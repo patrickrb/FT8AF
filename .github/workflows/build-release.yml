@@ -72,8 +72,28 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ft8cn/gradlew
 
+      - name: Decode signing keystore
+        if: steps.tag.outputs.should_release == 'true'
+        env:
+          RELEASE_STORE_FILE_BASE64: ${{ secrets.RELEASE_STORE_FILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${RELEASE_STORE_FILE_BASE64:-}" ]]; then
+            echo "::error::RELEASE_STORE_FILE_BASE64 secret is not configured." >&2
+            echo "::error::Add base64-encoded keystore (and RELEASE_STORE_PASSWORD," >&2
+            echo "::error::RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD) under Settings → Secrets." >&2
+            exit 1
+          fi
+          keystore_path="$RUNNER_TEMP/release.keystore"
+          echo "$RELEASE_STORE_FILE_BASE64" | base64 -d > "$keystore_path"
+          echo "ORG_GRADLE_PROJECT_RELEASE_STORE_FILE=$keystore_path" >> "$GITHUB_ENV"
+
       - name: Build APK
         working-directory: ft8cn
+        env:
+          ORG_GRADLE_PROJECT_RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
 
       - name: Rename APK
