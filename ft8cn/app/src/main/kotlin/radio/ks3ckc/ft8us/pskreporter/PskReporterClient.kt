@@ -71,7 +71,11 @@ object PskReporterClient {
     @Volatile
     private var rateLimitedUntilEpochMs: Long = 0L
 
-    suspend fun fetchSpotsForMe(call: String, secondsBack: Int): List<PskReporterSpot>? = withContext(Dispatchers.IO) {
+    suspend fun fetchSpotsForMe(
+        call: String,
+        secondsBack: Int,
+        modeFilter: String? = "FT8",
+    ): List<PskReporterSpot>? = withContext(Dispatchers.IO) {
         val now = clock()
         if (now < rateLimitedUntilEpochMs) {
             log("skipped (rate-limit back-off ${(rateLimitedUntilEpochMs - now) / 1000}s remaining)")
@@ -84,12 +88,13 @@ object PskReporterClient {
         lastFetchEpochMs = now
 
         val callUpper = call.uppercase()
+        val modeParam = modeFilter?.trim()?.takeIf { it.isNotEmpty() }?.uppercase()
         val url = "$baseUrl?senderCallsign=${urlEncode(callUpper)}" +
             "&flowStartSeconds=-$secondsBack" +
             "&rronly=1" +
-            "&mode=FT8" +
+            (modeParam?.let { "&mode=${urlEncode(it)}" } ?: "") +
             "&appcontact=${urlEncode(APP_CONTACT)}"
-        log("fetch start call=$callUpper secondsBack=$secondsBack")
+        log("fetch start call=$callUpper secondsBack=$secondsBack mode=${modeParam ?: "ALL"}")
 
         val body = fetch(url) ?: return@withContext null
         val spots = parseSpots(body)

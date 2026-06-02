@@ -111,6 +111,7 @@ fun SettingsScreen(
     var autoUpdateGridFromGPS by remember { mutableStateOf(GeneralVariables.autoUpdateGridFromGPS) }
     var enableCloudlog by remember { mutableStateOf(GeneralVariables.enableCloudlog) }
     var enableQRZ by remember { mutableStateOf(GeneralVariables.enableQRZ) }
+    var pskReporterEnabled by remember { mutableStateOf(GeneralVariables.pskOverlayEnabled) }
     var saveSWLMessage by remember { mutableStateOf(GeneralVariables.saveSWLMessage) }
     var saveSWL_QSO by remember { mutableStateOf(GeneralVariables.saveSWL_QSO) }
 
@@ -980,6 +981,19 @@ fun SettingsScreen(
                                 GeneralVariables.saveSWL_QSO = checked
                                 mainViewModel.databaseOpr.writeConfig(
                                     "saveSWLQSO", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "PSK Reporter Spots",
+                            description = "Show stations hearing your signal on the map",
+                            toggle = pskReporterEnabled,
+                            onToggleChange = { checked ->
+                                pskReporterEnabled = checked
+                                GeneralVariables.pskOverlayEnabled = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "pskOverlayEnabled", if (checked) "1" else "0", null,
                                 )
                             },
                         )

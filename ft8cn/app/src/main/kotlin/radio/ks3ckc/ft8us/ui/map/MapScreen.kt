@@ -56,10 +56,12 @@ import com.bg7yoz.ft8cn.Ft8Message
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
 import com.bg7yoz.ft8cn.maidenhead.MaidenheadGrid
+import com.bg7yoz.ft8cn.rigs.BaseRigOperation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import radio.ks3ckc.ft8us.pskreporter.PskReporterClient
+import radio.ks3ckc.ft8us.pskreporter.PskReporterSpot
 import radio.ks3ckc.ft8us.theme.*
 import radio.ks3ckc.ft8us.ui.components.GlassCard
 import radio.ks3ckc.ft8us.ui.components.TopBar
@@ -97,8 +99,38 @@ private data class PskSpotMarker(
     val frequencyHz: Long,
 )
 
-private const val PSK_OVERLAY_SECONDS_BACK = 3600
+internal enum class PskBandFilter(val label: String) { ALL("Band: ALL"), CURRENT("Band: CUR") }
+internal enum class PskModeFilter(val label: String, val apiValue: String?) {
+    ALL("Mode: ALL", null),
+    FT8("Mode: FT8", "FT8"),
+    FT4("Mode: FT4", "FT4"),
+}
+internal enum class PskTimeFilter(val label: String, val secondsBack: Int) {
+    M15("Time: 15m", 15 * 60),
+    H1("Time: 1h", 60 * 60),
+    H6("Time: 6h", 6 * 60 * 60),
+    H24("Time: 24h", 24 * 60 * 60),
+}
 private const val PSK_POLL_INTERVAL_MS = 5L * 60L * 1000L
+
+internal fun filterPskSpots(
+    spots: List<PskReporterSpot>,
+    bandFilter: PskBandFilter,
+    modeFilter: PskModeFilter,
+    currentBandHz: Long,
+    maxAgeSeconds: Int,
+    nowEpochSeconds: Long,
+): List<PskReporterSpot> {
+    val currentBand = BaseRigOperation.getMeterFromFreq(currentBandHz)
+    return spots.filter { spot ->
+        val ageSeconds = nowEpochSeconds - spot.flowStartSeconds
+        val withinTime = ageSeconds in 0..maxAgeSeconds.toLong()
+        val modeMatches = modeFilter.apiValue == null || spot.mode.equals(modeFilter.apiValue, ignoreCase = true)
+        val bandMatches = bandFilter != PskBandFilter.CURRENT ||
+            BaseRigOperation.getMeterFromFreq(spot.frequencyHz) == currentBand
+        withinTime && modeMatches && bandMatches
+    }
+}
 
 private data class ProjectedPoint(
     val x: Float,
@@ -179,6 +211,9 @@ fun MapScreen(mainViewModel: MainViewModel) {
     var selectedCallsign by remember { mutableStateOf<String?>(null) }
     var viewMode by rememberSaveable { mutableStateOf(MapViewMode.STANDARD) }
     var pskOverlayEnabled by rememberSaveable { mutableStateOf(GeneralVariables.pskOverlayEnabled) }
+    var pskBandFilter by rememberSaveable { mutableStateOf(PskBandFilter.ALL) }
+    var pskModeFilter by rememberSaveable { mutableStateOf(PskModeFilter.FT8) }
+    var pskTimeFilter by rememberSaveable { mutableStateOf(PskTimeFilter.H1) }
     var pskSpots by remember { mutableStateOf<List<PskSpotMarker>>(emptyList()) }
 
     // Zoom + pan (issue #51). Scale is clamped to [1, MAX_ZOOM]; pan is clamped so the
@@ -197,7 +232,7 @@ fun MapScreen(mainViewModel: MainViewModel) {
     // PSK Reporter polling — fires immediately on enter and every 5 min while enabled.
     // Re-reads myCallsign each cycle so a mid-session change is picked up on the next tick.
     // Structured concurrency cancels the loop when MapScreen leaves composition.
-    LaunchedEffect(pskOverlayEnabled) {
+    LaunchedEffect(pskOverlayEnabled, pskBandFilter, pskModeFilter, pskTimeFilter, GeneralVariables.band) {
         if (!pskOverlayEnabled) {
             pskSpots = emptyList()
             return@LaunchedEffect
@@ -207,9 +242,21 @@ fun MapScreen(mainViewModel: MainViewModel) {
             if (call.isEmpty()) {
                 pskSpots = emptyList()
             } else {
-                val spots = PskReporterClient.fetchSpotsForMe(call, PSK_OVERLAY_SECONDS_BACK)
+                val spots = PskReporterClient.fetchSpotsForMe(
+                    call = call,
+                    secondsBack = pskTimeFilter.secondsBack,
+                    modeFilter = pskModeFilter.apiValue,
+                )
                 if (spots != null) {
-                    pskSpots = spots.map {
+                    val filtered = filterPskSpots(
+                        spots = spots,
+                        bandFilter = pskBandFilter,
+                        modeFilter = pskModeFilter,
+                        currentBandHz = GeneralVariables.band,
+                        maxAgeSeconds = pskTimeFilter.secondsBack,
+                        nowEpochSeconds = System.currentTimeMillis() / 1000L,
+                    )
+                    pskSpots = filtered.map {
                         PskSpotMarker(
                             receiverCallsign = it.receiverCallsign,
                             grid = it.receiverGrid,
@@ -317,6 +364,49 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 )
             },
         )
+        if (pskOverlayEnabled) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                TogglePill(
+                    label = pskBandFilter.label,
+                    active = true,
+                    onClick = {
+                        pskBandFilter = if (pskBandFilter == PskBandFilter.ALL) {
+                            PskBandFilter.CURRENT
+                        } else {
+                            PskBandFilter.ALL
+                        }
+                    },
+                )
+                TogglePill(
+                    label = pskModeFilter.label,
+                    active = true,
+                    onClick = {
+                        pskModeFilter = when (pskModeFilter) {
+                            PskModeFilter.ALL -> PskModeFilter.FT8
+                            PskModeFilter.FT8 -> PskModeFilter.FT4
+                            PskModeFilter.FT4 -> PskModeFilter.ALL
+                        }
+                    },
+                )
+                TogglePill(
+                    label = pskTimeFilter.label,
+                    active = true,
+                    onClick = {
+                        pskTimeFilter = when (pskTimeFilter) {
+                            PskTimeFilter.M15 -> PskTimeFilter.H1
+                            PskTimeFilter.H1 -> PskTimeFilter.H6
+                            PskTimeFilter.H6 -> PskTimeFilter.H24
+                            PskTimeFilter.H24 -> PskTimeFilter.M15
+                        }
+                    },
+                )
+            }
+        }
 
         // Map canvas — pinch to zoom, drag to pan, double-tap to toggle 2× zoom in/out.
         // The STD/AZ mode toggle moved to the TopBar pill since drag now means pan.

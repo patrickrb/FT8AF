@@ -147,6 +147,26 @@ class PskReporterClientTest {
         assertThat(req.path).contains("senderCallsign=W1AW")
     }
 
+    @Test
+    fun fetchSpots_includesModeFilterWhenSpecified() = runBlocking<Unit> {
+        server.enqueue(MockResponse().setBody(fixture("pskreporter/reception-report.xml")))
+
+        PskReporterClient.fetchSpotsForMe("W1AW", 900, modeFilter = "ft4")
+
+        val req = server.takeRequest()
+        assertThat(req.path).contains("mode=FT4")
+    }
+
+    @Test
+    fun fetchSpots_omitsModeFilterWhenAllModesRequested() = runBlocking<Unit> {
+        server.enqueue(MockResponse().setBody(fixture("pskreporter/reception-report.xml")))
+
+        PskReporterClient.fetchSpotsForMe("W1AW", 900, modeFilter = null)
+
+        val req = server.takeRequest()
+        assertThat(req.path).doesNotContain("mode=")
+    }
+
     private fun fixture(path: String): String =
         checkNotNull(javaClass.classLoader?.getResourceAsStream(path)) {
             "missing test resource: $path"
