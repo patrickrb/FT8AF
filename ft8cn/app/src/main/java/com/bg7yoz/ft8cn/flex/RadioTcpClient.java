@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
 import java.util.Arrays;
@@ -96,7 +97,12 @@ public class RadioTcpClient {
                     mSocket = null;
                 }
                 InetAddress ipAddress = InetAddress.getByName(ip);
-                mSocket = new Socket(ipAddress, port);
+                // The old `new Socket(addr, port)` form used the OS default connect timeout
+                // (~75 s on Linux). When the Flex was unreachable the UI gave no feedback
+                // for that whole window. Use the two-step pattern with explicit timeouts.
+                mSocket = new Socket();
+                mSocket.connect(new InetSocketAddress(ipAddress, port), 5000);
+                mSocket.setSoTimeout(15000);
                 //Set no-delay sending
                 //mSocket.setTcpNoDelay(true);
                 //Set input/output buffer stream size

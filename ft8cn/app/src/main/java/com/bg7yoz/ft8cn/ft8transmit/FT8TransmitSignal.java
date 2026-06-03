@@ -339,7 +339,11 @@ public class FT8TransmitSignal {
      * @return 16-bit integer
      */
     private short[] float2Short(float[] buffer) {
-        short[] temp = new short[buffer.length + 8];// extra 8 zero-padded samples for QP-7C RP2040 audio detection compatibility
+        // Previously this allocated `buffer.length + 8` shorts "for QP-7C RP2040 audio
+        // detection compatibility", but the 16-bit AudioTrack.write below uses
+        // `playLength = buffer.length - skipSamples` and never writes the trailing pad.
+        // The float path didn't include the pad either. Drop the dead allocation.
+        short[] temp = new short[buffer.length];
         for (int i = 0; i < buffer.length; i++) {
             float x = buffer[i];
             if (x > 1.0)

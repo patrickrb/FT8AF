@@ -1074,7 +1074,15 @@ public class FlexRadio {
                     getHeadAndContent(line, "\\|");
                     try {
                         seq_number = Integer.parseInt(head.substring(1));//Parse command sequence number
-                        flexCommand = FlexCommand.values()[seq_number % 1000];
+                        int cmdIdx = seq_number % 1000;
+                        // Modulo 1000 doesn't bound the index by enum size — an out-of-range
+                        // sequence number used to crash the parser. Treat as unknown command.
+                        if (cmdIdx < 0 || cmdIdx >= FlexCommand.values().length) {
+                            Log.w(TAG, "FlexResponse seq_number=" + seq_number
+                                    + " -> unknown command index " + cmdIdx);
+                            break;
+                        }
+                        flexCommand = FlexCommand.values()[cmdIdx];
                         switch (flexCommand) {
                             case STREAM_CREATE_DAX_RX:
                                 this.daxStreamId = getStreamId(line);
@@ -1169,13 +1177,15 @@ public class FlexRadio {
          */
         private void getHeadAndContent(String line, String split) {
             String[] temp = line.split(split);
-            if (line.length() > 1) {
+            // The old guard was `line.length() > 1`, which has nothing to do with how many
+            // fields `split` produced — a single-token response (no delimiter) crashed the
+            // CAT parser thread with ArrayIndexOutOfBoundsException on `temp[1]`.
+            if (temp.length >= 2) {
                 head = temp[0];
                 content = temp[1];
             } else {
-                head = "";
+                head = temp.length == 1 ? temp[0] : "";
                 content = "";
-
             }
 
             if (temp.length > 2) {
