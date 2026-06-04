@@ -70,8 +70,16 @@ export default function App() {
   decodingRef.current = decoding;
 
   useEffect(() => {
+    // Register the event listener with cancellation-safe cleanup. Without this,
+    // React StrictMode's mount/unmount/mount in dev leaks the first listener
+    // (its async `listen()` resolves after the first cleanup ran), so every
+    // event would be handled twice — duplicating each decode batch.
     let unlisten: (() => void) | undefined;
-    onEngineEvent(handleEvent).then((u) => (unlisten = u));
+    let cancelled = false;
+    onEngineEvent(handleEvent).then((u) => {
+      if (cancelled) u();
+      else unlisten = u;
+    });
     api.listBands().then(setBands);
     api.getConfig("dial_hz").then((v) => {
       if (v) setDialHz(parseInt(v, 10));
@@ -79,7 +87,10 @@ export default function App() {
     api.getConfig("base_freq").then((v) => {
       if (v) setTxFreq(parseInt(v, 10));
     });
-    return () => unlisten?.();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, []);
 
   function handleEvent(e: EngineEvent) {
@@ -87,8 +98,12 @@ export default function App() {
       case "decoded":
         if (e.data.length) {
           setMessages((prev) => {
-            const next = [...e.data, ...prev];
-            return next.slice(0, MAX_MESSAGES);
+            // Safety net: drop any incoming message already present for the same
+            // slot (same utc_ms + text), so a stray duplicate event can't double rows.
+            const seen = new Set(prev.map((m) => `${m.utc_ms}|${m.text}`));
+            const fresh = e.data.filter((m) => !seen.has(`${m.utc_ms}|${m.text}`));
+            if (fresh.length === 0) return prev;
+            return [...fresh, ...prev].slice(0, MAX_MESSAGES);
           });
         }
         break;
