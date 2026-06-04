@@ -875,8 +875,11 @@ public class FT8TransmitSignal {
         }
 
 
-        // exit if auto-call for watched messages is disabled
-        if (!GeneralVariables.autoCallFollow) {
+        // exit if both auto-call modes are off: Hunt (auto-answer any CQ) and
+        // auto-call of followed callsigns. These are now independent — Hunt no
+        // longer requires autoCallFollow — so the on-screen HUNT toggle is
+        // authoritative on its own.
+        if (!GeneralVariables.autoFollowCQ && !GeneralVariables.autoCallFollow) {
             return false;
         }
 
@@ -888,19 +891,25 @@ public class FT8TransmitSignal {
             return false;
         }
 
-        // watched callsigns are secondary priority; search the watched message list
-        // check if watched callsigns are CQing (TO:CQ, and not a callsign that already completed a QSO)
-        for (int i = GeneralVariables.transmitMessages.size() - 1; i >= 0; i--) {
-            Ft8Message msg = GeneralVariables.transmitMessages.get(i);
+        // Auto-answer / auto-call is secondary priority, after stations calling us
+        // directly (the two loops above). Scan ONLY this cycle's fresh decodes —
+        // never the long-lived transmitMessages history. Scanning history would
+        // re-select a CQ heard minutes ago (including the very station the operator
+        // just abandoned by pressing CQ), which made auto-answer "randomly" lock
+        // onto an inactive station and call it forever. Live decodes only, matching
+        // the "calling me" loops.
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            Ft8Message msg = messages.get(i);
             if (isExcludeMessage(msg)) continue;// check if this is an excluded message
 
-            // is CQing, FROM is a watched callsign, and not in the successful QSO list
-            if ((msg.checkIsCQ()// is CQing
-                    && ((GeneralVariables.autoCallFollow && GeneralVariables.autoFollowCQ)// auto-call CQ
-                    || GeneralVariables.callsignInFollow(msg.getCallsignFrom()))// is watched
+            // is CQing, not already worked, not myself, and either Hunt mode is on
+            // (auto-answer any CQ) or this is a followed callsign we auto-call
+            if (msg.checkIsCQ()// is CQing
+                    && (GeneralVariables.autoFollowCQ// Hunt: auto-answer any CQ
+                    || (GeneralVariables.autoCallFollow
+                    && GeneralVariables.callsignInFollow(msg.getCallsignFrom())))// followed callsign
                     && !GeneralVariables.checkQSLCallsign(msg.getCallsignFrom())// not previously contacted successfully
-                    && !GeneralVariables.checkIsMyCallsign(msg.callsignFrom))) {// not myself
-                    //&& !msg.callsignFrom.equals(GeneralVariables.myCallsign))) {// not myself
+                    && !GeneralVariables.checkIsMyCallsign(msg.callsignFrom)) {// not myself
 
                 resetTargetReport();
                 setTransmit(new TransmitCallsign(msg.i3, msg.n3, msg.getCallsignFrom(), msg.freq_hz
