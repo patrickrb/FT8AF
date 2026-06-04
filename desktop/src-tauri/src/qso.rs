@@ -172,6 +172,10 @@ impl QsoEngine {
         self.active = false;
         self.tx_message = None;
         self.stage = TxStage::Idle;
+        // Clear the worked-station context too, so the UI drops the "→ DX" target
+        // and re-disables the Tx1–Tx5 stage picker. Without this the last station
+        // stays "active" on screen after Stop TX.
+        self.reset_qso();
     }
 
     fn reset_qso(&mut self) {
@@ -203,12 +207,24 @@ impl QsoEngine {
             None => return None, // no reply this slot; scheduler retransmits
         };
 
+        let content = classify(&msg);
+
+        // While calling CQ we have no target yet. Only commit to a caller whose
+        // message actually advances the QSO — a grid (their Tx1 answer) or a bare
+        // signal report. Without this gate, ANY to-me decode hijacks the CQ: most
+        // commonly a trailing "73"/"RR73" from the station we just worked, which
+        // locks `target` onto them and then filters out every genuine answerer, so
+        // the CQ looks "stuck" on a random station that never actually replies.
         if self.target.is_none() {
-            self.target = Some(msg.call_from.to_uppercase());
-            self.started_ms = util::now_unix_ms();
+            match content {
+                Content::Grid(_) | Content::Report(_) => {
+                    self.target = Some(msg.call_from.to_uppercase());
+                    self.started_ms = util::now_unix_ms();
+                }
+                _ => return None,
+            }
         }
         let dx = self.target.clone().unwrap();
-        let content = classify(&msg);
 
         match self.stage {
             TxStage::Cq => match content {
@@ -424,6 +440,31 @@ mod tests {
         }
         // auto-returned to CQ
         assert_eq!(e.tx_message(), Some("CQ K0XYZ EN37"));
+    }
+
+    #[test]
+    fn cq_ignores_trailing_73_from_prior_qso() {
+        let mut e = QsoEngine::new("K0XYZ", "EN37");
+        e.start_cq();
+        // A trailing 73 from the station we just worked is addressed to us but is
+        // NOT an answer — it must not hijack the CQ or lock the target.
+        assert!(e.process_rx(&[msg("K0XYZ", "K1ABC", "73", "", -5)]).is_none());
+        assert_eq!(e.status().target, None);
+        assert_eq!(e.tx_message(), Some("CQ K0XYZ EN37"));
+        // A genuine answer from a different station is still picked up.
+        e.process_rx(&[msg("K0XYZ", "W9XYZ", "EM69", "EM69", -7)]);
+        assert_eq!(e.status().target.as_deref(), Some("W9XYZ"));
+        assert_eq!(e.tx_message(), Some("W9XYZ K0XYZ -07"));
+    }
+
+    #[test]
+    fn stop_clears_target() {
+        let mut e = QsoEngine::new("K0XYZ", "EN37");
+        e.answer(&msg("CQ", "K1ABC", "FN42", "FN42", -5));
+        assert_eq!(e.status().target.as_deref(), Some("K1ABC"));
+        e.stop();
+        assert_eq!(e.status().target, None);
+        assert!(!e.status().active);
     }
 
     #[test]
