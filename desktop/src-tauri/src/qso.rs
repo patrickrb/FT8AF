@@ -129,6 +129,39 @@ impl QsoEngine {
         ));
     }
 
+    /// Operator manually picks which standard message to send next (the
+    /// WSJT-X Tx1–Tx5 buttons). Requires an active target — it rebuilds
+    /// `tx_message` for `stage` from the current QSO context, and the
+    /// auto-sequencer then carries on from there on the next decoded reply.
+    /// Selecting `Cq`/`Idle` falls through to start-CQ / stop so the same
+    /// control can cover the whole strip.
+    pub fn set_stage(&mut self, stage: TxStage) {
+        match stage {
+            TxStage::Cq => return self.start_cq(),
+            TxStage::Idle => return self.stop(),
+            _ => {}
+        }
+        let dx = match self.target.clone() {
+            Some(t) => t,
+            None => return, // no station selected yet — nothing to address
+        };
+        self.active = true;
+        match stage {
+            TxStage::Grid => {
+                self.tx_message = Some(format!("{} {} {}", dx, self.my_call, self.my_grid));
+                self.stage = TxStage::Grid;
+            }
+            TxStage::Report => self.send_report(&dx),
+            TxStage::RReport => self.send_r_report(&dx),
+            TxStage::Rr73 => self.send_rr73(&dx),
+            TxStage::Bye73 => {
+                self.tx_message = Some(format!("{} {} 73", dx, self.my_call));
+                self.stage = TxStage::Bye73;
+            }
+            TxStage::Cq | TxStage::Idle => unreachable!("handled above"),
+        }
+    }
+
     /// Send a free-text / arbitrary message once.
     pub fn set_free_text(&mut self, text: &str) {
         self.active = true;

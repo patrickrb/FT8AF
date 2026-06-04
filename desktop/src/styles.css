@@ -96,6 +96,10 @@ tr.clickable:hover td { background: #1d2730; }
 
 .txbar { display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--panel-2); border-top: 1px solid var(--border); }
 .txbar .msg { font-family: "Cascadia Code", monospace; }
+.stage-picker { display: flex; gap: 4px; }
+.stage-picker button { padding: 4px 10px; font-size: 12px; font-weight: 600; }
+.stage-picker button.active { background: var(--tx); color: #fff; border-color: var(--tx); }
+.stage-picker button:disabled { opacity: 0.4; cursor: not-allowed; }
 .badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
 .badge.tx { background: var(--tx); color: #fff; }
 .badge.rx { background: var(--panel); color: var(--muted); }

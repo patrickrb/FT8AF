@@ -156,6 +156,7 @@ export const api = {
   startCq: () => invoke("start_cq"),
   answer: (args: { call_from: string; grid: string; snr: number }) =>
     invoke("answer", { args }),
+  setStage: (stage: TxStage) => invoke("set_stage", { stage }),
   stopTx: () => invoke("stop_tx"),
   freeText: (text: string) => invoke("free_text", { text }),
 

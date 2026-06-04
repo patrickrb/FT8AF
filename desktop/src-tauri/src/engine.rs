@@ -23,6 +23,10 @@ use crate::util;
 const CYCLE_MS: i64 = 15_000;
 const TX_SLACK_MS: i64 = 2_360; // 12.64 s audio in a 15 s slot
 const PTT_DELAY_MS: u64 = 100;
+// Latest point into the cycle we can still key up and have the full 12.64 s
+// waveform (plus the PTT lead) land before the next slot boundary. Start later
+// than this and the leading Costas array gets clipped — audible but undecodable.
+const TX_LATEST_MS: i64 = TX_SLACK_MS - PTT_DELAY_MS as i64;
 const DEFAULT_TX_AUDIO_HZ: i32 = 1_500;
 const WF_FFT_SIZE: usize = 2048; // ~5.86 Hz/bin at 12 kHz
 const WF_AVG: usize = 6; // averaged FFT segments per row (Welch) to smooth the noise floor
@@ -54,6 +58,8 @@ pub enum EngineCommand {
     SelectRig(RigConfig),
     StartCq,
     Answer(AnswerArgs),
+    /// Operator manually selects which QSO message to transmit next.
+    SetStage(crate::qso::TxStage),
     StopTx,
     FreeText(String),
     /// Re-emit the current rig + TX status. Lets a freshly-loaded UI sync up with
@@ -338,7 +344,10 @@ impl Engine {
                 self.on_slot_boundary(rx_slot_id);
             }
 
-            // Act on any decodes the worker has finished (off-loop DSP).
+            // Act on any decodes the worker has finished (off-loop DSP). This is
+            // where steady-state TX is driven: each slot's decodes advance the QSO
+            // and then `maybe_transmit` keys up if it's our turn. Immediate keying
+            // on an operator tap is handled separately, in the command handlers.
             while let Ok(msgs) = self.dec_rx.try_recv() {
                 self.handle_decoded(msgs, slot_id);
             }
@@ -397,7 +406,9 @@ impl Engine {
     }
 
     /// Handle one slot's decodes (from the worker): publish them, advance the QSO
-    /// state machine, and transmit if it's our turn this slot.
+    /// state machine, then key up if it's our turn this slot. Runs once per slot
+    /// (the decoder returns a batch — possibly empty — every cycle), so this is
+    /// what drives CQ/auto-sequence retransmits.
     fn handle_decoded(&mut self, decoded: Vec<DecodedMessage>, slot_id: i64) {
         self.publish_decodes(&decoded);
         self.calibrate_dt(&decoded);
@@ -408,20 +419,49 @@ impl Engine {
                 Err(e) => self.emit(EngineEvent::Error(format!("log QSO failed: {e}"))),
             }
         }
-
-        if self.qso.active {
-            if self.tx_parity.is_none() {
-                self.tx_parity = Some(slot_id.rem_euclid(2));
-            }
-            let my_turn = Some(slot_id.rem_euclid(2)) == self.tx_parity;
-            if my_turn && self.txed_slot != slot_id {
-                self.txed_slot = slot_id;
-                if let Some(msg) = self.qso.tx_message().map(|s| s.to_string()) {
-                    self.transmit(&msg);
-                }
-            }
-        }
+        self.maybe_transmit(slot_id);
         self.publish_tx_state(false);
+    }
+
+    /// Key up this slot's QSO message if we're armed, it's our turn, and the
+    /// 12.64 s waveform still fits before the next boundary. Idempotent per slot
+    /// (`txed_slot` guard), so calling it from both `handle_decoded` and a command
+    /// handler in the same slot transmits at most once.
+    fn maybe_transmit(&mut self, slot_id: i64) {
+        if !self.qso.active {
+            return;
+        }
+        let parity = slot_id.rem_euclid(2);
+        // Respect a locked alternation. Answering a CQ pins the parity to the
+        // operator's click slot (set in the command handler) so we always reply
+        // opposite the DX; a CQ / free-text start leaves it `None`, eligible in
+        // any slot, and locks on its first transmission below.
+        if matches!(self.tx_parity, Some(p) if p != parity) {
+            return;
+        }
+        if self.txed_slot == slot_id {
+            return;
+        }
+        // Too late in the cycle to start cleanly — wait for our next eligible
+        // slot rather than transmit a clipped, undecodable signal.
+        if self.now().rem_euclid(CYCLE_MS) > TX_LATEST_MS {
+            return;
+        }
+        self.tx_parity = Some(parity);
+        self.txed_slot = slot_id;
+        if let Some(msg) = self.qso.tx_message().map(|s| s.to_string()) {
+            self.transmit(&msg);
+        }
+    }
+
+    /// The TX slot index we're currently in, by real UTC.
+    fn cur_slot(&self) -> i64 {
+        self.now().div_euclid(CYCLE_MS)
+    }
+
+    /// Parity (0/1) of the slot we're currently in.
+    fn cur_parity(&self) -> i64 {
+        self.cur_slot().rem_euclid(2)
     }
 
     fn transmit(&mut self, message: &str) {
@@ -623,6 +663,9 @@ impl Engine {
             EngineCommand::StartCq => {
                 self.tx_parity = None;
                 self.qso.start_cq();
+                // Start CQ this very slot if we're still inside the window;
+                // otherwise the first transmission lands at the next free slot.
+                self.maybe_transmit(self.cur_slot());
                 self.publish_tx_state(false);
             }
             EngineCommand::Answer(args) => {
@@ -632,8 +675,18 @@ impl Engine {
                     snr: args.snr,
                     ..Default::default()
                 };
-                self.tx_parity = None;
+                // Reply opposite the DX: the operator is clicking during the slot
+                // after the CQ, so pin TX to this slot's parity and key up right
+                // away if we're still inside the window — matching WSJT-X.
+                self.tx_parity = Some(self.cur_parity());
                 self.qso.answer(&msg);
+                self.maybe_transmit(self.cur_slot());
+                self.publish_tx_state(false);
+            }
+            EngineCommand::SetStage(stage) => {
+                self.tx_parity = None;
+                self.qso.set_stage(stage);
+                self.maybe_transmit(self.cur_slot());
                 self.publish_tx_state(false);
             }
             EngineCommand::StopTx => {
@@ -644,6 +697,7 @@ impl Engine {
             EngineCommand::FreeText(text) => {
                 self.tx_parity = None;
                 self.qso.set_free_text(&text);
+                self.maybe_transmit(self.cur_slot());
                 self.publish_tx_state(false);
             }
             EngineCommand::RefreshStatus => {

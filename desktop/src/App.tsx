@@ -12,6 +12,7 @@ import {
   type RigConfig,
   type RigStatusEvent,
   type SerialPortInfo,
+  type TxStage,
   type TxStateEvent,
   type UiMessage,
 } from "./ipc";
@@ -200,6 +201,7 @@ export default function App() {
         txState={txState}
         decoding={decoding}
         onCq={() => api.startCq()}
+        onStage={(s) => api.setStage(s)}
         onStop={() => api.stopTx()}
       />
       <div className="status-line">{status}</div>
@@ -393,16 +395,20 @@ function DecodeScreen(props: {
                   </tr>
                 )}
                 <tr
-                  className={(m.is_cq ? "cq " : "") + (m.to_me ? "tome " : "") + (m.is_cq ? "clickable" : "")}
-                  onClick={() => m.is_cq && onAnswer(m)}
-                  title={m.is_cq ? "Click to answer" : ""}
+                  className={
+                    (m.is_cq ? "cq " : "") +
+                    (m.to_me ? "tome " : "") +
+                    (m.is_cq || m.to_me ? "clickable" : "")
+                  }
+                  onClick={() => (m.is_cq || m.to_me) && onAnswer(m)}
+                  title={m.is_cq || m.to_me ? "Click to answer" : ""}
                 >
                   <td>{new Date(m.utc_ms).toISOString().substring(11, 19)}</td>
                   <td>{m.snr}</td>
                   <td>{m.time_sec.toFixed(1)}</td>
                   <td>{Math.round(m.freq_hz)}</td>
                   <td>{m.text}</td>
-                  <td>{m.is_cq ? "↩ answer" : ""}</td>
+                  <td>{m.is_cq || m.to_me ? "↩ answer" : ""}</td>
                 </tr>
               </Fragment>
             );
@@ -873,15 +879,27 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
   );
 }
 
+// The operator-selectable QSO messages, in WSJT-X Tx1–Tx5 order. Each rebuilds
+// the outgoing message from the current target/report on the backend.
+const TX_STAGES: { stage: TxStage; label: string; title: string }[] = [
+  { stage: "grid", label: "Grid", title: "Tx1 — send my grid" },
+  { stage: "report", label: "Rpt", title: "Tx2 — send signal report" },
+  { stage: "r_report", label: "R+Rpt", title: "Tx3 — send R + report" },
+  { stage: "rr73", label: "RR73", title: "Tx4 — send RR73" },
+  { stage: "bye73", label: "73", title: "Tx5 — send 73" },
+];
+
 function TxBar(props: {
   txState: TxStateEvent | null;
   decoding: boolean;
   onCq: () => void;
+  onStage: (s: TxStage) => void;
   onStop: () => void;
 }) {
-  const { txState, decoding, onCq, onStop } = props;
+  const { txState, decoding, onCq, onStage, onStop } = props;
   const tx = txState?.transmitting;
   const stage = txState?.status.stage ?? "idle";
+  const target = txState?.status.target ?? null;
   // Outside a QSO the auto-sequencer stage is "idle", which reads as "nothing
   // happening" even while we're decoding — show the receiver's real activity then.
   const stageLabel = stage === "idle" ? (decoding ? "listening" : "stopped") : stage;
@@ -889,9 +907,22 @@ function TxBar(props: {
     <div className="txbar">
       <span className={"badge " + (tx ? "tx" : "rx")}>{tx ? "TX" : "RX"}</span>
       <span className="muted">stage: {stageLabel}</span>
-      {txState?.status.target && <span className="muted">→ {txState.status.target}</span>}
+      {target && <span className="muted">→ {target}</span>}
       <span className="msg">{txState?.message ?? ""}</span>
       <div className="spacer" style={{ flex: 1 }} />
+      <div className="stage-picker" title={target ? "" : "Pick a station first"}>
+        {TX_STAGES.map((s) => (
+          <button
+            key={s.stage}
+            className={stage === s.stage ? "active" : ""}
+            disabled={!target}
+            title={s.title}
+            onClick={() => onStage(s.stage)}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
       <button className="primary" onClick={onCq}>Call CQ</button>
       <button className="danger" onClick={onStop}>Stop TX</button>
     </div>

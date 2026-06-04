@@ -117,6 +117,11 @@ fn answer(state: State<AppState>, args: AnswerArgs) {
 }
 
 #[tauri::command]
+fn set_stage(state: State<AppState>, stage: ft8af::qso::TxStage) {
+    state.engine.send(EngineCommand::SetStage(stage));
+}
+
+#[tauri::command]
 fn stop_tx(state: State<AppState>) {
     state.engine.send(EngineCommand::StopTx);
 }
@@ -222,6 +227,7 @@ fn main() {
             resync_time,
             start_cq,
             answer,
+            set_stage,
             stop_tx,
             free_text,
             list_log,
