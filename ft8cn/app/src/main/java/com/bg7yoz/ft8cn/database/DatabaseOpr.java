@@ -22,6 +22,8 @@ import com.bg7yoz.ft8cn.FT8Common;
 import com.bg7yoz.ft8cn.Ft8Message;
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.R;
+import com.bg7yoz.ft8cn.callsign.CallsignDatabase;
+import com.bg7yoz.ft8cn.callsign.CallsignInfo;
 import com.bg7yoz.ft8cn.connector.ConnectMode;
 import com.bg7yoz.ft8cn.ft8signal.FT8Package;
 import com.bg7yoz.ft8cn.log.OnQueryQSLCallsign;
@@ -1123,48 +1125,56 @@ public class DatabaseOpr extends SQLiteOpenHelper {
     }
 
     /**
-     * List DXCC zones that have been contacted
+     * Populate the "already worked" DXCC / CQ-zone / ITU-zone sets from the logbook.
+     *
+     * <p>Worked status is derived from the logged station's <b>callsign</b>
+     * (QSLTable.call), looked up against the callsign-prefix database — the same
+     * resolution used for live decodes ({@link CallsignDatabase#getMessagesLocation})
+     * and for QSOs completed in-app ({@code MainViewModel} -> {@code addDxcc}). This
+     * keeps the bulk loader consistent with those paths.
+     *
+     * <p>Previously this joined QSLTable to {@code dxcc_grid}/{@code cqzoneList}/
+     * {@code ituList} on the QSO's grid square. That dropped every QSO logged without
+     * a gridsquare (common for FT8 report-only exchanges) and any grid missing from the
+     * lookup tables, so worked entities — including the operator's own DXCC — could be
+     * absent and every decode would show "NEW DXCC".
      */
     @SuppressLint("Range")
     public void getQslDxccToMap() {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                String querySQL;
-                Cursor cursor;
                 Log.d(TAG, "run: starting zone import...");
 
-                //Import contacted DXCC zones
-                querySQL = "SELECT DISTINCT dl.pp FROM   dxcc_grid dg\n" +
-                        "inner join  QSLTable q\n" +
-                        "on  dg.grid =UPPER(SUBSTR(q.gridsquare,1,4))  LEFT JOIN dxccList dl on dg.dxcc =dl.dxcc";
-                cursor = db.rawQuery(querySQL, null);
+                CallsignDatabase callsignDatabase = GeneralVariables.callsignDatabase;
+                if (callsignDatabase == null) {
+                    Log.w(TAG, "run: callsign database not ready, skipping zone import");
+                    return;
+                }
+
+                Cursor cursor = db.rawQuery(
+                        "SELECT DISTINCT \"call\" FROM QSLTable WHERE \"call\" IS NOT NULL AND \"call\" <> ''",
+                        null);
+                int count = 0;
                 while (cursor.moveToNext()) {
-                    GeneralVariables.addDxcc(cursor.getString(cursor.getColumnIndex("pp")));
+                    String call = cursor.getString(cursor.getColumnIndex("call"));
+                    if (call == null) continue;
+                    call = call.replace("<", "").replace(">", "").trim();
+                    if (call.isEmpty()) continue;
+
+                    CallsignInfo info = callsignDatabase.getCallInfo(call);
+                    if (info == null) continue;
+
+                    if (info.DXCC != null && !info.DXCC.isEmpty()) {
+                        GeneralVariables.addDxcc(info.DXCC);
+                    }
+                    GeneralVariables.addCqZone(info.CQZone);
+                    GeneralVariables.addItuZone(info.ITUZone);
+                    count++;
                 }
                 cursor.close();
 
-                //Import contacted CQ zones
-                querySQL = "SELECT DISTINCT  cl.cqzone  as cq FROM   cqzoneList cl\n" +
-                        "inner join  QSLTable q\n" +
-                        "on  cl.grid =UPPER(SUBSTR(q.gridsquare,1,4)) ";
-                cursor = db.rawQuery(querySQL, null);
-                while (cursor.moveToNext()) {
-                    GeneralVariables.addCqZone(cursor.getInt(cursor.getColumnIndex("cq")));
-                }
-                cursor.close();
-
-                //Import contacted ITU zones
-                querySQL = "SELECT DISTINCT il.itu   FROM   ituList il\n" +
-                        "inner join  QSLTable q\n" +
-                        "on  il.grid =UPPER(SUBSTR(q.gridsquare,1,4))";
-                cursor = db.rawQuery(querySQL, null);
-                while (cursor.moveToNext()) {
-                    GeneralVariables.addItuZone(cursor.getInt(cursor.getColumnIndex("itu")));
-                }
-                cursor.close();
-
-                Log.d(TAG, "run: zone import complete...");
+                Log.d(TAG, "run: zone import complete, resolved " + count + " logged callsigns");
             }
         }).start();
 
