@@ -143,6 +143,8 @@ trait RigTransport: Send {
     fn set_frequency(&mut self, hz: u64) -> anyhow::Result<()>;
     fn set_data_mode(&mut self) -> anyhow::Result<()>;
     fn set_ptt(&mut self, on: bool) -> anyhow::Result<()>;
+    /// Human-readable radio model for the UI (e.g. "FlexRadio 6400"), not the
+    /// backend name — resolved per-backend at connect time.
     fn name(&self) -> String;
     fn connected(&self) -> bool;
 }
@@ -332,7 +334,7 @@ impl RigTransport for SerialCat {
         }
     }
     fn name(&self) -> String {
-        format!("Serial:{:?}", self.model)
+        format!("{:?}", self.model)
     }
     fn connected(&self) -> bool {
         true
@@ -346,14 +348,23 @@ impl RigTransport for SerialCat {
 struct Flrig {
     url: String,
     connected: bool,
+    radio: String,
 }
 
 impl Flrig {
     fn connect(cfg: &RigConfig) -> Flrig {
         let url = format!("http://{}:{}/", cfg.flrig_host, cfg.flrig_port);
-        let mut f = Flrig { url, connected: false };
+        let mut f = Flrig { url, connected: false, radio: "FLrig".to_string() };
         // Probe FLrig by reading the current VFO.
         f.connected = f.call("rig.get_vfo", "").is_ok();
+        // Ask FLrig which transceiver it's driving so the UI can show the radio.
+        if let Some(name) = f
+            .call("rig.get_xcvr", "")
+            .ok()
+            .and_then(|r| parse_xmlrpc_string(&r))
+        {
+            f.radio = name;
+        }
         f
     }
 
@@ -380,6 +391,23 @@ impl Flrig {
     }
 }
 
+/// Pull the text out of the first `<value>…</value>` of an XML-RPC response,
+/// unwrapping an optional `<string>` element. Crude on purpose — FLrig's replies
+/// are tiny and well-formed, and we only need scalar strings.
+fn parse_xmlrpc_string(xml: &str) -> Option<String> {
+    let start = xml.find("<value>")? + "<value>".len();
+    let end = xml[start..].find("</value>")? + start;
+    let mut s = xml[start..end].trim();
+    if let Some(rest) = s.strip_prefix("<string>") {
+        s = rest.strip_suffix("</string>").unwrap_or(rest).trim();
+    }
+    if s.is_empty() {
+        None
+    } else {
+        Some(s.to_string())
+    }
+}
+
 fn double_param(v: f64) -> String {
     format!("<param><value><double>{v}</double></value></param>")
 }
@@ -402,7 +430,7 @@ impl RigTransport for Flrig {
         Ok(())
     }
     fn name(&self) -> String {
-        "FLrig".into()
+        self.radio.clone()
     }
     fn connected(&self) -> bool {
         self.connected
@@ -435,6 +463,7 @@ struct Hamlib {
     fns: HamlibFns,
     rig: *mut c_void,
     connected: bool,
+    radio: String,
 }
 
 // The RIG* and loaded symbols are only ever touched from the engine thread.
@@ -476,6 +505,16 @@ extern "C" fn collect_rig(caps: *const RigCapsHead, data: *mut c_void) -> c_int 
     let name = format!("{mfg} {model_name}").trim().to_string();
     list.push(HamlibRig { model: c.rig_model, name });
     1
+}
+
+/// Human name for a Hamlib model id (e.g. "FlexRadio 6400"), via the enumerated
+/// rig list. Falls back to a generic label if it can't be resolved.
+fn hamlib_model_name(model: i32) -> String {
+    list_hamlib_rigs()
+        .into_iter()
+        .find(|r| r.model == model)
+        .map(|r| r.name)
+        .unwrap_or_else(|| format!("Hamlib #{model}"))
 }
 
 /// Enumerate every rig the installed Hamlib supports (for the Settings picker).
@@ -576,7 +615,8 @@ impl Hamlib {
             anyhow::bail!("rig_open failed (Hamlib error {rc})");
         }
 
-        Ok(Hamlib { _lib: lib, fns, rig, connected: true })
+        let radio = hamlib_model_name(cfg.hamlib_model);
+        Ok(Hamlib { _lib: lib, fns, rig, connected: true, radio })
     }
 }
 
@@ -617,7 +657,7 @@ impl RigTransport for Hamlib {
         Ok(())
     }
     fn name(&self) -> String {
-        "Hamlib".into()
+        self.radio.clone()
     }
     fn connected(&self) -> bool {
         self.connected

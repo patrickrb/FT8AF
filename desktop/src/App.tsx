@@ -4,6 +4,7 @@ import {
   onEngineEvent,
   type AudioDevice,
   type BandInfo,
+  type ClockSyncEvent,
   type CycleTick,
   type EngineEvent,
   type HamlibRig,
@@ -58,6 +59,7 @@ export default function App() {
   const [cycle, setCycle] = useState<CycleTick | null>(null);
   const [txState, setTxState] = useState<TxStateEvent | null>(null);
   const [rig, setRig] = useState<RigStatusEvent | null>(null);
+  const [clock, setClock] = useState<ClockSyncEvent | null>(null);
   const [decoding, setDecoding] = useState(false);
   const [status, setStatus] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -79,6 +81,11 @@ export default function App() {
     onEngineEvent(handleEvent).then((u) => {
       if (cancelled) u();
       else unlisten = u;
+      // Pull current rig/TX status now that we're listening. The engine
+      // auto-reconnects the saved rig at startup and emits its status before this
+      // listener exists, so without this the corner would show "no rig" until the
+      // next status change.
+      api.refreshStatus();
     });
     api.listBands().then(setBands);
     api.getConfig("dial_hz").then((v) => {
@@ -115,6 +122,9 @@ export default function App() {
         break;
       case "rig_status":
         setRig(e.data);
+        break;
+      case "clock_sync":
+        setClock(e.data);
         break;
       case "waterfall_row":
         drawWaterfallRow(e.data.bins);
@@ -160,6 +170,7 @@ export default function App() {
         dialHz={dialHz}
         onBand={onBand}
         rig={rig}
+        clock={clock}
       />
       <div className="tabs">
         {(["decode", "log", "settings"] as Tab[]).map((t) => (
@@ -168,7 +179,7 @@ export default function App() {
           </button>
         ))}
       </div>
-      <div className="content">
+      <div className={"content" + (tab === "decode" ? " decode" : "")}>
         {tab === "decode" && (
           <DecodeScreen
             messages={visible}
@@ -183,9 +194,14 @@ export default function App() {
           />
         )}
         {tab === "log" && <LogScreen />}
-        {tab === "settings" && <SettingsScreen onStatus={setStatus} />}
+        {tab === "settings" && <SettingsScreen onStatus={setStatus} clock={clock} />}
       </div>
-      <TxBar txState={txState} onCq={() => api.startCq()} onStop={() => api.stopTx()} />
+      <TxBar
+        txState={txState}
+        decoding={decoding}
+        onCq={() => api.startCq()}
+        onStop={() => api.stopTx()}
+      />
       <div className="status-line">{status}</div>
     </>
   );
@@ -199,14 +215,16 @@ function TopBar(props: {
   dialHz: number;
   onBand: (hz: number) => void;
   rig: RigStatusEvent | null;
+  clock: ClockSyncEvent | null;
 }) {
-  const { cycle, decoding, onToggleDecode, bands, dialHz, onBand, rig } = props;
+  const { cycle, decoding, onToggleDecode, bands, dialHz, onBand, rig, clock } = props;
   const utc = cycle ? new Date(cycle.utc_ms).toISOString().substring(11, 19) : "--:--:--";
   const pct = cycle ? (cycle.ms_into_cycle / 15000) * 100 : 0;
   return (
     <div className="topbar">
       <span className="brand">FT8AF</span>
       <span className="clock">{utc}</span>
+      <ClockSyncBadge clock={clock} />
       <div className="cycle-bar">
         <div style={{ width: `${pct}%` }} />
       </div>
@@ -227,6 +245,31 @@ function TopBar(props: {
         {decoding ? "Stop" : "Start"} decode
       </button>
     </div>
+  );
+}
+
+// Format an NTP offset (ms) as a signed seconds string, e.g. "+0.12s".
+function fmtOffset(ms: number): string {
+  const s = ms / 1000;
+  return `${s >= 0 ? "+" : ""}${s.toFixed(2)}s`;
+}
+
+// Small clock-health indicator next to the UTC clock. Green when the offset is
+// tight enough for clean FT8 (<0.5 s), amber when it's getting risky, grey until
+// the first sync lands.
+function ClockSyncBadge({ clock }: { clock: ClockSyncEvent | null }) {
+  if (!clock || !clock.synced) {
+    return <span className="muted" title="Waiting for NTP time sync">sync …</span>;
+  }
+  const mag = Math.abs(clock.offset_ms);
+  const color = mag < 500 ? "var(--ok)" : mag < 1500 ? "var(--tome)" : "var(--tx)";
+  return (
+    <span
+      style={{ color, fontVariantNumeric: "tabular-nums" }}
+      title={`Clock offset from NTP: ${clock.offset_ms} ms (applied to decode timing, system clock untouched)`}
+    >
+      sync {fmtOffset(clock.offset_ms)}
+    </span>
   );
 }
 
@@ -327,6 +370,7 @@ function DecodeScreen(props: {
           </div>
         ))}
       </div>
+      <div className="decode-list">
       <table>
         <thead>
           <tr>
@@ -372,6 +416,7 @@ function DecodeScreen(props: {
           )}
         </tbody>
       </table>
+      </div>
     </>
   );
 }
@@ -450,8 +495,8 @@ function LogScreen() {
   );
 }
 
-function SettingsScreen(props: { onStatus: (s: string) => void }) {
-  const { onStatus } = props;
+function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSyncEvent | null }) {
+  const { onStatus, clock } = props;
   const [call, setCall] = useState("");
   const [grid, setGrid] = useState("");
   const [inputs, setInputs] = useState<AudioDevice[]>([]);
@@ -515,6 +560,42 @@ function SettingsScreen(props: { onStatus: (s: string) => void }) {
             <input value={grid} onChange={(e) => setGrid(e.target.value.toUpperCase())} placeholder="EN37" />
           </div>
           <button className="primary" onClick={saveStation}>Save station</button>
+        </div>
+      </div>
+
+      <div className="panel">
+        <h3>Time sync</h3>
+        <div className="col">
+          <div className="muted">
+            FT8 needs the clock within ~1 s of UTC. The app syncs to NTP on its own —
+            no external time software, and your system clock is left untouched.
+          </div>
+          <div className="field">
+            <label>Clock offset from UTC</label>
+            <div>
+              {clock?.synced
+                ? `${fmtOffset(clock.offset_ms)} (${clock.offset_ms} ms)`
+                : "waiting for first sync…"}
+            </div>
+          </div>
+          <div className="field">
+            <label>DT auto-calibration (audio latency)</label>
+            <div>
+              {clock ? `${fmtOffset(clock.rx_offset_ms)} (${clock.rx_offset_ms} ms)` : "—"}
+              <span className="muted" style={{ display: "block", marginTop: 4 }}>
+                Auto-tuned from decoded DT to keep the RX window aligned with your
+                soundcard/SDR latency. Self-corrects over a few cycles.
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              api.resyncTime();
+              onStatus("Re-syncing clock to NTP…");
+            }}
+          >
+            Sync now
+          </button>
         </div>
       </div>
 
@@ -792,14 +873,22 @@ function SettingsScreen(props: { onStatus: (s: string) => void }) {
   );
 }
 
-function TxBar(props: { txState: TxStateEvent | null; onCq: () => void; onStop: () => void }) {
-  const { txState, onCq, onStop } = props;
+function TxBar(props: {
+  txState: TxStateEvent | null;
+  decoding: boolean;
+  onCq: () => void;
+  onStop: () => void;
+}) {
+  const { txState, decoding, onCq, onStop } = props;
   const tx = txState?.transmitting;
   const stage = txState?.status.stage ?? "idle";
+  // Outside a QSO the auto-sequencer stage is "idle", which reads as "nothing
+  // happening" even while we're decoding — show the receiver's real activity then.
+  const stageLabel = stage === "idle" ? (decoding ? "listening" : "stopped") : stage;
   return (
     <div className="txbar">
       <span className={"badge " + (tx ? "tx" : "rx")}>{tx ? "TX" : "RX"}</span>
-      <span className="muted">stage: {stage}</span>
+      <span className="muted">stage: {stageLabel}</span>
       {txState?.status.target && <span className="muted">→ {txState.status.target}</span>}
       <span className="msg">{txState?.message ?? ""}</span>
       <div className="spacer" style={{ flex: 1 }} />

@@ -11,4 +11,5 @@ pub mod dsp;
 pub mod engine;
 pub mod qso;
 pub mod rig;
+pub mod timesync;
 pub mod util;

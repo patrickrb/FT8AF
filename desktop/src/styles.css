@@ -70,6 +70,10 @@ select, input {
 
 .content { flex: 1; overflow: auto; padding: 14px; }
 
+/* Decode tab: keep the waterfall + filter chips pinned, scroll only the table. */
+.content.decode { overflow: hidden; display: flex; flex-direction: column; }
+.content.decode .decode-list { flex: 1; overflow: auto; min-height: 0; }
+
 .row { display: flex; align-items: center; gap: 10px; }
 .col { display: flex; flex-direction: column; gap: 8px; }
 .field label { display: block; color: var(--muted); margin-bottom: 3px; }

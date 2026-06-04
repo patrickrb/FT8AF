@@ -49,6 +49,15 @@ export interface RigStatusEvent {
   ptt: boolean;
 }
 
+export interface ClockSyncEvent {
+  /** ms added to the local clock to reach true UTC (negative = local clock is fast). */
+  offset_ms: number;
+  /** true once an NTP sync has succeeded (or a saved offset was restored). */
+  synced: boolean;
+  /** auto-calibrated audio-capture latency compensation (ms) applied to the RX window. */
+  rx_offset_ms: number;
+}
+
 export interface QsoRecord {
   id?: number | null;
   call: string;
@@ -113,6 +122,7 @@ export type EngineEvent =
   | { type: "cycle"; data: CycleTick }
   | { type: "tx_state"; data: TxStateEvent }
   | { type: "rig_status"; data: RigStatusEvent }
+  | { type: "clock_sync"; data: ClockSyncEvent }
   | { type: "qso_completed"; data: QsoRecord }
   | { type: "waterfall"; data: { bins: number[]; rows: number; cols: number; hz_per_col: number } }
   | { type: "waterfall_row"; data: { bins: number[]; hz_per_col: number } }
@@ -140,6 +150,8 @@ export const api = {
   setInputDevice: (name: string | null) => invoke("set_input_device", { name }),
   setOutputDevice: (name: string | null) => invoke("set_output_device", { name }),
   selectRig: (config: RigConfig) => invoke("select_rig", { config }),
+  refreshStatus: () => invoke("refresh_status"),
+  resyncTime: () => invoke("resync_time"),
 
   startCq: () => invoke("start_cq"),
   answer: (args: { call_from: string; grid: string; snr: number }) =>

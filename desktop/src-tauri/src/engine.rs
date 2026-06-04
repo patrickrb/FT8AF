@@ -56,6 +56,13 @@ pub enum EngineCommand {
     Answer(AnswerArgs),
     StopTx,
     FreeText(String),
+    /// Re-emit the current rig + TX status. Lets a freshly-loaded UI sync up with
+    /// state set before its event listener existed (e.g. the startup auto-reconnect).
+    RefreshStatus,
+    /// Apply a fresh NTP clock offset (ms to add to local time to get true UTC).
+    SetClockOffset(i64),
+    /// Kick off an immediate one-shot NTP re-sync (manual "Resync" button).
+    ResyncTime,
     Shutdown,
 }
 
@@ -97,6 +104,16 @@ pub struct RigStatusEvent {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct ClockSyncEvent {
+    /// ms added to the local clock to get true UTC (negative = local is fast).
+    pub offset_ms: i64,
+    /// true once an NTP sync has succeeded this session (or a saved offset was restored).
+    pub synced: bool,
+    /// Auto-calibrated audio-capture latency compensation (ms) applied to the RX window.
+    pub rx_offset_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct WaterfallFrame {
     /// Magnitude bins (0..=255) for the displayed audio band of one slot,
     /// downsampled server-side. `cols` bins per row, `rows` time rows.
@@ -120,6 +137,7 @@ pub enum EngineEvent {
     Cycle(CycleTick),
     TxState(TxStateEvent),
     RigStatus(RigStatusEvent),
+    ClockSync(ClockSyncEvent),
     QsoCompleted(QsoRecord),
     Waterfall(WaterfallFrame),
     WaterfallRow(WaterfallRow),
@@ -144,10 +162,14 @@ impl EngineHandle {
 pub fn spawn(db: Arc<Db>) -> (EngineHandle, Receiver<EngineEvent>) {
     let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
     let (evt_tx, evt_rx) = std::sync::mpsc::channel();
+    // Background NTP time sync: corrects the app's clock without admin rights or
+    // external software. Feeds offsets back through the command channel.
+    crate::timesync::spawn_loop(cmd_tx.clone());
+    let engine_cmd_tx = cmd_tx.clone();
     std::thread::Builder::new()
         .name("ft8af-engine".into())
         .spawn(move || {
-            let mut engine = Engine::new(db, evt_tx);
+            let mut engine = Engine::new(db, evt_tx, engine_cmd_tx);
             engine.run(cmd_rx);
         })
         .expect("spawn engine thread");
@@ -169,10 +191,19 @@ struct Engine {
     decoding: bool,
     dial_hz: u64,
     tx_audio_hz: i32,
-    last_slot_id: i64,
+    last_rx_slot_id: i64,
+    /// Audio-capture latency compensation (ms). The RX decode window is sliced
+    /// this much later than the UTC cycle boundary so that buffered/late-arriving
+    /// input audio lands aligned — drives decoded DT toward 0. Auto-calibrated
+    /// from the median DT of each slot's decodes; persisted across sessions.
+    rx_offset_ms: i64,
     last_tick_ms: i64,
     tx_parity: Option<i64>,
     clock_offset_ms: i64,
+    time_synced: bool,
+    /// Clone of the command sender so background helpers (NTP sync) can feed
+    /// results back into this loop.
+    cmd_tx: Sender<EngineCommand>,
     ptt: bool,
     // live waterfall FFT
     fft: Arc<dyn Fft<f32>>,
@@ -181,7 +212,7 @@ struct Engine {
 }
 
 impl Engine {
-    fn new(db: Arc<Db>, evt: Sender<EngineEvent>) -> Self {
+    fn new(db: Arc<Db>, evt: Sender<EngineEvent>, cmd_tx: Sender<EngineCommand>) -> Self {
         // Restore persisted station + band where present.
         let my_call = db.get_config("my_call").unwrap_or_default();
         let my_grid = db.get_config("my_grid").unwrap_or_default();
@@ -195,6 +226,13 @@ impl Engine {
             .get_config("base_freq")
             .and_then(|s| s.parse().ok())
             .unwrap_or(DEFAULT_TX_AUDIO_HZ);
+        // Restore the last NTP offset so DT is roughly right immediately, before
+        // the first fresh sync of this session lands. Treated as already-synced.
+        let saved_offset: Option<i64> = db.get_config("clock_offset_ms").and_then(|s| s.parse().ok());
+        let rx_offset_ms: i64 = db
+            .get_config("rx_offset_ms")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
         let mut qso = QsoEngine::new(my_call, my_grid);
         qso.band = bands::band_for_freq_hz(dial_hz).to_string();
         qso.freq_mhz = bands::freq_mhz_string(dial_hz);
@@ -239,10 +277,13 @@ impl Engine {
             decoding: false,
             dial_hz,
             tx_audio_hz,
-            last_slot_id: -1,
+            last_rx_slot_id: -1,
+            rx_offset_ms,
             last_tick_ms: 0,
             tx_parity: None,
-            clock_offset_ms: 0,
+            clock_offset_ms: saved_offset.unwrap_or(0),
+            time_synced: saved_offset.is_some(),
+            cmd_tx,
             ptt: false,
             fft,
             hann,
@@ -288,9 +329,13 @@ impl Engine {
                 }));
             }
 
-            if slot_id != self.last_slot_id {
-                self.last_slot_id = slot_id;
-                self.on_slot_boundary(slot_id);
+            // RX window boundary runs on a clock shifted later by the capture-latency
+            // compensation, so the sliced 15 s slot aligns with the audio that has
+            // actually arrived in the buffer (UTC display + TX still use real `now`).
+            let rx_slot_id = (now - self.rx_offset_ms).div_euclid(CYCLE_MS);
+            if rx_slot_id != self.last_rx_slot_id {
+                self.last_rx_slot_id = rx_slot_id;
+                self.on_slot_boundary(rx_slot_id);
             }
 
             // Act on any decodes the worker has finished (off-loop DSP).
@@ -305,6 +350,39 @@ impl Engine {
 
             std::thread::sleep(Duration::from_millis(100));
         }
+    }
+
+    /// Nudge the capture-latency compensation toward zeroing the decoded DT. The
+    /// FT8 network is NTP-synced, so the *median* DT of a slot's decodes is a robust
+    /// estimate of our own systematic timing error (clock residual + audio latency).
+    /// A slow EMA keeps it from chasing noise; persisted so DT is right at next launch.
+    fn calibrate_dt(&mut self, decoded: &[DecodedMessage]) {
+        // Need a few independent decodes for the median to be meaningful.
+        const MIN_DECODES: usize = 4;
+        const ALPHA: f64 = 0.6; // correction fraction applied per slot
+        const DEADBAND_MS: i64 = 60; // ignore tiny residuals to avoid jitter
+        const MAX_OFFSET_MS: i64 = 4_000;
+        if decoded.len() < MIN_DECODES {
+            return;
+        }
+
+        let mut dts: Vec<f32> = decoded.iter().map(|m| m.time_sec).collect();
+        dts.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let median_dt_ms = (dts[dts.len() / 2] * 1000.0) as i64;
+        if median_dt_ms.abs() <= DEADBAND_MS {
+            return;
+        }
+
+        let adjusted = self.rx_offset_ms + (median_dt_ms as f64 * ALPHA).round() as i64;
+        let new_offset = adjusted.clamp(-MAX_OFFSET_MS, MAX_OFFSET_MS);
+        if new_offset == self.rx_offset_ms {
+            return;
+        }
+        self.rx_offset_ms = new_offset;
+        // Re-anchor so the offset change doesn't re-trigger a boundary for this cycle.
+        self.last_rx_slot_id = (self.now() - self.rx_offset_ms).div_euclid(CYCLE_MS);
+        let _ = self.db.set_config("rx_offset_ms", &new_offset.to_string());
+        self.publish_clock_sync();
     }
 
     fn on_slot_boundary(&mut self, _entering_slot: i64) {
@@ -322,6 +400,7 @@ impl Engine {
     /// state machine, and transmit if it's our turn this slot.
     fn handle_decoded(&mut self, decoded: Vec<DecodedMessage>, slot_id: i64) {
         self.publish_decodes(&decoded);
+        self.calibrate_dt(&decoded);
 
         if let Some(QsoOutcome::Completed(record)) = self.qso.process_rx(&decoded) {
             match self.db.insert_qso(&record) {
@@ -484,6 +563,14 @@ impl Engine {
         }));
     }
 
+    fn publish_clock_sync(&self) {
+        self.emit(EngineEvent::ClockSync(ClockSyncEvent {
+            offset_ms: self.clock_offset_ms,
+            synced: self.time_synced,
+            rx_offset_ms: self.rx_offset_ms,
+        }));
+    }
+
     fn emit(&self, e: EngineEvent) {
         let _ = self.evt.send(e);
     }
@@ -558,6 +645,23 @@ impl Engine {
                 self.tx_parity = None;
                 self.qso.set_free_text(&text);
                 self.publish_tx_state(false);
+            }
+            EngineCommand::RefreshStatus => {
+                self.publish_rig_status();
+                self.publish_tx_state(self.ptt);
+                self.publish_clock_sync();
+            }
+            EngineCommand::SetClockOffset(offset_ms) => {
+                self.clock_offset_ms = offset_ms;
+                self.time_synced = true;
+                let _ = self.db.set_config("clock_offset_ms", &offset_ms.to_string());
+                self.emit(EngineEvent::Info(format!(
+                    "time synced: clock offset {offset_ms:+} ms"
+                )));
+                self.publish_clock_sync();
+            }
+            EngineCommand::ResyncTime => {
+                crate::timesync::spawn_once(self.cmd_tx.clone());
             }
             EngineCommand::Shutdown => {}
         }

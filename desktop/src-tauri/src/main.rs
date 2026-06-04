@@ -97,6 +97,16 @@ fn select_rig(state: State<AppState>, config: RigConfig) {
 }
 
 #[tauri::command]
+fn refresh_status(state: State<AppState>) {
+    state.engine.send(EngineCommand::RefreshStatus);
+}
+
+#[tauri::command]
+fn resync_time(state: State<AppState>) {
+    state.engine.send(EngineCommand::ResyncTime);
+}
+
+#[tauri::command]
 fn start_cq(state: State<AppState>) {
     state.engine.send(EngineCommand::StartCq);
 }
@@ -208,6 +218,8 @@ fn main() {
             set_input_device,
             set_output_device,
             select_rig,
+            refresh_status,
+            resync_time,
             start_cq,
             answer,
             stop_tx,
