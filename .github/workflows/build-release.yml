@@ -13,8 +13,8 @@ permissions:
 
 jobs:
   test:
-    name: Unit tests (PR only)
-    if: github.event_name == 'pull_request'
+    name: Unit tests & coverage
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
 
     steps:
@@ -44,19 +44,31 @@ jobs:
         working-directory: ft8cn
         run: ./gradlew testDebugUnitTest --stacktrace
 
+      - name: Generate coverage report
+        working-directory: ft8cn
+        run: ./gradlew jacocoTestReport --stacktrace
+
+      - name: Upload coverage to Codecov
+        continue-on-error: true
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ft8cn/app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
+
       - name: Upload test reports on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unit-test-reports
           path: |
             ft8cn/app/build/reports/tests/
             ft8cn/app/build/test-results/
+            ft8cn/app/build/reports/jacoco/
 
   build:
     name: Build APK
     needs: test
-    # Run when tests pass (PR), or when tests were skipped (push to main/dev/tags).
+    # Run when tests pass (PR/main push), or when tests were skipped (push to main/dev/tags).
     # Block only on actual test failure or cancellation.
     if: ${{ always() && needs.test.result != 'failure' && needs.test.result != 'cancelled' }}
     runs-on: ubuntu-latest
@@ -185,14 +197,14 @@ jobs:
           mv "$src" "FT8CN-${{ steps.tag.outputs.release_tag }}.apk"
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ft8cn-release
           path: ft8cn/app/build/outputs/apk/release/*.apk
 
       - name: Upload AAB artifact
         if: steps.tag.outputs.should_release == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ft8cn-release-aab
           path: ft8cn/app/build/outputs/bundle/release/*.aab
