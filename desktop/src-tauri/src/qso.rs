@@ -443,6 +443,25 @@ mod tests {
     }
 
     #[test]
+    fn cq_resumes_cleanly_after_qso_completes() {
+        let mut e = QsoEngine::new("K0XYZ", "EN37");
+        e.start_cq();
+        // Full initiator QSO with K1ABC.
+        e.process_rx(&[msg("K0XYZ", "K1ABC", "FN42", "FN42", -10)]); // grid -> report
+        e.process_rx(&[msg("K0XYZ", "K1ABC", "R-15", "", -10)]); // R-rpt -> RR73
+        let out = e.process_rx(&[msg("K0XYZ", "K1ABC", "73", "", -10)]); // 73 -> log
+        assert!(matches!(out, Some(QsoOutcome::Completed(_))));
+        // Auto-returned to a clean CQ: no target, message is CQ again.
+        assert_eq!(e.status().target, None);
+        assert_eq!(e.status().stage, TxStage::Cq);
+        assert_eq!(e.tx_message(), Some("CQ K0XYZ EN37"));
+        // K1ABC repeats a trailing 73 — it must NOT re-capture the fresh CQ.
+        assert!(e.process_rx(&[msg("K0XYZ", "K1ABC", "73", "", -10)]).is_none());
+        assert_eq!(e.status().target, None);
+        assert_eq!(e.tx_message(), Some("CQ K0XYZ EN37"));
+    }
+
+    #[test]
     fn cq_ignores_trailing_73_from_prior_qso() {
         let mut e = QsoEngine::new("K0XYZ", "EN37");
         e.start_cq();
