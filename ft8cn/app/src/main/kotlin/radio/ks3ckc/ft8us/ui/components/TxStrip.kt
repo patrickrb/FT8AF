@@ -36,10 +36,12 @@ fun TxStrip(
     isActivated: Boolean,
     frequencyLabel: String,
     txSlot: Int,
+    huntEnabled: Boolean,
     expanded: Boolean = false,
     onCallCQ: () -> Unit,
     onStop: () -> Unit,
     onToggleSlot: () -> Unit,
+    onToggleHunt: () -> Unit,
     onOpenFrequencyPicker: () -> Unit,
     onToggleExpand: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -134,6 +136,30 @@ fun TxStrip(
                     size = 12.dp,
                     color = TextMuted,
                     strokeWidth = 2f,
+                )
+            }
+
+            // HUNT (auto-answer CQ) toggle pill. On = proactively call stations
+            // calling CQ; off = run CQ and only work stations that answer us.
+            val huntBg = if (huntEnabled) Signal.copy(alpha = 0.18f) else BgSurface3
+            val huntColor = if (huntEnabled) Signal else TextMuted
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(huntBg)
+                    .clickable { onToggleHunt() }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "HUNT",
+                    color = huntColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = GeistMonoFamily,
+                    letterSpacing = 0.02.sp,
+                    maxLines = 1,
+                    softWrap = false,
                 )
             }
 
