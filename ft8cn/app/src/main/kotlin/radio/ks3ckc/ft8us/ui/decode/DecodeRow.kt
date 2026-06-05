@@ -1,8 +1,9 @@
 package radio.ks3ckc.ft8us.ui.decode
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -54,11 +55,13 @@ import radio.ks3ckc.ft8us.ui.motion.MotionTokens
  *  - Surface tint for CQ messages
  *  - Transparent for others
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DecodeRow(
     message: Ft8Message,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
     animateEntry: Boolean = false,
     nowMillis: Long = 0L,
     isTarget: Boolean = false,
@@ -111,7 +114,7 @@ fun DecodeRow(
             .clip(shape)
             .background(bgColor, shape)
             .border(1.dp, borderColor, shape)
-            .clickable { onClick() }
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(start = 0.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.Top,
     ) {

@@ -2343,6 +2343,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                         GeneralVariables.lateStartTolerance = 2000;
                     }
                 }
+                if (name.equalsIgnoreCase("earlyDecode")) {//Fast turnaround: shorter RX window, defaults on
+                    GeneralVariables.earlyDecode = (result.equals("") || result.equals("1"));
+                }
                 if (name.equalsIgnoreCase("icomIp")) {//ICOM IP address
                     GeneralVariables.icomIp = result.equals("") ? "255.255.255.255" : result;
                 }

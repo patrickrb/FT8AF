@@ -111,6 +111,7 @@ fun SettingsScreen(
     var synFrequency by remember { mutableStateOf(GeneralVariables.synFrequency) }
     var autoFollowCQ by remember { mutableStateOf(GeneralVariables.autoFollowCQ) }
     var autoCallFollow by remember { mutableStateOf(GeneralVariables.autoCallFollow) }
+    var earlyDecode by remember { mutableStateOf(GeneralVariables.earlyDecode) }
     var autoUpdateGridFromGPS by remember { mutableStateOf(GeneralVariables.autoUpdateGridFromGPS) }
     var enableCloudlog by remember { mutableStateOf(GeneralVariables.enableCloudlog) }
     var enableQRZ by remember { mutableStateOf(GeneralVariables.enableQRZ) }
@@ -993,6 +994,19 @@ fun SettingsScreen(
                                 GeneralVariables.autoCallFollow = checked
                                 mainViewModel.databaseOpr.writeConfig(
                                     "autoCallFollow", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "Fast turnaround",
+                            description = "Decode ~1s earlier so you can answer a CQ on the next slot instead of waiting. May miss stations with a large clock offset.",
+                            toggle = earlyDecode,
+                            onToggleChange = { checked ->
+                                earlyDecode = checked
+                                GeneralVariables.earlyDecode = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "earlyDecode", if (checked) "1" else "0", null,
                                 )
                             },
                         )

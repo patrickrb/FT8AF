@@ -224,6 +224,7 @@ public class GeneralVariables {
     public static int transmitDelay = 500;//Transmit delay; also allows decoding time for the previous cycle
     public static int pttDelay = 100;//PTT response time; radios typically need some response time after PTT command, default 100ms
     public static int lateStartTolerance = 2000;//Max ms into a cycle that a manual TX may start; leading audio is clipped so TX still ends on the cycle boundary. 0-4000.
+    public static boolean earlyDecode = true;//Fast turnaround: decode a shorter RX window so CQ decodes appear ~1s before the cycle boundary, enabling a next-slot reply.
     public static int civAddress = 0xa4;//CI-V address
     public static int baudRate = 19200;//Baud rate
     public static long band = 14074000;//Carrier frequency band
