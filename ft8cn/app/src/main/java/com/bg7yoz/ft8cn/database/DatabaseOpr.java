@@ -2269,6 +2269,16 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(GeneralVariables.band);
                 }
 
+                if (name.equalsIgnoreCase("excludedBands")) {
+                    GeneralVariables.excludedBands.clear();
+                    if (!result.trim().isEmpty()) {
+                        for (String w : result.split(",")) {
+                            String t = w.trim();
+                            if (!t.isEmpty()) GeneralVariables.excludedBands.add(t);
+                        }
+                    }
+                }
+
                 if (name.equalsIgnoreCase("msgMode")) {
                     GeneralVariables.simpleCallItemMode = result.equals("1") ;
                 }

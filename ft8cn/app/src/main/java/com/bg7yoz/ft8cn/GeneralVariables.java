@@ -233,6 +233,17 @@ public class GeneralVariables {
     public static int instructionSet = 0;//Instruction set: 0=ICOM, 1=Yaesu gen 2, 2=Yaesu gen 3
     public static int bandListIndex = -1;//Radio band index value
     public static MutableLiveData<Integer> mutableBandChange = new MutableLiveData<>();//Band index change
+    //Band names (e.g. "6m","60m") the user has hidden from the band pickers. Empty = show all.
+    //Persisted in config as a comma-separated list under the key "excludedBands".
+    public static java.util.HashSet<String> excludedBands = new java.util.HashSet<>();
+
+    public static boolean isBandExcluded(String waveLength) {
+        return excludedBands.contains(waveLength);
+    }
+
+    public static String excludedBandsToCsv() {
+        return android.text.TextUtils.join(",", excludedBands);
+    }
     public static int controlMode = ControlMode.VOX;
     public static int modelNo = 0;
     public static int launchSupervision = DEFAULT_LAUNCH_SUPERVISION;//Transmit supervision

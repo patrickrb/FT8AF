@@ -122,6 +122,33 @@ public class OperationBand {
             return null;
         }
     }
+    /**
+     * Indices into {@link #bandList} for bands whose waveLength the user has not
+     * hidden, in file order. Used by the band pickers so excluded bands (e.g. 6m,
+     * 60m in regions where they're prohibited) don't appear.
+     */
+    public static java.util.List<Integer> getVisibleBandIndices(){
+        java.util.ArrayList<Integer> out = new java.util.ArrayList<>();
+        for (int i = 0; i < bandList.size(); i++) {
+            if (!com.bg7yoz.ft8cn.GeneralVariables.isBandExcluded(bandList.get(i).waveLength)) {
+                out.add(i);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Distinct band names (e.g. "160m","6m") in file order. Drives the
+     * Enabled Bands toggle list in Settings.
+     */
+    public static java.util.List<String> getAllWaveLengths(){
+        java.util.LinkedHashSet<String> s = new java.util.LinkedHashSet<>();
+        for (Band b : bandList) {
+            s.add(b.waveLength);
+        }
+        return new java.util.ArrayList<>(s);
+    }
+
     public static long getBandFreq(int index){
         if (index>bandList.size()){
             return 14074000;
