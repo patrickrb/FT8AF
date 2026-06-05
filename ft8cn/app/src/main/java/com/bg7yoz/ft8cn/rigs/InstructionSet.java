@@ -27,6 +27,7 @@ public class InstructionSet {
     public static final int YAESU_847=21;//Ft-847
     public static final int ICOM_756=22;//Ft-847
     public static final int YAESU_FT710=23;//FT-710, currently reuses DX10 instruction set; CAT read loop must stay off
+    public static final int DISCOVERY_TX500=24;//Lab599 Discovery TX-500, TS-2000 compatible, DATA mode (MD6;)
 
 
 

@@ -78,6 +78,7 @@ import com.bg7yoz.ft8cn.log.SWLQsoList;
 import com.bg7yoz.ft8cn.log.ThirdPartyService;
 import com.bg7yoz.ft8cn.rigs.BaseRig;
 import com.bg7yoz.ft8cn.rigs.BaseRigOperation;
+import com.bg7yoz.ft8cn.rigs.DiscoveryTX500Rig;
 import com.bg7yoz.ft8cn.rigs.ElecraftRig;
 import com.bg7yoz.ft8cn.rigs.Flex6000Rig;
 import com.bg7yoz.ft8cn.rigs.FlexNetworkRig;
@@ -988,6 +989,9 @@ public class MainViewModel extends ViewModel {
                 break;
             case InstructionSet.KENWOOD_TS2000:
                 baseRig = new KenwoodTS2000Rig();//Kenwood TS2000
+                break;
+            case InstructionSet.DISCOVERY_TX500:
+                baseRig = new DiscoveryTX500Rig();//Lab599 Discovery TX-500 (TS-2000 + DATA mode)
                 break;
             case InstructionSet.WOLF_SDR_DIGU:
                 baseRig = new Wolf_sdr_450Rig(false);
