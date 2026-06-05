@@ -2361,8 +2361,31 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("volumeValue")) {//Output volume level
                     GeneralVariables.volumePercent = result.equals("") ? 1.0f : Float.parseFloat(result) / 100f;
                 }
-                if (name.equalsIgnoreCase("excludedCallsigns")) {//Excluded callsigns
+                if (name.equalsIgnoreCase("excludedCallsigns")) {//Blocklist: callsign prefixes
                     GeneralVariables.addExcludedCallsigns(result);
+                }
+                if (name.equalsIgnoreCase("blockedExactCallsigns")) {//Blocklist: whole-call exact
+                    GeneralVariables.addBlockedExactCallsigns(result);
+                }
+                if (name.equalsIgnoreCase("blockedKeywords")) {//Blocklist: keyword substrings
+                    GeneralVariables.addBlockedKeywords(result);
+                }
+                if (name.equalsIgnoreCase("filterShowOnlyCQ")) {//Decode filter: CQ only
+                    GeneralVariables.filterShowOnlyCQ = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("filterDxOnly")) {//Decode filter: DX (other continents) only
+                    GeneralVariables.filterDxOnly = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("filterNeededOnly")) {//Decode filter: needed only
+                    GeneralVariables.filterNeededOnly = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("filterByContinent")) {//Decode filter: by continent
+                    GeneralVariables.filterByContinent = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("filterContinent")) {//Decode filter: target continent
+                    if (result != null && result.length() > 0) {
+                        GeneralVariables.filterContinent = result;
+                    }
                 }
                 if (name.equalsIgnoreCase("flexMaxRfPower")) {//Flex max RF power
                     GeneralVariables.flexMaxRfPower = result.equals("") ? 10 : Integer.parseInt(result);

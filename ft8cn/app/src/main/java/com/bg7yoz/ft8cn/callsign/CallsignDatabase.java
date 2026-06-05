@@ -123,7 +123,19 @@ public class CallsignDatabase extends SQLiteOpenHelper {
                     msg.fromItu = !GeneralVariables.getItuZoneById(fromCallsignInfo.ITUZone);
                     msg.fromCq = !GeneralVariables.getCqZoneById(fromCallsignInfo.CQZone);
                     msg.fromWhere = fromCallsignInfo.CountryNameEn;
+                    msg.continent = fromCallsignInfo.Continent;
                     msg.fromLatLng = new LatLng(fromCallsignInfo.Latitude, fromCallsignInfo.Longitude * -1);
+            }
+
+            // Resolve the operator's own continent once (for the DX decode filter).
+            if (GeneralVariables.myContinent == null
+                    && GeneralVariables.myCallsign != null
+                    && GeneralVariables.myCallsign.length() > 0) {
+                CallsignInfo myInfo = getCallsignInfo(db,
+                        GeneralVariables.myCallsign.replace("<", "").replace(">", ""));
+                if (myInfo != null) {
+                    GeneralVariables.myContinent = myInfo.Continent;
+                }
             }
 
             if (msg.checkIsCQ() || msg.getCallsignTo().contains("...")) { // Skip CQ messages

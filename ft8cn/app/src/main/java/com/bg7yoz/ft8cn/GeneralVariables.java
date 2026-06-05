@@ -104,36 +104,115 @@ public class GeneralVariables {
     public static final Map<Integer, Integer> cqMap = new ConcurrentHashMap<>();
     public static final Map<Integer, Integer> ituMap = new ConcurrentHashMap<>();
 
+    // Callsign blocklist (Settings → Callsign Blocklist). Three independent match
+    // modes, generalizing the original prefix-only "excluded callsigns" feature. A
+    // blocked station is hidden from the decode list AND excluded from TX/auto-seq.
+    //   - excludedCallsigns: callsign PREFIX match (e.g. "RA" blocks RA0..RA9..).
+    //     Reuses the legacy "excludedCallsigns" config key for backward compat.
+    //   - blockedExactCallsigns: whole-call EXACT match.
+    //   - blockedKeywords: SUBSTRING match (against the call, and the full message
+    //     text via checkIsBlockedMessage) — catches POTA, /P, QRP, contest junk.
     private static final Map<String, Integer> excludedCallsigns = new HashMap<>();
+    private static final java.util.LinkedHashSet<String> blockedExactCallsigns = new java.util.LinkedHashSet<>();
+    private static final java.util.LinkedHashSet<String> blockedKeywords = new java.util.LinkedHashSet<>();
 
     /**
-     * Add excluded callsign prefixes
-     *
-     * @param callsigns callsigns
+     * Split a user-entered list on comma / space / pipe / Chinese comma and
+     * collect the non-empty, upper-cased tokens into {@code target}.
      */
-    public static synchronized void addExcludedCallsigns(String callsigns) {
-        excludedCallsigns.clear();
-        String[] s = callsigns.toUpperCase().replace(" ", ",")
+    private static void parseBlockTokens(String text, java.util.Collection<String> target) {
+        target.clear();
+        if (text == null) return;
+        String[] s = text.toUpperCase().replace(" ", ",")
                 .replace("|", ",")
                 .replace("，", ",").split(",");
-        for (int i = 0; i < s.length; i++) {
-            if (s[i].length() > 0) {
-                excludedCallsigns.put(s[i], 0);
+        for (String token : s) {
+            if (token.length() > 0) {
+                target.add(token);
             }
         }
     }
 
     /**
-     * Check if a callsign matches an excluded prefix
+     * Join a token collection back into the canonical comma-separated form used
+     * for persistence and for display in the Settings text field.
+     */
+    private static String joinBlockTokens(java.util.Collection<String> tokens) {
+        StringBuilder calls = new StringBuilder();
+        int i = 0;
+        for (String token : tokens) {
+            if (i++ == 0) {
+                calls.append(token);
+            } else {
+                calls.append(",").append(token);
+            }
+        }
+        return calls.toString();
+    }
+
+    /**
+     * Add excluded callsign prefixes (legacy name kept; this is the PREFIX list).
+     *
+     * @param callsigns callsigns
+     */
+    public static synchronized void addExcludedCallsigns(String callsigns) {
+        excludedCallsigns.clear();
+        if (callsigns == null) return;
+        String[] s = callsigns.toUpperCase().replace(" ", ",")
+                .replace("|", ",")
+                .replace("，", ",").split(",");
+        for (String token : s) {
+            if (token.length() > 0) {
+                excludedCallsigns.put(token, 0);
+            }
+        }
+    }
+
+    public static synchronized void addBlockedExactCallsigns(String callsigns) {
+        parseBlockTokens(callsigns, blockedExactCallsigns);
+    }
+
+    public static synchronized void addBlockedKeywords(String keywords) {
+        parseBlockTokens(keywords, blockedKeywords);
+    }
+
+    /**
+     * Get the list of excluded callsign prefixes (the PREFIX list).
+     *
+     * @return the list as a comma-separated string
+     */
+    public static synchronized String getExcludeCallsigns() {
+        return joinBlockTokens(excludedCallsigns.keySet());
+    }
+
+    public static synchronized String getBlockedExactCallsigns() {
+        return joinBlockTokens(blockedExactCallsigns);
+    }
+
+    public static synchronized String getBlockedKeywords() {
+        return joinBlockTokens(blockedKeywords);
+    }
+
+    /**
+     * Check whether a callsign is blocked by any match mode: exact whole-call,
+     * prefix, or keyword substring (against the callsign itself).
      *
      * @param callsign callsign
-     * @return whether it matches
+     * @return whether it is blocked
      */
-    public static synchronized boolean checkIsExcludeCallsign(String callsign) {
-        Iterator<String> iterator = excludedCallsigns.keySet().iterator();
-        while (iterator.hasNext()) {
-            String key = iterator.next();
-            if (callsign.toUpperCase().indexOf(key) == 0) {
+    public static synchronized boolean checkIsBlocked(String callsign) {
+        if (callsign == null) return false;
+        String up = callsign.toUpperCase();
+        if (blockedExactCallsigns.contains(up)) {
+            return true;
+        }
+        for (String prefix : excludedCallsigns.keySet()) {
+            if (up.indexOf(prefix) == 0) {
+                return true;
+            }
+        }
+        for (String keyword : blockedKeywords) {
+            if (up.contains(keyword)) {
                 return true;
             }
         }
@@ -141,24 +220,41 @@ public class GeneralVariables {
     }
 
     /**
-     * Get the list of excluded callsign prefixes
+     * Decode-list block check: blocked if the sender's callsign is blocked, or any
+     * keyword appears anywhere in the rendered message text (so keywords can match
+     * message content like "POTA", not just the callsign).
      *
-     * @return the list as a string
+     * @param msg the decoded message
+     * @return whether it is blocked
      */
-    public static synchronized String getExcludeCallsigns() {
-        StringBuilder calls = new StringBuilder();
-        Iterator<String> iterator = excludedCallsigns.keySet().iterator();
-        int i = 0;
-        while (iterator.hasNext()) {
-            String key = iterator.next();
-            if (i == 0) {
-                calls.append(key);
-            } else {
-                calls.append(",").append(key);
-            }
-            i++;
+    public static synchronized boolean checkIsBlockedMessage(Ft8Message msg) {
+        if (msg == null) return false;
+        if (checkIsBlocked(msg.callsignFrom)) {
+            return true;
         }
-        return calls.toString();
+        if (!blockedKeywords.isEmpty()) {
+            String text = msg.getMessageText();
+            if (text != null) {
+                String up = text.toUpperCase();
+                for (String keyword : blockedKeywords) {
+                    if (up.contains(keyword)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Backward-compatible alias. Existing TX-side call sites call this; it now
+     * covers all three blocklist match modes via {@link #checkIsBlocked}.
+     *
+     * @param callsign callsign
+     * @return whether it matches
+     */
+    public static synchronized boolean checkIsExcludeCallsign(String callsign) {
+        return checkIsBlocked(callsign);
     }
 
 
@@ -275,6 +371,19 @@ public class GeneralVariables {
     public static boolean highlightNewBand = true;//Highlight stations worked only on other bands
     public static boolean highlightWorked = true;//Tag stations already worked
     public static boolean highlightPota = true;//Highlight spotted POTA activators (new parks stand out)
+
+    // Decode-list display filters (Settings → Decode Filters). Persistent
+    // "show only" filters applied to the decode list in DecodeScreen.filterMessages().
+    // Multiple enabled filters AND together.
+    public static boolean filterShowOnlyCQ = false;//Show only CQ-type messages
+    public static boolean filterDxOnly = false;//Show only stations outside my own continent
+    public static boolean filterNeededOnly = false;//Show only not-yet-QSL'd stations
+    public static boolean filterByContinent = false;//Show only stations from filterContinent
+    public static String filterContinent = "EU";//Target continent for filterByContinent (NA/SA/EU/AF/AS/OC/AN)
+
+    // The operator's own continent abbreviation, derived once from the callsign
+    // (CallsignDatabase.getContinent). Used by the DX filter. Null until resolved.
+    public static String myContinent = null;
 
 
     public static final ArrayList<String> followCallsign = new ArrayList<>();//Followed callsigns

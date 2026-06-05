@@ -319,9 +319,34 @@ private fun filterMessages(
     messages: List<Ft8Message>,
     filter: String,
 ): List<Ft8Message> {
+    // Base stage: always-on blocklist + settings-driven "show only" filters.
+    // Applied before the chip switch so they AND with whatever chip is selected.
+    var base = messages.filterNot { GeneralVariables.checkIsBlockedMessage(it) }
+    if (GeneralVariables.filterShowOnlyCQ) {
+        base = base.filter { it.checkIsCQ() }
+    }
+    if (GeneralVariables.filterDxOnly) {
+        base = base.filter {
+            it.continent != null && GeneralVariables.myContinent != null &&
+                !it.continent.equals(GeneralVariables.myContinent, ignoreCase = true)
+        }
+    }
+    if (GeneralVariables.filterNeededOnly) {
+        base = base.filter {
+            !it.isQSL_Callsign &&
+                !GeneralVariables.checkQSLCallsign(it.callsignFrom ?: "")
+        }
+    }
+    if (GeneralVariables.filterByContinent) {
+        base = base.filter {
+            it.continent != null &&
+                it.continent.equals(GeneralVariables.filterContinent, ignoreCase = true)
+        }
+    }
+
     return when (filter) {
-        "CQ Calls" -> messages.filter { it.checkIsCQ() }
-        "CQ POTA" -> messages.filter {
+        "CQ Calls" -> base.filter { it.checkIsCQ() }
+        "CQ POTA" -> base.filter {
             // Match three signals: (1) explicit "POTA" suffix on a CQ, (2) any CQ from a
             // station currently spotted on pota.app (activators often drop the suffix to
             // save chars), (3) free-text fragments like "CQ POT" that decoders garble
@@ -332,15 +357,15 @@ private fun filterMessages(
                     (it.callsignTo?.startsWith("CQ POT", ignoreCase = true) == true)
                 )
         }
-        "New DXCC" -> messages.filter { it.checkIsCQ() && it.fromDxcc }
-        "Needed" -> messages.filter {
+        "New DXCC" -> base.filter { it.checkIsCQ() && it.fromDxcc }
+        "Needed" -> base.filter {
             !it.isQSL_Callsign &&
                 !GeneralVariables.checkQSLCallsign(it.callsignFrom ?: "")
         }
-        "For Me" -> messages.filter {
+        "For Me" -> base.filter {
             GeneralVariables.checkIsMyCallsign(it.callsignTo ?: "")
         }
-        else -> messages // "All"
+        else -> base // "All"
     }
 }
 
