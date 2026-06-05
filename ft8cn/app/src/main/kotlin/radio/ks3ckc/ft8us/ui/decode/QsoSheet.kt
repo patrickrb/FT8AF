@@ -189,18 +189,7 @@ private fun QsoSheetContent(
         } else {
             Button(
                 onClick = {
-                    mainViewModel.addFollowCallsign(callsign)
-                    if (!mainViewModel.ft8TransmitSignal.isActivated) {
-                        mainViewModel.ft8TransmitSignal.setActivated(true)
-                        GeneralVariables.transmitMessages.add(message)
-                        GeneralVariables.resetLaunchSupervision()
-                    }
-                    mainViewModel.ft8TransmitSignal.setTransmit(
-                        message.fromCallTransmitCallsign,
-                        1,
-                        message.extraInfo,
-                    )
-                    mainViewModel.ft8TransmitSignal.transmitNow()
+                    mainViewModel.callStation(message)
                 },
                 modifier = Modifier
                     .fillMaxWidth()

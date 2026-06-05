@@ -101,7 +101,13 @@ public class FT8SignalListener {
         Log.d(TAG, "Starting recording...");
 
         if (onWaveDataListener != null) {
-            onWaveDataListener.getVoiceData(FT8Common.FT8_SLOT_TIME_MILLISECOND, true
+            // Fast turnaround: collect a shorter window so decoding finishes (and CQ
+            // decodes appear) ~1s before the cycle boundary, leaving time to answer
+            // on the next slot. Off = full 15s window (max sensitivity).
+            int recordMs = GeneralVariables.earlyDecode
+                    ? FT8Common.FT8_EARLY_DECODE_MILLISECOND
+                    : FT8Common.FT8_SLOT_TIME_MILLISECOND;
+            onWaveDataListener.getVoiceData(recordMs, true
                     , new OnGetVoiceDataDone() {
                         @Override
                         public void onGetDone(float[] data) {

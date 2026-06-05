@@ -11,6 +11,10 @@ public final class FT8Common {
     public static final int SAMPLE_RATE=12000;
     public static final int FT8_SLOT_TIME=15;
     public static final int FT8_SLOT_TIME_MILLISECOND=15000;//milliseconds per cycle
+    //Shorter RX window used when GeneralVariables.earlyDecode is on. The FT8 message is
+    //12.64s; 13500ms captures it plus ~0.86s of positive-DT margin and lets the decode
+    //finish ~1s before the cycle boundary, so a CQ can be answered on the next slot.
+    public static final int FT8_EARLY_DECODE_MILLISECOND=13500;
     public static final int FT4_SLOT_TIME_MILLISECOND=7500;
     public static final int FT8_5_SYMBOLS_MILLISECOND=800;//time needed for 5 symbols
 

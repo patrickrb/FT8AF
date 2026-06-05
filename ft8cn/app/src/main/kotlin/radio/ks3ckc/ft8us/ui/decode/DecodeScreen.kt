@@ -143,6 +143,22 @@ fun DecodeScreen(
         previousCount = filteredMessages.size
     }
 
+    // A tapped Needed-DX notification asks us to pre-select that station: reset to the
+    // "All" filter so it's visible, scroll to its latest decode, and open the QSO sheet
+    // (which shows the station detail + a Call button). We do NOT auto-transmit.
+    val preselectCallsign by mainViewModel.mutablePreselectCallsign.observeAsState()
+    LaunchedEffect(preselectCallsign, messageList?.size) {
+        val cs = preselectCallsign
+        if (cs.isNullOrBlank()) return@LaunchedEffect
+        val present = (messageList ?: arrayListOf())
+            .any { it.callsignFrom.equals(cs, ignoreCase = true) }
+        if (!present) return@LaunchedEffect          // wait until the station is in the list
+        selectedFilter = "All"
+        mainViewModel.qsoSheetCallsign.postValue(cs)
+        mainViewModel.qsoSheetMinimized.postValue(false)
+        mainViewModel.mutablePreselectCallsign.postValue(null)   // consume (allow re-trigger)
+    }
+
     // Format UTC time for the subtitle
     val utcString = if (utcTime > 0L) {
         UtcTimer.getTimeStr(utcTime)
@@ -230,7 +246,12 @@ fun DecodeScreen(
                             animateEntry = rowKey in newKeys,
                             nowMillis = utcTime,
                             isTarget = isTarget,
+                            // Single tap = immediately call this station (fast reply to
+                            // a CQ). Long-press opens the info sheet (QRZ, country, etc.).
                             onClick = {
+                                mainViewModel.callStation(message)
+                            },
+                            onLongClick = {
                                 mainViewModel.qsoSheetCallsign.postValue(message.callsignFrom)
                                 mainViewModel.qsoSheetMinimized.postValue(false)
                             },
@@ -314,9 +335,37 @@ private fun filterMessages(
     messages: List<Ft8Message>,
     filter: String,
 ): List<Ft8Message> {
+    // Base stage: always-on blocklist + settings-driven "show only" filters.
+    // Applied before the chip switch so they AND with whatever chip is selected.
+    var base = messages.filterNot { GeneralVariables.checkIsBlockedMessage(it) }
+    if (GeneralVariables.filterShowOnlyCQ) {
+        base = base.filter { it.checkIsCQ() }
+    }
+    if (GeneralVariables.filterDxOnly) {
+        base = base.filter {
+            it.continent != null && GeneralVariables.myContinent != null &&
+                !it.continent.equals(GeneralVariables.myContinent, ignoreCase = true)
+        }
+    }
+    if (GeneralVariables.filterNeededOnly) {
+        base = base.filter {
+            !it.isQSL_Callsign &&
+                !GeneralVariables.checkQSLCallsign(it.callsignFrom ?: "")
+        }
+    }
+    if (GeneralVariables.filterByContinent) {
+        base = base.filter {
+            it.continent != null &&
+                it.continent.equals(GeneralVariables.filterContinent, ignoreCase = true)
+        }
+    }
+    if (GeneralVariables.filterDirectionalCQ) {
+        base = base.filter { GeneralVariables.directionalCQIsForMe(it.callsignTo) }
+    }
+
     return when (filter) {
-        "CQ Calls" -> messages.filter { it.checkIsCQ() }
-        "CQ POTA" -> messages.filter {
+        "CQ Calls" -> base.filter { it.checkIsCQ() }
+        "CQ POTA" -> base.filter {
             // Match three signals: (1) explicit "POTA" suffix on a CQ, (2) any CQ from a
             // station currently spotted on pota.app (activators often drop the suffix to
             // save chars), (3) free-text fragments like "CQ POT" that decoders garble
@@ -327,15 +376,15 @@ private fun filterMessages(
                     (it.callsignTo?.startsWith("CQ POT", ignoreCase = true) == true)
                 )
         }
-        "New DXCC" -> messages.filter { it.checkIsCQ() && it.fromDxcc }
-        "Needed" -> messages.filter {
+        "New DXCC" -> base.filter { it.checkIsCQ() && it.fromDxcc }
+        "Needed" -> base.filter {
             !it.isQSL_Callsign &&
                 !GeneralVariables.checkQSLCallsign(it.callsignFrom ?: "")
         }
-        "For Me" -> messages.filter {
+        "For Me" -> base.filter {
             GeneralVariables.checkIsMyCallsign(it.callsignTo ?: "")
         }
-        else -> messages // "All"
+        else -> base // "All"
     }
 }
 

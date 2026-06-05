@@ -155,6 +155,12 @@ public class MainViewModel extends ViewModel {
     public MutableLiveData<Integer> mutable_Decoded_Counter = new MutableLiveData<>();//total decoded count
     public int currentDecodeCount = 0;//number of decoded items in this cycle
     public MutableLiveData<ArrayList<Ft8Message>> mutableFt8MessageList = new MutableLiveData<>();//message list
+    // Needed-DX alerts: posts sound+vibrate notifications for new DXCC/state CQ stations.
+    public final com.bg7yoz.ft8cn.alert.DxAlertNotifier dxAlertNotifier =
+            new com.bg7yoz.ft8cn.alert.DxAlertNotifier(GeneralVariables.getMainContext());
+    // Callsign from a tapped Needed-DX notification; the Decode screen observes this to
+    // scroll to + highlight that station (pre-select). Set by ComposeMainActivity.
+    public MutableLiveData<String> mutablePreselectCallsign = new MutableLiveData<>();
     public MutableLiveData<Long> timerSec = new MutableLiveData<>();//current UTC time. Update frequency determined by UtcTimer, ~100ms when not triggered.
     public MutableLiveData<Boolean> mutableIsRecording = new MutableLiveData<>();//whether currently recording
     public MutableLiveData<Boolean> mutableHamRecordIsRunning = new MutableLiveData<>();//whether HamRecord is running
@@ -671,6 +677,44 @@ public class MainViewModel extends ViewModel {
 
 
     /**
+     * Start calling the station that sent {@code message} (e.g. a station calling CQ).
+     * This is the single entry point shared by the decode-list row tap and the
+     * QsoSheet "Call" button: it follows the callsign, activates TX if idle, sets up
+     * the QSO sequence, and requests an immediate transmit (which fires this slot if
+     * we are still inside the late-start window, otherwise at the next matching slot).
+     *
+     * @param message the decoded message whose sender we want to call
+     */
+    public void callStation(Ft8Message message) {
+        if (message == null || ft8TransmitSignal == null) {
+            return;
+        }
+        // Don't hijack an in-progress transmission, and ignore rows with no usable
+        // sender or our own decoded callsign (avoids accidentally "calling" ourselves).
+        if (ft8TransmitSignal.isTransmitting()) {
+            return;
+        }
+        String from = message.callsignFrom;
+        if (from == null || from.trim().isEmpty()
+                || from.equalsIgnoreCase(GeneralVariables.myCallsign)) {
+            return;
+        }
+
+        addFollowCallsign(from);
+        if (!ft8TransmitSignal.isActivated()) {
+            ft8TransmitSignal.setActivated(true);
+            GeneralVariables.transmitMessages.add(message);
+            GeneralVariables.resetLaunchSupervision();
+        }
+        ft8TransmitSignal.setTransmit(
+                message.getFromCallTransmitCallsign(),
+                1,
+                message.extraInfo);
+        ft8TransmitSignal.transmitNow();
+    }
+
+
+    /**
      * Get the followed callsign list from the database
      */
     public void getFollowCallsignsFromDataBase() {
@@ -1177,6 +1221,8 @@ public class MainViewModel extends ViewModel {
         public void run() {
             CallsignDatabase.getMessagesLocation(
                     GeneralVariables.callsignDatabase.getDb(), messages);
+            // Entity/state flags are now populated — fire Needed-DX alerts before the UI refresh.
+            mainViewModel.dxAlertNotifier.processDecodes(messages);
             mainViewModel.mutableFt8MessageList.postValue(mainViewModel.ft8Messages);
         }
     }

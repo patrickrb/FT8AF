@@ -111,6 +111,7 @@ fun SettingsScreen(
     var synFrequency by remember { mutableStateOf(GeneralVariables.synFrequency) }
     var autoFollowCQ by remember { mutableStateOf(GeneralVariables.autoFollowCQ) }
     var autoCallFollow by remember { mutableStateOf(GeneralVariables.autoCallFollow) }
+    var earlyDecode by remember { mutableStateOf(GeneralVariables.earlyDecode) }
     var autoUpdateGridFromGPS by remember { mutableStateOf(GeneralVariables.autoUpdateGridFromGPS) }
     var enableCloudlog by remember { mutableStateOf(GeneralVariables.enableCloudlog) }
     var enableQRZ by remember { mutableStateOf(GeneralVariables.enableQRZ) }
@@ -124,6 +125,26 @@ fun SettingsScreen(
     var highlightNewBand by remember { mutableStateOf(GeneralVariables.highlightNewBand) }
     var highlightWorked by remember { mutableStateOf(GeneralVariables.highlightWorked) }
     var highlightPota by remember { mutableStateOf(GeneralVariables.highlightPota) }
+
+    // Callsign blocklist (comma-separated entries) + decode display filters
+    var blockedExact by remember { mutableStateOf(GeneralVariables.getBlockedExactCallsigns()) }
+    var blockedPrefixes by remember { mutableStateOf(GeneralVariables.getExcludeCallsigns()) }
+    var blockedKeywords by remember { mutableStateOf(GeneralVariables.getBlockedKeywords()) }
+    var filterShowOnlyCQ by remember { mutableStateOf(GeneralVariables.filterShowOnlyCQ) }
+    var filterDxOnly by remember { mutableStateOf(GeneralVariables.filterDxOnly) }
+    var filterNeededOnly by remember { mutableStateOf(GeneralVariables.filterNeededOnly) }
+    var filterByContinent by remember { mutableStateOf(GeneralVariables.filterByContinent) }
+    var filterContinent by remember { mutableStateOf(GeneralVariables.filterContinent) }
+    var respectDirectionalCQ by remember { mutableStateOf(GeneralVariables.respectDirectionalCQ) }
+    var filterDirectionalCQ by remember { mutableStateOf(GeneralVariables.filterDirectionalCQ) }
+    var alertNewDxcc by remember { mutableStateOf(GeneralVariables.alertNewDxcc) }
+    var alertNewState by remember { mutableStateOf(GeneralVariables.alertNewState) }
+
+    // Continent codes (stored on the message) and their display names, parallel lists.
+    val continentCodes = listOf("NA", "SA", "EU", "AF", "AS", "OC", "AN")
+    val continentNames = listOf(
+        "North America", "South America", "Europe", "Africa", "Asia", "Oceania", "Antarctica",
+    )
 
     // Observe serial ports for USB Cable picker
     val serialPorts by mainViewModel.mutableSerialPorts.observeAsState()
@@ -157,6 +178,10 @@ fun SettingsScreen(
     var showAudioOutputPicker by remember { mutableStateOf(false) }
     var showBaudRatePicker by remember { mutableStateOf(false) }
     var showTxVolume by remember { mutableStateOf(false) }
+    var showBlockExactDialog by remember { mutableStateOf(false) }
+    var showBlockPrefixDialog by remember { mutableStateOf(false) }
+    var showBlockKeywordDialog by remember { mutableStateOf(false) }
+    var showContinentPicker by remember { mutableStateOf(false) }
 
     // Operator identity edit state
     var callsignState by remember { mutableStateOf(GeneralVariables.myCallsign.orEmpty()) }
@@ -164,6 +189,7 @@ fun SettingsScreen(
 
     // Mutable state for settings that need to trigger recomposition on change
     var watchdogMs by remember { mutableIntStateOf(GeneralVariables.launchSupervision) }
+    var autoCQAfterQSO by remember { mutableStateOf(GeneralVariables.autoCQAfterQSO) }
     var noReplyLimit by remember { mutableIntStateOf(GeneralVariables.noReplyLimit) }
     var pttDelay by remember { mutableIntStateOf(GeneralVariables.pttDelay) }
     var txDelay by remember { mutableIntStateOf(GeneralVariables.transmitDelay) }
@@ -262,6 +288,72 @@ fun SettingsScreen(
                 mainViewModel.databaseOpr.writeConfig("grid", formattedGrid, null)
 
                 showEditOperator = false
+            },
+        )
+    }
+
+    // -- Blocklist: exact whole-call dialog --
+    if (showBlockExactDialog) {
+        TextListDialog(
+            title = "Block Exact Callsigns",
+            description = "Whole-call match. Comma- or space-separated, e.g. W1AW, K1ABC.",
+            initialValue = blockedExact,
+            onDismiss = { showBlockExactDialog = false },
+            onSave = { text ->
+                GeneralVariables.addBlockedExactCallsigns(text)
+                blockedExact = GeneralVariables.getBlockedExactCallsigns()
+                mainViewModel.databaseOpr.writeConfig("blockedExactCallsigns", blockedExact, null)
+                showBlockExactDialog = false
+            },
+        )
+    }
+
+    // -- Blocklist: prefix dialog (legacy excludedCallsigns key) --
+    if (showBlockPrefixDialog) {
+        TextListDialog(
+            title = "Block Callsign Prefixes",
+            description = "Prefix match, e.g. RA blocks RA0AA..RA9ZZ. Comma- or space-separated.",
+            initialValue = blockedPrefixes,
+            onDismiss = { showBlockPrefixDialog = false },
+            onSave = { text ->
+                GeneralVariables.addExcludedCallsigns(text)
+                blockedPrefixes = GeneralVariables.getExcludeCallsigns()
+                mainViewModel.databaseOpr.writeConfig("excludedCallsigns", blockedPrefixes, null)
+                showBlockPrefixDialog = false
+            },
+        )
+    }
+
+    // -- Blocklist: keyword dialog --
+    if (showBlockKeywordDialog) {
+        TextListDialog(
+            title = "Block Keywords",
+            description = "Substring match against the call and message text, e.g. POTA, /P, QRP.",
+            initialValue = blockedKeywords,
+            onDismiss = { showBlockKeywordDialog = false },
+            onSave = { text ->
+                GeneralVariables.addBlockedKeywords(text)
+                blockedKeywords = GeneralVariables.getBlockedKeywords()
+                mainViewModel.databaseOpr.writeConfig("blockedKeywords", blockedKeywords, null)
+                showBlockKeywordDialog = false
+            },
+        )
+    }
+
+    // -- Decode filter: continent picker --
+    if (showContinentPicker) {
+        val currentIndex = continentCodes.indexOf(filterContinent).coerceAtLeast(0)
+        ListPickerDialog(
+            title = "Filter Continent",
+            items = continentNames,
+            selectedIndex = currentIndex,
+            onDismiss = { showContinentPicker = false },
+            onSelect = { index ->
+                showContinentPicker = false
+                val code = continentCodes[index]
+                filterContinent = code
+                GeneralVariables.filterContinent = code
+                mainViewModel.databaseOpr.writeConfig("filterContinent", code, null)
             },
         )
     }
@@ -996,6 +1088,32 @@ fun SettingsScreen(
                                 )
                             },
                         )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "Fast turnaround",
+                            description = "Decode ~1s earlier so you can answer a CQ on the next slot instead of waiting. May miss stations with a large clock offset.",
+                            toggle = earlyDecode,
+                            onToggleChange = { checked ->
+                                earlyDecode = checked
+                                GeneralVariables.earlyDecode = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "earlyDecode", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "Auto-CQ after QSO",
+                            description = "Keep calling CQ automatically after each completed contact — no re-tap. Stays on your frequency (ignores Hunt). Runs until you stop or the TX Watchdog times out with no answers.",
+                            toggle = autoCQAfterQSO,
+                            onToggleChange = { checked ->
+                                autoCQAfterQSO = checked
+                                GeneralVariables.autoCQAfterQSO = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "autoCQAfterQSO", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
                     }
                 }
             }
@@ -1067,6 +1185,172 @@ fun SettingsScreen(
                                 GeneralVariables.highlightWorked = checked
                                 mainViewModel.databaseOpr.writeConfig(
                                     "highlightWorked", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+
+            // =====================================================================
+            // 4c. CALLSIGN BLOCKLIST
+            // =====================================================================
+            SettingsSection(title = "CALLSIGN BLOCKLIST") {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        SettingsRow(
+                            label = "Exact Callsigns",
+                            description = "Block whole-call matches",
+                            value = blockedExact.ifBlank { "None" },
+                            showChevron = true,
+                            onClick = { showBlockExactDialog = true },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "Prefixes",
+                            description = "Block by callsign prefix (e.g. RA)",
+                            value = blockedPrefixes.ifBlank { "None" },
+                            showChevron = true,
+                            onClick = { showBlockPrefixDialog = true },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "Keywords",
+                            description = "Block by substring in call or message (e.g. POTA, /P)",
+                            value = blockedKeywords.ifBlank { "None" },
+                            showChevron = true,
+                            onClick = { showBlockKeywordDialog = true },
+                        )
+                    }
+                }
+            }
+
+            // =====================================================================
+            // 4d. DECODE FILTERS
+            // =====================================================================
+            SettingsSection(title = "DECODE FILTERS") {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        SettingsRow(
+                            label = "Show Only CQ",
+                            description = "Hide everything except CQ-type messages",
+                            toggle = filterShowOnlyCQ,
+                            onToggleChange = { checked ->
+                                filterShowOnlyCQ = checked
+                                GeneralVariables.filterShowOnlyCQ = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "filterShowOnlyCQ", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "DX Only",
+                            description = "Show only stations outside your own continent",
+                            toggle = filterDxOnly,
+                            onToggleChange = { checked ->
+                                filterDxOnly = checked
+                                GeneralVariables.filterDxOnly = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "filterDxOnly", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "Needed Only",
+                            description = "Show only stations not yet confirmed (QSL)",
+                            toggle = filterNeededOnly,
+                            onToggleChange = { checked ->
+                                filterNeededOnly = checked
+                                GeneralVariables.filterNeededOnly = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "filterNeededOnly", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "Filter By Continent",
+                            description = "Show only stations from a chosen continent",
+                            toggle = filterByContinent,
+                            onToggleChange = { checked ->
+                                filterByContinent = checked
+                                GeneralVariables.filterByContinent = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "filterByContinent", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        if (filterByContinent) {
+                            SectionDivider()
+                            SettingsRow(
+                                label = "Continent",
+                                value = continentNames.getOrElse(
+                                    continentCodes.indexOf(filterContinent),
+                                ) { filterContinent },
+                                showChevron = true,
+                                onClick = { showContinentPicker = true },
+                            )
+                        }
+                        SectionDivider()
+                        SettingsRow(
+                            label = "Skip Directional CQs (auto-reply)",
+                            description = "Don't auto-answer CQ DX/EU/JA… aimed at a different DXCC",
+                            toggle = respectDirectionalCQ,
+                            onToggleChange = { checked ->
+                                respectDirectionalCQ = checked
+                                GeneralVariables.respectDirectionalCQ = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "respectDirectionalCQ", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "Hide Directional CQs Not For Me",
+                            description = "Hide region-directed CQs that don't target your DXCC",
+                            toggle = filterDirectionalCQ,
+                            onToggleChange = { checked ->
+                                filterDirectionalCQ = checked
+                                GeneralVariables.filterDirectionalCQ = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "filterDirectionalCQ", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+
+            // =====================================================================
+            // 4e. NEEDED-DX ALERTS
+            // =====================================================================
+            SettingsSection(title = "NEEDED-DX ALERTS") {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        SettingsRow(
+                            label = "New DXCC",
+                            description = "Sound + vibrate + notify when an unworked DXCC entity calls CQ",
+                            toggle = alertNewDxcc,
+                            onToggleChange = { checked ->
+                                alertNewDxcc = checked
+                                GeneralVariables.alertNewDxcc = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "alertNewDxcc", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "New US State",
+                            description = "Sound + vibrate + notify when a station from an unworked US state calls CQ (state from grid)",
+                            toggle = alertNewState,
+                            onToggleChange = { checked ->
+                                alertNewState = checked
+                                GeneralVariables.alertNewState = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "alertNewState", if (checked) "1" else "0", null,
                                 )
                             },
                         )
@@ -1352,6 +1636,82 @@ private fun EditOperatorDialog(
                 TextButton(
                     onClick = { onSave(callsignInput.text, gridInput.text) },
                 ) {
+                    Text("Save", color = Accent, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Dialog for editing a comma/space-separated list of tokens (blocklist entries).
+ * One multi-line text field; the caller parses + persists the saved string.
+ */
+@Composable
+private fun TextListDialog(
+    title: String,
+    description: String,
+    initialValue: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var input by remember { mutableStateOf(TextFieldValue(initialValue)) }
+
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = TextPrimary,
+        unfocusedTextColor = TextPrimary,
+        cursorColor = Accent,
+        focusedBorderColor = Accent,
+        unfocusedBorderColor = BorderStrong,
+        focusedLabelColor = Accent,
+        unfocusedLabelColor = TextMuted,
+    )
+
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(BgSurface2)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = title,
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 18.sp,
+            )
+
+            Text(
+                text = description,
+                color = TextMuted,
+                fontSize = 13.sp,
+            )
+
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                placeholder = { Text("e.g. W1AW, RA, /P", color = TextFaint) },
+                singleLine = false,
+                minLines = 2,
+                colors = fieldColors,
+                textStyle = TextStyle(
+                    fontFamily = GeistMonoFamily,
+                    fontSize = 15.sp,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel", color = TextMuted)
+                }
+                TextButton(onClick = { onSave(input.text) }) {
                     Text("Save", color = Accent, fontWeight = FontWeight.SemiBold)
                 }
             }

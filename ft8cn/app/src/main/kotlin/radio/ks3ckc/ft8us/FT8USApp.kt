@@ -60,6 +60,15 @@ fun FT8USApp(mainViewModel: MainViewModel) {
     // Frequency picker sheet state
     var showFrequencyPicker by rememberSaveable { mutableStateOf(false) }
 
+    // A tapped Needed-DX notification asks us to jump to the Decode tab (DecodeScreen
+    // then scrolls to + highlights the alerted station).
+    val preselectCallsign by mainViewModel.mutablePreselectCallsign.observeAsState()
+    LaunchedEffect(preselectCallsign) {
+        if (!preselectCallsign.isNullOrBlank()) {
+            activeTab = FT8USTab.DECODE
+        }
+    }
+
     // Auto-expand when activated, auto-collapse when deactivated
     LaunchedEffect(isActivated) {
         if (isActivated) {

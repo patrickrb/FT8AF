@@ -1,5 +1,11 @@
 # FT8AF Project Instructions
 
+## Workflow
+
+After finishing the code for any feature, open a pull request targeting the `dev`
+branch (do the work on a feature branch, then `gh pr create --base dev`). Don't
+merge straight to `main`.
+
 ## Build & Deploy
 
 After making code changes, always build and install on the connected device.

@@ -70,6 +70,8 @@ public class Ft8Message {
     public String fromWhere = null;//used for displaying address/location
     public String toWhere = null;//used for displaying address/location
 
+    public String continent = null;//sender's continent abbrev (NA/SA/EU/AF/AS/OC/AN); used by decode filters
+
     public boolean isQSL_Callsign = false;//whether this callsign has been previously contacted
 
     public static MessageHashMap hashList = new MessageHashMap();
@@ -81,6 +83,11 @@ public class Ft8Message {
     public boolean toDxcc = false;
     public boolean toItu = false;
     public boolean toCq = false;
+
+    // US state of the sender, derived from maidenGrid via GeneralVariables.stateForGrid
+    // (null when not a US grid). fromNewState = that state is not yet in the worked set.
+    public String fromState = null;
+    public boolean fromNewState = false;
 
     public LatLng fromLatLng = null;
     public LatLng toLatLng = null;

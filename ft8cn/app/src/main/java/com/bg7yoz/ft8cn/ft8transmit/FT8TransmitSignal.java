@@ -829,6 +829,10 @@ public class FT8TransmitSignal {
      */
     //@RequiresApi(api = Build.VERSION_CODES.N)
     private boolean checkCQMeOrFollowCQMessage(ArrayList<Ft8Message> messages) {
+        return checkCQMeOrFollowCQMessage(messages, false);
+    }
+
+    private boolean checkCQMeOrFollowCQMessage(ArrayList<Ft8Message> messages, boolean suppressHunt) {
         // these messages are freshly decoded
         // both loops check for CQ-me messages. The first loop prioritizes checking for my target callsign,
         // to prevent replying inconsistently when multiple targets are calling me.
@@ -880,7 +884,9 @@ public class FT8TransmitSignal {
         // auto-call of followed callsigns. These are now independent — Hunt no
         // longer requires autoCallFollow — so the on-screen HUNT toggle is
         // authoritative on its own.
-        if (!GeneralVariables.autoFollowCQ && !GeneralVariables.autoCallFollow) {
+        // suppressHunt: Auto-CQ forces pure CQ — answer direct callers (loops
+        // above) but never auto-follow another station's CQ.
+        if (suppressHunt || (!GeneralVariables.autoFollowCQ && !GeneralVariables.autoCallFollow)) {
             return false;
         }
 
@@ -909,6 +915,9 @@ public class FT8TransmitSignal {
                     && (GeneralVariables.autoFollowCQ// Hunt: auto-answer any CQ
                     || (GeneralVariables.autoCallFollow
                     && GeneralVariables.callsignInFollow(msg.getCallsignFrom())))// followed callsign
+                    // skip directional CQs aimed at a different DXCC/continent (opt-in)
+                    && (!GeneralVariables.respectDirectionalCQ
+                    || GeneralVariables.directionalCQIsForMe(msg.callsignTo))
                     && !GeneralVariables.checkQSLCallsign(msg.getCallsignFrom())// not previously contacted successfully
                     && !GeneralVariables.checkIsMyCallsign(msg.callsignFrom)) {// not myself
 
@@ -1019,9 +1028,17 @@ public class FT8TransmitSignal {
             // enter CQ state
             resetToCQ();
 
-            // try queued callers first, then check for new callers
+            // Auto-CQ: refresh the watchdog on each completed QSO so the run
+            // keeps going without a re-tap. An idle CQ (no answers) still times out.
+            if (GeneralVariables.autoCQAfterQSO) {
+                GeneralVariables.resetLaunchSupervision();
+            }
+
+            // try queued callers first, then answer direct callers. When Auto-CQ
+            // is on, suppress Hunt so we stay on our run frequency calling CQ
+            // instead of chasing someone else's CQ.
             if (!dequeueNextCaller()) {
-                checkCQMeOrFollowCQMessage(messages);
+                checkCQMeOrFollowCQMessage(messages, GeneralVariables.autoCQAfterQSO);
             }
             setCurrentFunctionOrder(functionOrder);// set current message
             mutableFunctionOrder.postValue(functionOrder);
