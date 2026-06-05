@@ -187,6 +187,7 @@ fun SettingsScreen(
 
     // Mutable state for settings that need to trigger recomposition on change
     var watchdogMs by remember { mutableIntStateOf(GeneralVariables.launchSupervision) }
+    var autoCQAfterQSO by remember { mutableStateOf(GeneralVariables.autoCQAfterQSO) }
     var noReplyLimit by remember { mutableIntStateOf(GeneralVariables.noReplyLimit) }
     var pttDelay by remember { mutableIntStateOf(GeneralVariables.pttDelay) }
     var txDelay by remember { mutableIntStateOf(GeneralVariables.transmitDelay) }
@@ -1095,6 +1096,19 @@ fun SettingsScreen(
                                 GeneralVariables.earlyDecode = checked
                                 mainViewModel.databaseOpr.writeConfig(
                                     "earlyDecode", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "Auto-CQ after QSO",
+                            description = "Keep calling CQ automatically after each completed contact — no re-tap. Stays on your frequency (ignores Hunt). Runs until you stop or the TX Watchdog times out with no answers.",
+                            toggle = autoCQAfterQSO,
+                            onToggleChange = { checked ->
+                                autoCQAfterQSO = checked
+                                GeneralVariables.autoCQAfterQSO = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "autoCQAfterQSO", if (checked) "1" else "0", null,
                                 )
                             },
                         )

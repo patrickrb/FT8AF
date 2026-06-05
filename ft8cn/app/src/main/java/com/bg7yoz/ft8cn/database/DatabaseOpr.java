@@ -2346,6 +2346,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("earlyDecode")) {//Fast turnaround: shorter RX window, defaults on
                     GeneralVariables.earlyDecode = (result.equals("") || result.equals("1"));
                 }
+                if (name.equalsIgnoreCase("autoCQAfterQSO")) {//Auto-CQ after each completed QSO, defaults off
+                    GeneralVariables.autoCQAfterQSO = result.equals("1");
+                }
                 if (name.equalsIgnoreCase("icomIp")) {//ICOM IP address
                     GeneralVariables.icomIp = result.equals("") ? "255.255.255.255" : result;
                 }
