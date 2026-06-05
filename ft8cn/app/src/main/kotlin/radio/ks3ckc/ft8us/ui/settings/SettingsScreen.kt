@@ -80,6 +80,7 @@ import com.bg7yoz.ft8cn.ui.SelectXieguRadioDialog
 import radio.ks3ckc.ft8us.theme.*
 import radio.ks3ckc.ft8us.ui.components.GlassCard
 import radio.ks3ckc.ft8us.ui.components.SettingsRow
+import radio.ks3ckc.ft8us.ui.components.Toggle
 import radio.ks3ckc.ft8us.ui.components.TopBar
 import radio.ks3ckc.ft8us.ui.components.selectBandIndex
 
@@ -117,6 +118,13 @@ fun SettingsScreen(
     var saveSWLMessage by remember { mutableStateOf(GeneralVariables.saveSWLMessage) }
     var saveSWL_QSO by remember { mutableStateOf(GeneralVariables.saveSWL_QSO) }
 
+    // Decode-list highlight toggles
+    var highlightNewDxcc by remember { mutableStateOf(GeneralVariables.highlightNewDxcc) }
+    var highlightNewGrid by remember { mutableStateOf(GeneralVariables.highlightNewGrid) }
+    var highlightNewBand by remember { mutableStateOf(GeneralVariables.highlightNewBand) }
+    var highlightWorked by remember { mutableStateOf(GeneralVariables.highlightWorked) }
+    var highlightPota by remember { mutableStateOf(GeneralVariables.highlightPota) }
+
     // Observe serial ports for USB Cable picker
     val serialPorts by mainViewModel.mutableSerialPorts.observeAsState()
     var showSerialPortPicker by remember { mutableStateOf(false) }
@@ -125,6 +133,10 @@ fun SettingsScreen(
     var showEditOperator by remember { mutableStateOf(false) }
     var showConnectionMode by remember { mutableStateOf(false) }
     var showBandPicker by remember { mutableStateOf(false) }
+    var showEnabledBands by remember { mutableStateOf(false) }
+    // Mirror of GeneralVariables.excludedBands so the dialog + the "N of M enabled"
+    // label recompose as the user toggles bands.
+    var excludedBands by remember { mutableStateOf(GeneralVariables.excludedBands.toSet()) }
     var showAudioFreq by remember { mutableStateOf(false) }
     var showSpectrumWidth by remember { mutableStateOf(false) }
     var showWatchdog by remember { mutableStateOf(false) }
@@ -314,18 +326,40 @@ fun SettingsScreen(
 
     // -- Band & Frequency Picker --
     if (showBandPicker) {
-        val bandItems = (0 until OperationBand.bandList.size).map { i ->
-            OperationBand.getBandInfo(i)
-        }
-        val currentBandIndex = GeneralVariables.bandListIndex.coerceAtLeast(0)
+        // Only show bands the user hasn't hidden. visibleIndices maps the dialog's
+        // row position back to the real OperationBand.bandList index.
+        val visibleIndices = OperationBand.getVisibleBandIndices()
+        val bandItems = visibleIndices.map { i -> OperationBand.getBandInfo(i) }
+        // Highlight the active band if it's still visible; otherwise no selection.
+        val selectedIndex = visibleIndices.indexOf(GeneralVariables.bandListIndex)
         ListPickerDialog(
             title = "Band & Frequency",
             items = bandItems,
-            selectedIndex = currentBandIndex,
+            selectedIndex = selectedIndex,
             onDismiss = { showBandPicker = false },
-            onSelect = { index ->
+            onSelect = { position ->
                 showBandPicker = false
-                selectBandIndex(mainViewModel, context, index)
+                selectBandIndex(mainViewModel, context, visibleIndices[position])
+            },
+        )
+    }
+
+    // -- Enabled Bands (per-band visibility toggles) --
+    if (showEnabledBands) {
+        BandToggleDialog(
+            excludedBands = excludedBands,
+            onDismiss = { showEnabledBands = false },
+            onToggle = { waveLength, enabled ->
+                val updated = excludedBands.toMutableSet()
+                if (enabled) updated.remove(waveLength) else updated.add(waveLength)
+                // Never let the user hide every band; at least one must remain.
+                if (updated.size >= OperationBand.getAllWaveLengths().size) return@BandToggleDialog
+                excludedBands = updated
+                GeneralVariables.excludedBands.clear()
+                GeneralVariables.excludedBands.addAll(updated)
+                mainViewModel.databaseOpr.writeConfig(
+                    "excludedBands", GeneralVariables.excludedBandsToCsv(), null,
+                )
             },
         )
     }
@@ -828,6 +862,16 @@ fun SettingsScreen(
                             onClick = { showBandPicker = true },
                         )
                         SectionDivider()
+                        run {
+                            val total = OperationBand.getAllWaveLengths().size
+                            SettingsRow(
+                                label = "Enabled Bands",
+                                value = "${total - excludedBands.size} of $total enabled",
+                                showChevron = true,
+                                onClick = { showEnabledBands = true },
+                            )
+                        }
+                        SectionDivider()
                         SettingsRow(
                             label = "Audio Frequency",
                             value = audioFreqStr,
@@ -949,6 +993,80 @@ fun SettingsScreen(
                                 GeneralVariables.autoCallFollow = checked
                                 mainViewModel.databaseOpr.writeConfig(
                                     "autoCallFollow", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+
+            // =====================================================================
+            // 4b. DECODE HIGHLIGHTS
+            // =====================================================================
+            SettingsSection(title = "DECODE HIGHLIGHTS") {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        SettingsRow(
+                            label = "New DXCC",
+                            description = "Highlight stations from an unworked DXCC entity",
+                            toggle = highlightNewDxcc,
+                            onToggleChange = { checked ->
+                                highlightNewDxcc = checked
+                                GeneralVariables.highlightNewDxcc = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "highlightNewDxcc", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "New Grid",
+                            description = "Highlight not-yet-worked Maidenhead grids",
+                            toggle = highlightNewGrid,
+                            onToggleChange = { checked ->
+                                highlightNewGrid = checked
+                                GeneralVariables.highlightNewGrid = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "highlightNewGrid", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "New Band",
+                            description = "Highlight stations worked only on other bands",
+                            toggle = highlightNewBand,
+                            onToggleChange = { checked ->
+                                highlightNewBand = checked
+                                GeneralVariables.highlightNewBand = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "highlightNewBand", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "POTA Activators",
+                            description = "Highlight spotted POTA activators; new parks stand out",
+                            toggle = highlightPota,
+                            onToggleChange = { checked ->
+                                highlightPota = checked
+                                GeneralVariables.highlightPota = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "highlightPota", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "Worked Before",
+                            description = "Tag stations already in your log",
+                            toggle = highlightWorked,
+                            onToggleChange = { checked ->
+                                highlightWorked = checked
+                                GeneralVariables.highlightWorked = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "highlightWorked", if (checked) "1" else "0", null,
                                 )
                             },
                         )
@@ -1649,6 +1767,88 @@ private fun QrzCredsDialog(
                     },
                 ) {
                     Text("Save", color = Accent, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Per-band visibility toggles. Lists every distinct band name from bands.txt;
+ * a band that's switched off is hidden from both band pickers. Lets operators
+ * in regions with restricted band plans (e.g. Russia: no 6m/60m) hide bands
+ * they may not use.
+ */
+@Composable
+private fun BandToggleDialog(
+    excludedBands: Set<String>,
+    onDismiss: () -> Unit,
+    onToggle: (waveLength: String, enabled: Boolean) -> Unit,
+) {
+    val waveLengths = remember { OperationBand.getAllWaveLengths() }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(BgSurface2)
+                .padding(vertical = 24.dp),
+        ) {
+            Text(
+                text = "Enabled Bands",
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 18.sp,
+                modifier = Modifier.padding(horizontal = 24.dp),
+            )
+            Text(
+                text = "Hidden bands won't appear in the frequency pickers.",
+                color = TextMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp),
+            ) {
+                itemsIndexed(waveLengths) { _, wave ->
+                    val enabled = !excludedBands.contains(wave)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggle(wave, !enabled) }
+                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = wave,
+                            color = TextPrimary,
+                            fontSize = 15.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Toggle(
+                            checked = enabled,
+                            onCheckedChange = { onToggle(wave, it) },
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text("Done", color = Accent)
                 }
             }
         }

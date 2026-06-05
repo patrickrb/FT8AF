@@ -344,18 +344,23 @@ internal fun resolveQsoStatus(message: Ft8Message): QsoStatus? {
 
     // Spotted-on-pota.app activators frequently CQ without the "POTA" suffix
     // because their full call already eats the budget. Treat them as POTA so
-    // hunters can recognise them at a glance.
-    val isSpottedPotaActivator =
-        radio.ks3ckc.ft8us.pota.PotaSpotsRepository.parkRefFor(message.callsignFrom) != null
+    // hunters can recognise them at a glance. When we have the park ref and it's
+    // not in the hunted log, surface it as a distinct NEW POTA.
+    val parkRef = radio.ks3ckc.ft8us.pota.PotaSpotsRepository.parkRefFor(message.callsignFrom)
+    val isPota = isCQ && (modifier == "POTA" || parkRef != null)
+    val newPota = isPota && parkRef != null && !GeneralVariables.checkQSLPark(parkRef)
 
+    // Each worked-before category is gated by a user toggle (Settings → Decode
+    // Highlights). A disabled category falls through to the next in priority.
     return when {
         isToMe -> QsoStatus.PENDING
-        isCQ && (modifier == "POTA" || isSpottedPotaActivator) -> QsoStatus.POTA
+        GeneralVariables.highlightPota && isPota ->
+            if (newPota) QsoStatus.NEW_POTA else QsoStatus.POTA
         isCQ && modifier == "SOTA" -> QsoStatus.SOTA
-        message.fromDxcc -> QsoStatus.NEW
-        newGrid -> QsoStatus.NEW_GRID
-        newBand -> QsoStatus.NEW_BAND
-        isWorked -> QsoStatus.WORKED
+        GeneralVariables.highlightNewDxcc && message.fromDxcc -> QsoStatus.NEW
+        GeneralVariables.highlightNewGrid && newGrid -> QsoStatus.NEW_GRID
+        GeneralVariables.highlightNewBand && newBand -> QsoStatus.NEW_BAND
+        GeneralVariables.highlightWorked && isWorked -> QsoStatus.WORKED
         isCQ -> QsoStatus.CQ
         else -> null
     }

@@ -233,6 +233,17 @@ public class GeneralVariables {
     public static int instructionSet = 0;//Instruction set: 0=ICOM, 1=Yaesu gen 2, 2=Yaesu gen 3
     public static int bandListIndex = -1;//Radio band index value
     public static MutableLiveData<Integer> mutableBandChange = new MutableLiveData<>();//Band index change
+    //Band names (e.g. "6m","60m") the user has hidden from the band pickers. Empty = show all.
+    //Persisted in config as a comma-separated list under the key "excludedBands".
+    public static java.util.HashSet<String> excludedBands = new java.util.HashSet<>();
+
+    public static boolean isBandExcluded(String waveLength) {
+        return excludedBands.contains(waveLength);
+    }
+
+    public static String excludedBandsToCsv() {
+        return android.text.TextUtils.join(",", excludedBands);
+    }
     public static int controlMode = ControlMode.VOX;
     public static int modelNo = 0;
     public static int launchSupervision = DEFAULT_LAUNCH_SUPERVISION;//Transmit supervision
@@ -254,6 +265,15 @@ public class GeneralVariables {
     public static ArrayList<String> QSL_Callsign_list = new ArrayList<>();//Successfully QSL'd callsigns
     public static ArrayList<String> QSL_Callsign_list_other_band = new ArrayList<>();//Successfully QSL'd callsigns on other bands
     public static HashSet<String> QSL_Grid_list = new HashSet<>();//Distinct worked 4-char Maidenhead grids (any band)
+    public static HashSet<String> QSL_Pota_list = new HashSet<>();//Distinct hunted POTA park refs (UPPER), any band
+
+    // Decode-list highlight toggles (Settings → Decode Highlights). Gate the
+    // status pill shown for each worked-before category in resolveQsoStatus().
+    public static boolean highlightNewDxcc = true;//Highlight stations from an unworked DXCC entity
+    public static boolean highlightNewGrid = false;//Off by default — most grids are "new", so it's noisy
+    public static boolean highlightNewBand = true;//Highlight stations worked only on other bands
+    public static boolean highlightWorked = true;//Tag stations already worked
+    public static boolean highlightPota = true;//Highlight spotted POTA activators (new parks stand out)
 
 
     public static final ArrayList<String> followCallsign = new ArrayList<>();//Followed callsigns
@@ -348,6 +368,14 @@ public class GeneralVariables {
     public static boolean checkQSLGrid(String grid) {
         if (grid == null || grid.length() < 4) return false;
         return QSL_Grid_list.contains(grid.substring(0, 4).toUpperCase());
+    }
+
+    /**
+     * Check if a POTA park reference (e.g. "K-1234") has been previously hunted (any band).
+     */
+    public static boolean checkQSLPark(String ref) {
+        if (ref == null || ref.isEmpty()) return false;
+        return QSL_Pota_list.contains(ref.toUpperCase());
     }
 
     /**

@@ -346,16 +346,18 @@ public class CallingListAdapter extends RecyclerView.Adapter<CallingListAdapter.
         }
 
         int colorRes;
-        if (msg.fromDxcc) {
+        if (GeneralVariables.highlightNewDxcc && msg.fromDxcc) {
             colorRes = R.color.stripe_new_dxcc;
-        } else if (msg.maidenGrid != null
+        } else if (GeneralVariables.highlightNewGrid
+                && msg.maidenGrid != null
                 && msg.maidenGrid.length() >= 4
                 && !GeneralVariables.checkQSLGrid(msg.maidenGrid)) {
             colorRes = R.color.stripe_new_grid;
-        } else if (!msg.isQSL_Callsign
+        } else if (GeneralVariables.highlightNewBand
+                && !msg.isQSL_Callsign
                 && holder.otherBandIsQso) {
             colorRes = R.color.stripe_new_band;
-        } else if (msg.isQSL_Callsign) {
+        } else if (GeneralVariables.highlightWorked && msg.isQSL_Callsign) {
             colorRes = R.color.stripe_worked;
         } else {
             colorRes = R.color.stripe_none;

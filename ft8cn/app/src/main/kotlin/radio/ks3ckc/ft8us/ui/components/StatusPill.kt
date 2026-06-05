@@ -51,6 +51,12 @@ enum class QsoStatus(
         Color(0x1F4ADE80),  // rgba(74,222,128,0.12)
         Color(0x474ADE80),  // rgba(74,222,128,0.28)
     ),
+    NEW_POTA(
+        "NEW POTA",
+        StatusNeeded,
+        Color(0x1FFFAF5E),  // amber — a park you haven't hunted yet
+        Color(0x47FFAF5E),
+    ),
     SOTA(
         "SOTA",
         StatusConfirmed,

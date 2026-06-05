@@ -18,6 +18,7 @@ import android.media.AudioTrack;
 import android.util.Log;
 
 import com.bg7yoz.ft8cn.wave.UsbAudioDevice;
+import com.bg7yoz.ft8cn.wave.UsbAudioNative;
 
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.Observer;
@@ -1152,6 +1153,12 @@ public class FT8TransmitSignal {
         }
 
         if (!transmitting) {//stop transmitting
+            // Abort any in-progress USB-audio write so TX audio stops immediately.
+            // The native/fallback writers run on the transmit worker thread and
+            // would otherwise drain the full ~12.6s message; this signals them to
+            // bail out. When the writer returns, playViaUsbAudio's afterPlayAudio()
+            // drops PTT. No-op when not transmitting over USB audio.
+            UsbAudioNative.cancelWrite();
             if (audioTrack != null) {
                 if (audioTrack.getState() != AudioTrack.STATE_UNINITIALIZED) {
                     audioTrack.pause();
@@ -1159,6 +1166,11 @@ public class FT8TransmitSignal {
                 if (onDoTransmitted != null) {//notify that transmitting has stopped
                     onDoTransmitted.onAfterTransmit(getFunctionCommand(functionOrder), functionOrder);
                 }
+                // Release the paused track: its completion marker won't fire once
+                // paused, so afterPlayAudio() would never run for this branch and
+                // the track would leak until the next TX overwrites the field.
+                audioTrack.release();
+                audioTrack = null;
             }
         }
 
