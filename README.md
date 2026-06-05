@@ -2,7 +2,7 @@
 
 **FT8 on Android — modernized.**
 
-🌐 **[ft8af.app](https://ft8af.app)**
+🌐 **[ft8af.app](https://ft8af.app)** · 💬 **[Join the Discord](https://discord.gg/tz4spm5nWB)**
 
 A fork of [FT8CN](https://github.com/N0BOY/FT8CN) that takes the excellent original and brings it forward: a Jetpack Compose UI, full English localization, dozens of bug fixes, and a pile of new operating features built for real on-the-air use.
 
