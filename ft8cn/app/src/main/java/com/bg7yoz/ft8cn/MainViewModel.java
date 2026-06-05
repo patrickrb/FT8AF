@@ -87,6 +87,7 @@ import com.bg7yoz.ft8cn.rigs.IcomRig;
 import com.bg7yoz.ft8cn.rigs.InstructionSet;
 import com.bg7yoz.ft8cn.rigs.KenwoodKT90Rig;
 import com.bg7yoz.ft8cn.rigs.KenwoodTS2000Rig;
+import com.bg7yoz.ft8cn.rigs.KenwoodTS440Rig;
 import com.bg7yoz.ft8cn.rigs.KenwoodTS570Rig;
 import com.bg7yoz.ft8cn.rigs.KenwoodTS590Rig;
 import com.bg7yoz.ft8cn.rigs.OnRigStateChanged;
@@ -1004,6 +1005,9 @@ public class MainViewModel extends ViewModel {
                 break;
             case InstructionSet.KENWOOD_TS570:
                 baseRig = new KenwoodTS570Rig();//KENWOOD TS-570D
+                break;
+            case InstructionSet.KENWOOD_TS440:
+                baseRig = new KenwoodTS440Rig();//KENWOOD TS-440S (TS-570 CAT, USB mode)
                 break;
         }
 
