@@ -91,6 +91,7 @@ private fun buildBandGroups(): List<BandGroup> {
     val order = LinkedHashMap<String, MutableList<Pair<Int, OperationBand.Band>>>()
     for (i in 0 until OperationBand.bandList.size) {
         val b = OperationBand.bandList[i]
+        if (GeneralVariables.isBandExcluded(b.waveLength)) continue
         order.getOrPut(b.waveLength) { mutableListOf() }.add(i to b)
     }
     return order.map { (wave, entries) ->
@@ -119,7 +120,7 @@ fun FrequencyPickerSheet(
     onSelect: (Int) -> Unit,
 ) {
     FT8USBottomSheet(visible = visible, onDismiss = onDismiss) {
-        val groups = remember { buildBandGroups() }
+        val groups = remember(GeneralVariables.excludedBands.toSet()) { buildBandGroups() }
         var showAlternates by remember { mutableStateOf(false) }
 
         Column(
