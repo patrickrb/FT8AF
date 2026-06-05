@@ -127,14 +127,16 @@ public class CallsignDatabase extends SQLiteOpenHelper {
                     msg.fromLatLng = new LatLng(fromCallsignInfo.Latitude, fromCallsignInfo.Longitude * -1);
             }
 
-            // Resolve the operator's own continent once (for the DX decode filter).
-            if (GeneralVariables.myContinent == null
+            // Resolve the operator's own continent + DXCC once (continent for the DX
+            // decode filter, DXCC for the directional-CQ matcher).
+            if ((GeneralVariables.myContinent == null || GeneralVariables.myDxcc == null)
                     && GeneralVariables.myCallsign != null
                     && GeneralVariables.myCallsign.length() > 0) {
                 CallsignInfo myInfo = getCallsignInfo(db,
                         GeneralVariables.myCallsign.replace("<", "").replace(">", ""));
                 if (myInfo != null) {
                     GeneralVariables.myContinent = myInfo.Continent;
+                    GeneralVariables.myDxcc = myInfo.DXCC;
                 }
             }
 

@@ -909,6 +909,9 @@ public class FT8TransmitSignal {
                     && (GeneralVariables.autoFollowCQ// Hunt: auto-answer any CQ
                     || (GeneralVariables.autoCallFollow
                     && GeneralVariables.callsignInFollow(msg.getCallsignFrom())))// followed callsign
+                    // skip directional CQs aimed at a different DXCC/continent (opt-in)
+                    && (!GeneralVariables.respectDirectionalCQ
+                    || GeneralVariables.directionalCQIsForMe(msg.callsignTo))
                     && !GeneralVariables.checkQSLCallsign(msg.getCallsignFrom())// not previously contacted successfully
                     && !GeneralVariables.checkIsMyCallsign(msg.callsignFrom)) {// not myself
 

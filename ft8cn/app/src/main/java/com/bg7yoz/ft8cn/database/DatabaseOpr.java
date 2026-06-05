@@ -2387,6 +2387,12 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                         GeneralVariables.filterContinent = result;
                     }
                 }
+                if (name.equalsIgnoreCase("respectDirectionalCQ")) {//Directional CQ: suppress auto-reply
+                    GeneralVariables.respectDirectionalCQ = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("filterDirectionalCQ")) {//Directional CQ: hide from decode list
+                    GeneralVariables.filterDirectionalCQ = result.equals("1");
+                }
                 if (name.equalsIgnoreCase("flexMaxRfPower")) {//Flex max RF power
                     GeneralVariables.flexMaxRfPower = result.equals("") ? 10 : Integer.parseInt(result);
                 }

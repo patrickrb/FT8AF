@@ -343,6 +343,9 @@ private fun filterMessages(
                 it.continent.equals(GeneralVariables.filterContinent, ignoreCase = true)
         }
     }
+    if (GeneralVariables.filterDirectionalCQ) {
+        base = base.filter { GeneralVariables.directionalCQIsForMe(it.callsignTo) }
+    }
 
     return when (filter) {
         "CQ Calls" -> base.filter { it.checkIsCQ() }
