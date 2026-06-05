@@ -70,6 +70,8 @@ public class Ft8Message {
     public String fromWhere = null;//used for displaying address/location
     public String toWhere = null;//used for displaying address/location
 
+    public String continent = null;//sender's continent abbrev (NA/SA/EU/AF/AS/OC/AN); used by decode filters
+
     public boolean isQSL_Callsign = false;//whether this callsign has been previously contacted
 
     public static MessageHashMap hashList = new MessageHashMap();
