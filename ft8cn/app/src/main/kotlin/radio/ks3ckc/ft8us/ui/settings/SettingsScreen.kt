@@ -118,6 +118,13 @@ fun SettingsScreen(
     var saveSWLMessage by remember { mutableStateOf(GeneralVariables.saveSWLMessage) }
     var saveSWL_QSO by remember { mutableStateOf(GeneralVariables.saveSWL_QSO) }
 
+    // Decode-list highlight toggles
+    var highlightNewDxcc by remember { mutableStateOf(GeneralVariables.highlightNewDxcc) }
+    var highlightNewGrid by remember { mutableStateOf(GeneralVariables.highlightNewGrid) }
+    var highlightNewBand by remember { mutableStateOf(GeneralVariables.highlightNewBand) }
+    var highlightWorked by remember { mutableStateOf(GeneralVariables.highlightWorked) }
+    var highlightPota by remember { mutableStateOf(GeneralVariables.highlightPota) }
+
     // Observe serial ports for USB Cable picker
     val serialPorts by mainViewModel.mutableSerialPorts.observeAsState()
     var showSerialPortPicker by remember { mutableStateOf(false) }
@@ -986,6 +993,80 @@ fun SettingsScreen(
                                 GeneralVariables.autoCallFollow = checked
                                 mainViewModel.databaseOpr.writeConfig(
                                     "autoCallFollow", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+
+            // =====================================================================
+            // 4b. DECODE HIGHLIGHTS
+            // =====================================================================
+            SettingsSection(title = "DECODE HIGHLIGHTS") {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        SettingsRow(
+                            label = "New DXCC",
+                            description = "Highlight stations from an unworked DXCC entity",
+                            toggle = highlightNewDxcc,
+                            onToggleChange = { checked ->
+                                highlightNewDxcc = checked
+                                GeneralVariables.highlightNewDxcc = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "highlightNewDxcc", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "New Grid",
+                            description = "Highlight not-yet-worked Maidenhead grids",
+                            toggle = highlightNewGrid,
+                            onToggleChange = { checked ->
+                                highlightNewGrid = checked
+                                GeneralVariables.highlightNewGrid = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "highlightNewGrid", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "New Band",
+                            description = "Highlight stations worked only on other bands",
+                            toggle = highlightNewBand,
+                            onToggleChange = { checked ->
+                                highlightNewBand = checked
+                                GeneralVariables.highlightNewBand = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "highlightNewBand", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "POTA Activators",
+                            description = "Highlight spotted POTA activators; new parks stand out",
+                            toggle = highlightPota,
+                            onToggleChange = { checked ->
+                                highlightPota = checked
+                                GeneralVariables.highlightPota = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "highlightPota", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "Worked Before",
+                            description = "Tag stations already in your log",
+                            toggle = highlightWorked,
+                            onToggleChange = { checked ->
+                                highlightWorked = checked
+                                GeneralVariables.highlightWorked = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "highlightWorked", if (checked) "1" else "0", null,
                                 )
                             },
                         )

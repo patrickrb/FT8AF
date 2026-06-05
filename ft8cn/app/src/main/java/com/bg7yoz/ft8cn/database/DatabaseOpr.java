@@ -2081,6 +2081,25 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             }
             cursor.close();
             GeneralVariables.QSL_Grid_list = grids;
+
+            // Load distinct hunted POTA park refs (any band) into in-memory set.
+            // sig/sig_info may be absent on some upgraded installs (see note in
+            // onUpgrade), so guard the query defensively.
+            try {
+                Cursor potaCursor = db.rawQuery("select distinct upper(sig_info) as p from QSLTable" +
+                        " where sig='POTA' and sig_info is not null and sig_info<>''", null);
+                java.util.HashSet<String> parks = new java.util.HashSet<>();
+                while (potaCursor.moveToNext()) {
+                    String p = potaCursor.getString(0);
+                    if (p != null && !p.isEmpty()) {
+                        parks.add(p);
+                    }
+                }
+                potaCursor.close();
+                GeneralVariables.QSL_Pota_list = parks;
+            } catch (Exception ignored) {
+                GeneralVariables.QSL_Pota_list = new java.util.HashSet<>();
+            }
         }
 
     }
@@ -2436,6 +2455,22 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("spectrumWidth")) {
                     GeneralVariables.setSpectrumWidth(result.equals("") ? 3500 : Integer.parseInt(result));
+                }
+
+                if (name.equalsIgnoreCase("highlightNewDxcc")) {
+                    GeneralVariables.highlightNewDxcc = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("highlightNewGrid")) {
+                    GeneralVariables.highlightNewGrid = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("highlightNewBand")) {
+                    GeneralVariables.highlightNewBand = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("highlightWorked")) {
+                    GeneralVariables.highlightWorked = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("highlightPota")) {
+                    GeneralVariables.highlightPota = result.equals("1");
                 }
 
             }
