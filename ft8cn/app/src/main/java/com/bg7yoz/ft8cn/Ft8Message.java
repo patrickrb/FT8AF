@@ -84,6 +84,11 @@ public class Ft8Message {
     public boolean toItu = false;
     public boolean toCq = false;
 
+    // US state of the sender, derived from maidenGrid via GeneralVariables.stateForGrid
+    // (null when not a US grid). fromNewState = that state is not yet in the worked set.
+    public String fromState = null;
+    public boolean fromNewState = false;
+
     public LatLng fromLatLng = null;
     public LatLng toLatLng = null;
 

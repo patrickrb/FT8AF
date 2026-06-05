@@ -1174,7 +1174,27 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 cursor.close();
 
-                Log.d(TAG, "run: zone import complete, resolved " + count + " logged callsigns");
+                // Worked US states: derive each logged QSO's state from its grid square,
+                // using the same grid->state table the decode/display paths use. Keeps the
+                // "new state" alert consistent with what the UI shows on each row.
+                Cursor gridCursor = db.rawQuery(
+                        "SELECT DISTINCT gridsquare FROM QSLTable "
+                                + "WHERE gridsquare IS NOT NULL AND gridsquare <> ''",
+                        null);
+                int stateCount = 0;
+                while (gridCursor.moveToNext()) {
+                    String grid = gridCursor.getString(gridCursor.getColumnIndex("gridsquare"));
+                    String state = GeneralVariables.stateForGrid(grid);
+                    if (state != null) {
+                        GeneralVariables.addState(state);
+                        stateCount++;
+                    }
+                }
+                gridCursor.close();
+
+                Log.d(TAG, "run: zone import complete, resolved " + count + " logged callsigns, "
+                        + stateCount + " gridded QSOs -> " + GeneralVariables.workedStates.size()
+                        + " worked states");
             }
         }).start();
 
@@ -2395,6 +2415,12 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("filterDirectionalCQ")) {//Directional CQ: hide from decode list
                     GeneralVariables.filterDirectionalCQ = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("alertNewDxcc")) {//Needed-DX alert: new DXCC entity
+                    GeneralVariables.alertNewDxcc = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("alertNewState")) {//Needed-DX alert: new US state
+                    GeneralVariables.alertNewState = result.equals("1");
                 }
                 if (name.equalsIgnoreCase("flexMaxRfPower")) {//Flex max RF power
                     GeneralVariables.flexMaxRfPower = result.equals("") ? 10 : Integer.parseInt(result);
