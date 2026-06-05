@@ -68,7 +68,6 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
     var touchedFreqHz by remember { mutableIntStateOf(-1) }
     var updateCount by remember { mutableIntStateOf(0) }
 
-    val isDecoding by mainViewModel.mutableIsDecoding.observeAsState(false)
     val isTransmitting by mainViewModel.ft8TransmitSignal.mutableIsTransmitting.observeAsState(false)
     val txFreq by GeneralVariables.mutableBaseFrequency.observeAsState(GeneralVariables.getBaseFrequency())
     val spectrumWidth by GeneralVariables.mutableSpectrumWidth.observeAsState(GeneralVariables.getSpectrumWidth())
@@ -109,9 +108,12 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             }
 
             viewHolder.waterfall?.let { wView ->
-                val currentlyDecoding = mainViewModel.mutableIsDecoding.value ?: false
+                // drawMessage is armed elsewhere, edge-triggered off the
+                // decode-state LiveData (see decodingObserver below). The
+                // view stamps the labels onto its scrolling bitmap on the
+                // first setWaveData after it's armed, then self-resets the
+                // flag, so labels appear exactly once per decode cycle.
                 wView.setSpectrumWidth(GeneralVariables.getSpectrumWidth())
-                wView.setDrawMessage(mainViewModel.markMessage && !currentlyDecoding)
                 wView.setTxFrequency(currentTxFreq)
                 wView.setTxActive(currentTxActive)
                 val messages = if (mainViewModel.markMessage) mainViewModel.currentMessages else null
@@ -119,9 +121,23 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
                 wView.invalidate()
             }
         }
+        // Arm the decode-label draw edge-triggered off the decode-state
+        // LiveData, exactly like the old SpectrumFragment did
+        // (setDrawMessage(!isDecoding)). A decode lasts only ~60ms and can
+        // fall entirely between two ~160ms audio frames, so sampling
+        // isDecoding inside the audio observer misses the transition and the
+        // labels never draw. LiveData delivers every true/false transition on
+        // the main thread regardless of audio cadence. currentMessages is
+        // populated before isDecoding goes false (MainViewModel), so by the
+        // time we arm the draw the labels are ready for the next setWaveData.
+        val decodingObserver = Observer<Boolean> { decoding ->
+            viewHolder.waterfall?.setDrawMessage(!decoding && mainViewModel.markMessage)
+        }
         mainViewModel.spectrumListener.mutableDataBuffer.observeForever(observer)
+        mainViewModel.mutableIsDecoding.observeForever(decodingObserver)
         onDispose {
             mainViewModel.spectrumListener.mutableDataBuffer.removeObserver(observer)
+            mainViewModel.mutableIsDecoding.removeObserver(decodingObserver)
             viewHolder.columnar = null
             viewHolder.waterfall = null
         }
@@ -179,8 +195,6 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
         // Main waterfall display
         WaterfallCanvas(
             spectrumWidth = spectrumWidth,
-            showMessages = showMessages,
-            isDecoding = isDecoding,
             txFrequency = txFreq,
             txActive = isTransmitting,
             onViewCreated = { viewHolder.waterfall = it },
@@ -321,8 +335,6 @@ private fun ColumnarStrip(
 @Composable
 private fun WaterfallCanvas(
     spectrumWidth: Int,
-    showMessages: Boolean,
-    isDecoding: Boolean,
     txFrequency: Float,
     txActive: Boolean,
     onViewCreated: (WaterfallView) -> Unit,
@@ -330,6 +342,10 @@ private fun WaterfallCanvas(
     onTouchUp: (freqHz: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Note: drawMessage is NOT set here. It is armed exclusively by the audio
+    // observer in WaterfallScreen, edge-triggered once per decode cycle.
+    // Re-arming it on recomposition would re-stamp labels onto the scrolling
+    // bitmap and smear them down the waterfall.
     AndroidView(
         factory = { context ->
             WaterfallView(context).apply {
@@ -339,7 +355,6 @@ private fun WaterfallCanvas(
                 )
                 setBackgroundColor(0xFF000000.toInt())
                 setSpectrumWidth(spectrumWidth)
-                setDrawMessage(showMessages && !isDecoding)
                 setTxFrequency(txFrequency)
                 setTxActive(txActive)
 
@@ -363,7 +378,6 @@ private fun WaterfallCanvas(
         },
         update = { view ->
             view.setSpectrumWidth(spectrumWidth)
-            view.setDrawMessage(showMessages && !isDecoding)
             view.setTxFrequency(txFrequency)
             view.setTxActive(txActive)
         },
