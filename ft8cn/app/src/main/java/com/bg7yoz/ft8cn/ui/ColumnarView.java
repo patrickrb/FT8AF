@@ -127,7 +127,11 @@ public class ColumnarView extends View {
             }
             int val = (i + 1 < data.length) ? Math.max(data[i], data[i + 1]) : data[i];
             colRect.top = getHeight() - Math.round(val * rateHeight);
-            colRect.right = colRect.left + width - spacing;
+            // Guarantee at least a 1px-wide bar. With a wide spectrum span the
+            // bin count can exceed the pixel width (e.g. 560 bins across ~1080px
+            // gives width=1), so width - spacing collapses to 0 and every bar
+            // draws as a zero-width rect — the whole strip renders black.
+            colRect.right = colRect.left + Math.max(1, width - spacing);
             colRect.bottom = getHeight();
             newData.add(colRect);
         }
