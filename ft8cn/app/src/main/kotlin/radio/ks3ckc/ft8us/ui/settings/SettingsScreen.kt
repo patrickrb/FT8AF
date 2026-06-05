@@ -135,6 +135,8 @@ fun SettingsScreen(
     var filterNeededOnly by remember { mutableStateOf(GeneralVariables.filterNeededOnly) }
     var filterByContinent by remember { mutableStateOf(GeneralVariables.filterByContinent) }
     var filterContinent by remember { mutableStateOf(GeneralVariables.filterContinent) }
+    var respectDirectionalCQ by remember { mutableStateOf(GeneralVariables.respectDirectionalCQ) }
+    var filterDirectionalCQ by remember { mutableStateOf(GeneralVariables.filterDirectionalCQ) }
 
     // Continent codes (stored on the message) and their display names, parallel lists.
     val continentCodes = listOf("NA", "SA", "EU", "AF", "AS", "OC", "AN")
@@ -1275,6 +1277,32 @@ fun SettingsScreen(
                                 onClick = { showContinentPicker = true },
                             )
                         }
+                        SectionDivider()
+                        SettingsRow(
+                            label = "Skip Directional CQs (auto-reply)",
+                            description = "Don't auto-answer CQ DX/EU/JA… aimed at a different DXCC",
+                            toggle = respectDirectionalCQ,
+                            onToggleChange = { checked ->
+                                respectDirectionalCQ = checked
+                                GeneralVariables.respectDirectionalCQ = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "respectDirectionalCQ", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "Hide Directional CQs Not For Me",
+                            description = "Hide region-directed CQs that don't target your DXCC",
+                            toggle = filterDirectionalCQ,
+                            onToggleChange = { checked ->
+                                filterDirectionalCQ = checked
+                                GeneralVariables.filterDirectionalCQ = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "filterDirectionalCQ", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
                     }
                 }
             }

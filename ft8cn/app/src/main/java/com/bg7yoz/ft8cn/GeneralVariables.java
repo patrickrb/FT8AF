@@ -11,6 +11,7 @@ import android.util.Log;
 import androidx.lifecycle.MutableLiveData;
 
 import com.bg7yoz.ft8cn.callsign.CallsignDatabase;
+import com.bg7yoz.ft8cn.callsign.CallsignInfo;
 import com.bg7yoz.ft8cn.connector.ConnectMode;
 import com.bg7yoz.ft8cn.database.ControlMode;
 import com.bg7yoz.ft8cn.database.DatabaseOpr;
@@ -384,6 +385,63 @@ public class GeneralVariables {
     // The operator's own continent abbreviation, derived once from the callsign
     // (CallsignDatabase.getContinent). Used by the DX filter. Null until resolved.
     public static String myContinent = null;
+
+    // The operator's own DXCC, derived once from the callsign alongside myContinent
+    // (CallsignDatabase.getMessagesLocation). Used by the directional-CQ matcher to
+    // match country/region tokens (e.g. "CQ JA"). Null until resolved → fail-open.
+    public static String myDxcc = null;
+
+    // Directional CQ awareness (Settings → Decode Filters). Both opt-in, default off.
+    //   - respectDirectionalCQ: suppress AUTO-replies to directional CQs (CQ DX/EU/JA…)
+    //     not aimed at my station. Does not affect manual taps or stations calling me.
+    //   - filterDirectionalCQ: hide those same CQs from the decode list.
+    public static boolean respectDirectionalCQ = false;
+    public static boolean filterDirectionalCQ = false;
+
+    // Geographic continent-directed CQ tokens — matched against myContinent.
+    private static final java.util.Set<String> CONTINENT_CODES =
+            new java.util.HashSet<>(java.util.Arrays.asList("NA", "SA", "EU", "AF", "AS", "OC", "AN"));
+    // Non-geographic activity calls — always answerable. Easily extended.
+    private static final java.util.Set<String> ACTIVITY_TOKENS =
+            new java.util.HashSet<>(java.util.Arrays.asList(
+                    "DX", "POTA", "SOTA", "WWFF", "IOTA", "TEST", "FD", "QRP", "WW"));
+
+    /**
+     * The directional token after CQ/DE/QRZ in a decoded callsignTo (e.g. "DX" from
+     * "CQ DX"), or null for a plain CQ / non-CQ message.
+     */
+    public static String getDirectionalCQToken(String callsignTo) {
+        if (callsignTo == null) return null;
+        String[] p = callsignTo.trim().toUpperCase().split("\\s+");
+        if (p.length < 2) return null;
+        if (!(p[0].equals("CQ") || p[0].equals("DE") || p[0].equals("QRZ"))) return null;
+        return p[1];
+    }
+
+    /**
+     * Whether a (possibly directional) CQ is answerable by my station. Continent-code
+     * tokens are matched against {@link #myContinent}; country/region prefixes against
+     * {@link #myDxcc} via the callsign database. Fail-open: plain CQ, "CQ DX",
+     * 3-digit zone CQs, known activity calls, and anything we can't positively resolve
+     * to a different DXCC/continent are all treated as answerable.
+     *
+     * @param callsignTo the decoded message's callsignTo field
+     * @return true if answerable (or not a CQ at all)
+     */
+    public static synchronized boolean directionalCQIsForMe(String callsignTo) {
+        String token = getDirectionalCQToken(callsignTo);
+        if (token == null) return true;                       // plain CQ / not a CQ
+        if (token.matches("[0-9]{3}")) return true;           // zone-directed CQ nnn
+        if (ACTIVITY_TOKENS.contains(token)) return true;     // DX / POTA / TEST / ...
+        if (CONTINENT_CODES.contains(token)) {                // continent-directed
+            return myContinent == null || token.equalsIgnoreCase(myContinent);
+        }
+        // country/region prefix (e.g. JA) — match by DXCC
+        if (callsignDatabase == null || myDxcc == null) return true;
+        CallsignInfo info = callsignDatabase.getCallInfo(token);
+        if (info == null || info.DXCC == null) return true;   // unresolved → fail-open
+        return info.DXCC.equalsIgnoreCase(myDxcc);
+    }
 
 
     public static final ArrayList<String> followCallsign = new ArrayList<>();//Followed callsigns
