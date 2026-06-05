@@ -437,8 +437,27 @@ struct OutputSession {
     std::atomic<int>      firstError{0};   // non-zero = first libusb error code seen
 };
 
+// Cancel signal for an in-progress nativeWrite. Set from the main thread via
+// nativeCancelWrite() when the user presses STOP; observed by the transmit
+// worker thread blocked in nativeWrite's drain loop and by onOutputComplete,
+// which together stop resubmitting iso transfers and cancel the in-flight ones
+// so audio to the device halts (well under 100ms later). g_outputCtx lets the
+// cancel JNI wake the drain loop immediately instead of waiting out its 50ms
+// timeout. There is only ever one nativeWrite in flight (one TX per cycle), so
+// a single global pair is sufficient.
+std::atomic<bool>            g_outputCancel{false};
+std::atomic<libusb_context*> g_outputCtx{nullptr};
+
 void LIBUSB_CALL onOutputComplete(libusb_transfer* xfer) {
     auto* s = static_cast<OutputSession*>(xfer->user_data);
+
+    // User pressed STOP: retire this transfer instead of refilling it. Once all
+    // in-flight transfers retire this way, nativeWrite's drain loop exits and
+    // its cleanup cancels anything still pending.
+    if (g_outputCancel.load(std::memory_order_acquire)) {
+        s->inFlight.fetch_sub(1, std::memory_order_acq_rel);
+        return;
+    }
 
     if (xfer->status != LIBUSB_TRANSFER_COMPLETED) {
         int expect = 0;
@@ -498,6 +517,10 @@ Java_com_bg7yoz_ft8cn_wave_UsbAudioNative_nativeWrite(
     if (!pcmArray) return LIBUSB_ERROR_INVALID_PARAM;
     if (maxPacketSize <= 0) return LIBUSB_ERROR_INVALID_PARAM;
 
+    // Clear any stale cancel from a prior TX so this transmission isn't
+    // immediately aborted before it starts.
+    g_outputCancel.store(false, std::memory_order_release);
+
     // USB full-speed iso = 1 packet per 1ms frame. The amount of audio data
     // per packet must equal the *negotiated* sample rate × channels × bytes,
     // not the endpoint's wMaxPacketSize. The previous code used maxPktSize
@@ -526,6 +549,8 @@ Java_com_bg7yoz_ft8cn_wave_UsbAudioNative_nativeWrite(
         LOGE("nativeWrite: libusb_init: %s", libusb_error_name(rc));
         return rc;
     }
+    // Publish the context so nativeCancelWrite() can wake our drain loop.
+    g_outputCtx.store(ctx, std::memory_order_release);
 
     libusb_device_handle* handle = nullptr;
     rc = libusb_wrap_sys_device(ctx, (intptr_t)fd, &handle);
@@ -616,6 +641,10 @@ Java_com_bg7yoz_ft8cn_wave_UsbAudioNative_nativeWrite(
     // Drain. Iso transfers are paced by the device's bandwidth allocation,
     // so this naturally takes ~ pcmLen / (sampleRate * channels * 2) seconds.
     while (s.inFlight.load(std::memory_order_acquire) > 0) {
+        if (g_outputCancel.load(std::memory_order_acquire)) {
+            LOGI("nativeWrite: cancel requested, aborting TX");
+            break;  // cleanup below cancels the still-in-flight transfers
+        }
         timeval tv{0, 50000};  // 50ms
         rc = libusb_handle_events_timeout_completed(ctx, &tv, nullptr);
         if (rc != 0 && rc != LIBUSB_ERROR_INTERRUPTED) {
@@ -639,6 +668,8 @@ Java_com_bg7yoz_ft8cn_wave_UsbAudioNative_nativeWrite(
     }
 
     env->ReleaseByteArrayElements(pcmArray, pcmBytes, JNI_ABORT);
+    // Unpublish before exit so a late cancel can't poke a freed context.
+    g_outputCtx.store(nullptr, std::memory_order_release);
     libusb_close(handle);
     libusb_exit(ctx);
 
@@ -646,4 +677,17 @@ Java_com_bg7yoz_ft8cn_wave_UsbAudioNative_nativeWrite(
     LOGI("nativeWrite: done, firstError=%d (%s)",
          err, err == 0 ? "OK" : libusb_error_name(err));
     return err;
+}
+
+// Abort an in-progress nativeWrite as fast as possible. Safe to call from any
+// thread (and a no-op if no write is running). Sets the cancel flag, then nudges
+// the event loop so the drain loop notices now rather than after its 50ms tick.
+extern "C" JNIEXPORT void JNICALL
+Java_com_bg7yoz_ft8cn_wave_UsbAudioNative_nativeCancelWrite(
+        JNIEnv* /*env*/, jclass /*clazz*/) {
+    g_outputCancel.store(true, std::memory_order_release);
+    libusb_context* ctx = g_outputCtx.load(std::memory_order_acquire);
+    if (ctx) {
+        libusb_interrupt_event_handler(ctx);
+    }
 }

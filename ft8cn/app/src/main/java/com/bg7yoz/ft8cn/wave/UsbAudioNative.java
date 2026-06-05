@@ -38,9 +38,37 @@ public final class UsbAudioNative {
 
     private UsbAudioNative() {}
 
+    /**
+     * Set true by {@link #cancelWrite()} when the user presses STOP, cleared by
+     * {@link #resetCancel()} at the start of each transmission. Read by the
+     * {@code UsbRequest} fallback loop in {@link UsbAudioDevice#writeAudio} so it
+     * can break out between chunks. The libusb path uses the native cancel flag
+     * instead (see {@link #nativeCancelWrite()}).
+     */
+    public static volatile boolean writeCancelled = false;
+
     /** Whether {@code libft8af_usb.so} was loaded at process start. */
     public static boolean isAvailable() {
         return LIBRARY_LOADED;
+    }
+
+    /** Clear the cancel flag before a new transmission. */
+    public static void resetCancel() {
+        writeCancelled = false;
+    }
+
+    /**
+     * Abort an in-progress transmission immediately. Safe to call from the UI
+     * thread while a write is blocked on the transmit worker thread: flags the
+     * Java fallback loop and, when the native lib is present, signals the libusb
+     * drain loop to cancel its in-flight iso transfers. No-op if nothing is
+     * transmitting.
+     */
+    public static void cancelWrite() {
+        writeCancelled = true;
+        if (LIBRARY_LOADED) {
+            nativeCancelWrite();
+        }
     }
 
     /**
@@ -146,4 +174,13 @@ public final class UsbAudioNative {
             int outputChannels,
             int outputBytesPerSample,
             byte[] pcmData);
+
+    /**
+     * Request that an in-progress {@link #nativeWrite} abort. Sets a native
+     * cancel flag and wakes the libusb event loop so the blocked write returns
+     * within ~tens of ms, cancelling its in-flight iso transfers. Safe to call
+     * from any thread; a no-op if no write is running. Prefer {@link #cancelWrite()}
+     * which also covers the Java fallback path.
+     */
+    public static native void nativeCancelWrite();
 }

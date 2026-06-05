@@ -480,6 +480,10 @@ public class UsbAudioDevice {
     public boolean writeAudio(float[] audioData, int sourceSampleRate) {
         if (endpointOut == null || connection == null) return false;
 
+        // Start this transmission with a clear cancel flag. STOP sets it (via
+        // UsbAudioNative.cancelWrite) to abort either the native or fallback path.
+        UsbAudioNative.resetCancel();
+
         // Resample to device's output rate
         float[] resampled;
         if (sourceSampleRate != outputSampleRate) {
@@ -542,6 +546,12 @@ public class UsbAudioDevice {
         int offset = 0;
 
         while (offset < pcmData.length) {
+            // STOP pressed mid-transmission: abort between chunks so audio halts
+            // immediately instead of draining the full ~12.6s message.
+            if (UsbAudioNative.writeCancelled) {
+                Log.d(TAG, "writeAudio cancelled at offset " + offset);
+                return false;
+            }
             int chunkSize = Math.min(packetSize, pcmData.length - offset);
             ByteBuffer buf = ByteBuffer.allocateDirect(chunkSize);
             buf.order(ByteOrder.LITTLE_ENDIAN);
