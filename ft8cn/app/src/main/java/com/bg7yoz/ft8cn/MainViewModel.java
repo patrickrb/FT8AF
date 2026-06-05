@@ -671,6 +671,44 @@ public class MainViewModel extends ViewModel {
 
 
     /**
+     * Start calling the station that sent {@code message} (e.g. a station calling CQ).
+     * This is the single entry point shared by the decode-list row tap and the
+     * QsoSheet "Call" button: it follows the callsign, activates TX if idle, sets up
+     * the QSO sequence, and requests an immediate transmit (which fires this slot if
+     * we are still inside the late-start window, otherwise at the next matching slot).
+     *
+     * @param message the decoded message whose sender we want to call
+     */
+    public void callStation(Ft8Message message) {
+        if (message == null || ft8TransmitSignal == null) {
+            return;
+        }
+        // Don't hijack an in-progress transmission, and ignore rows with no usable
+        // sender or our own decoded callsign (avoids accidentally "calling" ourselves).
+        if (ft8TransmitSignal.isTransmitting()) {
+            return;
+        }
+        String from = message.callsignFrom;
+        if (from == null || from.trim().isEmpty()
+                || from.equalsIgnoreCase(GeneralVariables.myCallsign)) {
+            return;
+        }
+
+        addFollowCallsign(from);
+        if (!ft8TransmitSignal.isActivated()) {
+            ft8TransmitSignal.setActivated(true);
+            GeneralVariables.transmitMessages.add(message);
+            GeneralVariables.resetLaunchSupervision();
+        }
+        ft8TransmitSignal.setTransmit(
+                message.getFromCallTransmitCallsign(),
+                1,
+                message.extraInfo);
+        ft8TransmitSignal.transmitNow();
+    }
+
+
+    /**
      * Get the followed callsign list from the database
      */
     public void getFollowCallsignsFromDataBase() {

@@ -230,7 +230,12 @@ fun DecodeScreen(
                             animateEntry = rowKey in newKeys,
                             nowMillis = utcTime,
                             isTarget = isTarget,
+                            // Single tap = immediately call this station (fast reply to
+                            // a CQ). Long-press opens the info sheet (QRZ, country, etc.).
                             onClick = {
+                                mainViewModel.callStation(message)
+                            },
+                            onLongClick = {
                                 mainViewModel.qsoSheetCallsign.postValue(message.callsignFrom)
                                 mainViewModel.qsoSheetMinimized.postValue(false)
                             },
