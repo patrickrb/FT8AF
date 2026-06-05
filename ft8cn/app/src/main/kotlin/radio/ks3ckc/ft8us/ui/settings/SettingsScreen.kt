@@ -137,6 +137,8 @@ fun SettingsScreen(
     var filterContinent by remember { mutableStateOf(GeneralVariables.filterContinent) }
     var respectDirectionalCQ by remember { mutableStateOf(GeneralVariables.respectDirectionalCQ) }
     var filterDirectionalCQ by remember { mutableStateOf(GeneralVariables.filterDirectionalCQ) }
+    var alertNewDxcc by remember { mutableStateOf(GeneralVariables.alertNewDxcc) }
+    var alertNewState by remember { mutableStateOf(GeneralVariables.alertNewState) }
 
     // Continent codes (stored on the message) and their display names, parallel lists.
     val continentCodes = listOf("NA", "SA", "EU", "AF", "AS", "OC", "AN")
@@ -1314,6 +1316,41 @@ fun SettingsScreen(
                                 GeneralVariables.filterDirectionalCQ = checked
                                 mainViewModel.databaseOpr.writeConfig(
                                     "filterDirectionalCQ", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+
+            // =====================================================================
+            // 4e. NEEDED-DX ALERTS
+            // =====================================================================
+            SettingsSection(title = "NEEDED-DX ALERTS") {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        SettingsRow(
+                            label = "New DXCC",
+                            description = "Sound + vibrate + notify when an unworked DXCC entity calls CQ",
+                            toggle = alertNewDxcc,
+                            onToggleChange = { checked ->
+                                alertNewDxcc = checked
+                                GeneralVariables.alertNewDxcc = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "alertNewDxcc", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = "New US State",
+                            description = "Sound + vibrate + notify when a station from an unworked US state calls CQ (state from grid)",
+                            toggle = alertNewState,
+                            onToggleChange = { checked ->
+                                alertNewState = checked
+                                GeneralVariables.alertNewState = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "alertNewState", if (checked) "1" else "0", null,
                                 )
                             },
                         )

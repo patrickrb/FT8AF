@@ -104,6 +104,14 @@ public class GeneralVariables {
     public static final Map<String, String> dxccMap = new ConcurrentHashMap<>();
     public static final Map<Integer, Integer> cqMap = new ConcurrentHashMap<>();
     public static final Map<Integer, Integer> ituMap = new ConcurrentHashMap<>();
+    // Already-contacted US states (USPS code, e.g. "ND"). Populated at startup from the
+    // logbook by DatabaseOpr.getQslDxccToMap(), deriving each QSO's state from its grid.
+    public static final java.util.Set<String> workedStates =
+            java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
+
+    // 4-char Maidenhead field -> US state code, lazily loaded from the bundled
+    // assets/us_grid_states.json (the same map the Compose UI reads via UsStateLookup).
+    private static volatile Map<String, String> gridStateMap = null;
 
     // Callsign blocklist (Settings → Callsign Blocklist). Three independent match
     // modes, generalizing the original prefix-only "excluded callsigns" feature. A
@@ -398,6 +406,14 @@ public class GeneralVariables {
     //   - filterDirectionalCQ: hide those same CQs from the decode list.
     public static boolean respectDirectionalCQ = false;
     public static boolean filterDirectionalCQ = false;
+
+    // Needed-DX alerts (Settings → Needed-DX Alerts). Opt-in, default off. When enabled,
+    // a station calling CQ that is a NEW unworked entity/state triggers a sound + vibrate
+    // notification (DxAlertNotifier). Categories are independent.
+    //   - alertNewDxcc:  alert on a new (unworked) DXCC entity   (uses Ft8Message.fromDxcc)
+    //   - alertNewState: alert on a new (unworked) US state       (uses Ft8Message.fromNewState)
+    public static boolean alertNewDxcc = false;
+    public static boolean alertNewState = false;
 
     // Geographic continent-directed CQ tokens — matched against myContinent.
     private static final java.util.Set<String> CONTINENT_CODES =
@@ -819,6 +835,73 @@ public class GeneralVariables {
      */
     public static boolean getItuZoneById(int itu) {
         return ituMap.containsKey(itu);
+    }
+
+    /**
+     * Add an already-contacted US state to the set.
+     *
+     * @param state USPS state code (e.g. "ND")
+     */
+    public static void addState(String state) {
+        if (state == null || state.isEmpty()) return;
+        workedStates.add(state.toUpperCase());
+    }
+
+    /**
+     * Check if this US state has already been contacted.
+     *
+     * @param state USPS state code
+     * @return whether it is in the worked set
+     */
+    public static boolean getStateWorked(String state) {
+        return state != null && workedStates.contains(state.toUpperCase());
+    }
+
+    /**
+     * Resolve a 4-character Maidenhead field to a US state code, or null if it is not a
+     * US grid (the bundled table is US-only, so non-US grids return null naturally).
+     *
+     * <p>Backed by the same {@code assets/us_grid_states.json} the Compose UI reads via
+     * {@code UsStateLookup}; loaded once on first use. Used both for live-decode "new
+     * state" detection (CallsignDatabase) and worked-state import (DatabaseOpr).
+     *
+     * @param grid the station's Maidenhead grid (4+ chars); shorter/empty returns null
+     * @return USPS state code, or null
+     */
+    public static String stateForGrid(String grid) {
+        if (grid == null || grid.length() < 4) return null;
+        Map<String, String> m = gridStateMap;
+        if (m == null) {
+            m = loadGridStateMap();
+            gridStateMap = m;
+        }
+        return m.get(grid.substring(0, 4).toUpperCase());
+    }
+
+    private static synchronized Map<String, String> loadGridStateMap() {
+        if (gridStateMap != null) return gridStateMap;
+        Map<String, String> out = new HashMap<>();
+        Context ctx = getMainContext();
+        if (ctx != null) {
+            try {
+                java.io.InputStream is = ctx.getAssets().open("us_grid_states.json");
+                java.io.BufferedReader reader = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(is));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+                reader.close();
+                org.json.JSONObject obj = new org.json.JSONObject(sb.toString());
+                Iterator<String> keys = obj.keys();
+                while (keys.hasNext()) {
+                    String k = keys.next();
+                    out.put(k.toUpperCase(), obj.getString(k));
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "loadGridStateMap: failed to load us_grid_states.json", e);
+            }
+        }
+        return out;
     }
 
     //used to trigger new grid

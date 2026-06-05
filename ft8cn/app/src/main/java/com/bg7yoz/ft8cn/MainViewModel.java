@@ -155,6 +155,12 @@ public class MainViewModel extends ViewModel {
     public MutableLiveData<Integer> mutable_Decoded_Counter = new MutableLiveData<>();//total decoded count
     public int currentDecodeCount = 0;//number of decoded items in this cycle
     public MutableLiveData<ArrayList<Ft8Message>> mutableFt8MessageList = new MutableLiveData<>();//message list
+    // Needed-DX alerts: posts sound+vibrate notifications for new DXCC/state CQ stations.
+    public final com.bg7yoz.ft8cn.alert.DxAlertNotifier dxAlertNotifier =
+            new com.bg7yoz.ft8cn.alert.DxAlertNotifier(GeneralVariables.getMainContext());
+    // Callsign from a tapped Needed-DX notification; the Decode screen observes this to
+    // scroll to + highlight that station (pre-select). Set by ComposeMainActivity.
+    public MutableLiveData<String> mutablePreselectCallsign = new MutableLiveData<>();
     public MutableLiveData<Long> timerSec = new MutableLiveData<>();//current UTC time. Update frequency determined by UtcTimer, ~100ms when not triggered.
     public MutableLiveData<Boolean> mutableIsRecording = new MutableLiveData<>();//whether currently recording
     public MutableLiveData<Boolean> mutableHamRecordIsRunning = new MutableLiveData<>();//whether HamRecord is running
@@ -1215,6 +1221,8 @@ public class MainViewModel extends ViewModel {
         public void run() {
             CallsignDatabase.getMessagesLocation(
                     GeneralVariables.callsignDatabase.getDb(), messages);
+            // Entity/state flags are now populated — fire Needed-DX alerts before the UI refresh.
+            mainViewModel.dxAlertNotifier.processDecodes(messages);
             mainViewModel.mutableFt8MessageList.postValue(mainViewModel.ft8Messages);
         }
     }

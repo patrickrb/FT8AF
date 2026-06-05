@@ -182,6 +182,22 @@ class ComposeMainActivity : ComponentActivity() {
         } else {
             doReceiveShareFile(intent)
         }
+
+        // Handle a tapped Needed-DX alert (cold start).
+        handleAlertIntent(intent)
+    }
+
+    /**
+     * If [intent] came from a tapped Needed-DX notification, publish the alerted callsign
+     * so the Decode screen can switch to itself and scroll to + highlight that station.
+     */
+    private fun handleAlertIntent(intent: Intent?) {
+        val callsign = intent?.getStringExtra(
+            com.bg7yoz.ft8cn.alert.DxAlertNotifier.EXTRA_CALLSIGN,
+        ) ?: return
+        if (callsign.isBlank()) return
+        fileLog("handleAlertIntent: preselect $callsign")
+        mainViewModel.mutablePreselectCallsign.postValue(callsign)
     }
 
     private fun buildPermissionsList(): Array<String> {
@@ -197,6 +213,9 @@ class ComposeMainActivity : ComponentActivity() {
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             base.add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            base.add(Manifest.permission.POST_NOTIFICATIONS)
         }
         return base.toTypedArray()
     }
@@ -351,6 +370,8 @@ class ComposeMainActivity : ComponentActivity() {
         } else {
             setIntent(intent)
             doReceiveShareFile(intent)
+            // Handle a tapped Needed-DX alert (app already running).
+            handleAlertIntent(intent)
         }
     }
 

@@ -143,6 +143,22 @@ fun DecodeScreen(
         previousCount = filteredMessages.size
     }
 
+    // A tapped Needed-DX notification asks us to pre-select that station: reset to the
+    // "All" filter so it's visible, scroll to its latest decode, and open the QSO sheet
+    // (which shows the station detail + a Call button). We do NOT auto-transmit.
+    val preselectCallsign by mainViewModel.mutablePreselectCallsign.observeAsState()
+    LaunchedEffect(preselectCallsign, messageList?.size) {
+        val cs = preselectCallsign
+        if (cs.isNullOrBlank()) return@LaunchedEffect
+        val present = (messageList ?: arrayListOf())
+            .any { it.callsignFrom.equals(cs, ignoreCase = true) }
+        if (!present) return@LaunchedEffect          // wait until the station is in the list
+        selectedFilter = "All"
+        mainViewModel.qsoSheetCallsign.postValue(cs)
+        mainViewModel.qsoSheetMinimized.postValue(false)
+        mainViewModel.mutablePreselectCallsign.postValue(null)   // consume (allow re-trigger)
+    }
+
     // Format UTC time for the subtitle
     val utcString = if (utcTime > 0L) {
         UtcTimer.getTimeStr(utcTime)

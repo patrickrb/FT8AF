@@ -127,6 +127,12 @@ public class CallsignDatabase extends SQLiteOpenHelper {
                     msg.fromLatLng = new LatLng(fromCallsignInfo.Latitude, fromCallsignInfo.Longitude * -1);
             }
 
+            // US state from the sender's grid (US-only table → null for non-US grids).
+            // fromNewState mirrors fromDxcc: true when the state is not yet worked.
+            msg.fromState = GeneralVariables.stateForGrid(msg.maidenGrid);
+            msg.fromNewState = msg.fromState != null
+                    && !GeneralVariables.getStateWorked(msg.fromState);
+
             // Resolve the operator's own continent + DXCC once (continent for the DX
             // decode filter, DXCC for the directional-CQ matcher).
             if ((GeneralVariables.myContinent == null || GeneralVariables.myDxcc == null)
