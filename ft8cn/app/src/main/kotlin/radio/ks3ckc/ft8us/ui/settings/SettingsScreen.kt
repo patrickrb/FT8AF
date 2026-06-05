@@ -965,8 +965,8 @@ fun SettingsScreen(
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column {
                         SettingsRow(
-                            label = "Auto-call CQ",
-                            description = "Automatically call stations calling CQ",
+                            label = "Hunt (auto-answer CQ)",
+                            description = "Proactively call stations calling CQ. Same as the HUNT button on the TX bar. Off = run CQ and work only stations that answer you.",
                             toggle = autoFollowCQ,
                             onToggleChange = { checked ->
                                 autoFollowCQ = checked

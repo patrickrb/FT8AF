@@ -11,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -51,6 +52,10 @@ fun FT8USApp(mainViewModel: MainViewModel) {
 
     // QSO panel expand/collapse state
     var qsoPanelExpanded by rememberSaveable { mutableStateOf(false) }
+
+    // Hunt / auto-answer-CQ mode. Mirrors GeneralVariables.autoFollowCQ (also
+    // editable in Settings, which provides the persisted default at startup).
+    var huntEnabled by remember { mutableStateOf(GeneralVariables.autoFollowCQ) }
 
     // Frequency picker sheet state
     var showFrequencyPicker by rememberSaveable { mutableStateOf(false) }
@@ -135,6 +140,7 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                 isActivated = isActivated,
                 frequencyLabel = frequencyLabel,
                 txSlot = txSlot,
+                huntEnabled = huntEnabled,
                 expanded = qsoPanelExpanded,
                 onCallCQ = {
                     if (GeneralVariables.myCallsign.isNullOrEmpty()) {
@@ -153,6 +159,20 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                     val newSlot = if (current == 0) 1 else 0
                     mainViewModel.ft8TransmitSignal.sequential = newSlot
                     mainViewModel.ft8TransmitSignal.mutableSequential.postValue(newSlot)
+                },
+                onToggleHunt = {
+                    val newVal = !huntEnabled
+                    huntEnabled = newVal
+                    GeneralVariables.autoFollowCQ = newVal
+                    mainViewModel.databaseOpr.writeConfig(
+                        "autoFollowCQ", if (newVal) "1" else "0", null,
+                    )
+                    Toast.makeText(
+                        context,
+                        if (newVal) "Hunt on — auto-answering CQs"
+                        else "Hunt off — running CQ, working answers only",
+                        Toast.LENGTH_SHORT,
+                    ).show()
                 },
                 onOpenFrequencyPicker = { showFrequencyPicker = true },
                 onToggleExpand = { qsoPanelExpanded = !qsoPanelExpanded },
