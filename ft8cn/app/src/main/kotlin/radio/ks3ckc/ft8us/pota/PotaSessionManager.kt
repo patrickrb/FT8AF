@@ -41,26 +41,31 @@ object PotaSessionManager {
     private var savedModifier: String = ""
 
     val isActive: Boolean get() = _currentActivation.value != null
-    val currentParkRef: String? get() = _currentActivation.value?.parkRef
+    val currentParkRefs: List<String> get() = _currentActivation.value?.parkRefs ?: emptyList()
 
     @Synchronized
-    fun start(parkRef: String, notes: String?): PotaActivation? {
+    fun start(parkRefs: List<String>, notes: String?): PotaActivation? {
         if (_currentActivation.value != null) {
-            log("start ignored — activation already running for ${currentParkRef}")
+            log("start ignored — activation already running for ${currentParkRefs}")
             return _currentActivation.value
         }
-        val ref = parkRef.trim().uppercase()
-        if (ref.isEmpty()) {
-            log("start rejected — empty park ref")
+        val refs = parkRefs
+            .map { it.trim().uppercase() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .take(10)
+        if (refs.isEmpty()) {
+            log("start rejected — no valid park refs")
             return null
         }
+        val joined = refs.joinToString(",")
         savedModifier = GeneralVariables.toModifier ?: ""
         GeneralVariables.toModifier = MY_SIG_POTA
         val operator = GeneralVariables.myCallsign?.takeIf { it.isNotBlank() }
-        val activation = PotaActivationDao.startActivation(ref, operator, notes)
+        val activation = PotaActivationDao.startActivation(joined, operator, notes)
         _currentActivation.value = activation
         _activationQsos.value = emptyList()
-        log("start ref=$ref id=${activation.id} priorModifier='${savedModifier}'")
+        log("start refs=$joined id=${activation.id} priorModifier='${savedModifier}'")
         return activation
     }
 
@@ -111,7 +116,7 @@ object PotaSessionManager {
      */
     @JvmStatic
     fun stampQso(record: com.bg7yoz.ft8cn.log.QSLRecord, spottedParkRef: String?) {
-        currentParkRef?.let {
+        _currentActivation.value?.parkRef?.let {
             record.mySig = MY_SIG_POTA
             record.mySigInfo = it
         }
