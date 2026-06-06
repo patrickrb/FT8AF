@@ -245,8 +245,15 @@ fun ActiveQsoPanel(
                 },
             )
 
-            // Caller queue display
-            CallerQueueBar(queue = callerQueue ?: arrayListOf())
+            // Caller queue display — tap a callsign to log current QSO and work them next
+            CallerQueueBar(
+                queue = callerQueue ?: arrayListOf(),
+                onCallerTap = if (displayCallsign != null) { callsign ->
+                    mainViewModel.ft8TransmitSignal.forceLogAndMoveOn(callsign)
+                    mainViewModel.qsoSheetCallsign.postValue(null)
+                    mainViewModel.qsoSheetMinimized.postValue(false)
+                } else null,
+            )
         }
     }
 }
@@ -558,7 +565,10 @@ private fun TxSelector(
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun CallerQueueBar(queue: ArrayList<QueuedCaller>) {
+private fun CallerQueueBar(
+    queue: ArrayList<QueuedCaller>,
+    onCallerTap: ((String) -> Unit)? = null,
+) {
     if (queue.isEmpty()) return
 
     Spacer(modifier = Modifier.height(6.dp))
@@ -586,6 +596,10 @@ private fun CallerQueueBar(queue: ArrayList<QueuedCaller>) {
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
                         .background(SignalSoft)
+                        .then(
+                            if (onCallerTap != null) Modifier.clickable { onCallerTap(caller.callsign) }
+                            else Modifier
+                        )
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                     contentAlignment = Alignment.Center,
                 ) {
