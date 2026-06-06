@@ -314,6 +314,7 @@ private fun ActivateTab() {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun ActiveActivationCard(
     activation: PotaActivation,
@@ -597,6 +598,7 @@ private fun HistoryTab(mainViewModel: MainViewModel) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun HistoryRow(
     row: PotaActivation,
