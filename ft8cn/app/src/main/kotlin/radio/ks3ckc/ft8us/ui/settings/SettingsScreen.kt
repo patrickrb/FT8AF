@@ -204,6 +204,8 @@ fun SettingsScreen(
     // Operator identity edit state
     var callsignState by remember { mutableStateOf(GeneralVariables.myCallsign.orEmpty()) }
     var gridState by remember { mutableStateOf(GeneralVariables.getMyMaidenheadGrid().orEmpty()) }
+    var antennaState by remember { mutableStateOf(GeneralVariables.myAntenna.orEmpty()) }
+    var powerWattsState by remember { mutableIntStateOf(GeneralVariables.myPowerWatts) }
 
     // Mutable state for settings that need to trigger recomposition on change
     var watchdogMs by remember { mutableIntStateOf(GeneralVariables.launchSupervision) }
@@ -248,6 +250,8 @@ fun SettingsScreen(
     } else {
         stringResource(R.string.common_not_connected)
     }
+    val antennaDisplay = antennaState.ifEmpty { "--" }
+    val powerDisplay = if (powerWattsState > 0) "${powerWattsState}W" else "--"
     val baudRateStr = "$baudRate"
     val isCatMode = controlMode == ControlMode.CAT
         || controlMode == ControlMode.RTS
@@ -288,8 +292,10 @@ fun SettingsScreen(
         EditOperatorDialog(
             initialCallsign = callsign,
             initialGrid = grid,
+            initialAntenna = antennaState,
+            initialPowerWatts = powerWattsState,
             onDismiss = { showEditOperator = false },
-            onSave = { newCallsign, newGrid ->
+            onSave = { newCallsign, newGrid, newAntenna, newPowerWatts ->
                 val trimmedCall = newCallsign.uppercase().trim()
                 callsignState = trimmedCall
                 GeneralVariables.myCallsign = trimmedCall
@@ -307,6 +313,15 @@ fun SettingsScreen(
                 }
                 GeneralVariables.setMyMaidenheadGrid(formattedGrid)
                 mainViewModel.databaseOpr.writeConfig("grid", formattedGrid, null)
+
+                val trimmedAntenna = newAntenna.trim()
+                antennaState = trimmedAntenna
+                GeneralVariables.myAntenna = trimmedAntenna
+                mainViewModel.databaseOpr.writeConfig("antenna", trimmedAntenna, null)
+
+                powerWattsState = newPowerWatts
+                GeneralVariables.myPowerWatts = newPowerWatts
+                mainViewModel.databaseOpr.writeConfig("powerWatts", newPowerWatts.toString(), null)
 
                 showEditOperator = false
             },
@@ -944,6 +959,8 @@ fun SettingsScreen(
                     callsign = callsign,
                     grid = grid,
                     rigName = rigName,
+                    antenna = antennaDisplay,
+                    power = powerDisplay,
                     modifier = Modifier.padding(bottom = 4.dp),
                     onClick = { showEditOperator = true },
                 )
@@ -1661,17 +1678,23 @@ private fun SectionDivider() {
 // ---------------------------------------------------------------------------
 
 /**
- * Dialog for editing callsign and grid locator.
+ * Dialog for editing callsign, grid locator, antenna, and power.
  */
 @Composable
 private fun EditOperatorDialog(
     initialCallsign: String,
     initialGrid: String,
+    initialAntenna: String = "",
+    initialPowerWatts: Int = 0,
     onDismiss: () -> Unit,
-    onSave: (callsign: String, grid: String) -> Unit,
+    onSave: (callsign: String, grid: String, antenna: String, powerWatts: Int) -> Unit,
 ) {
     var callsignInput by remember { mutableStateOf(TextFieldValue(initialCallsign)) }
     var gridInput by remember { mutableStateOf(TextFieldValue(initialGrid)) }
+    var antennaInput by remember { mutableStateOf(TextFieldValue(initialAntenna)) }
+    var powerInput by remember {
+        mutableStateOf(TextFieldValue(if (initialPowerWatts > 0) initialPowerWatts.toString() else ""))
+    }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = TextPrimary,
@@ -1728,6 +1751,31 @@ private fun EditOperatorDialog(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            OutlinedTextField(
+                value = antennaInput,
+                onValueChange = { antennaInput = it },
+                label = { Text("Antenna") },
+                placeholder = { Text("e.g. EFHW 40-10m", color = TextFaint) },
+                singleLine = true,
+                colors = fieldColors,
+                textStyle = TextStyle(fontSize = 14.sp),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            OutlinedTextField(
+                value = powerInput,
+                onValueChange = { new ->
+                    if (new.text.all { it.isDigit() }) powerInput = new
+                },
+                label = { Text("Power (watts)") },
+                placeholder = { Text("e.g. 100", color = TextFaint) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                colors = fieldColors,
+                textStyle = TextStyle(fontSize = 14.sp),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -1737,7 +1785,10 @@ private fun EditOperatorDialog(
                     Text(stringResource(R.string.action_cancel), color = TextMuted)
                 }
                 TextButton(
-                    onClick = { onSave(callsignInput.text, gridInput.text) },
+                    onClick = {
+                        val watts = powerInput.text.toIntOrNull() ?: 0
+                        onSave(callsignInput.text, gridInput.text, antennaInput.text, watts)
+                    },
                 ) {
                     Text(stringResource(R.string.action_save), color = Accent, fontWeight = FontWeight.SemiBold)
                 }

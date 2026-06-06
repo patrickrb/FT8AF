@@ -305,6 +305,8 @@ public class GeneralVariables {
     //private static final Map<String,String> callsignAndGrids=new HashMap<>();
 
     public static String myCallsign = "";//My callsign
+    public static String myAntenna = "";
+    public static int myPowerWatts = 0;    // 0 = not set, displays as "--"
     public static String toModifier = "";//Call modifier
     private static float baseFrequency = 1000;//Audio frequency
 
