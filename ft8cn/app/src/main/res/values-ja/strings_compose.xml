@@ -340,6 +340,8 @@
     <string name="settings_highlight_pota_desc">スポットされた POTA アクティベーターをハイライト。新規公園を目立たせます</string>
     <string name="settings_highlight_worked">交信済</string>
     <string name="settings_highlight_worked_desc">すでにログにある局にタグを付けます</string>
+    <string name="settings_distance_unit">マイル表示</string>
+    <string name="settings_distance_unit_desc">キロメートルの代わりにマイルで距離を表示</string>
 
     <!-- ===== Settings: callsign blocklist ===== -->
     <string name="settings_exact_callsigns">完全一致コールサイン</string>

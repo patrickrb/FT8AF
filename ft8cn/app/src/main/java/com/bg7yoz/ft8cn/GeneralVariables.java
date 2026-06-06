@@ -43,6 +43,8 @@ public class GeneralVariables {
     public static boolean enableQRZ = false;//Whether QRZ auto-sync is enabled
     public static boolean enablePskReporter = true;//Whether PSKReporter spot upload is enabled
 
+    public static boolean distanceInMiles = true;//Display distances in miles (true) or kilometers (false)
+
     public static boolean deepDecodeMode = false;//Whether deep decode mode is enabled
 
     public static boolean audioOutput32Bit = true;//Audio output type: true=float, false=int16

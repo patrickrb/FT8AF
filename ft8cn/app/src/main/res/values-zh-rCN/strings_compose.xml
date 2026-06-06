@@ -340,6 +340,8 @@
     <string name="settings_highlight_pota_desc">高亮显示被点位的 POTA 激活者；新公园更醒目</string>
     <string name="settings_highlight_worked">此前已通联</string>
     <string name="settings_highlight_worked_desc">标记已在您日志中的电台</string>
+    <string name="settings_distance_unit">以英里显示距离</string>
+    <string name="settings_distance_unit_desc">以英里代替公里显示距离</string>
 
     <!-- ===== 设置：呼号屏蔽列表 ===== -->
     <string name="settings_exact_callsigns">精确呼号</string>

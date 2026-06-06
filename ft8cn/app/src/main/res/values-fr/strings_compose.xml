@@ -340,6 +340,8 @@
     <string name="settings_highlight_pota_desc">Mettre en évidence les activateurs POTA repérés ; les nouveaux parcs ressortent</string>
     <string name="settings_highlight_worked">Déjà contacté</string>
     <string name="settings_highlight_worked_desc">Marquer les stations déjà présentes dans votre journal</string>
+    <string name="settings_distance_unit">Distance en miles</string>
+    <string name="settings_distance_unit_desc">Afficher les distances en miles au lieu de kilomètres</string>
 
     <!-- ===== Settings: callsign blocklist ===== -->
     <string name="settings_exact_callsigns">Indicatifs exacts</string>

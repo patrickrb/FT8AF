@@ -356,6 +356,8 @@
     <string name="settings_highlight_pota_desc">Highlight spotted POTA activators; new parks stand out</string>
     <string name="settings_highlight_worked">Worked Before</string>
     <string name="settings_highlight_worked_desc">Tag stations already in your log</string>
+    <string name="settings_distance_unit">Distance in Miles</string>
+    <string name="settings_distance_unit_desc">Show distances in miles instead of kilometers</string>
 
     <!-- ===== Settings: callsign blocklist ===== -->
     <string name="settings_exact_callsigns">Exact Callsigns</string>

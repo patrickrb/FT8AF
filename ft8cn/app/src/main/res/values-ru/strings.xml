@@ -317,7 +317,7 @@
     <string name="callsign_info">Позывной:%s\nМестоположение:%s\nCQ-зона:%d\nITU-зона:%d\nКонтинент:%s\nШирота и долгота:%.2f,%.2f\nЧасовой пояс:%.0f\nПрефикс DXCC:%s</string>
     <string name="maximum_distance">Максимальное расстояние\n\n%s</string>
     <string name="minimum_distance">Минимальное расстояние\n\n%s</string>
-    <string name="count_distance_info">Максимальное расстояние:%.0f км (%s)\nМинимальное расстояние:%.0f км (%s)</string>
+    <string name="count_distance_info">Максимальное расстояние:%.0f %s (%s)\nМинимальное расстояние:%.0f %s (%s)</string>
     <string name="distance_statistics">Статистика расстояний</string>
     <string name="dxcc_image">dxcc</string>
     <string name="cqzone">cq zone</string>

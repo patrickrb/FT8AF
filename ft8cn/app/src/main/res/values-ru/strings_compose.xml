@@ -340,6 +340,8 @@
     <string name="settings_highlight_pota_desc">Подсвечивать заспоченных активаторов POTA; новые парки выделяются</string>
     <string name="settings_highlight_worked">Уже проведён</string>
     <string name="settings_highlight_worked_desc">Отмечать станции, уже имеющиеся в журнале</string>
+    <string name="settings_distance_unit">Расстояние в милях</string>
+    <string name="settings_distance_unit_desc">Показывать расстояния в милях вместо километров</string>
 
     <!-- ===== Settings: callsign blocklist ===== -->
     <string name="settings_exact_callsigns">Точные позывные</string>
