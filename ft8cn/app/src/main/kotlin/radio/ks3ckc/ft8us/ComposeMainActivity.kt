@@ -19,6 +19,7 @@ import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.activity.compose.setContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -70,6 +71,10 @@ class ComposeMainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Force night mode so the DayNight theme resolves to dark immediately,
+        // preventing any light-mode surface colors from flashing before Compose loads.
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+
         // Build permissions list
         val permissions = buildPermissionsList()
         checkPermission(permissions)

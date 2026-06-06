@@ -432,6 +432,7 @@
     <string name="settings_conn_bluetooth">Bluetooth</string>
     <string name="settings_conn_network">Network</string>
     <string name="settings_no_usb_serial">No USB serial devices detected. Please connect a USB cable to your radio and try again.</string>
+    <string name="settings_no_bluetooth_devices">No bonded Bluetooth devices found. Pair a device in Android Bluetooth settings first.</string>
     <string name="settings_debug_mode_enabled">Debug mode enabled</string>
     <string name="settings_debug_mode_disabled">Debug mode disabled</string>
     <string name="settings_edit_operator_identity">Edit Operator Identity</string>
