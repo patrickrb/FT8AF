@@ -3,6 +3,7 @@ package radio.ks3ckc.ft8us.ui.pota
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -42,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -50,6 +52,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
+import com.bg7yoz.ft8cn.R
 import kotlinx.coroutines.launch
 import radio.ks3ckc.ft8us.pota.PotaClient
 import radio.ks3ckc.ft8us.pota.PotaSessionManager
@@ -67,10 +70,10 @@ import radio.ks3ckc.ft8us.theme.StatusConfirmed
 import radio.ks3ckc.ft8us.theme.TextMuted
 import radio.ks3ckc.ft8us.theme.TextPrimary
 
-private enum class PotaSubTab(val label: String) {
-    ACTIVATE("Activate"),
-    HUNT("Hunt"),
-    HISTORY("History"),
+private enum class PotaSubTab(@StringRes val labelRes: Int) {
+    ACTIVATE(R.string.pota_tab_activate),
+    HUNT(R.string.pota_tab_hunt),
+    HISTORY(R.string.pota_tab_history),
 }
 
 @Composable
@@ -128,7 +131,7 @@ private fun PotaTabHeader(subTab: PotaSubTab, onTabSelected: (PotaSubTab) -> Uni
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = tab.label,
+                    text = stringResource(tab.labelRes),
                     color = if (selected) Accent else TextMuted,
                     fontSize = 13.sp,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
@@ -167,12 +170,12 @@ private fun ActivateTab() {
     ) {
         if (activation == null) {
             Card {
-                SectionTitle("Start activation")
+                SectionTitle(stringResource(R.string.pota_start_activation))
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = parkRef,
                     onValueChange = { parkRef = it.uppercase().take(10) },
-                    label = { Text("Park reference (e.g. K-1234)") },
+                    label = { Text(stringResource(R.string.pota_park_reference_label)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
                     colors = textFieldColors(),
@@ -182,7 +185,7 @@ private fun ActivateTab() {
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it.take(120) },
-                    label = { Text("Notes (optional)") },
+                    label = { Text(stringResource(R.string.pota_notes_optional_label)) },
                     singleLine = true,
                     colors = textFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
@@ -192,26 +195,26 @@ private fun ActivateTab() {
                     onClick = {
                         val started = PotaSessionManager.start(parkRef, notes.ifBlank { null })
                         if (started == null) {
-                            Toast.makeText(context, "Enter a park reference first", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.pota_enter_park_reference_first), Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(context, "Activating ${started.parkRef}", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.pota_activating, started.parkRef), Toast.LENGTH_SHORT).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BgApp),
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("Start activation", fontWeight = FontWeight.SemiBold) }
+                ) { Text(stringResource(R.string.pota_start_activation), fontWeight = FontWeight.SemiBold) }
             }
         } else {
             ActiveActivationCard(
                 activation = activation!!,
                 onStop = {
                     PotaSessionManager.end()
-                    Toast.makeText(context, "Activation ended", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.pota_activation_ended), Toast.LENGTH_SHORT).show()
                 },
                 onSelfSpot = {
                     val myCall = GeneralVariables.myCallsign ?: ""
                     if (myCall.isBlank()) {
-                        Toast.makeText(context, "Set your callsign in Settings first", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.pota_set_callsign_first), Toast.LENGTH_SHORT).show()
                     } else {
                         scope.launch {
                             val ok = PotaClient.selfSpot(
@@ -227,7 +230,7 @@ private fun ActivateTab() {
                             )
                             Toast.makeText(
                                 context,
-                                if (ok) "Self-spot posted" else "Self-spot failed — check log",
+                                context.getString(if (ok) R.string.pota_self_spot_posted else R.string.pota_self_spot_failed),
                                 Toast.LENGTH_SHORT,
                             ).show()
                         }
@@ -245,22 +248,22 @@ private fun ActiveActivationCard(
     onSelfSpot: () -> Unit,
 ) {
     Card {
-        SectionTitle("ACTIVE — ${activation.parkRef}")
+        SectionTitle(stringResource(R.string.pota_active_park, activation.parkRef))
         Spacer(Modifier.height(8.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             StatBlock(
-                label = "QSOs",
+                label = stringResource(R.string.pota_qsos),
                 value = activation.qsoCount.toString(),
-                hint = if (activation.qsoCount >= 10) "valid activation" else "${10 - activation.qsoCount} to valid",
+                hint = if (activation.qsoCount >= 10) stringResource(R.string.pota_valid_activation) else stringResource(R.string.pota_to_valid, 10 - activation.qsoCount),
                 valueColor = if (activation.qsoCount >= 10) StatusConfirmed else Accent,
             )
             StatBlock(
-                label = "Elapsed",
+                label = stringResource(R.string.pota_elapsed),
                 value = formatElapsed(System.currentTimeMillis() - activation.startedAtMs),
-                hint = "since start",
+                hint = stringResource(R.string.pota_since_start),
             )
         }
         Spacer(Modifier.height(12.dp))
@@ -272,23 +275,23 @@ private fun ActiveActivationCard(
                 onClick = onSelfSpot,
                 colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BgApp),
                 modifier = Modifier.weight(1f),
-            ) { Text("Self-spot", fontWeight = FontWeight.SemiBold) }
+            ) { Text(stringResource(R.string.pota_self_spot), fontWeight = FontWeight.SemiBold) }
             OutlinedButton(
                 onClick = onStop,
                 modifier = Modifier.weight(1f),
-            ) { Text("End activation", color = TextPrimary) }
+            ) { Text(stringResource(R.string.pota_end_activation), color = TextPrimary) }
         }
         if (!activation.notes.isNullOrBlank()) {
             Spacer(Modifier.height(8.dp))
             Text(
-                "“${activation.notes}”",
+                stringResource(R.string.pota_notes_quote, activation.notes),
                 color = TextMuted,
                 fontSize = 12.sp,
             )
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            "TX CQ will go out as “CQ POTA ${GeneralVariables.myCallsign ?: ""} ${GeneralVariables.getMyMaidenhead4Grid()}”.",
+            stringResource(R.string.pota_tx_cq_preview, GeneralVariables.myCallsign ?: "", GeneralVariables.getMyMaidenhead4Grid()),
             color = TextMuted,
             fontSize = 11.sp,
         )
@@ -307,7 +310,7 @@ private fun HuntTab(mainViewModel: MainViewModel) {
 
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
-            text = if (spots.isEmpty()) "No FT8 POTA spots right now." else "${spots.size} active FT8 spots",
+            text = if (spots.isEmpty()) stringResource(R.string.pota_no_spots) else stringResource(R.string.pota_active_spots, spots.size),
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
@@ -324,7 +327,7 @@ private fun HuntTab(mainViewModel: MainViewModel) {
                     mainViewModel.qsoSheetCallsign.postValue(spot.activator)
                     Toast.makeText(
                         context,
-                        "Targeting ${spot.activator} @ ${"%.1f".format(spot.frequencyKhz)} kHz (${spot.reference}) — switch to Decode to call",
+                        context.getString(R.string.pota_targeting, spot.activator, "%.1f".format(spot.frequencyKhz), spot.reference),
                         Toast.LENGTH_LONG,
                     ).show()
                 })
@@ -364,7 +367,7 @@ private fun SpotRow(spot: PotaSpot, onClick: () -> Unit) {
                 )
             }
             if (spot.comments.isNotBlank()) {
-                Text("“${spot.comments}”", color = TextMuted, fontSize = 11.sp)
+                Text(stringResource(R.string.pota_notes_quote, spot.comments), color = TextMuted, fontSize = 11.sp)
             }
         }
         Spacer(Modifier.width(8.dp))
@@ -396,7 +399,7 @@ private fun HistoryTab(mainViewModel: MainViewModel) {
     Column(modifier = Modifier.fillMaxSize()) {
         if (history.isEmpty()) {
             Text(
-                "No past activations yet.",
+                stringResource(R.string.pota_no_past_activations),
                 color = TextMuted,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(8.dp),
@@ -413,12 +416,12 @@ private fun HistoryTab(mainViewModel: MainViewModel) {
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://pota.app/#/user/upload"))
                             context.startActivity(intent)
                         }.onFailure {
-                            Toast.makeText(context, "No browser available", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.pota_no_browser_available), Toast.LENGTH_SHORT).show()
                         }
                     },
                     onShareAdif = {
                         PotaAdifExporter.shareActivationAdif(context, mainViewModel, row) { ok ->
-                            if (!ok) Toast.makeText(context, "Export failed — check log", Toast.LENGTH_SHORT).show()
+                            if (!ok) Toast.makeText(context, context.getString(R.string.pota_export_failed), Toast.LENGTH_SHORT).show()
                         }
                     },
                 )
@@ -449,7 +452,7 @@ private fun HistoryRow(
                 ParkPill(row.parkRef)
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    if (row.isActive) "active" else "${row.qsoCount} QSO",
+                    if (row.isActive) stringResource(R.string.pota_status_active) else stringResource(R.string.pota_qso_count, row.qsoCount),
                     color = if (row.isActive) Accent else TextPrimary,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 13.sp,
@@ -459,15 +462,15 @@ private fun HistoryRow(
         }
         if (!row.notes.isNullOrBlank()) {
             Spacer(Modifier.height(2.dp))
-            Text("“${row.notes}”", color = TextMuted, fontSize = 11.sp)
+            Text(stringResource(R.string.pota_notes_quote, row.notes), color = TextMuted, fontSize = 11.sp)
         }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedButton(onClick = onShareAdif, modifier = Modifier.weight(1f)) {
-                Text("Share ADIF", color = TextPrimary, fontSize = 12.sp)
+                Text(stringResource(R.string.pota_share_adif), color = TextPrimary, fontSize = 12.sp)
             }
             OutlinedButton(onClick = onOpenUploadPage, modifier = Modifier.weight(1f)) {
-                Text("Open pota.app", color = TextPrimary, fontSize = 12.sp)
+                Text(stringResource(R.string.pota_open_pota_app), color = TextPrimary, fontSize = 12.sp)
             }
         }
     }

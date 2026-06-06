@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
+import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.database.OperationBand
 import com.bg7yoz.ft8cn.rigs.BaseRigOperation
 import radio.ks3ckc.ft8us.theme.BgApp
@@ -153,7 +154,7 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                 expanded = qsoPanelExpanded,
                 onCallCQ = {
                     if (GeneralVariables.myCallsign.isNullOrEmpty()) {
-                        Toast.makeText(context, "Set your callsign in Settings before calling CQ", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
                     } else {
                         mainViewModel.ft8TransmitSignal.userResetToCQ()
                         mainViewModel.ft8TransmitSignal.setActivated(true)
@@ -178,8 +179,8 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                     )
                     Toast.makeText(
                         context,
-                        if (newVal) "Hunt on — auto-answering CQs"
-                        else "Hunt off — running CQ, working answers only",
+                        if (newVal) context.getString(R.string.app_hunt_on)
+                        else context.getString(R.string.app_hunt_off),
                         Toast.LENGTH_SHORT,
                     ).show()
                 },

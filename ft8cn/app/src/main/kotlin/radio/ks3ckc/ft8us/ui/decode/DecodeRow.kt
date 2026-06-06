@@ -29,7 +29,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import com.bg7yoz.ft8cn.Ft8Message
+import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.maidenhead.MaidenheadGrid
 import radio.ks3ckc.ft8us.theme.*
@@ -147,12 +149,12 @@ fun DecodeRow(
                 // CALLING / TO YOU / CQ labels (can stack \u2014 e.g. target station
                 // calling CQ shows both CALLING and CQ).
                 if (isTarget) {
-                    MessageLabel(text = "\u2192 CALLING", color = Target, bgColor = TargetSoft)
+                    MessageLabel(text = stringResource(R.string.decode_label_calling), color = Target, bgColor = TargetSoft)
                 }
                 if (isCQ) {
-                    MessageLabel(text = "CQ", color = Accent, bgColor = AccentSoft)
+                    MessageLabel(text = stringResource(R.string.decode_label_cq), color = Accent, bgColor = AccentSoft)
                 } else if (isToMe) {
-                    MessageLabel(text = "\u2193 TO YOU", color = Signal, bgColor = SignalSoft)
+                    MessageLabel(text = stringResource(R.string.decode_label_to_you), color = Signal, bgColor = SignalSoft)
                 }
 
                 // Callsign

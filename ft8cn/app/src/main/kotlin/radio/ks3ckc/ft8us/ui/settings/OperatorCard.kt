@@ -22,9 +22,11 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bg7yoz.ft8cn.R
 import radio.ks3ckc.ft8us.theme.*
 
 /**
@@ -113,7 +115,7 @@ fun OperatorCard(
                 // Callsign + grid
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        text = callsign.uppercase().ifEmpty { "NO CALL" },
+                        text = callsign.uppercase().ifEmpty { stringResource(R.string.op_no_call) },
                         color = TextPrimary,
                         fontFamily = GeistMonoFamily,
                         fontWeight = FontWeight.Bold,
@@ -121,13 +123,13 @@ fun OperatorCard(
                         letterSpacing = 0.5.sp,
                     )
                     Text(
-                        text = grid.uppercase().ifEmpty { "No grid set" },
+                        text = grid.uppercase().ifEmpty { stringResource(R.string.op_no_grid) },
                         color = TextMuted,
                         fontSize = 13.sp,
                     )
                     if (onClick != null) {
                         Text(
-                            text = "Tap to edit",
+                            text = stringResource(R.string.op_tap_to_edit),
                             color = TextFaint,
                             fontSize = 11.sp,
                         )
@@ -146,9 +148,9 @@ fun OperatorCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
-                MiniStat(label = "RIG", value = rigName)
-                MiniStat(label = "ANTENNA", value = antenna)
-                MiniStat(label = "POWER", value = power)
+                MiniStat(label = stringResource(R.string.op_stat_rig), value = rigName)
+                MiniStat(label = stringResource(R.string.op_stat_antenna), value = antenna)
+                MiniStat(label = stringResource(R.string.op_stat_power), value = power)
             }
         }
     }

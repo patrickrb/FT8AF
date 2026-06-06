@@ -49,12 +49,14 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bg7yoz.ft8cn.Ft8Message
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
+import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.maidenhead.MaidenheadGrid
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -287,10 +289,10 @@ fun MapScreen(mainViewModel: MainViewModel) {
             .background(BgApp),
     ) {
         TopBar(
-            title = "Map",
+            title = stringResource(R.string.map_title),
             subtitle = {
                 Text(
-                    text = if (myGrid.isNullOrEmpty()) "No grid set" else myGrid,
+                    text = if (myGrid.isNullOrEmpty()) stringResource(R.string.map_no_grid_set) else myGrid,
                     color = Signal,
                     fontFamily = GeistMonoFamily,
                     fontSize = 12.sp,
@@ -456,16 +458,16 @@ fun MapScreen(mainViewModel: MainViewModel) {
         ) {
             Text(
                 text = if (pskOverlayEnabled) {
-                    "${stations.size} stations · ${pskSpots.size} heard"
+                    stringResource(R.string.map_station_count_with_heard, stations.size, pskSpots.size)
                 } else {
-                    "${stations.size} stations"
+                    stringResource(R.string.map_station_count, stations.size)
                 },
                 color = TextMuted,
                 fontSize = 10.5.sp,
             )
             Spacer(modifier = Modifier.weight(1f))
             Text(
-                text = if (viewMode == MapViewMode.STANDARD) "Equirectangular" else "Azimuthal Equidistant",
+                text = if (viewMode == MapViewMode.STANDARD) stringResource(R.string.map_projection_equirectangular) else stringResource(R.string.map_projection_azimuthal),
                 color = TextDim,
                 fontSize = 9.sp,
             )
@@ -488,12 +490,12 @@ private fun MapViewToggle(
             .background(BgSurface3),
     ) {
         TogglePill(
-            label = "STD",
+            label = stringResource(R.string.map_mode_standard),
             active = mode == MapViewMode.STANDARD,
             onClick = { onModeChange(MapViewMode.STANDARD) },
         )
         TogglePill(
-            label = "AZ",
+            label = stringResource(R.string.map_mode_azimuthal),
             active = mode == MapViewMode.AZIMUTHAL,
             onClick = { onModeChange(MapViewMode.AZIMUTHAL) },
         )
@@ -511,7 +513,7 @@ private fun PskOverlayToggle(enabled: Boolean, onToggle: (Boolean) -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = "PSK",
+            text = stringResource(R.string.map_overlay_psk),
             color = if (enabled) BgApp else TextMuted,
             fontFamily = GeistMonoFamily,
             fontSize = 11.sp,
@@ -1206,9 +1208,9 @@ private fun SelectedStationCard(
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                InfoChip("${String.format("%.0f", distKm)} km", "Distance")
-                InfoChip("${String.format("%.0f", bearing)}\u00B0", "Bearing")
-                InfoChip("${station.snr} dB", "SNR")
+                InfoChip("${String.format("%.0f", distKm)} km", stringResource(R.string.map_info_distance))
+                InfoChip("${String.format("%.0f", bearing)}\u00B0", stringResource(R.string.map_info_bearing))
+                InfoChip("${station.snr} dB", stringResource(R.string.map_info_snr))
             }
         }
     }

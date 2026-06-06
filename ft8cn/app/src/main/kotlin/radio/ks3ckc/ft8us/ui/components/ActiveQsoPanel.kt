@@ -34,12 +34,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bg7yoz.ft8cn.Ft8Message
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
+import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.ft8transmit.FunctionOfTransmit
 import com.bg7yoz.ft8cn.ft8transmit.QueuedCaller
 import radio.ks3ckc.ft8us.theme.*
@@ -201,10 +203,10 @@ fun ActiveQsoPanel(
             // minimized it, the header acts as the "reopen" affordance.
             StationHeader(
                 targetCallsign = when {
-                    isCallingCq -> "Calling CQ"
-                    displayCallsign == null -> "Searching..."
-                    isTransmitting -> "QSOing with $displayCallsign"
-                    else -> "Waiting for $displayCallsign"
+                    isCallingCq -> stringResource(R.string.qsopanel_calling_cq)
+                    displayCallsign == null -> stringResource(R.string.qsopanel_searching)
+                    isTransmitting -> stringResource(R.string.qsopanel_qsoing_with, displayCallsign)
+                    else -> stringResource(R.string.qsopanel_waiting_for, displayCallsign)
                 },
                 snr = if (displayCallsign != null) toCallsign?.snr else null,
                 onClick = if (displayCallsign != null) onReopenSheet else null,
@@ -294,7 +296,7 @@ private fun StationHeader(
         ) {
             if (onClick != null) {
                 Text(
-                    text = "tap to view ↗",
+                    text = stringResource(R.string.qsopanel_tap_to_view),
                     color = Accent,
                     fontSize = 10.sp,
                     fontFamily = GeistMonoFamily,
@@ -335,9 +337,9 @@ private fun MessageLog(
 
     if (entries.isEmpty()) {
         val placeholder = if (isTransmitting && transmittingMessage.isNotEmpty()) {
-            "TX: $transmittingMessage"
+            stringResource(R.string.qsopanel_tx_message, transmittingMessage)
         } else {
-            "Waiting for messages..."
+            stringResource(R.string.qsopanel_waiting_messages)
         }
         Box(
             modifier = Modifier
@@ -542,7 +544,7 @@ private fun CallerQueueBar(queue: ArrayList<QueuedCaller>) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
-            text = "QUEUE",
+            text = stringResource(R.string.qsopanel_queue),
             color = TextFaint,
             fontSize = 9.sp,
             fontWeight = FontWeight.SemiBold,

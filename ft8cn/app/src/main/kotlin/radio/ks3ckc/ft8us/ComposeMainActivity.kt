@@ -17,8 +17,8 @@ import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -34,6 +34,7 @@ import android.os.Looper
 import androidx.lifecycle.Observer
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
+import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.bluetooth.BluetoothStateBroadcastReceive
 import com.bg7yoz.ft8cn.connector.CableSerialPort
 import com.bg7yoz.ft8cn.connector.ConnectMode
@@ -55,7 +56,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class ComposeMainActivity : ComponentActivity() {
+class ComposeMainActivity : AppCompatActivity() {
 
     private var bluetoothReceiver: BluetoothStateBroadcastReceive? = null
     private var usbDetachReceiver: BroadcastReceiver? = null
@@ -506,7 +507,7 @@ class ComposeMainActivity : ComponentActivity() {
 
                 // Show volume toast
                 volumeToast?.cancel()
-                volumeToast = android.widget.Toast.makeText(this, "TX Volume: $intVal%", android.widget.Toast.LENGTH_SHORT)
+                volumeToast = android.widget.Toast.makeText(this, getString(R.string.main_tx_volume, intVal), android.widget.Toast.LENGTH_SHORT)
                 volumeToast?.show()
 
                 return true

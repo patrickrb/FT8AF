@@ -17,11 +17,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.bg7yoz.ft8cn.R
 import radio.ks3ckc.ft8us.theme.BgApp
 import radio.ks3ckc.ft8us.theme.BgSurface2
 import radio.ks3ckc.ft8us.theme.BgSurface3
@@ -58,7 +60,7 @@ fun ExitConfirmDialog(
                 .padding(horizontal = 20.dp, vertical = 20.dp),
         ) {
             Text(
-                text = "EXIT FT8AF?",
+                text = stringResource(R.string.exit_title),
                 color = TextPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -69,7 +71,7 @@ fun ExitConfirmDialog(
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = "Are you sure you want to close the app? Any active QSO will be cancelled.",
+                text = stringResource(R.string.exit_message),
                 color = TextMuted,
                 fontSize = 13.sp,
                 lineHeight = 18.sp,
@@ -79,12 +81,12 @@ fun ExitConfirmDialog(
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 DialogSecondaryButton(
-                    label = "Cancel",
+                    label = stringResource(R.string.action_cancel),
                     modifier = Modifier.weight(1f),
                     onClick = onCancel,
                 )
                 DialogDestructiveButton(
-                    label = "Exit",
+                    label = stringResource(R.string.action_exit),
                     modifier = Modifier.weight(1f),
                     onClick = onConfirm,
                 )
