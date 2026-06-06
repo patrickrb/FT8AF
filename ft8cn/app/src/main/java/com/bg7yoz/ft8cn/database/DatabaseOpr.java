@@ -2276,6 +2276,16 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("toModifier")) {
                     GeneralVariables.toModifier = result;
                 }
+                if (name.equalsIgnoreCase("antenna")) {
+                    GeneralVariables.myAntenna = result;
+                }
+                if (name.equalsIgnoreCase("powerWatts")) {
+                    try {
+                        GeneralVariables.myPowerWatts = result.isEmpty() ? 0 : Integer.parseInt(result);
+                    } catch (NumberFormatException e) {
+                        GeneralVariables.myPowerWatts = 0;
+                    }
+                }
                 if (name.equalsIgnoreCase("freq")) {
                     float freq = 1000;
                     try {
