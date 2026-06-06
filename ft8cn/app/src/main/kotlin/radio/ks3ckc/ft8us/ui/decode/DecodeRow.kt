@@ -29,7 +29,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import com.bg7yoz.ft8cn.Ft8Message
+import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.maidenhead.MaidenheadGrid
 import radio.ks3ckc.ft8us.theme.*
@@ -65,6 +67,7 @@ fun DecodeRow(
     animateEntry: Boolean = false,
     nowMillis: Long = 0L,
     isTarget: Boolean = false,
+    compact: Boolean = false,
 ) {
     val isCQ = message.checkIsCQ()
     val isToMe = GeneralVariables.checkIsMyCallsign(message.callsignTo ?: "")
@@ -115,7 +118,7 @@ fun DecodeRow(
             .background(bgColor, shape)
             .border(1.dp, borderColor, shape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(start = 0.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+            .padding(start = 0.dp, end = 12.dp, top = if (compact) 6.dp else 10.dp, bottom = if (compact) 6.dp else 10.dp),
         verticalAlignment = Alignment.Top,
     ) {
         // Left accent bar — pink for the current call target, amber for CQ.
@@ -129,7 +132,7 @@ fun DecodeRow(
             Box(
                 modifier = Modifier
                     .width(3.dp)
-                    .height(52.dp)
+                    .height(if (compact) 32.dp else 52.dp)
                     .background(accentColor, RoundedCornerShape(99.dp))
             )
             Spacer(modifier = Modifier.width(10.dp))
@@ -147,12 +150,12 @@ fun DecodeRow(
                 // CALLING / TO YOU / CQ labels (can stack \u2014 e.g. target station
                 // calling CQ shows both CALLING and CQ).
                 if (isTarget) {
-                    MessageLabel(text = "\u2192 CALLING", color = Target, bgColor = TargetSoft)
+                    MessageLabel(text = stringResource(R.string.decode_label_calling), color = Target, bgColor = TargetSoft)
                 }
                 if (isCQ) {
-                    MessageLabel(text = "CQ", color = Accent, bgColor = AccentSoft)
+                    MessageLabel(text = stringResource(R.string.decode_label_cq), color = Accent, bgColor = AccentSoft)
                 } else if (isToMe) {
-                    MessageLabel(text = "\u2193 TO YOU", color = Signal, bgColor = SignalSoft)
+                    MessageLabel(text = stringResource(R.string.decode_label_to_you), color = Signal, bgColor = SignalSoft)
                 }
 
                 // Callsign
@@ -189,20 +192,22 @@ fun DecodeRow(
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(if (compact) 2.dp else 4.dp))
 
             // Full decoded message text (canonical FT8 frame, e.g. "K1ABC W9XYZ EN37"
             // or "CQ POTA W1ABC FN42"). This is what was actually transmitted.
-            val msgText = message.getMessageText()?.trim().orEmpty()
-            if (msgText.isNotEmpty()) {
-                Text(
-                    text = msgText,
-                    color = TextMuted,
-                    fontFamily = GeistMonoFamily,
-                    fontSize = 12.sp,
-                    letterSpacing = 0.02.sp,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
+            if (!compact) {
+                val msgText = message.getMessageText()?.trim().orEmpty()
+                if (msgText.isNotEmpty()) {
+                    Text(
+                        text = msgText,
+                        color = TextMuted,
+                        fontFamily = GeistMonoFamily,
+                        fontSize = 12.sp,
+                        letterSpacing = 0.02.sp,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
             }
 
             // Metadata row: signal bar, SNR, frequency, distance, UTC time
@@ -211,7 +216,7 @@ fun DecodeRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                SignalBar(snr = message.snr, width = 28.dp, height = 12.dp)
+                SignalBar(snr = message.snr, width = if (compact) 22.dp else 28.dp, height = if (compact) 10.dp else 12.dp)
 
                 MetaText("${message.snr} dB")
                 MetaText("${message.getFreq_hz()} Hz")
@@ -234,24 +239,26 @@ fun DecodeRow(
             }
 
             // State / DX entity location line (shown on every row when known)
-            val context = LocalContext.current
-            val locationText = resolveLocationText(context, message)
-            if (!locationText.isNullOrEmpty()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    radio.ks3ckc.ft8us.ui.components.FT8USIcons.Globe(
-                        color = TextDim,
-                        size = 12.dp,
-                    )
-                    Text(
-                        text = locationText,
-                        color = TextDim,
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
+            if (!compact) {
+                val context = LocalContext.current
+                val locationText = resolveLocationText(context, message)
+                if (!locationText.isNullOrEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        radio.ks3ckc.ft8us.ui.components.FT8USIcons.Globe(
+                            color = TextDim,
+                            size = 12.dp,
+                        )
+                        Text(
+                            text = locationText,
+                            color = TextDim,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
                 }
             }
         }
@@ -379,7 +386,7 @@ private fun computeDistanceText(message: Ft8Message): String {
     if (myGrid.isNullOrEmpty() || theirGrid.isNullOrEmpty()) return ""
     return try {
         val dist = MaidenheadGrid.getDist(myGrid, theirGrid)
-        if (dist > 0) "${String.format("%.0f", dist)} km" else ""
+        if (dist > 0) MaidenheadGrid.formatDist(dist) else ""
     } catch (_: Exception) {
         ""
     }

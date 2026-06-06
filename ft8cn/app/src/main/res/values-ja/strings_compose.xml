@@ -1,0 +1,459 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- ===== Common / shared ===== -->
+    <string name="action_cancel">キャンセル</string>
+    <string name="action_save">保存</string>
+    <string name="action_done">完了</string>
+    <string name="action_ok">OK</string>
+    <string name="action_exit">終了</string>
+    <string name="common_none">なし</string>
+    <string name="common_off">オフ</string>
+    <string name="common_not_configured">未設定</string>
+    <string name="common_not_connected">未接続</string>
+    <string name="common_pass">合格</string>
+    <string name="common_fail">失敗</string>
+    <string name="common_test_connection">接続テスト</string>
+
+    <!-- ===== Continents ===== -->
+    <string name="continent_na">北アメリカ</string>
+    <string name="continent_sa">南アメリカ</string>
+    <string name="continent_eu">ヨーロッパ</string>
+    <string name="continent_af">アフリカ</string>
+    <string name="continent_as">アジア</string>
+    <string name="continent_oc">オセアニア</string>
+    <string name="continent_an">南極</string>
+
+    <!-- ===== Bottom navigation tabs ===== -->
+    <string name="tab_decode">デコード</string>
+    <string name="tab_map">マップ</string>
+    <string name="tab_waterfall">ウォーターフォール</string>
+    <string name="tab_pota">POTA</string>
+    <string name="tab_logbook">ログブック</string>
+    <string name="tab_settings">設定</string>
+
+    <!-- ===== Status pills (decode list badges) ===== -->
+    <string name="status_new_dxcc">新規 DXCC</string>
+    <string name="status_new_grid">新規グリッド</string>
+    <string name="status_new_band">新規バンド</string>
+    <string name="status_pota">POTA</string>
+    <string name="status_new_pota">新規 POTA</string>
+    <string name="status_sota">SOTA</string>
+    <string name="status_needed">未交信</string>
+    <string name="status_worked">交信済</string>
+    <string name="status_confirmed">確認済</string>
+    <string name="status_cq">CQ</string>
+    <string name="status_pending">保留中</string>
+
+    <!-- ===== Splash / app-level ===== -->
+    <string name="splash_tagline">FT8 · モバイルコンパニオン</string>
+    <string name="splash_initializing">無線機を初期化中</string>
+    <string name="splash_version">v%1$s · ビルド %2$s</string>
+    <string name="app_set_callsign_first">CQ を出す前に設定でコールサインを登録してください</string>
+    <string name="app_hunt_on">ハント オン — CQ に自動応答します</string>
+    <string name="app_hunt_off">ハント オフ — CQ を出し、応答のみ交信します</string>
+    <string name="main_tx_volume">TX 音量: %1$d%%</string>
+
+    <!-- ===== Exit dialog ===== -->
+    <string name="exit_title">FT8AF を終了しますか？</string>
+    <string name="exit_message">アプリを閉じてよろしいですか？進行中の QSO はキャンセルされます。</string>
+
+    <!-- ===== Frequency picker ===== -->
+    <string name="freq_select_title">周波数を選択</string>
+    <string name="freq_show_alternates">代替を表示</string>
+    <string name="freq_hide_alternates">代替を非表示</string>
+    <string name="freq_alt_prefix">"ALT "</string>
+
+    <!-- ===== Operator card ===== -->
+    <string name="op_no_call">コールなし</string>
+    <string name="op_no_grid">グリッド未設定</string>
+    <string name="op_tap_to_edit">タップして編集</string>
+    <string name="op_stat_rig">RIG</string>
+    <string name="op_stat_antenna">ANTENNA</string>
+    <string name="op_stat_power">POWER</string>
+
+    <!-- ===== Export log sheet ===== -->
+    <string name="export_title">QSO をエクスポート</string>
+    <string name="export_date_range">期間</string>
+    <string name="export_date_from_placeholder">"開始  YYYYMMDD"</string>
+    <string name="export_date_to_placeholder">"終了  YYYYMMDD"</string>
+    <string name="export_share">共有</string>
+    <string name="export_filter_confirmed">確認済のみ</string>
+    <string name="export_filter_unconfirmed">未確認のみ</string>
+    <string name="export_record_singular">件</string>
+    <string name="export_record_plural">件</string>
+    <string name="export_summary_all">すべて</string>
+    <string name="export_summary_key">\'%1$s\'</string>
+    <string name="export_summary_suffix">" · %1$s"</string>
+    <string name="export_summary">%3$s に一致 %1$d %2$s%4$s</string>
+    <string name="export_preparing">準備中…</string>
+    <string name="export_share_chooser_title">QSO ログを共有</string>
+    <string name="export_saved_to">%1$s に保存しました</string>
+    <string name="export_save_failed">ダウンロードへの保存に失敗しました</string>
+    <string name="export_temp_file_failed">一時ファイルを作成できませんでした</string>
+
+    <!-- ===== Active QSO panel ===== -->
+    <string name="qsopanel_calling_cq">CQ 送信中</string>
+    <string name="qsopanel_searching">検索中...</string>
+    <string name="qsopanel_qsoing_with">%1$s と QSO 中</string>
+    <string name="qsopanel_waiting_for">%1$s を待機中</string>
+    <string name="qsopanel_tap_to_view">タップして表示 ↗</string>
+    <string name="qsopanel_tx_message">TX: %1$s</string>
+    <string name="qsopanel_waiting_messages">メッセージを待機中...</string>
+
+    <!-- ===== Decode screen ===== -->
+    <string name="decode_title">デコード</string>
+    <string name="decode_subtitle">"%1$s  •  このサイクルで %2$d 件デコード"</string>
+    <string name="decode_clear_list">デコードリストをクリア</string>
+    <string name="decode_utc_placeholder">UTC : --:--:--</string>
+    <string name="decode_time_group_utc">%1$s UTC</string>
+    <string name="decode_filter_all">すべて</string>
+    <string name="decode_filter_cq_calls">CQ コール</string>
+    <string name="decode_filter_cq_pota">CQ POTA</string>
+    <string name="decode_filter_new_dxcc">新規 DXCC</string>
+    <string name="decode_filter_needed">未交信</string>
+    <string name="decode_filter_for_me">自分宛て</string>
+    <string name="decode_empty_cq_title">CQ コールなし</string>
+    <string name="decode_empty_cq_body">現在このバンドで CQ を出している局はありません。</string>
+    <string name="decode_empty_pota_title">POTA スポットなし</string>
+    <string name="decode_empty_pota_body">このバンドではまだ公園アクティベーションがデコードされていません — POTA → ハント でスポット一覧を表示してください。</string>
+    <string name="decode_empty_dxcc_title">新規 DXCC なし</string>
+    <string name="decode_empty_dxcc_body">未交信の DXCC エンティティはまだデコードされていません。</string>
+    <string name="decode_empty_needed_title">必要な局なし</string>
+    <string name="decode_empty_needed_body">確認が必要な局は見つかりませんでした。</string>
+    <string name="decode_empty_forme_title">自分宛てのコールなし</string>
+    <string name="decode_empty_forme_body">現在あなたのコールサインを呼んでいる局はありません。</string>
+    <string name="decode_empty_default_title">デコードされた信号なし</string>
+    <string name="decode_empty_default_body">FT8 信号が表示されるのを待機中...</string>
+    <string name="decode_label_calling">→ 呼出中</string>
+    <string name="decode_label_cq">CQ</string>
+    <string name="decode_label_to_you">↓ 自分宛て</string>
+
+    <!-- ===== QSO sheet ===== -->
+    <string name="qso_complete">QSO 完了</string>
+    <string name="qso_call_action">%1$s を呼出</string>
+    <string name="qso_qrz_link">QRZ ↗</string>
+    <string name="qso_stat_signal">信号</string>
+    <string name="qso_stat_azimuth">方位</string>
+    <string name="qso_stat_band">バンド</string>
+    <string name="qso_sequence_header">QSO シーケンス</string>
+    <string name="qso_step_send_call">コール送信</string>
+    <string name="qso_step_report_sent">レポート送信</string>
+    <string name="qso_step_roger">ロジャー</string>
+    <string name="qso_step_confirm">確認</string>
+    <string name="qso_step_logged">記録済</string>
+    <string name="qso_live_sending">%1$s と QSO 中 — %2$s を送信</string>
+    <string name="qso_live_waiting">%1$s の応答を待機中…</string>
+    <string name="qso_live_transmitting">送信中…</string>
+    <string name="qso_live_step_fallback">メッセージ</string>
+    <string name="qso_tx_now">TX 今すぐ</string>
+    <string name="qso_tx_next">TX 次回</string>
+
+    <!-- ===== Logbook ===== -->
+    <string name="log_tab_stats">統計</string>
+    <string name="log_tab_recent">最近</string>
+    <string name="log_tab_awards">アワード</string>
+    <string name="log_title">ログブック</string>
+    <string name="log_subtitle_qsos_all_bands">%1$d QSO · 全バンド</string>
+    <string name="log_cd_sync_to_logging_services">ログサービスに同期</string>
+    <string name="log_cd_export_qsos">QSO をエクスポート</string>
+    <string name="log_stat_total_qsos">総 QSO 数</string>
+    <string name="log_stat_dxcc_entities">DXCC エンティティ</string>
+    <string name="log_stat_cq_zones">CQ ゾーン</string>
+    <string name="log_stat_itu_zones">ITU ゾーン</string>
+    <string name="log_section_band_distribution">バンド分布</string>
+    <string name="log_section_award_progress">アワード進捗</string>
+    <string name="log_award_dxcc_mixed">DXCC ミックス</string>
+    <string name="log_award_vucc_grid_squares">VUCC グリッドスクエア</string>
+    <string name="log_award_dxcc_challenge">DXCC チャレンジ</string>
+    <string name="log_section_grid_coverage">グリッドカバレッジ</string>
+    <string name="log_section_signal_trend">信号トレンド</string>
+    <string name="log_no_qsos_yet">QSO がまだありません</string>
+    <string name="log_no_qsos_recorded_yet">記録された QSO がまだありません</string>
+    <string name="log_state_usa">%1$s, USA</string>
+    <string name="log_cd_qso_actions">QSO 操作</string>
+    <string name="log_action_edit">編集</string>
+    <string name="log_action_delete">削除</string>
+    <string name="log_award_dxcc_mixed_desc">任意のバンド/モードで 100 の DXCC エンティティを交信・確認する</string>
+    <string name="log_award_was">WAS</string>
+    <string name="log_award_was_desc">US 全 50 州との交信を確認する</string>
+    <string name="log_award_waz">WAZ</string>
+    <string name="log_award_waz_desc">全 40 CQ ゾーンとの交信を確認する</string>
+    <string name="log_award_vucc">VUCC</string>
+    <string name="log_award_vucc_desc">VHF/UHF センチュリークラブ -- 単一バンドで 100 グリッドスクエア</string>
+    <string name="log_award_iota">IOTA</string>
+    <string name="log_award_iota_desc">Islands on the Air -- 指定された島の局と交信する</string>
+    <string name="log_edit_qso">QSO を編集</string>
+    <string name="log_field_callsign">コールサイン</string>
+    <string name="log_field_grid_locator">グリッドロケーター</string>
+    <string name="log_field_mode">モード</string>
+    <string name="log_delete_qso_title">QSO を削除しますか？</string>
+    <string name="log_delete_qso_body_callsign">%1$s との QSO をログブックから削除しますか？この操作は元に戻せません。</string>
+    <string name="log_delete_qso_body">この QSO をログブックから削除しますか？この操作は元に戻せません。</string>
+    <string name="log_sync_title_no_services">有効なサービスなし</string>
+    <string name="log_sync_title_syncing">同期中…</string>
+    <string name="log_sync_title_complete">同期完了</string>
+    <string name="log_sync_enable_services">設定で Cloudlog/Wavelog/Nextlog または QRZ を有効にして、もう一度お試しください。</string>
+    <string name="log_sync_progress_count">%2$d 件中 %1$d 件の QSO</string>
+    <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d 件受理</string>
+    <string name="log_sync_qrz_accepted">QRZ: %1$d 件受理</string>
+    <string name="log_sync_nothing_to_upload">アップロードする QSO がログブックにまだありません。</string>
+    <string name="log_sync_working">処理中…</string>
+
+    <!-- ===== POTA ===== -->
+    <string name="pota_tab_activate">アクティベート</string>
+    <string name="pota_tab_hunt">ハント</string>
+    <string name="pota_tab_history">履歴</string>
+    <string name="pota_start_activation">アクティベーション開始</string>
+    <string name="pota_park_reference_label">公園リファレンス (例: K-1234)</string>
+    <string name="pota_notes_optional_label">メモ (任意)</string>
+    <string name="pota_enter_park_reference_first">先に公園リファレンスを入力してください</string>
+    <string name="pota_activating">%1$s をアクティベート中</string>
+    <string name="pota_activation_ended">アクティベーション終了</string>
+    <string name="pota_set_callsign_first">先に設定でコールサインを登録してください</string>
+    <string name="pota_self_spot_posted">セルフスポットを投稿しました</string>
+    <string name="pota_self_spot_failed">セルフスポット失敗 — ログを確認してください</string>
+    <string name="pota_active_park">アクティブ — %1$s</string>
+    <string name="pota_qsos">QSO</string>
+    <string name="pota_valid_activation">有効なアクティベーション</string>
+    <string name="pota_to_valid">有効まであと %1$d</string>
+    <string name="pota_elapsed">経過時間</string>
+    <string name="pota_since_start">開始から</string>
+    <string name="pota_self_spot">セルフスポット</string>
+    <string name="pota_end_activation">アクティベーション終了</string>
+    <string name="pota_notes_quote">“%1$s”</string>
+    <string name="pota_tx_cq_preview">TX CQ は「CQ POTA %1$s %2$s」として送信されます。</string>
+    <string name="pota_no_spots">現在 FT8 POTA スポットはありません。</string>
+    <string name="pota_active_spots">%1$d 件のアクティブな FT8 スポット</string>
+    <string name="pota_targeting">%1$s @ %2$s kHz (%3$s) をターゲット中 — デコードに切り替えて呼出してください</string>
+    <string name="pota_no_past_activations">過去のアクティベーションはまだありません。</string>
+    <string name="pota_no_browser_available">利用可能なブラウザがありません</string>
+    <string name="pota_export_failed">エクスポート失敗 — ログを確認してください</string>
+    <string name="pota_status_active">アクティブ</string>
+    <string name="pota_qso_count">%1$d QSO</string>
+    <string name="pota_share_adif">ADIF を共有</string>
+    <string name="pota_open_pota_app">pota.app を開く</string>
+
+    <!-- ===== Debug log / Map / Waterfall ===== -->
+    <string name="debug_title">デバッグ</string>
+    <string name="debug_line_count">%1$d 行</string>
+    <string name="debug_logcat_on_suffix">" · logcat オン"</string>
+    <string name="debug_close">閉じる</string>
+    <string name="debug_share">共有</string>
+    <string name="debug_clear">クリア</string>
+    <string name="debug_logcat_on">Logcat: オン</string>
+    <string name="debug_logcat_off">Logcat: オフ</string>
+    <string name="debug_no_log_file">ログファイルなし</string>
+    <string name="debug_log_cleared">ログをクリアしました</string>
+    <string name="debug_share_chooser_title">debug.log を共有</string>
+    <string name="map_title">マップ</string>
+    <string name="map_no_grid_set">グリッド未設定</string>
+    <string name="map_station_count">%1$d 局</string>
+    <string name="map_station_count_with_heard">%1$d 局 · %2$d 局受信</string>
+    <string name="map_projection_equirectangular">正距円筒図法</string>
+    <string name="map_projection_azimuthal">正距方位図法</string>
+    <string name="map_mode_standard">STD</string>
+    <string name="map_mode_azimuthal">AZ</string>
+    <string name="map_overlay_psk">PSK</string>
+    <string name="map_info_distance">距離</string>
+    <string name="map_info_bearing">方位</string>
+    <string name="map_info_snr">SNR</string>
+    <string name="waterfall_title">ウォーターフォール</string>
+    <string name="waterfall_toggle_nr">NR</string>
+    <string name="waterfall_toggle_msg">MSG</string>
+    <string name="waterfall_status_live">ライブ</string>
+
+    <!-- ===== Settings: format helpers ===== -->
+    <string name="settings_minutes_format">%1$d 分</string>
+    <string name="settings_tries_format">%1$d 回</string>
+    <string name="settings_milliseconds_format">%1$d ms</string>
+    <string name="settings_hz_format">%1$d Hz</string>
+    <string name="settings_hz_str_format">%1$s Hz</string>
+    <string name="settings_percent_format">%1$d%%</string>
+    <string name="settings_bands_enabled_format">%2$d 件中 %1$d 件有効</string>
+    <string name="settings_min_max_suffix">%1$d–%2$d %3$s</string>
+    <string name="settings_build_date_format">ビルド %1$s</string>
+    <string name="settings_version_value">v%1$s</string>
+
+    <!-- ===== Settings: sections ===== -->
+    <string name="settings_title">設定</string>
+    <string name="settings_section_operator_identity">オペレーター情報</string>
+    <string name="settings_section_radio">無線機</string>
+    <string name="settings_section_audio">オーディオ</string>
+    <string name="settings_section_transmission">送信</string>
+    <string name="settings_section_auto_sequence">オートシーケンス</string>
+    <string name="settings_section_decode_highlights">デコードハイライト</string>
+    <string name="settings_section_callsign_blocklist">コールサインブロックリスト</string>
+    <string name="settings_section_decode_filters">デコードフィルター</string>
+    <string name="settings_section_needed_dx_alerts">未交信 DX アラート</string>
+    <string name="settings_section_logging_awards">ログ &amp; アワード</string>
+    <string name="settings_section_advanced">詳細設定</string>
+    <string name="settings_section_about">情報</string>
+    <string name="settings_section_language">言語</string>
+
+    <!-- ===== Settings: operator identity ===== -->
+    <string name="settings_auto_update_grid">グリッドを自動更新 (GPS)</string>
+    <string name="settings_auto_update_grid_desc">デバイスの GPS を使って Maidenhead グリッドを最新に保ちます</string>
+
+    <!-- ===== Settings: radio ===== -->
+    <string name="settings_rig_model">無線機モデル</string>
+    <string name="settings_control_mode">制御モード</string>
+    <string name="settings_connection_mode">接続モード</string>
+    <string name="settings_baud_rate">ボーレート</string>
+    <string name="settings_band_frequency">バンド &amp; 周波数</string>
+    <string name="settings_enabled_bands">有効なバンド</string>
+    <string name="settings_audio_frequency">オーディオ周波数</string>
+    <string name="settings_spectrum_width">スペクトラム幅</string>
+
+    <!-- ===== Settings: audio ===== -->
+    <string name="settings_audio_input">オーディオ入力</string>
+    <string name="settings_audio_output">オーディオ出力</string>
+    <string name="settings_tx_volume">TX 音量</string>
+    <string name="settings_tx_volume_desc" formatted="false">送信オーディオレベル (ハードウェアボタンで ±5%)</string>
+
+    <!-- ===== Settings: transmission ===== -->
+    <string name="settings_tx_rx_split">TX/RX スプリット</string>
+    <string name="settings_tx_rx_split_desc">受信とは異なる周波数で送信します</string>
+    <string name="settings_tx_watchdog">TX ウォッチドッグ</string>
+    <string name="settings_tx_watchdog_desc">タイムアウト後に送信を自動停止します</string>
+    <string name="settings_stop_after">停止条件</string>
+    <string name="settings_stop_after_desc">N 回応答がなければ呼出を停止します</string>
+
+    <!-- ===== Settings: auto-sequence ===== -->
+    <string name="settings_hunt">ハント (CQ 自動応答)</string>
+    <string name="settings_hunt_desc">CQ を出している局へ積極的に呼出します。TX バーの HUNT ボタンと同じです。オフ = CQ を出し、応答してきた局のみ交信します。</string>
+    <string name="settings_auto_call_followed">フォロー局を自動呼出</string>
+    <string name="settings_auto_call_followed_desc">フォロー中のコールサインを自動で呼出し続けます</string>
+    <string name="settings_fast_turnaround">高速ターンアラウンド</string>
+    <string name="settings_fast_turnaround_desc">約 1 秒早くデコードし、待たずに次のスロットで CQ に応答できます。クロックオフセットの大きい局を取りこぼす場合があります。</string>
+    <string name="settings_auto_cq_after_qso">QSO 後に自動 CQ</string>
+    <string name="settings_auto_cq_after_qso_desc">各交信の完了後に自動で CQ を出し続けます — 再タップ不要。自分の周波数を維持します (ハントは無視)。停止するか、応答なしで TX ウォッチドッグがタイムアウトするまで継続します。</string>
+
+    <!-- ===== Settings: decode highlights ===== -->
+    <string name="settings_highlight_new_dxcc">新規 DXCC</string>
+    <string name="settings_highlight_new_dxcc_desc">未交信の DXCC エンティティの局をハイライトします</string>
+    <string name="settings_highlight_new_grid">新規グリッド</string>
+    <string name="settings_highlight_new_grid_desc">まだ交信していない Maidenhead グリッドをハイライトします</string>
+    <string name="settings_highlight_new_band">新規バンド</string>
+    <string name="settings_highlight_new_band_desc">他のバンドでのみ交信した局をハイライトします</string>
+    <string name="settings_highlight_pota">POTA アクティベーター</string>
+    <string name="settings_highlight_pota_desc">スポットされた POTA アクティベーターをハイライト。新規公園を目立たせます</string>
+    <string name="settings_highlight_worked">交信済</string>
+    <string name="settings_highlight_worked_desc">すでにログにある局にタグを付けます</string>
+    <string name="settings_distance_unit">マイル表示</string>
+    <string name="settings_distance_unit_desc">キロメートルの代わりにマイルで距離を表示</string>
+
+    <!-- ===== Settings: callsign blocklist ===== -->
+    <string name="settings_exact_callsigns">完全一致コールサイン</string>
+    <string name="settings_exact_callsigns_desc">コール全体の一致をブロックします</string>
+    <string name="settings_prefixes">プレフィックス</string>
+    <string name="settings_prefixes_desc">コールサインのプレフィックスでブロック (例: RA)</string>
+    <string name="settings_keywords">キーワード</string>
+    <string name="settings_keywords_desc">コールまたはメッセージ内の部分文字列でブロック (例: POTA, /P)</string>
+
+    <!-- ===== Settings: decode filters ===== -->
+    <string name="settings_show_only_cq">CQ のみ表示</string>
+    <string name="settings_show_only_cq_desc">CQ 系メッセージ以外をすべて非表示にします</string>
+    <string name="settings_dx_only">DX のみ</string>
+    <string name="settings_dx_only_desc">自分の大陸以外の局のみ表示します</string>
+    <string name="settings_needed_only">未交信のみ</string>
+    <string name="settings_needed_only_desc">まだ確認 (QSL) していない局のみ表示します</string>
+    <string name="settings_filter_by_continent">大陸でフィルター</string>
+    <string name="settings_filter_by_continent_desc">選択した大陸の局のみ表示します</string>
+    <string name="settings_continent">大陸</string>
+    <string name="settings_skip_directional_cq">指向性 CQ をスキップ (自動応答)</string>
+    <string name="settings_skip_directional_cq_desc">別の DXCC に向けられた CQ DX/EU/JA… には自動応答しません</string>
+    <string name="settings_hide_directional_cq">自分宛てでない指向性 CQ を非表示</string>
+    <string name="settings_hide_directional_cq_desc">自分の DXCC を対象としない地域指向の CQ を非表示にします</string>
+
+    <!-- ===== Settings: needed-DX alerts ===== -->
+    <string name="settings_alert_new_dxcc">新規 DXCC</string>
+    <string name="settings_alert_new_dxcc_desc">未交信の DXCC エンティティが CQ を出したら音 + 振動 + 通知</string>
+    <string name="settings_alert_new_state">新規 US 州</string>
+    <string name="settings_alert_new_state_desc">未交信の US 州の局が CQ を出したら音 + 振動 + 通知 (州はグリッドから判定)</string>
+
+    <!-- ===== Settings: logging &amp; awards ===== -->
+    <string name="settings_save_swl_decodes">SWL デコードを保存</string>
+    <string name="settings_save_swl_decodes_desc">デコードしたすべてのメッセージをデータベースに記録します</string>
+    <string name="settings_save_swl_qsos">SWL QSO を保存</string>
+    <string name="settings_save_swl_qsos_desc">他局間で検出された QSO を記録します</string>
+    <string name="settings_pskreporter">PSKReporter</string>
+    <string name="settings_pskreporter_desc">デコードしたスポットを pskreporter.info にアップロードします</string>
+    <string name="settings_qrz_com">QRZ.com</string>
+    <string name="settings_qrz_com_desc">QSO を QRZ ログブックに自動アップロードします</string>
+    <string name="settings_qrz_profile_lookup">QRZ プロフィール検索</string>
+    <string name="settings_qrz_profile_lookup_desc">QRZ XML API 用のユーザー名 + パスワード (アバター)</string>
+    <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
+    <string name="settings_cloudlog_desc">QSO を Cloudlog、Wavelog、または Nextlog のインスタンスに自動アップロードします</string>
+
+    <!-- ===== Settings: advanced ===== -->
+    <string name="settings_ptt_delay">PTT ディレイ</string>
+    <string name="settings_ptt_delay_desc">PTT 後、送信オーディオが始まるまでの遅延</string>
+    <string name="settings_tx_delay">TX ディレイ</string>
+    <string name="settings_tx_delay_desc">前サイクルのデコードを可能にするための送信前遅延</string>
+    <string name="settings_late_start_tolerance">遅延開始許容時間</string>
+    <string name="settings_late_start_tolerance_desc">サイクル開始から最大 N ms までの TX 開始を許可します。先頭オーディオはクリップされ、TX はサイクル境界で終了します</string>
+
+    <!-- ===== Settings: about ===== -->
+    <string name="settings_faq_support">FAQ &amp; サポート</string>
+    <string name="settings_debug">デバッグ</string>
+    <string name="settings_debug_desc">debug.log を表示 / 共有</string>
+    <string name="settings_about_body">バージョン %1$s (ビルド %2$s)\nビルド日 %3$s\n\nFT8 を、もっと手軽に。\n\nAndroid 向けのスタンドアロン FT8 トランシーバーアプリ。USB、Bluetooth、ネットワークでの無線機制御に対応し、自動シーケンスとログ記録を備えています。</string>
+    <string name="settings_website">ウェブサイト</string>
+    <string name="settings_community">コミュニティ</string>
+    <string name="settings_built_by">制作</string>
+
+    <!-- ===== Settings: dialogs ===== -->
+    <string name="settings_block_exact_title">完全一致コールサインをブロック</string>
+    <string name="settings_block_exact_desc">コール全体の一致。カンマまたはスペース区切り、例: W1AW, K1ABC。</string>
+    <string name="settings_block_prefix_title">コールサインプレフィックスをブロック</string>
+    <string name="settings_block_prefix_desc">プレフィックス一致、例: RA は RA0AA..RA9ZZ をブロックします。カンマまたはスペース区切り。</string>
+    <string name="settings_block_keyword_title">キーワードをブロック</string>
+    <string name="settings_block_keyword_desc">コールとメッセージ本文に対する部分文字列一致、例: POTA, /P, QRP。</string>
+    <string name="settings_blocklist_hint">例: W1AW, RA, /P</string>
+    <string name="settings_filter_continent_title">大陸でフィルター</string>
+    <string name="settings_conn_usb_cable">USB ケーブル</string>
+    <string name="settings_conn_bluetooth">Bluetooth</string>
+    <string name="settings_conn_network">ネットワーク</string>
+    <string name="settings_no_usb_serial">USB シリアルデバイスが検出されませんでした。無線機に USB ケーブルを接続して、もう一度お試しください。</string>
+    <string name="settings_debug_mode_enabled">デバッグモードを有効にしました</string>
+    <string name="settings_debug_mode_disabled">デバッグモードを無効にしました</string>
+    <string name="settings_edit_operator_identity">オペレーター情報を編集</string>
+    <string name="settings_callsign">コールサイン</string>
+    <string name="settings_callsign_hint">例: W1AW</string>
+    <string name="settings_grid_locator">グリッドロケーター</string>
+    <string name="settings_grid_locator_hint">例: FN31pr</string>
+    <string name="settings_logging_server">ログサーバー</string>
+    <string name="settings_logging_server_desc">Cloudlog、Wavelog、Nextlog はすべて同じアップロードを受け付けます。</string>
+    <string name="settings_server_address">サーバーアドレス</string>
+    <string name="settings_api_key">API キー</string>
+    <string name="settings_api_key_hint">あなたの Cloudlog API キー</string>
+    <string name="settings_loading_stations">局を読み込み中...</string>
+    <string name="settings_station_id">局 ID</string>
+    <string name="settings_station_id_hint">例: 1</string>
+    <string name="settings_select_a_station">局を選択</string>
+    <string name="settings_enter_manually">手動入力</string>
+    <string name="settings_choose_from_server">サーバーから選択</string>
+    <string name="settings_station_profile">局プロフィール</string>
+    <string name="settings_qrz_creds_desc">QRZ XML API 経由でデコードしたコールサインのプロフィール写真を取得するために使用します。QRZ XML サブスクリプションが必要です。</string>
+    <string name="settings_username">ユーザー名</string>
+    <string name="settings_username_hint">あなたの QRZ.com ユーザー名</string>
+    <string name="settings_password">パスワード</string>
+    <string name="settings_enabled_bands_dialog_desc">非表示のバンドは周波数ピッカーに表示されません。</string>
+    <string name="settings_select_serial_port">シリアルポートを選択</string>
+    <string name="settings_tx_volume_advice">ライブで調整してください — 次の TX でこのレベルが使われます。無線機の ALC を見ながら、ラインに軽く触れる程度まで下げてください。</string>
+
+    <!-- ===== Settings: language picker ===== -->
+    <string name="settings_language">言語</string>
+    <string name="settings_language_desc">アプリの表示言語</string>
+    <string name="settings_language_system">システムの既定</string>
+
+    <string name="tx_transmitting">送信中</string>
+    <string name="tx_listening">受信中</string>
+    <string name="qsopanel_log_action">LOG</string>
+    <string name="qsopanel_queue">キュー</string>
+    <string name="swr_lockout_title">送信停止 — 高SWR検出 (%1$s)</string>
+    <string name="swr_lockout_body">送信前にアンテナ / 給電線を確認してください。</string>
+    <string name="swr_lockout_dismiss">解除</string>
+    <string name="swr_lockout_toast">送信ブロック — SWRロック中。先にロックバナーを解除してください。</string>
+</resources>

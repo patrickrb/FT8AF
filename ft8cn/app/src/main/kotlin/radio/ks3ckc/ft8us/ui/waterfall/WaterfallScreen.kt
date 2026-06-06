@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,6 +34,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Observer
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
+import com.bg7yoz.ft8cn.R
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -148,7 +150,7 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             .fillMaxSize()
             .background(BgApp),
     ) {
-        TopBar(title = "Waterfall") {
+        TopBar(title = stringResource(R.string.waterfall_title)) {
             val freqText = if (touchedFreqHz > 0) {
                 "$touchedFreqHz Hz"
             } else {
@@ -231,7 +233,7 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             Spacer(modifier = Modifier.width(12.dp))
 
             ToggleChip(
-                label = "NR",
+                label = stringResource(R.string.waterfall_toggle_nr),
                 active = deNoise,
                 onClick = {
                     deNoise = !deNoise
@@ -242,7 +244,7 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             Spacer(modifier = Modifier.width(8.dp))
 
             ToggleChip(
-                label = "MSG",
+                label = stringResource(R.string.waterfall_toggle_msg),
                 active = showMessages,
                 onClick = {
                     showMessages = !showMessages
@@ -262,7 +264,7 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             Spacer(modifier = Modifier.width(6.dp))
 
             Text(
-                text = "LIVE",
+                text = stringResource(R.string.waterfall_status_live),
                 color = StatusConfirmed,
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,

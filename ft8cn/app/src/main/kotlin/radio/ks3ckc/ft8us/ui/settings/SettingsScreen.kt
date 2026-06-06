@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.bg7yoz.ft8cn.Ft8Message
+import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.log.ThirdPartyService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -59,8 +61,10 @@ import android.app.Activity
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.os.LocaleListCompat
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
 import com.bg7yoz.ft8cn.connector.CableSerialPort
@@ -70,19 +74,23 @@ import com.bg7yoz.ft8cn.database.ControlMode
 import com.bg7yoz.ft8cn.database.OperationBand
 import com.bg7yoz.ft8cn.database.RigNameList
 import com.bg7yoz.ft8cn.ft8signal.FT8Package
+import com.bg7yoz.ft8cn.ft8transmit.MeterProtectionController
 import com.bg7yoz.ft8cn.rigs.BaseRigOperation
 import com.bg7yoz.ft8cn.rigs.InstructionSet
 import com.bg7yoz.ft8cn.ui.AudioDeviceSpinnerAdapter
-import com.bg7yoz.ft8cn.ui.LoginIcomRadioDialog
-import com.bg7yoz.ft8cn.ui.SelectBluetoothDialog
-import com.bg7yoz.ft8cn.ui.SelectFlexRadioDialog
-import com.bg7yoz.ft8cn.ui.SelectXieguRadioDialog
 import radio.ks3ckc.ft8us.theme.*
 import radio.ks3ckc.ft8us.ui.components.GlassCard
 import radio.ks3ckc.ft8us.ui.components.SettingsRow
 import radio.ks3ckc.ft8us.ui.components.Toggle
 import radio.ks3ckc.ft8us.ui.components.TopBar
 import radio.ks3ckc.ft8us.ui.components.selectBandIndex
+
+/**
+ * BCP-47 language tags for the in-app Language picker, parallel to the label list
+ * built in the picker dialog. Index 0 ("") means "System default" (empty locale
+ * list). Keep in sync with res/xml/locales_config.xml and the values-<locale>/ dirs.
+ */
+private val LANGUAGE_TAGS = listOf("", "en", "zh-CN", "zh-TW", "ru", "es", "fr", "ja")
 
 /**
  * Settings screen that replaces the legacy ConfigFragment.
@@ -125,6 +133,7 @@ fun SettingsScreen(
     var highlightNewBand by remember { mutableStateOf(GeneralVariables.highlightNewBand) }
     var highlightWorked by remember { mutableStateOf(GeneralVariables.highlightWorked) }
     var highlightPota by remember { mutableStateOf(GeneralVariables.highlightPota) }
+    var distanceInMiles by remember { mutableStateOf(GeneralVariables.distanceInMiles) }
 
     // Callsign blocklist (comma-separated entries) + decode display filters
     var blockedExact by remember { mutableStateOf(GeneralVariables.getBlockedExactCallsigns()) }
@@ -143,7 +152,13 @@ fun SettingsScreen(
     // Continent codes (stored on the message) and their display names, parallel lists.
     val continentCodes = listOf("NA", "SA", "EU", "AF", "AS", "OC", "AN")
     val continentNames = listOf(
-        "North America", "South America", "Europe", "Africa", "Asia", "Oceania", "Antarctica",
+        stringResource(R.string.continent_na),
+        stringResource(R.string.continent_sa),
+        stringResource(R.string.continent_eu),
+        stringResource(R.string.continent_af),
+        stringResource(R.string.continent_as),
+        stringResource(R.string.continent_oc),
+        stringResource(R.string.continent_an),
     )
 
     // Observe serial ports for USB Cable picker
@@ -182,10 +197,24 @@ fun SettingsScreen(
     var showBlockPrefixDialog by remember { mutableStateOf(false) }
     var showBlockKeywordDialog by remember { mutableStateOf(false) }
     var showContinentPicker by remember { mutableStateOf(false) }
+    var showLanguagePicker by remember { mutableStateOf(false) }
+    var showBluetoothPicker by remember { mutableStateOf(false) }
+    var showFlexRadioPicker by remember { mutableStateOf(false) }
+    var showXieguRadioPicker by remember { mutableStateOf(false) }
+    var showIcomLogin by remember { mutableStateOf(false) }
+
+    // TX Protection state
+    var autoVolumeEnabled by remember { mutableStateOf(GeneralVariables.autoVolumeEnabled) }
+    var swrHaltEnabled by remember { mutableStateOf(GeneralVariables.swrHaltEnabled) }
+    var swrHaltThreshold by remember { mutableIntStateOf(GeneralVariables.swrHaltThreshold) }
+    var alcTargetLow by remember { mutableIntStateOf(GeneralVariables.alcTargetLow) }
+    var alcTargetHigh by remember { mutableIntStateOf(GeneralVariables.alcTargetHigh) }
 
     // Operator identity edit state
     var callsignState by remember { mutableStateOf(GeneralVariables.myCallsign.orEmpty()) }
     var gridState by remember { mutableStateOf(GeneralVariables.getMyMaidenheadGrid().orEmpty()) }
+    var antennaState by remember { mutableStateOf(GeneralVariables.myAntenna.orEmpty()) }
+    var powerWattsState by remember { mutableIntStateOf(GeneralVariables.myPowerWatts) }
 
     // Mutable state for settings that need to trigger recomposition on change
     var watchdogMs by remember { mutableIntStateOf(GeneralVariables.launchSupervision) }
@@ -216,17 +245,22 @@ fun SettingsScreen(
     val grid = gridLive.orEmpty()
     val connectModeStr = ConnectMode.getModeStr(connectMode)
     val bandStr = BaseRigOperation.getFrequencyAllInfo(GeneralVariables.band)
-    val audioFreqStr = "${GeneralVariables.getBaseFrequencyStr()} Hz"
-    val txDelayStr = "$txDelay ms"
-    val pttDelayStr = "$pttDelay ms"
+    val audioFreqStr = stringResource(
+        R.string.settings_hz_str_format, GeneralVariables.getBaseFrequencyStr(),
+    )
+    val txDelayStr = stringResource(R.string.settings_milliseconds_format, txDelay)
+    val pttDelayStr = stringResource(R.string.settings_milliseconds_format, pttDelay)
     val watchdogMinutes = watchdogMs / 60000
-    val watchdogStr = if (watchdogMinutes == 0) "Off" else "$watchdogMinutes min"
+    val watchdogStr = if (watchdogMinutes == 0) stringResource(R.string.common_off)
+        else stringResource(R.string.settings_minutes_format, watchdogMinutes)
     val rigConnected = mainViewModel.isRigConnected()
     val rigName = if (rigConnected) {
         mainViewModel.baseRig?.javaClass?.simpleName ?: "--"
     } else {
-        "Not connected"
+        stringResource(R.string.common_not_connected)
     }
+    val antennaDisplay = antennaState.ifEmpty { "--" }
+    val powerDisplay = if (powerWattsState > 0) "${powerWattsState}W" else "--"
     val baudRateStr = "$baudRate"
     val isCatMode = controlMode == ControlMode.CAT
         || controlMode == ControlMode.RTS
@@ -267,8 +301,10 @@ fun SettingsScreen(
         EditOperatorDialog(
             initialCallsign = callsign,
             initialGrid = grid,
+            initialAntenna = antennaState,
+            initialPowerWatts = powerWattsState,
             onDismiss = { showEditOperator = false },
-            onSave = { newCallsign, newGrid ->
+            onSave = { newCallsign, newGrid, newAntenna, newPowerWatts ->
                 val trimmedCall = newCallsign.uppercase().trim()
                 callsignState = trimmedCall
                 GeneralVariables.myCallsign = trimmedCall
@@ -287,6 +323,15 @@ fun SettingsScreen(
                 GeneralVariables.setMyMaidenheadGrid(formattedGrid)
                 mainViewModel.databaseOpr.writeConfig("grid", formattedGrid, null)
 
+                val trimmedAntenna = newAntenna.trim()
+                antennaState = trimmedAntenna
+                GeneralVariables.myAntenna = trimmedAntenna
+                mainViewModel.databaseOpr.writeConfig("antenna", trimmedAntenna, null)
+
+                powerWattsState = newPowerWatts
+                GeneralVariables.myPowerWatts = newPowerWatts
+                mainViewModel.databaseOpr.writeConfig("powerWatts", newPowerWatts.toString(), null)
+
                 showEditOperator = false
             },
         )
@@ -295,8 +340,8 @@ fun SettingsScreen(
     // -- Blocklist: exact whole-call dialog --
     if (showBlockExactDialog) {
         TextListDialog(
-            title = "Block Exact Callsigns",
-            description = "Whole-call match. Comma- or space-separated, e.g. W1AW, K1ABC.",
+            title = stringResource(R.string.settings_block_exact_title),
+            description = stringResource(R.string.settings_block_exact_desc),
             initialValue = blockedExact,
             onDismiss = { showBlockExactDialog = false },
             onSave = { text ->
@@ -311,8 +356,8 @@ fun SettingsScreen(
     // -- Blocklist: prefix dialog (legacy excludedCallsigns key) --
     if (showBlockPrefixDialog) {
         TextListDialog(
-            title = "Block Callsign Prefixes",
-            description = "Prefix match, e.g. RA blocks RA0AA..RA9ZZ. Comma- or space-separated.",
+            title = stringResource(R.string.settings_block_prefix_title),
+            description = stringResource(R.string.settings_block_prefix_desc),
             initialValue = blockedPrefixes,
             onDismiss = { showBlockPrefixDialog = false },
             onSave = { text ->
@@ -327,8 +372,8 @@ fun SettingsScreen(
     // -- Blocklist: keyword dialog --
     if (showBlockKeywordDialog) {
         TextListDialog(
-            title = "Block Keywords",
-            description = "Substring match against the call and message text, e.g. POTA, /P, QRP.",
+            title = stringResource(R.string.settings_block_keyword_title),
+            description = stringResource(R.string.settings_block_keyword_desc),
             initialValue = blockedKeywords,
             onDismiss = { showBlockKeywordDialog = false },
             onSave = { text ->
@@ -344,7 +389,7 @@ fun SettingsScreen(
     if (showContinentPicker) {
         val currentIndex = continentCodes.indexOf(filterContinent).coerceAtLeast(0)
         ListPickerDialog(
-            title = "Filter Continent",
+            title = stringResource(R.string.settings_filter_continent_title),
             items = continentNames,
             selectedIndex = currentIndex,
             onDismiss = { showContinentPicker = false },
@@ -358,12 +403,54 @@ fun SettingsScreen(
         )
     }
 
+    // -- Language Picker --
+    // Index 0 = "System default" (empty locale list → follow system). Selecting a
+    // language calls AppCompatDelegate.setApplicationLocales, which persists the
+    // choice (framework LocaleManager on API 33+, AppCompat autoStore backport on
+    // older) and recreates the activity so the new locale takes effect immediately.
+    if (showLanguagePicker) {
+        val languageTags = LANGUAGE_TAGS
+        val languageLabels = listOf(
+            stringResource(R.string.settings_language_system),
+            stringResource(R.string.language_name_en),
+            stringResource(R.string.language_name_zh_cn),
+            stringResource(R.string.language_name_zh_tw),
+            stringResource(R.string.language_name_ru),
+            stringResource(R.string.language_name_es),
+            stringResource(R.string.language_name_fr),
+            stringResource(R.string.language_name_ja),
+        )
+        val currentTags = AppCompatDelegate.getApplicationLocales().toLanguageTags()
+        val currentIndex = languageTags.indexOfFirst { it.isNotEmpty() && currentTags.startsWith(it) }
+            .let { if (it >= 0) it else 0 }
+        ListPickerDialog(
+            title = stringResource(R.string.settings_language),
+            items = languageLabels,
+            selectedIndex = currentIndex,
+            onDismiss = { showLanguagePicker = false },
+            onSelect = { index ->
+                showLanguagePicker = false
+                val tag = languageTags[index]
+                val locales = if (tag.isEmpty()) {
+                    LocaleListCompat.getEmptyLocaleList()
+                } else {
+                    LocaleListCompat.forLanguageTags(tag)
+                }
+                AppCompatDelegate.setApplicationLocales(locales)
+            },
+        )
+    }
+
     // -- Connection Mode Picker --
     if (showConnectionMode) {
-        val connectionOptions = listOf("USB Cable", "Bluetooth", "Network")
+        val connectionOptions = listOf(
+            stringResource(R.string.settings_conn_usb_cable),
+            stringResource(R.string.settings_conn_bluetooth),
+            stringResource(R.string.settings_conn_network),
+        )
         val currentIndex = GeneralVariables.connectMode.coerceIn(0, 2)
         ListPickerDialog(
-            title = "Connection Mode",
+            title = stringResource(R.string.settings_connection_mode),
             items = connectionOptions,
             selectedIndex = currentIndex,
             onDismiss = { showConnectionMode = false },
@@ -374,16 +461,16 @@ fun SettingsScreen(
                 mainViewModel.databaseOpr.writeConfig("connectMode", index.toString(), null)
                 when (index) {
                     ConnectMode.BLUE_TOOTH -> {
-                        SelectBluetoothDialog(context, mainViewModel).show()
+                        showBluetoothPicker = true
                     }
                     ConnectMode.NETWORK -> {
                         when (GeneralVariables.instructionSet) {
                             InstructionSet.FLEX_NETWORK ->
-                                SelectFlexRadioDialog(context, mainViewModel).show()
+                                showFlexRadioPicker = true
                             InstructionSet.XIEGU_6100_FT8CNS ->
-                                SelectXieguRadioDialog(context, mainViewModel).show()
+                                showXieguRadioPicker = true
                             else ->
-                                LoginIcomRadioDialog(context, mainViewModel).show()
+                                showIcomLogin = true
                         }
                     }
                     ConnectMode.USB_CABLE -> {
@@ -400,8 +487,8 @@ fun SettingsScreen(
         val ports = serialPorts
         if (ports.isNullOrEmpty()) {
             InfoDialog(
-                title = "USB Cable",
-                body = "No USB serial devices detected. Please connect a USB cable to your radio and try again.",
+                title = stringResource(R.string.settings_conn_usb_cable),
+                body = stringResource(R.string.settings_no_usb_serial),
                 onDismiss = { showSerialPortPicker = false },
             )
         } else {
@@ -416,6 +503,38 @@ fun SettingsScreen(
         }
     }
 
+    // -- Bluetooth Picker --
+    if (showBluetoothPicker) {
+        BluetoothPickerDialog(
+            mainViewModel = mainViewModel,
+            onDismiss = { showBluetoothPicker = false },
+        )
+    }
+
+    // -- FlexRadio Picker --
+    if (showFlexRadioPicker) {
+        FlexRadioPickerDialog(
+            mainViewModel = mainViewModel,
+            onDismiss = { showFlexRadioPicker = false },
+        )
+    }
+
+    // -- Xiegu Picker --
+    if (showXieguRadioPicker) {
+        XieguRadioPickerDialog(
+            mainViewModel = mainViewModel,
+            onDismiss = { showXieguRadioPicker = false },
+        )
+    }
+
+    // -- ICOM / Xiegu WiFi Login --
+    if (showIcomLogin) {
+        IcomLoginDialog(
+            mainViewModel = mainViewModel,
+            onDismiss = { showIcomLogin = false },
+        )
+    }
+
     // -- Band & Frequency Picker --
     if (showBandPicker) {
         // Only show bands the user hasn't hidden. visibleIndices maps the dialog's
@@ -425,7 +544,7 @@ fun SettingsScreen(
         // Highlight the active band if it's still visible; otherwise no selection.
         val selectedIndex = visibleIndices.indexOf(GeneralVariables.bandListIndex)
         ListPickerDialog(
-            title = "Band & Frequency",
+            title = stringResource(R.string.settings_band_frequency),
             items = bandItems,
             selectedIndex = selectedIndex,
             onDismiss = { showBandPicker = false },
@@ -460,7 +579,7 @@ fun SettingsScreen(
     if (showAudioFreq) {
         val audioFreqMax = spectrumWidth - 100
         NumberInputDialog(
-            title = "Audio Frequency",
+            title = stringResource(R.string.settings_audio_frequency),
             suffix = "Hz",
             initialValue = GeneralVariables.getBaseFrequency().toInt(),
             min = 100,
@@ -477,7 +596,7 @@ fun SettingsScreen(
 
     if (showSpectrumWidth) {
         NumberInputDialog(
-            title = "Spectrum Width",
+            title = stringResource(R.string.settings_spectrum_width),
             suffix = "Hz",
             initialValue = spectrumWidth,
             min = 2500,
@@ -496,9 +615,9 @@ fun SettingsScreen(
     if (showWatchdog) {
         // Build the same options as LaunchSupervisionSpinnerAdapter:
         // index 0 = Off (0 ms), index 1..10 = (index*10-5) minutes
-        val watchdogOptions = mutableListOf("Off")
+        val watchdogOptions = mutableListOf(stringResource(R.string.common_off))
         for (i in 1..10) {
-            watchdogOptions.add("${i * 10 - 5} min")
+            watchdogOptions.add(stringResource(R.string.settings_minutes_format, i * 10 - 5))
         }
         // Find current selection index from stored ms value
         val currentWatchdogIndex = if (watchdogMs == 0) {
@@ -507,7 +626,7 @@ fun SettingsScreen(
             ((watchdogMs - 5 * 60 * 1000) / 60 / 1000 / 10).coerceIn(0, 10)
         }
         ListPickerDialog(
-            title = "TX Watchdog",
+            title = stringResource(R.string.settings_tx_watchdog),
             items = watchdogOptions,
             selectedIndex = currentWatchdogIndex,
             onDismiss = { showWatchdog = false },
@@ -526,12 +645,12 @@ fun SettingsScreen(
 
     // -- Stop After (No Reply Limit) Picker --
     if (showStopAfter) {
-        val stopAfterOptions = mutableListOf("Off")
+        val stopAfterOptions = mutableListOf(stringResource(R.string.common_off))
         for (i in 1..30) {
-            stopAfterOptions.add("$i tries")
+            stopAfterOptions.add(stringResource(R.string.settings_tries_format, i))
         }
         ListPickerDialog(
-            title = "Stop After",
+            title = stringResource(R.string.settings_stop_after),
             items = stopAfterOptions,
             selectedIndex = noReplyLimit.coerceIn(0, 30),
             onDismiss = { showStopAfter = false },
@@ -570,10 +689,12 @@ fun SettingsScreen(
 
     // -- PTT Delay Picker --
     if (showPttDelay) {
-        val pttDelayOptions = (0 until 20).map { "${it * 10} ms" }
+        val pttDelayOptions = (0 until 20).map {
+            stringResource(R.string.settings_milliseconds_format, it * 10)
+        }
         val currentPttIndex = (pttDelay / 10).coerceIn(0, 19)
         ListPickerDialog(
-            title = "PTT Delay",
+            title = stringResource(R.string.settings_ptt_delay),
             items = pttDelayOptions,
             selectedIndex = currentPttIndex,
             onDismiss = { showPttDelay = false },
@@ -590,7 +711,7 @@ fun SettingsScreen(
     // -- TX Delay Editor --
     if (showTxDelay) {
         NumberInputDialog(
-            title = "TX Delay",
+            title = stringResource(R.string.settings_tx_delay),
             suffix = "ms",
             initialValue = txDelay,
             min = 1,
@@ -610,7 +731,7 @@ fun SettingsScreen(
     // -- Late-start Tolerance Editor --
     if (showLateStart) {
         NumberInputDialog(
-            title = "Late-start Tolerance",
+            title = stringResource(R.string.settings_late_start_tolerance),
             suffix = "ms",
             initialValue = lateStartMs,
             min = 0,
@@ -639,7 +760,8 @@ fun SettingsScreen(
                 )
                 Toast.makeText(
                     context,
-                    if (next) "Debug mode enabled" else "Debug mode disabled",
+                    if (next) context.getString(R.string.settings_debug_mode_enabled)
+                    else context.getString(R.string.settings_debug_mode_disabled),
                     Toast.LENGTH_SHORT,
                 ).show()
             },
@@ -702,7 +824,7 @@ fun SettingsScreen(
         val currentRigIndex = rigItems.indexOfFirst { (index, _) -> index == modelNo }
             .coerceAtLeast(0)
         ListPickerDialog(
-            title = "Rig Model",
+            title = stringResource(R.string.settings_rig_model),
             items = rigDisplayNames,
             selectedIndex = currentRigIndex,
             onDismiss = { showRigModelPicker = false },
@@ -736,7 +858,7 @@ fun SettingsScreen(
         val controlModeValues = listOf(ControlMode.VOX, ControlMode.CAT, ControlMode.RTS, ControlMode.DTR)
         val currentControlIndex = controlModeValues.indexOf(controlMode).coerceAtLeast(0)
         ListPickerDialog(
-            title = "Control Mode",
+            title = stringResource(R.string.settings_control_mode),
             items = controlModeOptions,
             selectedIndex = currentControlIndex,
             onDismiss = { showControlModePicker = false },
@@ -768,7 +890,7 @@ fun SettingsScreen(
         val baudRateLabels = baudRateOptions.map { it.toString() }
         val currentBaudIndex = baudRateOptions.indexOf(baudRate).coerceAtLeast(0)
         ListPickerDialog(
-            title = "Baud Rate",
+            title = stringResource(R.string.settings_baud_rate),
             items = baudRateLabels,
             selectedIndex = currentBaudIndex,
             onDismiss = { showBaudRatePicker = false },
@@ -785,7 +907,7 @@ fun SettingsScreen(
     // -- Audio Input Device Picker --
     if (showAudioInputPicker) {
         AudioDevicePickerDialog(
-            title = "Audio Input",
+            title = stringResource(R.string.settings_audio_input),
             adapter = audioInputAdapter,
             currentDeviceId = GeneralVariables.audioInputDeviceId,
             onDismiss = { showAudioInputPicker = false },
@@ -820,7 +942,7 @@ fun SettingsScreen(
     // -- Audio Output Device Picker --
     if (showAudioOutputPicker) {
         AudioDevicePickerDialog(
-            title = "Audio Output",
+            title = stringResource(R.string.settings_audio_output),
             adapter = audioOutputAdapter,
             currentDeviceId = GeneralVariables.audioOutputDeviceId,
             onDismiss = { showAudioOutputPicker = false },
@@ -862,7 +984,7 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState()),
     ) {
         // -- Top bar --
-        TopBar(title = "Settings")
+        TopBar(title = stringResource(R.string.settings_title))
 
         Column(
             modifier = Modifier
@@ -873,18 +995,20 @@ fun SettingsScreen(
             // =====================================================================
             // 1. OPERATOR IDENTITY
             // =====================================================================
-            SettingsSection(title = "OPERATOR IDENTITY") {
+            SettingsSection(title = stringResource(R.string.settings_section_operator_identity)) {
                 OperatorCard(
                     callsign = callsign,
                     grid = grid,
                     rigName = rigName,
+                    antenna = antennaDisplay,
+                    power = powerDisplay,
                     modifier = Modifier.padding(bottom = 4.dp),
                     onClick = { showEditOperator = true },
                 )
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     SettingsRow(
-                        label = "Auto-update Grid (GPS)",
-                        description = "Use device GPS to keep your Maidenhead grid current",
+                        label = stringResource(R.string.settings_auto_update_grid),
+                        description = stringResource(R.string.settings_auto_update_grid_desc),
                         toggle = autoUpdateGridFromGPS,
                         onToggleChange = { checked ->
                             if (checked) {
@@ -916,39 +1040,39 @@ fun SettingsScreen(
             // =====================================================================
             // 2. RADIO
             // =====================================================================
-            SettingsSection(title = "RADIO") {
+            SettingsSection(title = stringResource(R.string.settings_section_radio)) {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column {
                         SettingsRow(
-                            label = "Rig Model",
+                            label = stringResource(R.string.settings_rig_model),
                             value = rigModelStr,
                             showChevron = true,
                             onClick = { showRigModelPicker = true },
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Control Mode",
+                            label = stringResource(R.string.settings_control_mode),
                             value = controlModeStr,
                             showChevron = true,
                             onClick = { showControlModePicker = true },
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Connection Mode",
+                            label = stringResource(R.string.settings_connection_mode),
                             value = connectModeStr,
                             showChevron = isCatMode,
                             onClick = if (isCatMode) {{ showConnectionMode = true }} else null,
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Baud Rate",
+                            label = stringResource(R.string.settings_baud_rate),
                             value = baudRateStr,
                             showChevron = isCatMode,
                             onClick = if (isCatMode) {{ showBaudRatePicker = true }} else null,
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Band & Frequency",
+                            label = stringResource(R.string.settings_band_frequency),
                             value = bandStr,
                             showChevron = true,
                             onClick = { showBandPicker = true },
@@ -957,23 +1081,26 @@ fun SettingsScreen(
                         run {
                             val total = OperationBand.getAllWaveLengths().size
                             SettingsRow(
-                                label = "Enabled Bands",
-                                value = "${total - excludedBands.size} of $total enabled",
+                                label = stringResource(R.string.settings_enabled_bands),
+                                value = stringResource(
+                                    R.string.settings_bands_enabled_format,
+                                    total - excludedBands.size, total,
+                                ),
                                 showChevron = true,
                                 onClick = { showEnabledBands = true },
                             )
                         }
                         SectionDivider()
                         SettingsRow(
-                            label = "Audio Frequency",
+                            label = stringResource(R.string.settings_audio_frequency),
                             value = audioFreqStr,
                             showChevron = !synFrequency,
                             onClick = if (!synFrequency) {{ showAudioFreq = true }} else null,
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Spectrum Width",
-                            value = "$spectrumWidth Hz",
+                            label = stringResource(R.string.settings_spectrum_width),
+                            value = stringResource(R.string.settings_hz_format, spectrumWidth),
                             showChevron = true,
                             onClick = { showSpectrumWidth = true },
                         )
@@ -984,11 +1111,11 @@ fun SettingsScreen(
             // =====================================================================
             // 2b. AUDIO
             // =====================================================================
-            SettingsSection(title = "AUDIO") {
+            SettingsSection(title = stringResource(R.string.settings_section_audio)) {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column {
                         SettingsRow(
-                            label = "Audio Input",
+                            label = stringResource(R.string.settings_audio_input),
                             value = audioInputName,
                             showChevron = true,
                             onClick = {
@@ -998,7 +1125,7 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Audio Output",
+                            label = stringResource(R.string.settings_audio_output),
                             value = audioOutputName,
                             showChevron = true,
                             onClick = {
@@ -1008,9 +1135,9 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "TX Volume",
-                            description = "Transmit audio level (hardware buttons ±5%)",
-                            value = "$txVolume%",
+                            label = stringResource(R.string.settings_tx_volume),
+                            description = stringResource(R.string.settings_tx_volume_desc),
+                            value = stringResource(R.string.settings_percent_format, txVolume),
                             showChevron = true,
                             onClick = { showTxVolume = true },
                         )
@@ -1021,12 +1148,12 @@ fun SettingsScreen(
             // =====================================================================
             // 3. TRANSMISSION
             // =====================================================================
-            SettingsSection(title = "TRANSMISSION") {
+            SettingsSection(title = stringResource(R.string.settings_section_transmission)) {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column {
                         SettingsRow(
-                            label = "TX/RX Split",
-                            description = "Transmit on a different frequency than receive",
+                            label = stringResource(R.string.settings_tx_rx_split),
+                            description = stringResource(R.string.settings_tx_rx_split_desc),
                             toggle = synFrequency,
                             onToggleChange = { checked ->
                                 synFrequency = checked
@@ -1038,18 +1165,18 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "TX Watchdog",
-                            description = "Auto-stop transmit after timeout",
+                            label = stringResource(R.string.settings_tx_watchdog),
+                            description = stringResource(R.string.settings_tx_watchdog_desc),
                             value = watchdogStr,
                             showChevron = true,
                             onClick = { showWatchdog = true },
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Stop After",
-                            description = "Stop calling after N unanswered attempts",
-                            value = if (noReplyLimit == 0) "Off"
-                            else "$noReplyLimit tries",
+                            label = stringResource(R.string.settings_stop_after),
+                            description = stringResource(R.string.settings_stop_after_desc),
+                            value = if (noReplyLimit == 0) stringResource(R.string.common_off)
+                            else stringResource(R.string.settings_tries_format, noReplyLimit),
                             showChevron = true,
                             onClick = { showStopAfter = true },
                         )
@@ -1058,14 +1185,166 @@ fun SettingsScreen(
             }
 
             // =====================================================================
-            // 4. AUTO-SEQUENCE
+            // 3b. TX PROTECTION
             // =====================================================================
-            SettingsSection(title = "AUTO-SEQUENCE") {
+            SettingsSection(title = "TX PROTECTION") {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column {
                         SettingsRow(
-                            label = "Hunt (auto-answer CQ)",
-                            description = "Proactively call stations calling CQ. Same as the HUNT button on the TX bar. Off = run CQ and work only stations that answer you.",
+                            label = "Auto Volume (ALC)",
+                            description = "Automatically adjust TX volume to keep ALC in target range",
+                            toggle = autoVolumeEnabled,
+                            onToggleChange = { checked ->
+                                autoVolumeEnabled = checked
+                                GeneralVariables.autoVolumeEnabled = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "autoVolumeEnabled", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        if (autoVolumeEnabled) {
+                            SectionDivider()
+                            // ALC target range — two values displayed as a label row
+                            SettingsRow(
+                                label = "ALC Target Range",
+                                description = "Low: $alcTargetLow  High: $alcTargetHigh  (0-255 normalized)",
+                                value = "$alcTargetLow – $alcTargetHigh",
+                            )
+                            // Low slider
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "Low",
+                                    style = TextStyle(fontSize = 12.sp, color = TextMuted),
+                                    modifier = Modifier.width(32.dp),
+                                )
+                                Slider(
+                                    value = alcTargetLow.toFloat(),
+                                    onValueChange = { v ->
+                                        val clamped = v.toInt().coerceIn(10, alcTargetHigh - 10)
+                                        alcTargetLow = clamped
+                                        GeneralVariables.alcTargetLow = clamped
+                                    },
+                                    onValueChangeFinished = {
+                                        mainViewModel.databaseOpr.writeConfig(
+                                            "alcTargetLow", alcTargetLow.toString(), null,
+                                        )
+                                    },
+                                    valueRange = 10f..200f,
+                                    modifier = Modifier.weight(1f),
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = Accent,
+                                        activeTrackColor = Accent,
+                                    ),
+                                )
+                            }
+                            // High slider
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp)
+                                    .padding(bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "High",
+                                    style = TextStyle(fontSize = 12.sp, color = TextMuted),
+                                    modifier = Modifier.width(32.dp),
+                                )
+                                Slider(
+                                    value = alcTargetHigh.toFloat(),
+                                    onValueChange = { v ->
+                                        val clamped = v.toInt().coerceIn(alcTargetLow + 10, 250)
+                                        alcTargetHigh = clamped
+                                        GeneralVariables.alcTargetHigh = clamped
+                                    },
+                                    onValueChangeFinished = {
+                                        mainViewModel.databaseOpr.writeConfig(
+                                            "alcTargetHigh", alcTargetHigh.toString(), null,
+                                        )
+                                    },
+                                    valueRange = 20f..250f,
+                                    modifier = Modifier.weight(1f),
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = Accent,
+                                        activeTrackColor = Accent,
+                                    ),
+                                )
+                            }
+                        }
+                        SectionDivider()
+                        SettingsRow(
+                            label = "SWR Protection",
+                            description = "Stop transmitting and lock TX if SWR exceeds threshold",
+                            toggle = swrHaltEnabled,
+                            onToggleChange = { checked ->
+                                swrHaltEnabled = checked
+                                GeneralVariables.swrHaltEnabled = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "swrHaltEnabled", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        if (swrHaltEnabled) {
+                            SectionDivider()
+                            val swrRatioStr = MeterProtectionController.normalizedSwrToRatio(swrHaltThreshold)
+                            SettingsRow(
+                                label = "SWR Threshold",
+                                description = "TX halts when SWR exceeds this value",
+                                value = swrRatioStr,
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp)
+                                    .padding(bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "1.5:1",
+                                    style = TextStyle(fontSize = 12.sp, color = TextMuted),
+                                )
+                                Slider(
+                                    value = swrHaltThreshold.toFloat(),
+                                    onValueChange = { v ->
+                                        swrHaltThreshold = v.toInt()
+                                        GeneralVariables.swrHaltThreshold = v.toInt()
+                                    },
+                                    onValueChangeFinished = {
+                                        mainViewModel.databaseOpr.writeConfig(
+                                            "swrHaltThreshold", swrHaltThreshold.toString(), null,
+                                        )
+                                    },
+                                    valueRange = 30f..200f, // ~1.3:1 to ~7.0:1
+                                    modifier = Modifier.weight(1f),
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = Accent,
+                                        activeTrackColor = Accent,
+                                    ),
+                                )
+                                Text(
+                                    "7:1",
+                                    style = TextStyle(fontSize = 12.sp, color = TextMuted),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // =====================================================================
+            // 4. AUTO-SEQUENCE
+            // =====================================================================
+            SettingsSection(title = stringResource(R.string.settings_section_auto_sequence)) {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        SettingsRow(
+                            label = stringResource(R.string.settings_hunt),
+                            description = stringResource(R.string.settings_hunt_desc),
                             toggle = autoFollowCQ,
                             onToggleChange = { checked ->
                                 autoFollowCQ = checked
@@ -1077,8 +1356,8 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Auto-call Followed",
-                            description = "Continue calling followed callsigns automatically",
+                            label = stringResource(R.string.settings_auto_call_followed),
+                            description = stringResource(R.string.settings_auto_call_followed_desc),
                             toggle = autoCallFollow,
                             onToggleChange = { checked ->
                                 autoCallFollow = checked
@@ -1090,8 +1369,8 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Fast turnaround",
-                            description = "Decode ~1s earlier so you can answer a CQ on the next slot instead of waiting. May miss stations with a large clock offset.",
+                            label = stringResource(R.string.settings_fast_turnaround),
+                            description = stringResource(R.string.settings_fast_turnaround_desc),
                             toggle = earlyDecode,
                             onToggleChange = { checked ->
                                 earlyDecode = checked
@@ -1103,8 +1382,8 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Auto-CQ after QSO",
-                            description = "Keep calling CQ automatically after each completed contact — no re-tap. Stays on your frequency (ignores Hunt). Runs until you stop or the TX Watchdog times out with no answers.",
+                            label = stringResource(R.string.settings_auto_cq_after_qso),
+                            description = stringResource(R.string.settings_auto_cq_after_qso_desc),
                             toggle = autoCQAfterQSO,
                             onToggleChange = { checked ->
                                 autoCQAfterQSO = checked
@@ -1121,12 +1400,12 @@ fun SettingsScreen(
             // =====================================================================
             // 4b. DECODE HIGHLIGHTS
             // =====================================================================
-            SettingsSection(title = "DECODE HIGHLIGHTS") {
+            SettingsSection(title = stringResource(R.string.settings_section_decode_highlights)) {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column {
                         SettingsRow(
-                            label = "New DXCC",
-                            description = "Highlight stations from an unworked DXCC entity",
+                            label = stringResource(R.string.settings_highlight_new_dxcc),
+                            description = stringResource(R.string.settings_highlight_new_dxcc_desc),
                             toggle = highlightNewDxcc,
                             onToggleChange = { checked ->
                                 highlightNewDxcc = checked
@@ -1138,8 +1417,8 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "New Grid",
-                            description = "Highlight not-yet-worked Maidenhead grids",
+                            label = stringResource(R.string.settings_highlight_new_grid),
+                            description = stringResource(R.string.settings_highlight_new_grid_desc),
                             toggle = highlightNewGrid,
                             onToggleChange = { checked ->
                                 highlightNewGrid = checked
@@ -1151,8 +1430,8 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "New Band",
-                            description = "Highlight stations worked only on other bands",
+                            label = stringResource(R.string.settings_highlight_new_band),
+                            description = stringResource(R.string.settings_highlight_new_band_desc),
                             toggle = highlightNewBand,
                             onToggleChange = { checked ->
                                 highlightNewBand = checked
@@ -1164,8 +1443,8 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "POTA Activators",
-                            description = "Highlight spotted POTA activators; new parks stand out",
+                            label = stringResource(R.string.settings_highlight_pota),
+                            description = stringResource(R.string.settings_highlight_pota_desc),
                             toggle = highlightPota,
                             onToggleChange = { checked ->
                                 highlightPota = checked
@@ -1177,14 +1456,27 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Worked Before",
-                            description = "Tag stations already in your log",
+                            label = stringResource(R.string.settings_highlight_worked),
+                            description = stringResource(R.string.settings_highlight_worked_desc),
                             toggle = highlightWorked,
                             onToggleChange = { checked ->
                                 highlightWorked = checked
                                 GeneralVariables.highlightWorked = checked
                                 mainViewModel.databaseOpr.writeConfig(
                                     "highlightWorked", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = stringResource(R.string.settings_distance_unit),
+                            description = stringResource(R.string.settings_distance_unit_desc),
+                            toggle = distanceInMiles,
+                            onToggleChange = { checked ->
+                                distanceInMiles = checked
+                                GeneralVariables.distanceInMiles = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "distanceInMiles", if (checked) "1" else "0", null,
                                 )
                             },
                         )
@@ -1195,29 +1487,29 @@ fun SettingsScreen(
             // =====================================================================
             // 4c. CALLSIGN BLOCKLIST
             // =====================================================================
-            SettingsSection(title = "CALLSIGN BLOCKLIST") {
+            SettingsSection(title = stringResource(R.string.settings_section_callsign_blocklist)) {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column {
                         SettingsRow(
-                            label = "Exact Callsigns",
-                            description = "Block whole-call matches",
-                            value = blockedExact.ifBlank { "None" },
+                            label = stringResource(R.string.settings_exact_callsigns),
+                            description = stringResource(R.string.settings_exact_callsigns_desc),
+                            value = blockedExact.ifBlank { stringResource(R.string.common_none) },
                             showChevron = true,
                             onClick = { showBlockExactDialog = true },
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Prefixes",
-                            description = "Block by callsign prefix (e.g. RA)",
-                            value = blockedPrefixes.ifBlank { "None" },
+                            label = stringResource(R.string.settings_prefixes),
+                            description = stringResource(R.string.settings_prefixes_desc),
+                            value = blockedPrefixes.ifBlank { stringResource(R.string.common_none) },
                             showChevron = true,
                             onClick = { showBlockPrefixDialog = true },
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Keywords",
-                            description = "Block by substring in call or message (e.g. POTA, /P)",
-                            value = blockedKeywords.ifBlank { "None" },
+                            label = stringResource(R.string.settings_keywords),
+                            description = stringResource(R.string.settings_keywords_desc),
+                            value = blockedKeywords.ifBlank { stringResource(R.string.common_none) },
                             showChevron = true,
                             onClick = { showBlockKeywordDialog = true },
                         )
@@ -1228,12 +1520,12 @@ fun SettingsScreen(
             // =====================================================================
             // 4d. DECODE FILTERS
             // =====================================================================
-            SettingsSection(title = "DECODE FILTERS") {
+            SettingsSection(title = stringResource(R.string.settings_section_decode_filters)) {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column {
                         SettingsRow(
-                            label = "Show Only CQ",
-                            description = "Hide everything except CQ-type messages",
+                            label = stringResource(R.string.settings_show_only_cq),
+                            description = stringResource(R.string.settings_show_only_cq_desc),
                             toggle = filterShowOnlyCQ,
                             onToggleChange = { checked ->
                                 filterShowOnlyCQ = checked
@@ -1245,8 +1537,8 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "DX Only",
-                            description = "Show only stations outside your own continent",
+                            label = stringResource(R.string.settings_dx_only),
+                            description = stringResource(R.string.settings_dx_only_desc),
                             toggle = filterDxOnly,
                             onToggleChange = { checked ->
                                 filterDxOnly = checked
@@ -1258,8 +1550,8 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Needed Only",
-                            description = "Show only stations not yet confirmed (QSL)",
+                            label = stringResource(R.string.settings_needed_only),
+                            description = stringResource(R.string.settings_needed_only_desc),
                             toggle = filterNeededOnly,
                             onToggleChange = { checked ->
                                 filterNeededOnly = checked
@@ -1271,8 +1563,8 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Filter By Continent",
-                            description = "Show only stations from a chosen continent",
+                            label = stringResource(R.string.settings_filter_by_continent),
+                            description = stringResource(R.string.settings_filter_by_continent_desc),
                             toggle = filterByContinent,
                             onToggleChange = { checked ->
                                 filterByContinent = checked
@@ -1285,7 +1577,7 @@ fun SettingsScreen(
                         if (filterByContinent) {
                             SectionDivider()
                             SettingsRow(
-                                label = "Continent",
+                                label = stringResource(R.string.settings_continent),
                                 value = continentNames.getOrElse(
                                     continentCodes.indexOf(filterContinent),
                                 ) { filterContinent },
@@ -1295,8 +1587,8 @@ fun SettingsScreen(
                         }
                         SectionDivider()
                         SettingsRow(
-                            label = "Skip Directional CQs (auto-reply)",
-                            description = "Don't auto-answer CQ DX/EU/JA… aimed at a different DXCC",
+                            label = stringResource(R.string.settings_skip_directional_cq),
+                            description = stringResource(R.string.settings_skip_directional_cq_desc),
                             toggle = respectDirectionalCQ,
                             onToggleChange = { checked ->
                                 respectDirectionalCQ = checked
@@ -1308,8 +1600,8 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Hide Directional CQs Not For Me",
-                            description = "Hide region-directed CQs that don't target your DXCC",
+                            label = stringResource(R.string.settings_hide_directional_cq),
+                            description = stringResource(R.string.settings_hide_directional_cq_desc),
                             toggle = filterDirectionalCQ,
                             onToggleChange = { checked ->
                                 filterDirectionalCQ = checked
@@ -1326,12 +1618,12 @@ fun SettingsScreen(
             // =====================================================================
             // 4e. NEEDED-DX ALERTS
             // =====================================================================
-            SettingsSection(title = "NEEDED-DX ALERTS") {
+            SettingsSection(title = stringResource(R.string.settings_section_needed_dx_alerts)) {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column {
                         SettingsRow(
-                            label = "New DXCC",
-                            description = "Sound + vibrate + notify when an unworked DXCC entity calls CQ",
+                            label = stringResource(R.string.settings_alert_new_dxcc),
+                            description = stringResource(R.string.settings_alert_new_dxcc_desc),
                             toggle = alertNewDxcc,
                             onToggleChange = { checked ->
                                 alertNewDxcc = checked
@@ -1343,8 +1635,8 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "New US State",
-                            description = "Sound + vibrate + notify when a station from an unworked US state calls CQ (state from grid)",
+                            label = stringResource(R.string.settings_alert_new_state),
+                            description = stringResource(R.string.settings_alert_new_state_desc),
                             toggle = alertNewState,
                             onToggleChange = { checked ->
                                 alertNewState = checked
@@ -1361,12 +1653,12 @@ fun SettingsScreen(
             // =====================================================================
             // 5. LOGGING & AWARDS
             // =====================================================================
-            SettingsSection(title = "LOGGING & AWARDS") {
+            SettingsSection(title = stringResource(R.string.settings_section_logging_awards)) {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column {
                         SettingsRow(
-                            label = "Save SWL Decodes",
-                            description = "Log all decoded messages to the database",
+                            label = stringResource(R.string.settings_save_swl_decodes),
+                            description = stringResource(R.string.settings_save_swl_decodes_desc),
                             toggle = saveSWLMessage,
                             onToggleChange = { checked ->
                                 saveSWLMessage = checked
@@ -1378,8 +1670,8 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Save SWL QSOs",
-                            description = "Log QSOs detected between other stations",
+                            label = stringResource(R.string.settings_save_swl_qsos),
+                            description = stringResource(R.string.settings_save_swl_qsos_desc),
                             toggle = saveSWL_QSO,
                             onToggleChange = { checked ->
                                 saveSWL_QSO = checked
@@ -1391,8 +1683,8 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "PSKReporter",
-                            description = "Upload decoded spots to pskreporter.info",
+                            label = stringResource(R.string.settings_pskreporter),
+                            description = stringResource(R.string.settings_pskreporter_desc),
                             toggle = enablePskReporter,
                             onToggleChange = { checked ->
                                 enablePskReporter = checked
@@ -1404,8 +1696,8 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "QRZ.com",
-                            description = "Auto-upload QSOs to QRZ Logbook",
+                            label = stringResource(R.string.settings_qrz_com),
+                            description = stringResource(R.string.settings_qrz_com_desc),
                             toggle = enableQRZ,
                             onToggleChange = { checked ->
                                 enableQRZ = checked
@@ -1417,21 +1709,21 @@ fun SettingsScreen(
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "QRZ Profile Lookup",
-                            description = "Username + password for QRZ XML API (avatars)",
+                            label = stringResource(R.string.settings_qrz_profile_lookup),
+                            description = stringResource(R.string.settings_qrz_profile_lookup_desc),
                             value = if (qrzXmlUser.isNotEmpty() && qrzXmlPass.isNotEmpty()) {
                                 qrzXmlUser
                             } else {
-                                "Not configured"
+                                stringResource(R.string.common_not_configured)
                             },
                             showChevron = true,
                             onClick = { showQrzCreds = true },
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Cloudlog / Wavelog / Nextlog",
-                            description = "Auto-upload QSOs to a Cloudlog, Wavelog, or Nextlog instance",
-                            value = cloudlogAddress.ifEmpty { "Not configured" },
+                            label = stringResource(R.string.settings_cloudlog),
+                            description = stringResource(R.string.settings_cloudlog_desc),
+                            value = cloudlogAddress.ifEmpty { stringResource(R.string.common_not_configured) },
                             toggle = enableCloudlog,
                             onToggleChange = { checked ->
                                 enableCloudlog = checked
@@ -1450,29 +1742,29 @@ fun SettingsScreen(
             // =====================================================================
             // 6. ADVANCED
             // =====================================================================
-            SettingsSection(title = "ADVANCED") {
+            SettingsSection(title = stringResource(R.string.settings_section_advanced)) {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column {
                         SettingsRow(
-                            label = "PTT Delay",
-                            description = "Delay after PTT before transmit audio begins",
+                            label = stringResource(R.string.settings_ptt_delay),
+                            description = stringResource(R.string.settings_ptt_delay_desc),
                             value = pttDelayStr,
                             showChevron = true,
                             onClick = { showPttDelay = true },
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "TX Delay",
-                            description = "Delay before transmit to allow prior-cycle decode",
+                            label = stringResource(R.string.settings_tx_delay),
+                            description = stringResource(R.string.settings_tx_delay_desc),
                             value = txDelayStr,
                             showChevron = true,
                             onClick = { showTxDelay = true },
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "Late-start Tolerance",
-                            description = "Allow starting TX up to N ms into a cycle; leading audio is clipped so TX ends on the cycle boundary",
-                            value = "$lateStartMs ms",
+                            label = stringResource(R.string.settings_late_start_tolerance),
+                            description = stringResource(R.string.settings_late_start_tolerance_desc),
+                            value = stringResource(R.string.settings_milliseconds_format, lateStartMs),
                             showChevron = true,
                             onClick = { showLateStart = true },
                         )
@@ -1483,30 +1775,64 @@ fun SettingsScreen(
             // =====================================================================
             // 7. ABOUT
             // =====================================================================
-            SettingsSection(title = "ABOUT") {
+            SettingsSection(title = stringResource(R.string.settings_section_about)) {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column {
                         SettingsRow(
                             label = "FT8US",
-                            description = "Build ${GeneralVariables.BUILD_DATE}",
-                            value = "v${GeneralVariables.VERSION}",
+                            description = stringResource(
+                                R.string.settings_build_date_format,
+                                GeneralVariables.BUILD_DATE,
+                            ),
+                            value = stringResource(
+                                R.string.settings_version_value,
+                                GeneralVariables.VERSION,
+                            ),
                         )
                         SectionDivider()
                         SettingsRow(
-                            label = "FAQ & Support",
+                            label = stringResource(R.string.settings_faq_support),
                             showChevron = true,
                             onClick = { showAbout = true },
                         )
                         if (debugEnabled) {
                             SectionDivider()
                             SettingsRow(
-                                label = "Debug",
-                                description = "View / share debug.log",
+                                label = stringResource(R.string.settings_debug),
+                                description = stringResource(R.string.settings_debug_desc),
                                 showChevron = true,
                                 onClick = { showDebugScreen = true },
                             )
                         }
                     }
+                }
+            }
+
+            // =====================================================================
+            // 8. LANGUAGE
+            // =====================================================================
+            SettingsSection(title = stringResource(R.string.settings_section_language)) {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    val currentTags = AppCompatDelegate.getApplicationLocales().toLanguageTags()
+                    val currentLangIndex = LANGUAGE_TAGS
+                        .indexOfFirst { it.isNotEmpty() && currentTags.startsWith(it) }
+                    val currentLangRes = when (LANGUAGE_TAGS.getOrElse(currentLangIndex) { "" }) {
+                        "en" -> R.string.language_name_en
+                        "zh-CN" -> R.string.language_name_zh_cn
+                        "zh-TW" -> R.string.language_name_zh_tw
+                        "ru" -> R.string.language_name_ru
+                        "es" -> R.string.language_name_es
+                        "fr" -> R.string.language_name_fr
+                        "ja" -> R.string.language_name_ja
+                        else -> R.string.settings_language_system
+                    }
+                    SettingsRow(
+                        label = stringResource(R.string.settings_language),
+                        description = stringResource(R.string.settings_language_desc),
+                        value = stringResource(currentLangRes),
+                        showChevron = true,
+                        onClick = { showLanguagePicker = true },
+                    )
                 }
             }
 
@@ -1558,17 +1884,23 @@ private fun SectionDivider() {
 // ---------------------------------------------------------------------------
 
 /**
- * Dialog for editing callsign and grid locator.
+ * Dialog for editing callsign, grid locator, antenna, and power.
  */
 @Composable
 private fun EditOperatorDialog(
     initialCallsign: String,
     initialGrid: String,
+    initialAntenna: String = "",
+    initialPowerWatts: Int = 0,
     onDismiss: () -> Unit,
-    onSave: (callsign: String, grid: String) -> Unit,
+    onSave: (callsign: String, grid: String, antenna: String, powerWatts: Int) -> Unit,
 ) {
     var callsignInput by remember { mutableStateOf(TextFieldValue(initialCallsign)) }
     var gridInput by remember { mutableStateOf(TextFieldValue(initialGrid)) }
+    var antennaInput by remember { mutableStateOf(TextFieldValue(initialAntenna)) }
+    var powerInput by remember {
+        mutableStateOf(TextFieldValue(if (initialPowerWatts > 0) initialPowerWatts.toString() else ""))
+    }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = TextPrimary,
@@ -1590,7 +1922,7 @@ private fun EditOperatorDialog(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = "Edit Operator Identity",
+                text = stringResource(R.string.settings_edit_operator_identity),
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 18.sp,
@@ -1599,8 +1931,8 @@ private fun EditOperatorDialog(
             OutlinedTextField(
                 value = callsignInput,
                 onValueChange = { callsignInput = it },
-                label = { Text("Callsign") },
-                placeholder = { Text("e.g. W1AW", color = TextFaint) },
+                label = { Text(stringResource(R.string.settings_callsign)) },
+                placeholder = { Text(stringResource(R.string.settings_callsign_hint), color = TextFaint) },
                 singleLine = true,
                 colors = fieldColors,
                 textStyle = TextStyle(
@@ -1614,8 +1946,8 @@ private fun EditOperatorDialog(
             OutlinedTextField(
                 value = gridInput,
                 onValueChange = { gridInput = it },
-                label = { Text("Grid Locator") },
-                placeholder = { Text("e.g. FN31pr", color = TextFaint) },
+                label = { Text(stringResource(R.string.settings_grid_locator)) },
+                placeholder = { Text(stringResource(R.string.settings_grid_locator_hint), color = TextFaint) },
                 singleLine = true,
                 colors = fieldColors,
                 textStyle = TextStyle(
@@ -1625,18 +1957,46 @@ private fun EditOperatorDialog(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            OutlinedTextField(
+                value = antennaInput,
+                onValueChange = { antennaInput = it },
+                label = { Text("Antenna") },
+                placeholder = { Text("e.g. EFHW 40-10m", color = TextFaint) },
+                singleLine = true,
+                colors = fieldColors,
+                textStyle = TextStyle(fontSize = 14.sp),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            OutlinedTextField(
+                value = powerInput,
+                onValueChange = { new ->
+                    if (new.text.all { it.isDigit() }) powerInput = new
+                },
+                label = { Text("Power (watts)") },
+                placeholder = { Text("e.g. 100", color = TextFaint) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                colors = fieldColors,
+                textStyle = TextStyle(fontSize = 14.sp),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = TextMuted)
+                    Text(stringResource(R.string.action_cancel), color = TextMuted)
                 }
                 TextButton(
-                    onClick = { onSave(callsignInput.text, gridInput.text) },
+                    onClick = {
+                        val watts = powerInput.text.toIntOrNull() ?: 0
+                        onSave(callsignInput.text, gridInput.text, antennaInput.text, watts)
+                    },
                 ) {
-                    Text("Save", color = Accent, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.action_save), color = Accent, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -1692,7 +2052,7 @@ private fun TextListDialog(
             OutlinedTextField(
                 value = input,
                 onValueChange = { input = it },
-                placeholder = { Text("e.g. W1AW, RA, /P", color = TextFaint) },
+                placeholder = { Text(stringResource(R.string.settings_blocklist_hint), color = TextFaint) },
                 singleLine = false,
                 minLines = 2,
                 colors = fieldColors,
@@ -1709,10 +2069,10 @@ private fun TextListDialog(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = TextMuted)
+                    Text(stringResource(R.string.action_cancel), color = TextMuted)
                 }
                 TextButton(onClick = { onSave(input.text) }) {
-                    Text("Save", color = Accent, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.action_save), color = Accent, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -1780,14 +2140,14 @@ private fun CloudlogSettingsDialog(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = "Logging Server",
+                text = stringResource(R.string.settings_logging_server),
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 18.sp,
             )
 
             Text(
-                text = "Cloudlog, Wavelog, and Nextlog all accept the same uploads.",
+                text = stringResource(R.string.settings_logging_server_desc),
                 color = TextMuted,
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
@@ -1800,7 +2160,7 @@ private fun CloudlogSettingsDialog(
                     testResult = null
                     stationList = emptyList()
                 },
-                label = { Text("Server Address") },
+                label = { Text(stringResource(R.string.settings_server_address)) },
                 placeholder = { Text("https://log.example.com/", color = TextFaint) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -1816,8 +2176,8 @@ private fun CloudlogSettingsDialog(
                     testResult = null
                     stationList = emptyList()
                 },
-                label = { Text("API Key") },
-                placeholder = { Text("Your Cloudlog API key", color = TextFaint) },
+                label = { Text(stringResource(R.string.settings_api_key)) },
+                placeholder = { Text(stringResource(R.string.settings_api_key_hint), color = TextFaint) },
                 singleLine = true,
                 colors = fieldColors,
                 textStyle = TextStyle(fontSize = 14.sp),
@@ -1837,7 +2197,7 @@ private fun CloudlogSettingsDialog(
                         color = Accent,
                     )
                     Text(
-                        text = "Loading stations...",
+                        text = stringResource(R.string.settings_loading_stations),
                         color = TextMuted,
                         fontSize = 13.sp,
                     )
@@ -1847,11 +2207,11 @@ private fun CloudlogSettingsDialog(
                 val selectedLabel = stationList
                     .firstOrNull { it.stationId == stationIdInput.text }
                     ?.displayLabel()
-                    ?: stationIdInput.text.ifBlank { "Select a station" }
+                    ?: stationIdInput.text.ifBlank { stringResource(R.string.settings_select_a_station) }
 
                 Column {
                     Text(
-                        text = "Station ID",
+                        text = stringResource(R.string.settings_station_id),
                         color = TextMuted,
                         fontSize = 12.sp,
                     )
@@ -1869,7 +2229,7 @@ private fun CloudlogSettingsDialog(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Enter manually",
+                        text = stringResource(R.string.settings_enter_manually),
                         color = Accent,
                         fontSize = 12.sp,
                         modifier = Modifier.clickable { manualStationEntry = true },
@@ -1880,8 +2240,8 @@ private fun CloudlogSettingsDialog(
                 OutlinedTextField(
                     value = stationIdInput,
                     onValueChange = { stationIdInput = it },
-                    label = { Text("Station ID") },
-                    placeholder = { Text("e.g. 1", color = TextFaint) },
+                    label = { Text(stringResource(R.string.settings_station_id)) },
+                    placeholder = { Text(stringResource(R.string.settings_station_id_hint), color = TextFaint) },
                     singleLine = true,
                     colors = fieldColors,
                     textStyle = TextStyle(fontSize = 14.sp),
@@ -1890,7 +2250,7 @@ private fun CloudlogSettingsDialog(
                 if (stationList.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Choose from server",
+                        text = stringResource(R.string.settings_choose_from_server),
                         color = Accent,
                         fontSize = 12.sp,
                         modifier = Modifier.clickable { manualStationEntry = false },
@@ -1934,7 +2294,7 @@ private fun CloudlogSettingsDialog(
                     enabled = !isTesting,
                 ) {
                     Text(
-                        text = "Test Connection",
+                        text = stringResource(R.string.common_test_connection),
                         color = if (isTesting) TextFaint else Accent,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -1950,7 +2310,8 @@ private fun CloudlogSettingsDialog(
                 }
                 if (testResult != null) {
                     Text(
-                        text = if (testResult == true) "Pass" else "Fail",
+                        text = if (testResult == true) stringResource(R.string.common_pass)
+                        else stringResource(R.string.common_fail),
                         color = if (testResult == true) StatusConfirmed else StatusBad,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp,
@@ -1964,7 +2325,7 @@ private fun CloudlogSettingsDialog(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = TextMuted)
+                    Text(stringResource(R.string.action_cancel), color = TextMuted)
                 }
                 TextButton(
                     onClick = {
@@ -1975,7 +2336,7 @@ private fun CloudlogSettingsDialog(
                         )
                     },
                 ) {
-                    Text("Save", color = Accent, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.action_save), color = Accent, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -1986,7 +2347,7 @@ private fun CloudlogSettingsDialog(
         val items = stationList.map { it.displayLabel() }
         val selectedIdx = stationList.indexOfFirst { it.stationId == stationIdInput.text }
         ListPickerDialog(
-            title = "Station Profile",
+            title = stringResource(R.string.settings_station_profile),
             items = items,
             selectedIndex = selectedIdx.coerceAtLeast(0),
             onDismiss = { showStationPicker = false },
@@ -2031,13 +2392,13 @@ private fun QrzCredsDialog(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = "QRZ Profile Lookup",
+                text = stringResource(R.string.settings_qrz_profile_lookup),
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 18.sp,
             )
             Text(
-                text = "Used to fetch profile photos for decoded callsigns via the QRZ XML API. Requires a QRZ XML subscription.",
+                text = stringResource(R.string.settings_qrz_creds_desc),
                 color = TextMuted,
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
@@ -2046,8 +2407,8 @@ private fun QrzCredsDialog(
             OutlinedTextField(
                 value = userInput,
                 onValueChange = { userInput = it; testResult = null },
-                label = { Text("Username") },
-                placeholder = { Text("Your QRZ.com username", color = TextFaint) },
+                label = { Text(stringResource(R.string.settings_username)) },
+                placeholder = { Text(stringResource(R.string.settings_username_hint), color = TextFaint) },
                 singleLine = true,
                 colors = fieldColors,
                 textStyle = TextStyle(fontSize = 14.sp),
@@ -2057,7 +2418,7 @@ private fun QrzCredsDialog(
             OutlinedTextField(
                 value = passInput,
                 onValueChange = { passInput = it; testResult = null },
-                label = { Text("Password") },
+                label = { Text(stringResource(R.string.settings_password)) },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -2088,7 +2449,7 @@ private fun QrzCredsDialog(
                     enabled = !isTesting,
                 ) {
                     Text(
-                        text = "Test Connection",
+                        text = stringResource(R.string.common_test_connection),
                         color = if (isTesting) TextFaint else Accent,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -2105,7 +2466,7 @@ private fun QrzCredsDialog(
                 if (testResult != null) {
                     val ok = testResult == "OK"
                     Text(
-                        text = if (ok) "Pass" else testResult!!,
+                        text = if (ok) stringResource(R.string.common_pass) else testResult!!,
                         color = if (ok) StatusConfirmed else StatusBad,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp,
@@ -2119,14 +2480,14 @@ private fun QrzCredsDialog(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = TextMuted)
+                    Text(stringResource(R.string.action_cancel), color = TextMuted)
                 }
                 TextButton(
                     onClick = {
                         onSave(userInput.text.trim(), passInput.text)
                     },
                 ) {
-                    Text("Save", color = Accent, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.action_save), color = Accent, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -2156,14 +2517,14 @@ private fun BandToggleDialog(
                 .padding(vertical = 24.dp),
         ) {
             Text(
-                text = "Enabled Bands",
+                text = stringResource(R.string.settings_enabled_bands),
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 18.sp,
                 modifier = Modifier.padding(horizontal = 24.dp),
             )
             Text(
-                text = "Hidden bands won't appear in the frequency pickers.",
+                text = stringResource(R.string.settings_enabled_bands_dialog_desc),
                 color = TextMuted,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
@@ -2208,7 +2569,7 @@ private fun BandToggleDialog(
                 horizontalArrangement = Arrangement.End,
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("Done", color = Accent)
+                    Text(stringResource(R.string.action_done), color = Accent)
                 }
             }
         }
@@ -2287,7 +2648,7 @@ private fun ListPickerDialog(
                 horizontalArrangement = Arrangement.End,
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = TextMuted)
+                    Text(stringResource(R.string.action_cancel), color = TextMuted)
                 }
             }
         }
@@ -2343,7 +2704,7 @@ private fun NumberInputDialog(
                         textInput = newValue
                     }
                 },
-                label = { Text("$min\u2013$max $suffix") },
+                label = { Text(stringResource(R.string.settings_min_max_suffix, min, max, suffix)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 colors = fieldColors,
@@ -2361,7 +2722,7 @@ private fun NumberInputDialog(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = TextMuted)
+                    Text(stringResource(R.string.action_cancel), color = TextMuted)
                 }
                 TextButton(
                     onClick = {
@@ -2369,7 +2730,7 @@ private fun NumberInputDialog(
                         onSave(parsed.coerceIn(min, max))
                     },
                 ) {
-                    Text("Save", color = Accent, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.action_save), color = Accent, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -2394,7 +2755,7 @@ private fun SerialPortPickerDialog(
                 .padding(vertical = 24.dp),
         ) {
             Text(
-                text = "Select Serial Port",
+                text = stringResource(R.string.settings_select_serial_port),
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 18.sp,
@@ -2430,7 +2791,7 @@ private fun SerialPortPickerDialog(
                 horizontalArrangement = Arrangement.End,
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = TextMuted)
+                    Text(stringResource(R.string.action_cancel), color = TextMuted)
                 }
             }
         }
@@ -2459,7 +2820,7 @@ private fun TxVolumeSliderDialog(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = "TX Volume",
+                text = stringResource(R.string.settings_tx_volume),
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 18.sp,
@@ -2469,7 +2830,7 @@ private fun TxVolumeSliderDialog(
             // the car where the slider thumb is small relative to the radio's
             // ALC meter you're watching at the same time.
             Text(
-                text = "$current%",
+                text = stringResource(R.string.settings_percent_format, current),
                 color = Accent,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 48.sp,
@@ -2492,8 +2853,7 @@ private fun TxVolumeSliderDialog(
             )
 
             Text(
-                text = "Adjust live — your next TX uses this level. " +
-                    "Watch your radio's ALC and dial down until it's just kissing the line.",
+                text = stringResource(R.string.settings_tx_volume_advice),
                 color = TextMuted,
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
@@ -2504,7 +2864,7 @@ private fun TxVolumeSliderDialog(
                 horizontalArrangement = Arrangement.End,
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("Done", color = Accent, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.action_done), color = Accent, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -2548,7 +2908,7 @@ private fun InfoDialog(
                 horizontalArrangement = Arrangement.End,
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("OK", color = Accent, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.action_ok), color = Accent, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -2585,12 +2945,12 @@ private fun AboutDialog(
             )
 
             Text(
-                text = "Version ${GeneralVariables.VERSION} (build ${GeneralVariables.VERSION_CODE})\n" +
-                    "Build date ${GeneralVariables.BUILD_DATE}\n\n" +
-                    "FT8, made easy.\n\n" +
-                    "A standalone FT8 transceiver app for Android. " +
-                    "USB, Bluetooth, and network rig control with " +
-                    "automatic sequencing and logging.",
+                text = stringResource(
+                    R.string.settings_about_body,
+                    GeneralVariables.VERSION,
+                    GeneralVariables.VERSION_CODE,
+                    GeneralVariables.BUILD_DATE,
+                ),
                 color = TextMuted,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
@@ -2604,7 +2964,7 @@ private fun AboutDialog(
             )
 
             Text(
-                text = "Website",
+                text = stringResource(R.string.settings_website),
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 14.sp,
@@ -2619,13 +2979,36 @@ private fun AboutDialog(
             )
 
             Text(
-                text = "Built by",
+                text = stringResource(R.string.settings_community),
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 14.sp,
             )
             Text(
-                text = "K1AF — Patrick Burns (QRZ)",
+                text = "github.com/patrickrb/FT8AF",
+                color = Accent,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { uriHandler.openUri("https://github.com/patrickrb/FT8AF") },
+            )
+            Text(
+                text = "discord.gg/UeE3ZpwRG",
+                color = Accent,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { uriHandler.openUri("https://discord.gg/UeE3ZpwRG") },
+            )
+
+            Text(
+                text = stringResource(R.string.settings_built_by),
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+            )
+            Text(
+                text = stringResource(R.string.settings_author_k1af),
                 color = Accent,
                 fontSize = 14.sp,
                 modifier = Modifier
@@ -2633,7 +3016,7 @@ private fun AboutDialog(
                     .clickable { uriHandler.openUri("https://www.qrz.com/db/K1AF") },
             )
             Text(
-                text = "N0RC — Reid (QRZ)",
+                text = stringResource(R.string.settings_author_n0rc),
                 color = Accent,
                 fontSize = 14.sp,
                 modifier = Modifier
@@ -2646,7 +3029,7 @@ private fun AboutDialog(
                 horizontalArrangement = Arrangement.End,
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("OK", color = Accent, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.action_ok), color = Accent, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

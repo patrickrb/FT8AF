@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bg7yoz.ft8cn.R
 import radio.ks3ckc.ft8us.theme.*
 
 @Composable
@@ -98,7 +100,8 @@ fun TxStrip(
             }
             PulseDot(color = if (isTransmitting) Accent else Signal)
             Text(
-                text = if (isTransmitting) "TRANSMITTING" else "LISTENING",
+                text = if (isTransmitting) stringResource(R.string.tx_transmitting)
+                else stringResource(R.string.tx_listening),
                 color = TextPrimary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,

@@ -43,6 +43,8 @@ public class GeneralVariables {
     public static boolean enableQRZ = false;//Whether QRZ auto-sync is enabled
     public static boolean enablePskReporter = true;//Whether PSKReporter spot upload is enabled
 
+    public static boolean distanceInMiles = true;//Display distances in miles (true) or kilometers (false)
+
     public static boolean deepDecodeMode = false;//Whether deep decode mode is enabled
 
     public static boolean audioOutput32Bit = true;//Audio output type: true=float, false=int16
@@ -305,6 +307,8 @@ public class GeneralVariables {
     //private static final Map<String,String> callsignAndGrids=new HashMap<>();
 
     public static String myCallsign = "";//My callsign
+    public static String myAntenna = "";
+    public static int myPowerWatts = 0;    // 0 = not set, displays as "--"
     public static String toModifier = "";//Call modifier
     private static float baseFrequency = 1000;//Audio frequency
 
@@ -312,6 +316,13 @@ public class GeneralVariables {
 
     public static boolean swr_switch_on = true;//SWR alarm switch
     public static boolean alc_switch_on = true;//ALC alarm switch
+
+    // TX Protection: ALC auto-volume and SWR TX halt (MeterProtectionController)
+    public static boolean autoVolumeEnabled = false;  // ALC auto-volume control
+    public static boolean swrHaltEnabled = false;      // SWR TX halt + lockout
+    public static int swrHaltThreshold = 120;          // 0-255 normalized (~3.0:1)
+    public static int alcTargetLow = 60;               // ALC target window low (0-255)
+    public static int alcTargetHigh = 100;             // ALC target window high (0-255)
 
     public static MutableLiveData<Float> mutableBaseFrequency = new MutableLiveData<>();
 

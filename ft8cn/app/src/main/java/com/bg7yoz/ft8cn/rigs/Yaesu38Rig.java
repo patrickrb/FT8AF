@@ -166,6 +166,7 @@ public class Yaesu38Rig extends BaseRig {
                     alc = Yaesu3Command.getALCOrSWR38(yaesu3Command);
                 }
                 showAlert();
+                notifyMeterData(alc, swr);
             }
 
 

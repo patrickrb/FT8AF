@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -42,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import com.bg7yoz.ft8cn.Ft8Message
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
+import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.maidenhead.MaidenheadGrid
 import com.bg7yoz.ft8cn.rigs.BaseRigOperation
 import com.bg7yoz.ft8cn.timer.UtcTimer
@@ -179,7 +181,7 @@ private fun QsoSheetContent(
                     FT8USIcons.Check(color = StatusConfirmed, size = 18.dp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "QSO Complete",
+                        text = stringResource(R.string.qso_complete),
                         color = StatusConfirmed,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp,
@@ -204,7 +206,7 @@ private fun QsoSheetContent(
                 FT8USIcons.Transmit(color = BgApp, size = 18.dp)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Call $callsign",
+                    text = stringResource(R.string.qso_call_action, callsign),
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                 )
@@ -286,7 +288,7 @@ private fun StationHeader(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = "QRZ \u2197",
+                    text = stringResource(R.string.qso_qrz_link),
                     color = Signal,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -353,17 +355,17 @@ private fun StatCardsRow(message: Ft8Message) {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         StatCard(
-            label = "Signal",
+            label = stringResource(R.string.qso_stat_signal),
             value = "${message.snr} dB",
             modifier = Modifier.weight(1f),
         )
         StatCard(
-            label = "Azimuth",
+            label = stringResource(R.string.qso_stat_azimuth),
             value = azimuthText,
             modifier = Modifier.weight(1f),
         )
         StatCard(
-            label = "Band",
+            label = stringResource(R.string.qso_stat_band),
             value = bandLabel,
             modifier = Modifier.weight(1f),
         )
@@ -452,11 +454,11 @@ private fun QsoLiveStatusRow(
     val text = when {
         isLiveQso && isTransmitting -> {
             val idx = computeCurrentStepIndex(message, true, liveFunctionOrder)
-            val stepLabel = QsoStepLabels.getOrNull(idx) ?: "message"
-            "QSOing with $callsign — Sending $stepLabel"
+            val stepLabel = QsoStepLabels.getOrNull(idx) ?: stringResource(R.string.qso_live_step_fallback)
+            stringResource(R.string.qso_live_sending, callsign, stepLabel)
         }
-        isLiveQso && !isTransmitting -> "Waiting for $callsign to reply…"
-        !isLiveQso && isTransmitting -> "Transmitting…"
+        isLiveQso && !isTransmitting -> stringResource(R.string.qso_live_waiting, callsign)
+        !isLiveQso && isTransmitting -> stringResource(R.string.qso_live_transmitting)
         else -> null
     } ?: return
 
@@ -498,27 +500,27 @@ private fun QsoSequenceVisualizer(
 
     val steps = listOf(
         QsoStep(
-            label = "Send call",
+            label = stringResource(R.string.qso_step_send_call),
             txRxLabel = "TX",
             messagePreview = "$callsign $myCall $myGrid",
         ),
         QsoStep(
-            label = "Report sent",
+            label = stringResource(R.string.qso_step_report_sent),
             txRxLabel = "RX",
             messagePreview = "$myCall $callsign ${message.snr}",
         ),
         QsoStep(
-            label = "Roger",
+            label = stringResource(R.string.qso_step_roger),
             txRxLabel = "TX",
             messagePreview = "$callsign $myCall R${message.snr}",
         ),
         QsoStep(
-            label = "Confirm",
+            label = stringResource(R.string.qso_step_confirm),
             txRxLabel = "RX",
             messagePreview = "$myCall $callsign RR73",
         ),
         QsoStep(
-            label = "Logged",
+            label = stringResource(R.string.qso_step_logged),
             txRxLabel = "--",
             messagePreview = "$callsign $myCall 73",
         ),
@@ -531,7 +533,7 @@ private fun QsoSequenceVisualizer(
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         Text(
-            text = "QSO SEQUENCE",
+            text = stringResource(R.string.qso_sequence_header),
             color = TextFaint,
             fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold,
@@ -742,7 +744,7 @@ private fun CurrentTxBanner(
     val currentFn = functions?.firstOrNull { it.functionOrder == functionOrder } ?: return
     val messageText = currentFn.functionMessage?.takeIf { it.isNotBlank() } ?: return
 
-    val labelText = if (isTransmitting) "TX NOW" else "TX NEXT"
+    val labelText = if (isTransmitting) stringResource(R.string.qso_tx_now) else stringResource(R.string.qso_tx_next)
     val labelColor = if (isTransmitting) StatusBad else Accent
 
     Spacer(modifier = Modifier.height(14.dp))

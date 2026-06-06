@@ -149,6 +149,7 @@ public class ElecraftRig extends BaseRig {
                 }
 
                 showAlert();
+                notifyMeterData(-1, Math.min(swr * 4, 255));
             }
 
 

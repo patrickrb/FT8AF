@@ -181,6 +181,7 @@ public class XieGu6100Rig extends BaseRig {
                     }
                 }
                 showAlert();//check if meter value is in alert range
+                notifyMeterData(alc, swr);
 
                 break;
         }
