@@ -25,7 +25,16 @@ public class FT8Package {
     private static final String A5 = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ/";
 
     static {
-        System.loadLibrary("ft8cn");
+        try {
+            System.loadLibrary("ft8cn");
+        } catch (UnsatisfiedLinkError e) {
+            // Best-effort load: JVM unit tests don't have libft8cn.so on
+            // java.library.path. The native methods themselves will throw if
+            // actually invoked without the library; the pure-Java helpers on
+            // this class (e.g. getStdCall) stay available either way. Mirrors
+            // the same guard in GenerateFT8.
+            Log.w(TAG, "ft8cn native library not loaded: " + e.getMessage());
+        }
     }
 
 
