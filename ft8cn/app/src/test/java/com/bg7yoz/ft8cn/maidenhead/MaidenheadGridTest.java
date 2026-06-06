@@ -149,4 +149,41 @@ public class MaidenheadGridTest {
         assertThat(MaidenheadGrid.checkMaidenhead("FNXX")).isFalse(); // letters in digit slot
         assertThat(MaidenheadGrid.checkMaidenhead("FN4")).isFalse();  // wrong length
     }
+
+    // ---------- distance formatting (convertDist / formatDist / getDistStr*) ----------
+
+    @Test
+    public void convertDist_zeroIsZeroRegardlessOfUnit() {
+        assertThat(MaidenheadGrid.convertDist(0.0)).isEqualTo(0.0);
+    }
+
+    @Test
+    public void getDistUnitLabel_isKmOrMiles() {
+        assertThat(MaidenheadGrid.getDistUnitLabel()).isAnyOf("km", "mi");
+    }
+
+    @Test
+    public void formatDist_roundsAndAppendsCurrentUnit() {
+        // Derive the expected unit from the current setting so the assertion is
+        // independent of the km/miles preference.
+        String label = MaidenheadGrid.getDistUnitLabel();
+        assertThat(MaidenheadGrid.formatDist(0.0)).isEqualTo("0 " + label);
+    }
+
+    @Test
+    public void getDistStr_samePointIsZeroOrEmpty() {
+        // getDistStr returns "" only when the great-circle distance is exactly
+        // 0.0; for identical grids haversine float error leaves a tiny non-zero
+        // that rounds to "0 <unit>". Accept either.
+        String label = MaidenheadGrid.getDistUnitLabel();
+        assertThat(MaidenheadGrid.getDistStr("FN42", "FN42")).isAnyOf("", "0 " + label);
+        assertThat(MaidenheadGrid.getDistStrEN("FN42", "FN42")).isAnyOf("", "0 " + label);
+    }
+
+    @Test
+    public void getDistStr_distinctGridsAreNonEmptyWithUnit() {
+        String label = MaidenheadGrid.getDistUnitLabel();
+        assertThat(MaidenheadGrid.getDistStr("FN42", "IO91")).endsWith(label);
+        assertThat(MaidenheadGrid.getDistStrEN("FN42", "IO91")).endsWith(label);
+    }
 }

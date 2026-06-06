@@ -70,4 +70,36 @@ public class Ft8MessageTest {
         assertThat(msg.snr).isEqualTo(0);
         assertThat(msg.score).isEqualTo(0);
     }
+
+    @Test
+    public void checkIsCQ_trueForCallingTokens() {
+        // checkIsCQ looks at the first whitespace-delimited token of callsignTo.
+        assertThat(new Ft8Message("CQ", "K1ABC", "FN42").checkIsCQ()).isTrue();
+        assertThat(new Ft8Message("DE", "K1ABC", "FN42").checkIsCQ()).isTrue();
+        assertThat(new Ft8Message("QRZ", "K1ABC", "FN42").checkIsCQ()).isTrue();
+        // "CQ DX" -> first token "CQ" still counts as a CQ.
+        assertThat(new Ft8Message("CQ DX", "K1ABC", "FN42").checkIsCQ()).isTrue();
+    }
+
+    @Test
+    public void checkIsCQ_falseWhenAddressedToCallsign() {
+        assertThat(new Ft8Message("K1ABC", "W1AW", "FN42").checkIsCQ()).isFalse();
+    }
+
+    @Test
+    public void getMessageText_freeTextPadsToThirteen() {
+        // Default i3/n3 == 0 selects the free-text branch, which upper-cases and
+        // left-pads the payload to 13 chars.
+        Ft8Message msg = new Ft8Message("cq", "k1abc", "test");
+        assertThat(msg.getMessageText()).isEqualTo("TEST         ");
+    }
+
+    @Test
+    public void getMessageText_weakSignalPrefixHonoursFlag() {
+        Ft8Message msg = new Ft8Message("cq", "k1abc", "test");
+        msg.isWeakSignal = true;
+        // showWeekSignal=true prefixes a "*"; false leaves the text untouched.
+        assertThat(msg.getMessageText(true)).startsWith("*");
+        assertThat(msg.getMessageText(false)).doesNotContain("*");
+    }
 }

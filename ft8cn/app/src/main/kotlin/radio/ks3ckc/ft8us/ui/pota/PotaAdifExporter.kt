@@ -160,7 +160,10 @@ object PotaAdifExporter {
         }
     }
 
-    private fun adifField(sb: StringBuilder, name: String, value: String?) {
+    // internal + @VisibleForTesting so the byte-length ADIF encoding (the
+    // bug-prone part) can be unit-tested directly; not part of the public API.
+    @androidx.annotation.VisibleForTesting
+    internal fun adifField(sb: StringBuilder, name: String, value: String?) {
         if (value.isNullOrEmpty()) return
         // ADIF length is in bytes, not characters — `value.length` (UTF-16 code units)
         // would mis-tag any non-ASCII content and misalign the following field.

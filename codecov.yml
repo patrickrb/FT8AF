@@ -1,0 +1,22 @@
+# Codecov configuration.
+#
+# While unit-test coverage is being built up, the status checks are
+# informational: Codecov still posts the project/patch coverage numbers on each
+# PR, but a dip no longer fails the check and blocks the merge. Flip
+# `informational: true` to a concrete `target`/`threshold` once coverage has
+# stabilised at a level worth enforcing.
+#
+# Note: no `ignore:` section — all source stays in the denominator so the
+# reported percentage reflects the whole codebase.
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+comment:
+  layout: "reach, diff, flags, files"
+  require_changes: false
