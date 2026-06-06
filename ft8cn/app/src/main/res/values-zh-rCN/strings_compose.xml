@@ -291,6 +291,14 @@
     <string name="settings_section_about">关于</string>
     <string name="settings_section_language">语言</string>
 
+    <!-- ===== Settings: drill-down category labels ===== -->
+    <string name="settings_cat_radio_audio">电台与音频</string>
+    <string name="settings_cat_transmission">发射</string>
+    <string name="settings_cat_decode_filters">解码与过滤</string>
+    <string name="settings_cat_logging">日志与奖项</string>
+    <string name="settings_cat_advanced">高级</string>
+    <string name="settings_cat_about">关于</string>
+
     <!-- ===== 设置：操作员身份 ===== -->
     <string name="settings_auto_update_grid">自动更新网格（GPS）</string>
     <string name="settings_auto_update_grid_desc">使用设备 GPS 实时更新您的 Maidenhead 网格</string>

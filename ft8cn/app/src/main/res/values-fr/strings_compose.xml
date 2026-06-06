@@ -291,6 +291,14 @@
     <string name="settings_section_about">À PROPOS</string>
     <string name="settings_section_language">LANGUE</string>
 
+    <!-- ===== Settings: drill-down category labels ===== -->
+    <string name="settings_cat_radio_audio">Radio et audio</string>
+    <string name="settings_cat_transmission">Transmission</string>
+    <string name="settings_cat_decode_filters">Décodage et filtres</string>
+    <string name="settings_cat_logging">Journal et diplômes</string>
+    <string name="settings_cat_advanced">Avancé</string>
+    <string name="settings_cat_about">À propos</string>
+
     <!-- ===== Settings: operator identity ===== -->
     <string name="settings_auto_update_grid">Mise à jour auto de la grille (GPS)</string>
     <string name="settings_auto_update_grid_desc">Utiliser le GPS de l\'appareil pour maintenir votre grille Maidenhead à jour</string>

@@ -291,6 +291,14 @@
     <string name="settings_section_about">關於</string>
     <string name="settings_section_language">語言</string>
 
+    <!-- ===== Settings: drill-down category labels ===== -->
+    <string name="settings_cat_radio_audio">電台與音訊</string>
+    <string name="settings_cat_transmission">發射</string>
+    <string name="settings_cat_decode_filters">解碼與過濾</string>
+    <string name="settings_cat_logging">日誌與獎項</string>
+    <string name="settings_cat_advanced">進階</string>
+    <string name="settings_cat_about">關於</string>
+
     <!-- ===== Settings: operator identity ===== -->
     <string name="settings_auto_update_grid">自動更新方格（GPS）</string>
     <string name="settings_auto_update_grid_desc">使用裝置 GPS 保持您的 Maidenhead 方格為最新</string>
