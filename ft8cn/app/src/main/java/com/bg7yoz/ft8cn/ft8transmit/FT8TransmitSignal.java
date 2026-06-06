@@ -1019,11 +1019,21 @@ public class FT8TransmitSignal {
         // update the QSO list; if not already recorded, save it
         updateQSlRecordList(newOrder, toCallsign);
 
+        // FT8 protocol: when we receive RR73/RRR (order 4), always reply with
+        // 73 (order 5) before completing the QSO. This handler fires before
+        // the completion check so that we never skip the 73 reply.
+        if (newOrder == 4) {
+            functionOrder = 5;
+            mutableFunctions.postValue(functionList);
+            mutableFunctionOrder.postValue(functionOrder);
+            setCurrentFunctionOrder(functionOrder);
+            return;
+        }
 
         // determine QSO success: other party replied 73 (5) || I am at 73 (5) and other party did not reply (-1)
         // or I am at RR73 (4) and no-reply threshold reached with no-reply limit enabled
         // or I am at RR73 (4) and the other party started calling someone else, to prevent RR73 deadlock
-        if (newOrder == 5// target replied RR73 to me
+        if (newOrder == 5// target replied 73 to me
                 || (functionOrder == 5 && newOrder == -1)// QSO success: other party replied 73 (5) || I am at 73 (5) and no reply (-1)
                 || (functionOrder == 4 &&
                 (GeneralVariables.noReplyCount > GeneralVariables.noReplyLimit * 2)
