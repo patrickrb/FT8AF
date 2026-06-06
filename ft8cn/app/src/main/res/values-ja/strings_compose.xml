@@ -445,4 +445,7 @@
     <string name="settings_language_desc">アプリの表示言語</string>
     <string name="settings_language_system">システムの既定</string>
 
+    <string name="tx_transmitting">送信中</string>
+    <string name="tx_listening">受信中</string>
+    <string name="qsopanel_queue">キュー</string>
 </resources>

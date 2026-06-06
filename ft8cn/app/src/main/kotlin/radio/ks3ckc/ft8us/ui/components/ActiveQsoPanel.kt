@@ -544,7 +544,7 @@ private fun CallerQueueBar(queue: ArrayList<QueuedCaller>) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
-            text = "QUEUE",
+            text = stringResource(R.string.qsopanel_queue),
             color = TextFaint,
             fontSize = 9.sp,
             fontWeight = FontWeight.SemiBold,

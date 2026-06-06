@@ -445,4 +445,7 @@
     <string name="settings_language_desc">Langue d\'affichage de l\'application</string>
     <string name="settings_language_system">Paramètre système</string>
 
+    <string name="tx_transmitting">ÉMISSION</string>
+    <string name="tx_listening">ÉCOUTE</string>
+    <string name="qsopanel_queue">FILE</string>
 </resources>

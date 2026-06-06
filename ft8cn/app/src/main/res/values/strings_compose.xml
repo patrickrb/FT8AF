@@ -103,6 +103,10 @@
     <string name="export_save_failed">Save to Downloads failed</string>
     <string name="export_temp_file_failed">Could not create temp file</string>
 
+    <!-- ===== TX strip ===== -->
+    <string name="tx_transmitting">TRANSMITTING</string>
+    <string name="tx_listening">LISTENING</string>
+
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">Calling CQ</string>
     <string name="qsopanel_searching">Searching...</string>
@@ -111,6 +115,7 @@
     <string name="qsopanel_tap_to_view">tap to view ↗</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">Waiting for messages...</string>
+    <string name="qsopanel_queue">QUEUE</string>
 
     <!-- ===== Decode screen ===== -->
     <string name="decode_title">Decode</string>

@@ -445,4 +445,7 @@
     <string name="settings_language_desc">Язык интерфейса приложения</string>
     <string name="settings_language_system">Системный по умолчанию</string>
 
+    <string name="tx_transmitting">ПЕРЕДАЧА</string>
+    <string name="tx_listening">ПРИЁМ</string>
+    <string name="qsopanel_queue">ОЧЕРЕДЬ</string>
 </resources>

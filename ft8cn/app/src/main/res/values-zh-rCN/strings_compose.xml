@@ -445,4 +445,7 @@
     <string name="settings_language_desc">应用显示语言</string>
     <string name="settings_language_system">跟随系统</string>
 
+    <string name="tx_transmitting">发射中</string>
+    <string name="tx_listening">监听中</string>
+    <string name="qsopanel_queue">队列</string>
 </resources>

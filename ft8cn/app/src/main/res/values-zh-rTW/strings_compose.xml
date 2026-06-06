@@ -445,4 +445,7 @@
     <string name="settings_language_desc">應用程式顯示語言</string>
     <string name="settings_language_system">系統預設</string>
 
+    <string name="tx_transmitting">發射中</string>
+    <string name="tx_listening">監聽中</string>
+    <string name="qsopanel_queue">佇列</string>
 </resources>

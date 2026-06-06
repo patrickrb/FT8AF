@@ -445,4 +445,7 @@
     <string name="settings_language_desc">Idioma de visualización de la app</string>
     <string name="settings_language_system">Predeterminado del sistema</string>
 
+    <string name="tx_transmitting">TRANSMITIENDO</string>
+    <string name="tx_listening">ESCUCHANDO</string>
+    <string name="qsopanel_queue">COLA</string>
 </resources>
