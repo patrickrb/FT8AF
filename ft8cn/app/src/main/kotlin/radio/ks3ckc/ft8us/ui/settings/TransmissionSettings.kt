@@ -1,0 +1,375 @@
+package radio.ks3ckc.ft8us.ui.settings
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.bg7yoz.ft8cn.GeneralVariables
+import com.bg7yoz.ft8cn.MainViewModel
+import com.bg7yoz.ft8cn.R
+import com.bg7yoz.ft8cn.ft8transmit.MeterProtectionController
+import radio.ks3ckc.ft8us.theme.*
+import radio.ks3ckc.ft8us.ui.components.GlassCard
+import radio.ks3ckc.ft8us.ui.components.SettingsRow
+
+/**
+ * Transmission settings: TX/RX split, watchdog, stop-after, TX protection
+ * (auto-volume ALC + SWR halt), and auto-sequencing.
+ */
+@Composable
+fun TransmissionSettings(
+    mainViewModel: MainViewModel,
+    onBack: () -> Unit,
+) {
+    var synFrequency by remember { mutableStateOf(GeneralVariables.synFrequency) }
+    var watchdogMs by remember { mutableIntStateOf(GeneralVariables.launchSupervision) }
+    var noReplyLimit by remember { mutableIntStateOf(GeneralVariables.noReplyLimit) }
+
+    // TX Protection state
+    var autoVolumeEnabled by remember { mutableStateOf(GeneralVariables.autoVolumeEnabled) }
+    var swrHaltEnabled by remember { mutableStateOf(GeneralVariables.swrHaltEnabled) }
+    var swrHaltThreshold by remember { mutableIntStateOf(GeneralVariables.swrHaltThreshold) }
+    var alcTargetLow by remember { mutableIntStateOf(GeneralVariables.alcTargetLow) }
+    var alcTargetHigh by remember { mutableIntStateOf(GeneralVariables.alcTargetHigh) }
+
+    // Auto-sequence state
+    var autoFollowCQ by remember { mutableStateOf(GeneralVariables.autoFollowCQ) }
+    var autoCallFollow by remember { mutableStateOf(GeneralVariables.autoCallFollow) }
+    var earlyDecode by remember { mutableStateOf(GeneralVariables.earlyDecode) }
+    var autoCQAfterQSO by remember { mutableStateOf(GeneralVariables.autoCQAfterQSO) }
+
+    var showWatchdog by remember { mutableStateOf(false) }
+    var showStopAfter by remember { mutableStateOf(false) }
+
+    val watchdogMinutes = watchdogMs / 60000
+    val watchdogStr = if (watchdogMinutes == 0) stringResource(R.string.common_off)
+        else stringResource(R.string.settings_minutes_format, watchdogMinutes)
+
+    // -- TX Watchdog Picker --
+    if (showWatchdog) {
+        // Build the same options as LaunchSupervisionSpinnerAdapter:
+        // index 0 = Off (0 ms), index 1..10 = (index*10-5) minutes
+        val watchdogOptions = mutableListOf(stringResource(R.string.common_off))
+        for (i in 1..10) {
+            watchdogOptions.add(stringResource(R.string.settings_minutes_format, i * 10 - 5))
+        }
+        // Find current selection index from stored ms value
+        val currentWatchdogIndex = if (watchdogMs == 0) {
+            0
+        } else {
+            ((watchdogMs - 5 * 60 * 1000) / 60 / 1000 / 10).coerceIn(0, 10)
+        }
+        ListPickerDialog(
+            title = stringResource(R.string.settings_tx_watchdog),
+            items = watchdogOptions,
+            selectedIndex = currentWatchdogIndex,
+            onDismiss = { showWatchdog = false },
+            onSelect = { index ->
+                showWatchdog = false
+                // Same formula as LaunchSupervisionSpinnerAdapter.getTimeOut()
+                val ms = if (index == 0) 0 else (index * 10 - 5) * 60 * 1000
+                GeneralVariables.launchSupervision = ms
+                watchdogMs = ms
+                mainViewModel.databaseOpr.writeConfig(
+                    "launchSupervision", ms.toString(), null,
+                )
+            },
+        )
+    }
+
+    // -- Stop After (No Reply Limit) Picker --
+    if (showStopAfter) {
+        val stopAfterOptions = mutableListOf(stringResource(R.string.common_off))
+        for (i in 1..30) {
+            stopAfterOptions.add(stringResource(R.string.settings_tries_format, i))
+        }
+        ListPickerDialog(
+            title = stringResource(R.string.settings_stop_after),
+            items = stopAfterOptions,
+            selectedIndex = noReplyLimit.coerceIn(0, 30),
+            onDismiss = { showStopAfter = false },
+            onSelect = { index ->
+                showStopAfter = false
+                GeneralVariables.noReplyLimit = index
+                noReplyLimit = index
+                mainViewModel.databaseOpr.writeConfig(
+                    "noReplyLimit", index.toString(), null,
+                )
+            },
+        )
+    }
+
+    SettingsDetailScaffold(
+        title = stringResource(R.string.settings_cat_transmission),
+        onBack = onBack,
+    ) {
+        // =====================================================================
+        // TRANSMISSION
+        // =====================================================================
+        SettingsSection(title = stringResource(R.string.settings_section_transmission)) {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    SettingsRow(
+                        label = stringResource(R.string.settings_tx_rx_split),
+                        description = stringResource(R.string.settings_tx_rx_split_desc),
+                        toggle = synFrequency,
+                        onToggleChange = { checked ->
+                            synFrequency = checked
+                            GeneralVariables.synFrequency = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "synFreq", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_tx_watchdog),
+                        description = stringResource(R.string.settings_tx_watchdog_desc),
+                        value = watchdogStr,
+                        showChevron = true,
+                        onClick = { showWatchdog = true },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_stop_after),
+                        description = stringResource(R.string.settings_stop_after_desc),
+                        value = if (noReplyLimit == 0) stringResource(R.string.common_off)
+                        else stringResource(R.string.settings_tries_format, noReplyLimit),
+                        showChevron = true,
+                        onClick = { showStopAfter = true },
+                    )
+                }
+            }
+        }
+
+        // =====================================================================
+        // TX PROTECTION
+        // =====================================================================
+        SettingsSection(title = "TX PROTECTION") {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    SettingsRow(
+                        label = "Auto Volume (ALC)",
+                        description = "Automatically adjust TX volume to keep ALC in target range",
+                        toggle = autoVolumeEnabled,
+                        onToggleChange = { checked ->
+                            autoVolumeEnabled = checked
+                            GeneralVariables.autoVolumeEnabled = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "autoVolumeEnabled", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    if (autoVolumeEnabled) {
+                        SectionDivider()
+                        // ALC target range — two values displayed as a label row
+                        SettingsRow(
+                            label = "ALC Target Range",
+                            description = "Low: $alcTargetLow  High: $alcTargetHigh  (0-255 normalized)",
+                            value = "$alcTargetLow – $alcTargetHigh",
+                        )
+                        // Low slider
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "Low",
+                                style = TextStyle(fontSize = 12.sp, color = TextMuted),
+                                modifier = Modifier.width(32.dp),
+                            )
+                            Slider(
+                                value = alcTargetLow.toFloat(),
+                                onValueChange = { v ->
+                                    val clamped = v.toInt().coerceIn(10, alcTargetHigh - 10)
+                                    alcTargetLow = clamped
+                                    GeneralVariables.alcTargetLow = clamped
+                                },
+                                onValueChangeFinished = {
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "alcTargetLow", alcTargetLow.toString(), null,
+                                    )
+                                },
+                                valueRange = 10f..200f,
+                                modifier = Modifier.weight(1f),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Accent,
+                                    activeTrackColor = Accent,
+                                ),
+                            )
+                        }
+                        // High slider
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .padding(bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "High",
+                                style = TextStyle(fontSize = 12.sp, color = TextMuted),
+                                modifier = Modifier.width(32.dp),
+                            )
+                            Slider(
+                                value = alcTargetHigh.toFloat(),
+                                onValueChange = { v ->
+                                    val clamped = v.toInt().coerceIn(alcTargetLow + 10, 250)
+                                    alcTargetHigh = clamped
+                                    GeneralVariables.alcTargetHigh = clamped
+                                },
+                                onValueChangeFinished = {
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "alcTargetHigh", alcTargetHigh.toString(), null,
+                                    )
+                                },
+                                valueRange = 20f..250f,
+                                modifier = Modifier.weight(1f),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Accent,
+                                    activeTrackColor = Accent,
+                                ),
+                            )
+                        }
+                    }
+                    SectionDivider()
+                    SettingsRow(
+                        label = "SWR Protection",
+                        description = "Stop transmitting and lock TX if SWR exceeds threshold",
+                        toggle = swrHaltEnabled,
+                        onToggleChange = { checked ->
+                            swrHaltEnabled = checked
+                            GeneralVariables.swrHaltEnabled = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "swrHaltEnabled", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    if (swrHaltEnabled) {
+                        SectionDivider()
+                        val swrRatioStr = MeterProtectionController.normalizedSwrToRatio(swrHaltThreshold)
+                        SettingsRow(
+                            label = "SWR Threshold",
+                            description = "TX halts when SWR exceeds this value",
+                            value = swrRatioStr,
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .padding(bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "1.5:1",
+                                style = TextStyle(fontSize = 12.sp, color = TextMuted),
+                            )
+                            Slider(
+                                value = swrHaltThreshold.toFloat(),
+                                onValueChange = { v ->
+                                    swrHaltThreshold = v.toInt()
+                                    GeneralVariables.swrHaltThreshold = v.toInt()
+                                },
+                                onValueChangeFinished = {
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "swrHaltThreshold", swrHaltThreshold.toString(), null,
+                                    )
+                                },
+                                valueRange = 30f..200f, // ~1.3:1 to ~7.0:1
+                                modifier = Modifier.weight(1f),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Accent,
+                                    activeTrackColor = Accent,
+                                ),
+                            )
+                            Text(
+                                "7:1",
+                                style = TextStyle(fontSize = 12.sp, color = TextMuted),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // AUTO-SEQUENCE
+        // =====================================================================
+        SettingsSection(title = stringResource(R.string.settings_section_auto_sequence)) {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    SettingsRow(
+                        label = stringResource(R.string.settings_hunt),
+                        description = stringResource(R.string.settings_hunt_desc),
+                        toggle = autoFollowCQ,
+                        onToggleChange = { checked ->
+                            autoFollowCQ = checked
+                            GeneralVariables.autoFollowCQ = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "autoFollowCQ", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_auto_call_followed),
+                        description = stringResource(R.string.settings_auto_call_followed_desc),
+                        toggle = autoCallFollow,
+                        onToggleChange = { checked ->
+                            autoCallFollow = checked
+                            GeneralVariables.autoCallFollow = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "autoCallFollow", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_fast_turnaround),
+                        description = stringResource(R.string.settings_fast_turnaround_desc),
+                        toggle = earlyDecode,
+                        onToggleChange = { checked ->
+                            earlyDecode = checked
+                            GeneralVariables.earlyDecode = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "earlyDecode", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_auto_cq_after_qso),
+                        description = stringResource(R.string.settings_auto_cq_after_qso_desc),
+                        toggle = autoCQAfterQSO,
+                        onToggleChange = { checked ->
+                            autoCQAfterQSO = checked
+                            GeneralVariables.autoCQAfterQSO = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "autoCQAfterQSO", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
