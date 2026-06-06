@@ -338,6 +338,42 @@ object FT8USIcons {
         }
     }
 
+    /** Three tightly-spaced horizontal lines — switch to compact decode list. */
+    @Composable
+    fun ViewCompact(
+        modifier: Modifier = Modifier,
+        color: Color = Color.Unspecified,
+        size: Dp = 22.dp,
+        strokeWidth: Float = 1.6f,
+    ) {
+        val tint = if (color == Color.Unspecified) androidx.compose.material3.MaterialTheme.colorScheme.onSurface else color
+        Canvas(modifier = modifier.then(Modifier.sizeOf(size))) {
+            val s = this.size.width / 24f
+            val stroke = strokeStyle(strokeWidth * s)
+            drawLine(tint, Offset(4f * s, 8f * s), Offset(20f * s, 8f * s), stroke.width, StrokeCap.Round)
+            drawLine(tint, Offset(4f * s, 12f * s), Offset(20f * s, 12f * s), stroke.width, StrokeCap.Round)
+            drawLine(tint, Offset(4f * s, 16f * s), Offset(20f * s, 16f * s), stroke.width, StrokeCap.Round)
+        }
+    }
+
+    /** Three widely-spaced horizontal lines — switch to expanded decode list. */
+    @Composable
+    fun ViewExpanded(
+        modifier: Modifier = Modifier,
+        color: Color = Color.Unspecified,
+        size: Dp = 22.dp,
+        strokeWidth: Float = 1.6f,
+    ) {
+        val tint = if (color == Color.Unspecified) androidx.compose.material3.MaterialTheme.colorScheme.onSurface else color
+        Canvas(modifier = modifier.then(Modifier.sizeOf(size))) {
+            val s = this.size.width / 24f
+            val stroke = strokeStyle(strokeWidth * s)
+            drawLine(tint, Offset(4f * s, 5f * s), Offset(20f * s, 5f * s), stroke.width, StrokeCap.Round)
+            drawLine(tint, Offset(4f * s, 12f * s), Offset(20f * s, 12f * s), stroke.width, StrokeCap.Round)
+            drawLine(tint, Offset(4f * s, 19f * s), Offset(20f * s, 19f * s), stroke.width, StrokeCap.Round)
+        }
+    }
+
     /** Triangular pine tree on a small trunk — POTA tab. */
     @Composable
     fun Tree(

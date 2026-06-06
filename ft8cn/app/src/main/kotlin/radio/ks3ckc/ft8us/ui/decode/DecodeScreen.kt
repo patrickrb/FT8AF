@@ -159,6 +159,9 @@ fun DecodeScreen(
         mainViewModel.mutablePreselectCallsign.postValue(null)   // consume (allow re-trigger)
     }
 
+    // Compact mode — persisted via GeneralVariables.simpleCallItemMode / DB key "msgMode"
+    var compactMode by rememberSaveable { mutableStateOf(GeneralVariables.simpleCallItemMode) }
+
     // Format UTC time for the subtitle
     val utcString = if (utcTime > 0L) {
         UtcTimer.getTimeStr(utcTime)
@@ -181,6 +184,19 @@ fun DecodeScreen(
                     )
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            compactMode = !compactMode
+                            GeneralVariables.simpleCallItemMode = compactMode
+                            mainViewModel.databaseOpr.writeConfig("msgMode", if (compactMode) "1" else "0", null)
+                        },
+                    ) {
+                        if (compactMode) {
+                            radio.ks3ckc.ft8us.ui.components.FT8USIcons.ViewExpanded(color = TextMuted)
+                        } else {
+                            radio.ks3ckc.ft8us.ui.components.FT8USIcons.ViewCompact(color = TextMuted)
+                        }
+                    }
                     IconButton(
                         onClick = { mainViewModel.clearFt8MessageList() },
                         enabled = messageList?.isNotEmpty() == true,
@@ -229,7 +245,7 @@ fun DecodeScreen(
                         val prevSlot = if (index > 0) filteredMessages[index - 1].utcTime / 15000L else null
                         val thisSlot = message.utcTime / 15000L
                         if (prevSlot == null || prevSlot != thisSlot) {
-                            TimeGroupDivider(utcTime = message.utcTime)
+                            TimeGroupDivider(utcTime = message.utcTime, compact = compactMode)
                         }
 
                         // Target highlight: this row is from the station the
@@ -246,6 +262,7 @@ fun DecodeScreen(
                             animateEntry = rowKey in newKeys,
                             nowMillis = utcTime,
                             isTarget = isTarget,
+                            compact = compactMode,
                             // Single tap = immediately call this station (fast reply to
                             // a CQ). Long-press opens the info sheet (QRZ, country, etc.).
                             onClick = {
@@ -285,12 +302,12 @@ fun DecodeScreen(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun TimeGroupDivider(utcTime: Long) {
+private fun TimeGroupDivider(utcTime: Long, compact: Boolean = false) {
     val timeStr = remember(utcTime) { UtcTimer.getTimeHHMMSS(utcTime) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp, vertical = if (compact) 3.dp else 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
