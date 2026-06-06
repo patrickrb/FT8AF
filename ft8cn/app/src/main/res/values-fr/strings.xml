@@ -317,7 +317,7 @@
     <string name="callsign_info">Indicatif : %s\nEmplacement : %s\nZone CQ : %d\nZone ITU : %d\nContinent : %s\nLongitude et latitude : %.2f,%.2f\nFuseau horaire : %.0f\nPréfixe DXCC : %s</string>
     <string name="maximum_distance">Distance maximale\n\n%s</string>
     <string name="minimum_distance">Distance minimale\n\n%s</string>
-    <string name="count_distance_info">Distance maximale : %.0f km (%s)\nDistance minimale : %.0f km (%s)</string>
+    <string name="count_distance_info">Distance maximale : %.0f %s (%s)\nDistance minimale : %.0f %s (%s)</string>
     <string name="distance_statistics">Statistiques de distance</string>
     <string name="dxcc_image">dxcc</string>
     <string name="cqzone">cq zone</string>

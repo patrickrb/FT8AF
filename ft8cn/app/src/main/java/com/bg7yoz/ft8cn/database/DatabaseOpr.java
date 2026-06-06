@@ -2560,6 +2560,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.highlightPota = result.equals("1");
                 }
 
+                if (name.equalsIgnoreCase("distanceInMiles")) {
+                    GeneralVariables.distanceInMiles = !result.equals("0");
+                }
+
             }
 
             cursor.close();

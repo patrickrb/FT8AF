@@ -386,7 +386,7 @@ private fun computeDistanceText(message: Ft8Message): String {
     if (myGrid.isNullOrEmpty() || theirGrid.isNullOrEmpty()) return ""
     return try {
         val dist = MaidenheadGrid.getDist(myGrid, theirGrid)
-        if (dist > 0) "${String.format("%.0f", dist)} km" else ""
+        if (dist > 0) MaidenheadGrid.formatDist(dist) else ""
     } catch (_: Exception) {
         ""
     }

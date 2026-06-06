@@ -137,6 +137,7 @@ fun SettingsScreen(
     var highlightNewBand by remember { mutableStateOf(GeneralVariables.highlightNewBand) }
     var highlightWorked by remember { mutableStateOf(GeneralVariables.highlightWorked) }
     var highlightPota by remember { mutableStateOf(GeneralVariables.highlightPota) }
+    var distanceInMiles by remember { mutableStateOf(GeneralVariables.distanceInMiles) }
 
     // Callsign blocklist (comma-separated entries) + decode display filters
     var blockedExact by remember { mutableStateOf(GeneralVariables.getBlockedExactCallsigns()) }
@@ -1431,6 +1432,19 @@ fun SettingsScreen(
                                 GeneralVariables.highlightWorked = checked
                                 mainViewModel.databaseOpr.writeConfig(
                                     "highlightWorked", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = stringResource(R.string.settings_distance_unit),
+                            description = stringResource(R.string.settings_distance_unit_desc),
+                            toggle = distanceInMiles,
+                            onToggleChange = { checked ->
+                                distanceInMiles = checked
+                                GeneralVariables.distanceInMiles = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "distanceInMiles", if (checked) "1" else "0", null,
                                 )
                             },
                         )

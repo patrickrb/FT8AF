@@ -1208,7 +1208,7 @@ private fun SelectedStationCard(
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                InfoChip("${String.format("%.0f", distKm)} km", stringResource(R.string.map_info_distance))
+                InfoChip(MaidenheadGrid.formatDist(distKm), stringResource(R.string.map_info_distance))
                 InfoChip("${String.format("%.0f", bearing)}\u00B0", stringResource(R.string.map_info_bearing))
                 InfoChip("${station.snr} dB", stringResource(R.string.map_info_snr))
             }

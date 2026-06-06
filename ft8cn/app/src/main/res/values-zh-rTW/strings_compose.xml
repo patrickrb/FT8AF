@@ -340,6 +340,8 @@
     <string name="settings_highlight_pota_desc">醒目標示被點位的 POTA 啟動者；新公園特別突顯</string>
     <string name="settings_highlight_worked">先前通聯過</string>
     <string name="settings_highlight_worked_desc">標記已在您日誌中的電台</string>
+    <string name="settings_distance_unit">以英里顯示距離</string>
+    <string name="settings_distance_unit_desc">以英里代替公里顯示距離</string>
 
     <!-- ===== Settings: callsign blocklist ===== -->
     <string name="settings_exact_callsigns">完整呼號</string>

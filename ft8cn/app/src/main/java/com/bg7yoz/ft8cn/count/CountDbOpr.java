@@ -116,17 +116,18 @@ public class CountDbOpr {
                 cursor.close();
 
                 if ((max>-1)&&(min<6553500f)){
-                    values.add(new CountValue((int) Math.round(max),String.format(
+                    values.add(new CountValue((int) Math.round(MaidenheadGrid.convertDist(max)),String.format(
                             GeneralVariables.getStringFromResource(R.string.maximum_distance)
                             ,getQSLInfo(maxGrid))));
-                    values.add(new CountValue((int) Math.round(min),String.format(
+                    values.add(new CountValue((int) Math.round(MaidenheadGrid.convertDist(min)),String.format(
                             GeneralVariables.getStringFromResource(R.string.minimum_distance)
                             ,getQSLInfo(minGrid))));
                 }
             }
 
            String info=String.format(GeneralVariables.getStringFromResource(R.string.count_distance_info)
-                   ,maxDistance,maxDistanceGrid,minDistance,minDistanceGrid);
+                   ,MaidenheadGrid.convertDist(maxDistance),MaidenheadGrid.getDistUnitLabel(),maxDistanceGrid
+                   ,MaidenheadGrid.convertDist(minDistance),MaidenheadGrid.getDistUnitLabel(),minDistanceGrid);
 
             if (afterCount!=null &&(maxDistance>0)&&(minDistance<6553500f)){
                 afterCount.countInformation(new CountInfo(info

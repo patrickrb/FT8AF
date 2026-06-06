@@ -317,7 +317,7 @@
     <string name="callsign_info">呼号：%s\n地点：%s\nCQ 区：%d\nITU 区：%d\n洲：%s\n经纬度：%.2f,%.2f\n时区：%.0f\nDXCC 前缀：%s</string>
     <string name="maximum_distance">最远距离\n\n%s</string>
     <string name="minimum_distance">最近距离\n\n%s</string>
-    <string name="count_distance_info">最远距离：%.0f 公里 (%s)\n最近距离：%.0f 公里 (%s)</string>
+    <string name="count_distance_info">最远距离：%.0f %s (%s)\n最近距离：%.0f %s (%s)</string>
     <string name="distance_statistics">距离统计</string>
     <string name="dxcc_image">DXCC</string>
     <string name="cqzone">CQ Zone</string>
