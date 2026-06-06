@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -132,13 +133,13 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "TX HALTED — High SWR detected ($lockoutSwrRatio)",
+                            text = stringResource(R.string.swr_lockout_title, lockoutSwrRatio),
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
                         )
                         Text(
-                            text = "Check antenna / feedline before transmitting.",
+                            text = stringResource(R.string.swr_lockout_body),
                             color = Color.White.copy(alpha = 0.85f),
                             fontSize = 11.sp,
                         )
@@ -150,7 +151,7 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                         },
                     ) {
                         Text(
-                            "DISMISS",
+                            stringResource(R.string.swr_lockout_dismiss),
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,

@@ -450,5 +450,10 @@
 
     <string name="tx_transmitting">发射中</string>
     <string name="tx_listening">监听中</string>
+    <string name="qsopanel_log_action">LOG</string>
     <string name="qsopanel_queue">队列</string>
+    <string name="swr_lockout_title">发射已停止 — 检测到高驻波比 (%1$s)</string>
+    <string name="swr_lockout_body">发射前请检查天线 / 馈线。</string>
+    <string name="swr_lockout_dismiss">关闭</string>
+    <string name="swr_lockout_toast">发射已阻止 — 驻波比锁定中，请先关闭锁定横幅。</string>
 </resources>

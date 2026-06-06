@@ -450,5 +450,10 @@
 
     <string name="tx_transmitting">TRANSMITIENDO</string>
     <string name="tx_listening">ESCUCHANDO</string>
+    <string name="qsopanel_log_action">LOG</string>
     <string name="qsopanel_queue">COLA</string>
+    <string name="swr_lockout_title">TX DETENIDO — SWR alto detectado (%1$s)</string>
+    <string name="swr_lockout_body">Verifique la antena / línea de alimentación antes de transmitir.</string>
+    <string name="swr_lockout_dismiss">DESCARTAR</string>
+    <string name="swr_lockout_toast">TX bloqueado — bloqueo por SWR activo. Descarte el aviso primero.</string>
 </resources>

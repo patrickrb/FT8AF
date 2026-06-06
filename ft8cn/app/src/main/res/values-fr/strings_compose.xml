@@ -450,5 +450,10 @@
 
     <string name="tx_transmitting">ÉMISSION</string>
     <string name="tx_listening">ÉCOUTE</string>
+    <string name="qsopanel_log_action">LOG</string>
     <string name="qsopanel_queue">FILE</string>
+    <string name="swr_lockout_title">TX ARRÊTÉ — SWR élevé détecté (%1$s)</string>
+    <string name="swr_lockout_body">Vérifiez l\'antenne / le câble avant d\'émettre.</string>
+    <string name="swr_lockout_dismiss">IGNORER</string>
+    <string name="swr_lockout_toast">TX bloqué — verrouillage SWR actif. Fermez la bannière d\'abord.</string>
 </resources>

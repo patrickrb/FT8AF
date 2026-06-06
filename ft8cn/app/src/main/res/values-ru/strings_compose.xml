@@ -450,5 +450,10 @@
 
     <string name="tx_transmitting">ПЕРЕДАЧА</string>
     <string name="tx_listening">ПРИЁМ</string>
+    <string name="qsopanel_log_action">LOG</string>
     <string name="qsopanel_queue">ОЧЕРЕДЬ</string>
+    <string name="swr_lockout_title">TX ОСТАНОВЛЕН — Высокий КСВ (%1$s)</string>
+    <string name="swr_lockout_body">Проверьте антенну / фидер перед передачей.</string>
+    <string name="swr_lockout_dismiss">ЗАКРЫТЬ</string>
+    <string name="swr_lockout_toast">TX заблокирован — блокировка КСВ активна. Сначала закройте баннер.</string>
 </resources>

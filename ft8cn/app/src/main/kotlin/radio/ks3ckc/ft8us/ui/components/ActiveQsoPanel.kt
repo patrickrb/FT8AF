@@ -328,7 +328,7 @@ private fun StationHeader(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "LOG",
+                        text = stringResource(R.string.qsopanel_log_action),
                         color = Signal,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,

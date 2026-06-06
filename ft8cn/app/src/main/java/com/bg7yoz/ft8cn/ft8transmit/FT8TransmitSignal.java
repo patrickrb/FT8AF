@@ -1174,7 +1174,7 @@ public class FT8TransmitSignal {
         // Block activation if SWR lockout is active
         if (activated && meterProtectionController != null
                 && meterProtectionController.isSwrLocked()) {
-            ToastMessage.show("TX blocked — SWR lockout active. Dismiss the lockout banner first.");
+            ToastMessage.show(GeneralVariables.getStringFromResource(R.string.swr_lockout_toast));
             return;
         }
         this.activated = activated;
