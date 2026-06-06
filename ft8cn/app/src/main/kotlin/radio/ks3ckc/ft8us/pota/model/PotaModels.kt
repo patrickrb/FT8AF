@@ -22,6 +22,21 @@ data class PotaPark(
     val locationDesc: String,
 )
 
+/** A single QSO row for the activation contacts list. */
+data class PotaQso(
+    val id: Long,
+    val callsign: String,
+    val grid: String,
+    val band: String,
+    val mode: String,
+    val rstSent: String,
+    val rstRcvd: String,
+    val qsoDate: String,
+    val timeOn: String,
+    val sig: String?,
+    val sigInfo: String?,
+)
+
 /** A logged activation session (row from pota_activation). */
 data class PotaActivation(
     val id: Long,

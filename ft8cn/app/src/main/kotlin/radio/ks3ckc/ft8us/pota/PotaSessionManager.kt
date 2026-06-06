@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import radio.ks3ckc.ft8us.pota.model.PotaActivation
+import radio.ks3ckc.ft8us.pota.model.PotaQso
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
@@ -33,6 +34,9 @@ object PotaSessionManager {
     private val _currentActivation = MutableStateFlow<PotaActivation?>(null)
     val currentActivation: StateFlow<PotaActivation?> = _currentActivation.asStateFlow()
 
+    private val _activationQsos = MutableStateFlow<List<PotaQso>>(emptyList())
+    val activationQsos: StateFlow<List<PotaQso>> = _activationQsos.asStateFlow()
+
     @Volatile
     private var savedModifier: String = ""
 
@@ -55,6 +59,7 @@ object PotaSessionManager {
         val operator = GeneralVariables.myCallsign?.takeIf { it.isNotBlank() }
         val activation = PotaActivationDao.startActivation(ref, operator, notes)
         _currentActivation.value = activation
+        _activationQsos.value = emptyList()
         log("start ref=$ref id=${activation.id} priorModifier='${savedModifier}'")
         return activation
     }
@@ -70,15 +75,22 @@ object PotaSessionManager {
         savedModifier = ""
         log("end ref=${active.parkRef} id=${active.id} qsoCount=${active.qsoCount} restoredModifier='${GeneralVariables.toModifier}'")
         _currentActivation.value = null
+        _activationQsos.value = emptyList()
     }
 
-    /** Pull the latest qso_count from the DB so the UI counter stays accurate. */
+    /** Pull the latest qso_count and contacts from the DB so the UI stays accurate. */
     fun refreshCounter() {
         val active = _currentActivation.value ?: return
-        PotaActivationDao.reload(active.id)?.let { _currentActivation.value = it }
+        PotaActivationDao.reload(active.id)?.let {
+            _currentActivation.value = it
+            _activationQsos.value = PotaActivationDao.getActivationQsos(it)
+        }
     }
 
     fun history(): List<PotaActivation> = PotaActivationDao.history()
+
+    fun getQsosForActivation(activation: PotaActivation): List<PotaQso> =
+        PotaActivationDao.getActivationQsos(activation)
 
     /**
      * Stamp POTA ADIF fields onto a QSO record about to be inserted. Mutates
