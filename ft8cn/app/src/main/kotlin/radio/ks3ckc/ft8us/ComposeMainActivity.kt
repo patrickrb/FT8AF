@@ -48,6 +48,7 @@ import com.bg7yoz.ft8cn.wave.UsbAudioNative
 import com.bg7yoz.ft8cn.log.OnShareLogEvents
 import com.bg7yoz.ft8cn.maidenhead.MaidenheadGrid
 import com.bg7yoz.ft8cn.ui.ToastMessage
+import radio.ks3ckc.ft8us.pota.PotaSessionManager
 import radio.ks3ckc.ft8us.theme.FT8USTheme
 import radio.ks3ckc.ft8us.ui.components.ExitConfirmDialog
 import java.io.File
@@ -266,6 +267,9 @@ class ComposeMainActivity : AppCompatActivity() {
                     GridLocationUpdater.refresh(applicationContext, mainViewModel)
                 }
                 mainViewModel.ft8TransmitSignal.setTimer_sec(GeneralVariables.transmitDelay)
+
+                // Resume any POTA activation that was interrupted by app close
+                PotaSessionManager.resume()
 
                 // Scan for USB devices AFTER config is loaded
                 fileLog("initData: scanning USB devices")

@@ -53,6 +53,14 @@ internal object PotaActivationDao {
         return cursor.use { c -> if (c.moveToFirst()) c.toActivation() else null }
     }
 
+    fun findActiveActivation(): PotaActivation? {
+        val cursor = db().rawQuery(
+            "SELECT * FROM pota_activation WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1",
+            null,
+        )
+        return cursor.use { c -> if (c.moveToFirst()) c.toActivation() else null }
+    }
+
     fun history(limit: Int = 50): List<PotaActivation> {
         val cursor = db().rawQuery(
             "SELECT * FROM pota_activation ORDER BY started_at DESC LIMIT ?",

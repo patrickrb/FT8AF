@@ -65,6 +65,17 @@ object PotaSessionManager {
     }
 
     @Synchronized
+    fun resume() {
+        if (_currentActivation.value != null) return
+        val active = PotaActivationDao.findActiveActivation() ?: return
+        savedModifier = GeneralVariables.toModifier ?: ""
+        GeneralVariables.toModifier = MY_SIG_POTA
+        _currentActivation.value = active
+        _activationQsos.value = PotaActivationDao.getActivationQsos(active)
+        log("resume ref=${active.parkRef} id=${active.id} qsoCount=${active.qsoCount}")
+    }
+
+    @Synchronized
     fun end() {
         val active = _currentActivation.value ?: run {
             log("end ignored — no activation running")
