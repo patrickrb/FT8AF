@@ -78,10 +78,6 @@ import com.bg7yoz.ft8cn.ft8transmit.MeterProtectionController
 import com.bg7yoz.ft8cn.rigs.BaseRigOperation
 import com.bg7yoz.ft8cn.rigs.InstructionSet
 import com.bg7yoz.ft8cn.ui.AudioDeviceSpinnerAdapter
-import com.bg7yoz.ft8cn.ui.LoginIcomRadioDialog
-import com.bg7yoz.ft8cn.ui.SelectBluetoothDialog
-import com.bg7yoz.ft8cn.ui.SelectFlexRadioDialog
-import com.bg7yoz.ft8cn.ui.SelectXieguRadioDialog
 import radio.ks3ckc.ft8us.theme.*
 import radio.ks3ckc.ft8us.ui.components.GlassCard
 import radio.ks3ckc.ft8us.ui.components.SettingsRow
@@ -202,6 +198,10 @@ fun SettingsScreen(
     var showBlockKeywordDialog by remember { mutableStateOf(false) }
     var showContinentPicker by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
+    var showBluetoothPicker by remember { mutableStateOf(false) }
+    var showFlexRadioPicker by remember { mutableStateOf(false) }
+    var showXieguRadioPicker by remember { mutableStateOf(false) }
+    var showIcomLogin by remember { mutableStateOf(false) }
 
     // TX Protection state
     var autoVolumeEnabled by remember { mutableStateOf(GeneralVariables.autoVolumeEnabled) }
@@ -461,16 +461,16 @@ fun SettingsScreen(
                 mainViewModel.databaseOpr.writeConfig("connectMode", index.toString(), null)
                 when (index) {
                     ConnectMode.BLUE_TOOTH -> {
-                        SelectBluetoothDialog(context, mainViewModel).show()
+                        showBluetoothPicker = true
                     }
                     ConnectMode.NETWORK -> {
                         when (GeneralVariables.instructionSet) {
                             InstructionSet.FLEX_NETWORK ->
-                                SelectFlexRadioDialog(context, mainViewModel).show()
+                                showFlexRadioPicker = true
                             InstructionSet.XIEGU_6100_FT8CNS ->
-                                SelectXieguRadioDialog(context, mainViewModel).show()
+                                showXieguRadioPicker = true
                             else ->
-                                LoginIcomRadioDialog(context, mainViewModel).show()
+                                showIcomLogin = true
                         }
                     }
                     ConnectMode.USB_CABLE -> {
@@ -501,6 +501,38 @@ fun SettingsScreen(
                 },
             )
         }
+    }
+
+    // -- Bluetooth Picker --
+    if (showBluetoothPicker) {
+        BluetoothPickerDialog(
+            mainViewModel = mainViewModel,
+            onDismiss = { showBluetoothPicker = false },
+        )
+    }
+
+    // -- FlexRadio Picker --
+    if (showFlexRadioPicker) {
+        FlexRadioPickerDialog(
+            mainViewModel = mainViewModel,
+            onDismiss = { showFlexRadioPicker = false },
+        )
+    }
+
+    // -- Xiegu Picker --
+    if (showXieguRadioPicker) {
+        XieguRadioPickerDialog(
+            mainViewModel = mainViewModel,
+            onDismiss = { showXieguRadioPicker = false },
+        )
+    }
+
+    // -- ICOM / Xiegu WiFi Login --
+    if (showIcomLogin) {
+        IcomLoginDialog(
+            mainViewModel = mainViewModel,
+            onDismiss = { showIcomLogin = false },
+        )
     }
 
     // -- Band & Frequency Picker --
