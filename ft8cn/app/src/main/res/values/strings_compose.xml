@@ -414,6 +414,7 @@
     <string name="settings_debug_desc">View / share debug.log</string>
     <string name="settings_about_body">Version %1$s (build %2$s)\nBuild date %3$s\n\nFT8, made easy.\n\nA standalone FT8 transceiver app for Android. USB, Bluetooth, and network rig control with automatic sequencing and logging.</string>
     <string name="settings_website">Website</string>
+    <string name="settings_community">Community</string>
     <string name="settings_built_by">Built by</string>
     <string name="settings_author_k1af" translatable="false">K1AF — Patrick Burns (QRZ)</string>
     <string name="settings_author_n0rc" translatable="false">N0RC — Reid (QRZ)</string>
