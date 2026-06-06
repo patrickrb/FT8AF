@@ -21,6 +21,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -58,7 +62,9 @@ import radio.ks3ckc.ft8us.pota.PotaClient
 import radio.ks3ckc.ft8us.pota.PotaSessionManager
 import radio.ks3ckc.ft8us.pota.PotaSpotsRepository
 import radio.ks3ckc.ft8us.pota.model.PotaActivation
+import radio.ks3ckc.ft8us.pota.model.PotaQso
 import radio.ks3ckc.ft8us.pota.model.PotaSpot
+import radio.ks3ckc.ft8us.ui.decode.QrzAvatar
 import radio.ks3ckc.ft8us.theme.Accent
 import radio.ks3ckc.ft8us.theme.AccentSoft
 import radio.ks3ckc.ft8us.theme.BgApp
@@ -148,6 +154,7 @@ private fun PotaTabHeader(subTab: PotaSubTab, onTabSelected: (PotaSubTab) -> Uni
 @Composable
 private fun ActivateTab() {
     val activation by PotaSessionManager.currentActivation.collectAsStateWithLifecycle()
+    val contacts by PotaSessionManager.activationQsos.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var parkRef by rememberSaveable { mutableStateOf("") }
@@ -164,11 +171,11 @@ private fun ActivateTab() {
         }
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        if (activation == null) {
+    if (activation == null) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             Card {
                 SectionTitle(stringResource(R.string.pota_start_activation))
                 Spacer(Modifier.height(8.dp))
@@ -204,39 +211,56 @@ private fun ActivateTab() {
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text(stringResource(R.string.pota_start_activation), fontWeight = FontWeight.SemiBold) }
             }
-        } else {
-            ActiveActivationCard(
-                activation = activation!!,
-                onStop = {
-                    PotaSessionManager.end()
-                    Toast.makeText(context, context.getString(R.string.pota_activation_ended), Toast.LENGTH_SHORT).show()
-                },
-                onSelfSpot = {
-                    val myCall = GeneralVariables.myCallsign ?: ""
-                    if (myCall.isBlank()) {
-                        Toast.makeText(context, context.getString(R.string.pota_set_callsign_first), Toast.LENGTH_SHORT).show()
-                    } else {
-                        scope.launch {
-                            val ok = PotaClient.selfSpot(
-                                activator = myCall,
-                                spotter = myCall,
-                                // getBaseFrequency() = carrier + audio offset, in Hz — the
-                                // actual TX QRG. Using band/1000 here posted the band
-                                // centre and put hunters off-frequency by the audio offset.
-                                frequencyKhz = GeneralVariables.getBaseFrequency() / 1000.0,
-                                mode = "FT8",
-                                reference = activation!!.parkRef,
-                                comments = "CQ POTA via FT8AF",
-                            )
-                            Toast.makeText(
-                                context,
-                                context.getString(if (ok) R.string.pota_self_spot_posted else R.string.pota_self_spot_failed),
-                                Toast.LENGTH_SHORT,
-                            ).show()
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            item(key = "activation-card") {
+                ActiveActivationCard(
+                    activation = activation!!,
+                    onStop = {
+                        PotaSessionManager.end()
+                        Toast.makeText(context, context.getString(R.string.pota_activation_ended), Toast.LENGTH_SHORT).show()
+                    },
+                    onSelfSpot = {
+                        val myCall = GeneralVariables.myCallsign ?: ""
+                        if (myCall.isBlank()) {
+                            Toast.makeText(context, context.getString(R.string.pota_set_callsign_first), Toast.LENGTH_SHORT).show()
+                        } else {
+                            scope.launch {
+                                val ok = PotaClient.selfSpot(
+                                    activator = myCall,
+                                    spotter = myCall,
+                                    frequencyKhz = GeneralVariables.getBaseFrequency() / 1000.0,
+                                    mode = "FT8",
+                                    reference = activation!!.parkRef,
+                                    comments = "CQ POTA via FT8AF",
+                                )
+                                Toast.makeText(
+                                    context,
+                                    context.getString(if (ok) R.string.pota_self_spot_posted else R.string.pota_self_spot_failed),
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
                         }
-                    }
-                },
-            )
+                    },
+                )
+            }
+            if (contacts.isNotEmpty()) {
+                item(key = "contacts-header") {
+                    Text(
+                        stringResource(R.string.pota_qsos),
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+                    )
+                }
+                items(contacts, key = { it.id }) { qso ->
+                    PotaContactRow(qso)
+                }
+            }
         }
     }
 }
@@ -295,6 +319,65 @@ private fun ActiveActivationCard(
             color = TextMuted,
             fontSize = 11.sp,
         )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Contact row
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun PotaContactRow(qso: PotaQso) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(BgSurface, RoundedCornerShape(10.dp))
+            .border(1.dp, Border, RoundedCornerShape(10.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        QrzAvatar(callsign = qso.callsign, size = 32.dp, fallbackText = qso.callsign.take(2))
+        Spacer(Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    qso.callsign,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                    fontFamily = FontFamily.Monospace,
+                )
+                if (qso.sigInfo != null) {
+                    Spacer(Modifier.width(6.dp))
+                    ParkPill(qso.sigInfo)
+                }
+            }
+            Row {
+                Text(
+                    listOfNotNull(
+                        qso.grid.ifBlank { null },
+                        qso.band.ifBlank { null },
+                    ).joinToString(" · "),
+                    color = TextMuted,
+                    fontSize = 11.sp,
+                )
+            }
+        }
+        Spacer(Modifier.width(6.dp))
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                formatQsoTime(qso.timeOn),
+                color = TextMuted,
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+            )
+            Text(
+                "${qso.rstRcvd} dB",
+                color = Accent,
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
     }
 }
 
@@ -436,6 +519,16 @@ private fun HistoryRow(
     onOpenUploadPage: () -> Unit,
     onShareAdif: () -> Unit,
 ) {
+    var expanded by remember { mutableStateOf(false) }
+    var contacts by remember { mutableStateOf<List<PotaQso>?>(null) }
+
+    // Load contacts lazily on first expansion.
+    LaunchedEffect(expanded) {
+        if (expanded && contacts == null) {
+            contacts = PotaSessionManager.getQsosForActivation(row)
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -444,7 +537,9 @@ private fun HistoryRow(
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded },
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -458,7 +553,18 @@ private fun HistoryRow(
                     fontSize = 13.sp,
                 )
             }
-            Text(formatDateRange(row), color = TextMuted, fontSize = 11.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(formatDateRange(row), color = TextMuted, fontSize = 11.sp)
+                if (row.qsoCount > 0) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = if (expanded) "Collapse" else "Expand",
+                        tint = TextMuted,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
         }
         if (!row.notes.isNullOrBlank()) {
             Spacer(Modifier.height(2.dp))
@@ -471,6 +577,13 @@ private fun HistoryRow(
             }
             OutlinedButton(onClick = onOpenUploadPage, modifier = Modifier.weight(1f)) {
                 Text(stringResource(R.string.pota_open_pota_app), color = TextPrimary, fontSize = 12.sp)
+            }
+        }
+        if (expanded && contacts != null) {
+            Spacer(Modifier.height(8.dp))
+            contacts!!.forEach { qso ->
+                PotaContactRow(qso)
+                Spacer(Modifier.height(4.dp))
             }
         }
     }
@@ -540,6 +653,11 @@ private fun formatElapsed(ms: Long): String {
     val h = totalSec / 3600
     val m = (totalSec % 3600) / 60
     return if (h > 0) "${h}h ${m}m" else "${m}m"
+}
+
+private fun formatQsoTime(timeOn: String): String {
+    if (timeOn.length < 4) return timeOn
+    return "${timeOn.substring(0, 2)}:${timeOn.substring(2, 4)}z"
 }
 
 private fun formatDateRange(row: PotaActivation): String {
