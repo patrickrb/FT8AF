@@ -200,6 +200,7 @@ public class Yaesu39Rig extends BaseRig {
                     alc = Yaesu3Command.getSWROrALC39(yaesu3Command);
                 }
                 showAlert();
+                notifyMeterData(alc, swr);
             } else {
                 fileLog("rig.parsed: cmd=" + yaesu3Command.getCommandID()
                         + " data=" + yaesu3Command.getData());

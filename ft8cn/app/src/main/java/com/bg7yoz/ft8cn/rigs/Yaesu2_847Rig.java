@@ -109,6 +109,7 @@ public class Yaesu2_847Rig extends BaseRig {
             alc = (data[0] & 0x0f);
             swr = (data[1] & 0x0f0) >> 4;
             showAlert();
+            notifyMeterData(alc * 17, swr * 17);
         }
 
     }

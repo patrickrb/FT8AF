@@ -68,6 +68,7 @@ import com.bg7yoz.ft8cn.flex.RadioTcpClient;
 import com.bg7yoz.ft8cn.ft8listener.FT8SignalListener;
 import com.bg7yoz.ft8cn.ft8listener.OnFt8Listen;
 import com.bg7yoz.ft8cn.ft8transmit.FT8TransmitSignal;
+import com.bg7yoz.ft8cn.ft8transmit.MeterProtectionController;
 import com.bg7yoz.ft8cn.ft8transmit.OnDoTransmitted;
 import com.bg7yoz.ft8cn.ft8transmit.OnTransmitSuccess;
 import com.bg7yoz.ft8cn.html.LogHttpServer;
@@ -195,6 +196,7 @@ public class MainViewModel extends ViewModel {
     public HamRecorder hamRecorder;//recording object
     public FT8SignalListener ft8SignalListener;//object for listening to and decoding FT8 signals
     public FT8TransmitSignal ft8TransmitSignal;//object for transmitting signals
+    public MeterProtectionController meterProtectionController;//ALC auto-volume + SWR halt
     public SpectrumListener spectrumListener;//object for drawing the spectrum
     public boolean markMessage = true;//whether to mark messages toggle
 
@@ -557,6 +559,11 @@ public class MainViewModel extends ViewModel {
             }
         });
 
+
+        //create meter protection controller (ALC auto-volume + SWR halt)
+        meterProtectionController = new MeterProtectionController();
+        meterProtectionController.setTransmitSignal(ft8TransmitSignal);
+        ft8TransmitSignal.setMeterProtectionController(meterProtectionController);
 
         //open HTTP SERVER
         httpServer = new LogHttpServer(this, LogHttpServer.DEFAULT_PORT);
@@ -1068,6 +1075,16 @@ public class MainViewModel extends ViewModel {
             } else {
                 hamRecorder.setDataFromLan();
             }
+        }
+
+        // Wire meter data callback for ALC auto-volume + SWR halt
+        if (baseRig != null && meterProtectionController != null) {
+            baseRig.setOnMeterData(new BaseRig.OnMeterData() {
+                @Override
+                public void onMeterUpdate(int normalizedAlc, int normalizedSwr) {
+                    meterProtectionController.onMeterUpdate(normalizedAlc, normalizedSwr);
+                }
+            });
         }
 
         mutableIsFlexRadio.postValue(GeneralVariables.instructionSet == InstructionSet.FLEX_NETWORK);

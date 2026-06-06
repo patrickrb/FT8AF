@@ -142,6 +142,7 @@ public class KenwoodTS570Rig extends BaseRig {
                     alc = Yaesu3Command.get590ALCOrSWR(yaesu3Command);
                 }
                 showAlert();
+                notifyMeterData(Math.min(alc * 8, 255), Math.min(swr * 8, 255));
             }
 
         }

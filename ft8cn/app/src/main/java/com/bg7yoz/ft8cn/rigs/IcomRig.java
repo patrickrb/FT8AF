@@ -186,6 +186,7 @@ public class IcomRig extends BaseRig {
                     swr = IcomRigConstant.twoByteBcdToInt(icomCommand.getData(true));
                 }
                 showAlert();//check if meter value is in alert range
+                notifyMeterData(alc, swr);
                 break;
             case IcomRigConstant.CMD_CONNECTORS:
                 break;

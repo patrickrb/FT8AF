@@ -101,6 +101,12 @@ public class FT8TransmitSignal {
     private final ArrayList<QueuedCaller> callerQueue = new ArrayList<>();
     public MutableLiveData<ArrayList<QueuedCaller>> mutableCallerQueue = new MutableLiveData<>();
 
+    private MeterProtectionController meterProtectionController;// ALC auto-volume + SWR halt
+
+    public void setMeterProtectionController(MeterProtectionController controller) {
+        this.meterProtectionController = controller;
+    }
+
     private final OnDoTransmitted onDoTransmitted;// typically used for opening/closing PTT
     private final ExecutorService doTransmitThreadPool = Executors.newCachedThreadPool();
     private final DoTransmitRunnable doTransmitRunnable = new DoTransmitRunnable(this);
@@ -617,6 +623,10 @@ public class FT8TransmitSignal {
     private void afterPlayAudio() {
         if (onDoTransmitted != null) {
             onDoTransmitted.onAfterTransmit(getFunctionCommand(functionOrder), functionOrder);
+        }
+        // Notify meter protection controller that the TX cycle ended (between-cycle ALC adjust)
+        if (meterProtectionController != null) {
+            meterProtectionController.onTxCycleEnd();
         }
         isTransmitting = false;
         mutableIsTransmitting.postValue(false);
@@ -1151,6 +1161,12 @@ public class FT8TransmitSignal {
     }
 
     public void setActivated(boolean activated) {
+        // Block activation if SWR lockout is active
+        if (activated && meterProtectionController != null
+                && meterProtectionController.isSwrLocked()) {
+            ToastMessage.show("TX blocked — SWR lockout active. Dismiss the lockout banner first.");
+            return;
+        }
         this.activated = activated;
         if (!this.activated) {//force stop transmitting
             setTransmitting(false);

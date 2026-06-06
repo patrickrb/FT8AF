@@ -74,6 +74,7 @@ import com.bg7yoz.ft8cn.database.ControlMode
 import com.bg7yoz.ft8cn.database.OperationBand
 import com.bg7yoz.ft8cn.database.RigNameList
 import com.bg7yoz.ft8cn.ft8signal.FT8Package
+import com.bg7yoz.ft8cn.ft8transmit.MeterProtectionController
 import com.bg7yoz.ft8cn.rigs.BaseRigOperation
 import com.bg7yoz.ft8cn.rigs.InstructionSet
 import com.bg7yoz.ft8cn.ui.AudioDeviceSpinnerAdapter
@@ -200,6 +201,13 @@ fun SettingsScreen(
     var showBlockKeywordDialog by remember { mutableStateOf(false) }
     var showContinentPicker by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
+
+    // TX Protection state
+    var autoVolumeEnabled by remember { mutableStateOf(GeneralVariables.autoVolumeEnabled) }
+    var swrHaltEnabled by remember { mutableStateOf(GeneralVariables.swrHaltEnabled) }
+    var swrHaltThreshold by remember { mutableIntStateOf(GeneralVariables.swrHaltThreshold) }
+    var alcTargetLow by remember { mutableIntStateOf(GeneralVariables.alcTargetLow) }
+    var alcTargetHigh by remember { mutableIntStateOf(GeneralVariables.alcTargetHigh) }
 
     // Operator identity edit state
     var callsignState by remember { mutableStateOf(GeneralVariables.myCallsign.orEmpty()) }
@@ -1139,6 +1147,158 @@ fun SettingsScreen(
                             showChevron = true,
                             onClick = { showStopAfter = true },
                         )
+                    }
+                }
+            }
+
+            // =====================================================================
+            // 3b. TX PROTECTION
+            // =====================================================================
+            SettingsSection(title = "TX PROTECTION") {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        SettingsRow(
+                            label = "Auto Volume (ALC)",
+                            description = "Automatically adjust TX volume to keep ALC in target range",
+                            toggle = autoVolumeEnabled,
+                            onToggleChange = { checked ->
+                                autoVolumeEnabled = checked
+                                GeneralVariables.autoVolumeEnabled = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "autoVolumeEnabled", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        if (autoVolumeEnabled) {
+                            SectionDivider()
+                            // ALC target range — two values displayed as a label row
+                            SettingsRow(
+                                label = "ALC Target Range",
+                                description = "Low: $alcTargetLow  High: $alcTargetHigh  (0-255 normalized)",
+                                value = "$alcTargetLow – $alcTargetHigh",
+                            )
+                            // Low slider
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "Low",
+                                    style = TextStyle(fontSize = 12.sp, color = TextMuted),
+                                    modifier = Modifier.width(32.dp),
+                                )
+                                Slider(
+                                    value = alcTargetLow.toFloat(),
+                                    onValueChange = { v ->
+                                        val clamped = v.toInt().coerceIn(10, alcTargetHigh - 10)
+                                        alcTargetLow = clamped
+                                        GeneralVariables.alcTargetLow = clamped
+                                    },
+                                    onValueChangeFinished = {
+                                        mainViewModel.databaseOpr.writeConfig(
+                                            "alcTargetLow", alcTargetLow.toString(), null,
+                                        )
+                                    },
+                                    valueRange = 10f..200f,
+                                    modifier = Modifier.weight(1f),
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = Accent,
+                                        activeTrackColor = Accent,
+                                    ),
+                                )
+                            }
+                            // High slider
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp)
+                                    .padding(bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "High",
+                                    style = TextStyle(fontSize = 12.sp, color = TextMuted),
+                                    modifier = Modifier.width(32.dp),
+                                )
+                                Slider(
+                                    value = alcTargetHigh.toFloat(),
+                                    onValueChange = { v ->
+                                        val clamped = v.toInt().coerceIn(alcTargetLow + 10, 250)
+                                        alcTargetHigh = clamped
+                                        GeneralVariables.alcTargetHigh = clamped
+                                    },
+                                    onValueChangeFinished = {
+                                        mainViewModel.databaseOpr.writeConfig(
+                                            "alcTargetHigh", alcTargetHigh.toString(), null,
+                                        )
+                                    },
+                                    valueRange = 20f..250f,
+                                    modifier = Modifier.weight(1f),
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = Accent,
+                                        activeTrackColor = Accent,
+                                    ),
+                                )
+                            }
+                        }
+                        SectionDivider()
+                        SettingsRow(
+                            label = "SWR Protection",
+                            description = "Stop transmitting and lock TX if SWR exceeds threshold",
+                            toggle = swrHaltEnabled,
+                            onToggleChange = { checked ->
+                                swrHaltEnabled = checked
+                                GeneralVariables.swrHaltEnabled = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "swrHaltEnabled", if (checked) "1" else "0", null,
+                                )
+                            },
+                        )
+                        if (swrHaltEnabled) {
+                            SectionDivider()
+                            val swrRatioStr = MeterProtectionController.normalizedSwrToRatio(swrHaltThreshold)
+                            SettingsRow(
+                                label = "SWR Threshold",
+                                description = "TX halts when SWR exceeds this value",
+                                value = swrRatioStr,
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp)
+                                    .padding(bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "1.5:1",
+                                    style = TextStyle(fontSize = 12.sp, color = TextMuted),
+                                )
+                                Slider(
+                                    value = swrHaltThreshold.toFloat(),
+                                    onValueChange = { v ->
+                                        swrHaltThreshold = v.toInt()
+                                        GeneralVariables.swrHaltThreshold = v.toInt()
+                                    },
+                                    onValueChangeFinished = {
+                                        mainViewModel.databaseOpr.writeConfig(
+                                            "swrHaltThreshold", swrHaltThreshold.toString(), null,
+                                        )
+                                    },
+                                    valueRange = 30f..200f, // ~1.3:1 to ~7.0:1
+                                    modifier = Modifier.weight(1f),
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = Accent,
+                                        activeTrackColor = Accent,
+                                    ),
+                                )
+                                Text(
+                                    "7:1",
+                                    style = TextStyle(fontSize = 12.sp, color = TextMuted),
+                                )
+                            }
+                        }
                     }
                 }
             }

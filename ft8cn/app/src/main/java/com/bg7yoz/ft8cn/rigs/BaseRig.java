@@ -142,4 +142,14 @@ public abstract class BaseRig {
     public void onDisconnecting() {
     }
 
+    // Meter data callback for MeterProtectionController (ALC auto-volume, SWR halt)
+    public interface OnMeterData {
+        void onMeterUpdate(int normalizedAlc, int normalizedSwr);
+    }
+    private OnMeterData onMeterData;
+    public void setOnMeterData(OnMeterData listener) { this.onMeterData = listener; }
+    protected void notifyMeterData(int alc, int swr) {
+        if (onMeterData != null) onMeterData.onMeterUpdate(alc, swr);
+    }
+
 }
