@@ -398,6 +398,7 @@
     <string name="settings_debug_desc">Просмотр / отправка debug.log</string>
     <string name="settings_about_body">Версия %1$s (сборка %2$s)\nДата сборки %3$s\n\nFT8 — это просто.\n\nАвтономное приложение FT8-трансивера для Android. Управление трансивером по USB, Bluetooth и сети с автопоследовательностью и журналированием.</string>
     <string name="settings_website">Веб-сайт</string>
+    <string name="settings_community">Сообщество</string>
     <string name="settings_built_by">Разработано</string>
 
     <!-- ===== Settings: dialogs ===== -->

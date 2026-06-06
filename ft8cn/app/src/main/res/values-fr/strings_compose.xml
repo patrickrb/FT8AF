@@ -398,6 +398,7 @@
     <string name="settings_debug_desc">Afficher / partager debug.log</string>
     <string name="settings_about_body">Version %1$s (build %2$s)\nDate de build %3$s\n\nFT8, en toute simplicité.\n\nUne application de transceiver FT8 autonome pour Android. Contrôle de rig par USB, Bluetooth et réseau avec séquençage et journalisation automatiques.</string>
     <string name="settings_website">Site web</string>
+    <string name="settings_community">Communauté</string>
     <string name="settings_built_by">Développé par</string>
 
     <!-- ===== Settings: dialogs ===== -->

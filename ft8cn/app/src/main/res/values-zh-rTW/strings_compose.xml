@@ -398,6 +398,7 @@
     <string name="settings_debug_desc">檢視／分享 debug.log</string>
     <string name="settings_about_body">版本 %1$s（build %2$s）\n建置日期 %3$s\n\nFT8，輕鬆上手。\n\n一款適用於 Android 的獨立 FT8 收發器應用程式。支援 USB、Bluetooth 與網路電台控制，並具備自動序列與日誌功能。</string>
     <string name="settings_website">網站</string>
+    <string name="settings_community">社群</string>
     <string name="settings_built_by">開發者</string>
 
     <!-- ===== Settings: dialogs ===== -->

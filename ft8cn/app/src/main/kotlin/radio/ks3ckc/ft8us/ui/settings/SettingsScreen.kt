@@ -2933,6 +2933,29 @@ private fun AboutDialog(
             )
 
             Text(
+                text = stringResource(R.string.settings_community),
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+            )
+            Text(
+                text = "github.com/patrickrb/FT8AF",
+                color = Accent,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { uriHandler.openUri("https://github.com/patrickrb/FT8AF") },
+            )
+            Text(
+                text = "discord.gg/UeE3ZpwRG",
+                color = Accent,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { uriHandler.openUri("https://discord.gg/UeE3ZpwRG") },
+            )
+
+            Text(
                 text = stringResource(R.string.settings_built_by),
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold,
