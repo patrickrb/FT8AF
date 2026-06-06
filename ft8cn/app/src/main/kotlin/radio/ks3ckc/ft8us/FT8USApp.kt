@@ -1,10 +1,17 @@
 package radio.ks3ckc.ft8us
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -16,7 +23,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
 import com.bg7yoz.ft8cn.R
@@ -95,10 +106,52 @@ fun FT8USApp(mainViewModel: MainViewModel) {
             append(bandName)
         }
     }
+    // Observe SWR lockout state
+    val swrLocked by mainViewModel.meterProtectionController.swrLockout.observeAsState(false)
+    val lockoutSwrRatio by mainViewModel.meterProtectionController.lockoutSwrRatio.observeAsState("")
+
     Box(modifier = Modifier.fillMaxSize().background(BgApp)) {
         Column(
             modifier = Modifier.fillMaxSize(),
         ) {
+            // SWR lockout banner — red warning at top when SWR halt triggered
+            if (swrLocked) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFCC2222))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "TX HALTED — High SWR detected ($lockoutSwrRatio)",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                        )
+                        Text(
+                            text = "Check antenna / feedline before transmitting.",
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 11.sp,
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TextButton(
+                        onClick = {
+                            mainViewModel.meterProtectionController.clearSwrLockout()
+                        },
+                    ) {
+                        Text(
+                            "DISMISS",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+            }
+
             // Main content area (takes remaining space).
             // Note: AndroidView-wrapped legacy views (waterfall/columnar) interact badly with
             // AnimatedContent's graphicsLayer translations during enter/exit, so tab switching

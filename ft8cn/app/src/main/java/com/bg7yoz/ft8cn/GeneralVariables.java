@@ -315,6 +315,13 @@ public class GeneralVariables {
     public static boolean swr_switch_on = true;//SWR alarm switch
     public static boolean alc_switch_on = true;//ALC alarm switch
 
+    // TX Protection: ALC auto-volume and SWR TX halt (MeterProtectionController)
+    public static boolean autoVolumeEnabled = false;  // ALC auto-volume control
+    public static boolean swrHaltEnabled = false;      // SWR TX halt + lockout
+    public static int swrHaltThreshold = 120;          // 0-255 normalized (~3.0:1)
+    public static int alcTargetLow = 60;               // ALC target window low (0-255)
+    public static int alcTargetHigh = 100;             // ALC target window high (0-255)
+
     public static MutableLiveData<Float> mutableBaseFrequency = new MutableLiveData<>();
 
     private static int spectrumWidth = 3500;//Spectrum display width in Hz

@@ -2524,6 +2524,22 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("alcSwitch")) {
                     GeneralVariables.alc_switch_on = result.equals("1");
                 }
+                // TX Protection: ALC auto-volume + SWR halt
+                if (name.equalsIgnoreCase("autoVolumeEnabled")) {
+                    GeneralVariables.autoVolumeEnabled = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("swrHaltEnabled")) {
+                    GeneralVariables.swrHaltEnabled = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("swrHaltThreshold")) {
+                    GeneralVariables.swrHaltThreshold = result.equals("") ? 120 : Integer.parseInt(result);
+                }
+                if (name.equalsIgnoreCase("alcTargetLow")) {
+                    GeneralVariables.alcTargetLow = result.equals("") ? 60 : Integer.parseInt(result);
+                }
+                if (name.equalsIgnoreCase("alcTargetHigh")) {
+                    GeneralVariables.alcTargetHigh = result.equals("") ? 100 : Integer.parseInt(result);
+                }
                 if (name.equalsIgnoreCase("spectrumWidth")) {
                     GeneralVariables.setSpectrumWidth(result.equals("") ? 3500 : Integer.parseInt(result));
                 }
