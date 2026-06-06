@@ -1,5 +1,6 @@
 package radio.ks3ckc.ft8us.ui.components
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
@@ -30,20 +31,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import radio.ks3ckc.ft8us.theme.*
 import radio.ks3ckc.ft8us.ui.motion.MotionTokens
 import radio.ks3ckc.ft8us.ui.motion.rememberHaptics
+import com.bg7yoz.ft8cn.R
 
-enum class FT8USTab(val label: String) {
-    DECODE("Decode"),
-    MAP("Map"),
-    WATERFALL("Waterfall"),
-    POTA("POTA"),
-    LOG("Logbook"),
-    SETTINGS("Settings"),
+enum class FT8USTab(@StringRes val labelRes: Int) {
+    DECODE(R.string.tab_decode),
+    MAP(R.string.tab_map),
+    WATERFALL(R.string.tab_waterfall),
+    POTA(R.string.tab_pota),
+    LOG(R.string.tab_logbook),
+    SETTINGS(R.string.tab_settings),
 }
 
 @Composable
@@ -170,7 +173,7 @@ fun TabBar(
                     }
                 }
                 Text(
-                    text = tab.label,
+                    text = stringResource(tab.labelRes),
                     color = color,
                     fontSize = 10.5.sp,
                     fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium,

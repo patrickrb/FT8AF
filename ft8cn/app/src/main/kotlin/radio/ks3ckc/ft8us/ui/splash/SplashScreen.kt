@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -125,7 +126,7 @@ fun FT8USplashScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = "FT8 · MOBILE COMPANION",
+                text = stringResource(R.string.splash_tagline),
                 color = TextPrimary.copy(alpha = 0.55f),
                 fontSize = 12.sp,
                 letterSpacing = 0.18.em,
@@ -145,13 +146,13 @@ fun FT8USplashScreen(
                         .clip(CircleShape)
                         .background(Signal.copy(alpha = blinkPhase)),
                 )
-                LoadingDots(label = "INITIALIZING RADIO", color = Accent.copy(alpha = 0.85f))
+                LoadingDots(label = stringResource(R.string.splash_initializing), color = Accent.copy(alpha = 0.85f))
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
             Text(
-                text = "v${GeneralVariables.VERSION} · build ${GeneralVariables.VERSION_CODE}",
+                text = stringResource(R.string.splash_version, GeneralVariables.VERSION, GeneralVariables.VERSION_CODE),
                 color = Color(0xFF8A96B1).copy(alpha = 0.5f),
                 fontSize = 10.sp,
                 fontFamily = GeistMonoFamily,

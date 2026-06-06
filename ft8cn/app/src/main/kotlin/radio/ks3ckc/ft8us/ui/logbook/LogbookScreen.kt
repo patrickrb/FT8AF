@@ -1,5 +1,6 @@
 package radio.ks3ckc.ft8us.ui.logbook
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -55,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.window.Dialog
@@ -73,6 +75,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bg7yoz.ft8cn.GeneralVariables
+import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.MainViewModel
 import com.bg7yoz.ft8cn.count.CountDbOpr
 import com.bg7yoz.ft8cn.log.QSLCallsignRecord
@@ -114,10 +117,10 @@ private fun bandColor(band: String): Color =
 // Tab enum
 // ---------------------------------------------------------------------------
 
-private enum class LogbookTab(val label: String) {
-    STATS("Stats"),
-    RECENT("Recent"),
-    AWARDS("Awards"),
+private enum class LogbookTab(@StringRes val labelRes: Int) {
+    STATS(R.string.log_tab_stats),
+    RECENT(R.string.log_tab_recent),
+    AWARDS(R.string.log_tab_awards),
 }
 
 // ---------------------------------------------------------------------------
@@ -259,10 +262,10 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
         ) {
             // Top bar
             TopBar(
-                title = "Logbook",
+                title = stringResource(R.string.log_title),
                 subtitle = {
                     val count = if (stats.totalQsos > 0) stats.totalQsos else records.size
-                    TopBarSubtitle(text = "$count QSOs \u00b7 All bands")
+                    TopBarSubtitle(text = stringResource(R.string.log_subtitle_qsos_all_bands, count))
                 },
                 actions = {
                     IconButton(
@@ -324,14 +327,14 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
                     ) {
                         Icon(
                             imageVector = Icons.Filled.CloudUpload,
-                            contentDescription = "Sync to logging services",
+                            contentDescription = stringResource(R.string.log_cd_sync_to_logging_services),
                             tint = TextMuted,
                         )
                     }
                     IconButton(onClick = { exportSheetVisible = true }) {
                         Icon(
                             imageVector = Icons.Filled.Share,
-                            contentDescription = "Export QSOs",
+                            contentDescription = stringResource(R.string.log_cd_export_qsos),
                             tint = TextMuted,
                         )
                     }
@@ -548,7 +551,7 @@ private fun SegmentedTabRow(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = tab.label,
+                    text = stringResource(tab.labelRes),
                     color = textColor,
                     fontSize = 12.sp,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
@@ -596,13 +599,13 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             BigStatCard(
-                label = "Total QSOs",
+                label = stringResource(R.string.log_stat_total_qsos),
                 value = stats.totalQsos,
                 accentColor = Accent,
                 modifier = Modifier.weight(1f),
             )
             BigStatCard(
-                label = "DXCC Entities",
+                label = stringResource(R.string.log_stat_dxcc_entities),
                 value = stats.dxccEntities,
                 accentColor = Signal,
                 modifier = Modifier.weight(1f),
@@ -614,13 +617,13 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             BigStatCard(
-                label = "CQ Zones",
+                label = stringResource(R.string.log_stat_cq_zones),
                 value = stats.cqZones,
                 accentColor = StatusNew,
                 modifier = Modifier.weight(1f),
             )
             BigStatCard(
-                label = "ITU Zones",
+                label = stringResource(R.string.log_stat_itu_zones),
                 value = stats.ituZones,
                 accentColor = Band17m,
                 modifier = Modifier.weight(1f),
@@ -629,7 +632,7 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
 
         // Band donut chart
         if (stats.bandCounts.isNotEmpty()) {
-            SectionHeader("Band Distribution")
+            SectionHeader(stringResource(R.string.log_section_band_distribution))
             BandDonutChart(
                 bandCounts = stats.bandCounts,
                 progress = chartProgress,
@@ -638,23 +641,23 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
         }
 
         // Award progress bars
-        SectionHeader("Award Progress")
+        SectionHeader(stringResource(R.string.log_section_award_progress))
         AwardProgressBar(
-            label = "DXCC Mixed",
+            label = stringResource(R.string.log_award_dxcc_mixed),
             current = stats.dxccEntities,
             total = 340,
             gradientColors = listOf(Signal, StatusConfirmed),
             progress = chartProgress,
         )
         AwardProgressBar(
-            label = "VUCC Grid Squares",
+            label = stringResource(R.string.log_award_vucc_grid_squares),
             current = gridSquaresWorked(records),
             total = 100,
             gradientColors = listOf(StatusNew, Band12m),
             progress = chartProgress,
         )
         AwardProgressBar(
-            label = "DXCC Challenge",
+            label = stringResource(R.string.log_award_dxcc_challenge),
             current = stats.dxccEntities * stats.bandCounts.size.coerceAtLeast(1),
             total = 1000,
             gradientColors = listOf(Accent, Band17m),
@@ -662,7 +665,7 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
         )
 
         // Grid square heatmap
-        SectionHeader("Grid Coverage")
+        SectionHeader(stringResource(R.string.log_section_grid_coverage))
         GridSquareHeatmap(
             records = records,
             progress = chartProgress,
@@ -670,7 +673,7 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
         )
 
         // Signal trend sparkline
-        SectionHeader("Signal Trend")
+        SectionHeader(stringResource(R.string.log_section_signal_trend))
         SignalSparkline(
             records = records,
             progress = chartProgress,
@@ -953,7 +956,7 @@ private fun SignalSparkline(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "No QSOs yet",
+                    text = stringResource(R.string.log_no_qsos_yet),
                     color = TextFaint,
                     fontSize = 11.sp,
                     fontFamily = GeistMonoFamily,
@@ -1058,7 +1061,7 @@ private fun RecentTab(
             EmptyStateWaves(size = 180.dp)
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "No QSOs recorded yet",
+                text = stringResource(R.string.log_no_qsos_recorded_yet),
                 color = TextFaint,
                 fontSize = 13.sp,
             )
@@ -1121,10 +1124,12 @@ private fun QsoRow(
     // Build the secondary line entries (state takes precedence over DXCC when present
     // because for US contacts the DXCC string is always just "United States" and the
     // state is the more useful information).
+    val stateUsaLabel = if (!state.isNullOrBlank())
+        stringResource(R.string.log_state_usa, state) else null
     val secondaryParts = buildList {
         if (grid.isNotBlank()) add(grid to Signal)
-        if (!state.isNullOrBlank()) {
-            add("$state, USA" to TextMuted)
+        if (stateUsaLabel != null) {
+            add(stateUsaLabel to TextMuted)
         } else if (dxcc.isNotBlank()) {
             add(dxcc to TextFaint)
         }
@@ -1208,7 +1213,7 @@ private fun QsoRow(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.MoreVert,
-                        contentDescription = "QSO actions",
+                        contentDescription = stringResource(R.string.log_cd_qso_actions),
                         tint = TextMuted,
                         modifier = Modifier.size(18.dp),
                     )
@@ -1218,7 +1223,7 @@ private fun QsoRow(
                     onDismissRequest = { menuOpen = false },
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Edit", color = TextPrimary) },
+                        text = { Text(stringResource(R.string.log_action_edit), color = TextPrimary) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Filled.Edit,
@@ -1232,7 +1237,7 @@ private fun QsoRow(
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Delete", color = StatusBad) },
+                        text = { Text(stringResource(R.string.log_action_delete), color = StatusBad) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Filled.Delete,
@@ -1321,39 +1326,49 @@ private fun formatTime(raw: String): String {
 
 @Composable
 private fun AwardsTab(stats: LogbookStats) {
+    val dxccMixedName = stringResource(R.string.log_award_dxcc_mixed)
+    val dxccMixedDesc = stringResource(R.string.log_award_dxcc_mixed_desc)
+    val wasName = stringResource(R.string.log_award_was)
+    val wasDesc = stringResource(R.string.log_award_was_desc)
+    val wazName = stringResource(R.string.log_award_waz)
+    val wazDesc = stringResource(R.string.log_award_waz_desc)
+    val vuccName = stringResource(R.string.log_award_vucc)
+    val vuccDesc = stringResource(R.string.log_award_vucc_desc)
+    val iotaName = stringResource(R.string.log_award_iota)
+    val iotaDesc = stringResource(R.string.log_award_iota_desc)
     val awards = remember(stats) {
         listOf(
             AwardProgress(
-                name = "DXCC Mixed",
-                description = "Work and confirm 100 DXCC entities on any band/mode",
+                name = dxccMixedName,
+                description = dxccMixedDesc,
                 current = stats.dxccEntities,
                 total = 100,
                 color = Signal,
             ),
             AwardProgress(
-                name = "WAS",
-                description = "Work all 50 US states confirmed",
+                name = wasName,
+                description = wasDesc,
                 current = (stats.dxccEntities * 50 / 340.coerceAtLeast(1)).coerceAtMost(50),
                 total = 50,
                 color = Accent,
             ),
             AwardProgress(
-                name = "WAZ",
-                description = "Work all 40 CQ zones confirmed",
+                name = wazName,
+                description = wazDesc,
                 current = stats.cqZones,
                 total = 40,
                 color = StatusNew,
             ),
             AwardProgress(
-                name = "VUCC",
-                description = "VHF/UHF Century Club -- 100 grid squares on a single band",
+                name = vuccName,
+                description = vuccDesc,
                 current = 0, // Would need per-band grid counting
                 total = 100,
                 color = Band12m,
             ),
             AwardProgress(
-                name = "IOTA",
-                description = "Islands on the Air -- work stations on designated islands",
+                name = iotaName,
+                description = iotaDesc,
                 current = 0, // Not tracked in current DB
                 total = 100,
                 color = Band17m,
@@ -1511,7 +1526,7 @@ private fun EditQsoDialog(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(
-                text = "Edit QSO",
+                text = stringResource(R.string.log_edit_qso),
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 18.sp,
@@ -1520,7 +1535,7 @@ private fun EditQsoDialog(
             OutlinedTextField(
                 value = callsignInput,
                 onValueChange = { callsignInput = it },
-                label = { Text("Callsign") },
+                label = { Text(stringResource(R.string.log_field_callsign)) },
                 singleLine = true,
                 colors = fieldColors,
                 textStyle = TextStyle(
@@ -1534,7 +1549,7 @@ private fun EditQsoDialog(
             OutlinedTextField(
                 value = gridInput,
                 onValueChange = { gridInput = it },
-                label = { Text("Grid Locator") },
+                label = { Text(stringResource(R.string.log_field_grid_locator)) },
                 singleLine = true,
                 colors = fieldColors,
                 textStyle = TextStyle(
@@ -1547,7 +1562,7 @@ private fun EditQsoDialog(
             OutlinedTextField(
                 value = modeInput,
                 onValueChange = { modeInput = it },
-                label = { Text("Mode") },
+                label = { Text(stringResource(R.string.log_field_mode)) },
                 singleLine = true,
                 colors = fieldColors,
                 textStyle = TextStyle(
@@ -1563,14 +1578,14 @@ private fun EditQsoDialog(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = TextMuted)
+                    Text(stringResource(R.string.action_cancel), color = TextMuted)
                 }
                 TextButton(
                     onClick = {
                         onSave(callsignInput.text, gridInput.text, modeInput.text)
                     },
                 ) {
-                    Text("Save", color = Accent, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.action_save), color = Accent, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -1600,7 +1615,7 @@ private fun DeleteQsoConfirm(
                 .padding(horizontal = 20.dp, vertical = 20.dp),
         ) {
             Text(
-                text = "DELETE QSO?",
+                text = stringResource(R.string.log_delete_qso_title),
                 color = TextPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -1612,9 +1627,9 @@ private fun DeleteQsoConfirm(
 
             Text(
                 text = if (callsign.isNotBlank())
-                    "Remove the QSO with $callsign from the logbook? This cannot be undone."
+                    stringResource(R.string.log_delete_qso_body_callsign, callsign)
                 else
-                    "Remove this QSO from the logbook? This cannot be undone.",
+                    stringResource(R.string.log_delete_qso_body),
                 color = TextMuted,
                 fontSize = 13.sp,
                 lineHeight = 18.sp,
@@ -1634,7 +1649,7 @@ private fun DeleteQsoConfirm(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "Cancel",
+                        text = stringResource(R.string.action_cancel),
                         color = TextPrimary,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp,
@@ -1650,7 +1665,7 @@ private fun DeleteQsoConfirm(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "Delete",
+                        text = stringResource(R.string.log_action_delete),
                         color = BgApp,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
@@ -1682,9 +1697,9 @@ private fun CatchUpSyncDialog(
                 .padding(horizontal = 20.dp, vertical = 20.dp),
         ) {
             val title = when {
-                state.noServicesEnabled -> "NO SERVICES ENABLED"
-                state.inProgress -> "SYNCING…"
-                else -> "SYNC COMPLETE"
+                state.noServicesEnabled -> stringResource(R.string.log_sync_title_no_services)
+                state.inProgress -> stringResource(R.string.log_sync_title_syncing)
+                else -> stringResource(R.string.log_sync_title_complete)
             }
             Text(
                 text = title,
@@ -1699,7 +1714,7 @@ private fun CatchUpSyncDialog(
 
             if (state.noServicesEnabled) {
                 Text(
-                    text = "Enable Cloudlog/Wavelog/Nextlog or QRZ in Settings, then try again.",
+                    text = stringResource(R.string.log_sync_enable_services),
                     color = TextMuted,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
@@ -1712,14 +1727,14 @@ private fun CatchUpSyncDialog(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = "${state.done} of ${state.total} QSOs",
+                    text = stringResource(R.string.log_sync_progress_count, state.done, state.total),
                     color = TextMuted,
                     fontSize = 13.sp,
                 )
                 if (state.cloudlogAttempted) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Cloudlog / Wavelog / Nextlog: ${state.cloudlogOk} accepted",
+                        text = stringResource(R.string.log_sync_cloudlog_accepted, state.cloudlogOk),
                         color = TextMuted,
                         fontSize = 12.sp,
                     )
@@ -1727,7 +1742,7 @@ private fun CatchUpSyncDialog(
                 if (state.qrzAttempted) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "QRZ: ${state.qrzOk} accepted",
+                        text = stringResource(R.string.log_sync_qrz_accepted, state.qrzOk),
                         color = TextMuted,
                         fontSize = 12.sp,
                     )
@@ -1735,7 +1750,7 @@ private fun CatchUpSyncDialog(
                 if (state.finished && state.total == 0) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "No QSOs in the logbook to upload yet.",
+                        text = stringResource(R.string.log_sync_nothing_to_upload),
                         color = TextMuted,
                         fontSize = 12.sp,
                     )
@@ -1756,7 +1771,7 @@ private fun CatchUpSyncDialog(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = if (state.inProgress) "Working…" else "Done",
+                    text = if (state.inProgress) stringResource(R.string.log_sync_working) else stringResource(R.string.action_done),
                     color = if (state.inProgress) TextMuted else BgApp,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,

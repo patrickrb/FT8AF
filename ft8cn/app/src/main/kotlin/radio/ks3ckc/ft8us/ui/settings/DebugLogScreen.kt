@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
+import com.bg7yoz.ft8cn.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -108,20 +110,20 @@ fun DebugLogScreen(onDismiss: () -> Unit) {
                 ) {
                     Column {
                         Text(
-                            text = "Debug",
+                            text = stringResource(R.string.debug_title),
                             color = TextPrimary,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 20.sp,
                         )
                         Text(
-                            text = "${lines.size} lines" +
-                                if (captureLogcat) " · logcat ON" else "",
+                            text = stringResource(R.string.debug_line_count, lines.size) +
+                                if (captureLogcat) stringResource(R.string.debug_logcat_on_suffix) else "",
                             color = TextFaint,
                             fontSize = 12.sp,
                         )
                     }
                     TextButton(onClick = onDismiss) {
-                        Text("Close", color = Accent, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.debug_close), color = Accent, fontWeight = FontWeight.SemiBold)
                     }
                 }
 
@@ -134,15 +136,16 @@ fun DebugLogScreen(onDismiss: () -> Unit) {
                 ) {
                     TextButton(onClick = {
                         debugLogFile?.let { shareDebugLog(context, it) }
-                            ?: run { statusMsg = "no log file" }
-                    }) { Text("Share", color = Accent) }
+                            ?: run { statusMsg = context.getString(R.string.debug_no_log_file) }
+                    }) { Text(stringResource(R.string.debug_share), color = Accent) }
                     TextButton(onClick = {
                         debugLogFile?.takeIf { it.exists() }?.delete()
-                        statusMsg = "log cleared"
-                    }) { Text("Clear", color = Accent) }
+                        statusMsg = context.getString(R.string.debug_log_cleared)
+                    }) { Text(stringResource(R.string.debug_clear), color = Accent) }
                     TextButton(onClick = { captureLogcat = !captureLogcat }) {
                         Text(
-                            if (captureLogcat) "Logcat: ON" else "Logcat: OFF",
+                            if (captureLogcat) stringResource(R.string.debug_logcat_on)
+                            else stringResource(R.string.debug_logcat_off),
                             color = Accent,
                         )
                     }
@@ -233,7 +236,7 @@ private fun shareDebugLog(context: android.content.Context, debugLogFile: File) 
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     context.startActivity(
-        Intent.createChooser(send, "Share debug.log").apply {
+        Intent.createChooser(send, context.getString(R.string.debug_share_chooser_title)).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         },
     )

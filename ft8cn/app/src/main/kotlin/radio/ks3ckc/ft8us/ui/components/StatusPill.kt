@@ -1,5 +1,6 @@
 package radio.ks3ckc.ft8us.ui.components
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -16,79 +17,81 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import radio.ks3ckc.ft8us.theme.*
+import com.bg7yoz.ft8cn.R
 
 enum class QsoStatus(
-    val label: String,
+    @StringRes val labelRes: Int,
     val color: Color,
     val bgColor: Color,
     val borderColor: Color,
 ) {
     NEW(
-        "NEW DXCC",
+        R.string.status_new_dxcc,
         StatusNew,
         Color(0x1FC084FC),  // rgba(192,132,252,0.12)
         Color(0x47C084FC),  // rgba(192,132,252,0.28)
     ),
     NEW_GRID(
-        "NEW GRID",
+        R.string.status_new_grid,
         StatusWarn,
         Color(0x1FFACC15),  // rgba(250,204,21,0.12)
         Color(0x47FACC15),  // rgba(250,204,21,0.28)
     ),
     NEW_BAND(
-        "NEW BAND",
+        R.string.status_new_band,
         Signal,
         Color(0x1F5CD6E8),  // rgba(92,214,232,0.12)
         Color(0x475CD6E8),  // rgba(92,214,232,0.28)
     ),
     POTA(
-        "POTA",
+        R.string.status_pota,
         StatusConfirmed,
         Color(0x1F4ADE80),  // rgba(74,222,128,0.12)
         Color(0x474ADE80),  // rgba(74,222,128,0.28)
     ),
     NEW_POTA(
-        "NEW POTA",
+        R.string.status_new_pota,
         StatusNeeded,
         Color(0x1FFFAF5E),  // amber — a park you haven't hunted yet
         Color(0x47FFAF5E),
     ),
     SOTA(
-        "SOTA",
+        R.string.status_sota,
         StatusConfirmed,
         Color(0x1F4ADE80),
         Color(0x474ADE80),
     ),
     NEEDED(
-        "NEEDED",
+        R.string.status_needed,
         StatusNeeded,
         Color(0x1FFFAF5E),
         Color(0x47FFAF5E),
     ),
     WORKED(
-        "WORKED",
+        R.string.status_worked,
         StatusWorked,
         Color(0x1A5CD6E8),  // rgba(92,214,232,0.10)
         Color(0x385CD6E8),  // rgba(92,214,232,0.22)
     ),
     CONFIRMED(
-        "CONFIRMED",
+        R.string.status_confirmed,
         StatusConfirmed,
         Color(0x1A4ADE80),
         Color(0x384ADE80),
     ),
     CQ(
-        "CQ",
+        R.string.status_cq,
         StatusCq,
         Color(0x1FFFAF5E),
         Color(0x47FFAF5E),
     ),
     PENDING(
-        "PENDING",
+        R.string.status_pending,
         TextMuted,
         Color(0x1A8A96B1),
         Color(0x388A96B1),
@@ -103,7 +106,7 @@ fun StatusPill(
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(999.dp)
-    val displayLabel = label ?: status.label
+    val displayLabel = label ?: stringResource(status.labelRes)
 
     Row(
         modifier = modifier

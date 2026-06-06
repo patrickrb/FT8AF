@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
+import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.log.OnShareLogEvents
 import com.bg7yoz.ft8cn.log.ShareLogs
 import com.bg7yoz.ft8cn.ui.ToastMessage
@@ -125,7 +127,7 @@ private fun ExportLogSheetContent(
     ) {
         // -- Header --
         Text(
-            text = "EXPORT QSOS",
+            text = stringResource(R.string.export_title),
             color = TextPrimary,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
@@ -139,7 +141,7 @@ private fun ExportLogSheetContent(
 
         // -- Date range --
         Text(
-            text = "DATE RANGE",
+            text = stringResource(R.string.export_date_range),
             color = TextFaint,
             fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold,
@@ -151,14 +153,14 @@ private fun ExportLogSheetContent(
             DateField(
                 value = dateStart,
                 onValueChange = { dateStart = it.filter { ch -> ch.isDigit() }.take(8) },
-                placeholder = "From  YYYYMMDD",
+                placeholder = stringResource(R.string.export_date_from_placeholder),
                 enabled = phase != ExportPhase.WORKING,
                 modifier = Modifier.weight(1f),
             )
             DateField(
                 value = dateEnd,
                 onValueChange = { dateEnd = it.filter { ch -> ch.isDigit() }.take(8) },
-                placeholder = "To  YYYYMMDD",
+                placeholder = stringResource(R.string.export_date_to_placeholder),
                 enabled = phase != ExportPhase.WORKING,
                 modifier = Modifier.weight(1f),
             )
@@ -188,7 +190,7 @@ private fun ExportLogSheetContent(
         // -- Action buttons --
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             SecondaryActionButton(
-                label = "Save",
+                label = stringResource(R.string.action_save),
                 enabled = phase != ExportPhase.WORKING,
                 modifier = Modifier.weight(1f),
                 onClick = {
@@ -209,7 +211,7 @@ private fun ExportLogSheetContent(
                 },
             )
             PrimaryActionButton(
-                label = "Share",
+                label = stringResource(R.string.export_share),
                 enabled = phase != ExportPhase.WORKING,
                 modifier = Modifier.weight(1f),
                 onClick = {
@@ -247,16 +249,18 @@ private fun ExportLogSheetContent(
 @Composable
 private fun SummaryLine(count: Int, queryKey: String, queryFilter: Int) {
     val filterLabel = when (queryFilter) {
-        1 -> "confirmed only"
-        2 -> "unconfirmed only"
+        1 -> stringResource(R.string.export_filter_confirmed)
+        2 -> stringResource(R.string.export_filter_unconfirmed)
         else -> null
     }
-    val recordWord = if (count == 1) "record" else "records"
-    val keyLabel = if (queryKey.isBlank()) "all" else "'$queryKey'"
-    val suffix = filterLabel?.let { " · $it" } ?: ""
+    val recordWord = if (count == 1) stringResource(R.string.export_record_singular)
+        else stringResource(R.string.export_record_plural)
+    val keyLabel = if (queryKey.isBlank()) stringResource(R.string.export_summary_all)
+        else stringResource(R.string.export_summary_key, queryKey)
+    val suffix = filterLabel?.let { stringResource(R.string.export_summary_suffix, it) } ?: ""
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            text = "$count $recordWord matching $keyLabel$suffix",
+            text = stringResource(R.string.export_summary, count, recordWord, keyLabel, suffix),
             color = TextMuted,
             fontSize = 12.sp,
             fontFamily = GeistMonoFamily,
@@ -392,13 +396,13 @@ private fun startShare(
     onDone: () -> Unit,
 ) {
     val adi = makeTempAdi(context) ?: return
-    onStateChange(ExportPhase.WORKING, "Preparing…", 0, 1)
+    onStateChange(ExportPhase.WORKING, context.getString(R.string.export_preparing), 0, 1)
 
     Thread {
         shareLogs.doShareLogs(
             context,
             adi,
-            "Share QSO logs",
+            context.getString(R.string.export_share_chooser_title),
             mainViewModel.databaseOpr.db,
             mainViewModel.queryKey ?: "",
             mainViewModel.queryFilter,
@@ -421,7 +425,7 @@ private fun startSave(
     onDone: () -> Unit,
 ) {
     val adi = makeTempAdi(context) ?: return
-    onStateChange(ExportPhase.WORKING, "Preparing…", 0, 1)
+    onStateChange(ExportPhase.WORKING, context.getString(R.string.export_preparing), 0, 1)
 
     val displayName = "ft8af-log-" +
         SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date()) +
@@ -445,9 +449,9 @@ private fun startSave(
                         displayName,
                     )
                     if (result != null) {
-                        ToastMessage.show("Saved to $result")
+                        ToastMessage.show(context.getString(R.string.export_saved_to, result))
                     } else {
-                        ToastMessage.show("Save to Downloads failed")
+                        ToastMessage.show(context.getString(R.string.export_save_failed))
                     }
                     onDone()
                 },
@@ -459,7 +463,7 @@ private fun startSave(
 private fun makeTempAdi(context: Context): File? {
     val adi = GeneralVariables.writeToTempFile(context, "FT8AF-", ".adi", "")
     if (adi == null) {
-        ToastMessage.show("Could not create temp file")
+        ToastMessage.show(context.getString(R.string.export_temp_file_failed))
     }
     return adi
 }
