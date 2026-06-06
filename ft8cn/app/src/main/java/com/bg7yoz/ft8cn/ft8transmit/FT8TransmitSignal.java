@@ -1249,6 +1249,39 @@ public class FT8TransmitSignal {
         pendingUserCQ = true;
     }
 
+    /**
+     * Force-log the current QSO and move on.
+     * Called when the user taps "LOG" to skip waiting for a 73 reply.
+     *
+     * @param nextCallsign if non-null, dequeue and start this specific caller
+     *                     instead of the head of the queue.
+     */
+    public void forceLogAndMoveOn(String nextCallsign) {
+        // Ensure QSO is saved (no-op if already saved at function order 4/5)
+        updateQSlRecordList(4, toCallsign);
+
+        // Mirror the normal QSO-completion path from parseMessageToFunction
+        resetToCQ();
+
+        if (GeneralVariables.autoCQAfterQSO) {
+            GeneralVariables.resetLaunchSupervision();
+        }
+
+        if (nextCallsign != null) {
+            dequeueSpecificCaller(nextCallsign);
+        } else if (!dequeueNextCaller()) {
+            // No queued callers — stay on CQ
+        }
+
+        setCurrentFunctionOrder(functionOrder);
+        mutableFunctionOrder.postValue(functionOrder);
+    }
+
+    /** Convenience overload: log and move on to the head of the queue. */
+    public void forceLogAndMoveOn() {
+        forceLogAndMoveOn(null);
+    }
+
     // ==================== Caller Queue Methods ====================
 
     /**
@@ -1304,6 +1337,30 @@ public class FT8TransmitSignal {
                         GeneralVariables.checkFunOrderByExtraInfo(caller.extraInfo) + 1,
                         caller.extraInfo);
                 return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Remove a specific caller from the queue by callsign and start a QSO with them.
+     * Returns true if the caller was found and started.
+     */
+    public boolean dequeueSpecificCaller(String callsign) {
+        if (callsign == null || callsign.isEmpty()) return false;
+        synchronized (callerQueue) {
+            for (int i = 0; i < callerQueue.size(); i++) {
+                if (callerQueue.get(i).callsign.equals(callsign)) {
+                    QueuedCaller caller = callerQueue.remove(i);
+                    mutableCallerQueue.postValue(new ArrayList<>(callerQueue));
+
+                    resetTargetReport();
+                    setTransmit(new TransmitCallsign(caller.i3, caller.n3, caller.callsign,
+                                    caller.frequency, caller.sequential, caller.snr),
+                            GeneralVariables.checkFunOrderByExtraInfo(caller.extraInfo) + 1,
+                            caller.extraInfo);
+                    return true;
+                }
             }
         }
         return false;
