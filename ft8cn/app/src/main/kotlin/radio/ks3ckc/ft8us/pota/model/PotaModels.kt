@@ -48,4 +48,12 @@ data class PotaActivation(
     val notes: String?,
 ) {
     val isActive: Boolean get() = endedAtMs == null
+
+    /** Individual park references (splits comma-separated `parkRef`). */
+    val parkRefs: List<String>
+        get() = parkRef.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+
+    /** Human-readable display: "K-1234 + K-5678". */
+    val parkRefsDisplay: String
+        get() = parkRefs.joinToString(" + ")
 }

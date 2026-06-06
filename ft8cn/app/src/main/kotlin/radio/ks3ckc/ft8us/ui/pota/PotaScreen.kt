@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,9 +23,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -38,6 +42,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -157,7 +162,7 @@ private fun ActivateTab() {
     val contacts by PotaSessionManager.activationQsos.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var parkRef by rememberSaveable { mutableStateOf("") }
+    val parkRefs = remember { mutableStateListOf("") }
     var notes by rememberSaveable { mutableStateOf("") }
     var refreshKey by remember { mutableIntStateOf(0) }
 
@@ -179,15 +184,52 @@ private fun ActivateTab() {
             Card {
                 SectionTitle(stringResource(R.string.pota_start_activation))
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = parkRef,
-                    onValueChange = { parkRef = it.uppercase().take(10) },
-                    label = { Text(stringResource(R.string.pota_park_reference_label)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
-                    colors = textFieldColors(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                parkRefs.forEachIndexed { index, ref ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedTextField(
+                            value = ref,
+                            onValueChange = { parkRefs[index] = it.uppercase().take(10) },
+                            label = { Text(stringResource(R.string.pota_park_reference_label)) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+                            colors = textFieldColors(),
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (parkRefs.size > 1) {
+                            IconButton(onClick = { parkRefs.removeAt(index) }) {
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription = stringResource(R.string.pota_remove_park),
+                                    tint = TextMuted,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    }
+                    if (index < parkRefs.lastIndex) Spacer(Modifier.height(4.dp))
+                }
+                if (parkRefs.size < 10) {
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedButton(
+                        onClick = { parkRefs.add("") },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.pota_add_park), color = TextPrimary, fontSize = 13.sp)
+                    }
+                } else {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        stringResource(R.string.pota_max_parks_reached),
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = notes,
@@ -200,11 +242,11 @@ private fun ActivateTab() {
                 Spacer(Modifier.height(12.dp))
                 Button(
                     onClick = {
-                        val started = PotaSessionManager.start(parkRef, notes.ifBlank { null })
+                        val started = PotaSessionManager.start(parkRefs, notes.ifBlank { null })
                         if (started == null) {
                             Toast.makeText(context, context.getString(R.string.pota_enter_park_reference_first), Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(context, context.getString(R.string.pota_activating, started.parkRef), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.pota_activating, started.parkRefsDisplay), Toast.LENGTH_SHORT).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BgApp),
@@ -229,20 +271,27 @@ private fun ActivateTab() {
                         if (myCall.isBlank()) {
                             Toast.makeText(context, context.getString(R.string.pota_set_callsign_first), Toast.LENGTH_SHORT).show()
                         } else {
+                            val refs = activation!!.parkRefs
                             scope.launch {
-                                val ok = PotaClient.selfSpot(
-                                    activator = myCall,
-                                    spotter = myCall,
-                                    frequencyKhz = GeneralVariables.getBaseFrequency() / 1000.0,
-                                    mode = "FT8",
-                                    reference = activation!!.parkRef,
-                                    comments = "CQ POTA via FT8AF",
-                                )
-                                Toast.makeText(
-                                    context,
-                                    context.getString(if (ok) R.string.pota_self_spot_posted else R.string.pota_self_spot_failed),
-                                    Toast.LENGTH_SHORT,
-                                ).show()
+                                var successCount = 0
+                                for (ref in refs) {
+                                    val ok = PotaClient.selfSpot(
+                                        activator = myCall,
+                                        spotter = myCall,
+                                        frequencyKhz = GeneralVariables.getBaseFrequency() / 1000.0,
+                                        mode = "FT8",
+                                        reference = ref,
+                                        comments = "CQ POTA via FT8AF",
+                                    )
+                                    if (ok) successCount++
+                                }
+                                val msg = if (successCount == refs.size) {
+                                    if (refs.size == 1) context.getString(R.string.pota_self_spot_posted)
+                                    else context.getString(R.string.pota_spotted_n_parks, successCount)
+                                } else {
+                                    context.getString(R.string.pota_self_spot_failed)
+                                }
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             }
                         }
                     },
@@ -265,6 +314,7 @@ private fun ActivateTab() {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun ActiveActivationCard(
     activation: PotaActivation,
@@ -272,7 +322,42 @@ private fun ActiveActivationCard(
     onSelfSpot: () -> Unit,
 ) {
     Card {
-        SectionTitle(stringResource(R.string.pota_active_park, activation.parkRef))
+        val parks = activation.parkRefs
+        if (parks.size <= 3) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    stringResource(R.string.pota_status_active).uppercase(),
+                    color = Accent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.align(Alignment.CenterVertically),
+                )
+                for (ref in parks) ParkPill(ref)
+            }
+        } else {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    stringResource(R.string.pota_status_active).uppercase(),
+                    color = Accent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.align(Alignment.CenterVertically),
+                )
+                for (ref in parks.take(3)) ParkPill(ref)
+                Text(
+                    stringResource(R.string.pota_parks_more, parks.size - 3),
+                    color = TextMuted,
+                    fontSize = 11.sp,
+                    modifier = Modifier.align(Alignment.CenterVertically),
+                )
+            }
+        }
         Spacer(Modifier.height(8.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -513,6 +598,7 @@ private fun HistoryTab(mainViewModel: MainViewModel) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun HistoryRow(
     row: PotaActivation,
@@ -544,7 +630,13 @@ private fun HistoryRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ParkPill(row.parkRef)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f, fill = false),
+                ) {
+                    for (ref in row.parkRefs) ParkPill(ref)
+                }
                 Spacer(Modifier.width(6.dp))
                 Text(
                     if (row.isActive) stringResource(R.string.pota_status_active) else stringResource(R.string.pota_qso_count, row.qsoCount),

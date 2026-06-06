@@ -249,6 +249,11 @@
     <string name="pota_qso_count">%1$d QSO</string>
     <string name="pota_share_adif">Share ADIF</string>
     <string name="pota_open_pota_app">Open pota.app</string>
+    <string name="pota_add_park">Add park</string>
+    <string name="pota_remove_park">Remove</string>
+    <string name="pota_max_parks_reached">Maximum of 10 parks reached</string>
+    <string name="pota_spotted_n_parks">Spotted at %1$d parks</string>
+    <string name="pota_parks_more">+%1$d more</string>
 
     <!-- ===== Debug log / Map / Waterfall ===== -->
     <string name="debug_title">Debug</string>
