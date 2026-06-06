@@ -61,6 +61,13 @@ fun FT8USApp(mainViewModel: MainViewModel) {
     val isActivated by mainViewModel.ft8TransmitSignal.mutableIsActivated.observeAsState(false)
     val txSlot by mainViewModel.ft8TransmitSignal.mutableSequential.observeAsState(mainViewModel.ft8TransmitSignal.sequential)
     val qsoCompletedAt by mainViewModel.ft8TransmitSignal.mutableQsoCompletedAt.observeAsState()
+    // Consume the one-shot celebration signal so LiveData doesn't replay it
+    // on recomposition / resubscription.
+    LaunchedEffect(qsoCompletedAt) {
+        if (qsoCompletedAt != null) {
+            mainViewModel.ft8TransmitSignal.mutableQsoCompletedAt.postValue(null)
+        }
+    }
 
     // QSO panel expand/collapse state
     var qsoPanelExpanded by rememberSaveable { mutableStateOf(false) }
