@@ -208,6 +208,13 @@ fun ActiveQsoPanel(
                 },
                 snr = if (displayCallsign != null) toCallsign?.snr else null,
                 onClick = if (displayCallsign != null) onReopenSheet else null,
+                onLog = if (displayCallsign != null) {
+                    {
+                        mainViewModel.ft8TransmitSignal.forceLogAndMoveOn()
+                        mainViewModel.qsoSheetCallsign.postValue(null)
+                        mainViewModel.qsoSheetMinimized.postValue(false)
+                    }
+                } else null,
                 onClear = if (displayCallsign != null) {
                     {
                         mainViewModel.ft8TransmitSignal.userResetToCQ()
@@ -249,6 +256,7 @@ private fun StationHeader(
     targetCallsign: String,
     snr: Int?,
     onClick: (() -> Unit)? = null,
+    onLog: (() -> Unit)? = null,
     onClear: (() -> Unit)? = null,
 ) {
     Row(
@@ -290,7 +298,7 @@ private fun StationHeader(
         }
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (onClick != null) {
                 Text(
@@ -300,6 +308,25 @@ private fun StationHeader(
                     fontFamily = GeistMonoFamily,
                     fontWeight = FontWeight.SemiBold,
                 )
+            }
+            if (onLog != null) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(SignalSoft)
+                        .clickable(onClick = onLog)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "LOG",
+                        color = Signal,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = GeistMonoFamily,
+                        letterSpacing = 0.04.sp,
+                    )
+                }
             }
             if (onClear != null) {
                 // Tap target uses its own Box so the parent header's reopen

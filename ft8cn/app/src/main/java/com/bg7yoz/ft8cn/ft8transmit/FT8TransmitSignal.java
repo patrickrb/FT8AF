@@ -1249,6 +1249,29 @@ public class FT8TransmitSignal {
         pendingUserCQ = true;
     }
 
+    /**
+     * Force-log the current QSO and move on to the next caller or CQ.
+     * Called when the user taps "LOG" to skip waiting for a 73 reply.
+     */
+    public void forceLogAndMoveOn() {
+        // Ensure QSO is saved (no-op if already saved at function order 4/5)
+        updateQSlRecordList(4, toCallsign);
+
+        // Mirror the normal QSO-completion path from parseMessageToFunction
+        resetToCQ();
+
+        if (GeneralVariables.autoCQAfterQSO) {
+            GeneralVariables.resetLaunchSupervision();
+        }
+
+        if (!dequeueNextCaller()) {
+            // No queued callers — stay on CQ
+        }
+
+        setCurrentFunctionOrder(functionOrder);
+        mutableFunctionOrder.postValue(functionOrder);
+    }
+
     // ==================== Caller Queue Methods ====================
 
     /**
