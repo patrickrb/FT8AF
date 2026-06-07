@@ -21,7 +21,6 @@ import com.bg7yoz.ft8cn.wave.UsbAudioDevice;
 import com.bg7yoz.ft8cn.wave.UsbAudioNative;
 
 import androidx.lifecycle.MutableLiveData;
-import androidx.lifecycle.Observer;
 
 import com.bg7yoz.ft8cn.FT8Common;
 import com.bg7yoz.ft8cn.Ft8Message;
@@ -141,15 +140,9 @@ public class FT8TransmitSignal {
         setActivated(false);
 
 
-        // observe volume setting changes
-        GeneralVariables.mutableVolumePercent.observeForever(new Observer<Float>() {
-            @Override
-            public void onChanged(Float aFloat) {
-                if (audioTrack != null) {
-                    audioTrack.setVolume(aFloat);
-                }
-            }
-        });
+        // Volume is baked into the TX samples per-cycle (see playFT8Signal / playViaUsbAudio),
+        // so there is no live mid-cycle setVolume() observer here: a volume change takes effect
+        // on the next cycle. This matches the ALC auto-volume model (MeterProtectionController).
 
         utcTimer = new UtcTimer(FT8Common.FT8_SLOT_TIME_M, false, new OnUtcTimer() {
             @Override
@@ -447,10 +440,12 @@ public class FT8TransmitSignal {
         // currently have no way to tell from debug.log which one fired.
         GeneralVariables.fileLog(String.format(
                 "playFT8Signal: TX path branch: audioOutputDeviceId=%d "
-                        + "usbAudioOutputVidPid=%04X:%04X",
+                        + "usbAudioOutputVidPid=%04X:%04X volume=%.0f%% autoVolume=%b",
                 GeneralVariables.audioOutputDeviceId,
                 GeneralVariables.usbAudioOutputVendorId,
-                GeneralVariables.usbAudioOutputProductId));
+                GeneralVariables.usbAudioOutputProductId,
+                GeneralVariables.volumePercent * 100f,
+                GeneralVariables.autoVolumeEnabled));
         if (GeneralVariables.audioOutputDeviceId == -1
                 && GeneralVariables.usbAudioOutputVendorId != 0) {
             GeneralVariables.fileLog("playFT8Signal: using USB audio (direct) output");
@@ -493,14 +488,27 @@ public class FT8TransmitSignal {
         if (skipSamples >= buffer.length) skipSamples = 0;
         int playLength = buffer.length - skipSamples;
 
+        // Apply volume in software, exactly like the USB-direct path (playViaUsbAudio).
+        // We do NOT rely on AudioTrack.setVolume() for level control: when the track is
+        // routed to a USB Audio Class device (the rig's sound card), many Android builds
+        // delegate level to the device's hardware volume and the per-track setVolume() is
+        // a no-op, so the samples leave at full scale and the rig overdrives regardless of
+        // the slider (even at 0%). Baking the gain into the samples here makes the slider
+        // behave identically on every output route.
+        float vol = GeneralVariables.volumePercent;
+        float[] volumeAdjusted = new float[playLength];
+        for (int i = 0; i < playLength; i++) {
+            volumeAdjusted[i] = buffer[skipSamples + i] * vol;
+        }
+
         // distinguish between 32-bit float and integer
         int writeResult;
         if (GeneralVariables.audioOutput32Bit) {
-            writeResult = audioTrack.write(buffer, skipSamples, playLength
+            writeResult = audioTrack.write(volumeAdjusted, 0, playLength
                     , AudioTrack.WRITE_NON_BLOCKING);
         } else {
-            short[] audio_data = float2Short(buffer);
-            writeResult = audioTrack.write(audio_data, skipSamples, playLength
+            short[] audio_data = float2Short(volumeAdjusted);
+            writeResult = audioTrack.write(audio_data, 0, playLength
                     , AudioTrack.WRITE_NON_BLOCKING);
         }
 
@@ -532,7 +540,9 @@ public class FT8TransmitSignal {
         });
         if (audioTrack != null) {
             audioTrack.play();
-            audioTrack.setVolume(GeneralVariables.volumePercent);// set playback volume
+            // Volume is baked into the samples above; keep the track at unity so we don't
+            // double-attenuate on routes where setVolume() does work (e.g. phone speaker).
+            audioTrack.setVolume(1.0f);
         }
     }
 
