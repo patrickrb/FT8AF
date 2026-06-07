@@ -53,13 +53,72 @@ import java.util.TimeZone
 /**
  * Data class representing a single message in the QSO log.
  */
-private data class QsoLogEntry(
+internal data class QsoLogEntry(
     val direction: Direction,
     val utcTime: Long,
     val messageText: String,
     val snr: Int? = null,
 ) {
     enum class Direction { TX, RX, BUSY }
+}
+
+/**
+ * Build the ordered QSO conversation log for [displayCallsign] from the decoded
+ * [messageList] plus our own synthesized TX entries ([synthTx]).
+ *
+ * Classification:
+ *  - RX   — from the target, addressed to us.
+ *  - BUSY — from the target, addressed to someone else (context for the hunter).
+ *  - TX   — our own transmissions, sourced *solely* from [synthTx]. Own-callsign
+ *           loopback echoes never appear here because they are filtered upstream
+ *           in MainViewModel.afterDecode (see OwnTxEchoFilter), so there is no
+ *           decoded-list TX branch and no de-dup against loopback to do.
+ *
+ * Extracted from the composable so the (pure) classification/ordering is unit
+ * testable. Entries are returned sorted ascending by [QsoLogEntry.utcTime].
+ */
+internal fun buildQsoLog(
+    messageList: List<Ft8Message>?,
+    displayCallsign: String,
+    myCallsign: String,
+    synthTx: List<QsoLogEntry>,
+): List<QsoLogEntry> {
+    if (displayCallsign.isEmpty()) return emptyList()
+
+    val entries = mutableListOf<QsoLogEntry>()
+    messageList?.forEach { msg ->
+        val from = msg.callsignFrom ?: ""
+        val to = msg.callsignTo ?: ""
+
+        val fromIsTarget = from.equals(displayCallsign, ignoreCase = true)
+        val toIsMe = to.equals(myCallsign, ignoreCase = true) ||
+            GeneralVariables.checkIsMyCallsign(to)
+
+        when {
+            fromIsTarget && toIsMe -> entries.add(
+                QsoLogEntry(
+                    direction = QsoLogEntry.Direction.RX,
+                    utcTime = msg.utcTime,
+                    messageText = msg.getMessageText() ?: "$from $to ${msg.extraInfo ?: ""}",
+                    snr = msg.snr,
+                )
+            )
+            fromIsTarget && !toIsMe -> entries.add(
+                QsoLogEntry(
+                    direction = QsoLogEntry.Direction.BUSY,
+                    utcTime = msg.utcTime,
+                    messageText = msg.getMessageText() ?: "$from $to ${msg.extraInfo ?: ""}",
+                    snr = msg.snr,
+                )
+            )
+            // No TX branch: own transmissions come solely from synthTx below.
+        }
+    }
+
+    // Our own transmissions — the sole source of TX rows.
+    entries.addAll(synthTx)
+
+    return entries.sortedBy { it.utcTime }
 }
 
 /**
@@ -114,63 +173,15 @@ fun ActiveQsoPanel(
         }
     }
 
-    // Filter messages to/from the target station
+    // Build the conversation log to/from the target station. The classification
+    // and ordering live in buildQsoLog() so they can be unit tested.
     val qsoMessages: List<QsoLogEntry> = remember(messageList, messageList?.size, displayCallsign, transmittingMessage, synthTxLog.size) {
-        if (!hasTarget || displayCallsign == null) return@remember emptyList()
-
-        val entries = mutableListOf<QsoLogEntry>()
-
-        // RX messages from the target station directed at us, or from us to the target
-        val myCallsign = GeneralVariables.myCallsign ?: ""
-        messageList?.forEach { msg ->
-            val from = msg.callsignFrom ?: ""
-            val to = msg.callsignTo ?: ""
-
-            val fromIsTarget = from.equals(displayCallsign, ignoreCase = true)
-            val toIsMe = to.equals(myCallsign, ignoreCase = true) ||
-                GeneralVariables.checkIsMyCallsign(to)
-
-            when {
-                // RX: target station calling us
-                fromIsTarget && toIsMe -> {
-                    entries.add(
-                        QsoLogEntry(
-                            direction = QsoLogEntry.Direction.RX,
-                            utcTime = msg.utcTime,
-                            messageText = msg.getMessageText() ?: "$from $to ${msg.extraInfo ?: ""}",
-                            snr = msg.snr,
-                        )
-                    )
-                }
-                // BUSY: target is transmitting but to someone else — useful so
-                // the hunter can see what their target is doing (calling CQ,
-                // exchanging reports with another station, etc.) instead of
-                // staring at an empty log wondering whether they're still on.
-                fromIsTarget && !toIsMe -> {
-                    entries.add(
-                        QsoLogEntry(
-                            direction = QsoLogEntry.Direction.BUSY,
-                            utcTime = msg.utcTime,
-                            messageText = msg.getMessageText() ?: "$from $to ${msg.extraInfo ?: ""}",
-                            snr = msg.snr,
-                        )
-                    )
-                }
-                // (No TX branch here.) Our own transmissions are never sourced from the
-                // decoded list: own-callsign loopback echoes are filtered out upstream in
-                // MainViewModel.afterDecode (so the rig monitoring TX audio back to line-in
-                // doesn't produce a phantom "received" copy of what we sent). TX rows come
-                // solely from synthTxLog below, which is added at key-up with the correct
-                // timestamp.
-            }
-        }
-
-        // Our own transmissions — the sole source of TX rows. Each distinct TX string is
-        // added once at key-up (see synthTxLog above); no de-dup against the decoded list
-        // is needed because own-TX loopback never reaches it.
-        entries.addAll(synthTxLog)
-
-        entries.sortedBy { it.utcTime }
+        buildQsoLog(
+            messageList = messageList,
+            displayCallsign = displayCallsign ?: "",
+            myCallsign = GeneralVariables.myCallsign ?: "",
+            synthTx = synthTxLog.toList(),
+        )
     }
 
     AnimatedVisibility(
