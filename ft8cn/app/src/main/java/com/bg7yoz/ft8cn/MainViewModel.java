@@ -344,8 +344,30 @@ public class MainViewModel extends ViewModel {
 
             @Override
             public void afterDecode(long utc, float time_sec, int sequential
-                    , ArrayList<Ft8Message> messages, boolean isDeep) {
-                if (messages.size() == 0) return;//no messages decoded, don't trigger action
+                    , ArrayList<Ft8Message> decoded, boolean isDeep) {
+                if (decoded.size() == 0) return;//no messages decoded, don't trigger action
+
+                // Filter out own-TX loopback echoes. When the rig monitors TX audio to
+                // line-out the decoder hears our own transmission and decodes it; a decode
+                // whose sender is our own callsign can only be that loopback, so it must
+                // not reach the message list, QSO panel, or SWL database. See
+                // OwnTxEchoFilter for the rationale. The QSO panel already shows what we
+                // send via its synthesized TX entry, and PSKReporter / the auto-sequence
+                // already ignore own-callsign messages.
+                OwnTxEchoFilter filtered = OwnTxEchoFilter.filter(decoded);
+                ArrayList<Ft8Message> messages = filtered.kept;
+                // Diagnostic for the "missing other station responses" report: record how
+                // many decodes survived, how many own-echoes were dropped, and whether any
+                // message addressed to us was decoded this cycle. Lets us tell "decoded but
+                // mis-rendered" from "never decoded" from a pulled debug.log. Skip deep
+                // passes to avoid log spam (they re-report the same cycle).
+                if (!isDeep) {
+                    fileLog(filtered.decodeLogLine(sequential));
+                }
+                if (messages.size() == 0) {
+                    mutableIsDecoding.postValue(false);//nothing left after filtering own echoes
+                    return;
+                }
 
                 // Diagnostic: log every CQ message so we can see what the JNI decoder
                 // populates for "CQ DX" / "CQ POTA" style broadcasts.

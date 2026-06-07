@@ -53,13 +53,66 @@ import java.util.TimeZone
 /**
  * Data class representing a single message in the QSO log.
  */
-private data class QsoLogEntry(
+internal data class QsoLogEntry(
     val direction: Direction,
     val utcTime: Long,
     val messageText: String,
     val snr: Int? = null,
 ) {
     enum class Direction { TX, RX, BUSY }
+}
+
+/**
+ * Build the ordered QSO conversation log for [displayCallsign] from the decoded
+ * [messageList] plus our own synthesized TX entries ([synthTx]).
+ *
+ * Classification:
+ *  - RX   — from the target, addressed to us.
+ *  - BUSY — from the target, addressed to someone else (context for the hunter).
+ *  - TX   — our own transmissions, sourced *solely* from [synthTx]. Own-callsign
+ *           loopback echoes never appear here because they are filtered upstream
+ *           in MainViewModel.afterDecode (see OwnTxEchoFilter), so there is no
+ *           decoded-list TX branch and no de-dup against loopback to do.
+ *
+ * Extracted from the composable so the (pure) classification/ordering is unit
+ * testable. Entries are returned sorted ascending by [QsoLogEntry.utcTime].
+ */
+internal fun buildQsoLog(
+    messageList: List<Ft8Message>?,
+    displayCallsign: String,
+    myCallsign: String,
+    synthTx: List<QsoLogEntry>,
+): List<QsoLogEntry> {
+    if (displayCallsign.isEmpty()) return emptyList()
+
+    val entries = mutableListOf<QsoLogEntry>()
+    messageList?.forEach { msg ->
+        val from = msg.callsignFrom ?: ""
+        // Only the target station's traffic appears in this panel. Own-callsign
+        // loopback (from == us) is filtered upstream (OwnTxEchoFilter) and there
+        // is deliberately no decoded-list TX branch, so anything not from the
+        // target is skipped here — TX rows come solely from synthTx below.
+        if (!from.equals(displayCallsign, ignoreCase = true)) return@forEach
+
+        val to = msg.callsignTo ?: ""
+        val toIsMe = to.equals(myCallsign, ignoreCase = true) ||
+            GeneralVariables.checkIsMyCallsign(to)
+
+        // RX when the target is calling us, BUSY when it's working someone else.
+        entries.add(
+            QsoLogEntry(
+                direction = if (toIsMe) QsoLogEntry.Direction.RX else QsoLogEntry.Direction.BUSY,
+                utcTime = msg.utcTime,
+                messageText = msg.getMessageText(),
+                snr = msg.snr,
+            )
+        )
+    }
+
+    // Our own transmissions — the sole source of TX rows.
+    entries.addAll(synthTx)
+
+    return entries.sortedBy { it.utcTime }
 }
 
 /**
@@ -114,69 +167,15 @@ fun ActiveQsoPanel(
         }
     }
 
-    // Filter messages to/from the target station
+    // Build the conversation log to/from the target station. The classification
+    // and ordering live in buildQsoLog() so they can be unit tested.
     val qsoMessages: List<QsoLogEntry> = remember(messageList, messageList?.size, displayCallsign, transmittingMessage, synthTxLog.size) {
-        if (!hasTarget || displayCallsign == null) return@remember emptyList()
-
-        val entries = mutableListOf<QsoLogEntry>()
-
-        // RX messages from the target station directed at us, or from us to the target
-        val myCallsign = GeneralVariables.myCallsign ?: ""
-        messageList?.forEach { msg ->
-            val from = msg.callsignFrom ?: ""
-            val to = msg.callsignTo ?: ""
-
-            val fromIsTarget = from.equals(displayCallsign, ignoreCase = true)
-            val toIsMe = to.equals(myCallsign, ignoreCase = true) ||
-                GeneralVariables.checkIsMyCallsign(to)
-
-            when {
-                // RX: target station calling us
-                fromIsTarget && toIsMe -> {
-                    entries.add(
-                        QsoLogEntry(
-                            direction = QsoLogEntry.Direction.RX,
-                            utcTime = msg.utcTime,
-                            messageText = msg.getMessageText() ?: "$from $to ${msg.extraInfo ?: ""}",
-                            snr = msg.snr,
-                        )
-                    )
-                }
-                // BUSY: target is transmitting but to someone else — useful so
-                // the hunter can see what their target is doing (calling CQ,
-                // exchanging reports with another station, etc.) instead of
-                // staring at an empty log wondering whether they're still on.
-                fromIsTarget && !toIsMe -> {
-                    entries.add(
-                        QsoLogEntry(
-                            direction = QsoLogEntry.Direction.BUSY,
-                            utcTime = msg.utcTime,
-                            messageText = msg.getMessageText() ?: "$from $to ${msg.extraInfo ?: ""}",
-                            snr = msg.snr,
-                        )
-                    )
-                }
-                // TX: us calling the target station (messages from us in the decoded list)
-                from.equals(myCallsign, ignoreCase = true) && to.equals(displayCallsign, ignoreCase = true) -> {
-                    entries.add(
-                        QsoLogEntry(
-                            direction = QsoLogEntry.Direction.TX,
-                            utcTime = msg.utcTime,
-                            messageText = msg.getMessageText() ?: "$from $to ${msg.extraInfo ?: ""}",
-                        )
-                    )
-                }
-            }
-        }
-
-        // Add synthesized TX entries (skip duplicates already present from decode loopback).
-        synthTxLog.forEach { synth ->
-            if (entries.none { it.messageText == synth.messageText && it.direction == QsoLogEntry.Direction.TX }) {
-                entries.add(synth)
-            }
-        }
-
-        entries.sortedBy { it.utcTime }
+        buildQsoLog(
+            messageList = messageList,
+            displayCallsign = displayCallsign ?: "",
+            myCallsign = GeneralVariables.myCallsign ?: "",
+            synthTx = synthTxLog.toList(),
+        )
     }
 
     AnimatedVisibility(
