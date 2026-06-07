@@ -165,4 +165,28 @@ public class OwnTxEchoFilterTest {
 
         assertThat(decoded).hasSize(2); // original list untouched
     }
+
+    @Test
+    public void decodeLogLine_reportsKeptEchoReplyAndSlot() {
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(ownEcho("RA3XYZ"));        // dropped
+        decoded.add(replyToMe("DL1ABC"));      // kept, reply to me
+        decoded.add(thirdParty("CQ", "JA1XYZ")); // kept
+
+        OwnTxEchoFilter result = OwnTxEchoFilter.filter(decoded);
+
+        assertThat(result.decodeLogLine(1))
+                .isEqualTo("DECODE: kept=2 ownEcho=1 replyToMe=true slot=1");
+    }
+
+    @Test
+    public void decodeLogLine_noEchoesNoReply() {
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(thirdParty("CQ", "DL1ABC"));
+
+        OwnTxEchoFilter result = OwnTxEchoFilter.filter(decoded);
+
+        assertThat(result.decodeLogLine(0))
+                .isEqualTo("DECODE: kept=1 ownEcho=0 replyToMe=false slot=0");
+    }
 }

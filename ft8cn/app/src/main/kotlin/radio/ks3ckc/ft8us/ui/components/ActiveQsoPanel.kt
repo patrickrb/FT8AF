@@ -88,31 +88,25 @@ internal fun buildQsoLog(
     val entries = mutableListOf<QsoLogEntry>()
     messageList?.forEach { msg ->
         val from = msg.callsignFrom ?: ""
-        val to = msg.callsignTo ?: ""
+        // Only the target station's traffic appears in this panel. Own-callsign
+        // loopback (from == us) is filtered upstream (OwnTxEchoFilter) and there
+        // is deliberately no decoded-list TX branch, so anything not from the
+        // target is skipped here — TX rows come solely from synthTx below.
+        if (!from.equals(displayCallsign, ignoreCase = true)) return@forEach
 
-        val fromIsTarget = from.equals(displayCallsign, ignoreCase = true)
+        val to = msg.callsignTo ?: ""
         val toIsMe = to.equals(myCallsign, ignoreCase = true) ||
             GeneralVariables.checkIsMyCallsign(to)
 
-        when {
-            fromIsTarget && toIsMe -> entries.add(
-                QsoLogEntry(
-                    direction = QsoLogEntry.Direction.RX,
-                    utcTime = msg.utcTime,
-                    messageText = msg.getMessageText() ?: "$from $to ${msg.extraInfo ?: ""}",
-                    snr = msg.snr,
-                )
+        // RX when the target is calling us, BUSY when it's working someone else.
+        entries.add(
+            QsoLogEntry(
+                direction = if (toIsMe) QsoLogEntry.Direction.RX else QsoLogEntry.Direction.BUSY,
+                utcTime = msg.utcTime,
+                messageText = msg.getMessageText(),
+                snr = msg.snr,
             )
-            fromIsTarget && !toIsMe -> entries.add(
-                QsoLogEntry(
-                    direction = QsoLogEntry.Direction.BUSY,
-                    utcTime = msg.utcTime,
-                    messageText = msg.getMessageText() ?: "$from $to ${msg.extraInfo ?: ""}",
-                    snr = msg.snr,
-                )
-            )
-            // No TX branch: own transmissions come solely from synthTx below.
-        }
+        )
     }
 
     // Our own transmissions — the sole source of TX rows.

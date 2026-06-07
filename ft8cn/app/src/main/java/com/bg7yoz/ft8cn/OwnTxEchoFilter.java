@@ -60,4 +60,18 @@ public final class OwnTxEchoFilter {
         }
         return new OwnTxEchoFilter(kept, ownEcho, replyToMe);
     }
+
+    /**
+     * Format the per-cycle diagnostic line written to debug.log. Recording the
+     * kept count, dropped-echo count, whether a reply addressed to us survived,
+     * and the slot lets us tell "decoded but mis-rendered" from "never decoded"
+     * when investigating the "missing other station responses" report.
+     *
+     * @param sequential the FT8 slot (0/1) of this decode cycle
+     * @return the log line, e.g. {@code "DECODE: kept=3 ownEcho=1 replyToMe=true slot=0"}
+     */
+    public String decodeLogLine(int sequential) {
+        return String.format("DECODE: kept=%d ownEcho=%d replyToMe=%b slot=%d",
+                kept.size(), ownEchoCount, replyToMePresent, sequential);
+    }
 }

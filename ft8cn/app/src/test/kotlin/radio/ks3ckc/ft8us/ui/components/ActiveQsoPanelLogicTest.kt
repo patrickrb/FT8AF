@@ -1,5 +1,6 @@
 package radio.ks3ckc.ft8us.ui.components
 
+import com.bg7yoz.ft8cn.FT8Common
 import com.bg7yoz.ft8cn.Ft8Message
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.google.common.truth.Truth.assertThat
@@ -37,6 +38,15 @@ class ActiveQsoPanelLogicTest {
         Ft8Message(to, from, "-10").apply {
             utcTime = utc
             this.snr = snr
+        }
+
+    /** Build a message with raw (possibly null) callsign fields. */
+    private fun rawMsg(to: String?, from: String?, utc: Long): Ft8Message =
+        Ft8Message(FT8Common.FT8_MODE).apply {
+            callsignTo = to
+            callsignFrom = from
+            extraInfo = "RR73"
+            utcTime = utc
         }
 
     @Test
@@ -114,6 +124,42 @@ class ActiveQsoPanelLogicTest {
     @Test
     fun `target match is case insensitive`() {
         val list = listOf(msg(myCall, "ra3xyz", 1_000L))
+        val result = buildQsoLog(list, target, myCall, emptyList())
+        assertThat(result).hasSize(1)
+        assertThat(result[0].direction).isEqualTo(QsoLogEntry.Direction.RX)
+    }
+
+    @Test
+    fun `null message list yields only synthesized TX rows`() {
+        val synth = listOf(
+            QsoLogEntry(QsoLogEntry.Direction.TX, utcTime = 1_000L, messageText = "RA3XYZ UB8CSJ 73")
+        )
+        val result = buildQsoLog(null, target, myCall, synth)
+        assertThat(result).hasSize(1)
+        assertThat(result[0].direction).isEqualTo(QsoLogEntry.Direction.TX)
+    }
+
+    @Test
+    fun `null sender callsign is ignored`() {
+        val list = listOf(rawMsg(to = myCall, from = null, utc = 1_000L))
+        val result = buildQsoLog(list, target, myCall, emptyList())
+        assertThat(result).isEmpty()
+    }
+
+    @Test
+    fun `target with null recipient is BUSY`() {
+        // from == target, to == null -> not addressed to us -> BUSY.
+        val list = listOf(rawMsg(to = null, from = target, utc = 1_000L))
+        val result = buildQsoLog(list, target, myCall, emptyList())
+        assertThat(result).hasSize(1)
+        assertThat(result[0].direction).isEqualTo(QsoLogEntry.Direction.BUSY)
+    }
+
+    @Test
+    fun `recipient matched via checkIsMyCallsign is RX`() {
+        // to is our compound form, not an exact equals() of myCallsign, so the
+        // RX classification must come from the checkIsMyCallsign() operand.
+        val list = listOf(msg("UB8CSJ/P", target, 1_000L))
         val result = buildQsoLog(list, target, myCall, emptyList())
         assertThat(result).hasSize(1)
         assertThat(result[0].direction).isEqualTo(QsoLogEntry.Direction.RX)

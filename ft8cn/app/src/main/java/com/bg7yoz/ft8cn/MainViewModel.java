@@ -362,10 +362,7 @@ public class MainViewModel extends ViewModel {
                 // mis-rendered" from "never decoded" from a pulled debug.log. Skip deep
                 // passes to avoid log spam (they re-report the same cycle).
                 if (!isDeep) {
-                    fileLog(String.format(
-                            "DECODE: kept=%d ownEcho=%d replyToMe=%b slot=%d",
-                            messages.size(), filtered.ownEchoCount,
-                            filtered.replyToMePresent, sequential));
+                    fileLog(filtered.decodeLogLine(sequential));
                 }
                 if (messages.size() == 0) {
                     mutableIsDecoding.postValue(false);//nothing left after filtering own echoes
