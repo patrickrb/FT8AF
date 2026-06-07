@@ -344,8 +344,43 @@ public class MainViewModel extends ViewModel {
 
             @Override
             public void afterDecode(long utc, float time_sec, int sequential
-                    , ArrayList<Ft8Message> messages, boolean isDeep) {
-                if (messages.size() == 0) return;//no messages decoded, don't trigger action
+                    , ArrayList<Ft8Message> decoded, boolean isDeep) {
+                if (decoded.size() == 0) return;//no messages decoded, don't trigger action
+
+                // Filter out own-TX loopback echoes. When the rig monitors TX audio to
+                // line-out the decoder hears our own transmission and decodes it. A decode
+                // whose *sender* is our own callsign can only be that loopback (you never
+                // legitimately receive your own callsign in the "from" field), so drop it
+                // before it reaches the message list, QSO panel, or SWL database. The QSO
+                // panel already shows what we send via its synthesized TX entry, and
+                // PSKReporter / the auto-sequence already ignore own-callsign messages.
+                ArrayList<Ft8Message> messages = new ArrayList<>(decoded.size());
+                int ownEchoCount = 0;
+                boolean replyToMePresent = false;
+                for (Ft8Message m : decoded) {
+                    if (GeneralVariables.checkIsMyCallsign(m.getCallsignFrom())) {
+                        ownEchoCount++;
+                        continue;
+                    }
+                    if (GeneralVariables.checkIsMyCallsign(m.getCallsignTo())) {
+                        replyToMePresent = true;
+                    }
+                    messages.add(m);
+                }
+                // Diagnostic for the "missing other station responses" report: record how
+                // many decodes survived, how many own-echoes were dropped, and whether any
+                // message addressed to us was decoded this cycle. Lets us tell "decoded but
+                // mis-rendered" from "never decoded" from a pulled debug.log. Skip deep
+                // passes to avoid log spam (they re-report the same cycle).
+                if (!isDeep) {
+                    fileLog(String.format(
+                            "DECODE: kept=%d ownEcho=%d replyToMe=%b slot=%d",
+                            messages.size(), ownEchoCount, replyToMePresent, sequential));
+                }
+                if (messages.size() == 0) {
+                    mutableIsDecoding.postValue(false);//nothing left after filtering own echoes
+                    return;
+                }
 
                 // Diagnostic: log every CQ message so we can see what the JNI decoder
                 // populates for "CQ DX" / "CQ POTA" style broadcasts.

@@ -156,25 +156,19 @@ fun ActiveQsoPanel(
                         )
                     )
                 }
-                // TX: us calling the target station (messages from us in the decoded list)
-                from.equals(myCallsign, ignoreCase = true) && to.equals(displayCallsign, ignoreCase = true) -> {
-                    entries.add(
-                        QsoLogEntry(
-                            direction = QsoLogEntry.Direction.TX,
-                            utcTime = msg.utcTime,
-                            messageText = msg.getMessageText() ?: "$from $to ${msg.extraInfo ?: ""}",
-                        )
-                    )
-                }
+                // (No TX branch here.) Our own transmissions are never sourced from the
+                // decoded list: own-callsign loopback echoes are filtered out upstream in
+                // MainViewModel.afterDecode (so the rig monitoring TX audio back to line-in
+                // doesn't produce a phantom "received" copy of what we sent). TX rows come
+                // solely from synthTxLog below, which is added at key-up with the correct
+                // timestamp.
             }
         }
 
-        // Add synthesized TX entries (skip duplicates already present from decode loopback).
-        synthTxLog.forEach { synth ->
-            if (entries.none { it.messageText == synth.messageText && it.direction == QsoLogEntry.Direction.TX }) {
-                entries.add(synth)
-            }
-        }
+        // Our own transmissions — the sole source of TX rows. Each distinct TX string is
+        // added once at key-up (see synthTxLog above); no de-dup against the decoded list
+        // is needed because own-TX loopback never reaches it.
+        entries.addAll(synthTxLog)
 
         entries.sortedBy { it.utcTime }
     }
