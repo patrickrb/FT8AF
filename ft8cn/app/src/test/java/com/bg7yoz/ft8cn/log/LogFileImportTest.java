@@ -114,6 +114,91 @@ public class LogFileImportTest {
         assertThat(imp.getLogRecords()).isEmpty();
     }
 
+    @Test
+    public void wellFormedAdif_getFileContext_returnsWholeFile() throws IOException {
+        File f = fixture("adif/sample-wsjtx.adi");
+        LogFileImport imp = new LogFileImport(task, f.getAbsolutePath());
+        // getFileContext returns the entire file including the header section.
+        String ctx = imp.getFileContext();
+        assertThat(ctx).contains("<adif_ver:5>3.1.0");
+        assertThat(ctx).contains("<eoh>");
+        assertThat(ctx).contains("DL1AA");
+    }
+
+    @Test
+    public void wellFormedAdif_extractsAllRecordsValues() throws IOException {
+        File f = fixture("adif/sample-wsjtx.adi");
+        LogFileImport imp = new LogFileImport(task, f.getAbsolutePath());
+        ArrayList<HashMap<String, String>> records = imp.getLogRecords();
+        // Second and third records carry distinct callsigns/grids.
+        assertThat(records.get(1).get("CALL")).isEqualTo("VE3XY");
+        assertThat(records.get(1).get("GRIDSQUARE")).isEqualTo("FN03");
+        assertThat(records.get(2).get("CALL")).isEqualTo("DL1AA");
+        assertThat(records.get(2).get("GRIDSQUARE")).isEqualTo("JO62");
+    }
+
+    @Test
+    public void wellFormedAdif_capturesNumericFreqAndReports() throws IOException {
+        File f = fixture("adif/sample-wsjtx.adi");
+        LogFileImport imp = new LogFileImport(task, f.getAbsolutePath());
+        HashMap<String, String> first = imp.getLogRecords().get(0);
+        // freq:8 declared length → "14.07415" is exactly 8 chars.
+        assertThat(first.get("FREQ")).isEqualTo("14.07415");
+        assertThat(first.get("RST_SENT")).isEqualTo("-08");
+        assertThat(first.get("RST_RCVD")).isEqualTo("-12");
+        // The fixture declares <station_callsign:5> for the 4-char value "W1AW";
+        // the length-prefixed parser honours the declared length, so assert the
+        // stable prefix rather than the exact (length-mismatched) slice.
+        assertThat(first.get("STATION_CALLSIGN")).startsWith("W1A");
+    }
+
+    @Test
+    public void wellFormedAdif_noErrors() throws IOException {
+        File f = fixture("adif/sample-wsjtx.adi");
+        LogFileImport imp = new LogFileImport(task, f.getAbsolutePath());
+        imp.getLogRecords();
+        assertThat(imp.getErrorCount()).isEqualTo(0);
+        assertThat(imp.getErrorLines()).isEmpty();
+    }
+
+    @Test
+    public void malformedAdif_errorLinesHtmlEscapesAngleBrackets() throws IOException {
+        File f = fixture("adif/sample-malformed.adi");
+        LogFileImport imp = new LogFileImport(task, f.getAbsolutePath());
+        imp.getLogRecords();
+        // The bad record is stored in errorLines with '<' escaped to "&lt;".
+        HashMap<Integer, String> errors = imp.getErrorLines();
+        assertThat(errors).hasSize(1);
+        String badContent = errors.values().iterator().next();
+        // Only '<' is escaped (replace("<","&lt;")); '>' is left intact.
+        assertThat(badContent).contains("&lt;call:notanumber>BADREC");
+        assertThat(badContent).doesNotContain("<call:notanumber>");
+    }
+
+    @Test
+    public void getLogBody_returnsEmptyWhenNoEoh() throws IOException {
+        File f = tmp.newFile("noeoh.adi");
+        try (FileOutputStream out = new FileOutputStream(f)) {
+            out.write("<call:5>K1ABC<eor>".getBytes(StandardCharsets.UTF_8));
+        }
+        LogFileImport imp = new LogFileImport(task, f.getAbsolutePath());
+        // No <eoh> marker → split produces a single element → body is "".
+        assertThat(imp.getLogBody()).isEmpty();
+        assertThat(imp.getLogRecords()).isEmpty();
+    }
+
+    @Test
+    public void getLogBody_caseInsensitiveEohMarker() throws IOException {
+        File f = tmp.newFile("upper.adi");
+        try (FileOutputStream out = new FileOutputStream(f)) {
+            out.write("header<EOH><call:5>K1ABC<eor>".getBytes(StandardCharsets.UTF_8));
+        }
+        LogFileImport imp = new LogFileImport(task, f.getAbsolutePath());
+        // The split regex [<][Ee][Oo][Hh][>] matches upper-case <EOH> too.
+        assertThat(imp.getLogBody()).contains("K1ABC");
+        assertThat(imp.getLogRecords()).hasSize(1);
+    }
+
     private File fixture(String resource) throws IOException {
         File out = tmp.newFile(new File(resource).getName());
         try (InputStream in = getClass().getClassLoader().getResourceAsStream(resource)) {

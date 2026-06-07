@@ -94,4 +94,44 @@ public class OperationBandTest {
         assertThat(OperationBand.getLinesFromInputStream(in, "\n"))
                 .asList().containsExactly("a", "b", "c").inOrder();
     }
-}
+
+    @Test
+    public void bandInfo_markedBand_usesAsteriskPrefix() {
+        // The marked variant of getBandInfo() (the "*" prefix branch) is distinct
+        // from the leading-space unmarked form.
+        OperationBand.Band b = new OperationBand.Band("*:14074000:20m");
+        assertThat(b.getBandInfo()).isEqualTo("* 14.074 MHz (20m)");
+    }
+
+    @Test
+    public void staticGetBandInfo_returnsInfoForIndex() {
+        OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
+        OperationBand.bandList.add(new OperationBand.Band(7_074_000L, "40m"));
+        assertThat(OperationBand.getBandInfo(1)).isEqualTo("  7.074 MHz (40m)");
+    }
+
+    @Test
+    public void staticGetBandInfo_outOfRangeIndex_fallsBackToFirst() {
+        // index >= size returns bandList.get(0).getBandInfo().
+        OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
+        assertThat(OperationBand.getBandInfo(99)).isEqualTo("  14.074 MHz (20m)");
+    }
+
+    @Test
+    public void getBandFreq_lastInRangeIndex_returnsThatEntry() {
+        // The existing suite covers index 0 and an out-of-range index; verify a
+        // non-zero in-range index resolves to the matching band.
+        OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
+        OperationBand.bandList.add(new OperationBand.Band(7_074_000L, "40m"));
+        assertThat(OperationBand.getBandFreq(1)).isEqualTo(7_074_000L);
+    }
+
+    @Test
+    public void bandStringConstructor_threeFieldUsesLastAsWavelength() {
+        // waveLength is taken from the last colon-delimited field, so a trailing
+        // descriptor still lands in waveLength.
+        OperationBand.Band b = new OperationBand.Band(" :10136000:30m");
+        assertThat(b.band).isEqualTo(10_136_000L);
+        assertThat(b.waveLength).isEqualTo("30m");
+        assertThat(b.marked).isFalse();
+    }}
