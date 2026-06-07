@@ -96,6 +96,14 @@ public class FT8TransmitSignal {
     public ArrayList<FunctionOfTransmit> functionList = new ArrayList<>();
     public MutableLiveData<ArrayList<FunctionOfTransmit>> mutableFunctions = new MutableLiveData<>();
 
+    // Failsafe caps that apply even when noReplyLimit is set to "ignore" (0), so
+    // a run never wedges. Calling states (order 1-3): give up on a station that
+    // never answers instead of transmitting at it forever. RR73 (order 4): the
+    // QSO is already logged, so only repeat RR73 a few times for the partner's
+    // benefit, then return to CQ / next caller.
+    private static final int NO_REPLY_GIVEUP_CYCLES = 4;
+    private static final int RR73_GIVEUP_CYCLES = 3;
+
     // Caller queue: stations that called us while we're in an active QSO
     private static final int MAX_QUEUE_SIZE = 10;
     private final ArrayList<QueuedCaller> callerQueue = new ArrayList<>();
@@ -214,6 +222,10 @@ public class FT8TransmitSignal {
             return;
         }
         Log.d(TAG, "doTransmit: Starting transmit...");
+        // Record exactly what goes on the air this cycle, alongside the existing
+        // serial.send TX1/TX0 keying lines, so the QSO trace shows the message text.
+        GeneralVariables.fileLog("QSO: TX slot=" + sequential + " order=" + functionOrder
+                + " msg=[" + getFunctionCommand(functionOrder).getMessageText() + "]");
         doTransmitThreadPool.execute(doTransmitRunnable);
 
         mutableFunctions.postValue(functionList);
@@ -265,6 +277,8 @@ public class FT8TransmitSignal {
         generateFun();
         mutableFunctionOrder.postValue(functionOrder);
 
+        GeneralVariables.fileLog("QSO: setTransmit to=" + toCallsign.callsign
+                + " order=" + this.functionOrder + " slot=" + sequential);
     }
 
     @SuppressLint("DefaultLocale")
@@ -931,6 +945,8 @@ public class FT8TransmitSignal {
                     && !GeneralVariables.checkQSLCallsign(msg.getCallsignFrom())// not previously contacted successfully
                     && !GeneralVariables.checkIsMyCallsign(msg.callsignFrom)) {// not myself
 
+                GeneralVariables.fileLog("QSO: auto-follow CQ from " + msg.getCallsignFrom()
+                        + " (Hunt=" + GeneralVariables.autoFollowCQ + ")");
                 resetTargetReport();
                 setTransmit(new TransmitCallsign(msg.i3, msg.n3, msg.getCallsignFrom(), msg.freq_hz
                         , msg.getSequence(), msg.snr), 1, msg.extraInfo);
@@ -1006,12 +1022,19 @@ public class FT8TransmitSignal {
         if (msgList.size() == 0) return;// no messages to parse, return
 
         if (msgList.get(0).getSequence() == sequential) {
+            GeneralVariables.fileLog("QSO: skip cycle, newest decode in own slot " + sequential);
             return;
         }
         ArrayList<Ft8Message> messages = new ArrayList<>(msgList);// prevent thread conflicts
 
 
         int newOrder = checkFunctionOrdFromMessages(messages);// check reply message sequence from the other party; -1 means not received
+        // Per-cycle spine of the QSO trace: current state, what (if anything) the
+        // other party sent us this cycle, who we're working, and the no-reply count.
+        GeneralVariables.fileLog(String.format("QSO: cycle slot=%d order=%d newOrder=%d to=%s noReply=%d/%d",
+                sequential, functionOrder, newOrder,
+                toCallsign != null ? toCallsign.callsign : "null",
+                GeneralVariables.noReplyCount, GeneralVariables.noReplyLimit));
         if (newOrder != -1) {// if there is a message sequence, reply received; reset error counter
             GeneralVariables.noReplyCount = 0;
         }
@@ -1023,6 +1046,8 @@ public class FT8TransmitSignal {
         // 73 (order 5) before completing the QSO. This handler fires before
         // the completion check so that we never skip the 73 reply.
         if (newOrder == 4) {
+            GeneralVariables.fileLog("QSO: rx RR73 from "
+                    + (toCallsign != null ? toCallsign.callsign : "?") + " -> reply 73");
             functionOrder = 5;
             mutableFunctions.postValue(functionList);
             mutableFunctionOrder.postValue(functionOrder);
@@ -1041,10 +1066,13 @@ public class FT8TransmitSignal {
 
                 || (functionOrder == 4 && checkTargetCallMe(messages) > 1)// or I am at RR73 (4) and target started calling others (>1 means target is calling others)
 
-                || (functionOrder == 4 && (GeneralVariables.noReplyCount > 20)
-                && (GeneralVariables.noReplyLimit == 0))// when no-reply is set to "ignore" and I am at RR73 (4), reset after 20 no-replies to prevent RR73 deadlock
+                || (functionOrder == 4 && (GeneralVariables.noReplyCount > RR73_GIVEUP_CYCLES)
+                && (GeneralVariables.noReplyLimit == 0))// when no-reply is "ignore" and I am at RR73 (4): the QSO is already logged, so reset after a few unacknowledged RR73s instead of holding the run frequency for minutes
 
         ) {
+            GeneralVariables.fileLog("QSO: complete with "
+                    + (toCallsign != null ? toCallsign.callsign : "?")
+                    + " (order=" + functionOrder + " newOrder=" + newOrder + ") -> reset to CQ");
             // enter CQ state
             resetToCQ();
 
@@ -1073,6 +1101,8 @@ public class FT8TransmitSignal {
                 generateFun();
             }
 
+            GeneralVariables.fileLog("QSO: advance order " + functionOrder + "->" + (newOrder + 1)
+                    + " with " + (toCallsign != null ? toCallsign.callsign : "?"));
             functionOrder = newOrder + 1;// execute the next message in sequence
             mutableFunctions.postValue(functionList);
             mutableFunctionOrder.postValue(functionOrder);
@@ -1104,8 +1134,25 @@ public class FT8TransmitSignal {
         if (!messages.get(0).isWeakSignal) {
             GeneralVariables.noReplyCount++;
         }
-        // if no-reply limit exceeded, reset to CQ state
-        if ((GeneralVariables.noReplyCount > GeneralVariables.noReplyLimit) && (GeneralVariables.noReplyLimit > 0)) {
+        GeneralVariables.fileLog(String.format("QSO: no-reply %d (order=%d to=%s)",
+                GeneralVariables.noReplyCount, functionOrder,
+                toCallsign != null ? toCallsign.callsign : "?"));
+
+        // Give up the current target and fall back to CQ / next caller when:
+        //  - the user-configured no-reply limit is hit (noReplyLimit > 0), OR
+        //  - the limit is "ignore" (0) but we're calling a station (order 1-3)
+        //    that never answers — a hard failsafe so we don't transmit at a
+        //    no-reply station forever. (Order 4/RR73 has its own cap in the
+        //    completion check above; order 5/73 already completes there.)
+        boolean limitHit = (GeneralVariables.noReplyLimit > 0)
+                && (GeneralVariables.noReplyCount > GeneralVariables.noReplyLimit);
+        boolean failsafeHit = (GeneralVariables.noReplyLimit == 0)
+                && (functionOrder >= 1 && functionOrder <= 3)
+                && (GeneralVariables.noReplyCount > NO_REPLY_GIVEUP_CYCLES);
+        if (limitHit || failsafeHit) {
+            GeneralVariables.fileLog("QSO: give up calling " + toCallsign.callsign
+                    + " (order=" + functionOrder + ", "
+                    + (failsafeHit ? "failsafe" : "limit") + ") -> CQ/next");
             // try queued callers first, then check watched messages, then fall back to CQ
             if (!dequeueNextCaller()) {
                 if (!getNewTargetCallsign(messages)) {//check CQ messages in watch list; returns true if a new target is found
@@ -1338,6 +1385,8 @@ public class FT8TransmitSignal {
                         callsign, msg.freq_hz, msg.getSequence(), msg.snr,
                         msg.i3, msg.n3, msg.extraInfo));
                 mutableCallerQueue.postValue(new ArrayList<>(callerQueue));
+                GeneralVariables.fileLog("QSO: enqueue caller " + callsign
+                        + " (queue size " + callerQueue.size() + ")");
             }
         }
     }
@@ -1357,6 +1406,8 @@ public class FT8TransmitSignal {
                 if (GeneralVariables.checkQSLCallsign(caller.callsign)) continue;
 
                 // Start QSO with this caller
+                GeneralVariables.fileLog("QSO: dequeue caller " + caller.callsign
+                        + " (" + callerQueue.size() + " left in queue)");
                 resetTargetReport();
                 setTransmit(new TransmitCallsign(caller.i3, caller.n3, caller.callsign,
                                 caller.frequency, caller.sequential, caller.snr),
