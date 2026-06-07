@@ -119,7 +119,15 @@ public class FT8TransmitSignal {
     private final DoTransmitRunnable doTransmitRunnable = new DoTransmitRunnable(this);
 
     static {
-        System.loadLibrary("ft8cn");
+        try {
+            System.loadLibrary("ft8cn");
+        } catch (UnsatisfiedLinkError e) {
+            // Best-effort load: JVM unit tests don't have libft8cn.so on
+            // java.library.path. The native methods themselves will throw if
+            // actually invoked without the library; the pure-Java helpers on
+            // this class (applyVolume, float2Short) stay available either way.
+            Log.w(TAG, "ft8cn native library not loaded: " + e.getMessage());
+        }
     }
 
     /**
@@ -346,13 +354,38 @@ public class FT8TransmitSignal {
     }
 
     /**
+     * Scale a slice of the generated waveform by the TX volume, returning a new
+     * buffer of exactly {@code playLength} samples.
+     *
+     * <p>This is the single source of truth for TX level. Both output paths use
+     * it: the AudioTrack path (because {@code AudioTrack.setVolume()} is a no-op
+     * when the track is routed to a USB Audio Class device, so the gain must be
+     * baked into the samples) and the USB-direct path. Pure function, no Android
+     * or native dependencies — covered by unit tests.
+     *
+     * @param source     full generated waveform
+     * @param skipSamples leading samples to drop (late-start trim); clamped to 0
+     * @param playLength number of samples to emit (source.length - skipSamples)
+     * @param volume     gain 0.0-1.0; 0 yields digital silence
+     * @return new float[playLength] of scaled samples
+     */
+    static float[] applyVolume(float[] source, int skipSamples, int playLength, float volume) {
+        if (skipSamples < 0) skipSamples = 0;
+        float[] out = new float[playLength];
+        for (int i = 0; i < playLength; i++) {
+            out[i] = source[skipSamples + i] * volume;
+        }
+        return out;
+    }
+
+    /**
      * Convert 32-bit float to 16-bit integer for maximum compatibility;
      * some sound cards do not support 32-bit float.
      *
      * @param buffer 32-bit float audio
      * @return 16-bit integer
      */
-    private short[] float2Short(float[] buffer) {
+    static short[] float2Short(float[] buffer) {
         short[] temp = new short[buffer.length + 8];// extra 8 zero-padded samples for QP-7C RP2040 audio detection compatibility
         for (int i = 0; i < buffer.length; i++) {
             float x = buffer[i];
@@ -495,11 +528,8 @@ public class FT8TransmitSignal {
         // a no-op, so the samples leave at full scale and the rig overdrives regardless of
         // the slider (even at 0%). Baking the gain into the samples here makes the slider
         // behave identically on every output route.
-        float vol = GeneralVariables.volumePercent;
-        float[] volumeAdjusted = new float[playLength];
-        for (int i = 0; i < playLength; i++) {
-            volumeAdjusted[i] = buffer[skipSamples + i] * vol;
-        }
+        float[] volumeAdjusted = applyVolume(buffer, skipSamples, playLength,
+                GeneralVariables.volumePercent);
 
         // distinguish between 32-bit float and integer
         int writeResult;
@@ -624,11 +654,9 @@ public class FT8TransmitSignal {
         if (skipSamples >= buffer.length) skipSamples = 0;
         int playLength = buffer.length - skipSamples;
 
-        // Apply volume
-        float[] volumeAdjusted = new float[playLength];
-        for (int i = 0; i < playLength; i++) {
-            volumeAdjusted[i] = buffer[skipSamples + i] * GeneralVariables.volumePercent;
-        }
+        // Apply volume (shared with the AudioTrack path)
+        float[] volumeAdjusted = applyVolume(buffer, skipSamples, playLength,
+                GeneralVariables.volumePercent);
 
         GeneralVariables.fileLog(String.format(
                 "playViaUsbAudio: calling writeAudio playLength=%d rate=%d",
