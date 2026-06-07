@@ -23,9 +23,14 @@ public class MeterProtectionController {
     // Reference to the transmit signal — set after construction
     private FT8TransmitSignal transmitSignal;
 
-    // ALC auto-volume tuning constants
-    private static final float VOLUME_STEP_DOWN = 0.02f;  // 2% per adjustment
-    private static final float VOLUME_STEP_UP = 0.01f;    // 1% per adjustment
+    // ALC auto-volume tuning. The TX audio buffer has its volume baked in once at
+    // the start of each cycle (the USB-direct path writes the entire buffer in a
+    // single blocking call, and AudioTrack volume is set at play() time), so a
+    // volume change can only affect the NEXT cycle. We therefore make exactly one
+    // proportional correction per TX cycle, in onTxCycleEnd() — adjusting mid-cycle
+    // just reacts repeatedly to a reading that cannot change yet and overshoots.
+    private static final float VOLUME_GAIN = 0.4f;        // volume change per unit ALC error (ALC on 0-1 scale)
+    private static final float VOLUME_MAX_STEP = 0.08f;   // cap any single cycle's change to 8%
     private static final float VOLUME_MIN = 0.05f;        // never below 5%
     private static final float VOLUME_MAX = 1.0f;
 
@@ -34,9 +39,6 @@ public class MeterProtectionController {
     private final int[] alcWindow = new int[ALC_WINDOW_SIZE];
     private int alcWindowIndex = 0;
     private int alcWindowCount = 0;
-
-    // Track whether we adjusted down mid-TX this cycle (suppress up-adjust mid-TX)
-    private boolean adjustedDownThisCycle = false;
 
     // Observable state for UI
     public final MutableLiveData<Boolean> swrLockout = new MutableLiveData<>(false);
@@ -65,30 +67,23 @@ public class MeterProtectionController {
             return; // no point adjusting volume if we just killed TX
         }
 
-        // --- ALC auto-volume (only when enabled and we have a valid reading) ---
+        // --- ALC sampling (only when enabled and we have a valid reading) ---
+        // We just accumulate here; the single per-cycle volume correction is made
+        // in onTxCycleEnd(). Adjusting mid-cycle is pointless because the current
+        // cycle's audio volume is already fixed, and reacting to the same reading
+        // every poll caused a violent over-correction (see class comment).
         if (normalizedAlc >= 0 && GeneralVariables.autoVolumeEnabled) {
             accumulateAlc(normalizedAlc);
-            int avg = getAlcAverage();
-            if (avg < 0) return; // not enough samples yet
-
-            if (avg > GeneralVariables.alcTargetHigh) {
-                // Too hot — reduce volume immediately (mid-TX for AudioTrack path)
-                float newVol = GeneralVariables.volumePercent - VOLUME_STEP_DOWN;
-                if (newVol < VOLUME_MIN) newVol = VOLUME_MIN;
-                GeneralVariables.volumePercent = newVol;
-                GeneralVariables.mutableVolumePercent.postValue(newVol);
-                adjustedDownThisCycle = true;
-                GeneralVariables.fileLog(String.format(
-                        "MeterProtection: ALC high (avg=%d > %d), vol down to %.0f%%",
-                        avg, GeneralVariables.alcTargetHigh, newVol * 100));
-            }
-            // Up-adjust is deferred to onTxCycleEnd() to avoid oscillation
         }
     }
 
     /**
      * Called after each TX cycle completes (from afterPlayAudio or onAfterTransmit).
-     * Applies between-cycle ALC volume increase if ALC was consistently low.
+     * Makes a single proportional volume correction for the next cycle based on the
+     * average ALC seen during this cycle. Doing exactly one correction per cycle —
+     * rather than one per meter poll — is required because the transmitted audio's
+     * volume is fixed for the duration of a cycle, so intra-cycle changes have no
+     * effect and only cause the loop to overshoot.
      */
     public void onTxCycleEnd() {
         if (!GeneralVariables.autoVolumeEnabled) {
@@ -97,19 +92,28 @@ public class MeterProtectionController {
         }
 
         int avg = getAlcAverage();
-        if (avg >= 0 && avg < GeneralVariables.alcTargetLow && !adjustedDownThisCycle) {
-            // ALC consistently low — nudge volume up for next cycle
-            float newVol = GeneralVariables.volumePercent + VOLUME_STEP_UP;
-            if (newVol > VOLUME_MAX) newVol = VOLUME_MAX;
-            GeneralVariables.volumePercent = newVol;
-            GeneralVariables.mutableVolumePercent.postValue(newVol);
-            GeneralVariables.fileLog(String.format(
-                    "MeterProtection: ALC low (avg=%d < %d), vol up to %.0f%%",
-                    avg, GeneralVariables.alcTargetLow, newVol * 100));
-        }
-
-        // Persist updated volume to DB (fire-and-forget)
-        if (alcWindowCount > 0) {
+        if (avg >= 0) {
+            int low = GeneralVariables.alcTargetLow;
+            int high = GeneralVariables.alcTargetHigh;
+            // Only correct when ALC is outside the target window; aim for its midpoint.
+            if (avg < low || avg > high) {
+                int target = (low + high) / 2;
+                float error = (target - avg) / 255f;      // -1..1 (negative = too hot)
+                float step = error * VOLUME_GAIN;
+                if (step > VOLUME_MAX_STEP) step = VOLUME_MAX_STEP;
+                if (step < -VOLUME_MAX_STEP) step = -VOLUME_MAX_STEP;
+                float newVol = GeneralVariables.volumePercent + step;
+                if (newVol < VOLUME_MIN) newVol = VOLUME_MIN;
+                if (newVol > VOLUME_MAX) newVol = VOLUME_MAX;
+                if (newVol != GeneralVariables.volumePercent) {
+                    GeneralVariables.volumePercent = newVol;
+                    GeneralVariables.mutableVolumePercent.postValue(newVol);
+                    GeneralVariables.fileLog(String.format(
+                            "MeterProtection: ALC avg=%d target=%d-%d, vol %s to %.0f%%",
+                            avg, low, high, step < 0 ? "down" : "up", newVol * 100));
+                }
+            }
+            // Persist updated volume to DB (fire-and-forget)
             persistVolume();
         }
 
@@ -177,7 +181,6 @@ public class MeterProtectionController {
     private void resetAccumulators() {
         alcWindowIndex = 0;
         alcWindowCount = 0;
-        adjustedDownThisCycle = false;
     }
 
     private void persistVolume() {

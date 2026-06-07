@@ -291,6 +291,14 @@
     <string name="settings_section_about">ACERCA DE</string>
     <string name="settings_section_language">IDIOMA</string>
 
+    <!-- ===== Settings: drill-down category labels ===== -->
+    <string name="settings_cat_radio_audio">Radio y audio</string>
+    <string name="settings_cat_transmission">Transmisión</string>
+    <string name="settings_cat_decode_filters">Decodificación y filtros</string>
+    <string name="settings_cat_logging">Registro y diplomas</string>
+    <string name="settings_cat_advanced">Avanzado</string>
+    <string name="settings_cat_about">Acerca de</string>
+
     <!-- ===== Settings: operator identity ===== -->
     <string name="settings_auto_update_grid">Actualizar grid automáticamente (GPS)</string>
     <string name="settings_auto_update_grid_desc">Usa el GPS del dispositivo para mantener tu grid Maidenhead actualizado</string>

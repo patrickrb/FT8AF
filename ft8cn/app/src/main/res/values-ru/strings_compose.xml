@@ -291,6 +291,14 @@
     <string name="settings_section_about">О ПРИЛОЖЕНИИ</string>
     <string name="settings_section_language">ЯЗЫК</string>
 
+    <!-- ===== Settings: drill-down category labels ===== -->
+    <string name="settings_cat_radio_audio">Радио и звук</string>
+    <string name="settings_cat_transmission">Передача</string>
+    <string name="settings_cat_decode_filters">Декодирование и фильтры</string>
+    <string name="settings_cat_logging">Журнал и награды</string>
+    <string name="settings_cat_advanced">Дополнительно</string>
+    <string name="settings_cat_about">О программе</string>
+
     <!-- ===== Settings: operator identity ===== -->
     <string name="settings_auto_update_grid">Автообновление QTH (GPS)</string>
     <string name="settings_auto_update_grid_desc">Использовать GPS устройства для актуального локатора Maidenhead</string>

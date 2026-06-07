@@ -83,4 +83,44 @@ public class CallsignInfoTest {
                 "United States\n:5:8:NA:42.5:-71.0:-5.0:K:K1ABC");
         assertThat(info.CountryNameEn).isEqualTo("United States");
     }
+
+    @Test
+    public void stringConstructor_ignoresExtraTrailingFields() {
+        // Only the first 9 colon-delimited fields are consumed; anything after
+        // index 8 is ignored.
+        CallsignInfo info = new CallsignInfo(
+                "United States:5:8:NA:42.5:-71.0:-5.0:K:K1ABC:extra:more");
+        assertThat(info.CallSign).isEqualTo("K1ABC");
+        assertThat(info.DXCC).isEqualTo("K");
+    }
+
+    @Test
+    public void stringConstructor_stripsSpacesFromContinentAndDxcc() {
+        // Continent and DXCC have all spaces removed (replace(" ","")), unlike
+        // CountryNameEn which only trims edges.
+        CallsignInfo info = new CallsignInfo(
+                "Country: 5: 8: N A : 42.5: -71.0: -5.0: K K :K1ABC");
+        assertThat(info.Continent).isEqualTo("NA");
+        assertThat(info.DXCC).isEqualTo("KK");
+    }
+
+    @Test
+    public void stringConstructor_parsesNegativeAndPositiveCoordinates() {
+        CallsignInfo info = new CallsignInfo(
+                "Far South:38:74:OC:-33.87:151.21:10.0:VK:VK2ABC");
+        assertThat(info.Latitude).isEqualTo(-33.87f);
+        assertThat(info.Longitude).isEqualTo(151.21f);
+        assertThat(info.GMT_offset).isEqualTo(10.0f);
+        assertThat(info.Continent).isEqualTo("OC");
+    }
+
+    @Test
+    public void argConstructor_preservesChineseCountryName() {
+        CallsignInfo info = new CallsignInfo(
+                "BY1QH", "China", "中国", 24, 44,
+                "AS", 39.9f, -116.4f, 8.0f, "BY");
+        assertThat(info.CountryNameCN).isEqualTo("中国");
+        assertThat(info.Continent).isEqualTo("AS");
+        assertThat(info.GMT_offset).isEqualTo(8.0f);
+    }
 }
