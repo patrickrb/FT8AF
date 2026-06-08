@@ -458,6 +458,13 @@
 
     <string name="tx_transmitting">TRANSMITIENDO</string>
     <string name="tx_listening">ESCUCHANDO</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT conectado — toca para reconectar</string>
+    <string name="cat_status_connecting">Conectando CAT…</string>
+    <string name="cat_status_disconnected">CAT desconectado — toca para conectar</string>
+    <string name="cat_status_error">Error de conexión CAT — toca para reintentar</string>
     <string name="qsopanel_log_action">LOG</string>
     <string name="qsopanel_queue">COLA</string>
     <string name="swr_lockout_title">TX DETENIDO — SWR alto detectado (%1$s)</string>

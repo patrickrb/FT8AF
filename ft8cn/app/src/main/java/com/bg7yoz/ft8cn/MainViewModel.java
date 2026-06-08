@@ -79,6 +79,7 @@ import com.bg7yoz.ft8cn.log.SWLQsoList;
 import com.bg7yoz.ft8cn.log.ThirdPartyService;
 import com.bg7yoz.ft8cn.rigs.BaseRig;
 import com.bg7yoz.ft8cn.rigs.BaseRigOperation;
+import com.bg7yoz.ft8cn.rigs.CatConnectionState;
 import com.bg7yoz.ft8cn.rigs.DiscoveryTX500Rig;
 import com.bg7yoz.ft8cn.rigs.ElecraftRig;
 import com.bg7yoz.ft8cn.rigs.Flex6000Rig;
@@ -215,16 +216,28 @@ public class MainViewModel extends ViewModel {
     public MutableLiveData<ArrayList<CableSerialPort.SerialPort>> mutableSerialPorts = new MutableLiveData<>();
     private ArrayList<CableSerialPort.SerialPort> serialPorts;//serial port list
     public BaseRig baseRig;//rig
+    //Observable CAT connection state for the UI status chip. Updated off the UI
+    //thread by the connector callbacks below, so use postValue everywhere.
+    public final MutableLiveData<CatConnectionState> mutableCatConnectionState =
+            new MutableLiveData<>(CatConnectionState.DISCONNECTED);
     private final OnRigStateChanged onRigStateChanged = new OnRigStateChanged() {
         @Override
         public void onDisconnected() {
             //disconnected from rig
+            mutableCatConnectionState.postValue(CatConnectionState.DISCONNECTED);
             ToastMessage.show(getStringFromResource(R.string.disconnect_rig));
+        }
+
+        @Override
+        public void onConnecting() {
+            //connection attempt started
+            mutableCatConnectionState.postValue(CatConnectionState.CONNECTING);
         }
 
         @Override
         public void onConnected() {
             //connected to rig
+            mutableCatConnectionState.postValue(CatConnectionState.CONNECTED);
             ToastMessage.show(getStringFromResource(R.string.connected_rig));
         }
 
@@ -250,6 +263,7 @@ public class MainViewModel extends ViewModel {
         @Override
         public void onRunError(String message) {
             //rig communication error
+            mutableCatConnectionState.postValue(CatConnectionState.ERROR);
             ToastMessage.show(String.format(getStringFromResource(R.string.radio_communication_error)
                     , message));
         }
@@ -1289,6 +1303,20 @@ public class MainViewModel extends ViewModel {
         } else {
             return baseRig.isConnected();
         }
+    }
+
+    /**
+     * Re-trigger the current rig's CAT connection. Backs the tap-to-reconnect
+     * status chip: Bluetooth often only connects on the second attempt, so this
+     * reuses the connector's existing connect() path (which, for Bluetooth, runs
+     * socketConnect() again). No-op when no rig/connector is configured.
+     */
+    public void reconnectRig() {
+        if (baseRig == null || baseRig.getConnector() == null) {
+            return;
+        }
+        mutableCatConnectionState.postValue(CatConnectionState.CONNECTING);
+        baseRig.getConnector().connect();
     }
 
     /**

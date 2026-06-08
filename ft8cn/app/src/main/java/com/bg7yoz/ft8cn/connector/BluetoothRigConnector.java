@@ -139,6 +139,7 @@ public class BluetoothRigConnector extends BaseRigConnector implements ServiceCo
             BluetoothDevice device = bluetoothAdapter.getRemoteDevice(deviceAddress);
             Log.d(TAG, "connecting...");
             connected = Connected.Pending;
+            getOnConnectorStateChanged().onConnecting();
             BluetoothSerialSocket socket = new BluetoothSerialSocket(context, device);
             service.connect(socket);
         } catch (Exception e) {

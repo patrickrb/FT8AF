@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bg7yoz.ft8cn.R
+import com.bg7yoz.ft8cn.rigs.CatConnectionState
 import radio.ks3ckc.ft8us.theme.*
 
 @Composable
@@ -42,6 +43,8 @@ fun TxStrip(
     modeName: String,
     modeSwitchEnabled: Boolean,
     dxEnabled: Boolean = false,
+    catState: CatConnectionState = CatConnectionState.DISCONNECTED,
+    showCatChip: Boolean = false,
     expanded: Boolean = false,
     onCallCQ: () -> Unit,
     onStop: () -> Unit,
@@ -49,6 +52,7 @@ fun TxStrip(
     onToggleHunt: () -> Unit,
     onCycleMode: () -> Unit,
     onToggleDx: () -> Unit = {},
+    onReconnectCat: () -> Unit = {},
     onOpenFrequencyPicker: () -> Unit,
     onToggleExpand: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -113,6 +117,11 @@ fun TxStrip(
                 fontFamily = GeistMonoFamily,
                 letterSpacing = 0.02.sp,
             )
+            // CAT connection status — tap to reconnect (Bluetooth often needs a
+            // second attempt). Hidden for VOX / audio-only setups.
+            if (showCatChip) {
+                CatStatusChip(state = catState, onReconnect = onReconnectCat)
+            }
         }
 
         // Right: CQ/Stop button + frequency

@@ -35,9 +35,11 @@ import com.bg7yoz.ft8cn.MainViewModel
 import com.bg7yoz.ft8cn.ModeProfile
 import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.database.OperationBand
+import com.bg7yoz.ft8cn.rigs.CatConnectionState
 import com.bg7yoz.ft8cn.rigs.BaseRigOperation
 import radio.ks3ckc.ft8us.theme.BgApp
 import radio.ks3ckc.ft8us.ui.components.ActiveQsoPanel
+import radio.ks3ckc.ft8us.ui.components.shouldShowCatChip
 import radio.ks3ckc.ft8us.ui.components.FT8USTab
 import radio.ks3ckc.ft8us.ui.components.FrequencyPickerSheet
 import radio.ks3ckc.ft8us.ui.components.HoundSetupSheet
@@ -65,6 +67,11 @@ fun FT8USApp(mainViewModel: MainViewModel) {
     val isActivated by mainViewModel.ft8TransmitSignal.mutableIsActivated.observeAsState(false)
     val txSlot by mainViewModel.ft8TransmitSignal.mutableSequential.observeAsState(mainViewModel.ft8TransmitSignal.sequential)
     val qsoCompletedAt by mainViewModel.ft8TransmitSignal.mutableQsoCompletedAt.observeAsState()
+    // CAT connection status for the TX-strip chip. Hidden for VOX / audio-only
+    // setups (see shouldShowCatChip); tap reconnects (handy for Bluetooth, which
+    // often only connects on the second attempt).
+    val catState by mainViewModel.mutableCatConnectionState.observeAsState(CatConnectionState.DISCONNECTED)
+    val showCatChip = shouldShowCatChip(GeneralVariables.controlMode, catState)
     // Consume the one-shot celebration signal so LiveData doesn't replay it
     // on recomposition / resubscription.
     LaunchedEffect(qsoCompletedAt) {
@@ -229,6 +236,8 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                 modeName = modeName,
                 modeSwitchEnabled = !isTransmitting,
                 dxEnabled = dxEnabled,
+                catState = catState,
+                showCatChip = showCatChip,
                 expanded = qsoPanelExpanded,
                 onCallCQ = {
                     if (GeneralVariables.myCallsign.isNullOrEmpty()) {
@@ -296,6 +305,7 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                         ).show()
                     }
                 },
+                onReconnectCat = { mainViewModel.reconnectRig() },
                 onOpenFrequencyPicker = { showFrequencyPicker = true },
                 onToggleExpand = { qsoPanelExpanded = !qsoPanelExpanded },
             )
