@@ -6,6 +6,26 @@ After finishing the code for any feature, open a pull request targeting the `dev
 branch (do the work on a feature branch, then `gh pr create --base dev`). Don't
 merge straight to `main`.
 
+**Use a git worktree for every separate line of work.** Don't switch branches in
+the primary checkout (`C:\Users\burns\Projects\NEXT-FT8CN`) — branch-switching
+there collides with anything else in flight (a running build, an `adb install`, a
+different task). Instead spin up an isolated worktree per task:
+
+```
+git worktree add ../NEXT-FT8CN-<short-task-name> -b feat/<task>
+```
+
+Two gotchas for a fresh worktree:
+
+- The `ft8cn/app/src/main/cpp/` native sources (`ft8_lib`, `ft8cn_glue`,
+  `libsamplerate`) are **untracked** (see `git status` / memory
+  `ft8af-untracked-native-sources.md`), so a new worktree won't have them and the
+  NDK build fails. Copy them over from the primary checkout before building.
+- Build/install still uses the Windows wrapper from inside the worktree's `ft8cn`
+  dir (`cmd.exe /c "gradlew.bat installDebug"`).
+
+Remove the worktree when the branch is merged: `git worktree remove <path>`.
+
 ## Build & Deploy
 
 After making code changes, always build and install on the connected device.
