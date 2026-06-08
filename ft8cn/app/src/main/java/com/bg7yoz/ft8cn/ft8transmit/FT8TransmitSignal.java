@@ -158,9 +158,11 @@ public class FT8TransmitSignal {
         setActivated(false);
 
 
-        // Volume is baked into the TX samples per-cycle (see playFT8Signal / playViaUsbAudio),
-        // so there is no live mid-cycle setVolume() observer here: a volume change takes effect
-        // on the next cycle. This matches the ALC auto-volume model (MeterProtectionController).
+        // TX volume is applied live, mid-transmission: the chunked MODE_STREAM AudioTrack
+        // loop re-reads GeneralVariables.volumePercent for each chunk (see playFT8Signal),
+        // and the USB-direct path applies gain live via UsbAudioNative.setTxVolume. A slider
+        // change therefore takes effect within the current cycle, so no per-cycle setVolume()
+        // observer is needed here.
 
         // Cycle timer on the current mode's period (FT8 = 15s/150, FT4 = 7.5s/75).
         utcTimer = new UtcTimer(GeneralVariables.currentMode().slotTenths, false, makeTimerCallback());

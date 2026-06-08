@@ -292,6 +292,18 @@ public class MainViewModel extends ViewModel {
     }
 
     /**
+     * The value afterDecode() must post to mutableIsDecoding (the spectrum-display
+     * "decoding" marker) once a decode pass finishes. beforeListen() turns the marker
+     * on at the start of every cycle, so every pass must turn it back off when done —
+     * a silent slot (rawDecodeCount == 0), an all-own-echo slot (keptCount == 0), and a
+     * normal slot alike. Routing all three exit paths of afterDecode() through this keeps
+     * them in agreement; an early return that skipped it once left the marker stuck on.
+     */
+    static boolean decodingMarkerAfterPass(int rawDecodeCount, int keptCount) {
+        return false;//a completed decode pass always ends the decoding state
+    }
+
+    /**
      * Get the specified message from the message list.
      *
      * @param position Position in the Mutable type list.
@@ -366,7 +378,14 @@ public class MainViewModel extends ViewModel {
             @Override
             public void afterDecode(long utc, float time_sec, int sequential
                     , ArrayList<Ft8Message> decoded, boolean isDeep) {
-                if (decoded.size() == 0) return;//no messages decoded, don't trigger action
+                if (decoded.size() == 0) {
+                    // beforeListen set mutableIsDecoding=true at the start of this cycle;
+                    // clear it here so a silent slot doesn't leave the spectrum-display
+                    // decoding marker stuck on until the next non-empty cycle (mirrors the
+                    // own-echo-only early return below).
+                    mutableIsDecoding.postValue(decodingMarkerAfterPass(0, 0));
+                    return;//no messages decoded, don't trigger action
+                }
 
                 // Filter out own-TX loopback echoes. When the rig monitors TX audio to
                 // line-out the decoder hears our own transmission and decodes it; a decode
@@ -386,7 +405,8 @@ public class MainViewModel extends ViewModel {
                     fileLog(filtered.decodeLogLine(sequential));
                 }
                 if (messages.size() == 0) {
-                    mutableIsDecoding.postValue(false);//nothing left after filtering own echoes
+                    //nothing left after filtering own echoes
+                    mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), 0));
                     return;
                 }
 
@@ -436,7 +456,8 @@ public class MainViewModel extends ViewModel {
                     currentDecodeCount = messages.size();
                 }
 
-                mutableIsDecoding.postValue(false);//decode state, triggers marker action in spectrum display
+                //decode state, triggers marker action in spectrum display
+                mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), messages.size()));
 
 
                 getQTHRunnable.messages = messages;
