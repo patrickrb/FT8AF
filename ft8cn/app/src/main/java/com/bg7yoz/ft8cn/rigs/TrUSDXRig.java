@@ -271,10 +271,10 @@ public class TrUSDXRig extends BaseRig {
             setPTT(false);
             return;
         }
-        //adjust signal strength
-        for (int i = 0; i < wave.length; i++) {
-            wave[i] = wave[i] * GeneralVariables.volumePercent;
-        }
+        // TX volume is applied live in the send loop below (around the 8-bit
+        // midpoint), not baked into the float wave here, so dragging the slider
+        // attenuates the in-progress over instead of only the next one. Real-time
+        // granularity is bounded by the serial buffer depth rather than the cycle.
 
 //
 //        byte[] pcm16 = toWaveFloatToPCM16(wave);
@@ -284,20 +284,31 @@ public class TrUSDXRig extends BaseRig {
 //        txResample.close();
 //        byte[] pcm8 = toWaveSamples16To8(resampled);
 
+        // Full-scale 8-bit unsigned PCM (zero == 128); volume applied per chunk below.
         byte[] pcm8 = FT8Resample.get8Resample32(wave, 24000, txSampling, 1);
 
-
-        for (int i = 0; i < pcm8.length; i++) {
-            if (pcm8[i] == 0x3B) pcm8[i] = 0x3A; // ; to :
-        }
-        while (pcm8.length > 0) {
-            if (pcm8.length <= 256) {
-                getConnector().sendData(pcm8);
-                break;
-            } else {
-                getConnector().sendData(Arrays.copyOfRange(pcm8, 0, 256));
-                pcm8 = Arrays.copyOfRange(pcm8, 256, pcm8.length);
+        // Send in 256-byte chunks, scaling each chunk by the *current* volume so a
+        // mid-over slider move takes effect within a serial-buffer's worth of audio.
+        // Scale around the 8-bit midpoint (128), then re-apply the 0x3B -> 0x3A
+        // escape (';' is the CAT command terminator and must not appear in audio) —
+        // the escape must come after scaling since scaling changes byte values. At
+        // unity (vol == 1) this reproduces the previous output exactly.
+        int sent = 0;
+        while (sent < pcm8.length) {
+            int len = Math.min(256, pcm8.length - sent);
+            byte[] chunk = new byte[len];
+            float vol = GeneralVariables.volumePercent;
+            for (int i = 0; i < len; i++) {
+                int u = pcm8[sent + i] & 0xFF;                 // unsigned 0..255
+                int scaled = 128 + Math.round((u - 128) * vol);
+                if (scaled > 255) scaled = 255;
+                else if (scaled < 0) scaled = 0;
+                byte b = (byte) scaled;
+                if (b == 0x3B) b = 0x3A; // ; to :
+                chunk[i] = b;
             }
+            getConnector().sendData(chunk);
+            sent += len;
         }
     }
 
