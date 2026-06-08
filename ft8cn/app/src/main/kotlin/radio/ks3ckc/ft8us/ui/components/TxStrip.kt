@@ -143,14 +143,24 @@ fun TxStrip(
             }
 
             // HUNT (auto-answer CQ) toggle pill. On = proactively call stations
-            // calling CQ; off = run CQ and only work stations that answer us.
-            val huntBg = if (huntEnabled) Signal.copy(alpha = 0.18f) else BgSurface3
-            val huntColor = if (huntEnabled) Signal else TextMuted
+            // calling CQ; off = run CQ. Mutually exclusive with CQ: disabled while
+            // you're actively running CQ so the two modes never overlap.
+            val huntDisabled = isActivated && !huntEnabled
+            val huntBg = when {
+                huntDisabled -> BgSurface3.copy(alpha = 0.4f)
+                huntEnabled -> Signal.copy(alpha = 0.18f)
+                else -> BgSurface3
+            }
+            val huntColor = when {
+                huntDisabled -> TextMuted.copy(alpha = 0.4f)
+                huntEnabled -> Signal
+                else -> TextMuted
+            }
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
                     .background(huntBg)
-                    .clickable { onToggleHunt() }
+                    .then(if (huntDisabled) Modifier else Modifier.clickable { onToggleHunt() })
                     .padding(horizontal = 8.dp, vertical = 4.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -166,16 +176,29 @@ fun TxStrip(
                 )
             }
 
-            // CQ / Stop pill button
-            val buttonBg = if (isActivated) StatusBad.copy(alpha = 0.18f) else AccentSoft
-            val buttonTextColor = if (isActivated) StatusBad else Accent
+            // CQ / Stop pill button. Mutually exclusive with HUNT: disabled while
+            // HUNT mode is on, so you can't run CQ and hunt at the same time.
+            val cqDisabled = huntEnabled && !isActivated
+            val buttonBg = when {
+                isActivated -> StatusBad.copy(alpha = 0.18f)
+                cqDisabled -> AccentSoft.copy(alpha = 0.4f)
+                else -> AccentSoft
+            }
+            val buttonTextColor = when {
+                isActivated -> StatusBad
+                cqDisabled -> Accent.copy(alpha = 0.4f)
+                else -> Accent
+            }
             val buttonLabel = if (isActivated) "STOP" else "CQ"
 
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .background(buttonBg)
-                    .clickable { if (isActivated) onStop() else onCallCQ() }
+                    .then(
+                        if (cqDisabled) Modifier
+                        else Modifier.clickable { if (isActivated) onStop() else onCallCQ() }
+                    )
                     .padding(horizontal = 18.dp, vertical = 9.dp),
                 contentAlignment = Alignment.Center,
             ) {
