@@ -66,8 +66,6 @@ import radio.ks3ckc.ft8us.ui.components.StatusPill
 import radio.ks3ckc.ft8us.ui.map.WorldOutlines
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlin.math.max
-import kotlin.math.min
 
 /**
  * Bottom sheet that displays full station details for a decoded message and
@@ -842,13 +840,13 @@ private fun computeAzimuthText(myGrid: String?, theirGrid: String?): String {
  * Distance from the operator's grid to the remote station's grid, formatted in
  * the user's preferred unit (mi/km). Returns "--" when either grid is unknown.
  */
-private fun computeDistanceText(myGrid: String?, theirGrid: String?): String {
+internal fun computeDistanceText(myGrid: String?, theirGrid: String?): String {
     if (myGrid.isNullOrEmpty() || theirGrid.isNullOrEmpty()) return "--"
     return MaidenheadGrid.getDistStr(myGrid, theirGrid).ifEmpty { "--" }
 }
 
 /** Decode a Maidenhead grid to (lat, lon); null if the grid is blank/invalid. */
-private fun gridToLatLon(grid: String?): Pair<Double, Double>? {
+internal fun gridToLatLon(grid: String?): Pair<Double, Double>? {
     if (grid.isNullOrEmpty()) return null
     return try {
         val ll = MaidenheadGrid.gridToLatLng(grid) ?: return null
@@ -861,9 +859,6 @@ private fun gridToLatLon(grid: String?): Pair<Double, Double>? {
 // ---------------------------------------------------------------------------
 // QSO path map (operator grid -> remote grid)
 // ---------------------------------------------------------------------------
-
-private const val QSO_MAP_MIN_SPAN_DEG = 25.0
-private const val QSO_MAP_PAD_FRAC = 0.30
 
 /**
  * Compact equirectangular map auto-zoomed to frame the operator's grid and the
@@ -948,22 +943,12 @@ private fun DrawScope.drawQsoPath(
     val h = size.height
     drawRect(color = BgSurface, size = size)
 
-    // Shift the remote longitude to the equivalent nearest the operator so the
-    // path takes the short way around (handles the antemeridian).
-    var tLon = theirLon
-    if (tLon - myLon > 180.0) tLon -= 360.0
-    else if (tLon - myLon < -180.0) tLon += 360.0
-
-    val cLon = (min(myLon, tLon) + max(myLon, tLon)) / 2.0
-    val cLat = (min(myLat, theirLat) + max(myLat, theirLat)) / 2.0
-    val spanLon = max(max(myLon, tLon) - min(myLon, tLon), QSO_MAP_MIN_SPAN_DEG) *
-        (1.0 + 2.0 * QSO_MAP_PAD_FRAC)
-    val spanLat = max(max(myLat, theirLat) - min(myLat, theirLat), QSO_MAP_MIN_SPAN_DEG) *
-        (1.0 + 2.0 * QSO_MAP_PAD_FRAC)
-    // Uniform degrees-per-pixel so geography isn't stretched; fit both spans.
-    val scale = min(w / spanLon, h / spanLat)
-    fun px(lon: Double): Float = (w / 2.0 + (lon - cLon) * scale).toFloat()
-    fun py(lat: Double): Float = (h / 2.0 - (lat - cLat) * scale).toFloat()
+    // Equirectangular framing of the two endpoints (pure, unit-tested geometry
+    // in QsoPathProjection — handles antemeridian normalization + uniform scale).
+    val proj = QsoPathProjection(myLat, myLon, theirLat, theirLon, w, h)
+    val tLon = proj.normalizedTheirLon
+    fun px(lon: Double): Float = proj.projectX(lon)
+    fun py(lat: Double): Float = proj.projectY(lat)
 
     // Land \u2014 drawn at -360/0/+360 lon offsets so continents that wrap across the
     // view's edge (e.g. trans-Pacific paths) still appear.
