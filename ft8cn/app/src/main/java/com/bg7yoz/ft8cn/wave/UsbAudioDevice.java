@@ -472,7 +472,15 @@ public class UsbAudioDevice {
      * Write audio data to the USB output device.
      * Handles sample rate conversion and format conversion.
      *
-     * @param audioData        Float PCM mono data
+     * <p>The {@code audioData} is full-scale (TX volume is no longer baked in by
+     * the caller). Gain is applied live as the buffer drains so a slider move
+     * takes effect mid-over: the native path multiplies each sample in its drain
+     * loop (see {@code nativeSetTxVolume}); the UsbRequest fallback below scales
+     * each chunk by the current {@link GeneralVariables#volumePercent} as it
+     * sends. This is the rig-protection path — pulling the slider down attenuates
+     * the in-progress transmission within tens of ms.
+     *
+     * @param audioData        Float PCM mono data, full-scale (no volume baked in)
      * @param sourceSampleRate Sample rate of the input data
      * @return true if successful
      */
@@ -483,6 +491,10 @@ public class UsbAudioDevice {
         // Start this transmission with a clear cancel flag. STOP sets it (via
         // UsbAudioNative.cancelWrite) to abort either the native or fallback path.
         UsbAudioNative.resetCancel();
+        // Seed the native drain loop with the current level before it starts, so
+        // the first packet is already at the right gain (the live observer keeps
+        // it updated thereafter).
+        UsbAudioNative.setTxVolume(com.bg7yoz.ft8cn.GeneralVariables.volumePercent);
 
         // Resample to device's output rate
         float[] resampled;
@@ -555,7 +567,29 @@ public class UsbAudioDevice {
             int chunkSize = Math.min(packetSize, pcmData.length - offset);
             ByteBuffer buf = ByteBuffer.allocateDirect(chunkSize);
             buf.order(ByteOrder.LITTLE_ENDIAN);
-            buf.put(pcmData, offset, chunkSize);
+            // Apply the current TX gain to this chunk as we copy it (pcmData is
+            // full-scale). Read once per chunk (~1ms of audio) so dragging the
+            // slider attenuates the in-progress TX almost immediately. Unity is
+            // a straight copy.
+            float vol = com.bg7yoz.ft8cn.GeneralVariables.volumePercent;
+            if (vol >= 0.999f) {
+                buf.put(pcmData, offset, chunkSize);
+            } else {
+                int pairs = chunkSize / 2;
+                for (int p = 0; p < pairs; p++) {
+                    int b = offset + p * 2;
+                    short s = (short) ((pcmData[b] & 0xFF) | (pcmData[b + 1] << 8));
+                    int scaled = (int) (s * vol);
+                    if (scaled > 32767) scaled = 32767;
+                    else if (scaled < -32768) scaled = -32768;
+                    buf.put((byte) (scaled & 0xFF));
+                    buf.put((byte) ((scaled >> 8) & 0xFF));
+                }
+                // Odd trailing byte (not expected for 16-bit audio) — copy as-is.
+                if ((chunkSize & 1) == 1) {
+                    buf.put(pcmData[offset + chunkSize - 1]);
+                }
+            }
             buf.flip();
 
             // Whole iteration is guarded: if the underlying USB connection has

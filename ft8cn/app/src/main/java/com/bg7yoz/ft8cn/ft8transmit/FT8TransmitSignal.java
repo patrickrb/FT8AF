@@ -89,6 +89,14 @@ public class FT8TransmitSignal {
     // so the TX still finishes on the cycle boundary. Set just before playback.
     private volatile int lateStartSkipMs = 0;
 
+    // Set by setTransmitting(false)/STOP to abort the chunked MODE_STREAM
+    // AudioTrack playback loop mid-buffer. The worker thread owns the track's
+    // stop/release (see playFT8Signal); the UI thread only flips this flag and
+    // pauses+flushes the track for immediate silence, avoiding a release race
+    // against the worker blocked in write(). Reset at the start of each cycle's
+    // sound-card playback.
+    private volatile boolean txAudioCancelled = false;
+
     public UtcTimer utcTimer;
 
 
@@ -398,6 +406,28 @@ public class FT8TransmitSignal {
         return temp;
     }
 
+    /**
+     * Convert the first {@code length} float samples to 16-bit, with no trailing
+     * zero padding. Used by the chunked MODE_STREAM playback loop, which writes
+     * many chunks per cycle; the 8-sample QP-7C pad must be appended once at the
+     * very end of the message, not after every chunk (see {@link #float2Short}).
+     * Pure function — covered by unit tests.
+     *
+     * @param buffer source samples
+     * @param length number of samples to convert (≤ buffer.length)
+     * @return new short[length] of clipped, scaled samples
+     */
+    static short[] floatToInt16NoPad(float[] buffer, int length) {
+        short[] out = new short[length];
+        for (int i = 0; i < length; i++) {
+            float x = buffer[i];
+            if (x > 1.0f) x = 1.0f;
+            else if (x < -1.0f) x = -1.0f;
+            out[i] = (short) (x * 32767.0);
+        }
+        return out;
+    }
+
     private void playFT8Signal(Ft8Message msg) {
 
         if (GeneralVariables.connectMode == ConnectMode.NETWORK) {// network mode does not play audio locally
@@ -466,6 +496,11 @@ public class FT8TransmitSignal {
             return;
         }
 
+        // Fresh cancel state for this cycle's playback (consumed by the chunked
+        // AudioTrack loop below; the USB path has its own cancel via
+        // UsbAudioNative.resetCancel/cancelWrite).
+        txAudioCancelled = false;
+
         // USB audio output path. Logged so a dev-screen reader can see
         // which branch was taken — the difference between TX going out
         // the USB radio (this branch) vs. Android's default sink (the
@@ -496,17 +531,28 @@ public class FT8TransmitSignal {
                 .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                 .build();
 
-        //myFormat = new AudioFormat.Builder().setSampleRate(FT8Common.SAMPLE_RATE)
+        int encoding = GeneralVariables.audioOutput32Bit
+                ? AudioFormat.ENCODING_PCM_FLOAT : AudioFormat.ENCODING_PCM_16BIT;
         myFormat = new AudioFormat.Builder().setSampleRate(GeneralVariables.audioSampleRate)
-                .setEncoding(GeneralVariables.audioOutput32Bit ? // float vs integer
-                        AudioFormat.ENCODING_PCM_FLOAT : AudioFormat.ENCODING_PCM_16BIT)
+                .setEncoding(encoding)
                 .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build();
+
+        // MODE_STREAM (was MODE_STATIC) with a deliberately SMALL buffer so we can
+        // apply TX volume live: we feed the generated waveform out in ~50ms chunks,
+        // re-reading volumePercent for each chunk, and a blocking write only commits
+        // a chunk once the device has room. The buffer depth (~200ms) bounds how much
+        // audio is already queued at the old level, i.e. the worst-case latency from
+        // a slider move to the level changing on air — instant enough to pull drive
+        // down and protect the rig mid-over, which baking volume into a one-shot
+        // MODE_STATIC write could not do (the slider only took effect next cycle).
+        int bytesPerSample = GeneralVariables.audioOutput32Bit ? 4 : 2;
+        int targetBufBytes = (GeneralVariables.audioSampleRate / 5) * bytesPerSample; // ~200ms mono
+        int minBuf = AudioTrack.getMinBufferSize(GeneralVariables.audioSampleRate,
+                AudioFormat.CHANNEL_OUT_MONO, encoding);
+        int bufBytes = Math.max(targetBufBytes, minBuf > 0 ? minBuf : targetBufBytes);
         int mySession = 0;
-        audioTrack = new AudioTrack(attributes, myFormat
-                , GeneralVariables.audioOutput32Bit ? GeneralVariables.audioSampleRate * 15 * 4
-                : GeneralVariables.audioSampleRate * 15 * 2// float vs integer
-                , AudioTrack.MODE_STATIC
-                , mySession);
+        audioTrack = new AudioTrack(attributes, myFormat, bufBytes,
+                AudioTrack.MODE_STREAM, mySession);
 
         // set preferred output device
         if (GeneralVariables.audioOutputDeviceId > 0) {
@@ -521,59 +567,75 @@ public class FT8TransmitSignal {
         if (skipSamples >= buffer.length) skipSamples = 0;
         int playLength = buffer.length - skipSamples;
 
-        // Apply volume in software, exactly like the USB-direct path (playViaUsbAudio).
-        // We do NOT rely on AudioTrack.setVolume() for level control: when the track is
-        // routed to a USB Audio Class device (the rig's sound card), many Android builds
-        // delegate level to the device's hardware volume and the per-track setVolume() is
-        // a no-op, so the samples leave at full scale and the rig overdrives regardless of
-        // the slider (even at 0%). Baking the gain into the samples here makes the slider
-        // behave identically on every output route.
-        float[] volumeAdjusted = applyVolume(buffer, skipSamples, playLength,
-                GeneralVariables.volumePercent);
+        // Keep the track at unity: TX level is carried in the sample values (we scale
+        // each chunk below). On routes where AudioTrack.setVolume() works (phone
+        // speaker) this avoids double-attenuation; on routes where it's a no-op (USB
+        // Audio Class sound cards delegating level to device hardware) the in-sample
+        // gain is what actually controls the rig's drive.
+        audioTrack.play();
+        audioTrack.setVolume(1.0f);
 
-        // distinguish between 32-bit float and integer
-        int writeResult;
-        if (GeneralVariables.audioOutput32Bit) {
-            writeResult = audioTrack.write(volumeAdjusted, 0, playLength
-                    , AudioTrack.WRITE_NON_BLOCKING);
-        } else {
-            short[] audio_data = float2Short(volumeAdjusted);
-            writeResult = audioTrack.write(audio_data, 0, playLength
-                    , AudioTrack.WRITE_NON_BLOCKING);
-        }
+        // Stream the waveform in chunks, re-reading volumePercent each chunk so a
+        // slider move ramps the on-air level within ~1 chunk + buffer depth.
+        final int chunkSamples = Math.max(1, GeneralVariables.audioSampleRate / 20); // ~50ms
+        int framesWritten = 0;
+        boolean writeError = false;
+        int offset = 0;
+        while (offset < playLength) {
+            if (txAudioCancelled || !isTransmitting) break;
+            int chunkLen = Math.min(chunkSamples, playLength - offset);
+            // applyVolume reads volumePercent fresh for this chunk (live gain) and
+            // performs the late-start slice at skipSamples + offset.
+            float[] chunk = applyVolume(buffer, skipSamples + offset, chunkLen,
+                    GeneralVariables.volumePercent);
 
-        if (playLength > writeResult) {
-            Log.e(TAG, String.format("Playback buffer insufficient: %d--->%d", playLength, writeResult));
-        }
-
-        // check write result; if abnormal, release resources immediately
-        if (writeResult == AudioTrack.ERROR_INVALID_OPERATION
-                || writeResult == AudioTrack.ERROR_BAD_VALUE
-                || writeResult == AudioTrack.ERROR_DEAD_OBJECT
-                || writeResult == AudioTrack.ERROR) {
-            // abnormal condition
-            Log.e(TAG, String.format("Playback error: %d", writeResult));
-            afterPlayAudio();
-            return;
-        }
-        audioTrack.setNotificationMarkerPosition(playLength);
-        audioTrack.setPlaybackPositionUpdateListener(new AudioTrack.OnPlaybackPositionUpdateListener() {
-            @Override
-            public void onMarkerReached(AudioTrack audioTrack) {
-                afterPlayAudio();
+            int writeResult;
+            if (GeneralVariables.audioOutput32Bit) {
+                writeResult = audioTrack.write(chunk, 0, chunkLen, AudioTrack.WRITE_BLOCKING);
+            } else {
+                short[] audio_data = floatToInt16NoPad(chunk, chunkLen);
+                writeResult = audioTrack.write(audio_data, 0, chunkLen, AudioTrack.WRITE_BLOCKING);
             }
 
-            @Override
-            public void onPeriodicNotification(AudioTrack audioTrack) {
-
+            if (writeResult < 0) {
+                Log.e(TAG, String.format("Playback error: %d", writeResult));
+                writeError = true;
+                break;
             }
-        });
-        if (audioTrack != null) {
-            audioTrack.play();
-            // Volume is baked into the samples above; keep the track at unity so we don't
-            // double-attenuate on routes where setVolume() does work (e.g. phone speaker).
-            audioTrack.setVolume(1.0f);
+            framesWritten += writeResult;
+            offset += chunkLen;
         }
+
+        // Append the 8-sample zero pad once at the end (QP-7C RP2040 audio
+        // detection compatibility), only for the int16 path — matches the old
+        // float2Short() behavior. Skipped if we errored or were cancelled.
+        if (!writeError && !txAudioCancelled && isTransmitting
+                && !GeneralVariables.audioOutput32Bit) {
+            short[] pad = new short[8];
+            int padResult = audioTrack.write(pad, 0, pad.length, AudioTrack.WRITE_BLOCKING);
+            if (padResult > 0) framesWritten += padResult;
+        }
+
+        // Blocking writes return once data is *buffered*, not played. Wait for the
+        // tail (up to bufBytes) to actually drain before releasing, so we don't
+        // truncate the end of the message. A STOP cancel skips the wait (the UI
+        // thread has already paused+flushed for immediate silence).
+        if (!writeError && !txAudioCancelled) {
+            while (isTransmitting && !txAudioCancelled) {
+                int head = audioTrack.getPlaybackHeadPosition();
+                if (head >= framesWritten) break;
+                try {
+                    Thread.sleep(20);
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+        }
+
+        // Worker-thread-owned teardown (drops PTT + releases the track). The UI
+        // thread never releases the streaming track — it only flips txAudioCancelled
+        // and pauses/flushes — so there's no release race against this write loop.
+        afterPlayAudio();
     }
 
     /**
@@ -654,14 +716,17 @@ public class FT8TransmitSignal {
         if (skipSamples >= buffer.length) skipSamples = 0;
         int playLength = buffer.length - skipSamples;
 
-        // Apply volume (shared with the AudioTrack path)
-        float[] volumeAdjusted = applyVolume(buffer, skipSamples, playLength,
-                GeneralVariables.volumePercent);
+        // Pass the full-scale slice; TX volume is applied live as the buffer
+        // drains (native scales each sample in its write loop, the UsbRequest
+        // fallback scales per chunk), so the slider attenuates the in-progress
+        // TX within tens of ms instead of next cycle. applyVolume at unity here
+        // just performs the late-start slice.
+        float[] unscaled = applyVolume(buffer, skipSamples, playLength, 1.0f);
 
         GeneralVariables.fileLog(String.format(
                 "playViaUsbAudio: calling writeAudio playLength=%d rate=%d",
                 playLength, GeneralVariables.audioSampleRate));
-        boolean success = usbDev.writeAudio(volumeAdjusted, GeneralVariables.audioSampleRate);
+        boolean success = usbDev.writeAudio(unscaled, GeneralVariables.audioSampleRate);
         GeneralVariables.fileLog(
                 "playViaUsbAudio: writeAudio returned " + (success ? "OK" : "FAILED"));
 
@@ -1287,18 +1352,27 @@ public class FT8TransmitSignal {
             // bail out. When the writer returns, playViaUsbAudio's afterPlayAudio()
             // drops PTT. No-op when not transmitting over USB audio.
             UsbAudioNative.cancelWrite();
-            if (audioTrack != null) {
-                if (audioTrack.getState() != AudioTrack.STATE_UNINITIALIZED) {
-                    audioTrack.pause();
+
+            // Abort the chunked MODE_STREAM AudioTrack playback. We must NOT release
+            // the track here: the transmit worker thread may be blocked in a
+            // WRITE_BLOCKING call, and releasing it underneath would race/crash.
+            // Instead flip the cancel flag (the write loop checks it each chunk) and
+            // pause()+flush() for immediate silence. flush() also discards the queued
+            // buffer so a blocked write returns at once instead of deadlocking on a
+            // full, paused buffer. The worker then breaks out and its afterPlayAudio()
+            // does the actual stop()/release() + PTT drop.
+            txAudioCancelled = true;
+            AudioTrack t = audioTrack;
+            if (t != null) {
+                try {
+                    if (t.getState() != AudioTrack.STATE_UNINITIALIZED
+                            && t.getPlayState() != AudioTrack.PLAYSTATE_STOPPED) {
+                        t.pause();
+                        t.flush();
+                    }
+                } catch (IllegalStateException ignored) {
+                    // Worker already released the track between our read and here.
                 }
-                if (onDoTransmitted != null) {//notify that transmitting has stopped
-                    onDoTransmitted.onAfterTransmit(getFunctionCommand(functionOrder), functionOrder);
-                }
-                // Release the paused track: its completion marker won't fire once
-                // paused, so afterPlayAudio() would never run for this branch and
-                // the track would leak until the next TX overwrites the field.
-                audioTrack.release();
-                audioTrack = null;
             }
         }
 
