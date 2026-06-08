@@ -2,9 +2,13 @@
 
 ## Workflow
 
-After finishing the code for any feature, open a pull request targeting the `dev`
-branch (do the work on a feature branch, then `gh pr create --base dev`). Don't
-merge straight to `main`.
+**Every work item requires a pull request — no direct commits to `dev` or
+`main`.** Even a one-line docs or config change goes through a feature branch and
+a PR.
+
+**All PRs target the `dev` branch.** After finishing the code for any work item,
+open a pull request against `dev` (do the work on a feature branch, then
+`gh pr create --base dev`). Don't merge straight to `main`.
 
 **Use a git worktree for every separate line of work.** Don't switch branches in
 the primary checkout (`C:\Users\burns\Projects\NEXT-FT8CN`) — branch-switching
