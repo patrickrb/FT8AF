@@ -1,7 +1,11 @@
 package radio.ks3ckc.ft8us.pota
 
 import android.content.Context
+import android.content.SharedPreferences
+import android.os.Build
 import android.util.Log
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import com.amazonaws.mobileconnectors.cognitoidentityprovider.CognitoUserPool
 import com.amazonaws.mobileconnectors.cognitoidentityprovider.CognitoUserSession
 import com.amazonaws.mobileconnectors.cognitoidentityprovider.continuations.AuthenticationContinuation
@@ -40,10 +44,10 @@ import kotlin.coroutines.resume
  *    refresh token via REFRESH_TOKEN_AUTH (a plain JSON POST — no SRP, no SDK)
  *    when the cached one is missing or near expiry.
  *
- * Storage note (spike): the refresh token lives in a private SharedPreferences
- * file, matching how the rest of the app persists the QRZ password (plaintext in
- * app-private storage). Swapping this for EncryptedSharedPreferences is a drop-in
- * follow-up and should cover the QRZ password too.
+ * Storage note: the refresh token is a long-lived credential (effectively
+ * standing account access), so it's persisted in an Android-Keystore-backed
+ * [EncryptedSharedPreferences] file rather than plaintext — keeping it out of
+ * reach of adb backup, filesystem extraction, and other apps.
  */
 object PotaAuth {
     private const val TAG = "PotaAuth"
@@ -64,7 +68,46 @@ object PotaAuth {
     @Volatile private var cachedIdToken: String? = null
     @Volatile private var cachedIdTokenExpiryMs: Long = 0L
 
-    private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    // Lazily-built, cached encrypted store. EncryptedSharedPreferences.create is
+    // relatively expensive (Keystore + Tink init), so reuse one instance.
+    @Volatile private var encPrefs: SharedPreferences? = null
+
+    private fun prefs(ctx: Context): SharedPreferences {
+        encPrefs?.let { return it }
+        return synchronized(this) {
+            encPrefs ?: buildPrefs(ctx.applicationContext).also { encPrefs = it }
+        }
+    }
+
+    private fun buildPrefs(ctx: Context): SharedPreferences {
+        return try {
+            createEncryptedPrefs(ctx)
+        } catch (e: Exception) {
+            // Keystore can fail on a corrupted keyset (e.g. after an app restore to a
+            // device with no matching key). Drop the unreadable file and rebuild it
+            // once; the user simply has to sign in again.
+            log("EncryptedSharedPreferences init failed, recreating: ${e.javaClass.simpleName}")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                ctx.deleteSharedPreferences(PREFS)
+            } else {
+                ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().commit()
+            }
+            createEncryptedPrefs(ctx)
+        }
+    }
+
+    private fun createEncryptedPrefs(ctx: Context): SharedPreferences {
+        val masterKey = MasterKey.Builder(ctx)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        return EncryptedSharedPreferences.create(
+            ctx,
+            PREFS,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+        )
+    }
 
     /** Whether a refresh token is stored (i.e. the user has logged in at least once). */
     fun isLoggedIn(): Boolean {

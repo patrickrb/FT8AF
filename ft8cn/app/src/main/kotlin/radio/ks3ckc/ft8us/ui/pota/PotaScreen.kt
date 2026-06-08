@@ -580,6 +580,9 @@ private fun HistoryTab(mainViewModel: MainViewModel) {
     }
 
     fun startUpload(row: PotaActivation) {
+        // Only one upload at a time — a second tap (on this or another row) while
+        // one is in flight would clobber uploadingId and fire a parallel upload.
+        if (uploadingId != null) return
         uploadingId = row.id
         scope.launch {
             val res = uploadActivation(mainViewModel, row)
@@ -587,7 +590,14 @@ private fun HistoryTab(mainViewModel: MainViewModel) {
             res.onSuccess { n ->
                 Toast.makeText(context, context.getString(R.string.pota_upload_success, n), Toast.LENGTH_LONG).show()
             }.onFailure { e ->
-                Toast.makeText(context, context.getString(R.string.pota_upload_failed, e.message ?: "?"), Toast.LENGTH_LONG).show()
+                // A missing/revoked token surfaces as NotSignedInException even when a
+                // stale refresh token is still on disk — re-prompt for login instead of
+                // just toasting an error the user can't act on.
+                if (e is NotSignedInException) {
+                    loginFor = row
+                } else {
+                    Toast.makeText(context, context.getString(R.string.pota_upload_failed, e.message ?: "?"), Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -609,9 +619,11 @@ private fun HistoryTab(mainViewModel: MainViewModel) {
                     row = row,
                     uploading = uploadingId == row.id,
                     onUploadToPota = {
-                        // First upload of the session prompts a sign-in; afterwards
-                        // the stored refresh token mints tokens silently.
-                        if (PotaAuth.isLoggedIn()) startUpload(row) else loginFor = row
+                        // Always attempt the upload; uploadActivation re-prompts for
+                        // sign-in (via NotSignedInException) when there's no usable
+                        // token — whether the user never logged in or the stored
+                        // refresh token has since been revoked/expired.
+                        startUpload(row)
                     },
                     onOpenUploadPage = {
                         runCatching {
@@ -652,17 +664,21 @@ private fun HistoryTab(mainViewModel: MainViewModel) {
     }
 }
 
+/** No usable ID token (never logged in, or the stored refresh token was revoked). */
+private class NotSignedInException : Exception("not signed in")
+
 /**
  * Build the per-park ADIF for [activation] and upload each document to POTA's
  * authenticated endpoint. Returns the number of parks uploaded on success, or a
- * failure carrying the first error (e.g. not-logged-in, no QSOs, HTTP error).
+ * failure carrying the first error. A [NotSignedInException] specifically means
+ * the caller should prompt for login (no token, or the refresh token is dead).
  */
 private suspend fun uploadActivation(
     mainViewModel: MainViewModel,
     activation: PotaActivation,
 ): Result<Int> {
     val token = PotaAuth.idToken()
-        ?: return Result.failure(IllegalStateException("not signed in"))
+        ?: return Result.failure(NotSignedInException())
     val db = mainViewModel.databaseOpr?.db
         ?: return Result.failure(IllegalStateException("no database"))
     val docs = withContext(Dispatchers.IO) { PotaAdifExporter.buildActivationAdif(db, activation) }
@@ -688,7 +704,10 @@ private fun PotaLoginDialog(
     onSubmit: (email: String, password: String) -> Unit,
 ) {
     var email by rememberSaveable { mutableStateOf(PotaAuth.loggedInEmail().orEmpty()) }
-    var password by rememberSaveable { mutableStateOf("") }
+    // Plain remember (not rememberSaveable) — the password must never be written to
+    // SavedInstanceState, which can be persisted to disk on process death. Matches
+    // the QRZ credentials dialog.
+    var password by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = BgSurface,

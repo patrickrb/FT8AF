@@ -182,6 +182,10 @@ dependencies {
     // aws-android-sdk-core transitively; no other AWS modules are needed.
     implementation 'com.amazonaws:aws-android-sdk-cognitoidentityprovider:2.76.0'
 
+    // Keystore-backed EncryptedSharedPreferences for the POTA refresh token —
+    // a long-lived credential that must not sit in plaintext app storage.
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+
     // --- JVM unit + Robolectric tests ---
     testImplementation 'junit:junit:4.13.2'
     // 4.14.1 ships android-all for SDK 35; older versions fail with
