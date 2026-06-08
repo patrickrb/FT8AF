@@ -9,6 +9,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -27,11 +29,13 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bg7yoz.ft8cn.R
 import radio.ks3ckc.ft8us.theme.*
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TxStrip(
     isTransmitting: Boolean,
@@ -64,7 +68,11 @@ fun TxStrip(
         Brush.horizontalGradient(listOf(BgSurface, BgSurface))
     }
 
-    Row(
+    // Six controls live here: status, mode, frequency, DX, HUNT, CQ, TX slot.
+    // They don't all fit on one row in portrait, so use a FlowRow that wraps the
+    // overflow onto a second line instead of pushing CQ/TX off the right edge.
+    // Each item is center-aligned within its wrapped line via Modifier.align.
+    FlowRow(
         modifier = modifier
             .fillMaxWidth()
             .background(bgColor)
@@ -78,11 +86,12 @@ fun TxStrip(
                 )
             }
             .padding(horizontal = 16.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        // Left: chevron + status
+        // Status: expand/collapse chevron (when QSO active) + pulse dot + state text
         Row(
+            modifier = Modifier.align(Alignment.CenterVertically),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -112,183 +121,187 @@ fun TxStrip(
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = GeistMonoFamily,
                 letterSpacing = 0.02.sp,
+                // Keep the status on a single line so a long (localized) label
+                // can't balloon this item to two lines inside the FlowRow.
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
 
-        // Right: CQ/Stop button + frequency
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        // Mode pill (FT8/FT4) — taps cycle the operating mode. Disabled mid-transmit
+        // so we never switch the cycle out from under an in-progress TX.
+        val modeBg = if (modeSwitchEnabled) Accent.copy(alpha = 0.18f) else BgSurface3
+        val modeColor = if (modeSwitchEnabled) Accent else TextFaint
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterVertically)
+                .clip(RoundedCornerShape(6.dp))
+                .background(modeBg)
+                .clickable(enabled = modeSwitchEnabled) { onCycleMode() }
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            // Mode pill (FT8/FT4) — taps cycle the operating mode. Disabled mid-transmit
-            // so we never switch the cycle out from under an in-progress TX.
-            val modeBg = if (modeSwitchEnabled) Accent.copy(alpha = 0.18f) else BgSurface3
-            val modeColor = if (modeSwitchEnabled) Accent else TextFaint
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(modeBg)
-                    .clickable(enabled = modeSwitchEnabled) { onCycleMode() }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = modeName,
-                    color = modeColor,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = GeistMonoFamily,
-                    letterSpacing = 0.02.sp,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
+            Text(
+                text = modeName,
+                color = modeColor,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = GeistMonoFamily,
+                letterSpacing = 0.02.sp,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
 
-            // Frequency / band pill — opens the frequency picker
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(BgSurface3)
-                    .clickable { onOpenFrequencyPicker() }
-                    .padding(horizontal = 10.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    text = frequencyLabel,
-                    color = TextPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = GeistMonoFamily,
-                    letterSpacing = 0.02.sp,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-                FT8USIcons.ChevronDown(
-                    size = 12.dp,
-                    color = TextMuted,
-                    strokeWidth = 2f,
-                )
-            }
+        // Frequency / band pill — opens the frequency picker
+        Row(
+            modifier = Modifier
+                .align(Alignment.CenterVertically)
+                .clip(RoundedCornerShape(8.dp))
+                .background(BgSurface3)
+                .clickable { onOpenFrequencyPicker() }
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = frequencyLabel,
+                color = TextPrimary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GeistMonoFamily,
+                letterSpacing = 0.02.sp,
+                maxLines = 1,
+                softWrap = false,
+            )
+            FT8USIcons.ChevronDown(
+                size = 12.dp,
+                color = TextMuted,
+                strokeWidth = 2f,
+            )
+        }
 
-            // DX (DXpedition Hound) toggle pill. On = working a Fox/DXpedition
-            // (call high, auto-QSY when answered). Mutually exclusive with HUNT/CQ.
-            val dxBg = if (dxEnabled) Accent.copy(alpha = 0.18f) else BgSurface3
-            val dxColor = if (dxEnabled) Accent else TextMuted
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(dxBg)
-                    .clickable { onToggleDx() }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "DX",
-                    color = dxColor,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = GeistMonoFamily,
-                    letterSpacing = 0.02.sp,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
+        // DX (DXpedition Hound) toggle pill. On = working a Fox/DXpedition
+        // (call high, auto-QSY when answered). Mutually exclusive with HUNT/CQ.
+        val dxBg = if (dxEnabled) Accent.copy(alpha = 0.18f) else BgSurface3
+        val dxColor = if (dxEnabled) Accent else TextMuted
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterVertically)
+                .clip(RoundedCornerShape(6.dp))
+                .background(dxBg)
+                .clickable { onToggleDx() }
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "DX",
+                color = dxColor,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GeistMonoFamily,
+                letterSpacing = 0.02.sp,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
 
-            // HUNT (auto-answer CQ) toggle pill. On = proactively call stations
-            // calling CQ; off = run CQ. Mutually exclusive with CQ: disabled while
-            // you're actively running CQ so the two modes never overlap.
-            val huntDisabled = isActivated && !huntEnabled
-            val huntBg = when {
-                huntDisabled -> BgSurface3.copy(alpha = 0.4f)
-                huntEnabled -> Signal.copy(alpha = 0.18f)
-                else -> BgSurface3
-            }
-            val huntColor = when {
-                huntDisabled -> TextMuted.copy(alpha = 0.4f)
-                huntEnabled -> Signal
-                else -> TextMuted
-            }
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(huntBg)
-                    // Disable via clickable(enabled=…) rather than dropping the modifier, so
-                    // the pill keeps its button semantics and TalkBack still announces it as a
-                    // disabled control instead of it vanishing from accessibility entirely.
-                    .clickable(enabled = !huntDisabled) { onToggleHunt() }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "HUNT",
-                    color = huntColor,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = GeistMonoFamily,
-                    letterSpacing = 0.02.sp,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
+        // HUNT (auto-answer CQ) toggle pill. On = proactively call stations
+        // calling CQ; off = run CQ. Mutually exclusive with CQ: disabled while
+        // you're actively running CQ so the two modes never overlap.
+        val huntDisabled = isActivated && !huntEnabled
+        val huntBg = when {
+            huntDisabled -> BgSurface3.copy(alpha = 0.4f)
+            huntEnabled -> Signal.copy(alpha = 0.18f)
+            else -> BgSurface3
+        }
+        val huntColor = when {
+            huntDisabled -> TextMuted.copy(alpha = 0.4f)
+            huntEnabled -> Signal
+            else -> TextMuted
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterVertically)
+                .clip(RoundedCornerShape(6.dp))
+                .background(huntBg)
+                // Disable via clickable(enabled=…) rather than dropping the modifier, so
+                // the pill keeps its button semantics and TalkBack still announces it as a
+                // disabled control instead of it vanishing from accessibility entirely.
+                .clickable(enabled = !huntDisabled) { onToggleHunt() }
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "HUNT",
+                color = huntColor,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GeistMonoFamily,
+                letterSpacing = 0.02.sp,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
 
-            // CQ / Stop pill button. Mutually exclusive with HUNT: disabled while
-            // HUNT mode is on, so you can't run CQ and hunt at the same time.
-            val cqDisabled = huntEnabled && !isActivated
-            val buttonBg = when {
-                isActivated -> StatusBad.copy(alpha = 0.18f)
-                cqDisabled -> AccentSoft.copy(alpha = 0.4f)
-                else -> AccentSoft
-            }
-            val buttonTextColor = when {
-                isActivated -> StatusBad
-                cqDisabled -> Accent.copy(alpha = 0.4f)
-                else -> Accent
-            }
-            val buttonLabel = if (isActivated) "STOP" else "CQ"
+        // CQ / Stop pill button. Mutually exclusive with HUNT: disabled while
+        // HUNT mode is on, so you can't run CQ and hunt at the same time.
+        val cqDisabled = huntEnabled && !isActivated
+        val buttonBg = when {
+            isActivated -> StatusBad.copy(alpha = 0.18f)
+            cqDisabled -> AccentSoft.copy(alpha = 0.4f)
+            else -> AccentSoft
+        }
+        val buttonTextColor = when {
+            isActivated -> StatusBad
+            cqDisabled -> Accent.copy(alpha = 0.4f)
+            else -> Accent
+        }
+        val buttonLabel = if (isActivated) "STOP" else "CQ"
 
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(buttonBg)
-                    // Keep button semantics when disabled (see HUNT pill above) so the
-                    // CQ/STOP control stays exposed to TalkBack as a disabled button.
-                    .clickable(enabled = !cqDisabled) { if (isActivated) onStop() else onCallCQ() }
-                    .padding(horizontal = 18.dp, vertical = 9.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = buttonLabel,
-                    color = buttonTextColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = GeistMonoFamily,
-                    letterSpacing = 0.04.sp,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterVertically)
+                .clip(RoundedCornerShape(8.dp))
+                .background(buttonBg)
+                // Keep button semantics when disabled (see HUNT pill above) so the
+                // CQ/STOP control stays exposed to TalkBack as a disabled button.
+                .clickable(enabled = !cqDisabled) { if (isActivated) onStop() else onCallCQ() }
+                .padding(horizontal = 18.dp, vertical = 9.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = buttonLabel,
+                color = buttonTextColor,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = GeistMonoFamily,
+                letterSpacing = 0.04.sp,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
 
-            // TX slot toggle pill
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(BgSurface3)
-                    .clickable { onToggleSlot() }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (txSlot == 0) "TX1" else "TX2",
-                    color = TextMuted,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = GeistMonoFamily,
-                    letterSpacing = 0.02.sp,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
+        // TX slot toggle pill
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterVertically)
+                .clip(RoundedCornerShape(6.dp))
+                .background(BgSurface3)
+                .clickable { onToggleSlot() }
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = if (txSlot == 0) "TX1" else "TX2",
+                color = TextMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GeistMonoFamily,
+                letterSpacing = 0.02.sp,
+                maxLines = 1,
+                softWrap = false,
+            )
         }
     }
 }
