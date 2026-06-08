@@ -68,10 +68,10 @@ fun TxStrip(
         Brush.horizontalGradient(listOf(BgSurface, BgSurface))
     }
 
-    // Six controls live here: status, mode, frequency, DX, HUNT, CQ, TX slot.
-    // They don't all fit on one row in portrait, so use a FlowRow that wraps the
-    // overflow onto a second line instead of pushing CQ/TX off the right edge.
-    // Each item is center-aligned within its wrapped line via Modifier.align.
+    // Seven controls live here: status, mode, frequency, DX, HUNT, CQ/STOP, and TX slot.
+    // They don't all fit on one row in portrait, so use a FlowRow that wraps overflow onto
+    // a second line instead of pushing CQ/TX off the right edge.
+    // Each item is vertically centered within its wrapped line via Modifier.align(Alignment.CenterVertically).
     FlowRow(
         modifier = modifier
             .fillMaxWidth()
