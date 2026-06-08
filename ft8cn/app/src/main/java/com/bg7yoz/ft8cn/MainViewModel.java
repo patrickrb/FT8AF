@@ -192,6 +192,11 @@ public class MainViewModel extends ViewModel {
     public MutableLiveData<String> qsoSheetCallsign = new MutableLiveData<>(null);
     public MutableLiveData<Boolean> qsoSheetMinimized = new MutableLiveData<>(false);
 
+    // Decode-screen filter selection (Compose UI). Lives in the ViewModel so
+    // the chosen filter survives navigation away from Decode and back, rather
+    // than resetting to "All" each time the screen is recreated.
+    public MutableLiveData<String> decodeFilter = new MutableLiveData<>("All");
+
 
     public HamRecorder hamRecorder;//recording object
     public FT8SignalListener ft8SignalListener;//object for listening to and decoding FT8 signals
