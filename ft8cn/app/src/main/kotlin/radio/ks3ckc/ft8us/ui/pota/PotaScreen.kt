@@ -31,11 +31,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -56,13 +59,18 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
 import com.bg7yoz.ft8cn.R
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import radio.ks3ckc.ft8us.pota.PotaAuth
 import radio.ks3ckc.ft8us.pota.PotaClient
 import radio.ks3ckc.ft8us.pota.PotaSessionManager
 import radio.ks3ckc.ft8us.pota.PotaSpotsRepository
@@ -555,13 +563,43 @@ private fun SpotRow(spot: PotaSpot, onClick: () -> Unit) {
 @Composable
 private fun HistoryTab(mainViewModel: MainViewModel) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var history by remember { mutableStateOf<List<PotaActivation>>(emptyList()) }
     var refreshKey by remember { mutableIntStateOf(0) }
     val activation by PotaSessionManager.currentActivation.collectAsStateWithLifecycle()
 
+    // Which row's upload is in flight (shows a spinner on that row), and which
+    // row is waiting on a sign-in before its upload can start.
+    var uploadingId by remember { mutableStateOf<Long?>(null) }
+    var loginFor by remember { mutableStateOf<PotaActivation?>(null) }
+    var loginSubmitting by remember { mutableStateOf(false) }
+
     // Reload whenever activation state changes (start/end will appear here).
     LaunchedEffect(refreshKey, activation?.id, activation?.endedAtMs) {
         history = PotaSessionManager.history()
+    }
+
+    fun startUpload(row: PotaActivation) {
+        // Only one upload at a time — a second tap (on this or another row) while
+        // one is in flight would clobber uploadingId and fire a parallel upload.
+        if (uploadingId != null) return
+        uploadingId = row.id
+        scope.launch {
+            val res = uploadActivation(mainViewModel, row)
+            uploadingId = null
+            res.onSuccess { n ->
+                Toast.makeText(context, context.getString(R.string.pota_upload_success, n), Toast.LENGTH_LONG).show()
+            }.onFailure { e ->
+                // A missing/revoked token surfaces as NotSignedInException even when a
+                // stale refresh token is still on disk — re-prompt for login instead of
+                // just toasting an error the user can't act on.
+                if (e is NotSignedInException) {
+                    loginFor = row
+                } else {
+                    Toast.makeText(context, context.getString(R.string.pota_upload_failed, e.message ?: "?"), Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -579,6 +617,14 @@ private fun HistoryTab(mainViewModel: MainViewModel) {
             items(history, key = { it.id }) { row ->
                 HistoryRow(
                     row = row,
+                    uploading = uploadingId == row.id,
+                    onUploadToPota = {
+                        // Always attempt the upload; uploadActivation re-prompts for
+                        // sign-in (via NotSignedInException) when there's no usable
+                        // token — whether the user never logged in or the stored
+                        // refresh token has since been revoked/expired.
+                        startUpload(row)
+                    },
                     onOpenUploadPage = {
                         runCatching {
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://pota.app/#/user/upload"))
@@ -596,12 +642,135 @@ private fun HistoryTab(mainViewModel: MainViewModel) {
             }
         }
     }
+
+    loginFor?.let { pending ->
+        PotaLoginDialog(
+            submitting = loginSubmitting,
+            onDismiss = { if (!loginSubmitting) loginFor = null },
+            onSubmit = { email, pass ->
+                loginSubmitting = true
+                scope.launch {
+                    val r = PotaAuth.login(email, pass)
+                    loginSubmitting = false
+                    r.onSuccess {
+                        loginFor = null
+                        startUpload(pending)
+                    }.onFailure { e ->
+                        Toast.makeText(context, context.getString(R.string.pota_login_failed, e.message ?: "?"), Toast.LENGTH_LONG).show()
+                    }
+                }
+            },
+        )
+    }
+}
+
+/** No usable ID token (never logged in, or the stored refresh token was revoked). */
+private class NotSignedInException : Exception("not signed in")
+
+/**
+ * Build the per-park ADIF for [activation] and upload each document to POTA's
+ * authenticated endpoint. Returns the number of parks uploaded on success, or a
+ * failure carrying the first error. A [NotSignedInException] specifically means
+ * the caller should prompt for login (no token, or the refresh token is dead).
+ */
+private suspend fun uploadActivation(
+    mainViewModel: MainViewModel,
+    activation: PotaActivation,
+): Result<Int> {
+    val token = PotaAuth.idToken()
+        ?: return Result.failure(NotSignedInException())
+    val db = mainViewModel.databaseOpr?.db
+        ?: return Result.failure(IllegalStateException("no database"))
+    val docs = withContext(Dispatchers.IO) { PotaAdifExporter.buildActivationAdif(db, activation) }
+    if (docs.isEmpty()) return Result.failure(IllegalStateException("no QSOs to upload"))
+    var ok = 0
+    var lastErr: String? = null
+    for (doc in docs) {
+        PotaClient.uploadAdif(token, doc.filename, doc.content)
+            .onSuccess { ok++ }
+            .onFailure { lastErr = it.message }
+    }
+    return if (ok == docs.size) {
+        Result.success(ok)
+    } else {
+        Result.failure(IllegalStateException(lastErr ?: "uploaded $ok of ${docs.size}"))
+    }
+}
+
+@Composable
+private fun PotaLoginDialog(
+    submitting: Boolean,
+    onDismiss: () -> Unit,
+    onSubmit: (email: String, password: String) -> Unit,
+) {
+    var email by rememberSaveable { mutableStateOf(PotaAuth.loggedInEmail().orEmpty()) }
+    // Plain remember (not rememberSaveable) — the password must never be written to
+    // SavedInstanceState, which can be persisted to disk on process death. Matches
+    // the QRZ credentials dialog.
+    var password by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = BgSurface,
+        title = { Text(stringResource(R.string.pota_login_title), color = TextPrimary) },
+        text = {
+            Column {
+                Text(
+                    stringResource(R.string.pota_login_desc),
+                    color = TextMuted,
+                    fontSize = 12.sp,
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it.trim() },
+                    label = { Text(stringResource(R.string.pota_login_email)) },
+                    singleLine = true,
+                    enabled = !submitting,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    colors = textFieldColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text(stringResource(R.string.pota_login_password)) },
+                    singleLine = true,
+                    enabled = !submitting,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    colors = textFieldColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSubmit(email, password) },
+                enabled = !submitting && email.isNotBlank() && password.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BgApp),
+            ) {
+                if (submitting) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = BgApp, strokeWidth = 2.dp)
+                } else {
+                    Text(stringResource(R.string.pota_login_button), fontWeight = FontWeight.SemiBold)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !submitting) {
+                Text(stringResource(R.string.pota_login_cancel), color = TextMuted)
+            }
+        },
+    )
 }
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun HistoryRow(
     row: PotaActivation,
+    uploading: Boolean,
+    onUploadToPota: () -> Unit,
     onOpenUploadPage: () -> Unit,
     onShareAdif: () -> Unit,
 ) {
@@ -661,6 +830,21 @@ private fun HistoryRow(
         if (!row.notes.isNullOrBlank()) {
             Spacer(Modifier.height(2.dp))
             Text(stringResource(R.string.pota_notes_quote, row.notes), color = TextMuted, fontSize = 11.sp)
+        }
+        if (row.qsoCount > 0) {
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = onUploadToPota,
+                enabled = !uploading,
+                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BgApp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (uploading) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = BgApp, strokeWidth = 2.dp)
+                } else {
+                    Text(stringResource(R.string.pota_upload_to_pota), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                }
+            }
         }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
