@@ -60,9 +60,11 @@ fun DecodeScreen(
     val decodedCount by mainViewModel.mutable_Decoded_Counter.observeAsState(0)
     val utcTime by mainViewModel.timerSec.observeAsState(0L)
 
-    // Filter state
+    // Filter state. Backed by the ViewModel so the chosen filter survives
+    // navigation away from Decode and back (the screen is recreated by the
+    // tab switch, which would otherwise reset a local rememberSaveable).
     val filterOptions = listOf("All", "CQ Calls", "CQ POTA", "New DXCC", "Needed", "For Me")
-    var selectedFilter by rememberSaveable { mutableStateOf("All") }
+    val selectedFilter by mainViewModel.decodeFilter.observeAsState("All")
 
     // Keep the POTA spots cache warm while the user is browsing decodes so the
     // CQ POTA filter and the green POTA pill on spotted activators work even
@@ -155,7 +157,7 @@ fun DecodeScreen(
         val present = (messageList ?: arrayListOf())
             .any { it.callsignFrom.equals(cs, ignoreCase = true) }
         if (!present) return@LaunchedEffect          // wait until the station is in the list
-        selectedFilter = "All"
+        mainViewModel.decodeFilter.postValue("All")
         mainViewModel.qsoSheetCallsign.postValue(cs)
         mainViewModel.qsoSheetMinimized.postValue(false)
         mainViewModel.mutablePreselectCallsign.postValue(null)   // consume (allow re-trigger)
@@ -221,7 +223,7 @@ fun DecodeScreen(
             FilterChips(
                 options = localizedLabels,
                 selected = filterLabel(selectedFilter),
-                onSelected = { label -> selectedFilter = labelToKey[label] ?: selectedFilter },
+                onSelected = { label -> mainViewModel.decodeFilter.postValue(labelToKey[label] ?: selectedFilter) },
                 modifier = Modifier.padding(bottom = 8.dp),
             )
 
