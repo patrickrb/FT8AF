@@ -93,6 +93,22 @@ class ComposeMainActivity : AppCompatActivity() {
         mainViewModel = MainViewModel.getInstance(this)
         ToastMessage.getInstance()
 
+        // Forward every TX-volume change to the native USB-direct write loop so a
+        // slider move (or hardware-button / ALC auto-volume change) attenuates the
+        // in-progress transmission live, protecting the rig from overdrive. Every
+        // volume mutator posts to mutableVolumePercent, so this single wire covers
+        // them all; the AudioTrack and CAT/UDP paths read volumePercent directly.
+        // Seeded with the current value for the case where no change fires.
+        // Lifecycle-bound (observe(this), not observeForever) so the observer is
+        // removed automatically on destroy — otherwise every activity recreation
+        // (rotation, theme/locale change, process restart) would stack another
+        // observer and fire a redundant native setter per change. TX runs with the
+        // activity foregrounded (STARTED), so STARTED-only delivery loses nothing.
+        UsbAudioNative.setTxVolume(GeneralVariables.volumePercent)
+        GeneralVariables.mutableVolumePercent.observe(this) { v ->
+            if (v != null) UsbAudioNative.setTxVolume(v)
+        }
+
         // Register back press handler. Priority: dismiss the QSO sheet if
         // it's open, otherwise show exit confirm. Without this, back-from-
         // sheet tries to exit the whole app, which surprises users who

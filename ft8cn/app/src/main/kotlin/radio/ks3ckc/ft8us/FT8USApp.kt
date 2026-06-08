@@ -40,6 +40,7 @@ import radio.ks3ckc.ft8us.theme.BgApp
 import radio.ks3ckc.ft8us.ui.components.ActiveQsoPanel
 import radio.ks3ckc.ft8us.ui.components.FT8USTab
 import radio.ks3ckc.ft8us.ui.components.FrequencyPickerSheet
+import radio.ks3ckc.ft8us.ui.components.HoundSetupSheet
 import radio.ks3ckc.ft8us.ui.components.formatMhz
 import radio.ks3ckc.ft8us.ui.components.QsoCelebration
 import radio.ks3ckc.ft8us.ui.components.SlotTimerBar
@@ -78,6 +79,11 @@ fun FT8USApp(mainViewModel: MainViewModel) {
     // Hunt / auto-answer-CQ mode. Mirrors GeneralVariables.autoFollowCQ (also
     // editable in Settings, which provides the persisted default at startup).
     var huntEnabled by remember { mutableStateOf(GeneralVariables.autoFollowCQ) }
+
+    // DXpedition Hound mode. Mirrors GeneralVariables.houndMode; the setup sheet
+    // collects the Fox call + call frequency before starting.
+    var dxEnabled by remember { mutableStateOf(GeneralVariables.houndMode) }
+    var showHoundSetup by remember { mutableStateOf(false) }
 
     // Frequency picker sheet state
     var showFrequencyPicker by rememberSaveable { mutableStateOf(false) }
@@ -222,6 +228,7 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                 huntEnabled = huntEnabled,
                 modeName = modeName,
                 modeSwitchEnabled = !isTransmitting,
+                dxEnabled = dxEnabled,
                 expanded = qsoPanelExpanded,
                 onCallCQ = {
                     if (GeneralVariables.myCallsign.isNullOrEmpty()) {
@@ -233,7 +240,22 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                     }
                 },
                 onStop = {
-                    mainViewModel.ft8TransmitSignal.setActivated(false)
+                    // In Hound mode the STOP button leaves Hound entirely;
+                    // otherwise it just deactivates the normal sequencer.
+                    if (GeneralVariables.houndMode) {
+                        mainViewModel.stopHoundMode()
+                        dxEnabled = false
+                    } else {
+                        mainViewModel.ft8TransmitSignal.setActivated(false)
+                    }
+                },
+                onToggleDx = {
+                    if (dxEnabled || GeneralVariables.houndMode) {
+                        mainViewModel.stopHoundMode()
+                        dxEnabled = false
+                    } else {
+                        showHoundSetup = true
+                    }
                 },
                 onToggleSlot = {
                     val current = mainViewModel.ft8TransmitSignal.sequential
@@ -301,6 +323,24 @@ fun FT8USApp(mainViewModel: MainViewModel) {
             onSelect = { idx ->
                 selectBandIndex(mainViewModel, context, idx)
                 showFrequencyPicker = false
+            },
+        )
+
+        // DXpedition Hound setup — collects the Fox call + call frequency, then
+        // starts calling (disabling Hunt, which is mutually exclusive).
+        HoundSetupSheet(
+            visible = showHoundSetup,
+            initialFoxCall = GeneralVariables.houndFoxCall,
+            onDismiss = { showHoundSetup = false },
+            onStart = { foxCall, callFreqHz ->
+                if (GeneralVariables.myCallsign.isNullOrEmpty()) {
+                    Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
+                } else {
+                    mainViewModel.startHoundMode(foxCall, callFreqHz)
+                    dxEnabled = true
+                    huntEnabled = false
+                    showHoundSetup = false
+                }
             },
         )
     }

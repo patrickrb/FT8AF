@@ -28,11 +28,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -53,6 +63,10 @@ import radio.ks3ckc.ft8us.ui.components.FT8USIcons
 import radio.ks3ckc.ft8us.ui.components.GlassCard
 import radio.ks3ckc.ft8us.ui.components.QsoStatus
 import radio.ks3ckc.ft8us.ui.components.StatusPill
+import radio.ks3ckc.ft8us.ui.map.UsStateOutlines
+import radio.ks3ckc.ft8us.ui.map.WorldOutlines
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Bottom sheet that displays full station details for a decoded message and
@@ -127,10 +141,19 @@ private fun QsoSheetContent(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // -- Stat cards: Signal, Azimuth, Band --
+        // -- Stat cards: Signal, Distance, Azimuth, Band --
         StatCardsRow(message = message)
 
         Spacer(modifier = Modifier.height(20.dp))
+
+        // -- Path map: operator grid -> remote grid, with a connecting line.
+        // Renders nothing (and no trailing spacer) when either grid is unknown.
+        QsoPathMap(
+            callsign = callsign,
+            theirGrid = message.maidenGrid,
+            country = message.fromWhere,
+            state = usState,
+        )
 
         // -- QSO sequence visualizer --
         val liveQsoIsThisCallsign =
@@ -340,8 +363,9 @@ private fun StatCardsRow(message: Ft8Message) {
     val myGrid = GeneralVariables.getMyMaidenheadGrid()
     val theirGrid = message.maidenGrid ?: ""
 
-    // Compute azimuth
+    // Compute azimuth + distance from the operator's grid to the remote station.
     val azimuthText = computeAzimuthText(myGrid, theirGrid)
+    val distanceText = computeDistanceText(myGrid, theirGrid)
 
     // Derive band label from message carrier frequency
     val bandLabel = try {
@@ -352,11 +376,16 @@ private fun StatCardsRow(message: Ft8Message) {
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         StatCard(
             label = stringResource(R.string.qso_stat_signal),
             value = "${message.snr} dB",
+            modifier = Modifier.weight(1f),
+        )
+        StatCard(
+            label = stringResource(R.string.qso_stat_distance),
+            value = distanceText,
             modifier = Modifier.weight(1f),
         )
         StatCard(
@@ -385,7 +414,7 @@ private fun StatCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 8.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
@@ -401,8 +430,10 @@ private fun StatCard(
                 color = TextPrimary,
                 fontFamily = GeistMonoFamily,
                 fontWeight = FontWeight.Bold,
-                fontSize = 16.sp,
+                fontSize = 15.sp,
                 textAlign = TextAlign.Center,
+                maxLines = 1,
+                softWrap = false,
             )
         }
     }
@@ -804,4 +835,211 @@ private fun computeAzimuthText(myGrid: String?, theirGrid: String?): String {
     } catch (_: Exception) {
         "--"
     }
+}
+
+/**
+ * Distance from the operator's grid to the remote station's grid, formatted in
+ * the user's preferred unit (mi/km). Returns "--" when either grid is unknown.
+ */
+internal fun computeDistanceText(myGrid: String?, theirGrid: String?): String {
+    if (myGrid.isNullOrEmpty() || theirGrid.isNullOrEmpty()) return "--"
+    // Go through lat/lng so a genuine 0-distance (identical grids) formats as
+    // "0 mi/km" rather than "--"; only unparseable grids fall back to "--".
+    // (MaidenheadGrid.getDistStr collapses both cases to an empty string.)
+    return try {
+        val myLatLng = MaidenheadGrid.gridToLatLng(myGrid) ?: return "--"
+        val theirLatLng = MaidenheadGrid.gridToLatLng(theirGrid) ?: return "--"
+        MaidenheadGrid.getDistLatLngStr(myLatLng, theirLatLng)
+    } catch (_: Exception) {
+        "--"
+    }
+}
+
+/** Decode a Maidenhead grid to (lat, lon); null if the grid is blank/invalid. */
+internal fun gridToLatLon(grid: String?): Pair<Double, Double>? {
+    if (grid.isNullOrEmpty()) return null
+    return try {
+        val ll = MaidenheadGrid.gridToLatLng(grid) ?: return null
+        Pair(ll.latitude, ll.longitude)
+    } catch (_: Exception) {
+        null
+    }
+}
+
+// ---------------------------------------------------------------------------
+// QSO path map (operator grid -> remote grid)
+// ---------------------------------------------------------------------------
+
+/**
+ * Compact equirectangular map auto-zoomed to frame the operator's grid and the
+ * remote station's grid, with a dashed line connecting the two. Renders nothing
+ * (and no trailing spacer) when either grid is unavailable.
+ */
+@Composable
+private fun QsoPathMap(
+    callsign: String,
+    theirGrid: String?,
+    country: String?,
+    state: String?,
+) {
+    val myGrid = GeneralVariables.getMyMaidenheadGrid()
+    val me = remember(myGrid) { gridToLatLon(myGrid) }
+    val them = remember(theirGrid) { gridToLatLon(theirGrid) }
+    if (me == null || them == null) return
+
+    val context = LocalContext.current
+    val landRings by produceState<List<FloatArray>?>(initialValue = null, context) {
+        value = withContext(Dispatchers.IO) { WorldOutlines.load(context) }
+    }
+    val stateRings by produceState<List<FloatArray>?>(initialValue = null, context) {
+        value = withContext(Dispatchers.IO) { UsStateOutlines.load(context) }
+    }
+    val myCall = GeneralVariables.myCallsign?.trim().orEmpty()
+
+    GlassCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 12.dp) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Spacer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                    .qsoPath(
+                        landRings = landRings,
+                        stateRings = stateRings,
+                        myLat = me.first,
+                        myLon = me.second,
+                        theirLat = them.first,
+                        theirLon = them.second,
+                        myColor = Accent,
+                        theirColor = Signal,
+                        myLabel = myCall.ifEmpty { null },
+                        theirLabel = callsign,
+                    ),
+            )
+
+            // DX country / state footer (falls back to grid only).
+            val place = formatLocationLine(state = state, country = country, grid = theirGrid)
+            if (!place.isNullOrEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    FT8USIcons.Globe(color = TextFaint, size = 12.dp)
+                    Text(
+                        text = place,
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+        }
+    }
+
+    Spacer(modifier = Modifier.height(20.dp))
+}
+
+/**
+ * Equirectangular QSO path map drawn via [drawWithCache]: the (large) land + US
+ * state ring sets are projected into screen-space [Path]s ONCE per
+ * size/endpoint/ring change in the cache phase, so the per-frame draw — which
+ * fires on every recompose and every frame of the sheet's slide-in animation —
+ * only issues `drawPath` calls instead of rebuilding the whole geometry.
+ */
+private fun Modifier.qsoPath(
+    landRings: List<FloatArray>?,
+    stateRings: List<FloatArray>?,
+    myLat: Double,
+    myLon: Double,
+    theirLat: Double,
+    theirLon: Double,
+    myColor: Color,
+    theirColor: Color,
+    myLabel: String?,
+    theirLabel: String,
+): Modifier = drawWithCache {
+    // Equirectangular framing of the two endpoints (pure, unit-tested geometry
+    // in QsoPathProjection — handles antemeridian normalization + uniform scale).
+    val proj = QsoPathProjection(myLat, myLon, theirLat, theirLon, size.width, size.height)
+    val tLon = proj.normalizedTheirLon
+
+    val landPath = landRings?.let { buildRingPath(it, proj) }
+    val statePath = stateRings?.let { buildRingPath(it, proj) }
+
+    val myX = proj.projectX(myLon)
+    val myY = proj.projectY(myLat)
+    val tX = proj.projectX(tLon)
+    val tY = proj.projectY(theirLat)
+
+    onDrawBehind {
+        drawRect(color = BgSurface, size = size)
+
+        // Land fill + coastline.
+        landPath?.let { land ->
+            drawPath(land, color = Color(0x4094A3B8))
+            drawPath(land, color = Color(0x9094A3B8), style = Stroke(width = 0.75f))
+        }
+
+        // US state borders (stroke only) layered over the land fill.
+        statePath?.let {
+            drawPath(it, color = Color(0x5594A3B8), style = Stroke(width = 0.6f))
+        }
+
+        drawLine(
+            color = Accent.copy(alpha = 0.75f),
+            start = Offset(myX, myY),
+            end = Offset(tX, tY),
+            strokeWidth = 2f,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 5f)),
+        )
+
+        drawStationDot(myX, myY, myColor)
+        drawStationDot(tX, tY, theirColor)
+
+        myLabel?.let { drawMapLabel(it, myX, myY, myColor) }
+        drawMapLabel(theirLabel, tX, tY, theirColor)
+    }
+}
+
+/**
+ * Build a closed [Path] from polygon rings, repeated at -360/0/+360 lon offsets
+ * so continents/states that wrap across the view's edge (e.g. trans-Pacific
+ * paths, or the Aleutians) still appear.
+ */
+private fun buildRingPath(rings: List<FloatArray>, proj: QsoPathProjection): Path {
+    val path = Path()
+    for (off in doubleArrayOf(-360.0, 0.0, 360.0)) {
+        for (ring in rings) {
+            if (ring.size < 6) continue
+            path.moveTo(proj.projectX(ring[0].toDouble() + off), proj.projectY(ring[1].toDouble()))
+            var i = 2
+            while (i < ring.size) {
+                path.lineTo(proj.projectX(ring[i].toDouble() + off), proj.projectY(ring[i + 1].toDouble()))
+                i += 2
+            }
+            path.close()
+        }
+    }
+    return path
+}
+
+private fun DrawScope.drawStationDot(x: Float, y: Float, color: Color) {
+    drawCircle(color = color.copy(alpha = 0.22f), radius = 9f, center = Offset(x, y))
+    drawCircle(color = color, radius = 4.5f, center = Offset(x, y))
+    drawCircle(color = BgApp, radius = 4.5f, center = Offset(x, y), style = Stroke(width = 1.3f))
+}
+
+private fun DrawScope.drawMapLabel(text: String, x: Float, y: Float, color: Color) {
+    val paint = android.graphics.Paint().apply {
+        this.color = color.toArgb()
+        textSize = 22f
+        isAntiAlias = true
+        typeface = android.graphics.Typeface.create(
+            android.graphics.Typeface.MONOSPACE,
+            android.graphics.Typeface.BOLD,
+        )
+    }
+    drawContext.canvas.nativeCanvas.drawText(text, x + 9f, y + paint.textSize / 3f, paint)
 }

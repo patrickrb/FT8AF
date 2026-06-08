@@ -314,6 +314,8 @@ public class GeneralVariables {
 
     public static boolean simpleCallItemMode = false;//Compact message mode
 
+    public static boolean clearDecodesEveryCycle = false;//Clear the decode list at the start of each cycle
+
     public static boolean swr_switch_on = true;//SWR alarm switch
     public static boolean alc_switch_on = true;//ALC alarm switch
 
@@ -485,6 +487,14 @@ public class GeneralVariables {
     public static String getMyMaidenheadGrid() {
         return myMaidenheadGrid;
     }
+
+    // ===== FT8 DXpedition "Hound" mode =====
+    // When true, the TX engine runs the Hound QSO variant (call Fox high at
+    // 1000-4000 Hz, auto-QSY down to where Fox calls us, reply R+rpt, log on
+    // RR73) instead of the standard auto-sequencer. Mutually exclusive with the
+    // Hunt auto-answer-CQ mode. houndFoxCall is the Fox's base callsign.
+    public static boolean houndMode = false;
+    public static String houndFoxCall = "";
 
     public static float getBaseFrequency() {
         return baseFrequency;

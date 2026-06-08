@@ -2333,6 +2333,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.simpleCallItemMode = result.equals("1") ;
                 }
 
+                if (name.equalsIgnoreCase("clearDecodesEveryCycle")) {
+                    GeneralVariables.clearDecodesEveryCycle = result.equals("1");
+                }
+
                 if (name.equalsIgnoreCase("ctrMode")) {
                     GeneralVariables.controlMode = result.equals("") ? ControlMode.VOX : Integer.parseInt(result);
                 }
