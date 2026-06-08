@@ -217,7 +217,8 @@ fun DecodeScreen(
             // Filter chips. FilterChips renders each option string AND passes it
             // back through onSelected, so we feed it localized labels for display
             // but translate the tapped label back to its stable English key before
-            // storing it in selectedFilter (which the filter logic switches on).
+            // writing it to mainViewModel.decodeFilter, which selectedFilter
+            // observes and the filter logic switches on.
             val localizedLabels = filterOptions.map { filterLabel(it) }
             val labelToKey = filterOptions.indices.associate { localizedLabels[it] to filterOptions[it] }
             FilterChips(
