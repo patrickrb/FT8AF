@@ -63,6 +63,7 @@ import radio.ks3ckc.ft8us.ui.components.FT8USIcons
 import radio.ks3ckc.ft8us.ui.components.GlassCard
 import radio.ks3ckc.ft8us.ui.components.QsoStatus
 import radio.ks3ckc.ft8us.ui.components.StatusPill
+import radio.ks3ckc.ft8us.ui.map.UsStateOutlines
 import radio.ks3ckc.ft8us.ui.map.WorldOutlines
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -881,6 +882,9 @@ private fun QsoPathMap(
     val landRings by produceState<List<FloatArray>?>(initialValue = null, context) {
         value = withContext(Dispatchers.IO) { WorldOutlines.load(context) }
     }
+    val stateRings by produceState<List<FloatArray>?>(initialValue = null, context) {
+        value = withContext(Dispatchers.IO) { UsStateOutlines.load(context) }
+    }
     val myCall = GeneralVariables.myCallsign?.trim().orEmpty()
 
     GlassCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 12.dp) {
@@ -893,6 +897,7 @@ private fun QsoPathMap(
             ) {
                 drawQsoPath(
                     rings = landRings,
+                    stateRings = stateRings,
                     myLat = me.first,
                     myLon = me.second,
                     theirLat = them.first,
@@ -930,6 +935,7 @@ private fun QsoPathMap(
 
 private fun DrawScope.drawQsoPath(
     rings: List<FloatArray>?,
+    stateRings: List<FloatArray>?,
     myLat: Double,
     myLon: Double,
     theirLat: Double,
@@ -950,24 +956,36 @@ private fun DrawScope.drawQsoPath(
     fun px(lon: Double): Float = proj.projectX(lon)
     fun py(lat: Double): Float = proj.projectY(lat)
 
-    // Land \u2014 drawn at -360/0/+360 lon offsets so continents that wrap across the
-    // view's edge (e.g. trans-Pacific paths) still appear.
-    rings?.let { rs ->
-        val land = Path()
+    // Build a closed Path from polygon rings, repeated at -360/0/+360 lon offsets
+    // so continents/states that wrap across the view's edge (e.g. trans-Pacific
+    // paths, or the Aleutians) still appear.
+    fun buildRingPath(rs: List<FloatArray>): Path {
+        val path = Path()
         for (off in doubleArrayOf(-360.0, 0.0, 360.0)) {
             for (ring in rs) {
                 if (ring.size < 6) continue
-                land.moveTo(px(ring[0].toDouble() + off), py(ring[1].toDouble()))
+                path.moveTo(px(ring[0].toDouble() + off), py(ring[1].toDouble()))
                 var i = 2
                 while (i < ring.size) {
-                    land.lineTo(px(ring[i].toDouble() + off), py(ring[i + 1].toDouble()))
+                    path.lineTo(px(ring[i].toDouble() + off), py(ring[i + 1].toDouble()))
                     i += 2
                 }
-                land.close()
+                path.close()
             }
         }
+        return path
+    }
+
+    // Land fill + coastline.
+    rings?.let { rs ->
+        val land = buildRingPath(rs)
         drawPath(land, color = Color(0x4094A3B8))
         drawPath(land, color = Color(0x9094A3B8), style = Stroke(width = 0.75f))
+    }
+
+    // US state borders (stroke only) layered over the land fill.
+    stateRings?.let { rs ->
+        drawPath(buildRingPath(rs), color = Color(0x5594A3B8), style = Stroke(width = 0.6f))
     }
 
     val myX = px(myLon)
