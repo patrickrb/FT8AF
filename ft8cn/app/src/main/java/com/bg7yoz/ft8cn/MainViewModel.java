@@ -742,6 +742,35 @@ public class MainViewModel extends ViewModel {
         ft8TransmitSignal.transmitNow();
     }
 
+    // ===== FT8 DXpedition Hound mode =====
+
+    /**
+     * Enter DXpedition Hound mode and start calling the Fox. Mutually exclusive
+     * with Hunt (auto-answer-CQ), which is disabled here. The rig should already
+     * be tuned to the Fox's published dial frequency.
+     *
+     * @param foxCall    the Fox's base callsign (the DXpedition)
+     * @param callFreqHz initial Hound TX audio frequency, 1000-4000 Hz
+     */
+    public void startHoundMode(String foxCall, float callFreqHz) {
+        if (foxCall == null || foxCall.trim().length() < 3) return;
+        if (GeneralVariables.myCallsign == null
+                || GeneralVariables.myCallsign.length() < 3) return;
+        GeneralVariables.houndMode = true;
+        GeneralVariables.houndFoxCall = foxCall.trim().toUpperCase();
+        GeneralVariables.autoFollowCQ = false;// Hound and Hunt are mutually exclusive
+        GeneralVariables.resetLaunchSupervision();
+        ft8TransmitSignal.startHound(GeneralVariables.houndFoxCall, callFreqHz);
+    }
+
+    /** Leave Hound mode and return to the normal idle/CQ state. */
+    public void stopHoundMode() {
+        GeneralVariables.houndMode = false;
+        GeneralVariables.houndFoxCall = "";
+        ft8TransmitSignal.setActivated(false);
+        ft8TransmitSignal.resetToCQ();
+    }
+
 
     /**
      * Get the followed callsign list from the database
