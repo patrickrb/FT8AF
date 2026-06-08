@@ -29,8 +29,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bg7yoz.ft8cn.FT8Common
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
+import com.bg7yoz.ft8cn.ModeProfile
 import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.database.OperationBand
 import com.bg7yoz.ft8cn.rigs.BaseRigOperation
@@ -114,6 +116,11 @@ fun FT8USApp(mainViewModel: MainViewModel) {
             append(bandName)
         }
     }
+    // Operating mode (FT8/FT4) — observed so the mode pill, countdown, and freq picker
+    // recompose when the mode changes.
+    val operatingMode by mainViewModel.mutableOperatingMode.observeAsState(GeneralVariables.operatingMode)
+    val modeName = ModeProfile.fromId(operatingMode).displayName
+
     // Observe SWR lockout state
     val swrLocked by mainViewModel.meterProtectionController.swrLockout.observeAsState(false)
     val lockoutSwrRatio by mainViewModel.meterProtectionController.lockoutSwrRatio.observeAsState("")
@@ -199,10 +206,11 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                 },
             )
 
-            // Slot timer bar — fills 0→100% across each 15s FT8 slot
+            // Slot timer bar — fills 0→100% across each slot (15s FT8 / 7.5s FT4)
             SlotTimerBar(
                 activeTxSlot = txSlot,
                 isActivated = isActivated,
+                slotMillis = ModeProfile.fromId(operatingMode).slotMillis.toLong(),
             )
 
             // TX status strip — always visible above tab bar
@@ -212,6 +220,8 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                 frequencyLabel = frequencyLabel,
                 txSlot = txSlot,
                 huntEnabled = huntEnabled,
+                modeName = modeName,
+                modeSwitchEnabled = !isTransmitting,
                 expanded = qsoPanelExpanded,
                 onCallCQ = {
                     if (GeneralVariables.myCallsign.isNullOrEmpty()) {
@@ -244,6 +254,25 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                         else context.getString(R.string.app_hunt_off),
                         Toast.LENGTH_SHORT,
                     ).show()
+                },
+                onCycleMode = {
+                    // v1 cycles FT8 <-> FT4. When FT2 ships, widen this to iterate the
+                    // shipped ModeProfile entries.
+                    val next = if (operatingMode == FT8Common.FT8_MODE) FT8Common.FT4_MODE
+                    else FT8Common.FT8_MODE
+                    if (mainViewModel.setOperatingMode(next)) {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.app_mode_switched, ModeProfile.fromId(next).displayName),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    } else {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.app_mode_switch_busy),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
                 },
                 onOpenFrequencyPicker = { showFrequencyPicker = true },
                 onToggleExpand = { qsoPanelExpanded = !qsoPanelExpanded },

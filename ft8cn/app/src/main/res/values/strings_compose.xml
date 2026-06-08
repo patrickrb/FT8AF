@@ -63,6 +63,8 @@
     <string name="app_set_callsign_first">Set your callsign in Settings before calling CQ</string>
     <string name="app_hunt_on">Hunt on — auto-answering CQs</string>
     <string name="app_hunt_off">Hunt off — running CQ, working answers only</string>
+    <string name="app_mode_switched">Mode: %1$s</string>
+    <string name="app_mode_switch_busy">Can\'t switch mode while transmitting</string>
     <string name="main_tx_volume">TX Volume: %1$d%%</string>
 
     <!-- ===== Exit dialog ===== -->

@@ -56,17 +56,32 @@ target_compile_options(usb1.0 PRIVATE
 )
 
 # ---------------------------------------------------------------------------
+# Prebuilt libft8cn.so (imported)
+# ---------------------------------------------------------------------------
+# The FT8/FT4 DSP lives in the upstream prebuilt libft8cn.so packaged under
+# app/libs/<abi>/. We don't compile it, but we link ft8af_usb against it so the
+# FT4 encode JNI shim (ft4_encode_jni.cpp) can call the prebuilt's `ft4_encode`.
+
+add_library(ft8cn_prebuilt SHARED IMPORTED)
+set_target_properties(ft8cn_prebuilt PROPERTIES
+        IMPORTED_LOCATION
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../libs/${ANDROID_ABI}/libft8cn.so
+)
+
+# ---------------------------------------------------------------------------
 # libft8af_usb.so — our JNI bridge
 # ---------------------------------------------------------------------------
 
 add_library(ft8af_usb SHARED
         usb_audio.cpp
         usb_audio_capture.cpp
+        ft4_encode_jni.cpp
 )
 
 find_library(log-lib log)
 
 target_link_libraries(ft8af_usb
         usb1.0
+        ft8cn_prebuilt
         ${log-lib}
 )

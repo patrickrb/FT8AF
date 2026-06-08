@@ -39,11 +39,14 @@ fun TxStrip(
     frequencyLabel: String,
     txSlot: Int,
     huntEnabled: Boolean,
+    modeName: String,
+    modeSwitchEnabled: Boolean,
     expanded: Boolean = false,
     onCallCQ: () -> Unit,
     onStop: () -> Unit,
     onToggleSlot: () -> Unit,
     onToggleHunt: () -> Unit,
+    onCycleMode: () -> Unit,
     onOpenFrequencyPicker: () -> Unit,
     onToggleExpand: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -115,6 +118,30 @@ fun TxStrip(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // Mode pill (FT8/FT4) — taps cycle the operating mode. Disabled mid-transmit
+            // so we never switch the cycle out from under an in-progress TX.
+            val modeBg = if (modeSwitchEnabled) Accent.copy(alpha = 0.18f) else BgSurface3
+            val modeColor = if (modeSwitchEnabled) Accent else TextFaint
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(modeBg)
+                    .clickable(enabled = modeSwitchEnabled) { onCycleMode() }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = modeName,
+                    color = modeColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = GeistMonoFamily,
+                    letterSpacing = 0.02.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+
             // Frequency / band pill — opens the frequency picker
             Row(
                 modifier = Modifier

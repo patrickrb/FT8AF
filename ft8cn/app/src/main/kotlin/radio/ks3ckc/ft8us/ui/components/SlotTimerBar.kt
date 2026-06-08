@@ -30,12 +30,11 @@ import radio.ks3ckc.ft8us.theme.GeistMonoFamily
 import radio.ks3ckc.ft8us.theme.Signal
 import radio.ks3ckc.ft8us.theme.TextMuted
 
-private const val SLOT_MILLIS = 15_000L
-
 @Composable
 fun SlotTimerBar(
     activeTxSlot: Int,
     isActivated: Boolean,
+    slotMillis: Long = 15_000L,
     modifier: Modifier = Modifier,
 ) {
     var nowMs by remember { mutableLongStateOf(UtcTimer.getSystemTime()) }
@@ -48,9 +47,10 @@ fun SlotTimerBar(
         }
     }
 
-    val slotMs = ((nowMs % SLOT_MILLIS) + SLOT_MILLIS) % SLOT_MILLIS
-    val progress = slotMs / SLOT_MILLIS.toFloat()
-    val secondsRemaining = (((SLOT_MILLIS - slotMs) + 999L) / 1000L).toInt().coerceIn(0, 15)
+    val slotMs = ((nowMs % slotMillis) + slotMillis) % slotMillis
+    val progress = slotMs / slotMillis.toFloat()
+    val maxSeconds = (slotMillis / 1000L).toInt()
+    val secondsRemaining = (((slotMillis - slotMs) + 999L) / 1000L).toInt().coerceIn(0, maxSeconds)
     val currentSlot = UtcTimer.sequential(nowMs)
     val fillColor = if (isActivated && currentSlot == activeTxSlot) Accent else Signal
 

@@ -14,6 +14,7 @@ import androidx.lifecycle.MutableLiveData;
 import com.bg7yoz.ft8cn.FT8Common;
 import com.bg7yoz.ft8cn.Ft8Message;
 import com.bg7yoz.ft8cn.GeneralVariables;
+import com.bg7yoz.ft8cn.ModeProfile;
 import com.bg7yoz.ft8cn.database.DatabaseOpr;
 import com.bg7yoz.ft8cn.ft8transmit.GenerateFT8;
 import com.bg7yoz.ft8cn.timer.OnUtcTimer;
@@ -26,7 +27,9 @@ import java.util.ArrayList;
 
 public class FT8SignalListener {
     private static final String TAG = "FT8SignalListener";
-    private final UtcTimer utcTimer;
+    // Not final: rebuildTimer() recreates it when the operating mode (and thus cycle
+    // length) changes. See rebuildTimer().
+    private UtcTimer utcTimer;
     //private HamRecorder hamRecorder;
     private final OnFt8Listen onFt8Listen;// event triggered when listening starts and decoding finishes
     //private long band;
@@ -54,9 +57,14 @@ public class FT8SignalListener {
         this.onFt8Listen = onFt8Listen;
         this.db = db;
 
-        // Create action trigger, synchronized with UTC time, on a 15-second cycle.
-        // DoOnSecTimer is the event triggered at the start of each cycle. 150 means 15 seconds.
-        utcTimer = new UtcTimer(FT8Common.FT8_SLOT_TIME_M, false, new OnUtcTimer() {
+        // Create action trigger, synchronized with UTC time, on the current mode's cycle
+        // (FT8 = 15s/150, FT4 = 7.5s/75). DoOnSecTimer fires at the start of each cycle.
+        utcTimer = new UtcTimer(GeneralVariables.currentMode().slotTenths, false, makeTimerCallback());
+    }
+
+    /** The cycle-trigger callback, shared between the constructor and {@link #rebuildTimer}. */
+    private OnUtcTimer makeTimerCallback() {
+        return new OnUtcTimer() {
             @Override
             public void doHeartBeatTimer(long utc) {// clock info when not triggered
             }
@@ -66,7 +74,21 @@ public class FT8SignalListener {
                 Log.d(TAG, String.format("Recording triggered, %d", utc));
                 runRecorde(utc);
             }
-        });
+        };
+    }
+
+    /**
+     * Recreate the cycle timer for a new operating mode. {@link UtcTimer}'s period is fixed
+     * at construction, so switching from FT8 (15s) to FT4 (7.5s) means tearing down the old
+     * timer and building a fresh one. Preserves the listening state.
+     */
+    public void rebuildTimer(ModeProfile mode) {
+        boolean wasListening = utcTimer.isRunning();
+        utcTimer.delete();
+        utcTimer = new UtcTimer(mode.slotTenths, false, makeTimerCallback());
+        if (wasListening) {
+            utcTimer.start();
+        }
     }
 
     public void startListen() {
@@ -103,10 +125,11 @@ public class FT8SignalListener {
         if (onWaveDataListener != null) {
             // Fast turnaround: collect a shorter window so decoding finishes (and CQ
             // decodes appear) ~1s before the cycle boundary, leaving time to answer
-            // on the next slot. Off = full 15s window (max sensitivity).
+            // on the next slot. Off = full slot window (max sensitivity).
+            ModeProfile mode = GeneralVariables.currentMode();
             int recordMs = GeneralVariables.earlyDecode
-                    ? FT8Common.FT8_EARLY_DECODE_MILLISECOND
-                    : FT8Common.FT8_SLOT_TIME_MILLISECOND;
+                    ? mode.earlyDecodeMillis
+                    : mode.slotMillis;
             onWaveDataListener.getVoiceData(recordMs, true
                     , new OnGetVoiceDataDone() {
                         @Override
@@ -141,7 +164,7 @@ public class FT8SignalListener {
                 /// Read audio data and perform preprocessing
                 // Note: decoding must complete within one cycle, otherwise a new decode cycle will begin
                 long ft8Decoder = InitDecoder(utc, FT8Common.SAMPLE_RATE
-                        , voiceData.length, true);
+                        , voiceData.length, GeneralVariables.currentMode().isFt8);
 //                        , tempData.length, true);
                 DecoderMonitorPressFloat(voiceData, ft8Decoder);// load audio data
 //                DecoderMonitorPressFloat(tempData, ft8Decoder);// load audio data
@@ -197,7 +220,7 @@ public class FT8SignalListener {
 
     private ArrayList<Ft8Message> runDecode(long ft8Decoder, long utc, boolean isDeep) {
         ArrayList<Ft8Message> ft8Messages = new ArrayList<>();
-        Ft8Message ft8Message = new Ft8Message(FT8Common.FT8_MODE);
+        Ft8Message ft8Message = new Ft8Message(GeneralVariables.operatingMode);
 
         ft8Message.utcTime = utc;
         ft8Message.band = GeneralVariables.band;

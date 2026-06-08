@@ -341,6 +341,7 @@ public class GeneralVariables {
     public static int pttDelay = 100;//PTT response time; radios typically need some response time after PTT command, default 100ms
     public static int lateStartTolerance = 2000;//Max ms into a cycle that a manual TX may start; leading audio is clipped so TX still ends on the cycle boundary. 0-4000.
     public static boolean earlyDecode = true;//Fast turnaround: decode a shorter RX window so CQ decodes appear ~1s before the cycle boundary, enabling a next-slot reply.
+    public static int operatingMode = FT8Common.FT8_MODE;//Current operating mode (FT8Common.FT8_MODE / FT4_MODE); persisted as config "operatingMode".
     public static boolean autoCQAfterQSO = false;//Auto-CQ: keep calling CQ after each completed QSO (chain without re-tapping). Refreshes the TX watchdog per QSO and forces pure CQ (ignores Hunt).
     public static int civAddress = 0xa4;//CI-V address
     public static int baudRate = 19200;//Baud rate
@@ -487,6 +488,11 @@ public class GeneralVariables {
 
     public static float getBaseFrequency() {
         return baseFrequency;
+    }
+
+    /** The descriptor for the current {@link #operatingMode} (FT8/FT4). */
+    public static ModeProfile currentMode() {
+        return ModeProfile.fromId(operatingMode);
     }
 
     public static void setBaseFrequency(float baseFrequency) {
