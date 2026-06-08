@@ -266,6 +266,9 @@
     <string name="pota_login_button">Sign in</string>
     <string name="pota_login_cancel">Cancel</string>
     <string name="pota_login_failed">Sign-in failed: %1$s</string>
+    <string name="pota_login_or">or</string>
+    <string name="pota_login_social">Sign in with Google / Facebook / Amazon</string>
+    <string name="pota_oauth_title">Sign in to POTA</string>
     <string name="pota_add_park">Add park</string>
     <string name="pota_remove_park">Remove</string>
     <string name="pota_max_parks_reached">Maximum of 10 parks reached</string>
