@@ -13,5 +13,18 @@ public enum CatConnectionState {
     DISCONNECTED,
     CONNECTING,
     CONNECTED,
-    ERROR
+    ERROR;
+
+    /**
+     * Resulting state after a disconnect event. A failed connect emits
+     * onRunError() (ERROR) immediately followed by onDisconnected(); keep ERROR
+     * in that case so the status chip stays red until the next connect attempt,
+     * otherwise fall to DISCONNECTED.
+     *
+     * @param current the current connection state
+     * @return ERROR if {@code current} is ERROR, otherwise DISCONNECTED
+     */
+    public static CatConnectionState afterDisconnect(CatConnectionState current) {
+        return current == ERROR ? ERROR : DISCONNECTED;
+    }
 }

@@ -69,4 +69,22 @@ class CatStatusChipLogicTest {
         assertThat(shouldShowCatChip(ControlMode.VOX, CatConnectionState.CONNECTED)).isTrue()
         assertThat(shouldShowCatChip(ControlMode.VOX, CatConnectionState.ERROR)).isTrue()
     }
+
+    @Test
+    fun `afterDisconnect preserves ERROR so the chip stays red`() {
+        // A failed connect emits ERROR then immediately DISCONNECTED; the latter
+        // must not clobber the error.
+        assertThat(CatConnectionState.afterDisconnect(CatConnectionState.ERROR))
+            .isEqualTo(CatConnectionState.ERROR)
+    }
+
+    @Test
+    fun `afterDisconnect falls to DISCONNECTED from non-error states`() {
+        assertThat(CatConnectionState.afterDisconnect(CatConnectionState.CONNECTED))
+            .isEqualTo(CatConnectionState.DISCONNECTED)
+        assertThat(CatConnectionState.afterDisconnect(CatConnectionState.CONNECTING))
+            .isEqualTo(CatConnectionState.DISCONNECTED)
+        assertThat(CatConnectionState.afterDisconnect(CatConnectionState.DISCONNECTED))
+            .isEqualTo(CatConnectionState.DISCONNECTED)
+    }
 }

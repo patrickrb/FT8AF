@@ -71,7 +71,10 @@ fun FT8USApp(mainViewModel: MainViewModel) {
     // setups (see shouldShowCatChip); tap reconnects (handy for Bluetooth, which
     // often only connects on the second attempt).
     val catState by mainViewModel.mutableCatConnectionState.observeAsState(CatConnectionState.DISCONNECTED)
-    val showCatChip = shouldShowCatChip(GeneralVariables.controlMode, catState)
+    // Observe control mode so the chip shows/hides immediately when the user
+    // switches VOX <-> CAT/RTS/DTR in Settings (seeds from the current value).
+    val controlMode by GeneralVariables.mutableControlMode.observeAsState(GeneralVariables.controlMode)
+    val showCatChip = shouldShowCatChip(controlMode, catState)
     // Consume the one-shot celebration signal so LiveData doesn't replay it
     // on recomposition / resubscription.
     LaunchedEffect(qsoCompletedAt) {
