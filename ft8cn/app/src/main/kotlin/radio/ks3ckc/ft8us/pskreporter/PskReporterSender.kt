@@ -2,7 +2,7 @@ package radio.ks3ckc.ft8us.pskreporter
 
 import android.util.Log
 import androidx.annotation.VisibleForTesting
-import com.bg7yoz.ft8cn.FT8Common
+import com.bg7yoz.ft8cn.ModeProfile
 import com.bg7yoz.ft8cn.Ft8Message
 import com.bg7yoz.ft8cn.GeneralVariables
 import kotlinx.coroutines.*
@@ -154,12 +154,8 @@ object PskReporterSender {
         // Skip free-text messages (i3=0, n3=0)
         if (msg.i3 == 0 && msg.n3 == 0) return null
 
-        // Only FT8 (and FT4 if present)
-        val mode = when (msg.signalFormat) {
-            FT8Common.FT8_MODE -> "FT8"
-            FT8Common.FT4_MODE -> "FT4"
-            else -> return null
-        }
+        // Mode string (FT8/FT4/FT2) derived from the message's mode descriptor.
+        val mode = ModeProfile.fromId(msg.signalFormat).displayName
 
         // Frequency = carrier band + audio offset
         val freqHz = msg.band + msg.freq_hz.toLong()

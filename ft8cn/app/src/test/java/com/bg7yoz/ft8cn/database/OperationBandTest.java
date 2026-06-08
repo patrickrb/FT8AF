@@ -147,13 +147,32 @@ public class OperationBandTest {
     }
 
     @Test
+    public void bandStringConstructor_fourthFieldTagsFt2Mode() {
+        // The mode tag resolves via ModeProfile.displayName, so "FT2" maps to FT2_MODE.
+        OperationBand.Band b = new OperationBand.Band("*:14074000:20m:FT2");
+        assertThat(b.band).isEqualTo(14_074_000L);
+        assertThat(b.waveLength).isEqualTo("20m");
+        assertThat(b.marked).isTrue();
+        assertThat(b.mode).isEqualTo(com.bg7yoz.ft8cn.FT8Common.FT2_MODE);
+    }
+
+    @Test
+    public void bandStringConstructor_unknownModeTagFallsBackToFt8() {
+        OperationBand.Band b = new OperationBand.Band("*:14074000:20m:FTX");
+        assertThat(b.mode).isEqualTo(com.bg7yoz.ft8cn.FT8Common.FT8_MODE);
+    }
+
+    @Test
     public void getModeBandFreq_returnsModeSpecificDial() {
         OperationBand.bandList.add(new OperationBand.Band("*:14074000:20m"));
         OperationBand.bandList.add(new OperationBand.Band("*:14080000:20m:FT4"));
+        OperationBand.bandList.add(new OperationBand.Band("*:14070000:20m:FT2"));
         assertThat(OperationBand.getModeBandFreq("20m", com.bg7yoz.ft8cn.FT8Common.FT8_MODE))
                 .isEqualTo(14_074_000L);
         assertThat(OperationBand.getModeBandFreq("20m", com.bg7yoz.ft8cn.FT8Common.FT4_MODE))
                 .isEqualTo(14_080_000L);
+        assertThat(OperationBand.getModeBandFreq("20m", com.bg7yoz.ft8cn.FT8Common.FT2_MODE))
+                .isEqualTo(14_070_000L);
     }
 
     @Test

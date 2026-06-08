@@ -1,0 +1,25 @@
+#ifndef _INCLUDE_PACK_H_
+#define _INCLUDE_PACK_H_
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/// Parse and pack FT8/FT4 text message into 77 bit binary payload
+/// @param[in] msg   FT8/FT4 message (e.g. "CQ TE5T KN01")
+/// @param[out] c77  10 byte array to store the 77 bit payload (MSB first)
+/// @return Parsing result (0 - success, otherwise error)
+int pack77(const char* msg, uint8_t* c77);
+
+/// Pack arbitrary text as a free-text (i3=0, n3=0) 77-bit payload, bypassing the
+/// structured-message parse that pack77() attempts first. Exposed for the FT8CN
+/// JNI layer; upstream kept this file-local. @param[out] b77 10-byte payload.
+void packtext77(const char* text, uint8_t* b77);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // _INCLUDE_PACK_H_

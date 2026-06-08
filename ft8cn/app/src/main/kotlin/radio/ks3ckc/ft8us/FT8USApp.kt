@@ -29,7 +29,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.bg7yoz.ft8cn.FT8Common
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
 import com.bg7yoz.ft8cn.ModeProfile
@@ -278,10 +277,12 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                     ).show()
                 },
                 onCycleMode = {
-                    // v1 cycles FT8 <-> FT4. When FT2 ships, widen this to iterate the
-                    // shipped ModeProfile entries.
-                    val next = if (operatingMode == FT8Common.FT8_MODE) FT8Common.FT4_MODE
-                    else FT8Common.FT8_MODE
+                    // Cycle through the shipped ModeProfile entries in declaration order
+                    // (FT8 -> FT4 -> FT2 -> ...), wrapping around. An unknown current mode
+                    // (indexOfFirst == -1) falls back to the first entry (FT8).
+                    val modes = ModeProfile.values()
+                    val curIdx = modes.indexOfFirst { it.id == operatingMode }
+                    val next = modes[(curIdx + 1) % modes.size].id
                     if (mainViewModel.setOperatingMode(next)) {
                         Toast.makeText(
                             context,

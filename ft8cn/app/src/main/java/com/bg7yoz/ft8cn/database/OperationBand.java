@@ -200,10 +200,17 @@ public class OperationBand {
             marked= (info[0].equals("*"));
             band=Long.parseLong(info[1]);
             //Format: marked:freq:waveLength[:mode]. waveLength is field 2; an optional 4th
-            //field tags the mode ("FT4"), otherwise the entry is FT8.
+            //field tags the mode by ModeProfile.displayName ("FT4"/"FT2"), otherwise FT8.
+            //Resolving against ModeProfile keeps future modes a one-entry add (no new branch).
             waveLength=info[2];
-            if (info.length > 3 && info[3].trim().equalsIgnoreCase("FT4")) {
-                mode = com.bg7yoz.ft8cn.FT8Common.FT4_MODE;
+            if (info.length > 3 && !info[3].trim().isEmpty()) {
+                String tag = info[3].trim();
+                for (com.bg7yoz.ft8cn.ModeProfile m : com.bg7yoz.ft8cn.ModeProfile.values()) {
+                    if (m.displayName.equalsIgnoreCase(tag)) {
+                        mode = m.id;
+                        break;
+                    }
+                }
             }
         }
         @SuppressLint("DefaultLocale")

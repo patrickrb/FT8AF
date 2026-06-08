@@ -47,3 +47,16 @@
 *:28180000:10m:FT4
 *:50318000:6m:FT4
 *:144170000:2m:FT4
+# FT2 dials below are PROVISIONAL placeholders (FT8 sub-band freqs) pending the
+# official ft2.it/HamPass ft2-bands.qrg list. Replace with the canonical values.
+# (Comment lines contain no colon, so the bands loader skips them.)
+*:3573000:80m:FT2
+*:7074000:40m:FT2
+*:10136000:30m:FT2
+*:14074000:20m:FT2
+*:18100000:17m:FT2
+*:21074000:15m:FT2
+*:24915000:12m:FT2
+*:28074000:10m:FT2
+*:50313000:6m:FT2
+*:144174000:2m:FT2
