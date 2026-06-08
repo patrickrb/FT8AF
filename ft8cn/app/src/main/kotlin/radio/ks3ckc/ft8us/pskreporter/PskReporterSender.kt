@@ -154,8 +154,12 @@ object PskReporterSender {
         // Skip free-text messages (i3=0, n3=0)
         if (msg.i3 == 0 && msg.n3 == 0) return null
 
-        // Mode string (FT8/FT4/FT2) derived from the message's mode descriptor.
-        val mode = ModeProfile.fromId(msg.signalFormat).displayName
+        // Mode string (FT8/FT4/FT2) derived from the message's mode descriptor. fromId()
+        // falls back to FT8 for unknown ids, so guard against a corrupt/unexpected
+        // signalFormat by dropping the spot rather than mislabelling it (prior behavior).
+        val profile = ModeProfile.fromId(msg.signalFormat)
+        if (profile.id != msg.signalFormat) return null
+        val mode = profile.displayName
 
         // Frequency = carrier band + audio offset
         val freqHz = msg.band + msg.freq_hz.toLong()

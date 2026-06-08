@@ -3,7 +3,9 @@
 #define LOG_LEVEL LOG_INFO
 #include <ft8/debug.h>
 
+#include <math.h>   // sinf/log10f used below
 #include <stdlib.h>
+#include "common.h" // M_PI fallback for toolchains where <math.h> omits it
 
 static float hann_i(int i, int N)
 {
