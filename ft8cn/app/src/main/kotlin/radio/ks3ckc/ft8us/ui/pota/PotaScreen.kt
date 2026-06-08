@@ -573,6 +573,9 @@ private fun HistoryTab(mainViewModel: MainViewModel) {
     var uploadingId by remember { mutableStateOf<Long?>(null) }
     var loginFor by remember { mutableStateOf<PotaActivation?>(null) }
     var loginSubmitting by remember { mutableStateOf(false) }
+    // Set when the user picks federated sign-in (Google/Facebook/Amazon); shows the
+    // hosted-UI WebView. The pending activation is uploaded once login succeeds.
+    var oauthFor by remember { mutableStateOf<PotaActivation?>(null) }
 
     // Reload whenever activation state changes (start/end will appear here).
     LaunchedEffect(refreshKey, activation?.id, activation?.endedAtMs) {
@@ -660,7 +663,22 @@ private fun HistoryTab(mainViewModel: MainViewModel) {
                     }
                 }
             },
+            onUseSocial = {
+                // Federated sign-in (Google/Facebook/Amazon) can't go through SRP —
+                // hand off to the hosted-UI WebView, keeping the same pending upload.
+                if (!loginSubmitting) {
+                    loginFor = null
+                    oauthFor = pending
+                }
+            },
         )
+    }
+
+    oauthFor?.let { pending ->
+        PotaOAuthDialog(onClose = { success ->
+            oauthFor = null
+            if (success) startUpload(pending)
+        })
     }
 }
 
@@ -702,6 +720,7 @@ private fun PotaLoginDialog(
     submitting: Boolean,
     onDismiss: () -> Unit,
     onSubmit: (email: String, password: String) -> Unit,
+    onUseSocial: () -> Unit,
 ) {
     var email by rememberSaveable { mutableStateOf(PotaAuth.loggedInEmail().orEmpty()) }
     // Plain remember (not rememberSaveable) — the password must never be written to
@@ -742,6 +761,32 @@ private fun PotaLoginDialog(
                     colors = textFieldColors(),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f).height(1.dp).background(Border))
+                    Text(
+                        stringResource(R.string.pota_login_or),
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                    Box(Modifier.weight(1f).height(1.dp).background(Border))
+                }
+                Spacer(Modifier.height(12.dp))
+                // Federated accounts (Google/Facebook/Amazon) have no Cognito password,
+                // so the email/password fields above can't authenticate them — this
+                // opens the hosted-UI WebView flow instead.
+                OutlinedButton(
+                    onClick = onUseSocial,
+                    enabled = !submitting,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        stringResource(R.string.pota_login_social),
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                    )
+                }
             }
         },
         confirmButton = {

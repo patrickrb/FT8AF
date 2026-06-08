@@ -3,6 +3,7 @@ package radio.ks3ckc.ft8us.pota
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
+import android.util.Base64
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
@@ -23,7 +24,10 @@ import java.io.File
 import java.io.FileWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.security.SecureRandom
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -34,12 +38,19 @@ import kotlin.coroutines.resume
  * activation logs directly (see [PotaClient.uploadAdif]).
  *
  * POTA's pool/client IDs are public — they ship in pota.app's own JS bundle and
- * are reproduced in the open-source `pota-adif-upload` Rust client. The user logs
- * in with their normal pota.app account email + password.
+ * are reproduced in the open-source `pota-adif-upload` Rust client.
  *
- * Flow:
- *  - [login] runs Cognito's USER_SRP_AUTH (password never leaves the SRP proof)
- *    via the AWS SDK and stashes the long-lived **refresh token**.
+ * Two ways in, both ending in a stored refresh token the rest of the class treats
+ * identically:
+ *  - [login] (email + password) runs Cognito's USER_SRP_AUTH (password never
+ *    leaves the SRP proof) via the AWS SDK. Only works for accounts that have a
+ *    Cognito password.
+ *  - [authorizeUrl] + [exchangeCode] drive the hosted-UI OAuth2 code+PKCE flow
+ *    (see [radio.ks3ckc.ft8us.ui.pota.PotaOAuthDialog]). This is the only path
+ *    that works for **federated** accounts (Google / Facebook / Login-with-Amazon),
+ *    which have no Cognito password for SRP to verify.
+ *
+ * Either way:
  *  - [idToken] returns a short-lived JWT ID token, refreshing it from the stored
  *    refresh token via REFRESH_TOKEN_AUTH (a plain JSON POST — no SRP, no SDK)
  *    when the cached one is missing or near expiry.
@@ -57,6 +68,19 @@ object PotaAuth {
     private const val CLIENT_ID = "7hluqct0n2nckib7i7sd5753oa"
     private val REGION = Regions.US_EAST_2
     private const val COGNITO_IDP = "https://cognito-idp.us-east-2.amazonaws.com/"
+
+    // Hosted-UI (managed login) origin for the OAuth2 code flow used by federated
+    // sign-in. From the pool's /.well-known/openid-configuration + pota.app's JS.
+    private const val HOSTED_UI = "https://parksontheair.auth.us-east-2.amazoncognito.com"
+    private const val OAUTH_SCOPE = "openid email phone profile"
+
+    /**
+     * The single redirect URI POTA registered on its Cognito app client. We can't
+     * register our own (no custom scheme / localhost is accepted — every other
+     * value returns redirect_mismatch), so the WebView flow watches for navigation
+     * to this URL and lifts the `?code=` out before pota.app actually loads.
+     */
+    const val OAUTH_REDIRECT = "https://pota.app/"
 
     private const val PREFS = "pota_auth"
     private const val KEY_REFRESH = "refresh_token"
@@ -244,6 +268,112 @@ object PotaAuth {
             conn?.disconnect()
         }
     }
+
+    // --- Hosted-UI OAuth2 (authorization code + PKCE) for federated sign-in ---
+
+    /** A PKCE verifier/challenge pair for one hosted-UI login attempt. */
+    data class Pkce(val verifier: String, val challenge: String)
+
+    /** Mint a fresh PKCE pair (S256). Hold onto it for the matching [exchangeCode]. */
+    fun newPkce(): Pkce {
+        val raw = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        val verifier = b64url(raw)
+        val challenge = b64url(
+            MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(StandardCharsets.US_ASCII))
+        )
+        return Pkce(verifier, challenge)
+    }
+
+    /** The hosted-UI authorize URL to load in the login WebView for [pkce]. */
+    fun authorizeUrl(pkce: Pkce): String {
+        val q = buildString {
+            append("client_id=").append(CLIENT_ID)
+            append("&response_type=code")
+            append("&scope=").append(URLEncoder.encode(OAUTH_SCOPE, "UTF-8"))
+            append("&redirect_uri=").append(URLEncoder.encode(OAUTH_REDIRECT, "UTF-8"))
+            append("&code_challenge=").append(pkce.challenge)
+            append("&code_challenge_method=S256")
+        }
+        return "$HOSTED_UI/oauth2/authorize?$q"
+    }
+
+    /**
+     * Exchange a hosted-UI authorization [code] for tokens, store the refresh token
+     * (so later uploads mint ID tokens silently via [idToken]), and return the ID
+     * token. [verifier] must be the one from the [Pkce] used to build [authorizeUrl].
+     */
+    suspend fun exchangeCode(code: String, verifier: String): Result<String> = withContext(Dispatchers.IO) {
+        val ctx = GeneralVariables.getMainContext()
+            ?: return@withContext Result.failure(IllegalStateException("no app context"))
+        try {
+            val form = buildString {
+                append("grant_type=authorization_code")
+                append("&client_id=").append(CLIENT_ID)
+                append("&code=").append(URLEncoder.encode(code, "UTF-8"))
+                append("&redirect_uri=").append(URLEncoder.encode(OAUTH_REDIRECT, "UTF-8"))
+                append("&code_verifier=").append(verifier)
+            }
+            val obj = JSONObject(postForm("$HOSTED_UI/oauth2/token", form))
+            val refresh = obj.optString("refresh_token", "")
+            val id = obj.optString("id_token", "")
+            if (refresh.isBlank() || id.isBlank()) {
+                return@withContext Result.failure(IllegalStateException("token response missing tokens"))
+            }
+            val email = emailFromIdToken(id).orEmpty()
+            prefs(ctx).edit()
+                .putString(KEY_REFRESH, refresh)
+                .putString(KEY_EMAIL, email)
+                .apply()
+            cachedIdToken = id
+            cachedIdTokenExpiryMs = System.currentTimeMillis() + ID_TOKEN_TTL_MS
+            log("oauth login ok email=$email (refresh stored)")
+            Result.success(id)
+        } catch (e: Exception) {
+            log("oauth exchange FAILED: ${e.javaClass.simpleName}: ${e.message ?: "?"}")
+            Result.failure(e)
+        }
+    }
+
+    private fun postForm(urlStr: String, form: String): String {
+        var conn: HttpURLConnection? = null
+        try {
+            conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 10_000
+                readTimeout = 10_000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+                setRequestProperty("Accept", "application/json")
+            }
+            conn.outputStream.use { it.write(form.toByteArray(StandardCharsets.UTF_8)) }
+            val code = conn.responseCode
+            if (code !in 200..299) {
+                val err = conn.errorStream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() } ?: ""
+                throw IllegalStateException("token http $code: ${err.take(200)}")
+            }
+            return conn.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
+    /** Pull the `email` claim out of a JWT ID token (for display only). */
+    private fun emailFromIdToken(idToken: String): String? = try {
+        val parts = idToken.split(".")
+        if (parts.size < 2) null
+        else {
+            val payload = String(
+                Base64.decode(parts[1], Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP),
+                StandardCharsets.UTF_8,
+            )
+            JSONObject(payload).optString("email").ifBlank { null }
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun b64url(bytes: ByteArray): String =
+        Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
 
     private fun log(msg: String) {
         Log.d(TAG, msg)
