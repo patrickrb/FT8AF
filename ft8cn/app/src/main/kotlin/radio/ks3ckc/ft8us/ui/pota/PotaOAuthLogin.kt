@@ -98,16 +98,14 @@ fun PotaOAuthDialog(onClose: (success: Boolean) -> Unit) {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { ctx ->
-                        // Start from a clean session so the user picks an account each
-                        // time rather than silently reusing a stale cookie.
-                        CookieManager.getInstance().removeAllCookies(null)
                         WebView(ctx).apply {
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
-                            // Plain Chrome UA (no "; wv") so Google's consent screen loads.
-                            settings.userAgentString =
-                                "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 " +
-                                "(KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36"
+                            // Google's consent screen rejects the "; wv" token the default
+                            // Android WebView UA carries (disallowed_useragent). Strip just
+                            // that token so the UA stays current with the device's real
+                            // Chrome/WebView version instead of pinning a version that ages out.
+                            settings.userAgentString = stripWebViewToken(settings.userAgentString)
 
                             var captured = false
 
@@ -142,7 +140,12 @@ fun PotaOAuthDialog(onClose: (success: Boolean) -> Unit) {
                                     url: String,
                                 ): Boolean = handleRedirect(url)
                             }
-                            loadUrl(PotaAuth.authorizeUrl(pkce))
+                            // removeAllCookies is async; load the authorize URL from its
+                            // callback (fires on the main thread) so navigation only begins
+                            // once cookies are cleared — otherwise the page could reuse a
+                            // stale session, contradicting the clean-start intent.
+                            val authUrl = PotaAuth.authorizeUrl(pkce)
+                            CookieManager.getInstance().removeAllCookies { loadUrl(authUrl) }
                         }
                     },
                 )
@@ -160,3 +163,11 @@ fun PotaOAuthDialog(onClose: (success: Boolean) -> Unit) {
         }
     }
 }
+
+/**
+ * Remove the "; wv" token an Android WebView appends to its user-agent. Google's
+ * OAuth consent screen rejects any UA carrying that token with
+ * `disallowed_useragent`; stripping it yields a plain Chrome UA that loads, while
+ * keeping the device's real (and self-updating) Chrome/WebView version.
+ */
+internal fun stripWebViewToken(ua: String): String = ua.replace("; wv", "")
