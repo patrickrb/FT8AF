@@ -2,9 +2,58 @@
 
 ## Workflow
 
-After finishing the code for any feature, open a pull request targeting the `dev`
-branch (do the work on a feature branch, then `gh pr create --base dev`). Don't
-merge straight to `main`.
+**Every work item requires a pull request — no direct commits to `dev` or
+`main`.** Even a one-line docs or config change goes through a feature branch and
+a PR.
+
+**All PRs target the `dev` branch.** After finishing the code for any work item,
+open a pull request against `dev` (do the work on a feature branch, then
+`gh pr create --base dev`). Don't merge straight to `main`.
+
+**Use a git worktree for every separate line of work.** Don't switch branches in
+the primary checkout (`C:\Users\burns\Projects\NEXT-FT8CN`) — branch-switching
+there collides with anything else in flight (a running build, an `adb install`, a
+different task). Instead spin up an isolated worktree per task:
+
+```
+git worktree add ../NEXT-FT8CN-<short-task-name> -b feat/<task>
+```
+
+Two gotchas for a fresh worktree:
+
+- The `ft8cn/app/src/main/cpp/` native sources (`ft8_lib`, `ft8cn_glue`,
+  `libsamplerate`) are **untracked** (see `git status` / memory
+  `ft8af-untracked-native-sources.md`), so a new worktree won't have them and the
+  NDK build fails. Copy them over from the primary checkout before building.
+- Build/install still uses the Windows wrapper from inside the worktree's `ft8cn`
+  dir (`cmd.exe /c "gradlew.bat installDebug"`).
+
+Remove the worktree when the branch is merged: `git worktree remove <path>`.
+
+## Testing
+
+**Every new code path requires a new test.** Any branch, helper, or behavior
+you add or change must be covered by a unit test in the same PR — this is not
+optional, even for small UI helpers.
+
+Compose `@Composable` and `DrawScope` code can't be unit-tested directly, so
+extract the decision/geometry logic into a plain top-level `internal` function
+or class (e.g. `buildQsoLog`, `QsoPathProjection`) and test that. Keep the
+Composable a thin wrapper that just calls the extracted logic.
+
+Tests live in `ft8cn/app/src/test/` (Kotlin under `.../kotlin`, Java under
+`.../java`), use JUnit4 + Truth (`assertThat`), and add
+`@RunWith(RobolectricTestRunner::class)` when the code under test touches
+Android/Play-Services types (e.g. anything reaching `MaidenheadGrid`,
+`GeneralVariables`, `LatLng`). Pure math/logic needs no runner.
+
+Run from the worktree's `ft8cn` dir:
+
+```
+cmd.exe /c "gradlew.bat testDebugUnitTest"
+# or a single class:
+cmd.exe /c "gradlew.bat testDebugUnitTest --tests <fully.qualified.ClassName>"
+```
 
 ## Build & Deploy
 
