@@ -9,6 +9,7 @@ import android.util.Log;
 
 import com.bg7yoz.ft8cn.Ft8Message;
 import com.bg7yoz.ft8cn.GeneralVariables;
+import com.bg7yoz.ft8cn.ModeProfile;
 import com.bg7yoz.ft8cn.R;
 import com.bg7yoz.ft8cn.ft8signal.FT8Package;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
@@ -35,8 +36,13 @@ public class GenerateFT8 {
     static {
         try {
             System.loadLibrary("ft8cn");
+            // ft4_encode's JNI entry point lives in ft8af_usb (it bridges to the
+            // prebuilt libft8cn.so's ft4_encode C symbol — see cpp/ft4_encode_jni.cpp).
+            // Load it here so GenerateFT8.ft4Encode() resolves regardless of whether
+            // the USB-audio path has been exercised yet.
+            System.loadLibrary("ft8af_usb");
         } catch (UnsatisfiedLinkError e) {
-            // Best-effort load: JVM unit tests don't have libft8cn.so on
+            // Best-effort load: JVM unit tests don't have the native libs on
             // java.library.path. The native methods themselves will throw if
             // actually invoked without the library; the pure-Java helpers on
             // this class stay available either way.
@@ -237,34 +243,42 @@ public class GenerateFT8 {
     }
 
     public static float[] generateFt8ByA91(byte[] a91, float frequency,int sample_rate){
-        byte[] tones = new byte[num_tones]; // 79-tone (symbol) array
-        // here is 12 bytes (91+7)/8, a91 can be used to generate audio
-        ft8_encode(a91, tones);
+        return generateFt8ByA91(a91, frequency, sample_rate, GeneralVariables.currentMode());
+    }
 
-        // third, convert FSK tones to audio signal
+    /**
+     * Generate the mode's audio waveform from an a91 payload. FT8 and FT4 share the same
+     * 77-bit payload but differ in tone count, symbol period, BT product, and native
+     * encoder (see {@link ModeProfile}). The {@code mode} parameter is explicit so this is
+     * unit-testable without touching global state.
+     */
+    public static float[] generateFt8ByA91(byte[] a91, float frequency, int sample_rate, ModeProfile mode){
+        byte[] tones = new byte[mode.numTones]; // FT8: 79 symbols, FT4: 105
+        // a91 is the 12-byte (91+7)/8 payload; the native encoder fills the tone array
+        mode.encode(a91, tones);
 
-
-        int num_samples = (int) (0.5f + num_tones * symbol_period * sample_rate); // number of samples in the data signal: 0.5+79*0.16*12000
-
+        // convert FSK tones to audio signal
+        int num_samples = (int) (0.5f + mode.numTones * mode.symbolPeriod * sample_rate); // FT8: 0.5+79*0.16*12000
 
         float[] signal = new float[num_samples];
-
-        // Ft8num_sample is the total number of FT8 audio samples, not bytes. 15*12000
-        //for (int i = 0; i < Ft8num_samples; i++)// silence all data
         for (int i = 0; i < num_samples; i++)// silence all data
         {
             signal[i] = 0;
         }
 
-        // generate FT8 audio from 79 byte symbols
-        synth_gfsk(tones, num_tones, frequency, symbol_bt, symbol_period, sample_rate, signal, 0);
-//        for (int i = 0; i < num_samples; i++)//silence all data
-//        {
-//            if (signal[i]>1.0||signal[i]<-1.0){
-//                Log.e(TAG, "generateFt8: "+signal[i] );
-//            }
-//        }
+        // generate audio from the symbol array
+        synth_gfsk(tones, mode.numTones, frequency, mode.symbolBt, mode.symbolPeriod, sample_rate, signal, 0);
         return signal;
+    }
+
+    /** Encode an a91 payload into 79 FT8 tones (native ft8_encode). */
+    public static void ft8Encode(byte[] a91, byte[] tones) {
+        ft8_encode(a91, tones);
+    }
+
+    /** Encode an a91 payload into 105 FT4 tones (native ft4_encode). */
+    public static void ft4Encode(byte[] a91, byte[] tones) {
+        ft4_encode(a91, tones);
     }
 
 
@@ -273,6 +287,8 @@ public class GenerateFT8 {
     private static native int pack77(String msg, byte[] c77);
 
     private static native void ft8_encode(byte[] payload, byte[] tones);
+
+    private static native void ft4_encode(byte[] payload, byte[] tones);
 
     private static native void synth_gfsk(byte[] symbols, int n_sym, float f0,
                                           float symbol_bt, float symbol_period,

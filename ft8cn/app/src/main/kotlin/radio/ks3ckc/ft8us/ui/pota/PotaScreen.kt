@@ -287,7 +287,7 @@ private fun ActivateTab() {
                                         activator = myCall,
                                         spotter = myCall,
                                         frequencyKhz = GeneralVariables.getBaseFrequency() / 1000.0,
-                                        mode = "FT8",
+                                        mode = GeneralVariables.currentMode().displayName,
                                         reference = ref,
                                         comments = "CQ POTA via FT8AF",
                                     )

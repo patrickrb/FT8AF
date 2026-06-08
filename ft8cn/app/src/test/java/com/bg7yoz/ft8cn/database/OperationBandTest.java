@@ -127,11 +127,39 @@ public class OperationBandTest {
     }
 
     @Test
-    public void bandStringConstructor_threeFieldUsesLastAsWavelength() {
-        // waveLength is taken from the last colon-delimited field, so a trailing
-        // descriptor still lands in waveLength.
+    public void bandStringConstructor_threeFieldUsesThirdAsWavelength() {
+        // waveLength is field index 2 (marked:freq:waveLength); a plain 3-field line
+        // has no mode tag and defaults to FT8.
         OperationBand.Band b = new OperationBand.Band(" :10136000:30m");
         assertThat(b.band).isEqualTo(10_136_000L);
         assertThat(b.waveLength).isEqualTo("30m");
         assertThat(b.marked).isFalse();
+        assertThat(b.mode).isEqualTo(com.bg7yoz.ft8cn.FT8Common.FT8_MODE);
+    }
+
+    @Test
+    public void bandStringConstructor_fourthFieldTagsFt4Mode() {
+        OperationBand.Band b = new OperationBand.Band("*:14080000:20m:FT4");
+        assertThat(b.band).isEqualTo(14_080_000L);
+        assertThat(b.waveLength).isEqualTo("20m");
+        assertThat(b.marked).isTrue();
+        assertThat(b.mode).isEqualTo(com.bg7yoz.ft8cn.FT8Common.FT4_MODE);
+    }
+
+    @Test
+    public void getModeBandFreq_returnsModeSpecificDial() {
+        OperationBand.bandList.add(new OperationBand.Band("*:14074000:20m"));
+        OperationBand.bandList.add(new OperationBand.Band("*:14080000:20m:FT4"));
+        assertThat(OperationBand.getModeBandFreq("20m", com.bg7yoz.ft8cn.FT8Common.FT8_MODE))
+                .isEqualTo(14_074_000L);
+        assertThat(OperationBand.getModeBandFreq("20m", com.bg7yoz.ft8cn.FT8Common.FT4_MODE))
+                .isEqualTo(14_080_000L);
+    }
+
+    @Test
+    public void getModeBandFreq_noEntryForBandInMode_returnsMinusOne() {
+        // 160m has an FT8 dial but no FT4 dial -> -1 so callers keep the current freq.
+        OperationBand.bandList.add(new OperationBand.Band("*:1840000:160m"));
+        assertThat(OperationBand.getModeBandFreq("160m", com.bg7yoz.ft8cn.FT8Common.FT4_MODE))
+                .isEqualTo(-1L);
     }}

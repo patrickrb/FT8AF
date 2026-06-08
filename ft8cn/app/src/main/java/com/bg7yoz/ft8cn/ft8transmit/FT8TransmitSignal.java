@@ -23,6 +23,7 @@ import com.bg7yoz.ft8cn.wave.UsbAudioNative;
 import androidx.lifecycle.MutableLiveData;
 
 import com.bg7yoz.ft8cn.FT8Common;
+import com.bg7yoz.ft8cn.ModeProfile;
 import com.bg7yoz.ft8cn.Ft8Message;
 import com.bg7yoz.ft8cn.ft8signal.FT8Package;
 import com.bg7yoz.ft8cn.GeneralVariables;
@@ -161,7 +162,16 @@ public class FT8TransmitSignal {
         // so there is no live mid-cycle setVolume() observer here: a volume change takes effect
         // on the next cycle. This matches the ALC auto-volume model (MeterProtectionController).
 
-        utcTimer = new UtcTimer(FT8Common.FT8_SLOT_TIME_M, false, new OnUtcTimer() {
+        // Cycle timer on the current mode's period (FT8 = 15s/150, FT4 = 7.5s/75).
+        utcTimer = new UtcTimer(GeneralVariables.currentMode().slotTenths, false, makeTimerCallback());
+
+        utcTimer.start();
+
+    }
+
+    /** The cycle-trigger callback, shared between the constructor and {@link #rebuildTimer}. */
+    private OnUtcTimer makeTimerCallback() {
+        return new OnUtcTimer() {
             @Override
             public void doHeartBeatTimer(long utc) {
 
@@ -184,10 +194,18 @@ public class FT8TransmitSignal {
                     doTransmit();// transmit action follows precise timing; delay is the audio signal delay
                 }
             }
-        });
+        };
+    }
 
+    /**
+     * Recreate the cycle timer for a new operating mode. {@link UtcTimer}'s period is fixed
+     * at construction, so a mode change (FT8 15s -> FT4 7.5s) requires a fresh timer. The
+     * timer is always restarted; callers should ensure we are not mid-transmit first.
+     */
+    public void rebuildTimer(ModeProfile mode) {
+        utcTimer.delete();
+        utcTimer = new UtcTimer(mode.slotTenths, false, makeTimerCallback());
         utcTimer.start();
-
     }
 
     /**
@@ -206,7 +224,7 @@ public class FT8TransmitSignal {
         resetTargetReport();
 
         if (UtcTimer.getNowSequential() == sequential) {
-            long msInCycle = UtcTimer.getSystemTime() % 15000;
+            long msInCycle = UtcTimer.getSystemTime() % GeneralVariables.currentMode().slotMillis;
             int tolerance = GeneralVariables.lateStartTolerance;
             if (tolerance < 0) tolerance = 0;
             if (tolerance > 4000) tolerance = 4000;
@@ -805,7 +823,7 @@ public class FT8TransmitSignal {
                     toMaidenheadGrid,
                     sentTargetReport != -100 ? sentTargetReport : sendReport,
                     receiveTargetReport != -100 ? receiveTargetReport : receivedReport,// if signal report for the other party is not -100, use the sent signal report record
-                    "FT8",
+                    GeneralVariables.currentMode().displayName,
                     GeneralVariables.band,
                     Math.round(GeneralVariables.getBaseFrequency())
             ));
@@ -1080,7 +1098,7 @@ public class FT8TransmitSignal {
                     toMaidenheadGrid,
                     sentTargetReport != -100 ? sentTargetReport : sendReport,
                     receiveTargetReport != -100 ? receiveTargetReport : receivedReport,// if signal report is not -100, use the sent signal report record
-                    "FT8",
+                    GeneralVariables.currentMode().displayName,
                     GeneralVariables.band,
                     Math.round(GeneralVariables.getBaseFrequency()
                     )));
@@ -1796,28 +1814,31 @@ public class FT8TransmitSignal {
                 e.printStackTrace();
             }
 
-            // Compute how late we are *vs. when FT8 audio should start*, and only
-            // clip leading audio if we'd overrun the 15-second cycle otherwise.
+            // Compute how late we are *vs. when the audio should start*, and only
+            // clip leading audio if we'd overrun the cycle otherwise. The numbers
+            // are per-mode (see ModeProfile): the slot length and the audio length.
             //
-            // FT8 = 79 GFSK symbols at 0.16s each = 12.64s of audio. The spec
-            // expects audio to start ~+0.5s into each 15s cycle, so any start
-            // between 0 and (15.00 - 12.64) = 2.36s into the cycle fits without
-            // clipping. The original `msLate = position % 15000` treated every
+            // FT8 = 79 GFSK symbols at 0.16s each = 12.64s of audio in a 15s slot,
+            // so the slack (last moment we can start without overrunning) is
+            // 15.00 - 12.64 = 2.36s. FT4 = 105 symbols at 0.048s = 5.04s in a 7.5s
+            // slot, slack 2.46s. Any start within the slack fits without clipping.
+            //
+            // The naive `msLate = position % slotMillis` would treat every
             // millisecond past the cycle boundary as lateness — so a normal
             // on-time TX that fires ~500-800ms into the cycle (totally fine)
-            // would chop 500-800ms off the *start* of the audio buffer, which
-            // is exactly where the leading Costas sync array lives (symbols
-            // 0-6, the first 1.12s). Receivers couldn't lock, and the signal
-            // came across as audible-but-undecodable.
+            // would chop that many ms off the *start* of the audio buffer, which
+            // is exactly where the leading Costas sync array lives. Receivers
+            // couldn't lock, and the signal came across as audible-but-undecodable.
             //
-            // New behavior: skip only the excess past 2.36s. On-time and
-            // mildly-late TXs send the full waveform; only genuinely late
-            // starts (over ~2.4s into cycle) start clipping leading audio.
-            int msIntoCycle = (int) (UtcTimer.getSystemTime() % 15000);
-            int msMaxStart = 15000 - 12640; // 2360ms — last moment we can start without overrunning
+            // New behavior: skip only the excess past the slack. On-time and
+            // mildly-late TXs send the full waveform; only genuinely late starts
+            // begin clipping leading audio.
+            ModeProfile mode = GeneralVariables.currentMode();
+            int msIntoCycle = (int) (UtcTimer.getSystemTime() % mode.slotMillis);
+            int msMaxStart = mode.audioSlackMillis; // last moment we can start without overrunning
             int msLate = msIntoCycle - msMaxStart;
             if (msLate < 0) msLate = 0;
-            if (msLate >= 15000) msLate = 14999;
+            if (msLate >= mode.slotMillis) msLate = mode.slotMillis - 1;
             transmitSignal.lateStartSkipMs = msLate;
             if (msLate > 100) {
                 Log.d(TAG, String.format("Late start: skipping %d ms of leading audio", msLate));

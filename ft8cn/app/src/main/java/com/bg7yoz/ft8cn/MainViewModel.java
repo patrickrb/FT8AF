@@ -167,6 +167,7 @@ public class MainViewModel extends ViewModel {
     public MutableLiveData<Boolean> mutableHamRecordIsRunning = new MutableLiveData<>();//whether HamRecord is running
     public MutableLiveData<Float> mutableTimerOffset = new MutableLiveData<>();//time delay of this cycle
     public MutableLiveData<Boolean> mutableIsDecoding = new MutableLiveData<>();//triggers marker action in spectrum display
+    public MutableLiveData<Integer> mutableOperatingMode = new MutableLiveData<>(GeneralVariables.operatingMode);//current mode (FT8/FT4) for Compose observers
     public ArrayList<Ft8Message> currentMessages = null;//decoded messages in this cycle (used for drawing on spectrum)
 
     public MutableLiveData<Boolean> mutableIsFlexRadio = new MutableLiveData<>();//whether it's a Flex radio
@@ -858,6 +859,84 @@ public class MainViewModel extends ViewModel {
                 baseRig.setFreqToRig();
             }
         }, 800);
+    }
+
+    /**
+     * Switch the operating mode (FT8 &lt;-&gt; FT4). Rejected while transmitting so we never
+     * end up with a half-FT8/half-FT4 QSO. Persists the mode, rebuilds the RX and TX cycle
+     * timers for the new period, retunes the dial to the new mode's frequency within the
+     * SAME band, and notifies UI observers.
+     *
+     * <p>Radio-safety: the band/waveLength NEVER changes here, only the in-band dial. Jumping
+     * to a band the user hasn't tuned (ATU/antenna) could present high SWR and damage the PA.
+     * If the current band has no dial in the new mode (e.g. 160m/60m have no FT4 allocation),
+     * the frequency is left exactly as-is.
+     *
+     * @param modeId FT8Common.FT8_MODE / FT4_MODE
+     * @return true if switched (or already in that mode); false if rejected mid-transmit
+     */
+    public boolean setOperatingMode(int modeId) {
+        if (ft8TransmitSignal != null && ft8TransmitSignal.isTransmitting()) {
+            return false;//don't switch mid-transmit
+        }
+        // Normalize once: an unknown id (e.g. a forward-compat value) degrades to FT8, and
+        // we then compare/store/retune/publish the normalized id everywhere so nothing
+        // operates on an unsupported mode.
+        ModeProfile mode = ModeProfile.fromId(modeId);
+        int normId = mode.id;
+        if (normId == GeneralVariables.operatingMode) {
+            return true;//no-op
+        }
+
+        // Leave any armed TX/QSO state before changing the cycle.
+        if (ft8TransmitSignal != null) {
+            ft8TransmitSignal.setActivated(false);
+        }
+
+        GeneralVariables.operatingMode = normId;
+        databaseOpr.writeConfig("operatingMode", String.valueOf(normId), null);
+
+        // Rebuild both cycle timers for the new period (FT8 15s -> FT4 7.5s).
+        if (ft8SignalListener != null) {
+            ft8SignalListener.rebuildTimer(mode);
+        }
+        if (ft8TransmitSignal != null) {
+            ft8TransmitSignal.rebuildTimer(mode);
+        }
+
+        // Retune within the SAME band to the new mode's dial (see safety note above).
+        String waveLength = BaseRigOperation.getMeterFromFreq(GeneralVariables.band);
+        long newFreq = OperationBand.getModeBandFreq(waveLength, normId);
+        if (newFreq > 0 && newFreq != GeneralVariables.band) {
+            GeneralVariables.band = newFreq;
+            GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(newFreq);
+            databaseOpr.writeConfig("bandFreq", String.valueOf(newFreq), null);
+            databaseOpr.getAllQSLCallsigns();
+            GeneralVariables.mutableBandChange.postValue(GeneralVariables.bandListIndex);
+            setOperationBand();//push the new dial to the rig over CAT (no-op if not connected)
+        }
+
+        mutableOperatingMode.postValue(normId);
+        return true;
+    }
+
+    /**
+     * Apply the operating mode loaded from config at startup. The RX/TX cycle timers are
+     * built in the constructor (defaulting to FT8) before the persisted mode is read from
+     * the DB asynchronously, so a persisted FT4 would otherwise run on FT8's 15s cycle and
+     * leave the UI pill stuck on FT8. Call this once config loading completes to rebuild the
+     * timers for the persisted mode and sync the LiveData. Unlike {@link #setOperatingMode},
+     * it does NOT retune the dial — the band is restored separately from config.
+     */
+    public void applyLoadedOperatingMode() {
+        ModeProfile mode = GeneralVariables.currentMode();
+        if (ft8SignalListener != null) {
+            ft8SignalListener.rebuildTimer(mode);
+        }
+        if (ft8TransmitSignal != null) {
+            ft8TransmitSignal.rebuildTimer(mode);
+        }
+        mutableOperatingMode.postValue(mode.id);
     }
 
     public void setCivAddress() {

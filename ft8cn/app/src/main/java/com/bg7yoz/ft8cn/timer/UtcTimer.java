@@ -253,13 +253,27 @@ public class UtcTimer {
     }
 
     /**
-     * Calculate the time sequence based on UTC time
+     * Calculate the time sequence based on UTC time, for an explicit slot length.
+     * For FT8 (slotMillis=15000) this equals the legacy ((utc/1000)/15)%2; FT4
+     * (slotMillis=7500) alternates twice as often, matching its 7.5s cycle.
+     *
+     * @param utc       UTC time (ms)
+     * @param slotMillis cycle length in ms (15000 FT8, 7500 FT4)
+     * @return sequence: 0 or 1
+     */
+    public static int sequential(long utc, int slotMillis) {
+        return (int) ((utc / slotMillis) % 2);
+    }
+
+    /**
+     * Calculate the time sequence based on UTC time, using the current operating mode's
+     * cycle length.
      *
      * @param utc UTC time
      * @return sequence: 0 or 1
      */
     public static int sequential(long utc) {
-        return (int) ((((utc) / 1000) / 15) % 2);
+        return sequential(utc, com.bg7yoz.ft8cn.GeneralVariables.currentMode().slotMillis);
     }
 
     public static int getNowSequential() {
