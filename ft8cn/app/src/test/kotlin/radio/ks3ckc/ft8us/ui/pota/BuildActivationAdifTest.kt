@@ -166,6 +166,24 @@ class BuildActivationAdifTest {
     }
 
     @Test
+    fun noMatchingQsos_returnsEmptyList_notHeaderOnlyDocs() {
+        // A row exists, but for a different park — so this activation has no QSOs.
+        insertQso("OTHER", "20240601", "1230", mySigInfo = "K-9999")
+
+        val docs = PotaAdifExporter.buildActivationAdif(db, activation("K-1234"))
+
+        // Must be empty (so callers reject it), not one header-only doc per park.
+        assertThat(docs).isEmpty()
+    }
+
+    @Test
+    fun noRowsAtAll_returnsEmptyList() {
+        val docs = PotaAdifExporter.buildActivationAdif(db, activation("K-1234,K-5678"))
+
+        assertThat(docs).isEmpty()
+    }
+
+    @Test
     fun onlyPotaRowsMatchingTheParkAreIncluded() {
         insertQso("INPARK", "20240601", "1230", mySigInfo = "K-1234")
         // Different park — must not bleed into K-1234's document.

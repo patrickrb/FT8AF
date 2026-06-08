@@ -90,6 +90,12 @@ object PotaAdifExporter {
             }
         }
 
+        // No matching QSO rows → no documents. Without this we'd emit header-only
+        // ADIF files (one per park), which the upload path would happily POST and the
+        // share path would attach as empty logs. Callers treat an empty list as
+        // "nothing to upload/share".
+        if (rows.isEmpty()) return emptyList()
+
         val ts = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date(activation.startedAtMs))
         return activation.parkRefs.map { parkRef ->
             val sb = StringBuilder()
@@ -134,6 +140,11 @@ object PotaAdifExporter {
         scope.launch {
             try {
                 val docs = buildActivationAdif(db, activation)
+                if (docs.isEmpty()) {
+                    // No QSOs matched this activation — nothing to share.
+                    onResult(false)
+                    return@launch
+                }
                 val dir = context.getExternalFilesDir(null) ?: run {
                     onResult(false)
                     return@launch
