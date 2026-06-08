@@ -383,6 +383,12 @@ public class MainViewModel extends ViewModel {
                 }
 
                 synchronized (ft8Messages) {
+                    // "Clear every cycle" mode: drop the previous cycle's decodes so the
+                    // list only ever shows the current slot. Deep decodes augment the
+                    // cycle that already cleared, so they must not wipe it again.
+                    if (GeneralVariables.clearDecodesEveryCycle && !isDeep) {
+                        ft8Messages.clear();
+                    }
                     ft8Messages.addAll(messages);//add messages to list
                 }
                 GeneralVariables.deleteArrayListMore(ft8Messages);//remove excess messages; FT8CN limits the total displayable messages

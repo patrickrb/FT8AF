@@ -164,6 +164,11 @@ fun DecodeScreen(
     // Compact mode — persisted via GeneralVariables.simpleCallItemMode / DB key "msgMode"
     var compactMode by rememberSaveable { mutableStateOf(GeneralVariables.simpleCallItemMode) }
 
+    // Clear-every-cycle mode — when on, the decode list is wiped at the start of
+    // each cycle so it only shows the current slot. Persisted via
+    // GeneralVariables.clearDecodesEveryCycle / DB key "clearDecodesEveryCycle".
+    var clearEachCycle by rememberSaveable { mutableStateOf(GeneralVariables.clearDecodesEveryCycle) }
+
     // Format UTC time for the subtitle
     val utcString = if (utcTime > 0L) {
         UtcTimer.getTimeStr(utcTime)
@@ -186,6 +191,19 @@ fun DecodeScreen(
                     )
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            clearEachCycle = !clearEachCycle
+                            GeneralVariables.clearDecodesEveryCycle = clearEachCycle
+                            mainViewModel.databaseOpr.writeConfig(
+                                "clearDecodesEveryCycle", if (clearEachCycle) "1" else "0", null,
+                            )
+                        },
+                    ) {
+                        radio.ks3ckc.ft8us.ui.components.FT8USIcons.AutoClear(
+                            color = if (clearEachCycle) Accent else TextMuted,
+                        )
+                    }
                     IconButton(
                         onClick = {
                             compactMode = !compactMode
