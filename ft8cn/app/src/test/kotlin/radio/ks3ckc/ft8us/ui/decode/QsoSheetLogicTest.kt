@@ -31,9 +31,17 @@ class QsoSheetLogicTest {
 
     @Test
     fun `distance is the placeholder when a grid cannot be parsed`() {
-        // "ABC" is an unsupported length, so getDist returns 0 -> getDistStr ""
-        // -> we surface the placeholder rather than a misleading "0".
+        // "ABC" is an unsupported length, so gridToLatLng returns null -> we
+        // surface the placeholder rather than a misleading "0".
         assertThat(computeDistanceText("FN42", "ABC")).isEqualTo("--")
+    }
+
+    @Test
+    fun `distance between identical grids is zero, not the placeholder`() {
+        // Both grids parse, so the answer is a real 0 — we must show "0 <unit>"
+        // rather than collapsing it to the unknown placeholder.
+        val label = MaidenheadGrid.getDistUnitLabel()
+        assertThat(computeDistanceText("FN42", "FN42")).isEqualTo("0 $label")
     }
 
     @Test

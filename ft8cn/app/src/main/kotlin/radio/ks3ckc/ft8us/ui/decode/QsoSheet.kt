@@ -7,7 +7,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -843,7 +843,16 @@ private fun computeAzimuthText(myGrid: String?, theirGrid: String?): String {
  */
 internal fun computeDistanceText(myGrid: String?, theirGrid: String?): String {
     if (myGrid.isNullOrEmpty() || theirGrid.isNullOrEmpty()) return "--"
-    return MaidenheadGrid.getDistStr(myGrid, theirGrid).ifEmpty { "--" }
+    // Go through lat/lng so a genuine 0-distance (identical grids) formats as
+    // "0 mi/km" rather than "--"; only unparseable grids fall back to "--".
+    // (MaidenheadGrid.getDistStr collapses both cases to an empty string.)
+    return try {
+        val myLatLng = MaidenheadGrid.gridToLatLng(myGrid) ?: return "--"
+        val theirLatLng = MaidenheadGrid.gridToLatLng(theirGrid) ?: return "--"
+        MaidenheadGrid.getDistLatLngStr(myLatLng, theirLatLng)
+    } catch (_: Exception) {
+        "--"
+    }
 }
 
 /** Decode a Maidenhead grid to (lat, lon); null if the grid is blank/invalid. */
@@ -889,25 +898,24 @@ private fun QsoPathMap(
 
     GlassCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 12.dp) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            Canvas(
+            Spacer(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(160.dp)
-                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
-            ) {
-                drawQsoPath(
-                    rings = landRings,
-                    stateRings = stateRings,
-                    myLat = me.first,
-                    myLon = me.second,
-                    theirLat = them.first,
-                    theirLon = them.second,
-                    myColor = Accent,
-                    theirColor = Signal,
-                    myLabel = myCall.ifEmpty { null },
-                    theirLabel = callsign,
-                )
-            }
+                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                    .qsoPath(
+                        landRings = landRings,
+                        stateRings = stateRings,
+                        myLat = me.first,
+                        myLon = me.second,
+                        theirLat = them.first,
+                        theirLon = them.second,
+                        myColor = Accent,
+                        theirColor = Signal,
+                        myLabel = myCall.ifEmpty { null },
+                        theirLabel = callsign,
+                    ),
+            )
 
             // DX country / state footer (falls back to grid only).
             val place = formatLocationLine(state = state, country = country, grid = theirGrid)
@@ -933,8 +941,15 @@ private fun QsoPathMap(
     Spacer(modifier = Modifier.height(20.dp))
 }
 
-private fun DrawScope.drawQsoPath(
-    rings: List<FloatArray>?,
+/**
+ * Equirectangular QSO path map drawn via [drawWithCache]: the (large) land + US
+ * state ring sets are projected into screen-space [Path]s ONCE per
+ * size/endpoint/ring change in the cache phase, so the per-frame draw — which
+ * fires on every recompose and every frame of the sheet's slide-in animation —
+ * only issues `drawPath` calls instead of rebuilding the whole geometry.
+ */
+private fun Modifier.qsoPath(
+    landRings: List<FloatArray>?,
     stateRings: List<FloatArray>?,
     myLat: Double,
     myLon: Double,
@@ -944,68 +959,70 @@ private fun DrawScope.drawQsoPath(
     theirColor: Color,
     myLabel: String?,
     theirLabel: String,
-) {
-    val w = size.width
-    val h = size.height
-    drawRect(color = BgSurface, size = size)
-
+): Modifier = drawWithCache {
     // Equirectangular framing of the two endpoints (pure, unit-tested geometry
     // in QsoPathProjection — handles antemeridian normalization + uniform scale).
-    val proj = QsoPathProjection(myLat, myLon, theirLat, theirLon, w, h)
+    val proj = QsoPathProjection(myLat, myLon, theirLat, theirLon, size.width, size.height)
     val tLon = proj.normalizedTheirLon
-    fun px(lon: Double): Float = proj.projectX(lon)
-    fun py(lat: Double): Float = proj.projectY(lat)
 
-    // Build a closed Path from polygon rings, repeated at -360/0/+360 lon offsets
-    // so continents/states that wrap across the view's edge (e.g. trans-Pacific
-    // paths, or the Aleutians) still appear.
-    fun buildRingPath(rs: List<FloatArray>): Path {
-        val path = Path()
-        for (off in doubleArrayOf(-360.0, 0.0, 360.0)) {
-            for (ring in rs) {
-                if (ring.size < 6) continue
-                path.moveTo(px(ring[0].toDouble() + off), py(ring[1].toDouble()))
-                var i = 2
-                while (i < ring.size) {
-                    path.lineTo(px(ring[i].toDouble() + off), py(ring[i + 1].toDouble()))
-                    i += 2
-                }
-                path.close()
-            }
+    val landPath = landRings?.let { buildRingPath(it, proj) }
+    val statePath = stateRings?.let { buildRingPath(it, proj) }
+
+    val myX = proj.projectX(myLon)
+    val myY = proj.projectY(myLat)
+    val tX = proj.projectX(tLon)
+    val tY = proj.projectY(theirLat)
+
+    onDrawBehind {
+        drawRect(color = BgSurface, size = size)
+
+        // Land fill + coastline.
+        landPath?.let { land ->
+            drawPath(land, color = Color(0x4094A3B8))
+            drawPath(land, color = Color(0x9094A3B8), style = Stroke(width = 0.75f))
         }
-        return path
+
+        // US state borders (stroke only) layered over the land fill.
+        statePath?.let {
+            drawPath(it, color = Color(0x5594A3B8), style = Stroke(width = 0.6f))
+        }
+
+        drawLine(
+            color = Accent.copy(alpha = 0.75f),
+            start = Offset(myX, myY),
+            end = Offset(tX, tY),
+            strokeWidth = 2f,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 5f)),
+        )
+
+        drawStationDot(myX, myY, myColor)
+        drawStationDot(tX, tY, theirColor)
+
+        myLabel?.let { drawMapLabel(it, myX, myY, myColor) }
+        drawMapLabel(theirLabel, tX, tY, theirColor)
     }
+}
 
-    // Land fill + coastline.
-    rings?.let { rs ->
-        val land = buildRingPath(rs)
-        drawPath(land, color = Color(0x4094A3B8))
-        drawPath(land, color = Color(0x9094A3B8), style = Stroke(width = 0.75f))
+/**
+ * Build a closed [Path] from polygon rings, repeated at -360/0/+360 lon offsets
+ * so continents/states that wrap across the view's edge (e.g. trans-Pacific
+ * paths, or the Aleutians) still appear.
+ */
+private fun buildRingPath(rings: List<FloatArray>, proj: QsoPathProjection): Path {
+    val path = Path()
+    for (off in doubleArrayOf(-360.0, 0.0, 360.0)) {
+        for (ring in rings) {
+            if (ring.size < 6) continue
+            path.moveTo(proj.projectX(ring[0].toDouble() + off), proj.projectY(ring[1].toDouble()))
+            var i = 2
+            while (i < ring.size) {
+                path.lineTo(proj.projectX(ring[i].toDouble() + off), proj.projectY(ring[i + 1].toDouble()))
+                i += 2
+            }
+            path.close()
+        }
     }
-
-    // US state borders (stroke only) layered over the land fill.
-    stateRings?.let { rs ->
-        drawPath(buildRingPath(rs), color = Color(0x5594A3B8), style = Stroke(width = 0.6f))
-    }
-
-    val myX = px(myLon)
-    val myY = py(myLat)
-    val tX = px(tLon)
-    val tY = py(theirLat)
-
-    drawLine(
-        color = Accent.copy(alpha = 0.75f),
-        start = Offset(myX, myY),
-        end = Offset(tX, tY),
-        strokeWidth = 2f,
-        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 5f)),
-    )
-
-    drawStationDot(myX, myY, myColor)
-    drawStationDot(tX, tY, theirColor)
-
-    myLabel?.let { drawMapLabel(it, myX, myY, myColor) }
-    drawMapLabel(theirLabel, tX, tY, theirColor)
+    return path
 }
 
 private fun DrawScope.drawStationDot(x: Float, y: Float, color: Color) {
