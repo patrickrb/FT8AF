@@ -314,6 +314,8 @@ public class GeneralVariables {
 
     public static boolean simpleCallItemMode = false;//Compact message mode
 
+    public static boolean clearDecodesEveryCycle = false;//Clear the decode list at the start of each cycle
+
     public static boolean swr_switch_on = true;//SWR alarm switch
     public static boolean alc_switch_on = true;//ALC alarm switch
 

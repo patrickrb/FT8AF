@@ -344,6 +344,21 @@ public class MainViewModel extends ViewModel {
         ft8SignalListener = new FT8SignalListener(databaseOpr, new OnFt8Listen() {
             @Override
             public void beforeListen(long utc) {
+                // "Clear every cycle" mode: wipe the previous slot's decodes at the very
+                // start of each cycle, before decoding runs. Doing it here (rather than in
+                // afterDecode) means even a silent slot — zero decodes, or everything
+                // filtered out as own-TX echoes, both of which return early from
+                // afterDecode — still clears, so the list only ever shows the current slot.
+                // Deep decodes later in this same cycle augment the cleared list instead of
+                // re-wiping it.
+                if (GeneralVariables.clearDecodesEveryCycle) {
+                    synchronized (ft8Messages) {
+                        ft8Messages.clear();
+                    }
+                    currentDecodeCount = 0;
+                    mutable_Decoded_Counter.postValue(0);
+                    publishFt8MessageList();
+                }
                 mutableIsDecoding.postValue(true);
             }
 
@@ -388,11 +403,13 @@ public class MainViewModel extends ViewModel {
                 }
 
                 synchronized (ft8Messages) {
+                    // "Clear every cycle" mode does its wipe in beforeListen (start of the
+                    // cycle), so by here the list is already fresh — just append.
                     ft8Messages.addAll(messages);//add messages to list
                 }
                 GeneralVariables.deleteArrayListMore(ft8Messages);//remove excess messages; FT8CN limits the total displayable messages
 
-                mutableFt8MessageList.postValue(ft8Messages);//trigger message addition action so the UI can observe
+                publishFt8MessageList();//post an immutable snapshot so the UI recomposes immediately
                 mutableTimerOffset.postValue(time_sec);//this cycle's time offset
 
 
@@ -678,9 +695,32 @@ public class MainViewModel extends ViewModel {
      * Clear the message list.
      */
     public void clearFt8MessageList() {
-        ft8Messages.clear();
-        mutable_Decoded_Counter.postValue(ft8Messages.size());
-        mutableFt8MessageList.postValue(ft8Messages);
+        synchronized (ft8Messages) {
+            ft8Messages.clear();
+        }
+        currentDecodeCount = 0;
+        mutable_Decoded_Counter.postValue(0);
+        publishFt8MessageList();
+    }
+
+    /**
+     * Publish the current decode list to the UI as a fresh snapshot.
+     *
+     * <p>The Compose decode screen observes {@link #mutableFt8MessageList} with
+     * structural equality. Re-posting the live {@link #ft8Messages} instance after
+     * mutating it in place is a no-op for recomposition — Compose is handed the same
+     * object it already holds, sees no change, and the UI only refreshes when some
+     * unrelated state (the 1 Hz clock) happens to trigger a recompose, up to a second
+     * later. That lag is what made the Clear button feel dead: you tapped it and
+     * nothing happened until the next clock tick. Posting a defensive copy gives
+     * Compose a structurally distinct value, so the list updates immediately.
+     */
+    public void publishFt8MessageList() {
+        final ArrayList<Ft8Message> snapshot;
+        synchronized (ft8Messages) {
+            snapshot = new ArrayList<>(ft8Messages);
+        }
+        mutableFt8MessageList.postValue(snapshot);
     }
 
 
@@ -1267,7 +1307,7 @@ public class MainViewModel extends ViewModel {
                     GeneralVariables.callsignDatabase.getDb(), messages);
             // Entity/state flags are now populated — fire Needed-DX alerts before the UI refresh.
             mainViewModel.dxAlertNotifier.processDecodes(messages);
-            mainViewModel.mutableFt8MessageList.postValue(mainViewModel.ft8Messages);
+            mainViewModel.publishFt8MessageList();
         }
     }
 
