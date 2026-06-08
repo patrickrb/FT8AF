@@ -160,7 +160,10 @@ fun TxStrip(
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
                     .background(huntBg)
-                    .then(if (huntDisabled) Modifier else Modifier.clickable { onToggleHunt() })
+                    // Disable via clickable(enabled=…) rather than dropping the modifier, so
+                    // the pill keeps its button semantics and TalkBack still announces it as a
+                    // disabled control instead of it vanishing from accessibility entirely.
+                    .clickable(enabled = !huntDisabled) { onToggleHunt() }
                     .padding(horizontal = 8.dp, vertical = 4.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -195,10 +198,9 @@ fun TxStrip(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .background(buttonBg)
-                    .then(
-                        if (cqDisabled) Modifier
-                        else Modifier.clickable { if (isActivated) onStop() else onCallCQ() }
-                    )
+                    // Keep button semantics when disabled (see HUNT pill above) so the
+                    // CQ/STOP control stays exposed to TalkBack as a disabled button.
+                    .clickable(enabled = !cqDisabled) { if (isActivated) onStop() else onCallCQ() }
                     .padding(horizontal = 18.dp, vertical = 9.dp),
                 contentAlignment = Alignment.Center,
             ) {
