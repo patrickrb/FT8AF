@@ -16,8 +16,8 @@ permissions:
 # create a new Edit." Serialize the release-publishing runs (pushes to dev/main
 # and v* tags) into a single queue so they never overlap on the Play API.
 # cancel-in-progress is false so an in-flight publish finishes rather than being
-# killed mid-upload. Everything else (PRs, feature-branch pushes) gets a unique
-# group keyed to its run id and is never queued.
+# killed mid-upload. Pull request runs get a unique group keyed to run id, so
+# they never queue and CI stays fast.
 concurrency:
   group: >-
     ${{
