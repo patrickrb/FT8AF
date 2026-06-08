@@ -30,6 +30,31 @@ Two gotchas for a fresh worktree:
 
 Remove the worktree when the branch is merged: `git worktree remove <path>`.
 
+## Testing
+
+**Every new code path requires a new test.** Any branch, helper, or behavior
+you add or change must be covered by a unit test in the same PR — this is not
+optional, even for small UI helpers.
+
+Compose `@Composable` and `DrawScope` code can't be unit-tested directly, so
+extract the decision/geometry logic into a plain top-level `internal` function
+or class (e.g. `buildQsoLog`, `QsoPathProjection`) and test that. Keep the
+Composable a thin wrapper that just calls the extracted logic.
+
+Tests live in `ft8cn/app/src/test/` (Kotlin under `.../kotlin`, Java under
+`.../java`), use JUnit4 + Truth (`assertThat`), and add
+`@RunWith(RobolectricTestRunner::class)` when the code under test touches
+Android/Play-Services types (e.g. anything reaching `MaidenheadGrid`,
+`GeneralVariables`, `LatLng`). Pure math/logic needs no runner.
+
+Run from the worktree's `ft8cn` dir:
+
+```
+cmd.exe /c "gradlew.bat testDebugUnitTest"
+# or a single class:
+cmd.exe /c "gradlew.bat testDebugUnitTest --tests <fully.qualified.ClassName>"
+```
+
 ## Build & Deploy
 
 After making code changes, always build and install on the connected device.

@@ -112,4 +112,74 @@ public class FT8TransmitSignalTest {
         assertThat((int) out[0]).isEqualTo(32767);   // clipped to +1.0
         assertThat((int) out[1]).isEqualTo(-32767);  // clipped to -1.0
     }
+
+    // ---- floatToInt16NoPad --------------------------------------------------
+    // Used by the chunked MODE_STREAM playback loop: converts each chunk with NO
+    // trailing zero pad (the 8-sample QP-7C pad is appended once at the end of the
+    // message, not per chunk — see float2Short which keeps the pad for other uses).
+
+    @Test
+    public void floatToInt16NoPad_hasNoZeroTail() {
+        short[] out = FT8TransmitSignal.floatToInt16NoPad(new float[]{1.0f, -1.0f}, 2);
+        assertThat(out).hasLength(2);                // exactly length, no +8 pad
+        assertThat((int) out[0]).isEqualTo(32767);
+        assertThat((int) out[1]).isEqualTo(-32767);
+    }
+
+    @Test
+    public void floatToInt16NoPad_honoursLengthShorterThanBuffer() {
+        // The loop passes chunkLen which can be < buffer.length on the last chunk.
+        short[] out = FT8TransmitSignal.floatToInt16NoPad(new float[]{0.5f, 0.5f, 0.5f}, 2);
+        assertThat(out).hasLength(2);
+        assertThat((int) out[0]).isEqualTo(16383);
+        assertThat((int) out[1]).isEqualTo(16383);
+    }
+
+    @Test
+    public void floatToInt16NoPad_clipsOutOfRange() {
+        short[] out = FT8TransmitSignal.floatToInt16NoPad(new float[]{2.0f, -2.0f}, 2);
+        assertThat((int) out[0]).isEqualTo(32767);
+        assertThat((int) out[1]).isEqualTo(-32767);
+    }
+
+    // ---- per-chunk slicing (the real-time volume path) ----------------------
+    // The streaming loop calls applyVolume(buffer, skipSamples + offset, chunkLen,
+    // currentVolume) repeatedly. These prove the offset math is sound and that
+    // changing the volume between chunks attenuates only the later chunks — the
+    // whole point of the feature (pull the slider down mid-over to protect the rig).
+
+    @Test
+    public void chunkedSlicing_concatenatesToWholeBufferAtFixedVolume() {
+        float[] src = {0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f};
+        int skip = 1;                       // simulate a late-start trim
+        int playLength = src.length - skip; // 6 samples to emit
+        int chunk = 4;
+        float vol = 0.5f;
+
+        float[] whole = FT8TransmitSignal.applyVolume(src, skip, playLength, vol);
+
+        // Re-assemble by chunked slicing the way the playback loop does.
+        float[] assembled = new float[playLength];
+        int pos = 0;
+        for (int offset = 0; offset < playLength; offset += chunk) {
+            int len = Math.min(chunk, playLength - offset);
+            float[] c = FT8TransmitSignal.applyVolume(src, skip + offset, len, vol);
+            System.arraycopy(c, 0, assembled, pos, len);
+            pos += len;
+        }
+        assertThat(assembled).usingTolerance(TOL).containsExactly(whole).inOrder();
+    }
+
+    @Test
+    public void chunkedSlicing_volumeChangeAffectsOnlyLaterChunks() {
+        float[] src = {1.0f, 1.0f, 1.0f, 1.0f};
+        // First two samples at full volume, then slider dropped to 0.25 for the rest.
+        float[] first = FT8TransmitSignal.applyVolume(src, 0, 2, 1.0f);
+        float[] second = FT8TransmitSignal.applyVolume(src, 2, 2, 0.25f);
+
+        assertThat(first).usingTolerance(TOL)
+                .containsExactly(new float[]{1.0f, 1.0f}).inOrder();
+        assertThat(second).usingTolerance(TOL)
+                .containsExactly(new float[]{0.25f, 0.25f}).inOrder();
+    }
 }
