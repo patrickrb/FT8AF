@@ -2379,8 +2379,12 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("operatingMode")) {//Operating mode (0=FT8,1=FT4), defaults FT8
                     try {
-                        GeneralVariables.operatingMode = result.equals("")
+                        int parsed = result.equals("")
                                 ? FT8Common.FT8_MODE : Integer.parseInt(result);
+                        // Normalize through ModeProfile so an unknown id persisted by a
+                        // future build (e.g. a mode this build doesn't know) degrades to
+                        // FT8 everywhere, not just in descriptor lookups.
+                        GeneralVariables.operatingMode = com.bg7yoz.ft8cn.ModeProfile.fromId(parsed).id;
                     } catch (NumberFormatException nfe) {
                         GeneralVariables.operatingMode = FT8Common.FT8_MODE;
                     }

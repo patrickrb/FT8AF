@@ -273,6 +273,10 @@ class ComposeMainActivity : AppCompatActivity() {
                 }
                 mainViewModel.ft8TransmitSignal.setTimer_sec(GeneralVariables.transmitDelay)
 
+                // The cycle timers were built (for FT8) before config loaded; now that the
+                // persisted operating mode is known, rebuild them for it and sync the UI.
+                mainViewModel.applyLoadedOperatingMode()
+
                 // Resume any POTA activation that was interrupted by app close
                 PotaSessionManager.resume()
 

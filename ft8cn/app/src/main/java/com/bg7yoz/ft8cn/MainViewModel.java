@@ -805,8 +805,12 @@ public class MainViewModel extends ViewModel {
         if (ft8TransmitSignal != null && ft8TransmitSignal.isTransmitting()) {
             return false;//don't switch mid-transmit
         }
+        // Normalize once: an unknown id (e.g. a forward-compat value) degrades to FT8, and
+        // we then compare/store/retune/publish the normalized id everywhere so nothing
+        // operates on an unsupported mode.
         ModeProfile mode = ModeProfile.fromId(modeId);
-        if (modeId == GeneralVariables.operatingMode) {
+        int normId = mode.id;
+        if (normId == GeneralVariables.operatingMode) {
             return true;//no-op
         }
 
@@ -815,8 +819,8 @@ public class MainViewModel extends ViewModel {
             ft8TransmitSignal.setActivated(false);
         }
 
-        GeneralVariables.operatingMode = modeId;
-        databaseOpr.writeConfig("operatingMode", String.valueOf(modeId), null);
+        GeneralVariables.operatingMode = normId;
+        databaseOpr.writeConfig("operatingMode", String.valueOf(normId), null);
 
         // Rebuild both cycle timers for the new period (FT8 15s -> FT4 7.5s).
         if (ft8SignalListener != null) {
@@ -828,7 +832,7 @@ public class MainViewModel extends ViewModel {
 
         // Retune within the SAME band to the new mode's dial (see safety note above).
         String waveLength = BaseRigOperation.getMeterFromFreq(GeneralVariables.band);
-        long newFreq = OperationBand.getModeBandFreq(waveLength, modeId);
+        long newFreq = OperationBand.getModeBandFreq(waveLength, normId);
         if (newFreq > 0 && newFreq != GeneralVariables.band) {
             GeneralVariables.band = newFreq;
             GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(newFreq);
@@ -838,8 +842,27 @@ public class MainViewModel extends ViewModel {
             setOperationBand();//push the new dial to the rig over CAT (no-op if not connected)
         }
 
-        mutableOperatingMode.postValue(modeId);
+        mutableOperatingMode.postValue(normId);
         return true;
+    }
+
+    /**
+     * Apply the operating mode loaded from config at startup. The RX/TX cycle timers are
+     * built in the constructor (defaulting to FT8) before the persisted mode is read from
+     * the DB asynchronously, so a persisted FT4 would otherwise run on FT8's 15s cycle and
+     * leave the UI pill stuck on FT8. Call this once config loading completes to rebuild the
+     * timers for the persisted mode and sync the LiveData. Unlike {@link #setOperatingMode},
+     * it does NOT retune the dial — the band is restored separately from config.
+     */
+    public void applyLoadedOperatingMode() {
+        ModeProfile mode = GeneralVariables.currentMode();
+        if (ft8SignalListener != null) {
+            ft8SignalListener.rebuildTimer(mode);
+        }
+        if (ft8TransmitSignal != null) {
+            ft8TransmitSignal.rebuildTimer(mode);
+        }
+        mutableOperatingMode.postValue(mode.id);
     }
 
     public void setCivAddress() {

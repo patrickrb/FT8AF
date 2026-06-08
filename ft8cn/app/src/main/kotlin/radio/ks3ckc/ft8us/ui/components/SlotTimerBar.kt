@@ -49,9 +49,13 @@ fun SlotTimerBar(
 
     val slotMs = ((nowMs % slotMillis) + slotMillis) % slotMillis
     val progress = slotMs / slotMillis.toFloat()
-    val maxSeconds = (slotMillis / 1000L).toInt()
+    // Round the slot length UP so a 7.5s FT4 slot peaks at 8s, not 7 (integer
+    // division would truncate the half-second).
+    val maxSeconds = ((slotMillis + 999L) / 1000L).toInt()
     val secondsRemaining = (((slotMillis - slotMs) + 999L) / 1000L).toInt().coerceIn(0, maxSeconds)
-    val currentSlot = UtcTimer.sequential(nowMs)
+    // Derive the slot index from the same slot length the bar is rendering, so
+    // they can't disagree if the bar is ever driven by a non-global slot.
+    val currentSlot = UtcTimer.sequential(nowMs, slotMillis.toInt())
     val fillColor = if (isActivated && currentSlot == activeTxSlot) Accent else Signal
 
     Row(
