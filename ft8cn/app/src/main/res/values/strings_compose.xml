@@ -157,6 +157,7 @@
     <string name="qso_call_action">Call %1$s</string>
     <string name="qso_qrz_link">QRZ ↗</string>
     <string name="qso_stat_signal">Signal</string>
+    <string name="qso_stat_distance">Distance</string>
     <string name="qso_stat_azimuth">Azimuth</string>
     <string name="qso_stat_band">Band</string>
     <string name="qso_sequence_header">QSO SEQUENCE</string>
