@@ -24,6 +24,7 @@ import androidx.lifecycle.MutableLiveData;
 
 import com.bg7yoz.ft8cn.FT8Common;
 import com.bg7yoz.ft8cn.Ft8Message;
+import com.bg7yoz.ft8cn.ft8signal.FT8Package;
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.R;
 import com.bg7yoz.ft8cn.connector.ConnectMode;
@@ -1223,6 +1224,14 @@ public class FT8TransmitSignal {
      */
     public void startHound(String foxCall, float callFreqHz) {
         int i3 = GenerateFT8.checkI3ByCallsign(GeneralVariables.myCallsign);
+        // Seed the Fox callsign's hashes. DXpedition combo messages carry the Fox
+        // only as a 10-bit hash, so without this the combo renders "<...>" in the
+        // UI and handleHoundCycle can't tell whose combo it is. (No-op for a
+        // compound Fox whose combo hashes its full call while the user enters the
+        // base call — handleHoundCycle degrades gracefully in that case.)
+        Ft8Message.hashList.addHash(FT8Package.getHash22(foxCall), foxCall);
+        Ft8Message.hashList.addHash(FT8Package.getHash12(foxCall), foxCall);
+        Ft8Message.hashList.addHash(FT8Package.getHash10(foxCall), foxCall);
         // Fox transmits in the even/1st slot (sequential 0); setTransmit derives
         // our slot as (fox.sequential + 1) % 2 = 1 (odd), which is where Hounds
         // are required to transmit.
@@ -1256,6 +1265,11 @@ public class FT8TransmitSignal {
 
             boolean combo = (msg.i3 == 0 && msg.n3 == 1);// Fox DXpedition combo
             boolean toMe = GeneralVariables.checkIsMyCallsign(msg.getCallsignTo());
+
+            // A combo names the Fox only by a 10-bit hash. If that hash resolves
+            // to a known callsign that isn't our Fox, it belongs to a different
+            // Fox's pileup — skip it so we don't QSY/log against the wrong station.
+            if (combo && !comboFromOurFox(msg, fox)) continue;
 
             // 1) RR73 to me => QSO complete & logged. Combo: I'm the acknowledged
             //    (first) call. Standard: an explicit RR73 addressed to me by Fox.
@@ -1305,6 +1319,21 @@ public class FT8TransmitSignal {
         doComplete();// saves the QSL record + posts mutableQsoCompletedAt
         setActivated(false);// worked the Fox; stop calling
         GeneralVariables.fileLog("HOUND: QSO logged with " + toCallsign.callsign);
+    }
+
+    /**
+     * Whether a DXpedition combo can be attributed to our Fox. The combo names
+     * the Fox only by a 10-bit hash; if that hash resolves to a known callsign
+     * that doesn't match our Fox (base or compound), it's a different Fox's combo.
+     * Returns true when the hash is unknown/unresolved, so we never reject a valid
+     * QSO just because the Fox's (possibly compound) call hasn't been hashed yet.
+     */
+    private boolean comboFromOurFox(Ft8Message msg, String fox) {
+        String resolved = Ft8Message.hashList
+                .getCallsign(new long[]{msg.callFromHash10})
+                .replace("<", "").replace(">", "");
+        if (resolved.isEmpty() || resolved.equals("...")) return true;// unknown -> allow
+        return resolved.equals(fox) || resolved.contains(fox) || fox.contains(resolved);
     }
 
     // ==================== End FT8 DXpedition Hound ====================
