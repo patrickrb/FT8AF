@@ -256,6 +256,16 @@
     <string name="pota_qso_count">%1$d QSO</string>
     <string name="pota_share_adif">Share ADIF</string>
     <string name="pota_open_pota_app">Open pota.app</string>
+    <string name="pota_upload_to_pota">Upload to POTA</string>
+    <string name="pota_upload_success">Uploaded %1$d park log(s) to POTA</string>
+    <string name="pota_upload_failed">Upload failed: %1$s</string>
+    <string name="pota_login_title">Sign in to POTA</string>
+    <string name="pota_login_desc">Use your pota.app account email and password.</string>
+    <string name="pota_login_email">Email</string>
+    <string name="pota_login_password">Password</string>
+    <string name="pota_login_button">Sign in</string>
+    <string name="pota_login_cancel">Cancel</string>
+    <string name="pota_login_failed">Sign-in failed: %1$s</string>
     <string name="pota_add_park">Add park</string>
     <string name="pota_remove_park">Remove</string>
     <string name="pota_max_parks_reached">Maximum of 10 parks reached</string>

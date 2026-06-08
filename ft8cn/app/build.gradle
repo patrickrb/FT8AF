@@ -176,6 +176,12 @@ dependencies {
     // Image loading for QRZ profile avatars
     implementation 'io.coil-kt:coil-compose:2.6.0'
 
+    // AWS Cognito user-pool SRP login — used only to mint a pota.app ID token for
+    // in-app POTA log upload (POST api.pota.app/adif). POTA's user pool/client IDs
+    // are public (shipped in pota.app's JS). cognitoidentityprovider pulls in
+    // aws-android-sdk-core transitively; no other AWS modules are needed.
+    implementation 'com.amazonaws:aws-android-sdk-cognitoidentityprovider:2.76.0'
+
     // --- JVM unit + Robolectric tests ---
     testImplementation 'junit:junit:4.13.2'
     // 4.14.1 ships android-all for SDK 35; older versions fail with
