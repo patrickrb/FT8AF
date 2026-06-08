@@ -39,11 +39,13 @@ fun TxStrip(
     frequencyLabel: String,
     txSlot: Int,
     huntEnabled: Boolean,
+    dxEnabled: Boolean = false,
     expanded: Boolean = false,
     onCallCQ: () -> Unit,
     onStop: () -> Unit,
     onToggleSlot: () -> Unit,
     onToggleHunt: () -> Unit,
+    onToggleDx: () -> Unit = {},
     onOpenFrequencyPicker: () -> Unit,
     onToggleExpand: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -139,6 +141,30 @@ fun TxStrip(
                     size = 12.dp,
                     color = TextMuted,
                     strokeWidth = 2f,
+                )
+            }
+
+            // DX (DXpedition Hound) toggle pill. On = working a Fox/DXpedition
+            // (call high, auto-QSY when answered). Mutually exclusive with HUNT/CQ.
+            val dxBg = if (dxEnabled) Accent.copy(alpha = 0.18f) else BgSurface3
+            val dxColor = if (dxEnabled) Accent else TextMuted
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(dxBg)
+                    .clickable { onToggleDx() }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "DX",
+                    color = dxColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = GeistMonoFamily,
+                    letterSpacing = 0.02.sp,
+                    maxLines = 1,
+                    softWrap = false,
                 )
             }
 

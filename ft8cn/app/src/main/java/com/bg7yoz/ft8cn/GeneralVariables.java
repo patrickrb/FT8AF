@@ -487,6 +487,14 @@ public class GeneralVariables {
         return myMaidenheadGrid;
     }
 
+    // ===== FT8 DXpedition "Hound" mode =====
+    // When true, the TX engine runs the Hound QSO variant (call Fox high at
+    // 1000-4000 Hz, auto-QSY down to where Fox calls us, reply R+rpt, log on
+    // RR73) instead of the standard auto-sequencer. Mutually exclusive with the
+    // Hunt auto-answer-CQ mode. houndFoxCall is the Fox's base callsign.
+    public static boolean houndMode = false;
+    public static String houndFoxCall = "";
+
     public static float getBaseFrequency() {
         return baseFrequency;
     }

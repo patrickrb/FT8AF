@@ -24,6 +24,7 @@ import androidx.lifecycle.MutableLiveData;
 
 import com.bg7yoz.ft8cn.FT8Common;
 import com.bg7yoz.ft8cn.Ft8Message;
+import com.bg7yoz.ft8cn.ft8signal.FT8Package;
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.R;
 import com.bg7yoz.ft8cn.connector.ConnectMode;
@@ -1130,6 +1131,10 @@ public class FT8TransmitSignal {
         }
         ArrayList<Ft8Message> messages = new ArrayList<>(msgList);// prevent thread conflicts
 
+        if (GeneralVariables.houndMode) {// DXpedition Hound: dedicated QSO handler
+            handleHoundCycle(messages);
+            return;
+        }
 
         int newOrder = checkFunctionOrdFromMessages(messages);// check reply message sequence from the other party; -1 means not received
         // Per-cycle spine of the QSO trace: current state, what (if anything) the
@@ -1271,6 +1276,132 @@ public class FT8TransmitSignal {
         }
 
     }
+
+    // ==================== FT8 DXpedition Hound ====================
+
+    /**
+     * Begin DXpedition Hound operation: call the Fox high (1000-4000 Hz) and let
+     * {@link #handleHoundCycle} auto-QSY and sequence the QSO. The caller sets
+     * {@code GeneralVariables.houndMode = true} first.
+     *
+     * @param foxCall    the Fox's base callsign
+     * @param callFreqHz initial Hound TX audio frequency (1000-4000 Hz)
+     */
+    public void startHound(String foxCall, float callFreqHz) {
+        int i3 = GenerateFT8.checkI3ByCallsign(GeneralVariables.myCallsign);
+        // Seed the Fox callsign's hashes. DXpedition combo messages carry the Fox
+        // only as a 10-bit hash, so without this the combo renders "<...>" in the
+        // UI and handleHoundCycle can't tell whose combo it is. (No-op for a
+        // compound Fox whose combo hashes its full call while the user enters the
+        // base call — handleHoundCycle degrades gracefully in that case.)
+        Ft8Message.hashList.addHash(FT8Package.getHash22(foxCall), foxCall);
+        Ft8Message.hashList.addHash(FT8Package.getHash12(foxCall), foxCall);
+        Ft8Message.hashList.addHash(FT8Package.getHash10(foxCall), foxCall);
+        // Fox transmits in the even/1st slot (sequential 0); setTransmit derives
+        // our slot as (fox.sequential + 1) % 2 = 1 (odd), which is where Hounds
+        // are required to transmit.
+        resetTargetReport();
+        setTransmit(new TransmitCallsign(i3, 0, foxCall, callFreqHz, 0, 0), 1, "");
+        setBaseFrequency(callFreqHz);// call Fox at the chosen high frequency
+        setActivated(true);
+        GeneralVariables.fileLog("HOUND: start, fox=" + foxCall
+                + " callFreq=" + Math.round(callFreqHz) + "Hz slot=" + sequential);
+    }
+
+    /**
+     * DXpedition Hound per-cycle handler. Reacts to the Fox's reply to us:
+     * <ul>
+     *   <li>RR73 to me (combo where I'm the acknowledged call, or an explicit
+     *       standard RR73 from Fox) -&gt; log + complete.</li>
+     *   <li>Report/invite to me (combo where I'm the invited second call, or a
+     *       standard "&lt;me&gt; &lt;fox&gt; -rpt") -&gt; QSY to the frequency Fox
+     *       called me on and reply "&lt;fox&gt; &lt;me&gt; R-rpt".</li>
+     *   <li>Otherwise keep calling at the current order (grid-call or R+rpt).</li>
+     * </ul>
+     */
+    private void handleHoundCycle(ArrayList<Ft8Message> messages) {
+        if (toCallsign == null || !toCallsign.haveTargetCallsign()) return;
+        String fox = toCallsign.callsign;
+
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            Ft8Message msg = messages.get(i);
+            if (msg.getSequence() == sequential) continue;// our own slot
+            if (msg.band != GeneralVariables.band) continue;
+
+            boolean combo = (msg.i3 == 0 && msg.n3 == 1);// Fox DXpedition combo
+            boolean toMe = GeneralVariables.checkIsMyCallsign(msg.getCallsignTo());
+
+            // A combo names the Fox only by a 10-bit hash. If that hash resolves
+            // to a known callsign that isn't our Fox, it belongs to a different
+            // Fox's pileup — skip it so we don't QSY/log against the wrong station.
+            if (combo && !comboFromOurFox(msg, fox)) continue;
+
+            // 1) RR73 to me => QSO complete & logged. Combo: I'm the acknowledged
+            //    (first) call. Standard: an explicit RR73 addressed to me by Fox.
+            if ((combo && toMe)
+                    || (msg.i3 == 1 && toMe
+                        && checkCallsignIsCallTo(msg.getCallsignFrom(), fox)
+                        && GeneralVariables.checkFun4(msg.extraInfo))) {
+                GeneralVariables.fileLog("HOUND: RR73 from " + fox + " -> complete");
+                houndComplete();
+                return;
+            }
+
+            // 2) Fox reported / invited me => reply R+rpt at Fox's frequency.
+            //    Combo: I'm the invited second call (dx_call_to2), report = msg.report.
+            //    Standard: "<me> <fox> -rpt" or "<me> <fox> R-rpt".
+            String invited = msg.dx_call_to2 == null ? ""
+                    : msg.dx_call_to2.replace("<", "").replace(">", "");
+            boolean invitedByCombo = combo && GeneralVariables.checkIsMyCallsign(invited);
+            boolean reportStd = msg.i3 == 1 && toMe
+                    && checkCallsignIsCallTo(msg.getCallsignFrom(), fox)
+                    && (GeneralVariables.checkFun2(msg.extraInfo)
+                        || GeneralVariables.checkFun3(msg.extraInfo));
+            if (invitedByCombo || reportStd) {
+                int rpt = invitedByCombo ? msg.report : getReportFromExtraInfo(msg.extraInfo);
+                if (rpt != -100) {
+                    receivedReport = rpt;
+                    receiveTargetReport = rpt;
+                }
+                toCallsign.snr = msg.snr;// Fox's SNR as I hear it -> goes in my R+rpt
+                setBaseFrequency(msg.freq_hz);// auto-QSY to where Fox called me
+                functionOrder = 3;// "<fox> <me> R-rpt"
+                generateFun();
+                setCurrentFunctionOrder(functionOrder);
+                mutableFunctionOrder.postValue(functionOrder);
+                GeneralVariables.fileLog(String.format(
+                        "HOUND: report from %s rpt=%d -> QSY %.0fHz, send R%s",
+                        fox, rpt, msg.freq_hz, toCallsign.getSnr()));
+                return;
+            }
+        }
+        // Nothing relevant this cycle: keep calling at the current order.
+    }
+
+    /** Hound QSO complete: log it, fire the celebration, and stop transmitting. */
+    private void houndComplete() {
+        if (toCallsign == null) return;
+        doComplete();// saves the QSL record + posts mutableQsoCompletedAt
+        setActivated(false);// worked the Fox; stop calling
+        GeneralVariables.fileLog("HOUND: QSO logged with " + toCallsign.callsign);
+    }
+
+    /**
+     * Whether a DXpedition combo can be attributed to our Fox. The combo names
+     * the Fox only by a 10-bit hash; if that hash resolves to a known callsign
+     * that doesn't match our Fox (base or compound), it's a different Fox's combo.
+     * Returns true when the hash is unknown/unresolved, so we never reject a valid
+     * QSO just because the Fox's (possibly compound) call hasn't been hashed yet.
+     */
+    private boolean comboFromOurFox(Ft8Message msg, String fox) {
+        String resolved = Ft8Message.hashList
+                .getCallsign(new long[]{msg.callFromHash10})
+                .replace("<", "").replace(">", "");
+        if (resolved.isEmpty() || resolved.equals("...")) return true;// unknown -> allow
+        return resolved.equals(fox) || resolved.contains(fox) || fox.contains(resolved);
+    }
+
+    // ==================== End FT8 DXpedition Hound ====================
 
     /**
      * Check watch list for active CQ messages that are not my current target callsign.
