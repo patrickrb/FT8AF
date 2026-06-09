@@ -93,6 +93,8 @@ private fun buildBandGroups(): List<BandGroup> {
     val order = LinkedHashMap<String, MutableList<Pair<Int, OperationBand.Band>>>()
     for (i in 0 until OperationBand.bandList.size) {
         val b = OperationBand.bandList[i]
+        // Only the current operating mode's dials (FT8 vs FT4 use different frequencies).
+        if (b.mode != GeneralVariables.operatingMode) continue
         if (GeneralVariables.isBandExcluded(b.waveLength)) continue
         order.getOrPut(b.waveLength) { mutableListOf() }.add(i to b)
     }
@@ -122,7 +124,7 @@ fun FrequencyPickerSheet(
     onSelect: (Int) -> Unit,
 ) {
     FT8USBottomSheet(visible = visible, onDismiss = onDismiss) {
-        val groups = remember(GeneralVariables.excludedBands.toSet()) { buildBandGroups() }
+        val groups = remember(GeneralVariables.excludedBands.toSet(), GeneralVariables.operatingMode) { buildBandGroups() }
         var showAlternates by remember { mutableStateOf(false) }
 
         Column(

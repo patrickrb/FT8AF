@@ -21,10 +21,11 @@ import com.bg7yoz.ft8cn.wave.UsbAudioDevice;
 import com.bg7yoz.ft8cn.wave.UsbAudioNative;
 
 import androidx.lifecycle.MutableLiveData;
-import androidx.lifecycle.Observer;
 
 import com.bg7yoz.ft8cn.FT8Common;
+import com.bg7yoz.ft8cn.ModeProfile;
 import com.bg7yoz.ft8cn.Ft8Message;
+import com.bg7yoz.ft8cn.ft8signal.FT8Package;
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.R;
 import com.bg7yoz.ft8cn.connector.ConnectMode;
@@ -90,6 +91,14 @@ public class FT8TransmitSignal {
     // so the TX still finishes on the cycle boundary. Set just before playback.
     private volatile int lateStartSkipMs = 0;
 
+    // Set by setTransmitting(false)/STOP to abort the chunked MODE_STREAM
+    // AudioTrack playback loop mid-buffer. The worker thread owns the track's
+    // stop/release (see playFT8Signal); the UI thread only flips this flag and
+    // pauses+flushes the track for immediate silence, avoiding a release race
+    // against the worker blocked in write(). Reset at the start of each cycle's
+    // sound-card playback.
+    private volatile boolean txAudioCancelled = false;
+
     public UtcTimer utcTimer;
 
 
@@ -120,7 +129,15 @@ public class FT8TransmitSignal {
     private final DoTransmitRunnable doTransmitRunnable = new DoTransmitRunnable(this);
 
     static {
-        System.loadLibrary("ft8cn");
+        try {
+            System.loadLibrary("ft8cn");
+        } catch (UnsatisfiedLinkError e) {
+            // Best-effort load: JVM unit tests don't have libft8cn.so on
+            // java.library.path. The native methods themselves will throw if
+            // actually invoked without the library; the pure-Java helpers on
+            // this class (applyVolume, float2Short) stay available either way.
+            Log.w(TAG, "ft8cn native library not loaded: " + e.getMessage());
+        }
     }
 
     /**
@@ -141,17 +158,22 @@ public class FT8TransmitSignal {
         setActivated(false);
 
 
-        // observe volume setting changes
-        GeneralVariables.mutableVolumePercent.observeForever(new Observer<Float>() {
-            @Override
-            public void onChanged(Float aFloat) {
-                if (audioTrack != null) {
-                    audioTrack.setVolume(aFloat);
-                }
-            }
-        });
+        // TX volume is applied live, mid-transmission: the chunked MODE_STREAM AudioTrack
+        // loop re-reads GeneralVariables.volumePercent for each chunk (see playFT8Signal),
+        // and the USB-direct path applies gain live via UsbAudioNative.setTxVolume. A slider
+        // change therefore takes effect within the current cycle, so no per-cycle setVolume()
+        // observer is needed here.
 
-        utcTimer = new UtcTimer(FT8Common.FT8_SLOT_TIME_M, false, new OnUtcTimer() {
+        // Cycle timer on the current mode's period (FT8 = 15s/150, FT4 = 7.5s/75).
+        utcTimer = new UtcTimer(GeneralVariables.currentMode().slotTenths, false, makeTimerCallback());
+
+        utcTimer.start();
+
+    }
+
+    /** The cycle-trigger callback, shared between the constructor and {@link #rebuildTimer}. */
+    private OnUtcTimer makeTimerCallback() {
+        return new OnUtcTimer() {
             @Override
             public void doHeartBeatTimer(long utc) {
 
@@ -174,10 +196,18 @@ public class FT8TransmitSignal {
                     doTransmit();// transmit action follows precise timing; delay is the audio signal delay
                 }
             }
-        });
+        };
+    }
 
+    /**
+     * Recreate the cycle timer for a new operating mode. {@link UtcTimer}'s period is fixed
+     * at construction, so a mode change (FT8 15s -> FT4 7.5s) requires a fresh timer. The
+     * timer is always restarted; callers should ensure we are not mid-transmit first.
+     */
+    public void rebuildTimer(ModeProfile mode) {
+        utcTimer.delete();
+        utcTimer = new UtcTimer(mode.slotTenths, false, makeTimerCallback());
         utcTimer.start();
-
     }
 
     /**
@@ -196,7 +226,7 @@ public class FT8TransmitSignal {
         resetTargetReport();
 
         if (UtcTimer.getNowSequential() == sequential) {
-            long msInCycle = UtcTimer.getSystemTime() % 15000;
+            long msInCycle = UtcTimer.getSystemTime() % GeneralVariables.currentMode().slotMillis;
             int tolerance = GeneralVariables.lateStartTolerance;
             if (tolerance < 0) tolerance = 0;
             if (tolerance > 4000) tolerance = 4000;
@@ -353,13 +383,38 @@ public class FT8TransmitSignal {
     }
 
     /**
+     * Scale a slice of the generated waveform by the TX volume, returning a new
+     * buffer of exactly {@code playLength} samples.
+     *
+     * <p>This is the single source of truth for TX level. Both output paths use
+     * it: the AudioTrack path (because {@code AudioTrack.setVolume()} is a no-op
+     * when the track is routed to a USB Audio Class device, so the gain must be
+     * baked into the samples) and the USB-direct path. Pure function, no Android
+     * or native dependencies — covered by unit tests.
+     *
+     * @param source     full generated waveform
+     * @param skipSamples leading samples to drop (late-start trim); clamped to 0
+     * @param playLength number of samples to emit (source.length - skipSamples)
+     * @param volume     gain 0.0-1.0; 0 yields digital silence
+     * @return new float[playLength] of scaled samples
+     */
+    static float[] applyVolume(float[] source, int skipSamples, int playLength, float volume) {
+        if (skipSamples < 0) skipSamples = 0;
+        float[] out = new float[playLength];
+        for (int i = 0; i < playLength; i++) {
+            out[i] = source[skipSamples + i] * volume;
+        }
+        return out;
+    }
+
+    /**
      * Convert 32-bit float to 16-bit integer for maximum compatibility;
      * some sound cards do not support 32-bit float.
      *
      * @param buffer 32-bit float audio
      * @return 16-bit integer
      */
-    private short[] float2Short(float[] buffer) {
+    static short[] float2Short(float[] buffer) {
         short[] temp = new short[buffer.length + 8];// extra 8 zero-padded samples for QP-7C RP2040 audio detection compatibility
         for (int i = 0; i < buffer.length; i++) {
             float x = buffer[i];
@@ -370,6 +425,28 @@ public class FT8TransmitSignal {
             temp[i] = (short) (x * 32767.0);
         }
         return temp;
+    }
+
+    /**
+     * Convert the first {@code length} float samples to 16-bit, with no trailing
+     * zero padding. Used by the chunked MODE_STREAM playback loop, which writes
+     * many chunks per cycle; the 8-sample QP-7C pad must be appended once at the
+     * very end of the message, not after every chunk (see {@link #float2Short}).
+     * Pure function — covered by unit tests.
+     *
+     * @param buffer source samples
+     * @param length number of samples to convert (≤ buffer.length)
+     * @return new short[length] of clipped, scaled samples
+     */
+    static short[] floatToInt16NoPad(float[] buffer, int length) {
+        short[] out = new short[length];
+        for (int i = 0; i < length; i++) {
+            float x = buffer[i];
+            if (x > 1.0f) x = 1.0f;
+            else if (x < -1.0f) x = -1.0f;
+            out[i] = (short) (x * 32767.0);
+        }
+        return out;
     }
 
     private void playFT8Signal(Ft8Message msg) {
@@ -440,6 +517,11 @@ public class FT8TransmitSignal {
             return;
         }
 
+        // Fresh cancel state for this cycle's playback (consumed by the chunked
+        // AudioTrack loop below; the USB path has its own cancel via
+        // UsbAudioNative.resetCancel/cancelWrite).
+        txAudioCancelled = false;
+
         // USB audio output path. Logged so a dev-screen reader can see
         // which branch was taken — the difference between TX going out
         // the USB radio (this branch) vs. Android's default sink (the
@@ -447,10 +529,12 @@ public class FT8TransmitSignal {
         // currently have no way to tell from debug.log which one fired.
         GeneralVariables.fileLog(String.format(
                 "playFT8Signal: TX path branch: audioOutputDeviceId=%d "
-                        + "usbAudioOutputVidPid=%04X:%04X",
+                        + "usbAudioOutputVidPid=%04X:%04X volume=%.0f%% autoVolume=%b",
                 GeneralVariables.audioOutputDeviceId,
                 GeneralVariables.usbAudioOutputVendorId,
-                GeneralVariables.usbAudioOutputProductId));
+                GeneralVariables.usbAudioOutputProductId,
+                GeneralVariables.volumePercent * 100f,
+                GeneralVariables.autoVolumeEnabled));
         if (GeneralVariables.audioOutputDeviceId == -1
                 && GeneralVariables.usbAudioOutputVendorId != 0) {
             GeneralVariables.fileLog("playFT8Signal: using USB audio (direct) output");
@@ -468,17 +552,28 @@ public class FT8TransmitSignal {
                 .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                 .build();
 
-        //myFormat = new AudioFormat.Builder().setSampleRate(FT8Common.SAMPLE_RATE)
+        int encoding = GeneralVariables.audioOutput32Bit
+                ? AudioFormat.ENCODING_PCM_FLOAT : AudioFormat.ENCODING_PCM_16BIT;
         myFormat = new AudioFormat.Builder().setSampleRate(GeneralVariables.audioSampleRate)
-                .setEncoding(GeneralVariables.audioOutput32Bit ? // float vs integer
-                        AudioFormat.ENCODING_PCM_FLOAT : AudioFormat.ENCODING_PCM_16BIT)
+                .setEncoding(encoding)
                 .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build();
+
+        // MODE_STREAM (was MODE_STATIC) with a deliberately SMALL buffer so we can
+        // apply TX volume live: we feed the generated waveform out in ~50ms chunks,
+        // re-reading volumePercent for each chunk, and a blocking write only commits
+        // a chunk once the device has room. The buffer depth (~200ms) bounds how much
+        // audio is already queued at the old level, i.e. the worst-case latency from
+        // a slider move to the level changing on air — instant enough to pull drive
+        // down and protect the rig mid-over, which baking volume into a one-shot
+        // MODE_STATIC write could not do (the slider only took effect next cycle).
+        int bytesPerSample = GeneralVariables.audioOutput32Bit ? 4 : 2;
+        int targetBufBytes = (GeneralVariables.audioSampleRate / 5) * bytesPerSample; // ~200ms mono
+        int minBuf = AudioTrack.getMinBufferSize(GeneralVariables.audioSampleRate,
+                AudioFormat.CHANNEL_OUT_MONO, encoding);
+        int bufBytes = Math.max(targetBufBytes, minBuf > 0 ? minBuf : targetBufBytes);
         int mySession = 0;
-        audioTrack = new AudioTrack(attributes, myFormat
-                , GeneralVariables.audioOutput32Bit ? GeneralVariables.audioSampleRate * 15 * 4
-                : GeneralVariables.audioSampleRate * 15 * 2// float vs integer
-                , AudioTrack.MODE_STATIC
-                , mySession);
+        audioTrack = new AudioTrack(attributes, myFormat, bufBytes,
+                AudioTrack.MODE_STREAM, mySession);
 
         // set preferred output device
         if (GeneralVariables.audioOutputDeviceId > 0) {
@@ -493,47 +588,75 @@ public class FT8TransmitSignal {
         if (skipSamples >= buffer.length) skipSamples = 0;
         int playLength = buffer.length - skipSamples;
 
-        // distinguish between 32-bit float and integer
-        int writeResult;
-        if (GeneralVariables.audioOutput32Bit) {
-            writeResult = audioTrack.write(buffer, skipSamples, playLength
-                    , AudioTrack.WRITE_NON_BLOCKING);
-        } else {
-            short[] audio_data = float2Short(buffer);
-            writeResult = audioTrack.write(audio_data, skipSamples, playLength
-                    , AudioTrack.WRITE_NON_BLOCKING);
-        }
+        // Keep the track at unity: TX level is carried in the sample values (we scale
+        // each chunk below). On routes where AudioTrack.setVolume() works (phone
+        // speaker) this avoids double-attenuation; on routes where it's a no-op (USB
+        // Audio Class sound cards delegating level to device hardware) the in-sample
+        // gain is what actually controls the rig's drive.
+        audioTrack.play();
+        audioTrack.setVolume(1.0f);
 
-        if (playLength > writeResult) {
-            Log.e(TAG, String.format("Playback buffer insufficient: %d--->%d", playLength, writeResult));
-        }
+        // Stream the waveform in chunks, re-reading volumePercent each chunk so a
+        // slider move ramps the on-air level within ~1 chunk + buffer depth.
+        final int chunkSamples = Math.max(1, GeneralVariables.audioSampleRate / 20); // ~50ms
+        int framesWritten = 0;
+        boolean writeError = false;
+        int offset = 0;
+        while (offset < playLength) {
+            if (txAudioCancelled || !isTransmitting) break;
+            int chunkLen = Math.min(chunkSamples, playLength - offset);
+            // applyVolume reads volumePercent fresh for this chunk (live gain) and
+            // performs the late-start slice at skipSamples + offset.
+            float[] chunk = applyVolume(buffer, skipSamples + offset, chunkLen,
+                    GeneralVariables.volumePercent);
 
-        // check write result; if abnormal, release resources immediately
-        if (writeResult == AudioTrack.ERROR_INVALID_OPERATION
-                || writeResult == AudioTrack.ERROR_BAD_VALUE
-                || writeResult == AudioTrack.ERROR_DEAD_OBJECT
-                || writeResult == AudioTrack.ERROR) {
-            // abnormal condition
-            Log.e(TAG, String.format("Playback error: %d", writeResult));
-            afterPlayAudio();
-            return;
-        }
-        audioTrack.setNotificationMarkerPosition(playLength);
-        audioTrack.setPlaybackPositionUpdateListener(new AudioTrack.OnPlaybackPositionUpdateListener() {
-            @Override
-            public void onMarkerReached(AudioTrack audioTrack) {
-                afterPlayAudio();
+            int writeResult;
+            if (GeneralVariables.audioOutput32Bit) {
+                writeResult = audioTrack.write(chunk, 0, chunkLen, AudioTrack.WRITE_BLOCKING);
+            } else {
+                short[] audio_data = floatToInt16NoPad(chunk, chunkLen);
+                writeResult = audioTrack.write(audio_data, 0, chunkLen, AudioTrack.WRITE_BLOCKING);
             }
 
-            @Override
-            public void onPeriodicNotification(AudioTrack audioTrack) {
-
+            if (writeResult < 0) {
+                Log.e(TAG, String.format("Playback error: %d", writeResult));
+                writeError = true;
+                break;
             }
-        });
-        if (audioTrack != null) {
-            audioTrack.play();
-            audioTrack.setVolume(GeneralVariables.volumePercent);// set playback volume
+            framesWritten += writeResult;
+            offset += chunkLen;
         }
+
+        // Append the 8-sample zero pad once at the end (QP-7C RP2040 audio
+        // detection compatibility), only for the int16 path — matches the old
+        // float2Short() behavior. Skipped if we errored or were cancelled.
+        if (!writeError && !txAudioCancelled && isTransmitting
+                && !GeneralVariables.audioOutput32Bit) {
+            short[] pad = new short[8];
+            int padResult = audioTrack.write(pad, 0, pad.length, AudioTrack.WRITE_BLOCKING);
+            if (padResult > 0) framesWritten += padResult;
+        }
+
+        // Blocking writes return once data is *buffered*, not played. Wait for the
+        // tail (up to bufBytes) to actually drain before releasing, so we don't
+        // truncate the end of the message. A STOP cancel skips the wait (the UI
+        // thread has already paused+flushed for immediate silence).
+        if (!writeError && !txAudioCancelled) {
+            while (isTransmitting && !txAudioCancelled) {
+                int head = audioTrack.getPlaybackHeadPosition();
+                if (head >= framesWritten) break;
+                try {
+                    Thread.sleep(20);
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+        }
+
+        // Worker-thread-owned teardown (drops PTT + releases the track). The UI
+        // thread never releases the streaming track — it only flips txAudioCancelled
+        // and pauses/flushes — so there's no release race against this write loop.
+        afterPlayAudio();
     }
 
     /**
@@ -614,16 +737,17 @@ public class FT8TransmitSignal {
         if (skipSamples >= buffer.length) skipSamples = 0;
         int playLength = buffer.length - skipSamples;
 
-        // Apply volume
-        float[] volumeAdjusted = new float[playLength];
-        for (int i = 0; i < playLength; i++) {
-            volumeAdjusted[i] = buffer[skipSamples + i] * GeneralVariables.volumePercent;
-        }
+        // Pass the full-scale slice; TX volume is applied live as the buffer
+        // drains (native scales each sample in its write loop, the UsbRequest
+        // fallback scales per chunk), so the slider attenuates the in-progress
+        // TX within tens of ms instead of next cycle. applyVolume at unity here
+        // just performs the late-start slice.
+        float[] unscaled = applyVolume(buffer, skipSamples, playLength, 1.0f);
 
         GeneralVariables.fileLog(String.format(
                 "playViaUsbAudio: calling writeAudio playLength=%d rate=%d",
                 playLength, GeneralVariables.audioSampleRate));
-        boolean success = usbDev.writeAudio(volumeAdjusted, GeneralVariables.audioSampleRate);
+        boolean success = usbDev.writeAudio(unscaled, GeneralVariables.audioSampleRate);
         GeneralVariables.fileLog(
                 "playViaUsbAudio: writeAudio returned " + (success ? "OK" : "FAILED"));
 
@@ -701,7 +825,7 @@ public class FT8TransmitSignal {
                     toMaidenheadGrid,
                     sentTargetReport != -100 ? sentTargetReport : sendReport,
                     receiveTargetReport != -100 ? receiveTargetReport : receivedReport,// if signal report for the other party is not -100, use the sent signal report record
-                    "FT8",
+                    GeneralVariables.currentMode().displayName,
                     GeneralVariables.band,
                     Math.round(GeneralVariables.getBaseFrequency())
             ));
@@ -976,7 +1100,7 @@ public class FT8TransmitSignal {
                     toMaidenheadGrid,
                     sentTargetReport != -100 ? sentTargetReport : sendReport,
                     receiveTargetReport != -100 ? receiveTargetReport : receivedReport,// if signal report is not -100, use the sent signal report record
-                    "FT8",
+                    GeneralVariables.currentMode().displayName,
                     GeneralVariables.band,
                     Math.round(GeneralVariables.getBaseFrequency()
                     )));
@@ -1027,6 +1151,10 @@ public class FT8TransmitSignal {
         }
         ArrayList<Ft8Message> messages = new ArrayList<>(msgList);// prevent thread conflicts
 
+        if (GeneralVariables.houndMode) {// DXpedition Hound: dedicated QSO handler
+            handleHoundCycle(messages);
+            return;
+        }
 
         int newOrder = checkFunctionOrdFromMessages(messages);// check reply message sequence from the other party; -1 means not received
         // Per-cycle spine of the QSO trace: current state, what (if anything) the
@@ -1169,6 +1297,132 @@ public class FT8TransmitSignal {
 
     }
 
+    // ==================== FT8 DXpedition Hound ====================
+
+    /**
+     * Begin DXpedition Hound operation: call the Fox high (1000-4000 Hz) and let
+     * {@link #handleHoundCycle} auto-QSY and sequence the QSO. The caller sets
+     * {@code GeneralVariables.houndMode = true} first.
+     *
+     * @param foxCall    the Fox's base callsign
+     * @param callFreqHz initial Hound TX audio frequency (1000-4000 Hz)
+     */
+    public void startHound(String foxCall, float callFreqHz) {
+        int i3 = GenerateFT8.checkI3ByCallsign(GeneralVariables.myCallsign);
+        // Seed the Fox callsign's hashes. DXpedition combo messages carry the Fox
+        // only as a 10-bit hash, so without this the combo renders "<...>" in the
+        // UI and handleHoundCycle can't tell whose combo it is. (No-op for a
+        // compound Fox whose combo hashes its full call while the user enters the
+        // base call — handleHoundCycle degrades gracefully in that case.)
+        Ft8Message.hashList.addHash(FT8Package.getHash22(foxCall), foxCall);
+        Ft8Message.hashList.addHash(FT8Package.getHash12(foxCall), foxCall);
+        Ft8Message.hashList.addHash(FT8Package.getHash10(foxCall), foxCall);
+        // Fox transmits in the even/1st slot (sequential 0); setTransmit derives
+        // our slot as (fox.sequential + 1) % 2 = 1 (odd), which is where Hounds
+        // are required to transmit.
+        resetTargetReport();
+        setTransmit(new TransmitCallsign(i3, 0, foxCall, callFreqHz, 0, 0), 1, "");
+        setBaseFrequency(callFreqHz);// call Fox at the chosen high frequency
+        setActivated(true);
+        GeneralVariables.fileLog("HOUND: start, fox=" + foxCall
+                + " callFreq=" + Math.round(callFreqHz) + "Hz slot=" + sequential);
+    }
+
+    /**
+     * DXpedition Hound per-cycle handler. Reacts to the Fox's reply to us:
+     * <ul>
+     *   <li>RR73 to me (combo where I'm the acknowledged call, or an explicit
+     *       standard RR73 from Fox) -&gt; log + complete.</li>
+     *   <li>Report/invite to me (combo where I'm the invited second call, or a
+     *       standard "&lt;me&gt; &lt;fox&gt; -rpt") -&gt; QSY to the frequency Fox
+     *       called me on and reply "&lt;fox&gt; &lt;me&gt; R-rpt".</li>
+     *   <li>Otherwise keep calling at the current order (grid-call or R+rpt).</li>
+     * </ul>
+     */
+    private void handleHoundCycle(ArrayList<Ft8Message> messages) {
+        if (toCallsign == null || !toCallsign.haveTargetCallsign()) return;
+        String fox = toCallsign.callsign;
+
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            Ft8Message msg = messages.get(i);
+            if (msg.getSequence() == sequential) continue;// our own slot
+            if (msg.band != GeneralVariables.band) continue;
+
+            boolean combo = (msg.i3 == 0 && msg.n3 == 1);// Fox DXpedition combo
+            boolean toMe = GeneralVariables.checkIsMyCallsign(msg.getCallsignTo());
+
+            // A combo names the Fox only by a 10-bit hash. If that hash resolves
+            // to a known callsign that isn't our Fox, it belongs to a different
+            // Fox's pileup — skip it so we don't QSY/log against the wrong station.
+            if (combo && !comboFromOurFox(msg, fox)) continue;
+
+            // 1) RR73 to me => QSO complete & logged. Combo: I'm the acknowledged
+            //    (first) call. Standard: an explicit RR73 addressed to me by Fox.
+            if ((combo && toMe)
+                    || (msg.i3 == 1 && toMe
+                        && checkCallsignIsCallTo(msg.getCallsignFrom(), fox)
+                        && GeneralVariables.checkFun4(msg.extraInfo))) {
+                GeneralVariables.fileLog("HOUND: RR73 from " + fox + " -> complete");
+                houndComplete();
+                return;
+            }
+
+            // 2) Fox reported / invited me => reply R+rpt at Fox's frequency.
+            //    Combo: I'm the invited second call (dx_call_to2), report = msg.report.
+            //    Standard: "<me> <fox> -rpt" or "<me> <fox> R-rpt".
+            String invited = msg.dx_call_to2 == null ? ""
+                    : msg.dx_call_to2.replace("<", "").replace(">", "");
+            boolean invitedByCombo = combo && GeneralVariables.checkIsMyCallsign(invited);
+            boolean reportStd = msg.i3 == 1 && toMe
+                    && checkCallsignIsCallTo(msg.getCallsignFrom(), fox)
+                    && (GeneralVariables.checkFun2(msg.extraInfo)
+                        || GeneralVariables.checkFun3(msg.extraInfo));
+            if (invitedByCombo || reportStd) {
+                int rpt = invitedByCombo ? msg.report : getReportFromExtraInfo(msg.extraInfo);
+                if (rpt != -100) {
+                    receivedReport = rpt;
+                    receiveTargetReport = rpt;
+                }
+                toCallsign.snr = msg.snr;// Fox's SNR as I hear it -> goes in my R+rpt
+                setBaseFrequency(msg.freq_hz);// auto-QSY to where Fox called me
+                functionOrder = 3;// "<fox> <me> R-rpt"
+                generateFun();
+                setCurrentFunctionOrder(functionOrder);
+                mutableFunctionOrder.postValue(functionOrder);
+                GeneralVariables.fileLog(String.format(
+                        "HOUND: report from %s rpt=%d -> QSY %.0fHz, send R%s",
+                        fox, rpt, msg.freq_hz, toCallsign.getSnr()));
+                return;
+            }
+        }
+        // Nothing relevant this cycle: keep calling at the current order.
+    }
+
+    /** Hound QSO complete: log it, fire the celebration, and stop transmitting. */
+    private void houndComplete() {
+        if (toCallsign == null) return;
+        doComplete();// saves the QSL record + posts mutableQsoCompletedAt
+        setActivated(false);// worked the Fox; stop calling
+        GeneralVariables.fileLog("HOUND: QSO logged with " + toCallsign.callsign);
+    }
+
+    /**
+     * Whether a DXpedition combo can be attributed to our Fox. The combo names
+     * the Fox only by a 10-bit hash; if that hash resolves to a known callsign
+     * that doesn't match our Fox (base or compound), it's a different Fox's combo.
+     * Returns true when the hash is unknown/unresolved, so we never reject a valid
+     * QSO just because the Fox's (possibly compound) call hasn't been hashed yet.
+     */
+    private boolean comboFromOurFox(Ft8Message msg, String fox) {
+        String resolved = Ft8Message.hashList
+                .getCallsign(new long[]{msg.callFromHash10})
+                .replace("<", "").replace(">", "");
+        if (resolved.isEmpty() || resolved.equals("...")) return true;// unknown -> allow
+        return resolved.equals(fox) || resolved.contains(fox) || fox.contains(resolved);
+    }
+
+    // ==================== End FT8 DXpedition Hound ====================
+
     /**
      * Check watch list for active CQ messages that are not my current target callsign.
      *
@@ -1249,18 +1503,27 @@ public class FT8TransmitSignal {
             // bail out. When the writer returns, playViaUsbAudio's afterPlayAudio()
             // drops PTT. No-op when not transmitting over USB audio.
             UsbAudioNative.cancelWrite();
-            if (audioTrack != null) {
-                if (audioTrack.getState() != AudioTrack.STATE_UNINITIALIZED) {
-                    audioTrack.pause();
+
+            // Abort the chunked MODE_STREAM AudioTrack playback. We must NOT release
+            // the track here: the transmit worker thread may be blocked in a
+            // WRITE_BLOCKING call, and releasing it underneath would race/crash.
+            // Instead flip the cancel flag (the write loop checks it each chunk) and
+            // pause()+flush() for immediate silence. flush() also discards the queued
+            // buffer so a blocked write returns at once instead of deadlocking on a
+            // full, paused buffer. The worker then breaks out and its afterPlayAudio()
+            // does the actual stop()/release() + PTT drop.
+            txAudioCancelled = true;
+            AudioTrack t = audioTrack;
+            if (t != null) {
+                try {
+                    if (t.getState() != AudioTrack.STATE_UNINITIALIZED
+                            && t.getPlayState() != AudioTrack.PLAYSTATE_STOPPED) {
+                        t.pause();
+                        t.flush();
+                    }
+                } catch (IllegalStateException ignored) {
+                    // Worker already released the track between our read and here.
                 }
-                if (onDoTransmitted != null) {//notify that transmitting has stopped
-                    onDoTransmitted.onAfterTransmit(getFunctionCommand(functionOrder), functionOrder);
-                }
-                // Release the paused track: its completion marker won't fire once
-                // paused, so afterPlayAudio() would never run for this branch and
-                // the track would leak until the next TX overwrites the field.
-                audioTrack.release();
-                audioTrack = null;
             }
         }
 
@@ -1553,28 +1816,31 @@ public class FT8TransmitSignal {
                 e.printStackTrace();
             }
 
-            // Compute how late we are *vs. when FT8 audio should start*, and only
-            // clip leading audio if we'd overrun the 15-second cycle otherwise.
+            // Compute how late we are *vs. when the audio should start*, and only
+            // clip leading audio if we'd overrun the cycle otherwise. The numbers
+            // are per-mode (see ModeProfile): the slot length and the audio length.
             //
-            // FT8 = 79 GFSK symbols at 0.16s each = 12.64s of audio. The spec
-            // expects audio to start ~+0.5s into each 15s cycle, so any start
-            // between 0 and (15.00 - 12.64) = 2.36s into the cycle fits without
-            // clipping. The original `msLate = position % 15000` treated every
+            // FT8 = 79 GFSK symbols at 0.16s each = 12.64s of audio in a 15s slot,
+            // so the slack (last moment we can start without overrunning) is
+            // 15.00 - 12.64 = 2.36s. FT4 = 105 symbols at 0.048s = 5.04s in a 7.5s
+            // slot, slack 2.46s. Any start within the slack fits without clipping.
+            //
+            // The naive `msLate = position % slotMillis` would treat every
             // millisecond past the cycle boundary as lateness — so a normal
             // on-time TX that fires ~500-800ms into the cycle (totally fine)
-            // would chop 500-800ms off the *start* of the audio buffer, which
-            // is exactly where the leading Costas sync array lives (symbols
-            // 0-6, the first 1.12s). Receivers couldn't lock, and the signal
-            // came across as audible-but-undecodable.
+            // would chop that many ms off the *start* of the audio buffer, which
+            // is exactly where the leading Costas sync array lives. Receivers
+            // couldn't lock, and the signal came across as audible-but-undecodable.
             //
-            // New behavior: skip only the excess past 2.36s. On-time and
-            // mildly-late TXs send the full waveform; only genuinely late
-            // starts (over ~2.4s into cycle) start clipping leading audio.
-            int msIntoCycle = (int) (UtcTimer.getSystemTime() % 15000);
-            int msMaxStart = 15000 - 12640; // 2360ms — last moment we can start without overrunning
+            // New behavior: skip only the excess past the slack. On-time and
+            // mildly-late TXs send the full waveform; only genuinely late starts
+            // begin clipping leading audio.
+            ModeProfile mode = GeneralVariables.currentMode();
+            int msIntoCycle = (int) (UtcTimer.getSystemTime() % mode.slotMillis);
+            int msMaxStart = mode.audioSlackMillis; // last moment we can start without overrunning
             int msLate = msIntoCycle - msMaxStart;
             if (msLate < 0) msLate = 0;
-            if (msLate >= 15000) msLate = 14999;
+            if (msLate >= mode.slotMillis) msLate = mode.slotMillis - 1;
             transmitSignal.lateStartSkipMs = msLate;
             if (msLate > 100) {
                 Log.d(TAG, String.format("Late start: skipping %d ms of leading audio", msLate));

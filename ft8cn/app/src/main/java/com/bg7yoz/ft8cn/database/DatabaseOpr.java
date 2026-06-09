@@ -1554,7 +1554,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     ",CALL_TO,EXTRAL,REPORT,BAND)\n" +
                     "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)";
             for (Ft8Message message : messages) {//Only save messages related to me
-                db.execSQL(sql, new Object[]{message.i3, message.n3, "FT8"
+                db.execSQL(sql, new Object[]{message.i3, message.n3,
+                        com.bg7yoz.ft8cn.ModeProfile.fromId(message.signalFormat).displayName
                         ,UtcTimer.getDatetimeYYYYMMDD_HHMMSS(message.utcTime)
                         , message.snr, message.time_sec, Math.round(message.freq_hz)
                         , message.callsignFrom, message.callsignTo, message.extraInfo
@@ -2306,6 +2307,20 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                         GeneralVariables.transmitDelay = FT8Common.FT8_TRANSMIT_DELAY;
                     }
                 }
+                //Manual time correction (ms). Re-applied to UtcTimer.delay at startup so a
+                //field operator's offline clock nudge survives a relaunch. delay is read live
+                //by the running timers, so this takes effect immediately.
+                if (name.equalsIgnoreCase("timeCorrectionMs")) {
+                    int ms;
+                    try {
+                        ms = Integer.parseInt(result.trim());
+                    } catch (NumberFormatException e) {
+                        ms = 0;
+                    }
+                    ms = Math.max(-2000, Math.min(2000, ms));
+                    GeneralVariables.manualTimeCorrectionMs = ms;
+                    UtcTimer.delay = ms;
+                }
 
                 if (name.equalsIgnoreCase("civ")) {
                     GeneralVariables.civAddress = result.equals("") ? 0xa4 : Integer.parseInt(result, 16);
@@ -2330,6 +2345,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
                 if (name.equalsIgnoreCase("msgMode")) {
                     GeneralVariables.simpleCallItemMode = result.equals("1") ;
+                }
+
+                if (name.equalsIgnoreCase("clearDecodesEveryCycle")) {
+                    GeneralVariables.clearDecodesEveryCycle = result.equals("1");
                 }
 
                 if (name.equalsIgnoreCase("ctrMode")) {
@@ -2375,6 +2394,18 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("earlyDecode")) {//Fast turnaround: shorter RX window, defaults on
                     GeneralVariables.earlyDecode = (result.equals("") || result.equals("1"));
+                }
+                if (name.equalsIgnoreCase("operatingMode")) {//Operating mode (0=FT8,1=FT4), defaults FT8
+                    try {
+                        int parsed = result.equals("")
+                                ? FT8Common.FT8_MODE : Integer.parseInt(result);
+                        // Normalize through ModeProfile so an unknown id persisted by a
+                        // future build (e.g. a mode this build doesn't know) degrades to
+                        // FT8 everywhere, not just in descriptor lookups.
+                        GeneralVariables.operatingMode = com.bg7yoz.ft8cn.ModeProfile.fromId(parsed).id;
+                    } catch (NumberFormatException nfe) {
+                        GeneralVariables.operatingMode = FT8Common.FT8_MODE;
+                    }
                 }
                 if (name.equalsIgnoreCase("autoCQAfterQSO")) {//Auto-CQ after each completed QSO, defaults off
                     GeneralVariables.autoCQAfterQSO = result.equals("1");

@@ -125,12 +125,15 @@ public class OperationBand {
     /**
      * Indices into {@link #bandList} for bands whose waveLength the user has not
      * hidden, in file order. Used by the band pickers so excluded bands (e.g. 6m,
-     * 60m in regions where they're prohibited) don't appear.
+     * 60m in regions where they're prohibited) don't appear. Also filtered to the
+     * current operating mode so the picker shows the right dials (FT8 vs FT4).
      */
     public static java.util.List<Integer> getVisibleBandIndices(){
         java.util.ArrayList<Integer> out = new java.util.ArrayList<>();
+        int mode = com.bg7yoz.ft8cn.GeneralVariables.operatingMode;
         for (int i = 0; i < bandList.size(); i++) {
-            if (!com.bg7yoz.ft8cn.GeneralVariables.isBandExcluded(bandList.get(i).waveLength)) {
+            Band b = bandList.get(i);
+            if (b.mode == mode && !com.bg7yoz.ft8cn.GeneralVariables.isBandExcluded(b.waveLength)) {
                 out.add(i);
             }
         }
@@ -156,10 +159,36 @@ public class OperationBand {
         return bandList.get(index).band;
     }
 
+    /**
+     * The dial frequency for a given waveLength in a given mode, or -1 if no entry exists.
+     * Used to retune within the current band when the operating mode changes (FT8 <-> FT4);
+     * the band itself never changes, only the in-band dial. Prefers the marked (*) entry,
+     * falling back to the first matching entry.
+     *
+     * @param waveLength band name, e.g. "20m"
+     * @param mode       FT8Common.FT8_MODE / FT4_MODE
+     * @return dial frequency in Hz, or -1 if this band has no entry in that mode
+     */
+    public static long getModeBandFreq(String waveLength, int mode) {
+        long firstMatch = -1;
+        for (Band b : bandList) {
+            if (b.mode == mode && b.waveLength.equals(waveLength)) {
+                if (b.marked) {
+                    return b.band;
+                }
+                if (firstMatch == -1) {
+                    firstMatch = b.band;
+                }
+            }
+        }
+        return firstMatch;
+    }
+
     public static class Band {
         public long band;
         public String waveLength;
         public boolean marked=false;
+        public int mode = com.bg7yoz.ft8cn.FT8Common.FT8_MODE;//FT8 unless tagged otherwise in bands.txt
 
         public Band(long band, String waveLength) {
             this.band = band;
@@ -170,7 +199,19 @@ public class OperationBand {
             String[] info=s.split(":");
             marked= (info[0].equals("*"));
             band=Long.parseLong(info[1]);
-            waveLength=info[info.length-1];
+            //Format: marked:freq:waveLength[:mode]. waveLength is field 2; an optional 4th
+            //field tags the mode by ModeProfile.displayName ("FT4"/"FT2"), otherwise FT8.
+            //Resolving against ModeProfile keeps future modes a one-entry add (no new branch).
+            waveLength=info[2];
+            if (info.length > 3 && !info[3].trim().isEmpty()) {
+                String tag = info[3].trim();
+                for (com.bg7yoz.ft8cn.ModeProfile m : com.bg7yoz.ft8cn.ModeProfile.values()) {
+                    if (m.displayName.equalsIgnoreCase(tag)) {
+                        mode = m.id;
+                        break;
+                    }
+                }
+            }
         }
         @SuppressLint("DefaultLocale")
         public String getBandInfo(){

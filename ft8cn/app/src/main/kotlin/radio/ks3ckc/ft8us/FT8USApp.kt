@@ -31,13 +31,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
+import com.bg7yoz.ft8cn.ModeProfile
 import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.database.OperationBand
+import com.bg7yoz.ft8cn.rigs.CatConnectionState
 import com.bg7yoz.ft8cn.rigs.BaseRigOperation
 import radio.ks3ckc.ft8us.theme.BgApp
 import radio.ks3ckc.ft8us.ui.components.ActiveQsoPanel
+import radio.ks3ckc.ft8us.ui.components.shouldShowCatChip
 import radio.ks3ckc.ft8us.ui.components.FT8USTab
 import radio.ks3ckc.ft8us.ui.components.FrequencyPickerSheet
+import radio.ks3ckc.ft8us.ui.components.HoundSetupSheet
 import radio.ks3ckc.ft8us.ui.components.formatMhz
 import radio.ks3ckc.ft8us.ui.components.QsoCelebration
 import radio.ks3ckc.ft8us.ui.components.SlotTimerBar
@@ -62,6 +66,14 @@ fun FT8USApp(mainViewModel: MainViewModel) {
     val isActivated by mainViewModel.ft8TransmitSignal.mutableIsActivated.observeAsState(false)
     val txSlot by mainViewModel.ft8TransmitSignal.mutableSequential.observeAsState(mainViewModel.ft8TransmitSignal.sequential)
     val qsoCompletedAt by mainViewModel.ft8TransmitSignal.mutableQsoCompletedAt.observeAsState()
+    // CAT connection status for the TX-strip chip. Hidden for VOX / audio-only
+    // setups (see shouldShowCatChip); tap reconnects (handy for Bluetooth, which
+    // often only connects on the second attempt).
+    val catState by mainViewModel.mutableCatConnectionState.observeAsState(CatConnectionState.DISCONNECTED)
+    // Observe control mode so the chip shows/hides immediately when the user
+    // switches VOX <-> CAT/RTS/DTR in Settings (seeds from the current value).
+    val controlMode by GeneralVariables.mutableControlMode.observeAsState(GeneralVariables.controlMode)
+    val showCatChip = shouldShowCatChip(controlMode, catState)
     // Consume the one-shot celebration signal so LiveData doesn't replay it
     // on recomposition / resubscription.
     LaunchedEffect(qsoCompletedAt) {
@@ -76,6 +88,11 @@ fun FT8USApp(mainViewModel: MainViewModel) {
     // Hunt / auto-answer-CQ mode. Mirrors GeneralVariables.autoFollowCQ (also
     // editable in Settings, which provides the persisted default at startup).
     var huntEnabled by remember { mutableStateOf(GeneralVariables.autoFollowCQ) }
+
+    // DXpedition Hound mode. Mirrors GeneralVariables.houndMode; the setup sheet
+    // collects the Fox call + call frequency before starting.
+    var dxEnabled by remember { mutableStateOf(GeneralVariables.houndMode) }
+    var showHoundSetup by remember { mutableStateOf(false) }
 
     // Frequency picker sheet state
     var showFrequencyPicker by rememberSaveable { mutableStateOf(false) }
@@ -114,6 +131,11 @@ fun FT8USApp(mainViewModel: MainViewModel) {
             append(bandName)
         }
     }
+    // Operating mode (FT8/FT4) — observed so the mode pill, countdown, and freq picker
+    // recompose when the mode changes.
+    val operatingMode by mainViewModel.mutableOperatingMode.observeAsState(GeneralVariables.operatingMode)
+    val modeName = ModeProfile.fromId(operatingMode).displayName
+
     // Observe SWR lockout state
     val swrLocked by mainViewModel.meterProtectionController.swrLockout.observeAsState(false)
     val lockoutSwrRatio by mainViewModel.meterProtectionController.lockoutSwrRatio.observeAsState("")
@@ -199,10 +221,11 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                 },
             )
 
-            // Slot timer bar — fills 0→100% across each 15s FT8 slot
+            // Slot timer bar — fills 0→100% across each slot (15s FT8 / 7.5s FT4)
             SlotTimerBar(
                 activeTxSlot = txSlot,
                 isActivated = isActivated,
+                slotMillis = ModeProfile.fromId(operatingMode).slotMillis.toLong(),
             )
 
             // TX status strip — always visible above tab bar
@@ -212,6 +235,11 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                 frequencyLabel = frequencyLabel,
                 txSlot = txSlot,
                 huntEnabled = huntEnabled,
+                modeName = modeName,
+                modeSwitchEnabled = !isTransmitting,
+                dxEnabled = dxEnabled,
+                catState = catState,
+                showCatChip = showCatChip,
                 expanded = qsoPanelExpanded,
                 onCallCQ = {
                     if (GeneralVariables.myCallsign.isNullOrEmpty()) {
@@ -223,7 +251,22 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                     }
                 },
                 onStop = {
-                    mainViewModel.ft8TransmitSignal.setActivated(false)
+                    // In Hound mode the STOP button leaves Hound entirely;
+                    // otherwise it just deactivates the normal sequencer.
+                    if (GeneralVariables.houndMode) {
+                        mainViewModel.stopHoundMode()
+                        dxEnabled = false
+                    } else {
+                        mainViewModel.ft8TransmitSignal.setActivated(false)
+                    }
+                },
+                onToggleDx = {
+                    if (dxEnabled || GeneralVariables.houndMode) {
+                        mainViewModel.stopHoundMode()
+                        dxEnabled = false
+                    } else {
+                        showHoundSetup = true
+                    }
                 },
                 onToggleSlot = {
                     val current = mainViewModel.ft8TransmitSignal.sequential
@@ -245,6 +288,28 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                         Toast.LENGTH_SHORT,
                     ).show()
                 },
+                onCycleMode = {
+                    // Cycle through the shipped ModeProfile entries in declaration order
+                    // (FT8 -> FT4 -> FT2 -> ...), wrapping around. An unknown current mode
+                    // (indexOfFirst == -1) falls back to the first entry (FT8).
+                    val modes = ModeProfile.values()
+                    val curIdx = modes.indexOfFirst { it.id == operatingMode }
+                    val next = modes[(curIdx + 1) % modes.size].id
+                    if (mainViewModel.setOperatingMode(next)) {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.app_mode_switched, ModeProfile.fromId(next).displayName),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    } else {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.app_mode_switch_busy),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                },
+                onReconnectCat = { mainViewModel.reconnectRig() },
                 onOpenFrequencyPicker = { showFrequencyPicker = true },
                 onToggleExpand = { qsoPanelExpanded = !qsoPanelExpanded },
             )
@@ -272,6 +337,24 @@ fun FT8USApp(mainViewModel: MainViewModel) {
             onSelect = { idx ->
                 selectBandIndex(mainViewModel, context, idx)
                 showFrequencyPicker = false
+            },
+        )
+
+        // DXpedition Hound setup — collects the Fox call + call frequency, then
+        // starts calling (disabling Hunt, which is mutually exclusive).
+        HoundSetupSheet(
+            visible = showHoundSetup,
+            initialFoxCall = GeneralVariables.houndFoxCall,
+            onDismiss = { showHoundSetup = false },
+            onStart = { foxCall, callFreqHz ->
+                if (GeneralVariables.myCallsign.isNullOrEmpty()) {
+                    Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
+                } else {
+                    mainViewModel.startHoundMode(foxCall, callFreqHz)
+                    dxEnabled = true
+                    huntEnabled = false
+                    showHoundSetup = false
+                }
             },
         )
     }

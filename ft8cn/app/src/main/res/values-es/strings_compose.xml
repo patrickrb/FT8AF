@@ -215,6 +215,8 @@
     <string name="pota_self_spot_failed">Error en el auto-spot — revisa el registro</string>
     <string name="pota_active_park">ACTIVO — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_contacts_map">Mapa de contactos</string>
+    <string name="pota_back">Atrás</string>
     <string name="pota_valid_activation">activación válida</string>
     <string name="pota_to_valid">%1$d para válida</string>
     <string name="pota_elapsed">Transcurrido</string>
@@ -458,6 +460,16 @@
 
     <string name="tx_transmitting">TRANSMITIENDO</string>
     <string name="tx_listening">ESCUCHANDO</string>
+    <string name="tx_hunt">Caza</string>
+    <string name="tx_call_cq">Llamar CQ</string>
+    <string name="tx_stop">Detener</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT conectado — toca para reconectar</string>
+    <string name="cat_status_connecting">Conectando CAT…</string>
+    <string name="cat_status_disconnected">CAT desconectado — toca para conectar</string>
+    <string name="cat_status_error">Error de conexión CAT — toca para reintentar</string>
     <string name="qsopanel_log_action">LOG</string>
     <string name="qsopanel_queue">COLA</string>
     <string name="swr_lockout_title">TX DETENIDO — SWR alto detectado (%1$s)</string>

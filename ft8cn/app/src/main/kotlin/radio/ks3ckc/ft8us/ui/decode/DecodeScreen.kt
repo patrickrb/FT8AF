@@ -60,9 +60,11 @@ fun DecodeScreen(
     val decodedCount by mainViewModel.mutable_Decoded_Counter.observeAsState(0)
     val utcTime by mainViewModel.timerSec.observeAsState(0L)
 
-    // Filter state
+    // Filter state. Backed by the ViewModel so the chosen filter survives
+    // navigation away from Decode and back (the screen is recreated by the
+    // tab switch, which would otherwise reset a local rememberSaveable).
     val filterOptions = listOf("All", "CQ Calls", "CQ POTA", "New DXCC", "Needed", "For Me")
-    var selectedFilter by rememberSaveable { mutableStateOf("All") }
+    val selectedFilter by mainViewModel.decodeFilter.observeAsState("All")
 
     // Keep the POTA spots cache warm while the user is browsing decodes so the
     // CQ POTA filter and the green POTA pill on spotted activators work even
@@ -155,7 +157,7 @@ fun DecodeScreen(
         val present = (messageList ?: arrayListOf())
             .any { it.callsignFrom.equals(cs, ignoreCase = true) }
         if (!present) return@LaunchedEffect          // wait until the station is in the list
-        selectedFilter = "All"
+        mainViewModel.decodeFilter.postValue("All")
         mainViewModel.qsoSheetCallsign.postValue(cs)
         mainViewModel.qsoSheetMinimized.postValue(false)
         mainViewModel.mutablePreselectCallsign.postValue(null)   // consume (allow re-trigger)
@@ -163,6 +165,11 @@ fun DecodeScreen(
 
     // Compact mode — persisted via GeneralVariables.simpleCallItemMode / DB key "msgMode"
     var compactMode by rememberSaveable { mutableStateOf(GeneralVariables.simpleCallItemMode) }
+
+    // Clear-every-cycle mode — when on, the decode list is wiped at the start of
+    // each cycle so it only shows the current slot. Persisted via
+    // GeneralVariables.clearDecodesEveryCycle / DB key "clearDecodesEveryCycle".
+    var clearEachCycle by rememberSaveable { mutableStateOf(GeneralVariables.clearDecodesEveryCycle) }
 
     // Format UTC time for the subtitle
     val utcString = if (utcTime > 0L) {
@@ -186,6 +193,19 @@ fun DecodeScreen(
                     )
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            clearEachCycle = !clearEachCycle
+                            GeneralVariables.clearDecodesEveryCycle = clearEachCycle
+                            mainViewModel.databaseOpr.writeConfig(
+                                "clearDecodesEveryCycle", if (clearEachCycle) "1" else "0", null,
+                            )
+                        },
+                    ) {
+                        radio.ks3ckc.ft8us.ui.components.FT8USIcons.AutoClear(
+                            color = if (clearEachCycle) Accent else TextMuted,
+                        )
+                    }
                     IconButton(
                         onClick = {
                             compactMode = !compactMode
@@ -215,13 +235,14 @@ fun DecodeScreen(
             // Filter chips. FilterChips renders each option string AND passes it
             // back through onSelected, so we feed it localized labels for display
             // but translate the tapped label back to its stable English key before
-            // storing it in selectedFilter (which the filter logic switches on).
+            // writing it to mainViewModel.decodeFilter, which selectedFilter
+            // observes and the filter logic switches on.
             val localizedLabels = filterOptions.map { filterLabel(it) }
             val labelToKey = filterOptions.indices.associate { localizedLabels[it] to filterOptions[it] }
             FilterChips(
                 options = localizedLabels,
                 selected = filterLabel(selectedFilter),
-                onSelected = { label -> selectedFilter = labelToKey[label] ?: selectedFilter },
+                onSelected = { label -> mainViewModel.decodeFilter.postValue(labelToKey[label] ?: selectedFilter) },
                 modifier = Modifier.padding(bottom = 8.dp),
             )
 

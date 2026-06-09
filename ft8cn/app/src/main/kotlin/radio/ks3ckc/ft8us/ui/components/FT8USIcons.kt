@@ -338,6 +338,31 @@ object FT8USIcons {
         }
     }
 
+    /** Upward arrow — the TX time-slot button (we key up / transmit). */
+    @Composable
+    fun ArrowUp(
+        modifier: Modifier = Modifier,
+        color: Color = Color.Unspecified,
+        size: Dp = 22.dp,
+        strokeWidth: Float = 1.6f,
+    ) {
+        val tint = if (color == Color.Unspecified) androidx.compose.material3.MaterialTheme.colorScheme.onSurface else color
+        Canvas(modifier = modifier.then(Modifier.sizeOf(size))) {
+            val s = this.size.width / 24f
+            val stroke = strokeStyle(strokeWidth * s)
+            // Shaft
+            drawLine(tint, Offset(12f * s, 19f * s), Offset(12f * s, 5f * s),
+                strokeWidth * s, StrokeCap.Round)
+            // Head
+            val head = Path().apply {
+                moveTo(6f * s, 11f * s)
+                lineTo(12f * s, 5f * s)
+                lineTo(18f * s, 11f * s)
+            }
+            drawPath(head, tint, style = stroke)
+        }
+    }
+
     /** Three tightly-spaced horizontal lines — switch to compact decode list. */
     @Composable
     fun ViewCompact(
@@ -371,6 +396,37 @@ object FT8USIcons {
             drawLine(tint, Offset(4f * s, 5f * s), Offset(20f * s, 5f * s), stroke.width, StrokeCap.Round)
             drawLine(tint, Offset(4f * s, 12f * s), Offset(20f * s, 12f * s), stroke.width, StrokeCap.Round)
             drawLine(tint, Offset(4f * s, 19f * s), Offset(20f * s, 19f * s), stroke.width, StrokeCap.Round)
+        }
+    }
+
+    /**
+     * Circular arrow — toggles "clear the decode list every cycle". A near-full
+     * loop with an arrowhead conveys the per-slot refresh; tint with [Accent]
+     * when the mode is on, [TextMuted] when off.
+     */
+    @Composable
+    fun AutoClear(
+        modifier: Modifier = Modifier,
+        color: Color = Color.Unspecified,
+        size: Dp = 22.dp,
+        strokeWidth: Float = 1.6f,
+    ) {
+        val tint = if (color == Color.Unspecified) androidx.compose.material3.MaterialTheme.colorScheme.onSurface else color
+        Canvas(modifier = modifier.then(Modifier.sizeOf(size))) {
+            val s = this.size.width / 24f
+            val stroke = strokeStyle(strokeWidth * s)
+            // Loop with a gap at the top-right where the arrowhead sits.
+            drawArc(
+                tint, -60f, 300f, false,
+                Offset(5f * s, 5f * s), Size(14f * s, 14f * s), style = stroke,
+            )
+            // Arrowhead at the leading end of the arc (top-right), pointing tangentially.
+            val head = Path().apply {
+                moveTo(11.8f * s, 5.2f * s)
+                lineTo(15.5f * s, 5.6f * s)
+                lineTo(15.0f * s, 9.4f * s)
+            }
+            drawPath(head, tint, style = stroke)
         }
     }
 

@@ -87,7 +87,7 @@ object PskReporterClient {
         val url = "$baseUrl?senderCallsign=${urlEncode(callUpper)}" +
             "&flowStartSeconds=-$secondsBack" +
             "&rronly=1" +
-            "&mode=FT8" +
+            "&mode=${GeneralVariables.currentMode().displayName}" +
             "&appcontact=${urlEncode(APP_CONTACT)}"
         log("fetch start call=$callUpper secondsBack=$secondsBack")
 

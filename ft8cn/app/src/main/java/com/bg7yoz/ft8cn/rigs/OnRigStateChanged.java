@@ -11,4 +11,10 @@ public interface OnRigStateChanged {
     void onPttChanged(boolean isOn);
     void onFreqChanged(long freq);
     void onRunError(String message);
+
+    /**
+     * Called when a connection attempt has started but not yet succeeded or
+     * failed. Default no-op so existing implementers don't need to change.
+     */
+    default void onConnecting() {}
 }

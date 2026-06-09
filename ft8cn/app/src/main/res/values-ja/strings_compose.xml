@@ -215,6 +215,8 @@
     <string name="pota_self_spot_failed">セルフスポット失敗 — ログを確認してください</string>
     <string name="pota_active_park">アクティブ — %1$s</string>
     <string name="pota_qsos">QSO</string>
+    <string name="pota_contacts_map">交信マップ</string>
+    <string name="pota_back">戻る</string>
     <string name="pota_valid_activation">有効なアクティベーション</string>
     <string name="pota_to_valid">有効まであと %1$d</string>
     <string name="pota_elapsed">経過時間</string>
@@ -458,6 +460,16 @@
 
     <string name="tx_transmitting">送信中</string>
     <string name="tx_listening">受信中</string>
+    <string name="tx_hunt">ハント</string>
+    <string name="tx_call_cq">CQを出す</string>
+    <string name="tx_stop">停止</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT接続済み — タップで再接続</string>
+    <string name="cat_status_connecting">CAT接続中…</string>
+    <string name="cat_status_disconnected">CAT未接続 — タップで接続</string>
+    <string name="cat_status_error">CAT接続エラー — タップで再試行</string>
     <string name="qsopanel_log_action">LOG</string>
     <string name="qsopanel_queue">キュー</string>
     <string name="swr_lockout_title">送信停止 — 高SWR検出 (%1$s)</string>

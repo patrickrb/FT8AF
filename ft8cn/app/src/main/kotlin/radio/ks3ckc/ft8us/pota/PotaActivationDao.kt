@@ -85,7 +85,7 @@ internal object PotaActivationDao {
         val cursor = db().rawQuery(
             """
             SELECT id, call, gridsquare, band, mode, rst_sent, rst_rcvd,
-                   qso_date, time_on, sig, sig_info
+                   qso_date, time_on, sig, sig_info, my_gridsquare
               FROM QSLTable
              WHERE my_sig = 'POTA' AND my_sig_info = ?
                AND (qso_date || time_on) >= ?
@@ -110,6 +110,7 @@ internal object PotaActivationDao {
                         timeOn = c.getString(8) ?: "",
                         sig = c.getString(9),
                         sigInfo = c.getString(10),
+                        myGrid = c.getString(11) ?: "",
                     ),
                 )
             }
