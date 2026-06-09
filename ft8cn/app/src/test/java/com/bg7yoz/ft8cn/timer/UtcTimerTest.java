@@ -97,6 +97,91 @@ public class UtcTimerTest {
         assertThat(UtcTimer.sequential(29_999L)).isEqualTo(1);
     }
 
+    /** The legacy minute-anchored predicate, kept here to prove equivalence for FT8/FT4. */
+    private static boolean legacyBoundary(long utc, int offsetMs, int sec) {
+        return (((utc - offsetMs) / 100) % 600) % sec == 0;
+    }
+
+    @Test
+    public void isCycleBoundary_ft8MatchesLegacyMinuteAnchoredFormula() {
+        // 150 tenths (15s) divides 600, so the new epoch-anchored test must agree with the
+        // old minute-anchored one at every 100ms tick across a full minute.
+        for (long ms = 0; ms < 60_000; ms += 100) {
+            assertThat(UtcTimer.isCycleBoundary(ms, 0, 150))
+                    .isEqualTo(legacyBoundary(ms, 0, 150));
+        }
+    }
+
+    @Test
+    public void isCycleBoundary_ft4MatchesLegacyMinuteAnchoredFormula() {
+        // 75 tenths (7.5s) also divides 600 — behaviour is unchanged for FT4.
+        for (long ms = 0; ms < 60_000; ms += 100) {
+            assertThat(UtcTimer.isCycleBoundary(ms, 0, 75))
+                    .isEqualTo(legacyBoundary(ms, 0, 75));
+        }
+    }
+
+    @Test
+    public void isCycleBoundary_ft8FiresOnAbsoluteSlotGrid() {
+        assertThat(UtcTimer.isCycleBoundary(0L, 0, 150)).isTrue();
+        assertThat(UtcTimer.isCycleBoundary(15_000L, 0, 150)).isTrue();
+        assertThat(UtcTimer.isCycleBoundary(7_500L, 0, 150)).isFalse();
+        // Real-world instant: a boundary iff systemTime % 15000 == 0.
+        assertThat(UtcTimer.isCycleBoundary(T_2023, 0, 150))
+                .isEqualTo(T_2023 % 15_000 == 0);
+    }
+
+    @Test
+    public void isCycleBoundary_ft2FiresOnAbsolute3point8sGrid() {
+        // FT2 (38 tenths) does NOT divide 600, so this is where old and new diverge.
+        // The new predicate fires exactly on multiples of 3.8s from the epoch...
+        assertThat(UtcTimer.isCycleBoundary(0L, 0, 38)).isTrue();
+        assertThat(UtcTimer.isCycleBoundary(3_800L, 0, 38)).isTrue();
+        assertThat(UtcTimer.isCycleBoundary(7_600L, 0, 38)).isTrue();
+        assertThat(UtcTimer.isCycleBoundary(3_700L, 0, 38)).isFalse();
+        assertThat(UtcTimer.isCycleBoundary(3_900L, 0, 38)).isFalse();
+    }
+
+    @Test
+    public void isCycleBoundary_ft2EveryFireOpensASlotSoLateStartNeverClips() {
+        // The transmit late-start math clips leading audio by (systemTime % slotMillis)
+        // beyond the slack. The FT2 regression was that the timer fired when
+        // systemTime % 3800 was large (up to ~3.0s), clipping the leading Costas sync.
+        // With the epoch-anchored predicate, every fire lands within one 100ms tick of a
+        // real 3800ms slot boundary, so msIntoCycle is always < 100 and nothing is clipped.
+        int slotMillis = 3_800;
+        int fires = 0;
+        for (long ms = 0; ms < 600_000; ms += 100) { // 10 minutes of ticks
+            if (UtcTimer.isCycleBoundary(ms, 0, 38)) {
+                fires++;
+                long msIntoCycle = ms % slotMillis;
+                assertThat(msIntoCycle).isLessThan(100L);
+            }
+        }
+        // Sanity: ~ one fire per 3.8s over 10 minutes.
+        assertThat(fires).isEqualTo(600_000 / slotMillis + 1);
+    }
+
+    @Test
+    public void isCycleBoundary_legacyFormulaWouldHaveClippedFt2() {
+        // Guard the regression: the OLD predicate fired off the absolute slot grid for
+        // FT2, landing where systemTime % 3800 was large — that is the clip that broke TX.
+        boolean sawLargeOffset = false;
+        for (long ms = 0; ms < 600_000; ms += 100) {
+            if (legacyBoundary(ms, 0, 38) && (ms % 3_800) >= 1_280) {
+                sawLargeOffset = true; // >= FT2 audio slack -> leading audio clipped
+                break;
+            }
+        }
+        assertThat(sawLargeOffset).isTrue();
+    }
+
+    @Test
+    public void isCycleBoundary_nonPositivePeriodNeverFires() {
+        assertThat(UtcTimer.isCycleBoundary(0L, 0, 0)).isFalse();
+        assertThat(UtcTimer.isCycleBoundary(15_000L, 0, -5)).isFalse();
+    }
+
     @Test
     public void getTimeStr_wrapsHoursAtMidnight() {
         // 24h exactly -> back to 00:00:00 (hour is modulo 24).
