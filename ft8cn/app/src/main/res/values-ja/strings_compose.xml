@@ -460,6 +460,9 @@
 
     <string name="tx_transmitting">送信中</string>
     <string name="tx_listening">受信中</string>
+    <string name="tx_hunt">ハント</string>
+    <string name="tx_call_cq">CQを出す</string>
+    <string name="tx_stop">停止</string>
 
     <!-- ===== CAT status chip ===== -->
     <string name="cat_status_chip_label">CAT</string>

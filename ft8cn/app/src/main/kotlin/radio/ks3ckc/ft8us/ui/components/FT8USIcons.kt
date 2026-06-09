@@ -338,6 +338,31 @@ object FT8USIcons {
         }
     }
 
+    /** Upward arrow — the TX time-slot button (we key up / transmit). */
+    @Composable
+    fun ArrowUp(
+        modifier: Modifier = Modifier,
+        color: Color = Color.Unspecified,
+        size: Dp = 22.dp,
+        strokeWidth: Float = 1.6f,
+    ) {
+        val tint = if (color == Color.Unspecified) androidx.compose.material3.MaterialTheme.colorScheme.onSurface else color
+        Canvas(modifier = modifier.then(Modifier.sizeOf(size))) {
+            val s = this.size.width / 24f
+            val stroke = strokeStyle(strokeWidth * s)
+            // Shaft
+            drawLine(tint, Offset(12f * s, 19f * s), Offset(12f * s, 5f * s),
+                strokeWidth * s, StrokeCap.Round)
+            // Head
+            val head = Path().apply {
+                moveTo(6f * s, 11f * s)
+                lineTo(12f * s, 5f * s)
+                lineTo(18f * s, 11f * s)
+            }
+            drawPath(head, tint, style = stroke)
+        }
+    }
+
     /** Three tightly-spaced horizontal lines — switch to compact decode list. */
     @Composable
     fun ViewCompact(

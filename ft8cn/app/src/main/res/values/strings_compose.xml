@@ -108,6 +108,9 @@
     <!-- ===== TX strip ===== -->
     <string name="tx_transmitting">TRANSMITTING</string>
     <string name="tx_listening">LISTENING</string>
+    <string name="tx_hunt">Hunt</string>
+    <string name="tx_call_cq">Call CQ</string>
+    <string name="tx_stop">Stop</string>
 
     <!-- ===== CAT status chip ===== -->
     <string name="cat_status_chip_label">CAT</string>
