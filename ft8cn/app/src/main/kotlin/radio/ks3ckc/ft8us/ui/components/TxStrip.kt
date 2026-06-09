@@ -6,13 +6,14 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -36,7 +37,30 @@ import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.rigs.CatConnectionState
 import radio.ks3ckc.ft8us.theme.*
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * The enabled/disabled state of the two mutually-exclusive action buttons (HUNT and
+ * CQ/STOP), derived purely from the activation + hunt flags so the rule can be unit-tested
+ * without Compose.
+ *
+ * HUNT (auto-answer the stations calling CQ) and running your own CQ can't both be on:
+ *  - While a CQ/QSO is active ([isActivated]) the HUNT toggle is locked off.
+ *  - While HUNT is armed (and no QSO yet) the CQ button is locked off.
+ * Once activated, the CQ button becomes the STOP button.
+ */
+internal data class TxStripActionState(
+    val huntDisabled: Boolean,
+    val huntActive: Boolean,
+    val cqDisabled: Boolean,
+    val cqIsStop: Boolean,
+)
+
+internal fun txStripActionState(isActivated: Boolean, huntEnabled: Boolean) = TxStripActionState(
+    huntDisabled = isActivated && !huntEnabled,
+    huntActive = huntEnabled,
+    cqDisabled = huntEnabled && !isActivated,
+    cqIsStop = isActivated,
+)
+
 @Composable
 fun TxStrip(
     isTransmitting: Boolean,
@@ -72,16 +96,17 @@ fun TxStrip(
         Brush.horizontalGradient(listOf(BgSurface, BgSurface))
     }
 
-    // Seven controls live here: status, mode, frequency, DX, HUNT, CQ/STOP, and TX slot.
-    // They don't all fit on one row in portrait, so use a FlowRow that wraps overflow onto
-    // a second line instead of pushing CQ/TX off the right edge.
-    // Each item is vertically centered within its wrapped line via Modifier.align(Alignment.CenterVertically).
-    FlowRow(
+    val actions = txStripActionState(isActivated, huntEnabled)
+
+    // Two stacked rows (vs. the old single cramped FlowRow): an info line with the small
+    // status/mode/frequency/DX chips, and a row of three large primary buttons
+    // (HUNT · CQ/STOP · TX slot) sized like the design prototype so the main action is a
+    // comfortable tap target on a phone.
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .background(bgColor)
             .drawBehind {
-                // Top border
                 drawLine(
                     color = Border,
                     start = androidx.compose.ui.geometry.Offset(0f, 0f),
@@ -89,229 +114,268 @@ fun TxStrip(
                     strokeWidth = 1f,
                 )
             }
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        // Status: expand/collapse chevron (when QSO active) + pulse dot + state text
+        // ---- Info row: status (left) · mode / frequency / DX chips (right) ----
         Row(
-            modifier = Modifier.align(Alignment.CenterVertically),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            // Expand/collapse chevron — only shown when QSO is active
-            if (isActivated) {
-                Box(
-                    modifier = Modifier
-                        .size(20.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable { onToggleExpand() }
-                        .rotate(if (expanded) 0f else 180f),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    FT8USIcons.ChevronDown(
-                        size = 14.dp,
-                        color = TextMuted,
-                        strokeWidth = 2f,
-                    )
+            // Left: expand chevron (when QSO active) + pulse dot + state + CAT chip.
+            // weight(1f, fill=false) lets the status label ellipsize before it can shove
+            // the right-hand chips off screen on a narrow device.
+            Row(
+                modifier = Modifier.weight(1f, fill = false),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (isActivated) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable { onToggleExpand() }
+                            .rotate(if (expanded) 0f else 180f),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        FT8USIcons.ChevronDown(size = 14.dp, color = TextMuted, strokeWidth = 2f)
+                    }
+                }
+                PulseDot(color = if (isTransmitting) Accent else Signal)
+                Text(
+                    text = if (isTransmitting) stringResource(R.string.tx_transmitting)
+                    else stringResource(R.string.tx_listening),
+                    color = TextPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = GeistMonoFamily,
+                    letterSpacing = 0.02.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (showCatChip) {
+                    CatStatusChip(state = catState, onReconnect = onReconnectCat)
                 }
             }
-            PulseDot(color = if (isTransmitting) Accent else Signal)
-            Text(
-                text = if (isTransmitting) stringResource(R.string.tx_transmitting)
-                else stringResource(R.string.tx_listening),
-                color = TextPrimary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = GeistMonoFamily,
-                letterSpacing = 0.02.sp,
-                // Keep the status on a single line so a long (localized) label
-                // can't balloon this item to two lines inside the FlowRow.
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            // CAT connection status — tap to reconnect (Bluetooth often needs a
-            // second attempt). Hidden for VOX / audio-only setups.
-            if (showCatChip) {
-                CatStatusChip(state = catState, onReconnect = onReconnectCat)
+
+            // Right: mode pill, frequency/band pill, DX pill.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                // Mode pill (FT8/FT4/FT2) — taps cycle the operating mode. Disabled
+                // mid-transmit so we never switch the cycle out from under a live TX.
+                TxChip(
+                    label = modeName,
+                    background = if (modeSwitchEnabled) Accent.copy(alpha = 0.18f) else BgSurface3,
+                    textColor = if (modeSwitchEnabled) Accent else TextFaint,
+                    bold = true,
+                    enabled = modeSwitchEnabled,
+                    onClick = onCycleMode,
+                )
+
+                // Frequency / band pill — opens the frequency picker.
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(BgSurface3)
+                        .clickable { onOpenFrequencyPicker() }
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = frequencyLabel,
+                        color = TextPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = GeistMonoFamily,
+                        letterSpacing = 0.02.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                    FT8USIcons.ChevronDown(size = 12.dp, color = TextMuted, strokeWidth = 2f)
+                }
+
+                // DX (DXpedition Hound) toggle pill. On = working a Fox (call high,
+                // auto-QSY when answered). Mutually exclusive with HUNT/CQ.
+                TxChip(
+                    label = "DX",
+                    background = if (dxEnabled) Accent.copy(alpha = 0.18f) else BgSurface3,
+                    textColor = if (dxEnabled) Accent else TextMuted,
+                    bold = false,
+                    enabled = true,
+                    onClick = onToggleDx,
+                )
             }
         }
 
-        // Mode pill (FT8/FT4) — taps cycle the operating mode. Disabled mid-transmit
-        // so we never switch the cycle out from under an in-progress TX.
-        val modeBg = if (modeSwitchEnabled) Accent.copy(alpha = 0.18f) else BgSurface3
-        val modeColor = if (modeSwitchEnabled) Accent else TextFaint
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterVertically)
-                .clip(RoundedCornerShape(6.dp))
-                .background(modeBg)
-                .clickable(enabled = modeSwitchEnabled) { onCycleMode() }
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = modeName,
-                color = modeColor,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = GeistMonoFamily,
-                letterSpacing = 0.02.sp,
-                maxLines = 1,
-                softWrap = false,
-            )
-        }
-
-        // Frequency / band pill — opens the frequency picker
+        // ---- Action row: HUNT · CQ/STOP · TX slot ----
         Row(
-            modifier = Modifier
-                .align(Alignment.CenterVertically)
-                .clip(RoundedCornerShape(8.dp))
-                .background(BgSurface3)
-                .clickable { onOpenFrequencyPicker() }
-                .padding(horizontal = 10.dp, vertical = 7.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(
-                text = frequencyLabel,
-                color = TextPrimary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = GeistMonoFamily,
-                letterSpacing = 0.02.sp,
-                maxLines = 1,
-                softWrap = false,
-            )
-            FT8USIcons.ChevronDown(
-                size = 12.dp,
-                color = TextMuted,
-                strokeWidth = 2f,
-            )
-        }
+            // HUNT — stacked icon + label. Locked off during an active CQ/QSO.
+            StackedActionButton(
+                modifier = Modifier.weight(1f),
+                label = "Hunt",
+                background = when {
+                    actions.huntDisabled -> BgSurface3.copy(alpha = 0.4f)
+                    actions.huntActive -> Signal.copy(alpha = 0.18f)
+                    else -> BgSurface3
+                },
+                contentColor = when {
+                    actions.huntDisabled -> TextMuted.copy(alpha = 0.4f)
+                    actions.huntActive -> Signal
+                    else -> TextMuted
+                },
+                borderColor = if (actions.huntActive) Signal.copy(alpha = 0.5f) else Border,
+                enabled = !actions.huntDisabled,
+                onClick = onToggleHunt,
+            ) { color -> FT8USIcons.Target(size = 18.dp, color = color, strokeWidth = 1.8f) }
 
-        // DX (DXpedition Hound) toggle pill. On = working a Fox/DXpedition
-        // (call high, auto-QSY when answered). Mutually exclusive with HUNT/CQ.
-        val dxBg = if (dxEnabled) Accent.copy(alpha = 0.18f) else BgSurface3
-        val dxColor = if (dxEnabled) Accent else TextMuted
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterVertically)
-                .clip(RoundedCornerShape(6.dp))
-                .background(dxBg)
-                .clickable { onToggleDx() }
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "DX",
-                color = dxColor,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = GeistMonoFamily,
-                letterSpacing = 0.02.sp,
-                maxLines = 1,
-                softWrap = false,
-            )
-        }
+            // CQ / STOP — the primary action. Filled amber to call CQ, red to stop.
+            // Locked off while HUNT is armed (and no QSO yet).
+            val cqIsStop = actions.cqIsStop
+            PrimaryActionButton(
+                modifier = Modifier.weight(1.7f),
+                label = if (cqIsStop) "Stop" else "Call CQ",
+                background = when {
+                    cqIsStop -> StatusBad
+                    actions.cqDisabled -> Accent.copy(alpha = 0.35f)
+                    else -> Accent
+                },
+                contentColor = if (cqIsStop) Color.White else BgApp,
+                enabled = !actions.cqDisabled,
+                onClick = { if (cqIsStop) onStop() else onCallCQ() },
+            ) { color ->
+                if (cqIsStop) {
+                    FT8USIcons.Close(size = 18.dp, color = color, strokeWidth = 2f)
+                } else {
+                    FT8USIcons.Transmit(size = 18.dp, color = color, strokeWidth = 1.8f)
+                }
+            }
 
-        // HUNT (auto-answer CQ) toggle pill. On = proactively call stations
-        // calling CQ; off = run CQ. Mutually exclusive with CQ: disabled while
-        // you're actively running CQ so the two modes never overlap.
-        val huntDisabled = isActivated && !huntEnabled
-        val huntBg = when {
-            huntDisabled -> BgSurface3.copy(alpha = 0.4f)
-            huntEnabled -> Signal.copy(alpha = 0.18f)
-            else -> BgSurface3
+            // TX time-slot toggle — stacked arrow + TX1/TX2.
+            StackedActionButton(
+                modifier = Modifier.weight(1f),
+                label = if (txSlot == 0) "TX1" else "TX2",
+                background = BgSurface3,
+                contentColor = TextMuted,
+                borderColor = Border,
+                enabled = true,
+                onClick = onToggleSlot,
+            ) { color -> FT8USIcons.ArrowUp(size = 18.dp, color = color, strokeWidth = 1.8f) }
         }
-        val huntColor = when {
-            huntDisabled -> TextMuted.copy(alpha = 0.4f)
-            huntEnabled -> Signal
-            else -> TextMuted
-        }
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterVertically)
-                .clip(RoundedCornerShape(6.dp))
-                .background(huntBg)
-                // Disable via clickable(enabled=…) rather than dropping the modifier, so
-                // the pill keeps its button semantics and TalkBack still announces it as a
-                // disabled control instead of it vanishing from accessibility entirely.
-                .clickable(enabled = !huntDisabled) { onToggleHunt() }
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "HUNT",
-                color = huntColor,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = GeistMonoFamily,
-                letterSpacing = 0.02.sp,
-                maxLines = 1,
-                softWrap = false,
-            )
-        }
+    }
+}
 
-        // CQ / Stop pill button. Mutually exclusive with HUNT: disabled while
-        // HUNT mode is on, so you can't run CQ and hunt at the same time.
-        val cqDisabled = huntEnabled && !isActivated
-        val buttonBg = when {
-            isActivated -> StatusBad.copy(alpha = 0.18f)
-            cqDisabled -> AccentSoft.copy(alpha = 0.4f)
-            else -> AccentSoft
-        }
-        val buttonTextColor = when {
-            isActivated -> StatusBad
-            cqDisabled -> Accent.copy(alpha = 0.4f)
-            else -> Accent
-        }
-        val buttonLabel = if (isActivated) "STOP" else "CQ"
+/** A small rounded text chip (mode / DX). Keeps button semantics when disabled. */
+@Composable
+private fun TxChip(
+    label: String,
+    background: Color,
+    textColor: Color,
+    bold: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(background)
+            // Disable via clickable(enabled=…) rather than dropping the modifier, so the
+            // chip keeps its button semantics and TalkBack still announces it as a disabled
+            // control instead of vanishing from accessibility entirely.
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = textColor,
+            fontSize = 11.sp,
+            fontWeight = if (bold) FontWeight.Bold else FontWeight.SemiBold,
+            fontFamily = GeistMonoFamily,
+            letterSpacing = 0.02.sp,
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
 
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterVertically)
-                .clip(RoundedCornerShape(8.dp))
-                .background(buttonBg)
-                // Keep button semantics when disabled (see HUNT pill above) so the
-                // CQ/STOP control stays exposed to TalkBack as a disabled button.
-                .clickable(enabled = !cqDisabled) { if (isActivated) onStop() else onCallCQ() }
-                .padding(horizontal = 18.dp, vertical = 9.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = buttonLabel,
-                color = buttonTextColor,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = GeistMonoFamily,
-                letterSpacing = 0.04.sp,
-                maxLines = 1,
-                softWrap = false,
-            )
-        }
+/** A large secondary button with the icon stacked above the label (HUNT, TX slot). */
+@Composable
+private fun StackedActionButton(
+    label: String,
+    background: Color,
+    contentColor: Color,
+    borderColor: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: @Composable (Color) -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .height(54.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(background)
+            .border(1.dp, borderColor, RoundedCornerShape(12.dp))
+            .clickable(enabled = enabled) { onClick() }
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
+    ) {
+        icon(contentColor)
+        Text(
+            text = label,
+            color = contentColor,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = GeistMonoFamily,
+            letterSpacing = 0.02.sp,
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
 
-        // TX slot toggle pill
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterVertically)
-                .clip(RoundedCornerShape(6.dp))
-                .background(BgSurface3)
-                .clickable { onToggleSlot() }
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = if (txSlot == 0) "TX1" else "TX2",
-                color = TextMuted,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = GeistMonoFamily,
-                letterSpacing = 0.02.sp,
-                maxLines = 1,
-                softWrap = false,
-            )
-        }
+/** The large primary button with the icon beside the label (CQ / STOP). */
+@Composable
+private fun PrimaryActionButton(
+    label: String,
+    background: Color,
+    contentColor: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: @Composable (Color) -> Unit,
+) {
+    Row(
+        modifier = modifier
+            .height(54.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(background)
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        icon(contentColor)
+        Text(
+            text = label,
+            color = contentColor,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = GeistMonoFamily,
+            letterSpacing = 0.04.sp,
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 
