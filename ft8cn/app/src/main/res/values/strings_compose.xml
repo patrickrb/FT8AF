@@ -349,6 +349,18 @@
     <string name="settings_cat_logging">Logging &amp; Awards</string>
     <string name="settings_cat_advanced">Advanced</string>
     <string name="settings_cat_about">About</string>
+    <string name="settings_cat_time_sync">Time Sync</string>
+    <string name="settings_cat_time_sync_desc">Manual clock correction for offline operating</string>
+
+    <!-- ===== Settings: Time Sync (manual clock correction) ===== -->
+    <string name="settings_time_correction_section">Manual Correction</string>
+    <string name="settings_time_current_label">Current correction</string>
+    <string name="settings_time_correction_reset">Reset to 0</string>
+    <string name="settings_time_correction_desc">Nudge the app clock when you have no internet to sync. FT8 needs UTC within about 1 second. Adjust until the DT column on decoded stations centers near 0.</string>
+    <string name="settings_time_suggest_section">Suggested from decodes</string>
+    <string name="settings_time_suggest_none">No decodes yet — start receiving to get a suggestion.</string>
+    <string name="settings_time_suggest_label">Recent average DT: %1$s</string>
+    <string name="settings_time_suggest_apply">Apply suggested correction</string>
 
     <!-- ===== Settings: operator identity ===== -->
     <string name="settings_auto_update_grid">Auto-update Grid (GPS)</string>

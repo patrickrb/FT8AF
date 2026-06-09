@@ -2307,6 +2307,20 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                         GeneralVariables.transmitDelay = FT8Common.FT8_TRANSMIT_DELAY;
                     }
                 }
+                //Manual time correction (ms). Re-applied to UtcTimer.delay at startup so a
+                //field operator's offline clock nudge survives a relaunch. delay is read live
+                //by the running timers, so this takes effect immediately.
+                if (name.equalsIgnoreCase("timeCorrectionMs")) {
+                    int ms;
+                    try {
+                        ms = Integer.parseInt(result.trim());
+                    } catch (NumberFormatException e) {
+                        ms = 0;
+                    }
+                    ms = Math.max(-2000, Math.min(2000, ms));
+                    GeneralVariables.manualTimeCorrectionMs = ms;
+                    UtcTimer.delay = ms;
+                }
 
                 if (name.equalsIgnoreCase("civ")) {
                     GeneralVariables.civAddress = result.equals("") ? 0xa4 : Integer.parseInt(result, 16);
