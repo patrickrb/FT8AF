@@ -40,9 +40,35 @@ public class ModeProfileTest {
     }
 
     @Test
+    public void ft2_descriptorMatchesSpec() {
+        ModeProfile m = ModeProfile.FT2;
+        assertThat(m.id).isEqualTo(FT8Common.FT2_MODE);
+        assertThat(m.displayName).isEqualTo("FT2");
+        assertThat(m.slotMillis).isEqualTo(3_800);
+        assertThat(m.slotTenths).isEqualTo(38);
+        // FT2 reuses FT4's 105-symbol layout (same encoder/tones).
+        assertThat(m.numTones).isEqualTo(105);
+        // FT2 decodes as FT4-family (isFt8 false), but receives on the from-source decoder.
+        assertThat(m.isFt8).isFalse();
+        // Half FT4's symbol period -> double baud.
+        assertThat(m.symbolPeriod).isEqualTo(0.024f);
+        // 105 * 0.024 * 1000 = 2520ms audio; slack = 3800 - 2520.
+        assertThat(m.audioMillis).isEqualTo(2_520);
+        assertThat(m.audioSlackMillis).isEqualTo(1_280);
+    }
+
+    @Test
+    public void usesFt2Decoder_onlyTrueForFt2() {
+        assertThat(ModeProfile.FT8.usesFt2Decoder()).isFalse();
+        assertThat(ModeProfile.FT4.usesFt2Decoder()).isFalse();
+        assertThat(ModeProfile.FT2.usesFt2Decoder()).isTrue();
+    }
+
+    @Test
     public void fromId_resolvesKnownIds() {
         assertThat(ModeProfile.fromId(FT8Common.FT8_MODE)).isEqualTo(ModeProfile.FT8);
         assertThat(ModeProfile.fromId(FT8Common.FT4_MODE)).isEqualTo(ModeProfile.FT4);
+        assertThat(ModeProfile.fromId(FT8Common.FT2_MODE)).isEqualTo(ModeProfile.FT2);
     }
 
     @Test

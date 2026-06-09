@@ -17,7 +17,12 @@ import com.bg7yoz.ft8cn.ft8transmit.GenerateFT8;
 public enum ModeProfile {
     // id, name, slotMs, slotTenths, earlyDecodeMs, symPeriod, symBt, numTones, isFt8
     FT8(FT8Common.FT8_MODE, "FT8", 15000, 150, 13500, 0.160f, 2.0f, 79, true),
-    FT4(FT8Common.FT4_MODE, "FT4", 7500, 75, 6500, 0.048f, 1.0f, 105, false);
+    FT4(FT8Common.FT4_MODE, "FT4", 7500, 75, 6500, 0.048f, 1.0f, 105, false),
+    // FT2 reuses FT4's tone layout (4-GFSK, 4 Costas, 105 symbols, same LDPC/encoder) at
+    // double the baud: 0.024s symbol period -> ~2.52s audio, 3.8s slot. isFt8=false so
+    // encode() dispatches to the shared ft4Encode; decode routes to the from-source FT2
+    // decoder (see usesFt2Decoder) since the prebuilt has no FT2 protocol.
+    FT2(FT8Common.FT2_MODE, "FT2", 3800, 38, 3000, 0.024f, 1.0f, 105, false);
 
     /** Mode id, matching the {@code FT8Common.*_MODE} ints (also stored in config + Ft8Message). */
     public final int id;
@@ -73,6 +78,16 @@ public enum ModeProfile {
             }
         }
         return FT8;
+    }
+
+    /**
+     * Whether receive uses the from-source parallel FT2 decoder (compiled into
+     * libft8af_usb.so) rather than the prebuilt libft8cn.so. Only FT2 does: the closed
+     * prebuilt's decoder protocol enum knows FT8/FT4 only, so FT2's 0.024s symbol period
+     * is decoded by our own ft8_lib build. FT8/FT4 stay on the prebuilt (unchanged).
+     */
+    public boolean usesFt2Decoder() {
+        return id == FT8Common.FT2_MODE;
     }
 
     /**
