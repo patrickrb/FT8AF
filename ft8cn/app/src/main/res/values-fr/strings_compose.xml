@@ -215,6 +215,8 @@
     <string name="pota_self_spot_failed">Échec de l\'auto-spot — consultez le journal</string>
     <string name="pota_active_park">ACTIF — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_contacts_map">Carte des contacts</string>
+    <string name="pota_back">Retour</string>
     <string name="pota_valid_activation">activation valide</string>
     <string name="pota_to_valid">%1$d pour valider</string>
     <string name="pota_elapsed">Écoulé</string>

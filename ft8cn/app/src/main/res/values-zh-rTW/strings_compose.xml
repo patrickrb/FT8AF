@@ -215,6 +215,8 @@
     <string name="pota_self_spot_failed">自我點位失敗 — 請查看日誌</string>
     <string name="pota_active_park">啟動中 — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_contacts_map">通聯地圖</string>
+    <string name="pota_back">返回</string>
     <string name="pota_valid_activation">有效啟動</string>
     <string name="pota_to_valid">還差 %1$d 筆即有效</string>
     <string name="pota_elapsed">已經過</string>

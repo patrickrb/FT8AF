@@ -239,6 +239,8 @@
     <string name="pota_self_spot_failed">Self-spot failed — check log</string>
     <string name="pota_active_park">ACTIVE — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_contacts_map">Contacts map</string>
+    <string name="pota_back">Back</string>
     <string name="pota_valid_activation">valid activation</string>
     <string name="pota_to_valid">%1$d to valid</string>
     <string name="pota_elapsed">Elapsed</string>
