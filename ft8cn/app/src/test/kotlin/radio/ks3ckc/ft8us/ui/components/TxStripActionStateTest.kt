@@ -53,21 +53,37 @@ class TxStripActionStateTest {
     }
 
     @Test
-    fun `CQ and HUNT are never both enabled at once when idle-armed or active`() {
-        // The whole point of the rule: you can't be running CQ and hunting simultaneously.
+    fun `full truth table — every (isActivated, huntEnabled) combination`() {
+        // Exhaustive, both-directions assertion of the whole 2x2 space, so a regression in
+        // any field of any cell fails here. Tuple order:
+        //   isActivated, huntEnabled -> huntDisabled, huntActive, cqDisabled, cqIsStop
+        val expected = mapOf(
+            (false to false) to TxStripActionState(
+                huntDisabled = false, huntActive = false, cqDisabled = false, cqIsStop = false),
+            (false to true) to TxStripActionState(
+                huntDisabled = false, huntActive = true, cqDisabled = true, cqIsStop = false),
+            (true to false) to TxStripActionState(
+                huntDisabled = true, huntActive = false, cqDisabled = false, cqIsStop = true),
+            (true to true) to TxStripActionState(
+                huntDisabled = false, huntActive = true, cqDisabled = false, cqIsStop = true),
+        )
+        for ((input, want) in expected) {
+            val (activated, hunt) = input
+            assertThat(txStripActionState(activated, hunt)).isEqualTo(want)
+        }
+    }
+
+    @Test
+    fun `the two calling modes are mutually exclusive in every cell`() {
+        // The rule's purpose: you can never be set up to run CQ and to hunt at the same
+        // time. "Able to call CQ" = the CQ button is enabled and not already STOP; "hunting"
+        // = HUNT is the active calling mode and not locked. These must never both hold.
         for (activated in listOf(false, true)) {
             for (hunt in listOf(false, true)) {
                 val s = txStripActionState(activated, hunt)
-                val cqEnabled = !s.cqDisabled
-                val huntEnabledForCalling = s.huntActive && !s.huntDisabled
-                // If CQ is being actively run (activated, not stop-disabled) it's exclusive
-                // with hunt being the *calling* mode.
-                if (activated && !hunt) {
-                    assertThat(huntEnabledForCalling).isFalse()
-                }
-                if (!activated && hunt) {
-                    assertThat(cqEnabled).isFalse()
-                }
+                val canCallCq = !s.cqDisabled && !s.cqIsStop
+                val isHunting = s.huntActive && !s.huntDisabled
+                assertThat(canCallCq && isHunting).isFalse()
             }
         }
     }

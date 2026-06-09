@@ -221,7 +221,7 @@ fun TxStrip(
             // HUNT — stacked icon + label. Locked off during an active CQ/QSO.
             StackedActionButton(
                 modifier = Modifier.weight(1f),
-                label = "Hunt",
+                label = stringResource(R.string.tx_hunt),
                 background = when {
                     actions.huntDisabled -> BgSurface3.copy(alpha = 0.4f)
                     actions.huntActive -> Signal.copy(alpha = 0.18f)
@@ -242,7 +242,7 @@ fun TxStrip(
             val cqIsStop = actions.cqIsStop
             PrimaryActionButton(
                 modifier = Modifier.weight(1.7f),
-                label = if (cqIsStop) "Stop" else "Call CQ",
+                label = if (cqIsStop) stringResource(R.string.tx_stop) else stringResource(R.string.tx_call_cq),
                 background = when {
                     cqIsStop -> StatusBad
                     actions.cqDisabled -> Accent.copy(alpha = 0.35f)

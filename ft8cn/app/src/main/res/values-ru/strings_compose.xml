@@ -460,6 +460,9 @@
 
     <string name="tx_transmitting">ПЕРЕДАЧА</string>
     <string name="tx_listening">ПРИЁМ</string>
+    <string name="tx_hunt">Охота</string>
+    <string name="tx_call_cq">Вызов CQ</string>
+    <string name="tx_stop">Стоп</string>
 
     <!-- ===== CAT status chip ===== -->
     <string name="cat_status_chip_label">CAT</string>
