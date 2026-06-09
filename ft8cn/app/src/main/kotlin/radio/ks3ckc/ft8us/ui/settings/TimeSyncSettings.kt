@@ -154,7 +154,7 @@ fun TimeSyncSettings(
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier
-                                .clickable { apply(suggestedCorrectionMs(UtcTimer.delay, dt)) }
+                                .clickable { apply(suggestedCorrectionMs(correctionMs, dt)) }
                                 .padding(vertical = 6.dp),
                         )
                     }
