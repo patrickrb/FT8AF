@@ -215,6 +215,8 @@
     <string name="pota_self_spot_failed">Самоспот не удался — проверьте журнал</string>
     <string name="pota_active_park">АКТИВНА — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_contacts_map">Карта контактов</string>
+    <string name="pota_back">Назад</string>
     <string name="pota_valid_activation">зачётная активация</string>
     <string name="pota_to_valid">ещё %1$d до зачёта</string>
     <string name="pota_elapsed">Прошло</string>

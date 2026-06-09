@@ -3,6 +3,7 @@ package radio.ks3ckc.ft8us.ui.pota
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,10 +24,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -98,12 +99,27 @@ private enum class PotaSubTab(@StringRes val labelRes: Int) {
 @Composable
 fun PotaScreen(mainViewModel: MainViewModel) {
     var subTab by rememberSaveable { mutableStateOf(PotaSubTab.ACTIVATE) }
+    // When non-null, a history entry was tapped: show its detail screen instead
+    // of the tab UI. Plain remember (not saveable) — PotaActivation isn't
+    // Parcelable and re-tapping after a config change is cheap.
+    var selectedActivation by remember { mutableStateOf<PotaActivation?>(null) }
 
     // Hunter tab and an active activation both rely on fresh spots — start
     // polling whenever the POTA screen is mounted.
     DisposableEffect(Unit) {
         PotaSpotsRepository.start()
         onDispose { PotaSpotsRepository.stop() }
+    }
+
+    val detail = selectedActivation
+    if (detail != null) {
+        BackHandler { selectedActivation = null }
+        ActivationDetailScreen(
+            activation = detail,
+            mainViewModel = mainViewModel,
+            onBack = { selectedActivation = null },
+        )
+        return
     }
 
     Column(
@@ -117,7 +133,7 @@ fun PotaScreen(mainViewModel: MainViewModel) {
         when (subTab) {
             PotaSubTab.ACTIVATE -> ActivateTab()
             PotaSubTab.HUNT -> HuntTab(mainViewModel)
-            PotaSubTab.HISTORY -> HistoryTab(mainViewModel)
+            PotaSubTab.HISTORY -> HistoryTab(onOpenActivation = { selectedActivation = it })
         }
     }
 }
@@ -263,6 +279,10 @@ private fun ActivateTab() {
             }
         }
     } else {
+        // Frame the operator + plottable contacts; null when nothing has a grid yet.
+        val mapData = remember(contacts) {
+            buildActivationMapData(contacts, GeneralVariables.getMyMaidenhead4Grid())
+        }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -304,6 +324,16 @@ private fun ActivateTab() {
                         }
                     },
                 )
+            }
+            if (mapData != null) {
+                item(key = "activation-map") {
+                    Spacer(Modifier.height(2.dp))
+                    PotaActivationMap(
+                        operatorLat = mapData.operatorLat,
+                        operatorLon = mapData.operatorLon,
+                        contacts = mapData.contacts,
+                    )
+                }
             }
             if (contacts.isNotEmpty()) {
                 item(key = "contacts-header") {
@@ -561,48 +591,13 @@ private fun SpotRow(spot: PotaSpot, onClick: () -> Unit) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun HistoryTab(mainViewModel: MainViewModel) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+private fun HistoryTab(onOpenActivation: (PotaActivation) -> Unit) {
     var history by remember { mutableStateOf<List<PotaActivation>>(emptyList()) }
-    var refreshKey by remember { mutableIntStateOf(0) }
     val activation by PotaSessionManager.currentActivation.collectAsStateWithLifecycle()
 
-    // Which row's upload is in flight (shows a spinner on that row), and which
-    // row is waiting on a sign-in before its upload can start.
-    var uploadingId by remember { mutableStateOf<Long?>(null) }
-    var loginFor by remember { mutableStateOf<PotaActivation?>(null) }
-    var loginSubmitting by remember { mutableStateOf(false) }
-    // Set when the user picks federated sign-in (Google/Facebook/Amazon); shows the
-    // hosted-UI WebView. The pending activation is uploaded once login succeeds.
-    var oauthFor by remember { mutableStateOf<PotaActivation?>(null) }
-
     // Reload whenever activation state changes (start/end will appear here).
-    LaunchedEffect(refreshKey, activation?.id, activation?.endedAtMs) {
+    LaunchedEffect(activation?.id, activation?.endedAtMs) {
         history = PotaSessionManager.history()
-    }
-
-    fun startUpload(row: PotaActivation) {
-        // Only one upload at a time — a second tap (on this or another row) while
-        // one is in flight would clobber uploadingId and fire a parallel upload.
-        if (uploadingId != null) return
-        uploadingId = row.id
-        scope.launch {
-            val res = uploadActivation(mainViewModel, row)
-            uploadingId = null
-            res.onSuccess { n ->
-                Toast.makeText(context, context.getString(R.string.pota_upload_success, n), Toast.LENGTH_LONG).show()
-            }.onFailure { e ->
-                // A missing/revoked token surfaces as NotSignedInException even when a
-                // stale refresh token is still on disk — re-prompt for login instead of
-                // just toasting an error the user can't act on.
-                if (e is NotSignedInException) {
-                    loginFor = row
-                } else {
-                    Toast.makeText(context, context.getString(R.string.pota_upload_failed, e.message ?: "?"), Toast.LENGTH_LONG).show()
-                }
-            }
-        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -618,67 +613,9 @@ private fun HistoryTab(mainViewModel: MainViewModel) {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             items(history, key = { it.id }) { row ->
-                HistoryRow(
-                    row = row,
-                    uploading = uploadingId == row.id,
-                    onUploadToPota = {
-                        // Always attempt the upload; uploadActivation re-prompts for
-                        // sign-in (via NotSignedInException) when there's no usable
-                        // token — whether the user never logged in or the stored
-                        // refresh token has since been revoked/expired.
-                        startUpload(row)
-                    },
-                    onOpenUploadPage = {
-                        runCatching {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://pota.app/#/user/upload"))
-                            context.startActivity(intent)
-                        }.onFailure {
-                            Toast.makeText(context, context.getString(R.string.pota_no_browser_available), Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    onShareAdif = {
-                        PotaAdifExporter.shareActivationAdif(context, mainViewModel, row) { ok ->
-                            if (!ok) Toast.makeText(context, context.getString(R.string.pota_export_failed), Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                )
+                HistoryRow(row = row, onClick = { onOpenActivation(row) })
             }
         }
-    }
-
-    loginFor?.let { pending ->
-        PotaLoginDialog(
-            submitting = loginSubmitting,
-            onDismiss = { if (!loginSubmitting) loginFor = null },
-            onSubmit = { email, pass ->
-                loginSubmitting = true
-                scope.launch {
-                    val r = PotaAuth.login(email, pass)
-                    loginSubmitting = false
-                    r.onSuccess {
-                        loginFor = null
-                        startUpload(pending)
-                    }.onFailure { e ->
-                        Toast.makeText(context, context.getString(R.string.pota_login_failed, e.message ?: "?"), Toast.LENGTH_LONG).show()
-                    }
-                }
-            },
-            onUseSocial = {
-                // Federated sign-in (Google/Facebook/Amazon) can't go through SRP —
-                // hand off to the hosted-UI WebView, keeping the same pending upload.
-                if (!loginSubmitting) {
-                    loginFor = null
-                    oauthFor = pending
-                }
-            },
-        )
-    }
-
-    oauthFor?.let { pending ->
-        PotaOAuthDialog(onClose = { success ->
-            oauthFor = null
-            if (success) startUpload(pending)
-        })
     }
 }
 
@@ -814,32 +751,18 @@ private fun PotaLoginDialog(
 @Composable
 private fun HistoryRow(
     row: PotaActivation,
-    uploading: Boolean,
-    onUploadToPota: () -> Unit,
-    onOpenUploadPage: () -> Unit,
-    onShareAdif: () -> Unit,
+    onClick: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    var contacts by remember { mutableStateOf<List<PotaQso>?>(null) }
-
-    // Load contacts lazily on first expansion.
-    LaunchedEffect(expanded) {
-        if (expanded && contacts == null) {
-            contacts = PotaSessionManager.getQsosForActivation(row)
-        }
-    }
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(BgSurface, RoundedCornerShape(10.dp))
             .border(1.dp, Border, RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = !expanded },
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -861,52 +784,235 @@ private fun HistoryRow(
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(formatDateRange(row), color = TextMuted, fontSize = 11.sp)
-                if (row.qsoCount > 0) {
-                    Spacer(Modifier.width(4.dp))
-                    Icon(
-                        imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                        contentDescription = if (expanded) "Collapse" else "Expand",
-                        tint = TextMuted,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = TextMuted,
+                    modifier = Modifier.size(18.dp),
+                )
             }
         }
         if (!row.notes.isNullOrBlank()) {
             Spacer(Modifier.height(2.dp))
             Text(stringResource(R.string.pota_notes_quote, row.notes), color = TextMuted, fontSize = 11.sp)
         }
-        if (row.qsoCount > 0) {
-            Spacer(Modifier.height(8.dp))
-            Button(
-                onClick = onUploadToPota,
-                enabled = !uploading,
-                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BgApp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (uploading) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = BgApp, strokeWidth = 2.dp)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Activation detail screen (opened from a history row)
+// ---------------------------------------------------------------------------
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ActivationDetailScreen(
+    activation: PotaActivation,
+    mainViewModel: MainViewModel,
+    onBack: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var contacts by remember(activation.id) { mutableStateOf<List<PotaQso>?>(null) }
+
+    LaunchedEffect(activation.id) {
+        contacts = withContext(Dispatchers.IO) { PotaSessionManager.getQsosForActivation(activation) }
+    }
+
+    val loaded = contacts
+    // Fall back to the live grid only while the activation is active — before the
+    // first QSO carries my_gridsquare the map would otherwise be hidden. For a
+    // finished activation we keep null so a stale current grid can't misplace the
+    // operator on a historical map.
+    val mapData = remember(loaded, activation.isActive) {
+        loaded?.let {
+            buildActivationMapData(
+                it,
+                fallbackOperatorGrid = if (activation.isActive) GeneralVariables.getMyMaidenhead4Grid() else null,
+            )
+        }
+    }
+
+    // Direct upload-to-POTA state. A missing/revoked token surfaces as
+    // NotSignedInException, which re-prompts for sign-in (SRP dialog, or the
+    // hosted-UI WebView for federated accounts) before retrying the upload.
+    var uploading by remember { mutableStateOf(false) }
+    var loginPending by remember { mutableStateOf(false) }
+    var loginSubmitting by remember { mutableStateOf(false) }
+    var oauthPending by remember { mutableStateOf(false) }
+
+    fun startUpload() {
+        if (uploading) return
+        uploading = true
+        scope.launch {
+            val res = uploadActivation(mainViewModel, activation)
+            uploading = false
+            res.onSuccess { n ->
+                Toast.makeText(context, context.getString(R.string.pota_upload_success, n), Toast.LENGTH_LONG).show()
+            }.onFailure { e ->
+                if (e is NotSignedInException) {
+                    loginPending = true
                 } else {
-                    Text(stringResource(R.string.pota_upload_to_pota), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Toast.makeText(context, context.getString(R.string.pota_upload_failed, e.message ?: "?"), Toast.LENGTH_LONG).show()
                 }
             }
         }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedButton(onClick = onShareAdif, modifier = Modifier.weight(1f)) {
-                Text(stringResource(R.string.pota_share_adif), color = TextPrimary, fontSize = 12.sp)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BgApp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        // Header: back chevron + park pills + date + count.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.pota_back),
+                    tint = TextPrimary,
+                )
             }
-            OutlinedButton(onClick = onOpenUploadPage, modifier = Modifier.weight(1f)) {
-                Text(stringResource(R.string.pota_open_pota_app), color = TextPrimary, fontSize = 12.sp)
+            Spacer(Modifier.width(4.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    for (ref in activation.parkRefs) ParkPill(ref)
+                }
+                Text(formatDateRange(activation), color = TextMuted, fontSize = 11.sp)
+            }
+            Spacer(Modifier.width(6.dp))
+            Text(
+                if (activation.isActive) stringResource(R.string.pota_status_active) else stringResource(R.string.pota_qso_count, activation.qsoCount),
+                color = if (activation.isActive) Accent else TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+            )
+        }
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (!activation.notes.isNullOrBlank()) {
+                item(key = "notes") {
+                    Text(stringResource(R.string.pota_notes_quote, activation.notes), color = TextMuted, fontSize = 11.sp)
+                }
+            }
+            if (mapData != null) {
+                item(key = "map") {
+                    Text(
+                        stringResource(R.string.pota_contacts_map),
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                    )
+                    PotaActivationMap(
+                        operatorLat = mapData.operatorLat,
+                        operatorLon = mapData.operatorLon,
+                        contacts = mapData.contacts,
+                    )
+                }
+            }
+            item(key = "actions") {
+                if (activation.qsoCount > 0) {
+                    Button(
+                        onClick = {
+                            // uploadActivation re-prompts for sign-in via
+                            // NotSignedInException when there's no usable token.
+                            startUpload()
+                        },
+                        enabled = !uploading,
+                        colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BgApp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (uploading) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = BgApp, strokeWidth = 2.dp)
+                        } else {
+                            Text(stringResource(R.string.pota_upload_to_pota), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            PotaAdifExporter.shareActivationAdif(context, mainViewModel, activation) { ok ->
+                                if (!ok) Toast.makeText(context, context.getString(R.string.pota_export_failed), Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.pota_share_adif), color = TextPrimary, fontSize = 12.sp)
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            runCatching {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://pota.app/#/user/upload"))
+                                context.startActivity(intent)
+                            }.onFailure {
+                                Toast.makeText(context, context.getString(R.string.pota_no_browser_available), Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.pota_open_pota_app), color = TextPrimary, fontSize = 12.sp)
+                    }
+                }
+            }
+            val list = loaded
+            if (!list.isNullOrEmpty()) {
+                item(key = "contacts-header") {
+                    Text(
+                        stringResource(R.string.pota_qsos),
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+                    )
+                }
+                items(list, key = { it.id }) { qso ->
+                    PotaContactRow(qso)
+                }
             }
         }
-        if (expanded && contacts != null) {
-            Spacer(Modifier.height(8.dp))
-            contacts!!.forEach { qso ->
-                PotaContactRow(qso)
-                Spacer(Modifier.height(4.dp))
-            }
-        }
+    }
+
+    if (loginPending) {
+        PotaLoginDialog(
+            submitting = loginSubmitting,
+            onDismiss = { if (!loginSubmitting) loginPending = false },
+            onSubmit = { email, pass ->
+                loginSubmitting = true
+                scope.launch {
+                    val r = PotaAuth.login(email, pass)
+                    loginSubmitting = false
+                    r.onSuccess {
+                        loginPending = false
+                        startUpload()
+                    }.onFailure { e ->
+                        Toast.makeText(context, context.getString(R.string.pota_login_failed, e.message ?: "?"), Toast.LENGTH_LONG).show()
+                    }
+                }
+            },
+            onUseSocial = {
+                // Federated sign-in (Google/Facebook/Amazon) can't go through SRP —
+                // hand off to the hosted-UI WebView, keeping the pending upload.
+                if (!loginSubmitting) {
+                    loginPending = false
+                    oauthPending = true
+                }
+            },
+        )
+    }
+
+    if (oauthPending) {
+        PotaOAuthDialog(onClose = { success ->
+            oauthPending = false
+            if (success) startUpload()
+        })
     }
 }
 
