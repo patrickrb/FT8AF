@@ -156,6 +156,31 @@ public class UtcTimer {
         };
     }
 
+    /**
+     * Whether {@code utc} lands on a cycle (slot) boundary for a slot of {@code sec} tenths
+     * of a second, anchored to the Unix epoch.
+     *
+     * <p>The original test was {@code (((utc - offsetMs) / 100) % 600) % sec == 0}, which
+     * anchored the slot grid to each UTC minute (600 tenths of a second). That is identical
+     * to this epoch-anchored form only when {@code sec} evenly divides 600 — true for FT8
+     * (150) and FT4 (75), but NOT FT2 (38, since 600 / 38 is not whole). For FT2 the
+     * minute-anchored grid drifted off the absolute 3.8 s slot grid that
+     * {@link #sequential(long, int)} and the transmit late-start clip math both use, so a
+     * normal FT2 transmit fired part-way into its slot and had its leading Costas sync
+     * array clipped — audible on the air but undecodable. Anchoring to the epoch keeps the
+     * FT8/FT4 firing instants byte-for-byte identical while making every slot length
+     * internally consistent.
+     *
+     * @param utc      system time in ms (epoch + {@link #delay})
+     * @param offsetMs manual time offset in ms (see {@link #setTime_sec(int)})
+     * @param sec      slot period in tenths of a second (see ModeProfile.slotTenths)
+     * @return true exactly on the 100 ms tick that opens a slot
+     */
+    public static boolean isCycleBoundary(long utc, int offsetMs, int sec) {
+        if (sec <= 0) return false;
+        return (((utc - offsetMs) / 100) % sec) == 0;
+    }
+
     private TimerTask secTask() {
         return new TimerTask() {
 
@@ -165,11 +190,9 @@ public class UtcTimer {
 
                 try {
                     utc = getSystemTime();//get current UTC time
-                    //utc/100 is in tenths of a second, so modulo should be 600, not 60, remember!
                     //running determines whether to trigger cycle actions
-                    //+80 is time compensation for some action delays after triggering
                     //time_sec is the time offset
-                    if (running && (((utc - time_sec) / 100) % 600) % sec == 0) {
+                    if (running && isCycleBoundary(utc, time_sec, sec)) {
                         //cycle action
                         //IMPORTANT! doHeartBeatTimer must not perform time-consuming operations and must complete within the heartbeat interval, otherwise thread backlog may occur and affect performance.
                         cachedThreadPool.execute(doSomething);//use thread pool for invocation to reduce system overhead
