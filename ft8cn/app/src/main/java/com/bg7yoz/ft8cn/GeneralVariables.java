@@ -59,6 +59,27 @@ public class GeneralVariables {
     public static int usbAudioOutputVendorId = 0;
     public static int usbAudioOutputProductId = 0;
 
+    /**
+     * Whether the given USB VID:PID is the device the user picked for direct
+     * USB audio <em>input</em> (audioInputDeviceId == -1 means "USB direct").
+     * Used on a USB-attach event to decide whether a freshly-plugged device
+     * needs an audio permission request so the recorder can rebind to it
+     * instead of staying on the built-in mic.
+     */
+    public static boolean isConfiguredUsbAudioInput(int vid, int pid) {
+        return audioInputDeviceId == -1 && usbAudioInputVendorId != 0
+                && usbAudioInputVendorId == vid && usbAudioInputProductId == pid;
+    }
+
+    /**
+     * Whether the given USB VID:PID is the device the user picked for direct
+     * USB audio <em>output</em> (audioOutputDeviceId == -1 means "USB direct").
+     */
+    public static boolean isConfiguredUsbAudioOutput(int vid, int pid) {
+        return audioOutputDeviceId == -1 && usbAudioOutputVendorId != 0
+                && usbAudioOutputVendorId == vid && usbAudioOutputProductId == pid;
+    }
+
     public static MutableLiveData<Float> mutableVolumePercent = new MutableLiveData<>();
     public static float volumePercent = 0.8f;//Audio playback volume, as a percentage
 

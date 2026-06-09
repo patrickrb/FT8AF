@@ -1539,7 +1539,19 @@ public class MainViewModel extends ViewModel {
                     boolean granted = intent.getBooleanExtra(
                             UsbManager.EXTRA_PERMISSION_GRANTED, false);
                     Log.d(TAG, "USB audio permission " + (granted ? "granted" : "denied"));
+                    GeneralVariables.fileLog("USB audio permission "
+                            + (granted ? "granted" : "denied"));
                     try { ctx.unregisterReceiver(this); } catch (Exception ignored) {}
+                    if (granted) {
+                        // The recorder was constructed before this permission
+                        // existed and fell back to the built-in mic (see
+                        // MicRecorder.openUsbAudioInput's hasPermission check).
+                        // Now that we're allowed to open the device, rebind the
+                        // input so RX actually uses the USB sound card. TX is
+                        // immune to this bug because it opens the device lazily
+                        // at transmit time, always after this grant.
+                        reinitializeAudioInput();
+                    }
                 }
             }
         };

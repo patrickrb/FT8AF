@@ -381,6 +381,26 @@ class ComposeMainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         if ("android.hardware.usb.action.USB_DEVICE_ATTACHED" == intent.action) {
             fileLog("onNewIntent: USB_DEVICE_ATTACHED")
+            // If the attached device is the one the user picked for direct USB
+            // audio, make sure we hold permission before the delayed reinit
+            // below tries to open it. USB permission can be dropped across an
+            // unplug/replug; without this, the recorder reopens, finds no
+            // permission, and silently falls back to the built-in mic. The
+            // grant callback (MainViewModel.requestUsbPermissionIfNeeded) then
+            // rebinds the input once the user allows it.
+            val attached: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            }
+            if (attached != null
+                && (GeneralVariables.isConfiguredUsbAudioInput(attached.vendorId, attached.productId)
+                    || GeneralVariables.isConfiguredUsbAudioOutput(attached.vendorId, attached.productId))
+            ) {
+                fileLog("onNewIntent: attached device is configured USB audio; ensuring permission")
+                mainViewModel.requestUsbPermissionIfNeeded(attached)
+            }
             // Immediate scan
             mainViewModel.getUsbDevice()
             val ports = mainViewModel.mutableSerialPorts.value
