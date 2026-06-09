@@ -463,6 +463,11 @@
     <string name="tx_hunt">Caza</string>
     <string name="tx_call_cq">Llamar CQ</string>
     <string name="tx_stop">Detener</string>
+    <string name="hound_title">Trabajar una DXpedición (Hound)</string>
+    <string name="hound_help">Primero sintoniza el equipo en la frecuencia de dial publicada del Fox. Tú llamas alto (1000–4000 Hz); la app te hace QSY automáticamente a donde responde el Fox y envía tu informe.</string>
+    <string name="hound_fox_callsign">Indicativo del Fox</string>
+    <string name="hound_call_frequency">Frecuencia de llamada (Hz, 1000–4000)</string>
+    <string name="hound_start">Iniciar</string>
 
     <!-- ===== CAT status chip ===== -->
     <string name="cat_status_chip_label">CAT</string>

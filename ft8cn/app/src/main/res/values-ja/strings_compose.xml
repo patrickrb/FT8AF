@@ -463,6 +463,11 @@
     <string name="tx_hunt">ハント</string>
     <string name="tx_call_cq">CQを出す</string>
     <string name="tx_stop">停止</string>
+    <string name="hound_title">DXペディションと交信（Hound）</string>
+    <string name="hound_help">まず無線機を Fox の公開ダイヤル周波数に合わせます。高い周波数（1000〜4000 Hz）で呼び出すと、アプリが自動的に Fox が応答する周波数へ QSY し、レポートを送信します。</string>
+    <string name="hound_fox_callsign">Fox のコールサイン</string>
+    <string name="hound_call_frequency">呼び出し周波数（Hz、1000〜4000）</string>
+    <string name="hound_start">開始</string>
 
     <!-- ===== CAT status chip ===== -->
     <string name="cat_status_chip_label">CAT</string>
