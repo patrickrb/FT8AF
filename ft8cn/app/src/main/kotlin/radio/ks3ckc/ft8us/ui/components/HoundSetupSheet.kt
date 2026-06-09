@@ -13,9 +13,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
+import com.bg7yoz.ft8cn.R
 
 /**
  * Setup dialog for FT8 DXpedition "Hound" mode. The user tunes the rig to the
@@ -38,26 +40,24 @@ fun HoundSetupSheet(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Work a DXpedition (Hound)") },
+        title = { Text(stringResource(R.string.hound_title)) },
         text = {
             Column {
-                Text(
-                    "Tune the rig to the Fox's published dial frequency first. " +
-                        "You call high (1000–4000 Hz); the app auto-QSYs you " +
-                        "down to where the Fox answers and replies with your report.",
-                )
+                Text(stringResource(R.string.hound_help))
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = foxCall,
+                    // uppercase() (no Locale arg) is locale-invariant, so callsigns are
+                    // normalized the same way regardless of the device locale.
                     onValueChange = { foxCall = it.uppercase().trim() },
-                    label = { Text("Fox callsign") },
+                    label = { Text(stringResource(R.string.hound_fox_callsign)) },
                     singleLine = true,
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = callFreq,
                     onValueChange = { v -> callFreq = v.filter { it.isDigit() }.take(4) },
-                    label = { Text("Call frequency (Hz, 1000–4000)") },
+                    label = { Text(stringResource(R.string.hound_call_frequency)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
@@ -69,10 +69,10 @@ fun HoundSetupSheet(
                     val f = (callFreq.toFloatOrNull() ?: 2500f).coerceIn(1000f, 4000f)
                     if (foxCall.trim().length >= 3) onStart(foxCall.trim(), f)
                 },
-            ) { Text("Start") }
+            ) { Text(stringResource(R.string.hound_start)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
     )
 }

@@ -463,6 +463,11 @@
     <string name="tx_hunt">Охота</string>
     <string name="tx_call_cq">Вызов CQ</string>
     <string name="tx_stop">Стоп</string>
+    <string name="hound_title">Работа с DX-экспедицией (Hound)</string>
+    <string name="hound_help">Сначала настройте трансивер на опубликованную частоту Fox. Вы вызываете на высокой частоте (1000–4000 Гц); приложение автоматически переходит (QSY) туда, где отвечает Fox, и отправляет ваш рапорт.</string>
+    <string name="hound_fox_callsign">Позывной Fox</string>
+    <string name="hound_call_frequency">Частота вызова (Гц, 1000–4000)</string>
+    <string name="hound_start">Старт</string>
 
     <!-- ===== CAT status chip ===== -->
     <string name="cat_status_chip_label">CAT</string>

@@ -463,6 +463,11 @@
     <string name="tx_hunt">獵取</string>
     <string name="tx_call_cq">呼叫CQ</string>
     <string name="tx_stop">停止</string>
+    <string name="hound_title">工作 DX 遠征（Hound）</string>
+    <string name="hound_help">請先將電台調到 Fox 公佈的撥盤頻率。你在高頻處呼叫（1000–4000 Hz）；應用會自動將你 QSY 到 Fox 回應的頻率並回覆你的報告。</string>
+    <string name="hound_fox_callsign">Fox 呼號</string>
+    <string name="hound_call_frequency">呼叫頻率（Hz，1000–4000）</string>
+    <string name="hound_start">開始</string>
 
     <!-- ===== CAT status chip ===== -->
     <string name="cat_status_chip_label">CAT</string>
