@@ -79,6 +79,7 @@ import com.bg7yoz.ft8cn.log.SWLQsoList;
 import com.bg7yoz.ft8cn.log.ThirdPartyService;
 import com.bg7yoz.ft8cn.rigs.BaseRig;
 import com.bg7yoz.ft8cn.rigs.BaseRigOperation;
+import com.bg7yoz.ft8cn.rigs.CatConnectionState;
 import com.bg7yoz.ft8cn.rigs.DiscoveryTX500Rig;
 import com.bg7yoz.ft8cn.rigs.ElecraftRig;
 import com.bg7yoz.ft8cn.rigs.Flex6000Rig;
@@ -167,6 +168,7 @@ public class MainViewModel extends ViewModel {
     public MutableLiveData<Boolean> mutableHamRecordIsRunning = new MutableLiveData<>();//whether HamRecord is running
     public MutableLiveData<Float> mutableTimerOffset = new MutableLiveData<>();//time delay of this cycle
     public MutableLiveData<Boolean> mutableIsDecoding = new MutableLiveData<>();//triggers marker action in spectrum display
+    public MutableLiveData<Integer> mutableOperatingMode = new MutableLiveData<>(GeneralVariables.operatingMode);//current mode (FT8/FT4) for Compose observers
     public ArrayList<Ft8Message> currentMessages = null;//decoded messages in this cycle (used for drawing on spectrum)
 
     public MutableLiveData<Boolean> mutableIsFlexRadio = new MutableLiveData<>();//whether it's a Flex radio
@@ -214,16 +216,40 @@ public class MainViewModel extends ViewModel {
     public MutableLiveData<ArrayList<CableSerialPort.SerialPort>> mutableSerialPorts = new MutableLiveData<>();
     private ArrayList<CableSerialPort.SerialPort> serialPorts;//serial port list
     public BaseRig baseRig;//rig
+    //Observable CAT connection state for the UI status chip. The callbacks below
+    //fire off the UI thread, so LiveData is updated via postValue. catConnectionState
+    //is a synchronous mirror of the same value: a failed Bluetooth connect calls
+    //onRunError() immediately followed by onDisconnected(), and reading LiveData's
+    //value across those two posts would race — so the ERROR-preserving guard reads
+    //the synchronous field instead.
+    public final MutableLiveData<CatConnectionState> mutableCatConnectionState =
+            new MutableLiveData<>(CatConnectionState.DISCONNECTED);
+    private volatile CatConnectionState catConnectionState = CatConnectionState.DISCONNECTED;
+
+    private void setCatConnectionState(CatConnectionState state) {
+        catConnectionState = state;
+        mutableCatConnectionState.postValue(state);
+    }
     private final OnRigStateChanged onRigStateChanged = new OnRigStateChanged() {
         @Override
         public void onDisconnected() {
-            //disconnected from rig
+            //disconnected from rig. A failed connect fires onRunError() then
+            //onDisconnected(); afterDisconnect() preserves ERROR so the chip can
+            //stay red until the next connect attempt (onConnecting) or a success.
+            setCatConnectionState(CatConnectionState.afterDisconnect(catConnectionState));
             ToastMessage.show(getStringFromResource(R.string.disconnect_rig));
+        }
+
+        @Override
+        public void onConnecting() {
+            //connection attempt started
+            setCatConnectionState(CatConnectionState.CONNECTING);
         }
 
         @Override
         public void onConnected() {
             //connected to rig
+            setCatConnectionState(CatConnectionState.CONNECTED);
             ToastMessage.show(getStringFromResource(R.string.connected_rig));
         }
 
@@ -249,6 +275,7 @@ public class MainViewModel extends ViewModel {
         @Override
         public void onRunError(String message) {
             //rig communication error
+            setCatConnectionState(CatConnectionState.ERROR);
             ToastMessage.show(String.format(getStringFromResource(R.string.radio_communication_error)
                     , message));
         }
@@ -288,6 +315,18 @@ public class MainViewModel extends ViewModel {
             viewModel = new ViewModelProvider(owner).get(MainViewModel.class);
         }
         return viewModel;
+    }
+
+    /**
+     * The value afterDecode() must post to mutableIsDecoding (the spectrum-display
+     * "decoding" marker) once a decode pass finishes. beforeListen() turns the marker
+     * on at the start of every cycle, so every pass must turn it back off when done —
+     * a silent slot (rawDecodeCount == 0), an all-own-echo slot (keptCount == 0), and a
+     * normal slot alike. Routing all three exit paths of afterDecode() through this keeps
+     * them in agreement; an early return that skipped it once left the marker stuck on.
+     */
+    static boolean decodingMarkerAfterPass(int rawDecodeCount, int keptCount) {
+        return false;//a completed decode pass always ends the decoding state
     }
 
     /**
@@ -365,7 +404,14 @@ public class MainViewModel extends ViewModel {
             @Override
             public void afterDecode(long utc, float time_sec, int sequential
                     , ArrayList<Ft8Message> decoded, boolean isDeep) {
-                if (decoded.size() == 0) return;//no messages decoded, don't trigger action
+                if (decoded.size() == 0) {
+                    // beforeListen set mutableIsDecoding=true at the start of this cycle;
+                    // clear it here so a silent slot doesn't leave the spectrum-display
+                    // decoding marker stuck on until the next non-empty cycle (mirrors the
+                    // own-echo-only early return below).
+                    mutableIsDecoding.postValue(decodingMarkerAfterPass(0, 0));
+                    return;//no messages decoded, don't trigger action
+                }
 
                 // Filter out own-TX loopback echoes. When the rig monitors TX audio to
                 // line-out the decoder hears our own transmission and decodes it; a decode
@@ -385,7 +431,8 @@ public class MainViewModel extends ViewModel {
                     fileLog(filtered.decodeLogLine(sequential));
                 }
                 if (messages.size() == 0) {
-                    mutableIsDecoding.postValue(false);//nothing left after filtering own echoes
+                    //nothing left after filtering own echoes
+                    mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), 0));
                     return;
                 }
 
@@ -435,7 +482,8 @@ public class MainViewModel extends ViewModel {
                     currentDecodeCount = messages.size();
                 }
 
-                mutableIsDecoding.postValue(false);//decode state, triggers marker action in spectrum display
+                //decode state, triggers marker action in spectrum display
+                mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), messages.size()));
 
 
                 getQTHRunnable.messages = messages;
@@ -787,6 +835,35 @@ public class MainViewModel extends ViewModel {
         ft8TransmitSignal.transmitNow();
     }
 
+    // ===== FT8 DXpedition Hound mode =====
+
+    /**
+     * Enter DXpedition Hound mode and start calling the Fox. Mutually exclusive
+     * with Hunt (auto-answer-CQ), which is disabled here. The rig should already
+     * be tuned to the Fox's published dial frequency.
+     *
+     * @param foxCall    the Fox's base callsign (the DXpedition)
+     * @param callFreqHz initial Hound TX audio frequency, 1000-4000 Hz
+     */
+    public void startHoundMode(String foxCall, float callFreqHz) {
+        if (foxCall == null || foxCall.trim().length() < 3) return;
+        if (GeneralVariables.myCallsign == null
+                || GeneralVariables.myCallsign.length() < 3) return;
+        GeneralVariables.houndMode = true;
+        GeneralVariables.houndFoxCall = foxCall.trim().toUpperCase();
+        GeneralVariables.autoFollowCQ = false;// Hound and Hunt are mutually exclusive
+        GeneralVariables.resetLaunchSupervision();
+        ft8TransmitSignal.startHound(GeneralVariables.houndFoxCall, callFreqHz);
+    }
+
+    /** Leave Hound mode and return to the normal idle/CQ state. */
+    public void stopHoundMode() {
+        GeneralVariables.houndMode = false;
+        GeneralVariables.houndFoxCall = "";
+        ft8TransmitSignal.setActivated(false);
+        ft8TransmitSignal.resetToCQ();
+    }
+
 
     /**
      * Get the followed callsign list from the database
@@ -831,6 +908,84 @@ public class MainViewModel extends ViewModel {
         }, 800);
     }
 
+    /**
+     * Switch the operating mode (FT8 &lt;-&gt; FT4). Rejected while transmitting so we never
+     * end up with a half-FT8/half-FT4 QSO. Persists the mode, rebuilds the RX and TX cycle
+     * timers for the new period, retunes the dial to the new mode's frequency within the
+     * SAME band, and notifies UI observers.
+     *
+     * <p>Radio-safety: the band/waveLength NEVER changes here, only the in-band dial. Jumping
+     * to a band the user hasn't tuned (ATU/antenna) could present high SWR and damage the PA.
+     * If the current band has no dial in the new mode (e.g. 160m/60m have no FT4 allocation),
+     * the frequency is left exactly as-is.
+     *
+     * @param modeId FT8Common.FT8_MODE / FT4_MODE
+     * @return true if switched (or already in that mode); false if rejected mid-transmit
+     */
+    public boolean setOperatingMode(int modeId) {
+        if (ft8TransmitSignal != null && ft8TransmitSignal.isTransmitting()) {
+            return false;//don't switch mid-transmit
+        }
+        // Normalize once: an unknown id (e.g. a forward-compat value) degrades to FT8, and
+        // we then compare/store/retune/publish the normalized id everywhere so nothing
+        // operates on an unsupported mode.
+        ModeProfile mode = ModeProfile.fromId(modeId);
+        int normId = mode.id;
+        if (normId == GeneralVariables.operatingMode) {
+            return true;//no-op
+        }
+
+        // Leave any armed TX/QSO state before changing the cycle.
+        if (ft8TransmitSignal != null) {
+            ft8TransmitSignal.setActivated(false);
+        }
+
+        GeneralVariables.operatingMode = normId;
+        databaseOpr.writeConfig("operatingMode", String.valueOf(normId), null);
+
+        // Rebuild both cycle timers for the new period (FT8 15s -> FT4 7.5s).
+        if (ft8SignalListener != null) {
+            ft8SignalListener.rebuildTimer(mode);
+        }
+        if (ft8TransmitSignal != null) {
+            ft8TransmitSignal.rebuildTimer(mode);
+        }
+
+        // Retune within the SAME band to the new mode's dial (see safety note above).
+        String waveLength = BaseRigOperation.getMeterFromFreq(GeneralVariables.band);
+        long newFreq = OperationBand.getModeBandFreq(waveLength, normId);
+        if (newFreq > 0 && newFreq != GeneralVariables.band) {
+            GeneralVariables.band = newFreq;
+            GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(newFreq);
+            databaseOpr.writeConfig("bandFreq", String.valueOf(newFreq), null);
+            databaseOpr.getAllQSLCallsigns();
+            GeneralVariables.mutableBandChange.postValue(GeneralVariables.bandListIndex);
+            setOperationBand();//push the new dial to the rig over CAT (no-op if not connected)
+        }
+
+        mutableOperatingMode.postValue(normId);
+        return true;
+    }
+
+    /**
+     * Apply the operating mode loaded from config at startup. The RX/TX cycle timers are
+     * built in the constructor (defaulting to FT8) before the persisted mode is read from
+     * the DB asynchronously, so a persisted FT4 would otherwise run on FT8's 15s cycle and
+     * leave the UI pill stuck on FT8. Call this once config loading completes to rebuild the
+     * timers for the persisted mode and sync the LiveData. Unlike {@link #setOperatingMode},
+     * it does NOT retune the dial — the band is restored separately from config.
+     */
+    public void applyLoadedOperatingMode() {
+        ModeProfile mode = GeneralVariables.currentMode();
+        if (ft8SignalListener != null) {
+            ft8SignalListener.rebuildTimer(mode);
+        }
+        if (ft8TransmitSignal != null) {
+            ft8TransmitSignal.rebuildTimer(mode);
+        }
+        mutableOperatingMode.postValue(mode.id);
+    }
+
     public void setCivAddress() {
         if (baseRig != null) {
             baseRig.setCivAddress(GeneralVariables.civAddress);
@@ -841,6 +996,8 @@ public class MainViewModel extends ViewModel {
         if (baseRig != null) {
             baseRig.setControlMode(GeneralVariables.controlMode);
         }
+        //Notify observers (CAT status chip visibility) of the mode change.
+        GeneralVariables.mutableControlMode.postValue(GeneralVariables.controlMode);
     }
 
 
@@ -854,6 +1011,7 @@ public class MainViewModel extends ViewModel {
         if (GeneralVariables.controlMode == ControlMode.VOX) {//if currently VOX, switch to CAT mode
             GeneralVariables.controlMode = ControlMode.CAT;
             databaseOpr.writeConfig("ctrMode", String.valueOf(ControlMode.CAT), null);
+            GeneralVariables.mutableControlMode.postValue(GeneralVariables.controlMode);
         }
         connectRig();
 
@@ -890,6 +1048,7 @@ public class MainViewModel extends ViewModel {
 
     public void connectBluetoothRig(Context context, BluetoothDevice device) {
         GeneralVariables.controlMode = ControlMode.CAT;//Bluetooth control mode, only CAT control is supported
+        GeneralVariables.mutableControlMode.postValue(GeneralVariables.controlMode);
         connectRig();
         if (baseRig == null) {
             return;
@@ -1181,6 +1340,20 @@ public class MainViewModel extends ViewModel {
         } else {
             return baseRig.isConnected();
         }
+    }
+
+    /**
+     * Re-trigger the current rig's CAT connection. Backs the tap-to-reconnect
+     * status chip: Bluetooth often only connects on the second attempt, so this
+     * reuses the connector's existing connect() path (which, for Bluetooth, runs
+     * socketConnect() again). No-op when no rig/connector is configured.
+     */
+    public void reconnectRig() {
+        if (baseRig == null || baseRig.getConnector() == null) {
+            return;
+        }
+        setCatConnectionState(CatConnectionState.CONNECTING);
+        baseRig.getConnector().connect();
     }
 
     /**

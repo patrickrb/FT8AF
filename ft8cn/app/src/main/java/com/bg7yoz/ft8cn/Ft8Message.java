@@ -250,13 +250,16 @@ public class Ft8Message {
         }
 
         if (i3 == 0 && (n3 == 1)) {//this is DXpedition
-
+            // Fox combo: "<acked> RR73; <invited> <foxHash> <report>". The report
+            // is already signed, so format its magnitude after the sign char —
+            // otherwise a negative report renders a double minus ("--18"). A zero
+            // report formats as "+0" (>= 0), matching WSJT-X, not "-0".
             return String.format("%s RR73; %s %s %s%d"
                     ,callsignTo
                     ,dx_call_to2
                     ,hashList.getCallsign(new long[]{callFromHash10})
-                    ,report > 0 ? "+" : "-"
-                    ,report
+                    ,report >= 0 ? "+" : "-"
+                    ,Math.abs(report)
             );
         }
 

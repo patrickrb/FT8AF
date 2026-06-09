@@ -59,6 +59,35 @@ public class UtcTimerTest {
     }
 
     @Test
+    public void sequential_withSlotMillis_ft8MatchesLegacy() {
+        // The 2-arg form with 15000 must equal the legacy ((utc/1000)/15)%2 exactly.
+        assertThat(UtcTimer.sequential(0L, 15_000)).isEqualTo(0);
+        assertThat(UtcTimer.sequential(15_000L, 15_000)).isEqualTo(1);
+        assertThat(UtcTimer.sequential(30_000L, 15_000)).isEqualTo(0);
+        assertThat(UtcTimer.sequential(T_2023, 15_000))
+                .isEqualTo((int) (((T_2023 / 1000) / 15) % 2));
+    }
+
+    @Test
+    public void sequential_withSlotMillis_ft4AlternatesEvery7point5s() {
+        assertThat(UtcTimer.sequential(0L, 7_500)).isEqualTo(0);
+        assertThat(UtcTimer.sequential(7_500L, 7_500)).isEqualTo(1);
+        assertThat(UtcTimer.sequential(15_000L, 7_500)).isEqualTo(0);
+        assertThat(UtcTimer.sequential(22_500L, 7_500)).isEqualTo(1);
+    }
+
+    @Test
+    public void sequential_withSlotMillis_ft2AlternatesEvery3point8s() {
+        // FT2's 3800ms slot isn't a whole number of seconds; sequential() works in ms
+        // directly so the boundary lands exactly on each 3.8s multiple.
+        assertThat(UtcTimer.sequential(0L, 3_800)).isEqualTo(0);
+        assertThat(UtcTimer.sequential(3_799L, 3_800)).isEqualTo(0);
+        assertThat(UtcTimer.sequential(3_800L, 3_800)).isEqualTo(1);
+        assertThat(UtcTimer.sequential(7_600L, 3_800)).isEqualTo(0);
+        assertThat(UtcTimer.sequential(11_400L, 3_800)).isEqualTo(1);
+    }
+
+    @Test
     public void sequential_isStableWithinASingleCycle() {
         // Any instant inside the first 15-second window is slot 0; the boundary
         // at 15s flips to slot 1. Sub-second jitter must not change the slot.

@@ -460,6 +460,13 @@
 
     <string name="tx_transmitting">ПЕРЕДАЧА</string>
     <string name="tx_listening">ПРИЁМ</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT подключён — нажмите для переподключения</string>
+    <string name="cat_status_connecting">Подключение CAT…</string>
+    <string name="cat_status_disconnected">CAT отключён — нажмите для подключения</string>
+    <string name="cat_status_error">Ошибка подключения CAT — нажмите для повтора</string>
     <string name="qsopanel_log_action">LOG</string>
     <string name="qsopanel_queue">ОЧЕРЕДЬ</string>
     <string name="swr_lockout_title">TX ОСТАНОВЛЕН — Высокий КСВ (%1$s)</string>

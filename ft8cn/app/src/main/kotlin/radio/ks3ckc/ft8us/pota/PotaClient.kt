@@ -107,6 +107,85 @@ object PotaClient {
         }
     }
 
+    /**
+     * Upload one ADIF document to the authenticated endpoint. [idToken] is a
+     * Cognito ID token from [PotaAuth.idToken]; it goes in the Authorization
+     * header verbatim (POTA's API Gateway expects the raw JWT, not "Bearer …").
+     * The body is multipart/form-data with a single `adif` part, matching the
+     * pota.app website uploader. Returns the (possibly empty) response body on
+     * success, or a failure carrying the HTTP status / error text.
+     */
+    suspend fun uploadAdif(idToken: String, filename: String, adif: String): Result<String> =
+        withContext(Dispatchers.IO) {
+            val boundary = "----ft8af${System.nanoTime()}"
+            val preamble = buildString {
+                append("--").append(boundary).append("\r\n")
+                append("Content-Disposition: form-data; name=\"adif\"; filename=\"").append(filename).append("\"\r\n")
+                append("Content-Type: application/octet-stream\r\n\r\n")
+            }.toByteArray(StandardCharsets.UTF_8)
+            val epilogue = "\r\n--$boundary--\r\n".toByteArray(StandardCharsets.UTF_8)
+            val payload = adif.toByteArray(StandardCharsets.UTF_8)
+
+            var conn: HttpURLConnection? = null
+            try {
+                conn = (URL("$BASE_URL/adif").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = IO_TIMEOUT_MS
+                    readTimeout = 30_000
+                    doOutput = true
+                    setRequestProperty("User-Agent", USER_AGENT)
+                    setRequestProperty("Authorization", idToken)
+                    setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+                    setRequestProperty("Accept", "application/json")
+                }
+                conn.outputStream.use { out ->
+                    out.write(preamble)
+                    out.write(payload)
+                    out.write(epilogue)
+                }
+                val code = conn.responseCode
+                if (code !in 200..299) {
+                    val err = conn.errorStream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() } ?: ""
+                    log("uploadAdif $filename -> http $code ${err.take(200)}")
+                    return@withContext Result.failure(IllegalStateException("HTTP $code${if (err.isNotBlank()) ": ${err.take(160)}" else ""}"))
+                }
+                val resp = conn.inputStream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() } ?: ""
+                log("uploadAdif ok $filename (${payload.size}B) -> ${resp.take(120)}")
+                Result.success(resp)
+            } catch (e: Exception) {
+                log("uploadAdif $filename failed: ${e.javaClass.simpleName}: ${e.message ?: "?"}")
+                Result.failure(e)
+            } finally {
+                conn?.disconnect()
+            }
+        }
+
+    /** Fetch the user's recent upload/processing jobs (authenticated). Raw JSON. */
+    suspend fun getJobs(idToken: String): String? = withContext(Dispatchers.IO) {
+        var conn: HttpURLConnection? = null
+        try {
+            conn = (URL("$BASE_URL/user/jobs").openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = IO_TIMEOUT_MS
+                readTimeout = IO_TIMEOUT_MS
+                setRequestProperty("User-Agent", USER_AGENT)
+                setRequestProperty("Authorization", idToken)
+                setRequestProperty("Accept", "application/json")
+            }
+            val code = conn.responseCode
+            if (code != HttpURLConnection.HTTP_OK) {
+                log("getJobs -> http $code")
+                return@withContext null
+            }
+            conn.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+        } catch (e: Exception) {
+            log("getJobs failed: ${e.javaClass.simpleName}: ${e.message ?: "?"}")
+            null
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
     private fun httpGet(url: String): String? {
         var conn: HttpURLConnection? = null
         return try {

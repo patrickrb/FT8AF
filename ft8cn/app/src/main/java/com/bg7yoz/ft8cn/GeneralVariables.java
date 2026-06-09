@@ -343,6 +343,7 @@ public class GeneralVariables {
     public static int pttDelay = 100;//PTT response time; radios typically need some response time after PTT command, default 100ms
     public static int lateStartTolerance = 2000;//Max ms into a cycle that a manual TX may start; leading audio is clipped so TX still ends on the cycle boundary. 0-4000.
     public static boolean earlyDecode = true;//Fast turnaround: decode a shorter RX window so CQ decodes appear ~1s before the cycle boundary, enabling a next-slot reply.
+    public static int operatingMode = FT8Common.FT8_MODE;//Current operating mode (FT8Common.FT8_MODE / FT4_MODE); persisted as config "operatingMode".
     public static boolean autoCQAfterQSO = false;//Auto-CQ: keep calling CQ after each completed QSO (chain without re-tapping). Refreshes the TX watchdog per QSO and forces pure CQ (ignores Hunt).
     public static int civAddress = 0xa4;//CI-V address
     public static int baudRate = 19200;//Baud rate
@@ -365,6 +366,10 @@ public class GeneralVariables {
         return android.text.TextUtils.join(",", excludedBands);
     }
     public static int controlMode = ControlMode.VOX;
+    //Control-mode change signal so Compose can react when the user switches
+    //VOX <-> CAT/RTS/DTR (e.g. to show/hide the CAT status chip). No initial
+    //value: observers seed from the current controlMode until a change posts.
+    public static MutableLiveData<Integer> mutableControlMode = new MutableLiveData<>();
     public static int modelNo = 0;
     public static int launchSupervision = DEFAULT_LAUNCH_SUPERVISION;//Transmit supervision
     public static long launchSupervisionStart = UtcTimer.getSystemTime();//Auto-transmit start time
@@ -487,8 +492,21 @@ public class GeneralVariables {
         return myMaidenheadGrid;
     }
 
+    // ===== FT8 DXpedition "Hound" mode =====
+    // When true, the TX engine runs the Hound QSO variant (call Fox high at
+    // 1000-4000 Hz, auto-QSY down to where Fox calls us, reply R+rpt, log on
+    // RR73) instead of the standard auto-sequencer. Mutually exclusive with the
+    // Hunt auto-answer-CQ mode. houndFoxCall is the Fox's base callsign.
+    public static boolean houndMode = false;
+    public static String houndFoxCall = "";
+
     public static float getBaseFrequency() {
         return baseFrequency;
+    }
+
+    /** The descriptor for the current {@link #operatingMode} (FT8/FT4). */
+    public static ModeProfile currentMode() {
+        return ModeProfile.fromId(operatingMode);
     }
 
     public static void setBaseFrequency(float baseFrequency) {

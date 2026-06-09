@@ -63,6 +63,8 @@
     <string name="app_set_callsign_first">Set your callsign in Settings before calling CQ</string>
     <string name="app_hunt_on">Hunt on — auto-answering CQs</string>
     <string name="app_hunt_off">Hunt off — running CQ, working answers only</string>
+    <string name="app_mode_switched">Mode: %1$s</string>
+    <string name="app_mode_switch_busy">Can\'t switch mode while transmitting</string>
     <string name="main_tx_volume">TX Volume: %1$d%%</string>
 
     <!-- ===== Exit dialog ===== -->
@@ -106,6 +108,13 @@
     <!-- ===== TX strip ===== -->
     <string name="tx_transmitting">TRANSMITTING</string>
     <string name="tx_listening">LISTENING</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT connected — tap to reconnect</string>
+    <string name="cat_status_connecting">CAT connecting…</string>
+    <string name="cat_status_disconnected">CAT disconnected — tap to connect</string>
+    <string name="cat_status_error">CAT connection error — tap to retry</string>
 
     <!-- ===== SWR lockout banner ===== -->
     <string name="swr_lockout_title">TX HALTED — High SWR detected (%1$s)</string>
@@ -259,6 +268,19 @@
     <string name="pota_qso_count">%1$d QSO</string>
     <string name="pota_share_adif">Share ADIF</string>
     <string name="pota_open_pota_app">Open pota.app</string>
+    <string name="pota_upload_to_pota">Upload to POTA</string>
+    <string name="pota_upload_success">Uploaded %1$d park log(s) to POTA</string>
+    <string name="pota_upload_failed">Upload failed: %1$s</string>
+    <string name="pota_login_title">Sign in to POTA</string>
+    <string name="pota_login_desc">Use your pota.app account email and password.</string>
+    <string name="pota_login_email">Email</string>
+    <string name="pota_login_password">Password</string>
+    <string name="pota_login_button">Sign in</string>
+    <string name="pota_login_cancel">Cancel</string>
+    <string name="pota_login_failed">Sign-in failed: %1$s</string>
+    <string name="pota_login_or">or</string>
+    <string name="pota_login_social">Sign in with Google / Facebook / Amazon</string>
+    <string name="pota_oauth_title">Sign in to POTA</string>
     <string name="pota_add_park">Add park</string>
     <string name="pota_remove_park">Remove</string>
     <string name="pota_max_parks_reached">Maximum of 10 parks reached</string>

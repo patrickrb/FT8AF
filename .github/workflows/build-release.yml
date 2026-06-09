@@ -11,6 +11,25 @@ on:
 permissions:
   contents: write
 
+# Google Play allows only one active "edit" per app, so two release builds
+# publishing at once make the second fail with "This edit has expired, please
+# create a new Edit." Serialize the release-publishing runs (pushes to dev/main
+# and v* tags) into a single queue so they never overlap on the Play API.
+# cancel-in-progress is false so an in-flight publish finishes rather than being
+# killed mid-upload. Pull request runs get a unique group keyed to run id, so
+# they never queue and CI stays fast.
+concurrency:
+  group: >-
+    ${{
+      (github.event_name == 'push'
+        && (github.ref == 'refs/heads/main'
+          || github.ref == 'refs/heads/dev'
+          || startsWith(github.ref, 'refs/tags/v')))
+      && 'play-publish'
+      || format('build-{0}', github.run_id)
+    }}
+  cancel-in-progress: false
+
 jobs:
   test:
     name: Unit tests & coverage

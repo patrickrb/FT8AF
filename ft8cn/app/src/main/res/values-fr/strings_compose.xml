@@ -460,6 +460,13 @@
 
     <string name="tx_transmitting">ÉMISSION</string>
     <string name="tx_listening">ÉCOUTE</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT connecté — appuyez pour reconnecter</string>
+    <string name="cat_status_connecting">Connexion CAT…</string>
+    <string name="cat_status_disconnected">CAT déconnecté — appuyez pour connecter</string>
+    <string name="cat_status_error">Erreur de connexion CAT — appuyez pour réessayer</string>
     <string name="qsopanel_log_action">LOG</string>
     <string name="qsopanel_queue">FILE</string>
     <string name="swr_lockout_title">TX ARRÊTÉ — SWR élevé détecté (%1$s)</string>

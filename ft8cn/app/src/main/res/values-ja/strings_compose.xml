@@ -460,6 +460,13 @@
 
     <string name="tx_transmitting">送信中</string>
     <string name="tx_listening">受信中</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT接続済み — タップで再接続</string>
+    <string name="cat_status_connecting">CAT接続中…</string>
+    <string name="cat_status_disconnected">CAT未接続 — タップで接続</string>
+    <string name="cat_status_error">CAT接続エラー — タップで再試行</string>
     <string name="qsopanel_log_action">LOG</string>
     <string name="qsopanel_queue">キュー</string>
     <string name="swr_lockout_title">送信停止 — 高SWR検出 (%1$s)</string>
