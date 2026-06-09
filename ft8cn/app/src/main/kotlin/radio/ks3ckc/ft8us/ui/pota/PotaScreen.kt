@@ -820,7 +820,18 @@ private fun ActivationDetailScreen(
     }
 
     val loaded = contacts
-    val mapData = remember(loaded) { loaded?.let { buildActivationMapData(it, null) } }
+    // Fall back to the live grid only while the activation is active — before the
+    // first QSO carries my_gridsquare the map would otherwise be hidden. For a
+    // finished activation we keep null so a stale current grid can't misplace the
+    // operator on a historical map.
+    val mapData = remember(loaded, activation.isActive) {
+        loaded?.let {
+            buildActivationMapData(
+                it,
+                fallbackOperatorGrid = if (activation.isActive) GeneralVariables.getMyMaidenhead4Grid() else null,
+            )
+        }
+    }
 
     // Direct upload-to-POTA state. A missing/revoked token surfaces as
     // NotSignedInException, which re-prompts for sign-in (SRP dialog, or the

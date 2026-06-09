@@ -107,6 +107,8 @@ private fun Modifier.activationMap(
     val contactPts = contacts.mapIndexed { i, c ->
         Offset(proj.projectX(proj.normalizedContactLons[i]), proj.projectY(c.lat))
     }
+    // Built once per size/data change, not per contact per frame.
+    val dashEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f))
 
     onDrawBehind {
         drawRect(color = BgSurface, size = size)
@@ -128,7 +130,7 @@ private fun Modifier.activationMap(
                 start = Offset(opX, opY),
                 end = pt,
                 strokeWidth = 1.5f,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f)),
+                pathEffect = dashEffect,
             )
         }
         for (pt in contactPts) {

@@ -11,8 +11,8 @@ import kotlin.math.min
  * [QsoPathProjection] from two endpoints to the operator plus an arbitrary list
  * of contacts: frames them all into a fixed-size canvas with an equirectangular
  * projection at a uniform degrees-per-pixel scale, reusing the same min-span
- * floor and padding so a clustered cluster of nearby contacts doesn't zoom in to
- * an uninformative street-level view.
+ * floor and padding so a cluster of nearby contacts doesn't zoom in to an
+ * uninformative street-level view.
  *
  * Kept separate from the Compose `DrawScope` drawing code so the math can be
  * unit-tested without a Canvas. Construct with the operator location, the
