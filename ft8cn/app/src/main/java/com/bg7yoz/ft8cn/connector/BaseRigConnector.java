@@ -34,6 +34,13 @@ public class BaseRigConnector {
         }
 
         @Override
+        public void onConnecting() {
+            if (onRigStateChanged!=null){
+                onRigStateChanged.onConnecting();
+            }
+        }
+
+        @Override
         public void onRunError(String message) {
             if (onRigStateChanged!=null){
                 onRigStateChanged.onRunError(message);

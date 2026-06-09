@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bg7yoz.ft8cn.R
+import com.bg7yoz.ft8cn.rigs.CatConnectionState
 import radio.ks3ckc.ft8us.theme.*
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -46,6 +47,8 @@ fun TxStrip(
     modeName: String,
     modeSwitchEnabled: Boolean,
     dxEnabled: Boolean = false,
+    catState: CatConnectionState = CatConnectionState.DISCONNECTED,
+    showCatChip: Boolean = false,
     expanded: Boolean = false,
     onCallCQ: () -> Unit,
     onStop: () -> Unit,
@@ -53,6 +56,7 @@ fun TxStrip(
     onToggleHunt: () -> Unit,
     onCycleMode: () -> Unit,
     onToggleDx: () -> Unit = {},
+    onReconnectCat: () -> Unit = {},
     onOpenFrequencyPicker: () -> Unit,
     onToggleExpand: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -126,6 +130,11 @@ fun TxStrip(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            // CAT connection status — tap to reconnect (Bluetooth often needs a
+            // second attempt). Hidden for VOX / audio-only setups.
+            if (showCatChip) {
+                CatStatusChip(state = catState, onReconnect = onReconnectCat)
+            }
         }
 
         // Mode pill (FT8/FT4) — taps cycle the operating mode. Disabled mid-transmit

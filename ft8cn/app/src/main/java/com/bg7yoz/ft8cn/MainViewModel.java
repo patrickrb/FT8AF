@@ -79,6 +79,7 @@ import com.bg7yoz.ft8cn.log.SWLQsoList;
 import com.bg7yoz.ft8cn.log.ThirdPartyService;
 import com.bg7yoz.ft8cn.rigs.BaseRig;
 import com.bg7yoz.ft8cn.rigs.BaseRigOperation;
+import com.bg7yoz.ft8cn.rigs.CatConnectionState;
 import com.bg7yoz.ft8cn.rigs.DiscoveryTX500Rig;
 import com.bg7yoz.ft8cn.rigs.ElecraftRig;
 import com.bg7yoz.ft8cn.rigs.Flex6000Rig;
@@ -215,16 +216,40 @@ public class MainViewModel extends ViewModel {
     public MutableLiveData<ArrayList<CableSerialPort.SerialPort>> mutableSerialPorts = new MutableLiveData<>();
     private ArrayList<CableSerialPort.SerialPort> serialPorts;//serial port list
     public BaseRig baseRig;//rig
+    //Observable CAT connection state for the UI status chip. The callbacks below
+    //fire off the UI thread, so LiveData is updated via postValue. catConnectionState
+    //is a synchronous mirror of the same value: a failed Bluetooth connect calls
+    //onRunError() immediately followed by onDisconnected(), and reading LiveData's
+    //value across those two posts would race — so the ERROR-preserving guard reads
+    //the synchronous field instead.
+    public final MutableLiveData<CatConnectionState> mutableCatConnectionState =
+            new MutableLiveData<>(CatConnectionState.DISCONNECTED);
+    private volatile CatConnectionState catConnectionState = CatConnectionState.DISCONNECTED;
+
+    private void setCatConnectionState(CatConnectionState state) {
+        catConnectionState = state;
+        mutableCatConnectionState.postValue(state);
+    }
     private final OnRigStateChanged onRigStateChanged = new OnRigStateChanged() {
         @Override
         public void onDisconnected() {
-            //disconnected from rig
+            //disconnected from rig. A failed connect fires onRunError() then
+            //onDisconnected(); afterDisconnect() preserves ERROR so the chip can
+            //stay red until the next connect attempt (onConnecting) or a success.
+            setCatConnectionState(CatConnectionState.afterDisconnect(catConnectionState));
             ToastMessage.show(getStringFromResource(R.string.disconnect_rig));
+        }
+
+        @Override
+        public void onConnecting() {
+            //connection attempt started
+            setCatConnectionState(CatConnectionState.CONNECTING);
         }
 
         @Override
         public void onConnected() {
             //connected to rig
+            setCatConnectionState(CatConnectionState.CONNECTED);
             ToastMessage.show(getStringFromResource(R.string.connected_rig));
         }
 
@@ -250,6 +275,7 @@ public class MainViewModel extends ViewModel {
         @Override
         public void onRunError(String message) {
             //rig communication error
+            setCatConnectionState(CatConnectionState.ERROR);
             ToastMessage.show(String.format(getStringFromResource(R.string.radio_communication_error)
                     , message));
         }
@@ -970,6 +996,8 @@ public class MainViewModel extends ViewModel {
         if (baseRig != null) {
             baseRig.setControlMode(GeneralVariables.controlMode);
         }
+        //Notify observers (CAT status chip visibility) of the mode change.
+        GeneralVariables.mutableControlMode.postValue(GeneralVariables.controlMode);
     }
 
 
@@ -983,6 +1011,7 @@ public class MainViewModel extends ViewModel {
         if (GeneralVariables.controlMode == ControlMode.VOX) {//if currently VOX, switch to CAT mode
             GeneralVariables.controlMode = ControlMode.CAT;
             databaseOpr.writeConfig("ctrMode", String.valueOf(ControlMode.CAT), null);
+            GeneralVariables.mutableControlMode.postValue(GeneralVariables.controlMode);
         }
         connectRig();
 
@@ -1019,6 +1048,7 @@ public class MainViewModel extends ViewModel {
 
     public void connectBluetoothRig(Context context, BluetoothDevice device) {
         GeneralVariables.controlMode = ControlMode.CAT;//Bluetooth control mode, only CAT control is supported
+        GeneralVariables.mutableControlMode.postValue(GeneralVariables.controlMode);
         connectRig();
         if (baseRig == null) {
             return;
@@ -1310,6 +1340,20 @@ public class MainViewModel extends ViewModel {
         } else {
             return baseRig.isConnected();
         }
+    }
+
+    /**
+     * Re-trigger the current rig's CAT connection. Backs the tap-to-reconnect
+     * status chip: Bluetooth often only connects on the second attempt, so this
+     * reuses the connector's existing connect() path (which, for Bluetooth, runs
+     * socketConnect() again). No-op when no rig/connector is configured.
+     */
+    public void reconnectRig() {
+        if (baseRig == null || baseRig.getConnector() == null) {
+            return;
+        }
+        setCatConnectionState(CatConnectionState.CONNECTING);
+        baseRig.getConnector().connect();
     }
 
     /**

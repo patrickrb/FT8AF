@@ -109,6 +109,13 @@
     <string name="tx_transmitting">TRANSMITTING</string>
     <string name="tx_listening">LISTENING</string>
 
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT connected — tap to reconnect</string>
+    <string name="cat_status_connecting">CAT connecting…</string>
+    <string name="cat_status_disconnected">CAT disconnected — tap to connect</string>
+    <string name="cat_status_error">CAT connection error — tap to retry</string>
+
     <!-- ===== SWR lockout banner ===== -->
     <string name="swr_lockout_title">TX HALTED — High SWR detected (%1$s)</string>
     <string name="swr_lockout_body">Check antenna / feedline before transmitting.</string>

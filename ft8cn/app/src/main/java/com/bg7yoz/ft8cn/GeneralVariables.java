@@ -366,6 +366,10 @@ public class GeneralVariables {
         return android.text.TextUtils.join(",", excludedBands);
     }
     public static int controlMode = ControlMode.VOX;
+    //Control-mode change signal so Compose can react when the user switches
+    //VOX <-> CAT/RTS/DTR (e.g. to show/hide the CAT status chip). No initial
+    //value: observers seed from the current controlMode until a change posts.
+    public static MutableLiveData<Integer> mutableControlMode = new MutableLiveData<>();
     public static int modelNo = 0;
     public static int launchSupervision = DEFAULT_LAUNCH_SUPERVISION;//Transmit supervision
     public static long launchSupervisionStart = UtcTimer.getSystemTime();//Auto-transmit start time

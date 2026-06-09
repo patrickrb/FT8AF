@@ -458,6 +458,13 @@
 
     <string name="tx_transmitting">发射中</string>
     <string name="tx_listening">监听中</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT 已连接 — 点按重新连接</string>
+    <string name="cat_status_connecting">CAT 连接中…</string>
+    <string name="cat_status_disconnected">CAT 未连接 — 点按连接</string>
+    <string name="cat_status_error">CAT 连接错误 — 点按重试</string>
     <string name="qsopanel_log_action">LOG</string>
     <string name="qsopanel_queue">队列</string>
     <string name="swr_lockout_title">发射已停止 — 检测到高驻波比 (%1$s)</string>
