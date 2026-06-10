@@ -75,6 +75,9 @@ public class WaterfallView extends View {
 
     // FT8 period timestamp tracking
     private long lastTimestampPeriod = -1;
+    // Gates the decoded-label stamp to once per 15s cycle, so a cycle's labels are painted
+    // exactly once even though the decode-done flag re-arms on every decode pass.
+    private final WaterfallLabelGate messageGate = new WaterfallLabelGate();
     private final Paint timestampLinePaint = new Paint();
 
     public WaterfallView(Context context) {
@@ -123,6 +126,8 @@ public class WaterfallView extends View {
         Log.d(TAG, String.format("Bitmap created: %dx%d, blockHeight=%d, freq_width=%.2f, spectrumWidth=%d",
                 w, h, blockHeight, freq_width, spectrumWidth));
         lastBitMap = Bitmap.createBitmap(w, h, ARGB_8888);
+        // Fresh bitmap wiped the stamped labels, so allow the current cycle to re-stamp.
+        messageGate.reset();
         _canvas = new Canvas(lastBitMap);
         Paint blackPaint = new Paint();
         blackPaint.setColor(0xFF000000);
@@ -321,9 +326,16 @@ public class WaterfallView extends View {
 
         //Messages have 3 types: normal, CQ, and involving me
         if (drawMessage && messages != null) {
-            Log.d(TAG, String.format("Drawing %d messages on waterfall", messages.size()));
-            drawMessage = false;//Only draw once
-            for (Ft8Message msg : messages) {
+            drawMessage = false;//Consume the one-shot arming
+            // FT8 decodes in more than one pass per cycle (a normal pass and a slower deep
+            // pass), and every completed pass re-arms drawMessage. Without this guard the
+            // same labels get stamped onto the scrolling bitmap several times per cycle, at
+            // different scroll offsets, so they appear to repeat down the waterfall —
+            // including over the next cycle's not-yet-populated rows where the signal is
+            // gone. Stamp at most once per 15s UTC period so each cycle is painted once.
+            if (messageGate.shouldStamp(period)) {
+                Log.d(TAG, String.format("Drawing %d messages on waterfall", messages.size()));
+                for (Ft8Message msg : messages) {
 
                 if (msg.inMyCall()) {//Related to me
                     messagePaint.setColor(0xffffb2b2);
@@ -353,6 +365,7 @@ public class WaterfallView extends View {
                     float text_high =dpToPixel(4);//messagePaint.getFontSpacing()/2;
                     _canvas.drawLine(msg.freq_hz * freq_width + text_high , text_start
                             , msg.freq_hz * freq_width + text_high, text_len + text_start, textLinePaint);
+                }
                 }
             }
         }
