@@ -997,9 +997,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         logStr.append("FT8AF ADIF Export<eoh>\n");
         cursor.moveToPosition(-1);
         while (cursor.moveToNext()) {
-            logStr.append(String.format("<call:%d>%s "
-                    , cursor.getString(cursor.getColumnIndex("call")).length()
-                    , cursor.getString(cursor.getColumnIndex("call"))));
+            logStr.append(com.bg7yoz.ft8cn.log.AdifFormat.callField(
+                    cursor.getString(cursor.getColumnIndex("call"))));
             if (!isSWL) {
                 if (cursor.getInt(cursor.getColumnIndex("isLotW_QSL")) == 1) {
                     logStr.append("<QSL_RCVD:1>Y ");
