@@ -415,18 +415,20 @@ object FT8USIcons {
         Canvas(modifier = modifier.then(Modifier.sizeOf(size))) {
             val s = this.size.width / 24f
             val stroke = strokeStyle(strokeWidth * s)
-            // Loop with a gap at the top-right where the arrowhead sits.
+            // Near-full clockwise loop with a gap at the top for the arrowhead.
             drawArc(
-                tint, -60f, 300f, false,
+                tint, -50f, 300f, false,
                 Offset(5f * s, 5f * s), Size(14f * s, 14f * s), style = stroke,
             )
-            // Arrowhead at the leading end of the arc (top-right), pointing tangentially.
+            // Filled triangular arrowhead at the arc's leading (clockwise) end, sitting at
+            // the top of the loop and pointing along the tangent — a clean refresh arrow.
             val head = Path().apply {
-                moveTo(11.8f * s, 5.2f * s)
-                lineTo(15.5f * s, 5.6f * s)
-                lineTo(15.0f * s, 9.4f * s)
+                moveTo(13.4f * s, 4.05f * s)   // tip (up-right, along tangent)
+                lineTo(8.05f * s, 2.6f * s)    // outer base corner
+                lineTo(10.25f * s, 8.6f * s)   // inner base corner (on the arc end)
+                close()
             }
-            drawPath(head, tint, style = stroke)
+            drawPath(head, tint)
         }
     }
 

@@ -481,4 +481,16 @@
     <string name="swr_lockout_body">發射前請檢查天線 / 饋線。</string>
     <string name="swr_lockout_dismiss">關閉</string>
     <string name="swr_lockout_toast">發射已阻止 — 駐波比鎖定中，請先關閉鎖定橫幅。</string>
+
+    <!-- ===== Time sync / manual correction ===== -->
+    <string name="settings_cat_time_sync">時間同步</string>
+    <string name="settings_cat_time_sync_desc">離線操作的手動時鐘校正</string>
+    <string name="settings_time_correction_section">手動校正</string>
+    <string name="settings_time_correction_desc">在沒有網路同步時微調應用時鐘。FT8 需要 UTC 精確到約 1 秒。請調整到解碼站台的 DT 欄接近 0。</string>
+    <string name="settings_time_current_label">目前校正</string>
+    <string name="settings_time_correction_reset">重設為 0</string>
+    <string name="settings_time_suggest_section">根據解碼建議</string>
+    <string name="settings_time_suggest_label">近期平均 DT：%1$s</string>
+    <string name="settings_time_suggest_none">尚無解碼 — 開始接收以取得建議。</string>
+    <string name="settings_time_suggest_apply">套用建議的校正</string>
 </resources>

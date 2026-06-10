@@ -182,12 +182,27 @@ public class FT8TransmitSignal {
             //@RequiresApi(api = Build.VERSION_CODES.N)
             @Override
             public void doOnSecTimer(long utc) {
+                // Hunt (auto-answer) is armed via setActivated(true) so it CAN reply, but it
+                // only answers other stations' CQs — it never calls CQ itself. While no
+                // caller is locked yet it's just listening, so keep the TX watchdog fresh;
+                // otherwise an idle hunt would auto-stop after the timeout even though it's
+                // behaving correctly. A stuck *active* QSO still ages the watchdog (this is
+                // false once a real target is locked).
+                if (isHuntListeningIdle(GeneralVariables.autoFollowCQ, functionOrder, toCallsign)) {
+                    GeneralVariables.resetLaunchSupervision();
+                }
                 // stop if auto-supervision timeout exceeded
                 if (GeneralVariables.isLaunchSupervisionTimeout()) {
                     setActivated(false);
                     return;
                 }
                 if (UtcTimer.getNowSequential() == sequential && activated) {
+                    // Idle hunt: stay silent this slot and keep listening rather than keying
+                    // up a CQ. Once parseMessageToFunction locks a caller (order advances,
+                    // target becomes a real callsign) this is false and the reply transmits.
+                    if (isHuntListeningIdle(GeneralVariables.autoFollowCQ, functionOrder, toCallsign)) {
+                        return;
+                    }
                     if (GeneralVariables.myCallsign.length() < 3) {
                         // my callsign is invalid, cannot transmit!
                         ToastMessage.show(GeneralVariables.getStringFromResource(R.string.callsign_error));
@@ -980,6 +995,30 @@ public class FT8TransmitSignal {
         return checkCQMeOrFollowCQMessage(messages, false);
     }
 
+    /**
+     * Whether Hunt (auto-answer) is armed but still idle — i.e. we are in the CQ baseline
+     * state ({@code functionOrder == 6}, target null/"CQ") with no station locked to answer.
+     *
+     * <p>Hunt arms the sequencer with {@code setActivated(true)} so it can reply, but it
+     * answers other stations' CQs and must never call CQ itself. In this idle state the
+     * transmit slot stays silent and we just keep listening; once
+     * {@link #checkCQMeOrFollowCQMessage} locks a caller (order advances past 6 and the
+     * target becomes a real callsign) this returns false and the reply transmits normally.
+     * When Hunt is off ({@code autoFollowCQ == false}) this is always false, so a normal
+     * user CQ run is unaffected.
+     *
+     * @param autoFollowCQ  the Hunt flag (GeneralVariables.autoFollowCQ)
+     * @param functionOrder the current TX sequence step (6 == CQ baseline)
+     * @param toCallsign    the current TX target, if any
+     */
+    static boolean isHuntListeningIdle(boolean autoFollowCQ, int functionOrder,
+                                       TransmitCallsign toCallsign) {
+        if (!autoFollowCQ) return false;
+        if (functionOrder != 6) return false;
+        // "no target" == null or the CQ placeholder (see TransmitCallsign.haveTargetCallsign).
+        return toCallsign == null || !toCallsign.haveTargetCallsign();
+    }
+
     private boolean checkCQMeOrFollowCQMessage(ArrayList<Ft8Message> messages, boolean suppressHunt) {
         // these messages are freshly decoded
         // both loops check for CQ-me messages. The first loop prioritizes checking for my target callsign,
@@ -1551,6 +1590,12 @@ public class FT8TransmitSignal {
                     // Worker already released the track between our read and here.
                 }
             }
+            // Clear the "currently transmitting" message on TX end. It's only shown while
+            // transmitting (banner), and clearing it means the next transmission's rising
+            // edge starts from empty rather than the previous over's text — so the mini-log
+            // logs each transmission's REAL message instead of, on a new-and-different over,
+            // the stale prior one. (mutableTransmittingMessage is posted fresh at TX start.)
+            mutableTransmittingMessage.postValue("");
         }
 
         mutableIsTransmitting.postValue(transmitting);
@@ -1609,6 +1654,18 @@ public class FT8TransmitSignal {
         resetToCQ();
         clearCallerQueue();
         pendingUserCQ = true;
+    }
+
+    /**
+     * Arm the sequencer for Hunt: enter the CQ baseline and clear the caller queue, but do
+     * NOT set {@code pendingUserCQ}. Unlike {@link #userResetToCQ()} (a user-initiated CQ,
+     * which deliberately skips one cycle so the CQ transmits cleanly first), Hunt should be
+     * able to lock onto and answer a CQ on the very next decode cycle, so it must not
+     * suppress the first {@code checkCQMeOrFollowCQMessage} pass.
+     */
+    public void armForHunt() {
+        resetToCQ();
+        clearCallerQueue();
     }
 
     /**
