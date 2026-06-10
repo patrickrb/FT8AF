@@ -47,8 +47,21 @@ public class MeterProtectionController {
     // Holds the SWR ratio string (e.g. "3.2:1") that triggered lockout, for the banner.
     public final MutableLiveData<String> lockoutSwrRatio = new MutableLiveData<>("");
 
+    // Throttle for the per-reading SWR diagnostic log line (meter polls ~every 2s).
+    private static final long SWR_LOG_THROTTLE_MS = 1500;
+    private long lastSwrLogMs = 0;
+    private int lastLoggedSwr = -1;
+
     public void setTransmitSignal(FT8TransmitSignal signal) {
         this.transmitSignal = signal;
+    }
+
+    /**
+     * Whether SWR is high enough to halt TX: protection enabled, a valid reading, and over
+     * the threshold. Pure so the rule is unit-tested independent of the rig meter plumbing.
+     */
+    public static boolean shouldHaltForSwr(int normalizedSwr, boolean enabled, int threshold) {
+        return normalizedSwr >= 0 && enabled && normalizedSwr > threshold;
     }
 
     /**
@@ -60,9 +73,30 @@ public class MeterProtectionController {
         if (normalizedAlc >= 0) lastAlc.postValue(normalizedAlc);
         if (normalizedSwr >= 0) lastSwr.postValue(normalizedSwr);
 
+        // Diagnostics: when SWR protection is on, record each SWR reading we actually
+        // receive so the debug.log shows whether meter data even reaches here during TX, the
+        // values, and the halt decision. Without this a halt that never fires leaves no trace
+        // — we can't tell "no meter data" from "value below threshold" from a wiring problem.
+        // (Reported: "SWR protection not working".) Log whenever the SWR value CHANGES (so a
+        // real SWR update isn't suppressed when ALC and SWR arrive as separate callbacks
+        // close together), plus a periodic time-throttled line for a stable value.
+        if (GeneralVariables.swrHaltEnabled && normalizedSwr >= 0) {
+            long now = System.currentTimeMillis();
+            boolean changed = normalizedSwr != lastLoggedSwr;
+            if (changed || now - lastSwrLogMs >= SWR_LOG_THROTTLE_MS) {
+                lastSwrLogMs = now;
+                lastLoggedSwr = normalizedSwr;
+                GeneralVariables.fileLog(String.format(
+                        "MeterProtection: SWR reading swr=%d threshold=%d -> %s",
+                        normalizedSwr, GeneralVariables.swrHaltThreshold,
+                        shouldHaltForSwr(normalizedSwr, GeneralVariables.swrHaltEnabled,
+                                GeneralVariables.swrHaltThreshold) ? "HALT" : "ok"));
+            }
+        }
+
         // --- SWR halt check ---
-        if (normalizedSwr >= 0 && GeneralVariables.swrHaltEnabled
-                && normalizedSwr > GeneralVariables.swrHaltThreshold) {
+        if (shouldHaltForSwr(normalizedSwr, GeneralVariables.swrHaltEnabled,
+                GeneralVariables.swrHaltThreshold)) {
             haltForSwr(normalizedSwr);
             return; // no point adjusting volume if we just killed TX
         }
