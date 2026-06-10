@@ -50,6 +50,7 @@ public class MeterProtectionController {
     // Throttle for the per-reading SWR diagnostic log line (meter polls ~every 2s).
     private static final long SWR_LOG_THROTTLE_MS = 1500;
     private long lastSwrLogMs = 0;
+    private int lastLoggedSwr = -1;
 
     public void setTransmitSignal(FT8TransmitSignal signal) {
         this.transmitSignal = signal;
@@ -73,19 +74,23 @@ public class MeterProtectionController {
         if (normalizedSwr >= 0) lastSwr.postValue(normalizedSwr);
 
         // Diagnostics: when SWR protection is on, record each SWR reading we actually
-        // receive (throttled) so the debug.log shows whether meter data even reaches here
-        // during TX, the values, and the halt decision. Without this a halt that never
-        // fires leaves no trace — we can't tell "no meter data" from "value below threshold"
-        // from a wiring problem. (Reported: "SWR protection not working".)
+        // receive so the debug.log shows whether meter data even reaches here during TX, the
+        // values, and the halt decision. Without this a halt that never fires leaves no trace
+        // — we can't tell "no meter data" from "value below threshold" from a wiring problem.
+        // (Reported: "SWR protection not working".) Log whenever the SWR value CHANGES (so a
+        // real SWR update isn't suppressed when ALC and SWR arrive as separate callbacks
+        // close together), plus a periodic time-throttled line for a stable value.
         if (GeneralVariables.swrHaltEnabled && normalizedSwr >= 0) {
             long now = System.currentTimeMillis();
-            if (now - lastSwrLogMs >= SWR_LOG_THROTTLE_MS) {
+            boolean changed = normalizedSwr != lastLoggedSwr;
+            if (changed || now - lastSwrLogMs >= SWR_LOG_THROTTLE_MS) {
                 lastSwrLogMs = now;
+                lastLoggedSwr = normalizedSwr;
                 GeneralVariables.fileLog(String.format(
                         "MeterProtection: SWR reading swr=%d threshold=%d -> %s",
                         normalizedSwr, GeneralVariables.swrHaltThreshold,
-                        shouldHaltForSwr(normalizedSwr, true, GeneralVariables.swrHaltThreshold)
-                                ? "HALT" : "ok"));
+                        shouldHaltForSwr(normalizedSwr, GeneralVariables.swrHaltEnabled,
+                                GeneralVariables.swrHaltThreshold) ? "HALT" : "ok"));
             }
         }
 
