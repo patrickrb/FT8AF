@@ -481,4 +481,15 @@
     <string name="swr_lockout_body">Проверьте антенну / фидер перед передачей.</string>
     <string name="swr_lockout_dismiss">ЗАКРЫТЬ</string>
     <string name="swr_lockout_toast">TX заблокирован — блокировка КСВ активна. Сначала закройте баннер.</string>
+
+    <!-- ===== Time sync / manual correction ===== -->
+    <string name="settings_cat_time_sync">Синхронизация времени</string>
+    <string name="settings_time_correction_section">Ручная коррекция</string>
+    <string name="settings_time_correction_desc">Подстройка часов приложения, когда нет интернета для синхронизации. Для FT8 нужно UTC с точностью около 1 секунды. Регулируйте, пока столбец DT у декодированных станций не будет около 0.</string>
+    <string name="settings_time_current_label">Текущая коррекция</string>
+    <string name="settings_time_correction_reset">Сбросить на 0</string>
+    <string name="settings_time_suggest_section">Предложение по декодированиям</string>
+    <string name="settings_time_suggest_label">Средний DT за последнее время: %1$s</string>
+    <string name="settings_time_suggest_none">Пока нет декодирований — включите приём, чтобы получить рекомендацию.</string>
+    <string name="settings_time_suggest_apply">Применить предложенную коррекцию</string>
 </resources>

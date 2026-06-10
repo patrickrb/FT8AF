@@ -481,4 +481,15 @@
     <string name="swr_lockout_body">Verifique la antena / línea de alimentación antes de transmitir.</string>
     <string name="swr_lockout_dismiss">DESCARTAR</string>
     <string name="swr_lockout_toast">TX bloqueado — bloqueo por SWR activo. Descarte el aviso primero.</string>
+
+    <!-- ===== Time sync / manual correction ===== -->
+    <string name="settings_cat_time_sync">Sincronización de hora</string>
+    <string name="settings_time_correction_section">Corrección manual</string>
+    <string name="settings_time_correction_desc">Ajusta el reloj de la app cuando no tienes internet para sincronizar. FT8 necesita UTC con una precisión de aproximadamente 1 segundo. Ajusta hasta que la columna DT de las estaciones decodificadas se centre cerca de 0.</string>
+    <string name="settings_time_current_label">Corrección actual</string>
+    <string name="settings_time_correction_reset">Restablecer a 0</string>
+    <string name="settings_time_suggest_section">Sugerido a partir de decodificaciones</string>
+    <string name="settings_time_suggest_label">DT promedio reciente: %1$s</string>
+    <string name="settings_time_suggest_none">Aún no hay decodificaciones — empieza a recibir para obtener una sugerencia.</string>
+    <string name="settings_time_suggest_apply">Aplicar corrección sugerida</string>
 </resources>

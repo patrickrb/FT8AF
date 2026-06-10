@@ -481,4 +481,15 @@
     <string name="swr_lockout_body">送信前にアンテナ / 給電線を確認してください。</string>
     <string name="swr_lockout_dismiss">解除</string>
     <string name="swr_lockout_toast">送信ブロック — SWRロック中。先にロックバナーを解除してください。</string>
+
+    <!-- ===== Time sync / manual correction ===== -->
+    <string name="settings_cat_time_sync">時刻同期</string>
+    <string name="settings_time_correction_section">手動補正</string>
+    <string name="settings_time_correction_desc">同期できるインターネットがないときにアプリの時計を微調整します。FT8 には約1秒以内の UTC が必要です。デコードした局の DT 列が 0 付近になるまで調整してください。</string>
+    <string name="settings_time_current_label">現在の補正</string>
+    <string name="settings_time_correction_reset">0 にリセット</string>
+    <string name="settings_time_suggest_section">デコードからの提案</string>
+    <string name="settings_time_suggest_label">最近の平均 DT: %1$s</string>
+    <string name="settings_time_suggest_none">まだデコードがありません — 受信を開始すると提案が表示されます。</string>
+    <string name="settings_time_suggest_apply">提案された補正を適用</string>
 </resources>
