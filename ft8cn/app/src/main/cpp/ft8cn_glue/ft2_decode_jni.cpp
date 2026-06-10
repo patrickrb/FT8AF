@@ -7,12 +7,14 @@
 // with FT2 added to the protocol switch (constants.h / monitor.c / decode.c).
 //
 // This file is a focused adaptation of ft8cn_glue/ft8_decoder.cpp (the full reconstruction
-// of the prebuilt's decode wrapper) with: protocol hardcoded to FTX_PROTOCOL_FT2; distinct
+// of the prebuilt's decode wrapper) with: the ftx protocol passed in from Java
+// (InitDecoderFt2 takes a `protocol` arg — FTX_PROTOCOL_FT2 or FTX_PROTOCOL_FT4); distinct
 // JNI entry-point names (FT8SignalListener.*Ft2 / ReBuildSignal.doSubtractSignalFt2) so it
-// never collides with the prebuilt's exported symbols; and FT2 deep-subtract geometry
-// (105 symbols, ~167 Hz window). FT8/FT4 keep using the prebuilt unchanged — only FT2 mode
-// reaches this code. All internal symbols are static / hidden so the two DSP copies in the
-// process don't interpose each other (see CMakeLists -fvisibility=hidden).
+// never collides with the prebuilt's exported symbols; and a 4-GFSK deep-subtract geometry
+// (105 symbols) shared by FT2 and FT4. FT2 *and* FT4 now reach this code (FT4 moved here for
+// a corrected SNR; see ft8_snr in decode.c); only FT8 keeps using the prebuilt unchanged.
+// All internal symbols are static / hidden so the two DSP copies in the process don't
+// interpose each other (see CMakeLists -fvisibility=hidden).
 
 #include <jni.h>
 #include <stdint.h>
@@ -415,10 +417,15 @@ FT2JNI(jbyteArray, DecoderFt2GetA91)(JNIEnv* env, jobject, jlong handle)
 }
 
 // ---------------------------------------------------------------------------
-// ReBuildSignal.doSubtractSignalFt2 — deep-decode subtraction for FT2. Zero the
-// waterfall magnitude cells the decoded signal occupies (across 105 FT2 symbol blocks,
-// ~167 Hz wide) so the next find_sync pass can't re-detect it. FT2 bin width is
-// 1/symbol_period = 41.67 Hz, so ~2 bins covers half the 167 Hz signal.
+// ReBuildSignal.doSubtractSignalFt2 — deep-decode subtraction for FT2 and FT4. Zero the
+// waterfall magnitude cells the decoded signal occupies (across the 105 4-GFSK symbol
+// blocks) so the next find_sync pass can't re-detect it.
+//
+// The geometry is protocol-correct for both FT2 and FT4 without a per-protocol width: the
+// freq/time offsets use d->mon.symbol_period (set per protocol at init), and the signal
+// occupies the same number of *bins* in either mode — bin width = 1/symbol_period scales
+// with the tone spacing, so ~2 bins covers half the 4-tone signal for FT2 (~167 Hz at
+// 41.67 Hz/bin) and FT4 (~83 Hz at 20.83 Hz/bin) alike.
 // ---------------------------------------------------------------------------
 extern "C" JNIEXPORT void JNICALL
 Java_com_bg7yoz_ft8cn_ft8listener_ReBuildSignal_doSubtractSignalFt2(
