@@ -1564,6 +1564,12 @@ public class FT8TransmitSignal {
                     // Worker already released the track between our read and here.
                 }
             }
+            // Clear the "currently transmitting" message on TX end. It's only shown while
+            // transmitting (banner), and clearing it means the next transmission's rising
+            // edge starts from empty rather than the previous over's text — so the mini-log
+            // logs each transmission's REAL message instead of, on a new-and-different over,
+            // the stale prior one. (mutableTransmittingMessage is posted fresh at TX start.)
+            mutableTransmittingMessage.postValue("");
         }
 
         mutableIsTransmitting.postValue(transmitting);
