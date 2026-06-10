@@ -484,6 +484,7 @@
 
     <!-- ===== Time sync / manual correction ===== -->
     <string name="settings_cat_time_sync">时间同步</string>
+    <string name="settings_cat_time_sync_desc">离线操作的手动时钟校正</string>
     <string name="settings_time_correction_section">手动校正</string>
     <string name="settings_time_correction_desc">在没有网络同步时微调应用时钟。FT8 需要 UTC 精确到约 1 秒。请调整到解码站点的 DT 列接近 0。</string>
     <string name="settings_time_current_label">当前校正</string>
