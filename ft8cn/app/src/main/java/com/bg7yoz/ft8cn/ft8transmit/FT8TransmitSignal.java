@@ -1625,6 +1625,18 @@ public class FT8TransmitSignal {
     }
 
     /**
+     * Arm the sequencer for Hunt: enter the CQ baseline and clear the caller queue, but do
+     * NOT set {@code pendingUserCQ}. Unlike {@link #userResetToCQ()} (a user-initiated CQ,
+     * which deliberately skips one cycle so the CQ transmits cleanly first), Hunt should be
+     * able to lock onto and answer a CQ on the very next decode cycle, so it must not
+     * suppress the first {@code checkCQMeOrFollowCQMessage} pass.
+     */
+    public void armForHunt() {
+        resetToCQ();
+        clearCallerQueue();
+    }
+
+    /**
      * Force-log the current QSO and move on.
      * Called when the user taps "LOG" to skip waiting for a 73 reply.
      *

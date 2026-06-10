@@ -295,7 +295,9 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                         if (newVal) {
                             // Arm the sequencer so Hunt actually answers CQs. It stays silent
                             // (transmit path suppresses calling CQ) until it hears a CQ to work.
-                            mainViewModel.ft8TransmitSignal.userResetToCQ()
+                            // armForHunt (not userResetToCQ) so Hunt can answer on the very next
+                            // cycle instead of skipping one via pendingUserCQ.
+                            mainViewModel.ft8TransmitSignal.armForHunt()
                             mainViewModel.ft8TransmitSignal.setActivated(true)
                             GeneralVariables.resetLaunchSupervision()
                         } else {
