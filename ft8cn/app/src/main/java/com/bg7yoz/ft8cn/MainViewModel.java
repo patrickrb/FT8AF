@@ -272,9 +272,15 @@ public class MainViewModel extends ViewModel {
         }
 
         @Override
-        public void onFreqChanged(long freq) {
-            //the rig answered a frequency query — proof the link is alive (liveness watchdog)
+        public void onRigResponded() {
+            // The rig answered with a valid frequency (changed or not) — the liveness signal.
+            // onFreqChanged only fires on a change, so it can't be used here (a stable dial
+            // would look dead and falsely trip the watchdog).
             markRigResponded();
+        }
+
+        @Override
+        public void onFreqChanged(long freq) {
             //current frequency: %s
             ToastMessage.show(String.format(getStringFromResource(R.string.current_frequency)
                     , BaseRigOperation.getFrequencyAllInfo(freq)));
@@ -357,8 +363,9 @@ public class MainViewModel extends ViewModel {
             }
         } catch (Exception e) {
             // Never let a probe failure crash the timer thread; a real I/O error already
-            // surfaces via onRunError().
-            Log.w(TAG, "cat liveness tick: " + e.getMessage());
+            // surfaces via onRunError(). Log the exception object (not just getMessage(),
+            // which can be null) so the stack trace is preserved.
+            Log.w(TAG, "cat liveness tick failed", e);
         }
     }
 

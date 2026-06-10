@@ -13,10 +13,11 @@ package com.bg7yoz.ft8cn.rigs;
  * <p>Two guards keep it from crying wolf:
  * <ul>
  *   <li>It never judges during transmit (we don't poll while keyed).</li>
- *   <li>It only arms once the rig has answered at least once since connecting
- *       ({@code sawResponse}). A rig that never echoes a frequency read (or a transport that
- *       doesn't support it) therefore can't be falsely marked dead — the watchdog simply
- *       stays dormant for it.</li>
+ *   <li>The <em>stale</em> decision only arms once the rig has answered at least once since
+ *       connecting ({@code sawResponse}). Probes are still sent every tick (see
+ *       {@link #shouldProbe}); it's only the "declare dead" judgement that waits for a first
+ *       reply, so a rig that never answers a frequency read (or a transport that doesn't
+ *       support it) can't be falsely marked dead.</li>
  * </ul>
  */
 public final class CatLiveness {
