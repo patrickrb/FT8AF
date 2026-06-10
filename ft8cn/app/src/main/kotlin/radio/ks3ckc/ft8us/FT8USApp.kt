@@ -258,6 +258,13 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                         dxEnabled = false
                     } else {
                         mainViewModel.ft8TransmitSignal.setActivated(false)
+                        // If Hunt armed this run, STOP ends Hunt too, so the buttons can't be
+                        // left showing Hunt "on" while the sequencer is stopped (and idle).
+                        if (huntEnabled) {
+                            huntEnabled = false
+                            GeneralVariables.autoFollowCQ = false
+                            mainViewModel.databaseOpr.writeConfig("autoFollowCQ", "0", null)
+                        }
                     }
                 },
                 onToggleDx = {
@@ -276,17 +283,33 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                 },
                 onToggleHunt = {
                     val newVal = !huntEnabled
-                    huntEnabled = newVal
-                    GeneralVariables.autoFollowCQ = newVal
-                    mainViewModel.databaseOpr.writeConfig(
-                        "autoFollowCQ", if (newVal) "1" else "0", null,
-                    )
-                    Toast.makeText(
-                        context,
-                        if (newVal) context.getString(R.string.app_hunt_on)
-                        else context.getString(R.string.app_hunt_off),
-                        Toast.LENGTH_SHORT,
-                    ).show()
+                    if (newVal && GeneralVariables.myCallsign.isNullOrEmpty()) {
+                        // Hunt transmits replies, so it needs a callsign just like CQ does.
+                        Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
+                    } else {
+                        huntEnabled = newVal
+                        GeneralVariables.autoFollowCQ = newVal
+                        mainViewModel.databaseOpr.writeConfig(
+                            "autoFollowCQ", if (newVal) "1" else "0", null,
+                        )
+                        if (newVal) {
+                            // Arm the sequencer so Hunt actually answers CQs. It stays silent
+                            // (transmit path suppresses calling CQ) until it hears a CQ to work.
+                            // armForHunt (not userResetToCQ) so Hunt can answer on the very next
+                            // cycle instead of skipping one via pendingUserCQ.
+                            mainViewModel.ft8TransmitSignal.armForHunt()
+                            mainViewModel.ft8TransmitSignal.setActivated(true)
+                            GeneralVariables.resetLaunchSupervision()
+                        } else {
+                            mainViewModel.ft8TransmitSignal.setActivated(false)
+                        }
+                        Toast.makeText(
+                            context,
+                            if (newVal) context.getString(R.string.app_hunt_on)
+                            else context.getString(R.string.app_hunt_off),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
                 },
                 onCycleMode = {
                     // Cycle through the shipped ModeProfile entries in declaration order
