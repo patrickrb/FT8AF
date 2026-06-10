@@ -176,7 +176,7 @@ public class FT8SignalListener {
                 // Note: decoding must complete within one cycle, otherwise a new decode cycle will begin
                 // FT2 receive uses the from-source decoder (ft8af_usb); FT8/FT4 use the prebuilt.
                 // All the native ops are dispatched through the *Decode helpers on this flag.
-                final boolean ft2 = GeneralVariables.currentMode().usesFt2Decoder();
+                final boolean ft2 = GeneralVariables.currentMode().usesFromSourceDecoder();
                 long ft8Decoder = initDecoder(utc, voiceData.length, ft2);
 //                        , tempData.length, true);
                 pressFloatDecode(voiceData, ft8Decoder, ft2);// load audio data
@@ -273,14 +273,16 @@ public class FT8SignalListener {
     }
 
     // ---- Decoder backend dispatch -----------------------------------------------------
-    // FT2 receive runs on the from-source decoder (ft8af_usb, *Ft2 entry points); FT8/FT4
-    // run on the prebuilt (ft8cn). The decode loop above stays backend-agnostic by routing
-    // every native op through these helpers on the per-cycle `ft2` flag
-    // (= ModeProfile.usesFt2Decoder()).
+    // FT2 and FT4 receive run on the from-source decoder (ft8af_usb, *Ft2 entry points);
+    // FT8 runs on the prebuilt (ft8cn). The decode loop above stays backend-agnostic by
+    // routing every native op through these helpers on the per-cycle `ft2` flag
+    // (= ModeProfile.usesFromSourceDecoder()). The from-source init takes the ftx protocol
+    // so it configures the monitor for FT2 vs FT4 symbol timing.
 
     private long initDecoder(long utc, int numSamples, boolean ft2) {
         if (ft2) {
-            return InitDecoderFt2(utc, FT8Common.SAMPLE_RATE, numSamples);
+            return InitDecoderFt2(utc, FT8Common.SAMPLE_RATE, numSamples,
+                    GeneralVariables.currentMode().ftxProtocol());
         }
         return InitDecoder(utc, FT8Common.SAMPLE_RATE, numSamples,
                 GeneralVariables.currentMode().isFt8);
@@ -461,7 +463,7 @@ public class FT8SignalListener {
     // ---- FT2 decoder (from-source ft8_lib in libft8af_usb.so) -------------------------
     // Distinct entry points so they never collide with the prebuilt's InitDecoder/etc.
     // Protocol is fixed to FT2 (0.024s symbol period); see cpp/ft8cn_glue/ft2_decode_jni.cpp.
-    public native long InitDecoderFt2(long utcTime, int sampleRate, int num_samples);
+    public native long InitDecoderFt2(long utcTime, int sampleRate, int num_samples, int protocol);
 
     public native void DecoderFt2MonitorPressFloat(float[] buffer, long decoder);
 

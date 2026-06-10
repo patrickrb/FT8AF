@@ -53,8 +53,36 @@ int ft8_snr(const waterfall_t* wf, const candidate_t* candidate)
     // Get the pointer to symbol 0 of the candidate
     const uint8_t* mag_cand = get_cand_mag(wf, candidate);
 
-    if (wf->protocol == FTX_PROTOCOL_FT4)
+    // FT4 and FT2 share a 4-GFSK layout (105 symbols, 4 sync groups of 4) completely
+    // different from FT8's, so they need their own signal/noise estimate. Without this
+    // branch the FT8 loop below ran FT8's 79-symbol / 8-tone Costas structure over an
+    // FT4/FT2 signal, mis-locating the sync tones and reading the SNR ~15 dB low. Mirror
+    // ft4_sync_score's geometry: at each sync symbol the expected tone
+    // (kFT4_Costas_pattern[m][k]) is the signal and the other three tones are the noise.
+    if (wf->protocol == FTX_PROTOCOL_FT4 || wf->protocol == FTX_PROTOCOL_FT2)
     {
+        for (int m = 0; m < FT4_NUM_SYNC; ++m)
+        {
+            for (int k = 0; k < FT4_LENGTH_SYNC; ++k)
+            {
+                int block = 1 + (FT4_SYNC_OFFSET * m) + k;
+                int block_abs = candidate->time_offset + block;
+                if (block_abs < 0)
+                    continue;
+                if (block_abs >= wf->num_blocks)
+                    break;
+
+                const uint8_t* p4 = mag_cand + (block * wf->block_stride);
+                int sm = kFT4_Costas_pattern[m][k]; // expected tone (0..3)
+                sum_signal += p4[sm];
+                // Noise = average of the other three of the four FT4 tones (+1 rounds /3).
+                sum_noise += (1 + (int)p4[0] + (int)p4[1] + (int)p4[2] + (int)p4[3] - (int)p4[sm]) / 3;
+                ++num_average;
+            }
+        }
+        if (num_average == 0)
+            return -24; // no usable sync symbols in this window; report a deep floor
+        return (sum_signal - sum_noise) / num_average;
     }
 
     // Compute average score over sync symbols (m+k = 0-7, 36-43, 72-79)

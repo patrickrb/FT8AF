@@ -218,7 +218,7 @@ static void ft2_set_call_hashes(JNIEnv* env, jobject msg, const char* call,
     extern "C" JNIEXPORT ret JNICALL Java_com_bg7yoz_ft8cn_ft8listener_FT8SignalListener_##name
 
 // ---------------------------------------------------------------------------
-FT2JNI(jlong, InitDecoderFt2)(JNIEnv*, jobject, jlong utcTime, jint sampleRate, jint num_samples)
+FT2JNI(jlong, InitDecoderFt2)(JNIEnv*, jobject, jlong utcTime, jint sampleRate, jint num_samples, jint protocol)
 {
     ft2_decoder_state* d = (ft2_decoder_state*)calloc(1, sizeof(ft2_decoder_state));
     if (!d)
@@ -228,13 +228,18 @@ FT2JNI(jlong, InitDecoderFt2)(JNIEnv*, jobject, jlong utcTime, jint sampleRate, 
     d->utc = utcTime;
     d->ldpc_iterations = 20;
 
+    // protocol is the ftx_protocol_t int from Java (ModeProfile.ftxProtocol): FT4=0, FT8=1,
+    // FT2=2. The from-source path serves FT2 and FT4; default to FT2 for any unexpected
+    // value so an older caller can't misconfigure the monitor.
+    ftx_protocol_t proto = (protocol == (jint)FTX_PROTOCOL_FT4) ? FTX_PROTOCOL_FT4 : FTX_PROTOCOL_FT2;
+
     monitor_config_t cfg;
     cfg.f_min = 100;
     cfg.f_max = 3500;
     cfg.sample_rate = sampleRate;
     cfg.time_osr = 2;
     cfg.freq_osr = 2;
-    cfg.protocol = FTX_PROTOCOL_FT2;
+    cfg.protocol = proto;
     monitor_init(&d->mon, &cfg);
     d->mon_ready = true;
 

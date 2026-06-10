@@ -58,10 +58,20 @@ public class ModeProfileTest {
     }
 
     @Test
-    public void usesFt2Decoder_onlyTrueForFt2() {
-        assertThat(ModeProfile.FT8.usesFt2Decoder()).isFalse();
-        assertThat(ModeProfile.FT4.usesFt2Decoder()).isFalse();
-        assertThat(ModeProfile.FT2.usesFt2Decoder()).isTrue();
+    public void usesFromSourceDecoder_trueForFt2AndFt4() {
+        // FT8 stays on the prebuilt; FT2 (no prebuilt protocol) and FT4 (prebuilt SNR is
+        // miscalibrated) both run on the from-source decoder.
+        assertThat(ModeProfile.FT8.usesFromSourceDecoder()).isFalse();
+        assertThat(ModeProfile.FT4.usesFromSourceDecoder()).isTrue();
+        assertThat(ModeProfile.FT2.usesFromSourceDecoder()).isTrue();
+    }
+
+    @Test
+    public void ftxProtocol_matchesNativeEnumOrder() {
+        // ftx_protocol_t in constants.h: FT4 = 0, FT8 = 1, FT2 = 2.
+        assertThat(ModeProfile.FT4.ftxProtocol()).isEqualTo(0);
+        assertThat(ModeProfile.FT8.ftxProtocol()).isEqualTo(1);
+        assertThat(ModeProfile.FT2.ftxProtocol()).isEqualTo(2);
     }
 
     @Test
