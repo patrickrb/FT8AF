@@ -10,6 +10,10 @@
 // #define LOG_LEVEL LOG_DEBUG
 // #include "debug.h"
 
+// dB subtracted from the raw FT4/FT2 SNR estimate to align its 4-GFSK magnitude scale with
+// FT8's reported range. Empirical; see the note in ft8_snr(). Tune here if FT4 reads high/low.
+#define FT4_SNR_CAL_DB 20
+
 /// Compute log likelihood log(p(1) / p(0)) of 174 message bits for later use in soft-decision LDPC decoding
 /// @param[in] wf Waterfall data collected during message slot
 /// @param[in] cand Candidate to extract the message from
@@ -82,7 +86,13 @@ int ft8_snr(const waterfall_t* wf, const candidate_t* candidate)
         }
         if (num_average == 0)
             return -24; // no usable sync symbols in this window; report a deep floor
-        return (sum_signal - sum_noise) / num_average;
+        // Calibration: the raw 4-GFSK magnitude difference reads ~20 dB hotter than FT8's
+        // scale (the monitor normalizes the FT4/FT2 magnitudes differently than FT8's
+        // 8-GFSK), so subtract a fixed offset to bring decoded FT4/FT2 SNRs into the same dB
+        // range as FT8. Tuned against on-air FT4 reciprocity: a station reporting us +10 was
+        // read here at +31 before this offset. Adjust if FT4 reads consistently high/low
+        // versus WSJT-X / reciprocal reports.
+        return (sum_signal - sum_noise) / num_average - FT4_SNR_CAL_DB;
     }
 
     // Compute average score over sync symbols (m+k = 0-7, 36-43, 72-79)
