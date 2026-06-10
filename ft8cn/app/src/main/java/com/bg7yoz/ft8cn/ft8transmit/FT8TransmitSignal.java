@@ -1429,8 +1429,28 @@ public class FT8TransmitSignal {
      * @param messages watched message list
      * @return true if new target found, false otherwise
      */
+    /**
+     * Whether we're allowed to auto-call a station that's calling CQ, given the auto-call
+     * settings. Hunt ({@code autoFollowCQ}) answers any CQ; with Hunt off, auto-call-follow
+     * answers only CQs from {@code isFollowed} callsigns; with both off we never auto-call.
+     * Shared rule so the give-up fallback ({@link #getNewTargetCallsign}) and the live
+     * auto-answer scan agree on who we'll call.
+     */
+    static boolean mayAutoCall(boolean autoFollowCQ, boolean autoCallFollow, boolean isFollowed) {
+        if (autoFollowCQ) return true;
+        return autoCallFollow && isFollowed;
+    }
+
     public boolean getNewTargetCallsign(ArrayList<Ft8Message> messages) {
         if (toCallsign == null) return false;
+        // Only auto-pick a fresh CQ target when an auto-call mode is on. With Hunt
+        // (autoFollowCQ) and auto-call-follow both off, a manually-started QSO that gets no
+        // reply must fall back to idle/CQ — it must NOT start answering some other station's
+        // CQ. (This is the give-up fallback after the no-reply limit; it previously chased
+        // any CQ regardless of the Hunt toggle.)
+        if (!GeneralVariables.autoFollowCQ && !GeneralVariables.autoCallFollow) {
+            return false;
+        }
         for (int i = messages.size() - 1; i >= 0; i--) {
             Ft8Message ft8Message = messages.get(i);
             if (ft8Message.band != GeneralVariables.band) {//ignore messages not on the same band
@@ -1438,6 +1458,12 @@ public class FT8TransmitSignal {
             }
             // not CQ, ignore
             if (!ft8Message.checkIsCQ()) {
+                continue;
+            }
+            // With Hunt off but auto-call-follow on, only auto-call *followed* callsigns —
+            // mirror checkCQMeOrFollowCQMessage so the two paths agree on who we'll call.
+            if (!mayAutoCall(GeneralVariables.autoFollowCQ, GeneralVariables.autoCallFollow,
+                    GeneralVariables.callsignInFollow(ft8Message.getCallsignFrom()))) {
                 continue;
             }
             // not the current target callsign, and no previous successful QSO

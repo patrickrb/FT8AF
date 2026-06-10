@@ -182,4 +182,27 @@ public class FT8TransmitSignalTest {
         assertThat(second).usingTolerance(TOL)
                 .containsExactly(new float[]{0.25f, 0.25f}).inOrder();
     }
+
+    // ---- mayAutoCall --------------------------------------------------------
+    // The give-up fallback after a no-reply manual QSO must not chase other CQs unless an
+    // auto-call mode is on.
+
+    @Test
+    public void mayAutoCall_huntOn_answersAnyCq() {
+        assertThat(FT8TransmitSignal.mayAutoCall(true, false, false)).isTrue();
+        assertThat(FT8TransmitSignal.mayAutoCall(true, false, true)).isTrue();
+    }
+
+    @Test
+    public void mayAutoCall_huntOff_followOn_onlyFollowed() {
+        assertThat(FT8TransmitSignal.mayAutoCall(false, true, true)).isTrue();
+        assertThat(FT8TransmitSignal.mayAutoCall(false, true, false)).isFalse();
+    }
+
+    @Test
+    public void mayAutoCall_bothOff_neverAnswers() {
+        // The reported bug: manual QSO, no reply, Hunt off -> must NOT answer other CQs.
+        assertThat(FT8TransmitSignal.mayAutoCall(false, false, false)).isFalse();
+        assertThat(FT8TransmitSignal.mayAutoCall(false, false, true)).isFalse();
+    }
 }
