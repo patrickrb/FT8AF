@@ -182,6 +182,10 @@ fun MapScreen(mainViewModel: MainViewModel) {
     var viewMode by rememberSaveable { mutableStateOf(MapViewMode.STANDARD) }
     var pskOverlayEnabled by rememberSaveable { mutableStateOf(GeneralVariables.pskOverlayEnabled) }
     var pskSpots by remember { mutableStateOf<List<PskSpotMarker>>(emptyList()) }
+    // Last overlay fetch error (transport/HTTP/rate-limit); null when the last fetch
+    // succeeded or was a benign cooldown skip. Surfaced in the status row so an empty
+    // overlay caused by a failure is distinguishable from "genuinely no spots".
+    var pskError by remember { mutableStateOf<String?>(null) }
 
     // Zoom + pan (issue #51). Scale is clamped to [1, MAX_ZOOM]; pan is clamped so the
     // scaled map can't be dragged entirely off-screen. Both reset whenever the projection
@@ -202,14 +206,21 @@ fun MapScreen(mainViewModel: MainViewModel) {
     LaunchedEffect(pskOverlayEnabled) {
         if (!pskOverlayEnabled) {
             pskSpots = emptyList()
+            pskError = null
             return@LaunchedEffect
         }
+        var firstFetch = true
         while (true) {
             val call = GeneralVariables.myCallsign.trim().uppercase()
             if (call.isEmpty()) {
                 pskSpots = emptyList()
+                pskError = null
             } else {
-                val spots = PskReporterClient.fetchSpotsForMe(call, PSK_OVERLAY_SECONDS_BACK)
+                // force=true only on the first fetch after the overlay is (re)entered so a
+                // recent prior-visit fetch within the 5-min cooldown doesn't leave the
+                // overlay blank; the 429/503 back-off is still honoured.
+                val spots = PskReporterClient.fetchSpotsForMe(call, PSK_OVERLAY_SECONDS_BACK, force = firstFetch)
+                firstFetch = false
                 if (spots != null) {
                     pskSpots = spots.map {
                         PskSpotMarker(
@@ -221,9 +232,13 @@ fun MapScreen(mainViewModel: MainViewModel) {
                             frequencyHz = it.frequencyHz,
                         )
                     }
+                    pskError = null
+                } else {
+                    // null = transport/HTTP error, rate-limit back-off, or cooldown skip.
+                    // Keep prior spots so the overlay doesn't flicker; surface the reason
+                    // (lastError is null for a benign cooldown skip). debug.log has detail.
+                    pskError = PskReporterClient.lastError
                 }
-                // On null (failure / cooldown / rate-limit) keep prior spots so the overlay
-                // doesn't flicker; PskReporterClient logs the reason to debug.log.
             }
             delay(PSK_POLL_INTERVAL_MS)
         }
@@ -465,6 +480,15 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 color = TextMuted,
                 fontSize = 10.5.sp,
             )
+            val overlayError = pskError
+            if (pskOverlayEnabled && overlayError != null) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.map_psk_error, overlayError),
+                    color = StatusNew,
+                    fontSize = 10.5.sp,
+                )
+            }
             Spacer(modifier = Modifier.weight(1f))
             Text(
                 text = if (viewMode == MapViewMode.STANDARD) stringResource(R.string.map_projection_equirectangular) else stringResource(R.string.map_projection_azimuthal),

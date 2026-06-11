@@ -313,6 +313,7 @@
     <string name="map_no_grid_set">No grid set</string>
     <string name="map_station_count">%1$d stations</string>
     <string name="map_station_count_with_heard">%1$d stations · %2$d heard</string>
+    <string name="map_psk_error">PSK Reporter unavailable: %1$s</string>
     <string name="map_projection_equirectangular">Equirectangular</string>
     <string name="map_projection_azimuthal">Azimuthal Equidistant</string>
     <string name="map_mode_standard">STD</string>
