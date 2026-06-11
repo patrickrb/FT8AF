@@ -47,16 +47,24 @@
 *:28180000:10m:FT4
 *:50318000:6m:FT4
 *:144170000:2m:FT4
-# FT2 dials below are PROVISIONAL placeholders (FT8 sub-band freqs) pending the
-# official ft2.it/HamPass ft2-bands.qrg list. Replace with the canonical values.
-# (Comment lines contain no colon, so the bands loader skips them.)
-*:3573000:80m:FT2
-*:7074000:40m:FT2
-*:10136000:30m:FT2
-*:14074000:20m:FT2
-*:18100000:17m:FT2
-*:21074000:15m:FT2
-*:24915000:12m:FT2
-*:28074000:10m:FT2
-*:50313000:6m:FT2
-*:144174000:2m:FT2
+# FT2 dial frequencies (canonical FT2 band plan).
+# Comment lines contain no colon, so the bands loader skips them.
+*:1843000:160m:FT2
+*:3578000:80m:FT2
+*:5360000:60m:FT2
+*:7062000:40m:FT2
+*:10144000:30m:FT2
+*:14084000:20m:FT2
+*:18108000:17m:FT2
+*:21144000:15m:FT2
+*:24923000:12m:FT2
+*:28184000:10m:FT2
+*:50316000:6m:FT2
+*:70157000:4m:FT2
+*:144177000:2m:FT2
+*:222177000:1.25m:FT2
+*:432177000:70cm:FT2
+*:1296177000:23cm:FT2
+# QO-100 geostationary satellite (Es'hail-2): 2.4 GHz uplink / 10.489 GHz downlink.
+*:2400040000:13cm:FT2
+*:10489540000:3cm:FT2
