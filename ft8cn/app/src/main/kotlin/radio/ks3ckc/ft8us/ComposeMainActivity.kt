@@ -258,7 +258,25 @@ class ComposeMainActivity : AppCompatActivity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        // Proceed regardless; same behavior as original
+        // Proceed regardless; same behavior as original.
+
+        // GPS grid auto-update: the toggle in Settings (and the cold-start path)
+        // requests ACCESS_FINE_LOCATION *asynchronously* and then immediately calls
+        // GridLocationUpdater.refresh(). On the very first enable the permission is
+        // still ungranted at that point, so start() bails and the subscription never
+        // begins until the next app launch. Once the user grants location here, kick
+        // refresh() again so updates start in the same session (issue #59).
+        if (locationGrantedIn(permissions, grantResults)
+            && GeneralVariables.autoUpdateGridFromGPS
+        ) {
+            fileLog("onRequestPermissionsResult: location granted, starting GPS grid updater")
+            val grid = MaidenheadGrid.getMyMaidenheadGrid(applicationContext)
+            if (grid.isNotEmpty()) {
+                GeneralVariables.setMyMaidenheadGrid(grid)
+                mainViewModel.databaseOpr.writeConfig("grid", grid, null)
+            }
+            GridLocationUpdater.refresh(applicationContext, mainViewModel)
+        }
     }
 
     private fun initData() {
@@ -288,6 +306,10 @@ class ComposeMainActivity : AppCompatActivity() {
                     GridLocationUpdater.refresh(applicationContext, mainViewModel)
                 }
                 mainViewModel.ft8TransmitSignal.setTimer_sec(GeneralVariables.transmitDelay)
+
+                // The cycle timers were built (for FT8) before config loaded; now that the
+                // persisted operating mode is known, rebuild them for it and sync the UI.
+                mainViewModel.applyLoadedOperatingMode()
 
                 // Resume any POTA activation that was interrupted by app close
                 PotaSessionManager.resume()
@@ -377,6 +399,26 @@ class ComposeMainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         if ("android.hardware.usb.action.USB_DEVICE_ATTACHED" == intent.action) {
             fileLog("onNewIntent: USB_DEVICE_ATTACHED")
+            // If the attached device is the one the user picked for direct USB
+            // audio, make sure we hold permission before the delayed reinit
+            // below tries to open it. USB permission can be dropped across an
+            // unplug/replug; without this, the recorder reopens, finds no
+            // permission, and silently falls back to the built-in mic. The
+            // grant callback (MainViewModel.requestUsbPermissionIfNeeded) then
+            // rebinds the input once the user allows it.
+            val attached: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            }
+            if (attached != null
+                && (GeneralVariables.isConfiguredUsbAudioInput(attached.vendorId, attached.productId)
+                    || GeneralVariables.isConfiguredUsbAudioOutput(attached.vendorId, attached.productId))
+            ) {
+                fileLog("onNewIntent: attached device is configured USB audio; ensuring permission")
+                mainViewModel.requestUsbPermissionIfNeeded(attached)
+            }
             // Immediate scan
             mainViewModel.getUsbDevice()
             val ports = mainViewModel.mutableSerialPorts.value
@@ -549,4 +591,26 @@ class ComposeMainActivity : AppCompatActivity() {
         mainViewModel.utcTimer?.delete()
         System.exit(0)
     }
+}
+
+/**
+ * True if this permission result granted either fine or coarse location.
+ * Top-level + [internal] so the GPS-grid restart decision (issue #59) can be
+ * unit-tested without constructing the Activity.
+ */
+internal fun locationGrantedIn(
+    permissions: Array<out String>,
+    grantResults: IntArray,
+): Boolean {
+    for (i in permissions.indices) {
+        if (i >= grantResults.size) break
+        val p = permissions[i]
+        if ((p == Manifest.permission.ACCESS_FINE_LOCATION ||
+                p == Manifest.permission.ACCESS_COARSE_LOCATION) &&
+            grantResults[i] == PackageManager.PERMISSION_GRANTED
+        ) {
+            return true
+        }
+    }
+    return false
 }

@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -30,12 +31,9 @@ import radio.ks3ckc.ft8us.theme.GeistMonoFamily
 import radio.ks3ckc.ft8us.theme.Signal
 import radio.ks3ckc.ft8us.theme.TextMuted
 
-private const val SLOT_MILLIS = 15_000L
-
 @Composable
 fun SlotTimerBar(
-    activeTxSlot: Int,
-    isActivated: Boolean,
+    slotMillis: Long = 15_000L,
     modifier: Modifier = Modifier,
 ) {
     var nowMs by remember { mutableLongStateOf(UtcTimer.getSystemTime()) }
@@ -48,11 +46,8 @@ fun SlotTimerBar(
         }
     }
 
-    val slotMs = ((nowMs % SLOT_MILLIS) + SLOT_MILLIS) % SLOT_MILLIS
-    val progress = slotMs / SLOT_MILLIS.toFloat()
-    val secondsRemaining = (((SLOT_MILLIS - slotMs) + 999L) / 1000L).toInt().coerceIn(0, 15)
-    val currentSlot = UtcTimer.sequential(nowMs)
-    val fillColor = if (isActivated && currentSlot == activeTxSlot) Accent else Signal
+    val state = slotTimerState(nowMs, slotMillis)
+    val fillColor = slotBarColor(state.currentSlot)
 
     Row(
         modifier = modifier
@@ -69,12 +64,12 @@ fun SlotTimerBar(
                     drawRect(color = Border, size = Size(size.width, size.height))
                     drawRect(
                         color = fillColor,
-                        size = Size(size.width * progress, size.height),
+                        size = Size(size.width * state.progress, size.height),
                     )
                 },
         )
         Text(
-            text = "${secondsRemaining}s",
+            text = "${state.secondsRemaining}s",
             color = TextMuted,
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
@@ -86,4 +81,43 @@ fun SlotTimerBar(
             modifier = Modifier.width(26.dp),
         )
     }
+}
+
+/**
+ * Color the slot bar by cycle parity, so the two alternating FT8 slots are visually
+ * distinguishable at a glance: the even slot ([UtcTimer.sequential] == 0) is the warm
+ * [Accent] (orange), the odd slot ([UtcTimer.sequential] == 1) is the cool [Signal] (blue).
+ *
+ * Extracted as a pure function so the parity→color mapping can be unit-tested without
+ * Compose, and so it can't silently regress to a single color again.
+ */
+internal fun slotBarColor(currentSlot: Int): Color =
+    if (currentSlot % 2 == 0) Accent else Signal
+
+/** The fill fraction, countdown label, and slot index the bar renders for a given instant. */
+internal data class SlotTimerState(
+    val progress: Float,
+    val secondsRemaining: Int,
+    val currentSlot: Int,
+)
+
+/**
+ * Pure slot-progress math, extracted so it can be unit-tested without Compose.
+ *
+ * [slotMillis] is a public composable parameter, so guard it: a 0 or negative value would
+ * crash the modulo/division below (e.g. `nowMs % 0`). Fall back to the FT8 default so an
+ * unexpected value can never take the UI down — the bar just renders a 15 s cycle instead.
+ */
+internal fun slotTimerState(nowMs: Long, slotMillis: Long): SlotTimerState {
+    val slot = if (slotMillis > 0L) slotMillis else 15_000L
+    val slotMs = ((nowMs % slot) + slot) % slot
+    val progress = slotMs / slot.toFloat()
+    // Round the slot length UP so a 7.5s FT4 slot peaks at 8s, not 7 (integer division
+    // would truncate the half-second).
+    val maxSeconds = ((slot + 999L) / 1000L).toInt()
+    val secondsRemaining = (((slot - slotMs) + 999L) / 1000L).toInt().coerceIn(0, maxSeconds)
+    // Derive the slot index from the same slot length the bar is rendering, so they can't
+    // disagree if the bar is ever driven by a non-global slot.
+    val currentSlot = UtcTimer.sequential(nowMs, slot.toInt())
+    return SlotTimerState(progress, secondsRemaining, currentSlot)
 }

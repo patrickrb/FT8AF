@@ -228,4 +228,63 @@ public class FT8TransmitSignalTest {
         assertThat(FT8TransmitSignal.shouldStopAfterQso(
                 true, true, true, false)).isFalse();
     }
+
+    // ---- mayAutoCall --------------------------------------------------------
+    // The give-up fallback after a no-reply manual QSO must not chase other CQs unless an
+    // auto-call mode is on.
+
+    @Test
+    public void mayAutoCall_huntOn_answersAnyCq() {
+        assertThat(FT8TransmitSignal.mayAutoCall(true, false, false)).isTrue();
+        assertThat(FT8TransmitSignal.mayAutoCall(true, false, true)).isTrue();
+    }
+
+    @Test
+    public void mayAutoCall_huntOff_followOn_onlyFollowed() {
+        assertThat(FT8TransmitSignal.mayAutoCall(false, true, true)).isTrue();
+        assertThat(FT8TransmitSignal.mayAutoCall(false, true, false)).isFalse();
+    }
+
+    @Test
+    public void mayAutoCall_bothOff_neverAnswers() {
+        // The reported bug: manual QSO, no reply, Hunt off -> must NOT answer other CQs.
+        assertThat(FT8TransmitSignal.mayAutoCall(false, false, false)).isFalse();
+        assertThat(FT8TransmitSignal.mayAutoCall(false, false, true)).isFalse();
+    }
+
+    // ---- isHuntListeningIdle ------------------------------------------------
+    // Hunt arms the sequencer so it CAN reply, but it answers others' CQs and never calls
+    // CQ itself: while idle (CQ baseline, no target locked) the TX slot must stay silent.
+
+    private static TransmitCallsign cqBaseline() {
+        return new TransmitCallsign(1, 0, "CQ", 0);
+    }
+
+    private static TransmitCallsign station(String call) {
+        return new TransmitCallsign(1, 0, call, 0);
+    }
+
+    @Test
+    public void huntIdle_armedWithCqBaseline_isListeningOnly() {
+        // Hunt on, CQ state (order 6), target is the CQ placeholder -> stay silent.
+        assertThat(FT8TransmitSignal.isHuntListeningIdle(true, 6, cqBaseline())).isTrue();
+        // Null target (never set) is also idle.
+        assertThat(FT8TransmitSignal.isHuntListeningIdle(true, 6, null)).isTrue();
+    }
+
+    @Test
+    public void huntIdle_lockedOntoStation_transmitsReply() {
+        // A real caller is locked: order advanced and target is a station -> not idle.
+        assertThat(FT8TransmitSignal.isHuntListeningIdle(true, 1, station("K1ABC"))).isFalse();
+        // Even at order 6, a real target means we're answering, not idle-listening.
+        assertThat(FT8TransmitSignal.isHuntListeningIdle(true, 6, station("K1ABC"))).isFalse();
+    }
+
+    @Test
+    public void huntIdle_huntOff_neverSuppresses() {
+        // Hunt off: a normal user CQ run (order 6, "CQ") must transmit as usual.
+        assertThat(FT8TransmitSignal.isHuntListeningIdle(false, 6, cqBaseline())).isFalse();
+        assertThat(FT8TransmitSignal.isHuntListeningIdle(false, 6, null)).isFalse();
+        assertThat(FT8TransmitSignal.isHuntListeningIdle(false, 1, station("K1ABC"))).isFalse();
+    }
 }

@@ -224,15 +224,13 @@ class PskReporterSenderTest {
     }
 
     @Test
-    fun `template field enterprise numbers are all 30351`() {
+    fun `enterprise fields all carry 30351 except the standard flowStart element`() {
         val data = PskReporterSender.encodeTemplates()
         val buf = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN)
 
-        // Scan for all 4-byte int values matching enterprise number pattern
-        // Each field is 8 bytes: type(2) + length(2) + enterprise(4)
-        // After set headers and template record headers
         val enterpriseValues = mutableListOf<Int>()
-        // Receiver template: skip set header(4) + templateId(2) + fieldCount(2) + scopeFieldCount(2) = 10
+        // Receiver options template: 3 enterprise fields (8 bytes each).
+        // Skip set header(4) + templateId(2) + fieldCount(2) + scopeFieldCount(2) = 10.
         buf.position(10)
         repeat(3) {
             buf.short // type
@@ -240,16 +238,17 @@ class PskReporterSenderTest {
             enterpriseValues.add(buf.int)
         }
 
-        // Skip padding to next set
         val rxSetLen = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN).run {
             short // skip set ID
             short.toInt() and 0xFFFF
         }
-        buf.position(rxSetLen)
 
-        // Sender template: skip set header(4) + templateId(2) + fieldCount(2) = 8
+        // Sender data template: first SIX fields are enterprise (8 bytes each); the
+        // seventh (flowStartSeconds) is standard element 0x0096 with NO enterprise
+        // number, so it is excluded from the scan.
+        // Skip set header(4) + templateId(2) + fieldCount(2) = 8.
         buf.position(rxSetLen + 8)
-        repeat(7) {
+        repeat(6) {
             buf.short // type
             buf.short // length
             enterpriseValues.add(buf.int)
@@ -258,6 +257,84 @@ class PskReporterSenderTest {
         for (en in enterpriseValues) {
             assertThat(en).isEqualTo(30351)
         }
+    }
+
+    @Test
+    fun `receiver template field IDs match PSKReporter spec`() {
+        val data = PskReporterSender.encodeTemplates()
+        val buf = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN)
+        // Skip set header(4) + templateId(2) + fieldCount(2) + scopeFieldCount(2) = 10.
+        buf.position(10)
+
+        // receiverCallsign 0x8002 / var, receiverLocator 0x8004 / var,
+        // decodingSoftware 0x8008 / var — all enterprise 30351.
+        val expected = listOf(0x8002 to 0xFFFF, 0x8004 to 0xFFFF, 0x8008 to 0xFFFF)
+        for ((type, len) in expected) {
+            assertThat(buf.short.toInt() and 0xFFFF).isEqualTo(type)
+            assertThat(buf.short.toInt() and 0xFFFF).isEqualTo(len)
+            assertThat(buf.int).isEqualTo(30351)
+        }
+    }
+
+    @Test
+    fun `sender template field IDs match PSKReporter spec`() {
+        val data = PskReporterSender.encodeTemplates()
+        val buf = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN)
+        val rxSetLen = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN).run {
+            short // skip set ID
+            short.toInt() and 0xFFFF
+        }
+        // Sender template starts at rxSetLen; skip set header(4) + templateId(2) + fieldCount(2) = 8.
+        buf.position(rxSetLen + 8)
+
+        // First six fields are enterprise-specific under 30351, in encode order:
+        // senderCallsign 0x8001/var, frequency 0x8005/4, sNR 0x8006/1, mode 0x800A/var,
+        // senderLocator 0x8003/var, informationSource 0x800B/1.
+        val enterpriseFields = listOf(
+            0x8001 to 0xFFFF,
+            0x8005 to 4,
+            0x8006 to 1,
+            0x800A to 0xFFFF,
+            0x8003 to 0xFFFF,
+            0x800B to 1,
+        )
+        for ((type, len) in enterpriseFields) {
+            assertThat(buf.short.toInt() and 0xFFFF).isEqualTo(type)
+            assertThat(buf.short.toInt() and 0xFFFF).isEqualTo(len)
+            assertThat(buf.int).isEqualTo(30351)
+        }
+
+        // Seventh field: flowStartSeconds is the STANDARD IPFIX element 0x0096
+        // (4-byte descriptor: type+length, enterprise bit clear, no enterprise number).
+        val flowType = buf.short.toInt() and 0xFFFF
+        assertThat(flowType).isEqualTo(0x0096)
+        assertThat(flowType and 0x8000).isEqualTo(0) // enterprise bit NOT set
+        assertThat(buf.short.toInt() and 0xFFFF).isEqualTo(4)
+    }
+
+    @Test
+    fun `encodeTemplates matches the PSKReporter reference byte layout`() {
+        // Golden vector: exact bytes the PSKReporter collector expects (same element
+        // IDs as WSJT-X PSKReporter.cpp). Pins the layout so a future field-ID drift
+        // fails loudly instead of silently producing discarded packets.
+        val expected = hex(
+            // --- Receiver options template (set 0x0003, len 0x0024 = 36) ---
+            "0003 0024 50E2 0003 0000" +
+                "8002 FFFF 0000768F" + // receiverCallsign  (id 2, var)
+                "8004 FFFF 0000768F" + // receiverLocator   (id 4, var)
+                "8008 FFFF 0000768F" + // decodingSoftware  (id 8, var)
+                "0000" +               // padding to 4-byte boundary
+                // --- Sender data template (set 0x0002, len 0x003C = 60) ---
+                "0002 003C 50E3 0007" +
+                "8001 FFFF 0000768F" + // senderCallsign    (id 1, var)
+                "8005 0004 0000768F" + // frequency         (id 5, u32)
+                "8006 0001 0000768F" + // sNR               (id 6, i8)
+                "800A FFFF 0000768F" + // mode              (id 10, var)
+                "8003 FFFF 0000768F" + // senderLocator     (id 3, var)
+                "800B 0001 0000768F" + // informationSource (id 11, u8)
+                "0096 0004"            // flowStartSeconds  (standard id 150, u32, no enterprise)
+        )
+        assertThat(PskReporterSender.encodeTemplates()).isEqualTo(expected)
     }
 
     // ---------------------------------------------------------------
@@ -379,6 +456,18 @@ class PskReporterSenderTest {
             buf.position(8) // skip version, length, export time
             val seq = buf.int
             assertThat(seq).isEqualTo(i)
+        }
+    }
+
+    /** Decode a hex string (all whitespace ignored) into bytes for golden-vector comparison. */
+    private fun hex(s: String): ByteArray {
+        val clean = s.filterNot { it.isWhitespace() }
+        require(clean.length % 2 == 0) { "odd-length hex string" }
+        return ByteArray(clean.length / 2) {
+            val hi = Character.digit(clean[it * 2], 16)
+            val lo = Character.digit(clean[it * 2 + 1], 16)
+            require(hi >= 0 && lo >= 0) { "invalid hex digit at index ${it * 2} in: $clean" }
+            ((hi shl 4) or lo).toByte()
         }
     }
 }

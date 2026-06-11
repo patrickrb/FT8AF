@@ -1046,6 +1046,49 @@ private fun gridSquaresWorked(records: List<QSLCallsignRecord>): Int =
 // RECENT TAB
 // ===========================================================================
 
+/**
+ * Order the recent QSO list newest-first by full date + time.
+ *
+ * [QSLCallsignRecord.lastTime] is the QSO date (YYYYMMDD) and
+ * [QSLCallsignRecord.timeOn] is the UTC time of day (HHMMSS); concatenated they
+ * form a lexicographically sortable timestamp, so same-day QSOs order by time
+ * rather than by the database's grouping order. Short/missing values are padded
+ * so a row without a recorded time still sorts within its day. The sort is
+ * stable, so genuine ties keep their incoming order.
+ *
+ * Extracted from [RecentTab] so the ordering can be unit-tested.
+ */
+internal fun sortQsosByDateTimeDesc(
+    records: List<QSLCallsignRecord>,
+): List<QSLCallsignRecord> = records.sortedByDescending { qsoSortKey(it) }
+
+internal fun qsoSortKey(record: QSLCallsignRecord): String {
+    val date = (record.lastTime ?: "").padEnd(8, '0')
+    return date + normalizeTimeOn(record.timeOn)
+}
+
+/**
+ * Normalize a stored time-of-day to a fixed-width 6-digit HHMMSS string so it sorts
+ * lexicographically against any other time on the same day. Handles every shape that
+ * can reach the logbook:
+ *  - "" / null            -> "000000" (no recorded time; sorts to the start of its day)
+ *  - HHMMSS ("143005")    -> unchanged
+ *  - HHMM   ("1430")      -> "143000" (append the missing seconds)
+ *  - dropped leading zero ("815" = 08:15, "81500" = 08:15:00) -> restore the hour's
+ *    leading zero first, then append seconds: "081500"
+ *
+ * Plain `padEnd(6, '0')` only fixes missing *trailing* digits, so "815" would become
+ * "815000" (81:50:00) and sort after a real "103000". Restoring the leading zero on an
+ * odd-length value fixes that. Mirrors the normalization the grouped SQL query applies,
+ * so the DB ordering and this in-memory sort agree.
+ */
+internal fun normalizeTimeOn(timeOn: String?): String {
+    val digits = (timeOn ?: "").filter { it.isDigit() }
+    if (digits.isEmpty()) return "000000"
+    val evened = if (digits.length % 2 == 1) "0$digits" else digits
+    return evened.padEnd(6, '0').substring(0, 6)
+}
+
 @Composable
 private fun RecentTab(
     records: List<QSLCallsignRecord>,
@@ -1076,7 +1119,7 @@ private fun RecentTab(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         items(
-            items = records.reversed(),
+            items = sortQsosByDateTimeDesc(records),
             // Include id so an edit that changes other fields still maps to a stable key,
             // and so two grouped rows with otherwise identical display fields don't collide.
             key = { "${it.id}_${it.callsign}_${it.lastTime}_${it.band}" },

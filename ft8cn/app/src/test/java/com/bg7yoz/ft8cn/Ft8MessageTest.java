@@ -185,6 +185,34 @@ public class Ft8MessageTest {
         assertThat(msg.getMessageText()).isEqualTo("<G4ABC> <PA9XYZ> R 570007 JO22DB");
     }
 
+    @Test
+    public void getMessageText_dxpeditionCombo_negativeReportSingleSign() {
+        // i3=0, n3=1 DXpedition combo: "<acked> RR73; <invited> <foxHash> <rpt>".
+        // An unseeded Fox hash resolves to "<...>"; a negative report must render a
+        // single minus (regression: the magnitude is formatted after the sign char).
+        Ft8Message msg = new Ft8Message(FT8Common.FT8_MODE);
+        msg.i3 = 0;
+        msg.n3 = 1;
+        msg.callsignTo = "K1ABC";
+        msg.dx_call_to2 = "W9XYZ";
+        msg.callFromHash10 = 0;
+        msg.report = -18;
+        assertThat(msg.getMessageText()).isEqualTo("K1ABC RR73; W9XYZ <...> -18");
+    }
+
+    @Test
+    public void getMessageText_dxpeditionCombo_zeroReportIsPlusZero() {
+        // A zero report formats as "+0" (>= 0), matching WSJT-X, not "-0".
+        Ft8Message msg = new Ft8Message(FT8Common.FT8_MODE);
+        msg.i3 = 0;
+        msg.n3 = 1;
+        msg.callsignTo = "K1ABC";
+        msg.dx_call_to2 = "W9XYZ";
+        msg.callFromHash10 = 0;
+        msg.report = 0;
+        assertThat(msg.getMessageText()).isEqualTo("K1ABC RR73; W9XYZ <...> +0");
+    }
+
     // ---- getCallsignFrom / getCallsignTo ------------------------------------
 
     @Test

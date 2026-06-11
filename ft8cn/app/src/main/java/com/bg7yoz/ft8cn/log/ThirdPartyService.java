@@ -97,9 +97,7 @@ public class ThirdPartyService {
 
     private static String QSLRecordToADIF(QSLRecord qslRecord, ServiceType serv){
         StringBuilder logStr = new StringBuilder();
-        logStr.append(String.format("<call:%d>%s "
-                , qslRecord.getToCallsign().length()
-                , qslRecord.getToCallsign()));
+        logStr.append(AdifFormat.callField(qslRecord.getToCallsign()));
 
         if (qslRecord.getToMaidenGrid() != null) {
             logStr.append(String.format("<gridsquare:%d>%s "

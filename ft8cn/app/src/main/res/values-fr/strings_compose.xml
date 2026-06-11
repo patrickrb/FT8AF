@@ -215,6 +215,8 @@
     <string name="pota_self_spot_failed">Échec de l\'auto-spot — consultez le journal</string>
     <string name="pota_active_park">ACTIF — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_contacts_map">Carte des contacts</string>
+    <string name="pota_back">Retour</string>
     <string name="pota_valid_activation">activation valide</string>
     <string name="pota_to_valid">%1$d pour valider</string>
     <string name="pota_elapsed">Écoulé</string>
@@ -458,10 +460,37 @@
 
     <string name="tx_transmitting">ÉMISSION</string>
     <string name="tx_listening">ÉCOUTE</string>
+    <string name="tx_hunt">Chasse</string>
+    <string name="tx_call_cq">Appel CQ</string>
+    <string name="tx_stop">Arrêter</string>
+    <string name="hound_title">Contacter une DXpédition (Hound)</string>
+    <string name="hound_help">Réglez d\'abord la radio sur la fréquence d\'affichage publiée du Fox. Vous appelez haut (1000–4000 Hz) ; l\'app vous fait QSY automatiquement là où le Fox répond et envoie votre report.</string>
+    <string name="hound_fox_callsign">Indicatif du Fox</string>
+    <string name="hound_call_frequency">Fréquence d\'appel (Hz, 1000–4000)</string>
+    <string name="hound_start">Démarrer</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT connecté — appuyez pour reconnecter</string>
+    <string name="cat_status_connecting">Connexion CAT…</string>
+    <string name="cat_status_disconnected">CAT déconnecté — appuyez pour connecter</string>
+    <string name="cat_status_error">Erreur de connexion CAT — appuyez pour réessayer</string>
     <string name="qsopanel_log_action">LOG</string>
     <string name="qsopanel_queue">FILE</string>
     <string name="swr_lockout_title">TX ARRÊTÉ — SWR élevé détecté (%1$s)</string>
     <string name="swr_lockout_body">Vérifiez l\'antenne / le câble avant d\'émettre.</string>
     <string name="swr_lockout_dismiss">IGNORER</string>
     <string name="swr_lockout_toast">TX bloqué — verrouillage SWR actif. Fermez la bannière d\'abord.</string>
+
+    <!-- ===== Time sync / manual correction ===== -->
+    <string name="settings_cat_time_sync">Synchronisation de l\'heure</string>
+    <string name="settings_cat_time_sync_desc">Correction manuelle de l\'horloge pour le trafic hors ligne</string>
+    <string name="settings_time_correction_section">Correction manuelle</string>
+    <string name="settings_time_correction_desc">Ajustez l\'horloge de l\'app quand vous n\'avez pas d\'Internet pour synchroniser. FT8 a besoin de l\'UTC à environ 1 seconde près. Ajustez jusqu\'à ce que la colonne DT des stations décodées soit proche de 0.</string>
+    <string name="settings_time_current_label">Correction actuelle</string>
+    <string name="settings_time_correction_reset">Réinitialiser à 0</string>
+    <string name="settings_time_suggest_section">Suggéré d\'après les décodages</string>
+    <string name="settings_time_suggest_label">DT moyen récent : %1$s</string>
+    <string name="settings_time_suggest_none">Aucun décodage pour l\'instant — commencez à recevoir pour obtenir une suggestion.</string>
+    <string name="settings_time_suggest_apply">Appliquer la correction suggérée</string>
 </resources>
