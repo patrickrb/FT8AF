@@ -404,6 +404,10 @@
 
     <!-- ===== Settings: about ===== -->
     <string name="settings_faq_support">FAQ и поддержка</string>
+    <string name="settings_report_bug">Сообщить об ошибке</string>
+    <string name="bug_report_description_hint">Опишите, что пошло не так…</string>
+    <string name="bug_report_send_email">Отправить письмо</string>
+    <string name="bug_report_open_github">Открыть issue на GitHub</string>
     <string name="settings_debug">Отладка</string>
     <string name="settings_debug_desc">Просмотр / отправка debug.log</string>
     <string name="settings_about_body">Версия %1$s (сборка %2$s)\nДата сборки %3$s\n\nFT8 — это просто.\n\nАвтономное приложение FT8-трансивера для Android. Управление трансивером по USB, Bluetooth и сети с автопоследовательностью и журналированием.</string>

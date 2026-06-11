@@ -404,6 +404,10 @@
 
     <!-- ===== Settings: about ===== -->
     <string name="settings_faq_support">FAQ y soporte</string>
+    <string name="settings_report_bug">Informar de un error</string>
+    <string name="bug_report_description_hint">Describe qué salió mal…</string>
+    <string name="bug_report_send_email">Enviar correo</string>
+    <string name="bug_report_open_github">Abrir incidencia en GitHub</string>
     <string name="settings_debug">Depuración</string>
     <string name="settings_debug_desc">Ver / compartir debug.log</string>
     <string name="settings_about_body">Versión %1$s (compilación %2$s)\nFecha de compilación %3$s\n\nFT8, fácil.\n\nUna app de transceptor FT8 independiente para Android. Control de RIG por USB, Bluetooth y red con secuenciado y registro automáticos.</string>

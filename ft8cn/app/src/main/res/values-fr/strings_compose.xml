@@ -404,6 +404,10 @@
 
     <!-- ===== Settings: about ===== -->
     <string name="settings_faq_support">FAQ &amp; assistance</string>
+    <string name="settings_report_bug">Signaler un bug</string>
+    <string name="bug_report_description_hint">Décrivez le problème…</string>
+    <string name="bug_report_send_email">Envoyer un e-mail</string>
+    <string name="bug_report_open_github">Ouvrir un ticket GitHub</string>
     <string name="settings_debug">Débogage</string>
     <string name="settings_debug_desc">Afficher / partager debug.log</string>
     <string name="settings_about_body">Version %1$s (build %2$s)\nDate de build %3$s\n\nFT8, en toute simplicité.\n\nUne application de transceiver FT8 autonome pour Android. Contrôle de rig par USB, Bluetooth et réseau avec séquençage et journalisation automatiques.</string>
