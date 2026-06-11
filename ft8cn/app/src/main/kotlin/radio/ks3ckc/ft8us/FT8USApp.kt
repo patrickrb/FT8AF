@@ -223,8 +223,6 @@ fun FT8USApp(mainViewModel: MainViewModel) {
 
             // Slot timer bar — fills 0→100% across each slot (15s FT8 / 7.5s FT4)
             SlotTimerBar(
-                activeTxSlot = txSlot,
-                isActivated = isActivated,
                 slotMillis = ModeProfile.fromId(operatingMode).slotMillis.toLong(),
             )
 

@@ -2,6 +2,8 @@ package radio.ks3ckc.ft8us.ui.components
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
+import radio.ks3ckc.ft8us.theme.Accent
+import radio.ks3ckc.ft8us.theme.Signal
 
 /**
  * Unit tests for [slotTimerState] — the pure slot-progress math extracted from
@@ -55,6 +57,31 @@ class SlotTimerStateTest {
         val s = slotTimerState(nowMs = 0L, slotMillis = -5L)
         assertThat(s.progress).isEqualTo(0f)
         assertThat(s.secondsRemaining).isEqualTo(15)
+    }
+
+    @Test
+    fun `even slot is orange, odd slot is blue`() {
+        // Regression guard for the parity coloring: the even cycle (sequential == 0) must
+        // be the warm Accent and the odd cycle (sequential == 1) the cool Signal. This
+        // broke once when the bar was tied to the active-TX slot and rendered blue only.
+        assertThat(slotBarColor(0)).isEqualTo(Accent)
+        assertThat(slotBarColor(1)).isEqualTo(Signal)
+    }
+
+    @Test
+    fun `slot color tracks parity for any slot index`() {
+        for (slot in 0..5) {
+            val expected = if (slot % 2 == 0) Accent else Signal
+            assertThat(slotBarColor(slot)).isEqualTo(expected)
+        }
+    }
+
+    @Test
+    fun `slot color drives off the timer state slot index`() {
+        // The bar feeds state.currentSlot into slotBarColor; verify the two stay consistent
+        // so the start of the FT8 slot is orange and the next 15s slot is blue.
+        assertThat(slotBarColor(slotTimerState(0L, 15_000L).currentSlot)).isEqualTo(Accent)
+        assertThat(slotBarColor(slotTimerState(15_000L, 15_000L).currentSlot)).isEqualTo(Signal)
     }
 
     @Test
