@@ -181,16 +181,20 @@ jobs:
           # that ZipException) if the Android Gradle Plugin is upgraded.
           NDK_VERSION=25.1.8937393
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          # sdkmanager writes source.properties last, so its presence marks a
+          # complete install — judge success by that, not the pipeline's exit
+          # code: `yes` dies with SIGPIPE when sdkmanager closes the pipe, which
+          # under `set -o pipefail` would otherwise read as a (false) failure.
+          MARKER="$ANDROID_HOME/ndk/$NDK_VERSION/source.properties"
           for attempt in 1 2 3; do
             echo "::group::NDK install attempt $attempt"
             rm -rf "$ANDROID_HOME/ndk/$NDK_VERSION" "$HOME/.android/cache"
-            if yes | "$SDKMANAGER" --install "ndk;$NDK_VERSION" \
-                && [[ -d "$ANDROID_HOME/ndk/$NDK_VERSION" ]]; then
-              echo "::endgroup::"
+            yes | "$SDKMANAGER" --install "ndk;$NDK_VERSION" || true
+            echo "::endgroup::"
+            if [[ -f "$MARKER" ]]; then
               echo "NDK $NDK_VERSION ready at $ANDROID_HOME/ndk/$NDK_VERSION"
               exit 0
             fi
-            echo "::endgroup::"
             echo "Attempt $attempt failed; retrying in 10s..."
             sleep 10
           done
