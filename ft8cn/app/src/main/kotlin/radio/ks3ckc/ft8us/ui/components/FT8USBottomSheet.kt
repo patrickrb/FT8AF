@@ -1,5 +1,6 @@
 package radio.ks3ckc.ft8us.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -45,6 +46,12 @@ fun FT8USBottomSheet(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
+    // Hardware / gesture back dismisses the sheet while it is shown, instead of
+    // falling through to the activity's back handler (which would try to exit
+    // the app — the bug behind the band picker not closing on Back). Disabled
+    // when hidden so Back still propagates to the app handler then.
+    BackHandler(enabled = visible) { onDismiss() }
+
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { 120.dp.toPx() }
     var dragOffset by remember { mutableFloatStateOf(0f) }
