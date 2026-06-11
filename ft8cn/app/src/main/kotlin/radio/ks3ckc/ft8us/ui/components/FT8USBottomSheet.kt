@@ -2,6 +2,7 @@ package radio.ks3ckc.ft8us.ui.components
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -46,11 +47,21 @@ fun FT8USBottomSheet(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    // Hardware / gesture back dismisses the sheet while it is shown, instead of
-    // falling through to the activity's back handler (which would try to exit
-    // the app — the bug behind the band picker not closing on Back). Disabled
-    // when hidden so Back still propagates to the app handler then.
-    BackHandler(enabled = visible) { onDismiss() }
+    // A MutableTransitionState lets the exit animation keep the Back handler
+    // installed: currentState stays true until the sheet's slide-out completes,
+    // even after targetState (visible) has already flipped to false.
+    val sheetState = remember { MutableTransitionState(visible) }
+    sheetState.targetState = visible
+
+    // Hardware / gesture Back dismisses the sheet while it is on-screen, instead
+    // of falling through to the activity's back handler (which would try to exit
+    // the app — the bug behind the band picker not closing on Back, #201). The
+    // handler stays active through the exit animation so a second Back press
+    // during slide-out can't slip past to the app-exit path while the sheet is
+    // still visible; once fully hidden it propagates to the app handler again.
+    BackHandler(enabled = sheetBackHandlerActive(sheetState.currentState, sheetState.targetState)) {
+        onDismiss()
+    }
 
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { 120.dp.toPx() }
@@ -87,7 +98,7 @@ fun FT8USBottomSheet(
     }
 
     AnimatedVisibility(
-        visible = visible,
+        visibleState = sheetState,
         enter = slideInVertically(initialOffsetY = { it }),
         exit = slideOutVertically(targetOffsetY = { it }),
     ) {
@@ -152,3 +163,18 @@ fun FT8USBottomSheet(
         }
     }
 }
+
+/**
+ * Whether the sheet's Android-Back handler should be enabled, given the sheet's
+ * [MutableTransitionState] components.
+ *
+ * The handler must stay active not only while the sheet is shown ([targetState])
+ * but throughout its exit animation: [currentState] remains true until the
+ * slide-out completes. Gating on `currentState || targetState` therefore keeps
+ * Back captured during the exit window, so a second press can't fall through to
+ * the activity's app-exit handler while the sheet is still on-screen (the
+ * follow-up to issue #201). Only once the sheet is fully hidden — both states
+ * false — does Back propagate to the app handler again.
+ */
+internal fun sheetBackHandlerActive(currentState: Boolean, targetState: Boolean): Boolean =
+    currentState || targetState
