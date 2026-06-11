@@ -109,6 +109,7 @@ import com.bg7yoz.ft8cn.spectrum.SpectrumListener;
 import com.bg7yoz.ft8cn.timer.OnUtcTimer;
 import com.bg7yoz.ft8cn.timer.UtcTimer;
 import com.bg7yoz.ft8cn.ui.ToastMessage;
+import com.bg7yoz.ft8cn.ui.WaterfallLabelMessages;
 import com.bg7yoz.ft8cn.wave.HamRecorder;
 import com.bg7yoz.ft8cn.wave.OnGetVoiceDataDone;
 import com.bg7yoz.ft8cn.x6100.X6100Radio;
@@ -498,6 +499,12 @@ public class MainViewModel extends ViewModel {
                     // clear it here so a silent slot doesn't leave the spectrum-display
                     // decoding marker stuck on until the next non-empty cycle (mirrors the
                     // own-echo-only early return below).
+                    // Refresh the waterfall label overlay too: a silent normal pass must
+                    // clear the previous slot's labels so they aren't re-stamped onto the
+                    // waterfall every cycle (worst on the fast FT4/FT2 slots). A silent deep
+                    // pass keeps the normal pass's labels. See WaterfallLabelMessages.
+                    currentMessages = WaterfallLabelMessages.afterPass(
+                            currentMessages, new ArrayList<>(), isDeep);
                     mutableIsDecoding.postValue(decodingMarkerAfterPass(0, 0));
                     return;//no messages decoded, don't trigger action
                 }
@@ -521,6 +528,11 @@ public class MainViewModel extends ViewModel {
                 }
                 if (messages.size() == 0) {
                     //nothing left after filtering own echoes
+                    // Same overlay refresh as the no-decode case: an all-filtered slot is
+                    // visually silent, so clear the previous slot's labels (normal pass)
+                    // rather than leaving them to be re-stamped.
+                    currentMessages = WaterfallLabelMessages.afterPass(
+                            currentMessages, new ArrayList<>(), isDeep);
                     mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), 0));
                     return;
                 }
@@ -563,7 +575,7 @@ public class MainViewModel extends ViewModel {
                     ft8TransmitSignal.parseMessageToFunction(messages);//parse messages and process
                 }
 
-                currentMessages = messages;
+                currentMessages = WaterfallLabelMessages.afterPass(currentMessages, messages, isDeep);
 
                 if (isDeep) {
                     currentDecodeCount += messages.size();
