@@ -315,7 +315,7 @@ public class MainViewModel extends ViewModel {
     private volatile long lastRigResponseMs = 0;
     private volatile boolean sawRigResponseSinceConnect = false;
 
-    /** Record that the rig just demonstrably responded (called from onFreqChanged). */
+    /** Record that the rig just demonstrably responded (called from onRigResponded). */
     private void markRigResponded() {
         lastRigResponseMs = System.currentTimeMillis();
         sawRigResponseSinceConnect = true;
@@ -347,8 +347,9 @@ public class MainViewModel extends ViewModel {
         try {
             boolean connected = isRigConnected();
             boolean transmitting = ft8TransmitSignal != null && ft8TransmitSignal.isTransmitting();
-            // Actively probe (a frequency read); the reply lands in onFreqChanged ->
-            // markRigResponded(). On a dead-but-powered BT module the write succeeds but no
+            // Actively probe (a frequency read); the reply lands in onRigResponded ->
+            // markRigResponded() (onFreqChanged only fires on a change, so a stable dial
+            // can't be used). On a dead-but-powered BT module the write succeeds but no
             // reply comes, so the quiet timer below eventually trips.
             if (CatLiveness.shouldProbe(connected, transmitting) && baseRig != null) {
                 baseRig.readFreqFromRig();
@@ -1588,6 +1589,10 @@ public class MainViewModel extends ViewModel {
     @Override
     protected void onCleared() {
         super.onCleared();
+        // The liveness watchdog otherwise only stops on disconnect/error/stale; if the
+        // ViewModel is cleared while still "connected" the Timer thread would keep probing
+        // the rig indefinitely. Tear it down here too.
+        stopCatLivenessWatchdog();
         PskReporterSender.INSTANCE.stop();
     }
 
