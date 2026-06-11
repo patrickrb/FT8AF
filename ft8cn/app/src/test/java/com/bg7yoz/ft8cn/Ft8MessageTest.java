@@ -335,4 +335,70 @@ public class Ft8MessageTest {
         assertThat(tc.snr).isEqualTo(5);
         assertThat(tc.sequential).isEqualTo(0);
     }
+
+    // ---- isPlausibleCallsign / isJunkDecode (false-decode guard) ------------
+
+    @Test
+    public void isPlausibleCallsign_acceptsRealCalls() {
+        assertThat(Ft8Message.isPlausibleCallsign("K1ABC")).isTrue();
+        assertThat(Ft8Message.isPlausibleCallsign("W9XYZ")).isTrue();
+    }
+
+    @Test
+    public void isPlausibleCallsign_acceptsCompoundCall() {
+        assertThat(Ft8Message.isPlausibleCallsign("PJ4/K1ABC")).isTrue();
+    }
+
+    @Test
+    public void isPlausibleCallsign_acceptsHashedWrappedCall() {
+        assertThat(Ft8Message.isPlausibleCallsign("<W9XYZ>")).isTrue();
+    }
+
+    @Test
+    public void isPlausibleCallsign_acceptsUnresolvedHashPlaceholder() {
+        assertThat(Ft8Message.isPlausibleCallsign("<...>")).isTrue();
+    }
+
+    @Test
+    public void isPlausibleCallsign_rejectsCrcCollisionJunk() {
+        assertThat(Ft8Message.isPlausibleCallsign(".<. >")).isFalse();
+    }
+
+    @Test
+    public void isPlausibleCallsign_rejectsEmbeddedSpace() {
+        assertThat(Ft8Message.isPlausibleCallsign("K1 ABC")).isFalse();
+    }
+
+    @Test
+    public void isPlausibleCallsign_rejectsEmptyAndNull() {
+        assertThat(Ft8Message.isPlausibleCallsign("")).isFalse();
+        assertThat(Ft8Message.isPlausibleCallsign("   ")).isFalse();
+        assertThat(Ft8Message.isPlausibleCallsign(null)).isFalse();
+    }
+
+    @Test
+    public void isJunkDecode_structuredWithJunkSender_isJunk() {
+        Ft8Message msg = new Ft8Message(1, 0, "K1ABC", ".<. >", "EN37");
+        assertThat(msg.isJunkDecode()).isTrue();
+    }
+
+    @Test
+    public void isJunkDecode_structuredWithRealSender_isNotJunk() {
+        Ft8Message msg = new Ft8Message(1, 0, "K1ABC", "W9XYZ", "EN37");
+        assertThat(msg.isJunkDecode()).isFalse();
+    }
+
+    @Test
+    public void isJunkDecode_freeText_isExempt() {
+        // i3=0,n3=0 carries free text in the sender field — never junk.
+        Ft8Message msg = new Ft8Message(0, 0, "CQ", ".<. >", "TNX 73");
+        assertThat(msg.isJunkDecode()).isFalse();
+    }
+
+    @Test
+    public void isJunkDecode_telemetry_isExempt() {
+        // i3=0,n3=5 telemetry carries hex digits, not a callsign — never junk.
+        Ft8Message msg = new Ft8Message(0, 5, "CQ", "123456789ABCDEF012", "");
+        assertThat(msg.isJunkDecode()).isFalse();
+    }
 }

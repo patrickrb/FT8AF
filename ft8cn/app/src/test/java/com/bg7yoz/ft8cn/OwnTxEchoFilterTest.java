@@ -176,7 +176,7 @@ public class OwnTxEchoFilterTest {
         OwnTxEchoFilter result = OwnTxEchoFilter.filter(decoded);
 
         assertThat(result.decodeLogLine(1))
-                .isEqualTo("DECODE: kept=2 ownEcho=1 replyToMe=true slot=1");
+                .isEqualTo("DECODE: kept=2 ownEcho=1 junk=0 replyToMe=true slot=1");
     }
 
     @Test
@@ -187,6 +187,69 @@ public class OwnTxEchoFilterTest {
         OwnTxEchoFilter result = OwnTxEchoFilter.filter(decoded);
 
         assertThat(result.decodeLogLine(0))
-                .isEqualTo("DECODE: kept=1 ownEcho=0 replyToMe=false slot=0");
+                .isEqualTo("DECODE: kept=1 ownEcho=0 junk=0 replyToMe=false slot=0");
+    }
+
+    /** A structured decode whose sender renders as junk (e.g. ".<. >") is dropped. */
+    private Ft8Message structuredJunk() {
+        // i3=1 standard message; sender field is CRC-collision garbage.
+        return new Ft8Message(1, 0, "K1ABC", ".<. >", "EN37");
+    }
+
+    /** A structured decode with a real sender callsign. */
+    private Ft8Message structuredReal(String fromCall) {
+        return new Ft8Message(1, 0, "K1ABC", fromCall, "EN37");
+    }
+
+    @Test
+    public void filter_dropsJunkDecode_keepsReal() {
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(structuredJunk());
+        decoded.add(structuredReal("W9XYZ"));
+
+        OwnTxEchoFilter result = OwnTxEchoFilter.filter(decoded);
+
+        assertThat(result.junkCount).isEqualTo(1);
+        assertThat(result.kept).hasSize(1);
+        assertThat(result.kept.get(0).getCallsignFrom()).isEqualTo("W9XYZ");
+    }
+
+    @Test
+    public void filter_junkCountedSeparatelyFromEchoes() {
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(structuredJunk());          // dropped as junk
+        decoded.add(ownEcho("RA3XYZ"));          // dropped as echo (free text)
+        decoded.add(structuredReal("DL1ABC"));   // kept
+
+        OwnTxEchoFilter result = OwnTxEchoFilter.filter(decoded);
+
+        assertThat(result.junkCount).isEqualTo(1);
+        assertThat(result.ownEchoCount).isEqualTo(1);
+        assertThat(result.kept).hasSize(1);
+    }
+
+    @Test
+    public void filter_freeTextWithNonCallsignSender_notJunk() {
+        // Free text (i3=0,n3=0) legitimately carries non-callsign text, so it is
+        // exempt from junk filtering even when the sender field isn't a callsign.
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(new Ft8Message(0, 0, "CQ", "TNX 73 GL", "FN42"));
+
+        OwnTxEchoFilter result = OwnTxEchoFilter.filter(decoded);
+
+        assertThat(result.junkCount).isEqualTo(0);
+        assertThat(result.kept).hasSize(1);
+    }
+
+    @Test
+    public void filter_junkAppearsInLogLine() {
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(structuredJunk());
+        decoded.add(structuredReal("DL1ABC"));
+
+        OwnTxEchoFilter result = OwnTxEchoFilter.filter(decoded);
+
+        assertThat(result.decodeLogLine(0))
+                .isEqualTo("DECODE: kept=1 ownEcho=0 junk=1 replyToMe=false slot=0");
     }
 }

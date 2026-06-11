@@ -478,6 +478,59 @@ t71     Telemetry data, up to 18 hex digits
     }
 
     /**
+     * Decide whether a callsign field could be a real callsign.
+     *
+     * <p>A real callsign field uses only the {@code [A-Z0-9/]} alphabet,
+     * optionally wrapped in {@code <...>} (a hashed / non-standard call), or is
+     * the bare {@code <...>} placeholder shown before a hash resolves. Anything
+     * else — stray angle brackets, embedded spaces, dots — is the junk a
+     * CRC-collision false decode renders into the sender field (e.g. {@code .<. >}).
+     *
+     * @param callsign the raw sender field (may be null, may be {@code <...>}-wrapped)
+     * @return true if it could be a real callsign or the unresolved-hash placeholder
+     */
+    public static boolean isPlausibleCallsign(String callsign) {
+        if (callsign == null) {
+            return false;
+        }
+        String s = callsign.trim();
+        if (s.isEmpty()) {
+            return false;
+        }
+        if (s.equals("<...>")) {//unresolved hashed-call placeholder
+            return true;
+        }
+        //Strip a single matching <...> wrapper around a hashed / non-standard call.
+        if (s.startsWith("<") && s.endsWith(">") && s.length() > 2) {
+            s = s.substring(1, s.length() - 1);
+        }
+        //No leftover angle brackets, spaces, or dots — just the call alphabet.
+        return s.matches("[A-Z0-9/]+");
+    }
+
+    /**
+     * Detect a junk/false decode by its sender callsign.
+     *
+     * <p>FT8 guards each 77-bit frame with only a 14-bit CRC, so roughly one
+     * noise event in 16k slips through as a "valid" decode. When that garbage
+     * lands in a callsign-bearing frame, the corrupt sender field renders as
+     * junk like {@code .<. >}. A structured decode is junk when its sender isn't
+     * a {@link #isPlausibleCallsign plausible callsign}. Free text
+     * ({@code i3=0,n3=0}) and telemetry ({@code i3=0,n3=5}) legitimately carry
+     * non-callsign text in that field, so they are never treated as junk here.
+     *
+     * @return true if this decode should be dropped as garbage
+     */
+    public boolean isJunkDecode() {
+        boolean freeText = (i3 == 0 && n3 == 0);
+        boolean telemetry = (i3 == 0 && n3 == 5);
+        if (freeText || telemetry) {
+            return false;
+        }
+        return !isPlausibleCallsign(callsignFrom);
+    }
+
+    /**
      * Get the message type (i3.n3).
      *
      * @return Message type
