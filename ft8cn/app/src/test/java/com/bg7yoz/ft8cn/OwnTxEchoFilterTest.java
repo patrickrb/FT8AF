@@ -176,7 +176,7 @@ public class OwnTxEchoFilterTest {
         OwnTxEchoFilter result = OwnTxEchoFilter.filter(decoded);
 
         assertThat(result.decodeLogLine(1))
-                .isEqualTo("DECODE: kept=2 ownEcho=1 replyToMe=true slot=1");
+                .isEqualTo("DECODE: kept=2 ownEcho=1 junk=0 replyToMe=true slot=1");
     }
 
     @Test
@@ -187,6 +187,42 @@ public class OwnTxEchoFilterTest {
         OwnTxEchoFilter result = OwnTxEchoFilter.filter(decoded);
 
         assertThat(result.decodeLogLine(0))
-                .isEqualTo("DECODE: kept=1 ownEcho=0 replyToMe=false slot=0");
+                .isEqualTo("DECODE: kept=1 ownEcho=0 junk=0 replyToMe=false slot=0");
+    }
+
+    /**
+     * A junk/false decode (garbage sender callsign such as ".<. >") is dropped
+     * and counted separately from own-TX echoes.
+     */
+    @Test
+    public void filter_dropsJunkDecode() {
+        Ft8Message junk = new Ft8Message("CQ", ".<. >", "FN42");
+        junk.i3 = 1;// standard message type -> sender must be a real callsign
+
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(junk);
+        decoded.add(thirdParty("CQ", "DL1ABC"));
+
+        OwnTxEchoFilter result = OwnTxEchoFilter.filter(decoded);
+
+        assertThat(result.junkCount).isEqualTo(1);
+        assertThat(result.ownEchoCount).isEqualTo(0);
+        assertThat(result.kept).hasSize(1);
+        assertThat(result.kept.get(0).getCallsignFrom()).isEqualTo("DL1ABC");
+    }
+
+    @Test
+    public void decodeLogLine_reportsJunkCount() {
+        Ft8Message junk = new Ft8Message("CQ", ".<. >", "FN42");
+        junk.i3 = 1;
+
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(junk);
+        decoded.add(thirdParty("CQ", "DL1ABC"));
+
+        OwnTxEchoFilter result = OwnTxEchoFilter.filter(decoded);
+
+        assertThat(result.decodeLogLine(0))
+                .isEqualTo("DECODE: kept=1 ownEcho=0 junk=1 replyToMe=false slot=0");
     }
 }

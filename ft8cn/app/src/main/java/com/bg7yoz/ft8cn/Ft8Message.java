@@ -418,6 +418,56 @@ t71     Telemetry data, up to 18 hex digits
     }
 
     /**
+     * Whether {@code raw} is a callsign an FT8 frame can legitimately carry: the
+     * {@code [A-Z0-9/]} callsign alphabet (standard or compound, e.g.
+     * {@code K1ABC} or {@code PJ4/K1ABC}), optionally wrapped in {@code <...>}
+     * for a hashed / non-standard call, plus the bare {@code <...>} placeholder
+     * shown before a hash has been resolved.
+     *
+     * @param raw the callsign field as decoded (may include the {@code <...>} wrapper)
+     * @return true if the field looks like a real callsign field
+     */
+    public static boolean isPlausibleCallsign(String raw) {
+        if (raw == null) {
+            return false;
+        }
+        String s = raw.trim().toUpperCase();
+        if (s.isEmpty()) {
+            return false;
+        }
+        if (s.equals("<...>")) {
+            return true;// unresolved hashed-call placeholder
+        }
+        if (s.startsWith("<") && s.endsWith(">")) {
+            s = s.substring(1, s.length() - 1);// strip the hashed / non-standard wrapper
+        }
+        return s.matches("[A-Z0-9/]+");
+    }
+
+    /**
+     * True when this is a structured decode (one that carries real callsign
+     * fields) whose sender callsign is not a callsign any FT8 frame can hold.
+     *
+     * <p>FT8 guards each frame with only a 14-bit CRC, so on the order of one
+     * noise event in 16k survives as a "valid" decode. Those false frames render
+     * as garbage such as {@code ".<. >"} — stray angle brackets, spaces and dots
+     * that no real callsign field produces — and would otherwise show up as a
+     * bogus station in the decode list, QSO panel and SWL log. Free text
+     * ({@code i3=0,n3=0}) and telemetry ({@code i3=0,n3=5}) legitimately put
+     * non-callsign text in these fields, so they are never treated as junk;
+     * every other type must carry a plausible sender callsign.
+     *
+     * @return true if this decode should be dropped as a false/garbage frame
+     */
+    public boolean isJunkDecode() {
+        boolean freeFormText = i3 == 0 && (n3 == 0 || n3 == 5);
+        if (freeFormText) {
+            return false;
+        }
+        return !isPlausibleCallsign(callsignFrom);
+    }
+
+    /**
      * Get the receiving callsign from the QSO information.
      *
      * @return

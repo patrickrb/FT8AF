@@ -4,8 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Splits a freshly decoded FT8 cycle into the messages worth keeping and the
- * own-TX loopback echoes that must be dropped.
+ * Cleans up a freshly decoded FT8 cycle: it splits the messages worth keeping
+ * from the two kinds that must not reach the UI — own-TX loopback echoes and
+ * junk/false decodes.
  *
  * <p>When the transceiver monitors its TX audio back into the app's line-in,
  * the decoder hears and decodes our <em>own</em> transmission. A decode whose
@@ -15,22 +16,31 @@ import java.util.List;
  * The QSO panel already shows what we transmit via its synthesized key-up entry,
  * and PSKReporter / the auto-sequence already ignore own-callsign messages.
  *
- * <p>The result also carries two diagnostic counters used to investigate the
- * separate "missing other station responses" report: how many echoes were
- * dropped and whether any message addressed to us survived this cycle.
+ * <p>FT8's 14-bit CRC also lets roughly one noise event in 16k pass as a "valid"
+ * decode; those false frames render as garbage callsigns like {@code ".<. >"}
+ * (see {@link Ft8Message#isJunkDecode()}) and are dropped here too so a bogus
+ * station never appears in the list.
+ *
+ * <p>The result also carries diagnostic counters used to investigate the
+ * separate "missing other station responses" report: how many echoes and how
+ * much junk were dropped, and whether any message addressed to us survived this
+ * cycle.
  */
 public final class OwnTxEchoFilter {
-    /** Messages to keep — own-TX loopback echoes removed. */
+    /** Messages to keep — own-TX loopback echoes and junk decodes removed. */
     public final ArrayList<Ft8Message> kept;
     /** Number of own-callsign loopback echoes that were dropped. */
     public final int ownEchoCount;
+    /** Number of junk/false decodes (garbage sender callsign) that were dropped. */
+    public final int junkCount;
     /** True if a kept message was addressed to our callsign (a reply to us). */
     public final boolean replyToMePresent;
 
     private OwnTxEchoFilter(ArrayList<Ft8Message> kept, int ownEchoCount,
-                            boolean replyToMePresent) {
+                            int junkCount, boolean replyToMePresent) {
         this.kept = kept;
         this.ownEchoCount = ownEchoCount;
+        this.junkCount = junkCount;
         this.replyToMePresent = replyToMePresent;
     }
 
@@ -42,13 +52,18 @@ public final class OwnTxEchoFilter {
      * Both callsign accessors return "" rather than null, so this is null-safe.
      *
      * @param decoded the raw decode list for one cycle (not modified)
-     * @return the kept messages plus echo/reply diagnostics
+     * @return the kept messages plus echo/junk/reply diagnostics
      */
     public static OwnTxEchoFilter filter(List<Ft8Message> decoded) {
         ArrayList<Ft8Message> kept = new ArrayList<>(decoded.size());
         int ownEcho = 0;
+        int junk = 0;
         boolean replyToMe = false;
         for (Ft8Message m : decoded) {
+            if (m.isJunkDecode()) {// false decode with a garbage sender callsign
+                junk++;
+                continue;
+            }
             if (GeneralVariables.checkIsMyCallsign(m.getCallsignFrom())) {
                 ownEcho++;
                 continue;
@@ -58,20 +73,21 @@ public final class OwnTxEchoFilter {
             }
             kept.add(m);
         }
-        return new OwnTxEchoFilter(kept, ownEcho, replyToMe);
+        return new OwnTxEchoFilter(kept, ownEcho, junk, replyToMe);
     }
 
     /**
      * Format the per-cycle diagnostic line written to debug.log. Recording the
-     * kept count, dropped-echo count, whether a reply addressed to us survived,
-     * and the slot lets us tell "decoded but mis-rendered" from "never decoded"
-     * when investigating the "missing other station responses" report.
+     * kept count, dropped-echo count, dropped-junk count, whether a reply
+     * addressed to us survived, and the slot lets us tell "decoded but
+     * mis-rendered" from "never decoded" when investigating the "missing other
+     * station responses" report.
      *
      * @param sequential the FT8 slot (0/1) of this decode cycle
-     * @return the log line, e.g. {@code "DECODE: kept=3 ownEcho=1 replyToMe=true slot=0"}
+     * @return the log line, e.g. {@code "DECODE: kept=3 ownEcho=1 junk=0 replyToMe=true slot=0"}
      */
     public String decodeLogLine(int sequential) {
-        return String.format("DECODE: kept=%d ownEcho=%d replyToMe=%b slot=%d",
-                kept.size(), ownEchoCount, replyToMePresent, sequential);
+        return String.format("DECODE: kept=%d ownEcho=%d junk=%d replyToMe=%b slot=%d",
+                kept.size(), ownEchoCount, junkCount, replyToMePresent, sequential);
     }
 }
