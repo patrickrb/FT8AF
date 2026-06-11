@@ -80,6 +80,31 @@ class LogbookSortTest {
     }
 
     @Test
+    fun missingLeadingZeroTimeSortsAsMorning() {
+        // A manually-edited or imported time that dropped its leading hour zero
+        // ("815" = 08:15) must normalize to 081500 — it should sort as a morning QSO,
+        // not after midday ones. Plain padEnd would make it "815000" (81:50) and sort last.
+        val sorted = sortQsosByDateTimeDesc(
+            listOf(
+                record("NOON", "20240615", "120000"),
+                record("MORNING_SHORT", "20240615", "815"),
+                record("EVENING", "20240615", "2030"),
+            ),
+        )
+        assertThat(calls(sorted)).containsExactly("EVENING", "NOON", "MORNING_SHORT").inOrder()
+    }
+
+    @Test
+    fun normalizeTimeOnHandlesEveryShape() {
+        assertThat(normalizeTimeOn(null)).isEqualTo("000000")
+        assertThat(normalizeTimeOn("")).isEqualTo("000000")
+        assertThat(normalizeTimeOn("143005")).isEqualTo("143005") // HHMMSS unchanged
+        assertThat(normalizeTimeOn("1430")).isEqualTo("143000")   // HHMM -> append seconds
+        assertThat(normalizeTimeOn("815")).isEqualTo("081500")    // dropped leading zero (H MM)
+        assertThat(normalizeTimeOn("81500")).isEqualTo("081500")  // dropped leading zero (H MM SS)
+    }
+
+    @Test
     fun emptyListReturnsEmpty() {
         assertThat(sortQsosByDateTimeDesc(emptyList())).isEmpty()
     }

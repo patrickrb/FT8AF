@@ -2007,10 +2007,20 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             if (!showAll){
                 limitStr="limit 100 offset "+offset;
             }
+            // Normalize time_on to a fixed-width 6-digit HHMMSS before max()/ORDER BY.
+            // time_on is stored as variable-width TEXT (ADIF may carry HHMM; the edit
+            // dialog allows arbitrary input), so a value with a dropped leading zero like
+            // "815" (08:15) would otherwise sort after "103000". Restore the hour's leading
+            // zero on odd-length values, then right-pad seconds. Mirrors normalizeTimeOn()
+            // in LogbookScreen.kt so the DB ordering and the Compose sort agree.
+            String normTimeOn =
+                    "CASE WHEN q.time_on IS NULL OR q.time_on='' THEN '000000'\n" +
+                    " WHEN length(q.time_on)%2=1 THEN substr('0'||q.time_on||'000000',1,6)\n" +
+                    " ELSE substr(q.time_on||'000000',1,6) END";
             String querySQL = "select max(q.id) as id, q.[call] as callsign ,q.gridsquare as grid" +
                     ",q.band||\"(\"||q.freq||\" MHz)\" as band \n" +
                     ",q.qso_date as last_time ,q.mode ,q.isQSL,q.isLotW_QSL\n" +
-                    ",max(q.time_on) as last_time_on\n" +
+                    ",max(" + normTimeOn + ") as last_time_on\n" +
                     ",max(q.synced_cloudlog) as synced_cloudlog\n" +
                     ",max(q.synced_qrz) as synced_qrz\n" +
                     "from QSLTable q inner join QSLTable q2 ON q.id =q2.id \n" +
