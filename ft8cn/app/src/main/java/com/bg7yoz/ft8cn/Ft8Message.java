@@ -328,26 +328,43 @@ public class Ft8Message {
     }
 
     /**
+     * The slot (cycle) index since the epoch for this message's mode.
+     *
+     * <p>FT8 keeps its legacy 15s math and FT4 its 7.5s; FT2 uses its own 3.8s
+     * slot from {@link ModeProfile}, <em>not</em> FT4's 7.5s. Reusing FT4's
+     * period for FT2 collapsed two adjacent 3.8s slots into a single parity, so
+     * the QSO auto-sequencer ({@link com.bg7yoz.ft8cn.ft8transmit.FT8TransmitSignal})
+     * saw the other station's reply as being in our own slot and skipped it —
+     * stalling after a report instead of advancing to RR73 (issue #205). The
+     * small {@code +slot/20} nudge mirrors the legacy FT8 (+750ms) / FT4 (+370ms)
+     * early-skew correction.
+     *
+     * @return slot index (monotonic, mod into 2 or 4 for the sequence helpers)
+     */
+    private long slotIndex() {
+        if (signalFormat == FT8Common.FT8_MODE) {
+            return (utcTime + 750) / 1000 / 15;
+        } else if (signalFormat == FT8Common.FT2_MODE) {
+            int slot = ModeProfile.FT2.slotMillis; // 3800ms
+            return (utcTime + slot / 20) / slot;
+        } else {
+            return (utcTime + 370) / 100 / 75;
+        }
+    }
+
+    /**
      * Show which time sequence the current message belongs to.
      *
      * @return String Result is the modulo of the time cycle.
      */
     @SuppressLint("DefaultLocale")
     public int getSequence() {
-        if (signalFormat == FT8Common.FT8_MODE) {
-            return (int) ((((utcTime + 750) / 1000) / 15) % 2);
-        } else {
-            return (int) (((utcTime + 370) / 100) / 75) % 2;
-        }
+        return (int) (slotIndex() % 2);
     }
 
     @SuppressLint("DefaultLocale")
     public int getSequence4() {
-        if (signalFormat == FT8Common.FT8_MODE) {
-            return (int) ((((utcTime + 750) / 1000) / 15) % 4);
-        } else {
-            return (int) (((utcTime + 370) / 100) / 75) % 4;
-        }
+        return (int) (slotIndex() % 4);
     }
 
     /**
