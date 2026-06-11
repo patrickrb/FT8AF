@@ -58,12 +58,27 @@ public class WaterfallLabelMessagesTest {
     }
 
     @Test
-    public void deepPass_nonEmpty_replacesWithTheDeepResult() {
+    public void deepPass_nonEmpty_mergesOntoThePreviousOverlay() {
+        // The listener dedups each deep pass against the earlier passes
+        // (addMsgToList), so `kept` is only the deep pass's *new* decodes. They
+        // must augment the normal pass's labels, not replace them.
         ArrayList<Ft8Message> previous = listOf(1);
-        ArrayList<Ft8Message> kept = listOf(4); // deep pass is a superset of the normal one
+        ArrayList<Ft8Message> kept = listOf(4);
         ArrayList<Ft8Message> result =
                 WaterfallLabelMessages.afterPass(previous, kept, true);
-        assertThat(result).isSameInstanceAs(kept);
+        assertThat(result).hasSize(5);
+        assertThat(result).containsAtLeastElementsIn(previous);
+        assertThat(result).containsAtLeastElementsIn(kept);
+    }
+
+    @Test
+    public void deepPass_nonEmpty_withNullPrevious_isJustTheDeepResult() {
+        // A deep pass that fires before any overlay exists (null previous) must
+        // not NPE; it simply becomes the deep result.
+        ArrayList<Ft8Message> kept = listOf(2);
+        ArrayList<Ft8Message> result =
+                WaterfallLabelMessages.afterPass(null, kept, true);
+        assertThat(result).containsExactlyElementsIn(kept);
     }
 
     @Test

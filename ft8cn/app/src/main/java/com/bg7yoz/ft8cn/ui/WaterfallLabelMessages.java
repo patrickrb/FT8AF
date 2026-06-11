@@ -29,9 +29,16 @@ public final class WaterfallLabelMessages {
      *
      * <p>A normal (non-deep) pass is authoritative for the slot: its result —
      * even an empty one — becomes the overlay, so a silent slot clears the
-     * previous slot's labels. A deep pass only augments: an empty deep pass keeps
-     * the normal pass's labels rather than wiping them (deep decode re-runs the
-     * same slot's audio and must never erase what the normal pass already found).
+     * previous slot's labels. A deep pass only augments: it never replaces the
+     * normal pass's labels, it adds to them. The listener already dedups each
+     * deep pass against the earlier passes ({@code FT8SignalListener.addMsgToList}
+     * removes from {@code msgs} anything already in {@code allMsg}), so {@code
+     * kept} here holds only this deep pass's <em>new</em> decodes — they must be
+     * merged onto {@code previous}, not used to replace it, or the normal pass's
+     * labels would be dropped. An empty deep pass keeps {@code previous} unchanged
+     * (deep decode re-runs the same slot's audio and must never erase what an
+     * earlier pass already found). This mirrors how {@code afterDecode} accumulates
+     * the main message list and decode count across deep passes.
      *
      * @param previous the current overlay messages (may be null)
      * @param kept     this pass's kept decodes (own-TX echoes / junk already removed)
@@ -41,9 +48,17 @@ public final class WaterfallLabelMessages {
     public static ArrayList<Ft8Message> afterPass(ArrayList<Ft8Message> previous,
                                                   ArrayList<Ft8Message> kept,
                                                   boolean isDeep) {
-        if (isDeep && kept.isEmpty()) {
+        if (!isDeep) {
+            return kept;
+        }
+        if (kept.isEmpty()) {
             return previous;
         }
-        return kept;
+        ArrayList<Ft8Message> merged = new ArrayList<>();
+        if (previous != null) {
+            merged.addAll(previous);
+        }
+        merged.addAll(kept);
+        return merged;
     }
 }
