@@ -2010,6 +2010,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             String querySQL = "select max(q.id) as id, q.[call] as callsign ,q.gridsquare as grid" +
                     ",q.band||\"(\"||q.freq||\" MHz)\" as band \n" +
                     ",q.qso_date as last_time ,q.mode ,q.isQSL,q.isLotW_QSL\n" +
+                    ",max(q.time_on) as last_time_on\n" +
                     ",max(q.synced_cloudlog) as synced_cloudlog\n" +
                     ",max(q.synced_qrz) as synced_qrz\n" +
                     "from QSLTable q inner join QSLTable q2 ON q.id =q2.id \n" +
@@ -2018,7 +2019,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     "group by q.[call] ,q.gridsquare,q.freq ,q.qso_date,q.band\n" +
                     ",q.mode,q.isQSL,q.isLotW_QSL\n" +
                     "HAVING q.qso_date =MAX(q2.qso_date) \n" +
-                    "order by q.qso_date desc\n"+
+                    // newest first, by date then time-of-day so same-day QSOs order correctly
+                    "order by q.qso_date desc, last_time_on desc\n"+
                     limitStr;
 
 
@@ -2035,6 +2037,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 record.syncedCloudlog = idxCl >= 0 && cursor.getInt(idxCl) == 1;
                 record.syncedQrz = idxQrz >= 0 && cursor.getInt(idxQrz) == 1;
                 record.setLastTime(cursor.getString(cursor.getColumnIndex("last_time")));
+                int idxTimeOn = cursor.getColumnIndex("last_time_on");
+                if (idxTimeOn >= 0) {
+                    record.setTimeOn(cursor.getString(idxTimeOn));
+                }
                 record.setMode(cursor.getString(cursor.getColumnIndex("mode")));
                 record.setGrid(cursor.getString(cursor.getColumnIndex("grid")));
                 record.setBand(cursor.getString(cursor.getColumnIndex("band")));

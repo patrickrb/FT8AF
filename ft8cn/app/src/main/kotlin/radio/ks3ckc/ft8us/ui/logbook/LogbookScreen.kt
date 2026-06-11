@@ -1046,6 +1046,28 @@ private fun gridSquaresWorked(records: List<QSLCallsignRecord>): Int =
 // RECENT TAB
 // ===========================================================================
 
+/**
+ * Order the recent QSO list newest-first by full date + time.
+ *
+ * [QSLCallsignRecord.lastTime] is the QSO date (YYYYMMDD) and
+ * [QSLCallsignRecord.timeOn] is the UTC time of day (HHMMSS); concatenated they
+ * form a lexicographically sortable timestamp, so same-day QSOs order by time
+ * rather than by the database's grouping order. Short/missing values are padded
+ * so a row without a recorded time still sorts within its day. The sort is
+ * stable, so genuine ties keep their incoming order.
+ *
+ * Extracted from [RecentTab] so the ordering can be unit-tested.
+ */
+internal fun sortQsosByDateTimeDesc(
+    records: List<QSLCallsignRecord>,
+): List<QSLCallsignRecord> = records.sortedByDescending { qsoSortKey(it) }
+
+internal fun qsoSortKey(record: QSLCallsignRecord): String {
+    val date = (record.lastTime ?: "").padEnd(8, '0')
+    val time = (record.timeOn ?: "").padEnd(6, '0')
+    return date + time
+}
+
 @Composable
 private fun RecentTab(
     records: List<QSLCallsignRecord>,
@@ -1076,7 +1098,7 @@ private fun RecentTab(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         items(
-            items = records.reversed(),
+            items = sortQsosByDateTimeDesc(records),
             // Include id so an edit that changes other fields still maps to a stable key,
             // and so two grouped rows with otherwise identical display fields don't collide.
             key = { "${it.id}_${it.callsign}_${it.lastTime}_${it.band}" },
