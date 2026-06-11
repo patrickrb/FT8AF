@@ -917,6 +917,11 @@ public class MainViewModel extends ViewModel {
             GeneralVariables.transmitMessages.add(message);
             GeneralVariables.resetLaunchSupervision();
         }
+        // Tapping a decode works one specific station: mark this run as a single
+        // QSO so it stops after completion instead of idling on CQ — unless Hunt
+        // or Auto-CQ after QSO is enabled. (Must come after setActivated(true),
+        // which clears the flag on its deactivation path.)
+        ft8TransmitSignal.beginSingleQso();
         ft8TransmitSignal.setTransmit(
                 message.getFromCallTransmitCallsign(),
                 1,

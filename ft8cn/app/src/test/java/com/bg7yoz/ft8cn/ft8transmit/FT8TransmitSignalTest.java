@@ -183,6 +183,52 @@ public class FT8TransmitSignalTest {
                 .containsExactly(new float[]{0.25f, 0.25f}).inOrder();
     }
 
+    // ---- shouldStopAfterQso -------------------------------------------------
+    // After tapping a single CQ in the decode list to work one station, the run
+    // must STOP once that QSO completes — it must not keep calling CQ or hunting
+    // unless the operator has Hunt or Auto-CQ-after-QSO enabled. Pure decision
+    // logic extracted from parseMessageToFunction so it can be tested directly.
+
+    @Test
+    public void shouldStop_singleTappedQso_huntAndAutoCqOff_stops() {
+        // The core request: tap a CQ, finish the QSO, then stop.
+        assertThat(FT8TransmitSignal.shouldStopAfterQso(
+                /*continued*/ false, /*autoCQAfterQSO*/ false,
+                /*autoFollowCQ*/ false, /*singleQsoMode*/ true)).isTrue();
+    }
+
+    @Test
+    public void shouldStop_singleTappedQso_huntOn_keepsRunning() {
+        // HUNT enabled -> keep hunting the next CQ after the tapped QSO.
+        assertThat(FT8TransmitSignal.shouldStopAfterQso(
+                false, false, /*autoFollowCQ*/ true, true)).isFalse();
+    }
+
+    @Test
+    public void shouldStop_singleTappedQso_autoCqOn_keepsRunning() {
+        // Auto-CQ after QSO enabled -> keep calling CQ after the tapped QSO.
+        assertThat(FT8TransmitSignal.shouldStopAfterQso(
+                false, /*autoCQAfterQSO*/ true, false, true)).isFalse();
+    }
+
+    @Test
+    public void shouldStop_singleTappedQso_callerQueued_keepsRunning() {
+        // A queued caller / Hunt target already picked up the next contact, so
+        // answer them rather than stopping — even with Hunt & Auto-CQ off.
+        assertThat(FT8TransmitSignal.shouldStopAfterQso(
+                /*continued*/ true, false, false, true)).isFalse();
+    }
+
+    @Test
+    public void shouldStop_notSingleQso_neverStops() {
+        // A run that did not start as a tapped QSO (e.g. pressing CQ) is never
+        // stopped by this rule, regardless of the other flags.
+        assertThat(FT8TransmitSignal.shouldStopAfterQso(
+                false, false, false, /*singleQsoMode*/ false)).isFalse();
+        assertThat(FT8TransmitSignal.shouldStopAfterQso(
+                true, true, true, false)).isFalse();
+    }
+
     // ---- mayAutoCall --------------------------------------------------------
     // The give-up fallback after a no-reply manual QSO must not chase other CQs unless an
     // auto-call mode is on.
