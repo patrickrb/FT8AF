@@ -1,10 +1,11 @@
 package radio.ks3ckc.ft8us.ui.logbook
 
-import androidx.compose.ui.res.stringResource
+import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import org.junit.Rule
@@ -26,12 +27,16 @@ class LogbookScreenTest {
     @get:Rule
     val composeRule = createComposeRule()
 
+    // Resolve expected labels from a Robolectric context up front rather than
+    // capturing stringResource(...) inside setContent — SegmentedTabRow animates
+    // (animateColorAsState), so a recomposition could re-run any in-composition
+    // capture while the assertions iterate over it.
+    private val context = ApplicationProvider.getApplicationContext<Context>()
+    private fun tabLabel(tab: LogbookTab): String = context.getString(tab.labelRes)
+
     @Test
     fun segmentedTabRow_rendersEveryTabLabel() {
-        val labels = mutableListOf<String>()
         composeRule.setContent {
-            labels.clear()
-            LogbookTab.entries.forEach { labels.add(stringResource(it.labelRes)) }
             SegmentedTabRow(
                 tabs = LogbookTab.entries,
                 selected = LogbookTab.STATS,
@@ -39,17 +44,15 @@ class LogbookScreenTest {
             )
         }
 
-        labels.forEach { label ->
-            composeRule.onNodeWithText(label).assertIsDisplayed()
+        LogbookTab.entries.forEach { tab ->
+            composeRule.onNodeWithText(tabLabel(tab)).assertIsDisplayed()
         }
     }
 
     @Test
     fun segmentedTabRow_tappingTabReportsThatTab() {
         var picked: LogbookTab? = null
-        lateinit var recentLabel: String
         composeRule.setContent {
-            recentLabel = stringResource(LogbookTab.RECENT.labelRes)
             SegmentedTabRow(
                 tabs = LogbookTab.entries,
                 selected = LogbookTab.STATS,
@@ -57,7 +60,7 @@ class LogbookScreenTest {
             )
         }
 
-        composeRule.onNodeWithText(recentLabel).performClick()
+        composeRule.onNodeWithText(tabLabel(LogbookTab.RECENT)).performClick()
 
         assertThat(picked).isEqualTo(LogbookTab.RECENT)
     }

@@ -1,10 +1,11 @@
 package radio.ks3ckc.ft8us.ui.map
 
-import androidx.compose.ui.res.stringResource
+import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bg7yoz.ft8cn.R
 import com.google.common.truth.Truth.assertThat
@@ -26,12 +27,13 @@ class MapOverlayToggleTest {
     @get:Rule
     val composeRule = createComposeRule()
 
+    private val context = ApplicationProvider.getApplicationContext<Context>()
+
     @Test
     fun pskOverlayToggle_clickEmitsToggledValue() {
+        val label = context.getString(R.string.map_overlay_psk)
         var toggledTo: Boolean? = null
-        lateinit var label: String
         composeRule.setContent {
-            label = stringResource(R.string.map_overlay_psk)
             PskOverlayToggle(enabled = false, onToggle = { toggledTo = it })
         }
 
@@ -43,10 +45,9 @@ class MapOverlayToggleTest {
 
     @Test
     fun mapViewToggle_selectingAzimuthalEmitsThatMode() {
+        val azimuthalLabel = context.getString(R.string.map_mode_azimuthal)
         var selected: MapViewMode? = null
-        lateinit var azimuthalLabel: String
         composeRule.setContent {
-            azimuthalLabel = stringResource(R.string.map_mode_azimuthal)
             MapViewToggle(mode = MapViewMode.STANDARD, onModeChange = { selected = it })
         }
 

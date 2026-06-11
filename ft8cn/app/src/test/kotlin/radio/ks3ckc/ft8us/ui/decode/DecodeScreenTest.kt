@@ -1,9 +1,10 @@
 package radio.ks3ckc.ft8us.ui.decode
 
-import androidx.compose.ui.res.stringResource
+import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bg7yoz.ft8cn.R
 import org.junit.Rule
@@ -29,12 +30,13 @@ class DecodeScreenTest {
     @get:Rule
     val composeRule = createComposeRule()
 
+    private val context = ApplicationProvider.getApplicationContext<Context>()
+
     @Test
     fun defaultFilter_showsDefaultEmptyCopy() {
+        val title = context.getString(R.string.decode_empty_default_title)
         composeRule.mainClock.autoAdvance = false
-        lateinit var title: String
         composeRule.setContent {
-            title = stringResource(R.string.decode_empty_default_title)
             EmptyState(selectedFilter = "All")
         }
 
@@ -43,10 +45,9 @@ class DecodeScreenTest {
 
     @Test
     fun cqFilter_showsCqEmptyCopy() {
+        val title = context.getString(R.string.decode_empty_cq_title)
         composeRule.mainClock.autoAdvance = false
-        lateinit var title: String
         composeRule.setContent {
-            title = stringResource(R.string.decode_empty_cq_title)
             EmptyState(selectedFilter = "CQ Calls")
         }
 
