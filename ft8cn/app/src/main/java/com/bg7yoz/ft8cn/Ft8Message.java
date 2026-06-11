@@ -27,8 +27,6 @@ import com.google.android.gms.maps.model.LatLng;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Locale;
-import java.util.regex.Pattern;
 
 public class Ft8Message {
     private static String TAG = "Ft8Message";
@@ -524,7 +522,17 @@ t71     Telemetry data, up to 18 hex digits
             s = s.substring(1, s.length() - 1);
         }
         //No leftover angle brackets, spaces, or dots — just the call alphabet.
-        return s.matches("[A-Z0-9/]+");
+        //Manual scan keeps this off the regex compiler on the decode hot-path.
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            boolean inAlphabet = (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9')
+                    || c == '/';
+            if (!inAlphabet) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

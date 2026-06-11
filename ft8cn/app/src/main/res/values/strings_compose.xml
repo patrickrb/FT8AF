@@ -485,6 +485,7 @@
     <string name="settings_report_bug">Report a Bug</string>
     <string name="bug_report_description_hint">Describe what went wrong…</string>
     <string name="bug_report_send_email">Send email</string>
+    <string name="bug_report_no_email_app">No email app found to send the report</string>
     <string name="bug_report_open_github">Open GitHub issue</string>
     <string name="bug_report_email" translatable="false">k1af@FT8AF.app</string>
     <string name="settings_debug">Debug</string>

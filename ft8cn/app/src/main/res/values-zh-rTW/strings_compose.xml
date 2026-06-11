@@ -409,6 +409,7 @@
     <string name="settings_report_bug">回報問題</string>
     <string name="bug_report_description_hint">描述發生的問題…</string>
     <string name="bug_report_send_email">傳送郵件</string>
+    <string name="bug_report_no_email_app">找不到可傳送報告的郵件應用程式</string>
     <string name="bug_report_open_github">開啟 GitHub issue</string>
     <string name="settings_debug">除錯</string>
     <string name="settings_debug_desc">檢視／分享 debug.log</string>

@@ -1,9 +1,11 @@
 package radio.ks3ckc.ft8us.ui.settings
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -164,5 +166,15 @@ private fun sendBugReportEmail(context: Context, description: String) {
         }
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
-    context.startActivity(intent)
+    // A device with no mail handler (or all disabled) throws here; surface a
+    // message instead of crashing out of Settings -> About.
+    try {
+        context.startActivity(intent)
+    } catch (e: ActivityNotFoundException) {
+        Toast.makeText(
+            context,
+            context.getString(R.string.bug_report_no_email_app),
+            Toast.LENGTH_LONG,
+        ).show()
+    }
 }
