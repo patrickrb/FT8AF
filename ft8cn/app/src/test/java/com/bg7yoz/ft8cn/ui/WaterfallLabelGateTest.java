@@ -52,4 +52,27 @@ public class WaterfallLabelGateTest {
         gate.reset();
         assertThat(gate.shouldStamp(100)).isTrue();   // after a bitmap recreate
     }
+
+    @Test
+    public void modeChangeStampsEvenWhenSlotIndexCollides() {
+        // The view (and its single gate) is reused across mode changes. FT8 (15s) and
+        // FT4 (7.5s) divide utcMs differently, so the new mode's slot index can equal one
+        // already stamped under the old mode. Keying on slotMillis too means the first
+        // slot after the switch still stamps once instead of being suppressed.
+        WaterfallLabelGate gate = new WaterfallLabelGate();
+        assertThat(gate.shouldStamp(15_000, 5)).isTrue();   // FT8 slot 5
+        assertThat(gate.shouldStamp(15_000, 5)).isFalse();  // deep pass, same slot
+        assertThat(gate.shouldStamp(7_500, 5)).isTrue();    // FT4 slot 5 — same index, new mode
+        assertThat(gate.shouldStamp(7_500, 5)).isFalse();   // deep pass after the switch
+    }
+
+    @Test
+    public void sameModeKeyBehavesLikeTheSingleArgGate() {
+        // With a fixed slotMillis the two-arg gate is once-per-slot, just like the
+        // slot-index-only overload.
+        WaterfallLabelGate gate = new WaterfallLabelGate();
+        assertThat(gate.shouldStamp(7_500, 100)).isTrue();
+        assertThat(gate.shouldStamp(7_500, 100)).isFalse();
+        assertThat(gate.shouldStamp(7_500, 101)).isTrue();
+    }
 }
