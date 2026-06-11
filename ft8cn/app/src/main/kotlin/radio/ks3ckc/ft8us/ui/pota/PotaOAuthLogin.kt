@@ -145,7 +145,11 @@ fun PotaOAuthDialog(onClose: (success: Boolean) -> Unit) {
                             var captured = false
 
                             fun handleRedirect(url: String): Boolean {
-                                if (captured) return false
+                                // Once we've captured (or rejected) the redirect, swallow every
+                                // later navigation: the code exchange is in flight or the dialog
+                                // is closing, and letting the WebView load pota.app (or anything
+                                // else) on top of that serves no purpose.
+                                if (captured) return true
                                 return when (val r = classifyRedirect(url, PotaAuth.OAUTH_REDIRECT)) {
                                     OAuthRedirect.NotRedirect -> false
                                     OAuthRedirect.NoCode -> {
@@ -240,7 +244,10 @@ fun PotaOAuthDialog(onClose: (success: Boolean) -> Unit) {
                                     if (message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
                                         oauthLog(ctx, "console error: ${message.message()}")
                                     }
-                                    return true
+                                    // Returning false lets WebView keep its default console
+                                    // logging for warnings/info — useful when troubleshooting a
+                                    // blank page — while we still capture errors above.
+                                    return false
                                 }
                             }
                             // removeAllCookies is async; load the authorize URL from its
@@ -289,10 +296,21 @@ internal sealed class OAuthRedirect {
  * (`https://pota.app/`). Only URLs at that prefix are ours to intercept; a `code`
  * query parameter means success, its absence means the provider redirected back
  * with an error or the user bailed.
+ *
+ * Origin is compared on parsed scheme/host/port — not a raw `startsWith` — so a
+ * lookalike host like `https://pota.app.evil.example/?code=…` can't masquerade as
+ * the redirect and trick us into exchanging an attacker-supplied code.
  */
 internal fun classifyRedirect(url: String, redirectPrefix: String): OAuthRedirect {
-    if (!url.startsWith(redirectPrefix)) return OAuthRedirect.NotRedirect
-    val code = Uri.parse(url).getQueryParameter("code")
+    val target = Uri.parse(url)
+    val expected = Uri.parse(redirectPrefix)
+    val sameOrigin = target.scheme.equals(expected.scheme, ignoreCase = true) &&
+        target.host.equals(expected.host, ignoreCase = true) &&
+        target.port == expected.port
+    val expectedPath = expected.path?.ifEmpty { "/" } ?: "/"
+    val targetPath = target.path?.ifEmpty { "/" } ?: "/"
+    if (!sameOrigin || !targetPath.startsWith(expectedPath)) return OAuthRedirect.NotRedirect
+    val code = target.getQueryParameter("code")
     return if (code.isNullOrBlank()) OAuthRedirect.NoCode else OAuthRedirect.WithCode(code)
 }
 

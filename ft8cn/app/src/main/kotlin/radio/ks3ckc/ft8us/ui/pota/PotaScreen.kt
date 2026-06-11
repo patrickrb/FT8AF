@@ -640,18 +640,18 @@ private suspend fun uploadActivation(
     val docs = withContext(Dispatchers.IO) { PotaAdifExporter.buildActivationAdif(db, activation) }
     if (docs.isEmpty()) return Result.failure(IllegalStateException("no QSOs to upload"))
     var ok = 0
-    var lastError: Throwable? = null
+    var firstError: Throwable? = null
     for (doc in docs) {
         PotaClient.uploadAdif(token, doc.filename, doc.content)
             .onSuccess { ok++ }
-            .onFailure { lastError = it }
+            .onFailure { if (firstError == null) firstError = it }
     }
     return if (ok == docs.size) {
         Result.success(ok)
     } else {
         // Preserve the original throwable (e.g. PotaUploadException) so the caller
         // can classify it for a useful message rather than a raw HTTP dump.
-        Result.failure(lastError ?: IllegalStateException("uploaded $ok of ${docs.size}"))
+        Result.failure(firstError ?: IllegalStateException("uploaded $ok of ${docs.size}"))
     }
 }
 

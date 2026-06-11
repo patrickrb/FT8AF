@@ -47,6 +47,26 @@ class OAuthRedirectTest {
     }
 
     @Test
+    fun `a lookalike host carrying a code is not the redirect`() {
+        // Raw startsWith would have matched this on the "https://pota.app" prefix
+        // and tried to exchange the attacker-supplied code; parsed-host compare rejects it.
+        assertThat(classifyRedirect("https://pota.app.evil.example/?code=abc123", redirect))
+            .isEqualTo(OAuthRedirect.NotRedirect)
+    }
+
+    @Test
+    fun `a different scheme is not the redirect`() {
+        assertThat(classifyRedirect("http://pota.app/?code=abc123", redirect))
+            .isEqualTo(OAuthRedirect.NotRedirect)
+    }
+
+    @Test
+    fun `host comparison ignores case`() {
+        assertThat(classifyRedirect("https://POTA.app/?code=abc123", redirect))
+            .isEqualTo(OAuthRedirect.WithCode("abc123"))
+    }
+
+    @Test
     fun `redactUrl drops the query string`() {
         assertThat(redactUrl("https://pota.app/?code=secret&state=xyz")).isEqualTo("https://pota.app/?…")
     }
