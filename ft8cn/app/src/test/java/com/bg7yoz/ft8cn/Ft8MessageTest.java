@@ -297,6 +297,69 @@ public class Ft8MessageTest {
         assertThat(msg.getSequence4()).isEqualTo(0);
     }
 
+    @Test
+    public void getSequence_ft4_alternatesEachSevenAndHalfSeconds() {
+        // Unchanged FT4 path: 7.5s slot.
+        Ft8Message msg = new Ft8Message(FT8Common.FT4_MODE);
+        msg.utcTime = 0;
+        assertThat(msg.getSequence()).isEqualTo(0);
+        msg.utcTime = 7500;
+        assertThat(msg.getSequence()).isEqualTo(1);
+        msg.utcTime = 15000;
+        assertThat(msg.getSequence()).isEqualTo(0);
+    }
+
+    @Test
+    public void getSequence_ft2_alternatesEachShortSlot() {
+        // FT2's 3.8s slot — must alternate twice as fast as FT4's 7.5s.
+        Ft8Message msg = new Ft8Message(FT8Common.FT2_MODE);
+        msg.utcTime = 0;
+        assertThat(msg.getSequence()).isEqualTo(0);
+        msg.utcTime = 3800;
+        assertThat(msg.getSequence()).isEqualTo(1);
+        msg.utcTime = 7600;
+        assertThat(msg.getSequence()).isEqualTo(0);
+        msg.utcTime = 11400;
+        assertThat(msg.getSequence()).isEqualTo(1);
+    }
+
+    @Test
+    public void getSequence_ft2_adjacentSlotsHaveDistinctParity() {
+        // Regression for #205: the old code reused FT4's 7.5s period for FT2, so
+        // two adjacent 3.8s slots (0ms and 3800ms) both mapped to sequence 0.
+        // The QSO sequencer then saw the other station's reply as being in our
+        // own slot and skipped it, stalling on the report instead of sending RR73.
+        Ft8Message slotA = new Ft8Message(FT8Common.FT2_MODE);
+        slotA.utcTime = 0;
+        Ft8Message slotB = new Ft8Message(FT8Common.FT2_MODE);
+        slotB.utcTime = 3800;
+        assertThat(slotA.getSequence()).isNotEqualTo(slotB.getSequence());
+    }
+
+    @Test
+    public void getSequence_ft2_toleratesSlightEarlySkew() {
+        // utcTime is slot-aligned; the +slot/20 nudge keeps a timestamp a touch
+        // early (clock skew) in the correct slot rather than the previous one.
+        Ft8Message msg = new Ft8Message(FT8Common.FT2_MODE);
+        msg.utcTime = 3800 - 50; // 50ms before slot 1's boundary
+        assertThat(msg.getSequence()).isEqualTo(1);
+    }
+
+    @Test
+    public void getSequence4_ft2_cyclesModuloFourOnShortSlot() {
+        Ft8Message msg = new Ft8Message(FT8Common.FT2_MODE);
+        msg.utcTime = 0;
+        assertThat(msg.getSequence4()).isEqualTo(0);
+        msg.utcTime = 3800;
+        assertThat(msg.getSequence4()).isEqualTo(1);
+        msg.utcTime = 7600;
+        assertThat(msg.getSequence4()).isEqualTo(2);
+        msg.utcTime = 11400;
+        assertThat(msg.getSequence4()).isEqualTo(3);
+        msg.utcTime = 15200;
+        assertThat(msg.getSequence4()).isEqualTo(0);
+    }
+
     // ---- TransmitCallsign factory methods -----------------------------------
 
     @Test
