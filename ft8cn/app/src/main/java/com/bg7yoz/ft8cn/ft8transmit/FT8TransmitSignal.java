@@ -56,6 +56,12 @@ public class FT8TransmitSignal {
     public volatile int sequential;// transmit sequence
     public MutableLiveData<Integer> mutableSequential = new MutableLiveData<>();
     private volatile boolean pendingUserCQ = false;
+    // True when the active run was started by tapping a single decode (the
+    // decode-list row tap / QsoSheet "Call" button) to work one specific
+    // station. On QSO completion we stop rather than idling on CQ — unless the
+    // operator has Hunt or Auto-CQ-after-QSO enabled. Cleared when a CQ run
+    // starts (userResetToCQ) or TX is deactivated.
+    private volatile boolean singleQsoMode = false;
     private volatile boolean isTransmitting = false;
     public MutableLiveData<Boolean> mutableIsTransmitting = new MutableLiveData<>();// whether currently transmitting
     public MutableLiveData<String> mutableTransmittingMessage = new MutableLiveData<>();// current message content
@@ -1113,6 +1119,40 @@ public class FT8TransmitSignal {
     }
 
     /**
+     * Mark the active run as a single tapped QSO: started by tapping a decode
+     * (or the QsoSheet "Call" button) to work one specific station. When that
+     * QSO completes, {@link #parseMessageToFunction} stops transmitting instead
+     * of idling on CQ — unless Hunt or Auto-CQ-after-QSO is enabled, or a direct
+     * caller / Hunt target keeps the run alive. Cleared by {@link #userResetToCQ}
+     * (a CQ run) and {@link #setActivated}(false).
+     */
+    public void beginSingleQso() {
+        singleQsoMode = true;
+    }
+
+    /**
+     * Decide whether to stop transmitting after a QSO completes.
+     *
+     * <p>A QSO started by tapping a decode ({@code singleQsoMode}) is a single
+     * shot: when it finishes we stop rather than idling on CQ. The operator
+     * keeps the run going by enabling Hunt ({@code autoFollowCQ}) or Auto-CQ
+     * after QSO ({@code autoCQAfterQSO}); a queued caller or Hunt target that
+     * already picked up the next contact ({@code continued}) also keeps us
+     * active. A run that did not start as a single tapped QSO (e.g. pressing CQ)
+     * is never stopped here.
+     *
+     * @param continued      a dequeued caller or Hunt/auto-follow already set up the next QSO
+     * @param autoCQAfterQSO the Auto-CQ-after-QSO setting (keep calling CQ)
+     * @param autoFollowCQ   the Hunt toggle (auto-answer any CQ)
+     * @param singleQsoMode  the active run started as a single tapped QSO
+     * @return true if TX should be deactivated now
+     */
+    static boolean shouldStopAfterQso(boolean continued, boolean autoCQAfterQSO,
+                                      boolean autoFollowCQ, boolean singleQsoMode) {
+        return singleQsoMode && !continued && !autoCQAfterQSO && !autoFollowCQ;
+    }
+
+    /**
      * Entry point for changing the transmit program based on decoded messages from the watch list.
      *
      * @param msgList message list
@@ -1187,9 +1227,18 @@ public class FT8TransmitSignal {
 
             // try queued callers first, then answer direct callers. When Auto-CQ
             // is on, suppress Hunt so we stay on our run frequency calling CQ
-            // instead of chasing someone else's CQ.
-            if (!dequeueNextCaller()) {
-                checkCQMeOrFollowCQMessage(messages, GeneralVariables.autoCQAfterQSO);
+            // instead of chasing someone else's CQ. `continued` is true when one
+            // of these picked up the next contact.
+            boolean continued = dequeueNextCaller()
+                    || checkCQMeOrFollowCQMessage(messages, GeneralVariables.autoCQAfterQSO);
+            // A QSO started by tapping a decode is a single shot: once it
+            // completes, stop transmitting rather than idling on CQ — unless the
+            // operator enabled Hunt or Auto-CQ after QSO, or a caller/Hunt target
+            // already kept the run alive.
+            if (shouldStopAfterQso(continued, GeneralVariables.autoCQAfterQSO,
+                    GeneralVariables.autoFollowCQ, singleQsoMode)) {
+                GeneralVariables.fileLog("QSO: single tapped QSO done, Hunt & Auto-CQ off -> stop TX");
+                setActivated(false);
             }
             setCurrentFunctionOrder(functionOrder);// set current message
             mutableFunctionOrder.postValue(functionOrder);
@@ -1331,6 +1380,7 @@ public class FT8TransmitSignal {
         if (!this.activated) {//force stop transmitting
             setTransmitting(false);
             clearCallerQueue();
+            singleQsoMode = false;
         }
         mutableIsActivated.postValue(activated);
     }
@@ -1432,6 +1482,9 @@ public class FT8TransmitSignal {
         resetToCQ();
         clearCallerQueue();
         pendingUserCQ = true;
+        // A user-initiated CQ run is not a single tapped QSO: it should keep
+        // calling CQ after each contact, so clear the one-shot flag.
+        singleQsoMode = false;
     }
 
     /**
@@ -1452,10 +1505,18 @@ public class FT8TransmitSignal {
             GeneralVariables.resetLaunchSupervision();
         }
 
-        if (nextCallsign != null) {
-            dequeueSpecificCaller(nextCallsign);
-        } else if (!dequeueNextCaller()) {
-            // No queued callers — stay on CQ
+        boolean continued = (nextCallsign != null)
+                ? dequeueSpecificCaller(nextCallsign)
+                : dequeueNextCaller();
+
+        // Same single-shot rule as the normal completion path: a tapped QSO that
+        // the user force-logs should stop afterwards unless Hunt or Auto-CQ is on
+        // or a caller was queued. (Force-log never auto-follows a CQ, so Hunt
+        // keeps us active to pick up on a later cycle rather than chasing now.)
+        if (shouldStopAfterQso(continued, GeneralVariables.autoCQAfterQSO,
+                GeneralVariables.autoFollowCQ, singleQsoMode)) {
+            GeneralVariables.fileLog("QSO: force-logged single tapped QSO, Hunt & Auto-CQ off -> stop TX");
+            setActivated(false);
         }
 
         setCurrentFunctionOrder(functionOrder);
