@@ -66,6 +66,7 @@ import kotlinx.coroutines.launch
 import radio.ks3ckc.ft8us.pota.PotaClient
 import radio.ks3ckc.ft8us.pota.PotaSessionManager
 import radio.ks3ckc.ft8us.pota.PotaSpotsRepository
+import radio.ks3ckc.ft8us.pota.potaSpotFrequencyKhz
 import radio.ks3ckc.ft8us.pota.model.PotaActivation
 import radio.ks3ckc.ft8us.pota.model.PotaQso
 import radio.ks3ckc.ft8us.pota.model.PotaSpot
@@ -278,7 +279,7 @@ private fun ActivateTab() {
                                     val ok = PotaClient.selfSpot(
                                         activator = myCall,
                                         spotter = myCall,
-                                        frequencyKhz = GeneralVariables.getBaseFrequency() / 1000.0,
+                                        frequencyKhz = potaSpotFrequencyKhz(GeneralVariables.band),
                                         mode = "FT8",
                                         reference = ref,
                                         comments = "CQ POTA via FT8AF",
