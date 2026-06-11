@@ -127,6 +127,26 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # Pre-build the app + androidTest APKs (and resolve all dependencies)
+      # BEFORE booting the emulator. The androidTest classpath pulls espresso /
+      # hamcrest from Maven Central, which rate-limits the shared GitHub runner
+      # IPs (transient HTTP 429). Doing it here, with a retry+backoff, means a
+      # 429 is retried cheaply instead of wasting a full emulator boot; the
+      # emulator step then runs against already-cached dependencies.
+      - name: Assemble instrumented test APKs
+        working-directory: ft8cn
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if ./gradlew assembleDebug assembleDebugAndroidTest --stacktrace; then
+              exit 0
+            fi
+            echo "::warning::Gradle assemble failed (attempt ${attempt}/3) — retrying after backoff"
+            sleep $((attempt * 30))
+          done
+          echo "::error::Gradle assemble failed after 3 attempts (likely Maven Central 429)"
+          exit 1
+
       # google_apis image (not plain default) so Google Play services types the
       # app links against — play-services-maps — resolve at runtime and the
       # activity reaches RESUMED. API 30 matches the Compose UI test floor.
