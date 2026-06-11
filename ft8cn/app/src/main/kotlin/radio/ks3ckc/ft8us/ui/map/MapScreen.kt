@@ -102,13 +102,13 @@ private data class PskSpotMarker(
 private const val PSK_OVERLAY_SECONDS_BACK = 3600
 private const val PSK_POLL_INTERVAL_MS = 5L * 60L * 1000L
 
-private data class ProjectedPoint(
+internal data class ProjectedPoint(
     val x: Float,
     val y: Float,
     val distKm: Double,
 )
 
-private enum class MapViewMode { STANDARD, AZIMUTHAL }
+internal enum class MapViewMode { STANDARD, AZIMUTHAL }
 
 private const val MAP_MIN_ZOOM = 1f
 private const val MAP_MAX_ZOOM = 8f
@@ -118,7 +118,7 @@ private const val MAP_ZOOM_STEP = 2f
 // Great-circle distance (km) — used by both projections
 // ---------------------------------------------------------------------------
 
-private fun greatCircleKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+internal fun greatCircleKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
     val phi1 = Math.toRadians(lat1)
     val phi2 = Math.toRadians(lat2)
     val dLam = Math.toRadians(lon2 - lon1)
@@ -130,7 +130,7 @@ private fun greatCircleKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double
 // Equirectangular (Plate Carrée) projection — lat/lon -> normalized [-1,1]
 // ---------------------------------------------------------------------------
 
-private fun equirectProject(lat: Double, lon: Double): ProjectedPoint {
+internal fun equirectProject(lat: Double, lon: Double): ProjectedPoint {
     return ProjectedPoint(
         x = (lon / 180.0).toFloat(),
         y = (-lat / 90.0).toFloat(),
@@ -142,7 +142,7 @@ private fun equirectProject(lat: Double, lon: Double): ProjectedPoint {
 // Azimuthal equidistant projection
 // ---------------------------------------------------------------------------
 
-private fun azProject(opLat: Double, opLon: Double, lat: Double, lon: Double): ProjectedPoint {
+internal fun azProject(opLat: Double, opLon: Double, lat: Double, lon: Double): ProjectedPoint {
     val phi1 = Math.toRadians(opLat)
     val lam1 = Math.toRadians(opLon)
     val phi2 = Math.toRadians(lat)
@@ -504,7 +504,7 @@ fun MapScreen(mainViewModel: MainViewModel) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun MapViewToggle(
+internal fun MapViewToggle(
     mode: MapViewMode,
     onModeChange: (MapViewMode) -> Unit,
 ) {
@@ -527,7 +527,7 @@ private fun MapViewToggle(
 }
 
 @Composable
-private fun PskOverlayToggle(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+internal fun PskOverlayToggle(enabled: Boolean, onToggle: (Boolean) -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
@@ -1262,7 +1262,7 @@ private fun InfoChip(value: String, label: String) {
 // Bearing calculation
 // ---------------------------------------------------------------------------
 
-private fun computeBearing(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+internal fun computeBearing(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
     val phi1 = Math.toRadians(lat1)
     val phi2 = Math.toRadians(lat2)
     val dLam = Math.toRadians(lon2 - lon1)
