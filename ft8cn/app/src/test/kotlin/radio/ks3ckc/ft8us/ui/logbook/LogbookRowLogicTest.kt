@@ -32,6 +32,10 @@ class LogbookRowLogicTest {
     fun formatQsoTime_blankOrNonNumericIsPlaceholder() {
         assertThat(formatQsoTime("")).isEqualTo("--:--")
         assertThat(formatQsoTime("abc")).isEqualTo("--:--")
+        // Partially-numeric input must be rejected, not silently stripped to digits
+        // and rendered as a real time.
+        assertThat(formatQsoTime("12ab")).isEqualTo("--:--")
+        assertThat(formatQsoTime("12:30")).isEqualTo("--:--")
     }
 
     @Test
@@ -46,6 +50,10 @@ class LogbookRowLogicTest {
         assertThat(formatQsoDate("")).isEqualTo("")
         assertThat(formatQsoDate("2026")).isEqualTo("")
         assertThat(formatQsoDate("20261301")).isEqualTo("") // month 13
+        // Must require exactly 8 digits, not merely "contains ≥8 digits": trailing
+        // junk or separators are malformed, not a valid yyyyMMdd.
+        assertThat(formatQsoDate("20260611xxx")).isEqualTo("")
+        assertThat(formatQsoDate("2026-06-11")).isEqualTo("")
     }
 
     @Test

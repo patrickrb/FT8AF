@@ -1384,7 +1384,11 @@ private fun SyncChip(label: String) {
  * Blank / non-numeric input → "--:--".
  */
 internal fun formatQsoTime(timeOn: String): String {
-    if (timeOn.none { it.isDigit() }) return "--:--"
+    // Reject anything that isn't purely numeric, not just the all-non-digit case:
+    // a partial like "12:30" or "12ab" would otherwise be silently stripped to digits
+    // by normalizeTimeOn and rendered as a real time, masking malformed data. Legit
+    // inputs are pure-digit strings of varying width (HHMMSS / HHMM / dropped zero).
+    if (timeOn.isEmpty() || timeOn.any { !it.isDigit() }) return "--:--"
     val norm = normalizeTimeOn(timeOn)
     return "${norm.substring(0, 2)}:${norm.substring(2, 4)}"
 }
@@ -1394,10 +1398,12 @@ internal fun formatQsoTime(timeOn: String): String {
  * malformed (anything that isn't a valid 8-digit yyyyMMdd) → "".
  */
 internal fun formatQsoDate(qsoDate: String): String {
-    val digits = qsoDate.filter { it.isDigit() }
-    if (digits.length < 8) return ""
-    val month = digits.substring(4, 6).toIntOrNull() ?: return ""
-    val day = digits.substring(6, 8).toIntOrNull() ?: return ""
+    // Require exactly 8 digits, not merely "contains ≥8 digits": stripping non-digits
+    // and taking the first 8 would render a date from malformed input like
+    // "20260611xxx" or "2026-06-11", contradicting the documented yyyyMMdd contract.
+    if (qsoDate.length != 8 || qsoDate.any { !it.isDigit() }) return ""
+    val month = qsoDate.substring(4, 6).toIntOrNull() ?: return ""
+    val day = qsoDate.substring(6, 8).toIntOrNull() ?: return ""
     if (month !in 1..12 || day !in 1..31) return ""
     val months = arrayOf(
         "Jan", "Feb", "Mar", "Apr", "May", "Jun",
