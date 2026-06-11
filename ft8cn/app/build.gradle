@@ -212,6 +212,11 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
     androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
+    // AppSmokeTest asserts with Truth (assertThat). Truth is on testImplementation
+    // for the JVM unit tests but does not flow into the androidTest classpath, so
+    // the instrumented build needs its own copy or compileDebugAndroidTestKotlin
+    // fails with "Unresolved reference: truth".
+    androidTestImplementation 'com.google.truth:truth:1.4.2'
 }
 
 jacoco {
