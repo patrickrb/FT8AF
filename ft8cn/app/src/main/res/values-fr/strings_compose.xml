@@ -409,6 +409,7 @@
     <string name="settings_report_bug">Signaler un bug</string>
     <string name="bug_report_description_hint">Décrivez le problème…</string>
     <string name="bug_report_send_email">Envoyer un e-mail</string>
+    <string name="bug_report_no_email_app">Aucune application e-mail trouvée pour envoyer le rapport</string>
     <string name="bug_report_open_github">Ouvrir un ticket GitHub</string>
     <string name="settings_debug">Débogage</string>
     <string name="settings_debug_desc">Afficher / partager debug.log</string>

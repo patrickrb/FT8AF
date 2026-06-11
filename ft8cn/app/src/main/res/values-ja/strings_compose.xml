@@ -409,6 +409,7 @@
     <string name="settings_report_bug">バグを報告</string>
     <string name="bug_report_description_hint">問題の内容を説明してください…</string>
     <string name="bug_report_send_email">メールを送信</string>
+    <string name="bug_report_no_email_app">レポートを送信できるメールアプリが見つかりません</string>
     <string name="bug_report_open_github">GitHub Issue を開く</string>
     <string name="settings_debug">デバッグ</string>
     <string name="settings_debug_desc">debug.log を表示 / 共有</string>

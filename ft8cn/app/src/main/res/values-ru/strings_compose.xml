@@ -409,6 +409,7 @@
     <string name="settings_report_bug">Сообщить об ошибке</string>
     <string name="bug_report_description_hint">Опишите, что пошло не так…</string>
     <string name="bug_report_send_email">Отправить письмо</string>
+    <string name="bug_report_no_email_app">Не найдено приложение для отправки отчёта по почте</string>
     <string name="bug_report_open_github">Открыть issue на GitHub</string>
     <string name="settings_debug">Отладка</string>
     <string name="settings_debug_desc">Просмотр / отправка debug.log</string>
