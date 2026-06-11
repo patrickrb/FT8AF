@@ -39,10 +39,17 @@ static void ft4_extract_symbol(const uint8_t* wf, float* logl);
 static void ft8_extract_symbol(const uint8_t* wf, float* logl);
 static void ft8_decode_multi_symbols(const uint8_t* wf, int num_bins, int n_syms, int bit_idx, float* log174);
 
-static const uint8_t* get_cand_mag(const waterfall_t* wf, const candidate_t* candidate)
+// Pointer to the candidate's frequency/sub-block slot in absolute block 0 of the waterfall.
+// We deliberately leave candidate->time_offset OUT of this base: time_offset ranges -12..23
+// (see ft8_find_sync), so folding it in here would form an out-of-bounds pointer (undefined
+// behavior) whenever it is negative, even though the per-symbol block_abs guards stop us from
+// ever dereferencing a negative block. Callers add `block_abs * block_stride` instead, where
+// block_abs = time_offset + block is range-checked to [0, num_blocks) before use — keeping all
+// pointer arithmetic in-bounds. time_sub < time_osr, freq_sub < freq_osr and freq_offset+7 <
+// num_bins, so this base itself always lands inside block 0.
+static const uint8_t* get_cand_mag_base(const waterfall_t* wf, const candidate_t* candidate)
 {
-    int offset = candidate->time_offset;
-    offset = (offset * wf->time_osr) + candidate->time_sub;
+    int offset = candidate->time_sub;
     offset = (offset * wf->freq_osr) + candidate->freq_sub;
     offset = (offset * wf->num_bins) + candidate->freq_offset;
     return wf->mag + offset;
@@ -54,8 +61,8 @@ int ft8_snr(const waterfall_t* wf, const candidate_t* candidate)
     int sum_noise = 0;
     int num_average = 0;
 
-    // Get the pointer to symbol 0 of the candidate
-    const uint8_t* mag_cand = get_cand_mag(wf, candidate);
+    // Base pointer to block 0; symbols are reached via block_abs (see get_cand_mag_base).
+    const uint8_t* mag_base = get_cand_mag_base(wf, candidate);
 
     // FT4 and FT2 share a 4-GFSK layout (105 symbols, 4 sync groups of 4) completely
     // different from FT8's, so they need their own signal/noise estimate. Without this
@@ -76,7 +83,7 @@ int ft8_snr(const waterfall_t* wf, const candidate_t* candidate)
                 if (block_abs >= wf->num_blocks)
                     break;
 
-                const uint8_t* p4 = mag_cand + (block * wf->block_stride);
+                const uint8_t* p4 = mag_base + (block_abs * wf->block_stride);
                 int sm = kFT4_Costas_pattern[m][k]; // expected tone (0..3)
                 sum_signal += p4[sm];
                 // Noise = average of the other three of the four FT4 tones (+1 rounds /3).
@@ -106,7 +113,7 @@ int ft8_snr(const waterfall_t* wf, const candidate_t* candidate)
             break;
 
         // Get the pointer to symbol 'block' of the candidate
-        const uint8_t* p8 = mag_cand + (block * wf->block_stride);
+        const uint8_t* p8 = mag_base + (block_abs * wf->block_stride);
 
         int k = block % FT8_SYNC_OFFSET;
         int sm = -1;
@@ -144,8 +151,8 @@ static int ft8_sync_score(const waterfall_t* wf, const candidate_t* candidate)
     int score = 0;
     int num_average = 0;
 
-    // Get the pointer to symbol 0 of the candidate
-    const uint8_t* mag_cand = get_cand_mag(wf, candidate);
+    // Base pointer to block 0; symbols are reached via block_abs (see get_cand_mag_base).
+    const uint8_t* mag_base = get_cand_mag_base(wf, candidate);
 
     // Compute average score over sync symbols (m+k = 0-7, 36-43, 72-79)
     for (int m = 0; m < FT8_NUM_SYNC; ++m)
@@ -161,7 +168,7 @@ static int ft8_sync_score(const waterfall_t* wf, const candidate_t* candidate)
                 break;
 
             // Get the pointer to symbol 'block' of the candidate
-            const uint8_t* p8 = mag_cand + (block * wf->block_stride);
+            const uint8_t* p8 = mag_base + (block_abs * wf->block_stride);
 
             // Weighted difference between the expected and all other symbols
             // Does not work as well as the alternative score below
@@ -210,8 +217,8 @@ static int ft4_sync_score(const waterfall_t* wf, const candidate_t* candidate)
     int score = 0;
     int num_average = 0;
 
-    // Get the pointer to symbol 0 of the candidate
-    const uint8_t* mag_cand = get_cand_mag(wf, candidate);
+    // Base pointer to block 0; symbols are reached via block_abs (see get_cand_mag_base).
+    const uint8_t* mag_base = get_cand_mag_base(wf, candidate);
 
     // Compute average score over sync symbols (block = 1-4, 34-37, 67-70, 100-103)
     for (int m = 0; m < FT4_NUM_SYNC; ++m)
@@ -227,7 +234,7 @@ static int ft4_sync_score(const waterfall_t* wf, const candidate_t* candidate)
                 break;
 
             // Get the pointer to symbol 'block' of the candidate
-            const uint8_t* p4 = mag_cand + (block * wf->block_stride);
+            const uint8_t* p4 = mag_base + (block_abs * wf->block_stride);
 
             int sm = kFT4_Costas_pattern[m][k]; // Index of the expected bin
 
@@ -338,7 +345,7 @@ int ft8_find_sync(const waterfall_t* wf, int num_candidates, candidate_t heap[],
 
 static void ft4_extract_likelihood(const waterfall_t* wf, const candidate_t* cand, float* log174)
 {
-    const uint8_t* mag_cand = get_cand_mag(wf, cand);
+    const uint8_t* mag_base = get_cand_mag_base(wf, cand);
 
     // Go over FSK tones and skip Costas sync symbols
     for (int k = 0; k < FT4_ND; ++k)
@@ -357,8 +364,8 @@ static void ft4_extract_likelihood(const waterfall_t* wf, const candidate_t* can
         }
         else
         {
-            // Pointer to 4 bins of the current symbol
-            const uint8_t* ps = mag_cand + (sym_idx * wf->block_stride);
+            // Pointer to 4 bins of the current symbol (block == block_abs here)
+            const uint8_t* ps = mag_base + (block * wf->block_stride);
 
             ft4_extract_symbol(ps, log174 + bit_idx);
         }
@@ -367,7 +374,7 @@ static void ft4_extract_likelihood(const waterfall_t* wf, const candidate_t* can
 
 static void ft8_extract_likelihood(const waterfall_t* wf, const candidate_t* cand, float* log174)
 {
-    const uint8_t* mag_cand = get_cand_mag(wf, cand);
+    const uint8_t* mag_base = get_cand_mag_base(wf, cand);
 
     // Go over FSK tones and skip Costas sync symbols
     for (int k = 0; k < FT8_ND; ++k)
@@ -387,8 +394,8 @@ static void ft8_extract_likelihood(const waterfall_t* wf, const candidate_t* can
         }
         else
         {
-            // Pointer to 8 bins of the current symbol
-            const uint8_t* ps = mag_cand + (sym_idx * wf->block_stride);
+            // Pointer to 8 bins of the current symbol (block == block_abs here)
+            const uint8_t* ps = mag_base + (block * wf->block_stride);
 
             ft8_extract_symbol(ps, log174 + bit_idx);
         }
