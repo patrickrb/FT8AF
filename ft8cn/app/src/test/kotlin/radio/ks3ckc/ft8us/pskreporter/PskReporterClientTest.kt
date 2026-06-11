@@ -83,6 +83,37 @@ class PskReporterClientTest {
     }
 
     @Test
+    fun fetchSpots_forceBypassesClientCooldown() = runBlocking<Unit> {
+        server.enqueue(MockResponse().setBody(fixture("pskreporter/reception-report.xml")))
+        server.enqueue(MockResponse().setBody(fixture("pskreporter/reception-report.xml")))
+
+        val first = PskReporterClient.fetchSpotsForMe("W1AW", 900)
+        assertThat(first).isNotNull()
+
+        // 30s is well inside the 4m50s cooldown, but force=true overrides it
+        // (used for the first overlay fetch when the map is re-entered).
+        now += 30_000L
+        val forced = PskReporterClient.fetchSpotsForMe("W1AW", 900, force = true)
+        assertThat(forced).isNotNull()
+        assertThat(server.requestCount).isEqualTo(2)
+    }
+
+    @Test
+    fun fetchSpots_forceStillRespectsRateLimitBackoff() = runBlocking<Unit> {
+        server.enqueue(MockResponse().setResponseCode(429))
+
+        val rateLimited = PskReporterClient.fetchSpotsForMe("W1AW", 900)
+        assertThat(rateLimited).isNull()
+
+        // Inside the 15-minute back-off: force must NOT override it — we never
+        // hammer a server that returned 429/503.
+        now += 60_000L
+        val forced = PskReporterClient.fetchSpotsForMe("W1AW", 900, force = true)
+        assertThat(forced).isNull()
+        assertThat(server.requestCount).isEqualTo(1)
+    }
+
+    @Test
     fun fetchSpots_afterCooldownExpires_callsServerAgain() = runBlocking<Unit> {
         server.enqueue(MockResponse().setBody(fixture("pskreporter/reception-report.xml")))
         server.enqueue(MockResponse().setBody(fixture("pskreporter/reception-report.xml")))
