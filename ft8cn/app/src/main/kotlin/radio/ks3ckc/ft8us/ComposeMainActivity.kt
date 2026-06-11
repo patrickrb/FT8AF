@@ -258,7 +258,25 @@ class ComposeMainActivity : AppCompatActivity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        // Proceed regardless; same behavior as original
+        // Proceed regardless; same behavior as original.
+
+        // GPS grid auto-update: the toggle in Settings (and the cold-start path)
+        // requests ACCESS_FINE_LOCATION *asynchronously* and then immediately calls
+        // GridLocationUpdater.refresh(). On the very first enable the permission is
+        // still ungranted at that point, so start() bails and the subscription never
+        // begins until the next app launch. Once the user grants location here, kick
+        // refresh() again so updates start in the same session (issue #59).
+        if (locationGrantedIn(permissions, grantResults)
+            && GeneralVariables.autoUpdateGridFromGPS
+        ) {
+            fileLog("onRequestPermissionsResult: location granted, starting GPS grid updater")
+            val grid = MaidenheadGrid.getMyMaidenheadGrid(applicationContext)
+            if (grid.isNotEmpty()) {
+                GeneralVariables.setMyMaidenheadGrid(grid)
+                mainViewModel.databaseOpr.writeConfig("grid", grid, null)
+            }
+            GridLocationUpdater.refresh(applicationContext, mainViewModel)
+        }
     }
 
     private fun initData() {
@@ -573,4 +591,26 @@ class ComposeMainActivity : AppCompatActivity() {
         mainViewModel.utcTimer?.delete()
         System.exit(0)
     }
+}
+
+/**
+ * True if this permission result granted either fine or coarse location.
+ * Top-level + [internal] so the GPS-grid restart decision (issue #59) can be
+ * unit-tested without constructing the Activity.
+ */
+internal fun locationGrantedIn(
+    permissions: Array<out String>,
+    grantResults: IntArray,
+): Boolean {
+    for (i in permissions.indices) {
+        if (i >= grantResults.size) break
+        val p = permissions[i]
+        if ((p == Manifest.permission.ACCESS_FINE_LOCATION ||
+                p == Manifest.permission.ACCESS_COARSE_LOCATION) &&
+            grantResults[i] == PackageManager.PERMISSION_GRANTED
+        ) {
+            return true
+        }
+    }
+    return false
 }
