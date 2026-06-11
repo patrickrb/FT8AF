@@ -168,6 +168,35 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ft8cn/gradlew
 
+      - name: Pre-install NDK (retry around flaky SDK downloads)
+        run: |
+          set -euo pipefail
+          # AGP auto-downloads this NDK during the native build, but its installer
+          # aborts the whole build on the first corrupt/truncated archive from
+          # Google's SDK server (java.util.zip.ZipException: Archive is not a ZIP
+          # archive) with no retry — which intermittently broke PR builds (#208,
+          # #212). Install it up front with retry and a clean slate between tries
+          # so AGP finds it already present and never runs its fragile downloader.
+          # Keep NDK_VERSION in sync with the AGP-default NDK (the version named in
+          # that ZipException) if the Android Gradle Plugin is upgraded.
+          NDK_VERSION=25.1.8937393
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          for attempt in 1 2 3; do
+            echo "::group::NDK install attempt $attempt"
+            rm -rf "$ANDROID_HOME/ndk/$NDK_VERSION" "$HOME/.android/cache"
+            if yes | "$SDKMANAGER" --install "ndk;$NDK_VERSION" \
+                && [[ -d "$ANDROID_HOME/ndk/$NDK_VERSION" ]]; then
+              echo "::endgroup::"
+              echo "NDK $NDK_VERSION ready at $ANDROID_HOME/ndk/$NDK_VERSION"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "Attempt $attempt failed; retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::Failed to install NDK $NDK_VERSION after 3 attempts"
+          exit 1
+
       - name: Decode keystore (release builds only)
         if: steps.tag.outputs.should_release == 'true'
         env:
