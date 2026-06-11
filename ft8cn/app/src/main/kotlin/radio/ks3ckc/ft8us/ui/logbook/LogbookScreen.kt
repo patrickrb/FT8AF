@@ -117,7 +117,7 @@ private fun bandColor(band: String): Color =
 // Tab enum
 // ---------------------------------------------------------------------------
 
-private enum class LogbookTab(@StringRes val labelRes: Int) {
+internal enum class LogbookTab(@StringRes val labelRes: Int) {
     STATS(R.string.log_tab_stats),
     RECENT(R.string.log_tab_recent),
     AWARDS(R.string.log_tab_awards),
@@ -510,7 +510,7 @@ private fun StatsLoadingPlaceholder() {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun SegmentedTabRow(
+internal fun SegmentedTabRow(
     tabs: List<LogbookTab>,
     selected: LogbookTab,
     onSelected: (LogbookTab) -> Unit,

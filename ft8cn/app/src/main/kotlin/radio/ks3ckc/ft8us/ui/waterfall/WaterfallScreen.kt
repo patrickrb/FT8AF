@@ -412,7 +412,7 @@ private fun WaterfallCanvas(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun FrequencyRuler(spectrumWidth: Int, modifier: Modifier = Modifier) {
+internal fun FrequencyRuler(spectrumWidth: Int, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier.background(BgSurface),
         verticalAlignment = Alignment.CenterVertically,
@@ -442,7 +442,7 @@ private fun FrequencyRuler(spectrumWidth: Int, modifier: Modifier = Modifier) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun ToggleChip(
+internal fun ToggleChip(
     label: String,
     active: Boolean,
     onClick: () -> Unit,

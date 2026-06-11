@@ -395,7 +395,7 @@ private fun filterLabel(key: String): String = when (key) {
  *  - Needed: need QSL confirmation (not in QSL callsign list)
  *  - For Me: callsignTo matches operator's callsign
  */
-private fun filterMessages(
+internal fun filterMessages(
     messages: List<Ft8Message>,
     filter: String,
 ): List<Ft8Message> {
@@ -457,7 +457,7 @@ private fun filterMessages(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun EmptyState(
+internal fun EmptyState(
     selectedFilter: String,
     modifier: Modifier = Modifier,
 ) {
