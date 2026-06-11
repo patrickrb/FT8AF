@@ -27,6 +27,8 @@ import com.google.android.gms.maps.model.LatLng;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 public class Ft8Message {
     private static String TAG = "Ft8Message";

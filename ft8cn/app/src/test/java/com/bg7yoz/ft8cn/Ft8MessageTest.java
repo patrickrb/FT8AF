@@ -245,6 +245,61 @@ public class Ft8MessageTest {
         assertThat(msg.getCallsignTo()).isEqualTo("K1ABC");
     }
 
+    // ---- isPlausibleCallsign / isJunkDecode ---------------------------------
+
+    @Test
+    public void isPlausibleCallsign_acceptsRealCallsigns() {
+        assertThat(Ft8Message.isPlausibleCallsign("K1ABC")).isTrue();
+        assertThat(Ft8Message.isPlausibleCallsign("PJ4/K1ABC")).isTrue();  // compound
+        assertThat(Ft8Message.isPlausibleCallsign("3DA0RS")).isTrue();     // leading digit
+        assertThat(Ft8Message.isPlausibleCallsign("<W9XYZ>")).isTrue();    // hashed wrapper
+        assertThat(Ft8Message.isPlausibleCallsign("<...>")).isTrue();      // unresolved placeholder
+        assertThat(Ft8Message.isPlausibleCallsign(" K1ABC ")).isTrue();    // trimmed
+    }
+
+    @Test
+    public void isPlausibleCallsign_rejectsGarbageAndEmpty() {
+        // The reported false decode: stray brackets, dots and a space.
+        assertThat(Ft8Message.isPlausibleCallsign(".<. >")).isFalse();
+        assertThat(Ft8Message.isPlausibleCallsign("<. .>")).isFalse();
+        assertThat(Ft8Message.isPlausibleCallsign("A B")).isFalse();      // embedded space
+        assertThat(Ft8Message.isPlausibleCallsign("")).isFalse();
+        assertThat(Ft8Message.isPlausibleCallsign("   ")).isFalse();
+        assertThat(Ft8Message.isPlausibleCallsign(null)).isFalse();
+    }
+
+    @Test
+    public void isJunkDecode_structuredMessageWithGarbageSender_isJunk() {
+        Ft8Message msg = new Ft8Message("CQ", ".<. >", "FN42");
+        msg.i3 = 1; // standard message — sender must be a real callsign
+        assertThat(msg.isJunkDecode()).isTrue();
+    }
+
+    @Test
+    public void isJunkDecode_structuredMessageWithRealSender_isNotJunk() {
+        Ft8Message msg = new Ft8Message("CQ", "K1ABC", "FN42");
+        msg.i3 = 1;
+        assertThat(msg.isJunkDecode()).isFalse();
+    }
+
+    @Test
+    public void isJunkDecode_freeTextAndTelemetry_neverJunk() {
+        // i3=0,n3=0 (free text) and i3=0,n3=5 (telemetry) legitimately carry
+        // non-callsign text in the callsign fields, so they are exempt even when
+        // the sender field is not a valid callsign.
+        Ft8Message freeText = new Ft8Message(FT8Common.FT8_MODE);
+        freeText.i3 = 0;
+        freeText.n3 = 0;
+        freeText.callsignFrom = "TNX 73 GL";
+        assertThat(freeText.isJunkDecode()).isFalse();
+
+        Ft8Message telemetry = new Ft8Message(FT8Common.FT8_MODE);
+        telemetry.i3 = 0;
+        telemetry.n3 = 5;
+        telemetry.callsignFrom = "123456789ABCDEF012";
+        assertThat(telemetry.isJunkDecode()).isFalse();
+    }
+
     // ---- simple formatters: getDt / getdB / getFreq_hz ----------------------
 
     @Test

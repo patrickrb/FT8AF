@@ -4,8 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Splits a freshly decoded FT8 cycle into the messages worth keeping and the
- * own-TX loopback echoes that must be dropped.
+ * Cleans up a freshly decoded FT8 cycle: it splits the messages worth keeping
+ * from the two kinds that must not reach the UI — own-TX loopback echoes and
+ * junk/false decodes.
  *
  * <p>When the transceiver monitors its TX audio back into the app's line-in,
  * the decoder hears and decodes our <em>own</em> transmission. A decode whose
@@ -15,9 +16,14 @@ import java.util.List;
  * The QSO panel already shows what we transmit via its synthesized key-up entry,
  * and PSKReporter / the auto-sequence already ignore own-callsign messages.
  *
+ * <p>FT8's 14-bit CRC also lets roughly one noise event in 16k pass as a "valid"
+ * decode; those false frames render as garbage callsigns like {@code ".<. >"}
+ * (see {@link Ft8Message#isJunkDecode()}) and are dropped here too so a bogus
+ * station never appears in the list.
+ *
  * <p>The result also carries diagnostic counters used to investigate the
- * separate "missing other station responses" report: how many echoes and junk
- * decodes were dropped and whether any message addressed to us survived this
+ * separate "missing other station responses" report: how many echoes and how
+ * much junk were dropped, and whether any message addressed to us survived this
  * cycle.
  */
 public final class OwnTxEchoFilter {
@@ -56,7 +62,7 @@ public final class OwnTxEchoFilter {
         int junk = 0;
         boolean replyToMe = false;
         for (Ft8Message m : decoded) {
-            if (m.isJunkDecode()) {
+            if (m.isJunkDecode()) {// false decode with a garbage sender callsign
                 junk++;
                 continue;
             }
@@ -74,9 +80,10 @@ public final class OwnTxEchoFilter {
 
     /**
      * Format the per-cycle diagnostic line written to debug.log. Recording the
-     * kept count, dropped-echo count, whether a reply addressed to us survived,
-     * and the slot lets us tell "decoded but mis-rendered" from "never decoded"
-     * when investigating the "missing other station responses" report.
+     * kept count, dropped-echo count, dropped-junk count, whether a reply
+     * addressed to us survived, and the slot lets us tell "decoded but
+     * mis-rendered" from "never decoded" when investigating the "missing other
+     * station responses" report.
      *
      * @param sequential the FT8 slot (0/1) of this decode cycle
      * @return the log line, e.g. {@code "DECODE: kept=3 ownEcho=1 junk=0 replyToMe=true slot=0"}
