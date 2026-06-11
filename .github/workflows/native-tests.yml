@@ -1,0 +1,33 @@
+name: Native FT8 tests
+
+# Gate on the native FT8 encode/hash golden vectors (issue #61). These guard the
+# from-source reconstruction of libft8cn.so: a regression in pack77 / ft8_encode
+# / the callsign hash would otherwise ship silently. The build is host-only C
+# (seconds), so it runs on every PR to dev/main without a path filter — keeping
+# it a reliable required status check (a path-filtered check that doesn't run
+# would leave branch protection stuck "pending").
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+# A new push to the same PR/branch cancels the prior in-flight run.
+concurrency:
+  group: native-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  golden-encode:
+    name: FT8 encode/hash golden vectors
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show clang version
+        run: clang --version
+
+      - name: Build & run golden tests
+        run: bash ft8cn/app/src/main/cpp/ft8cn_glue/run_host_tests.sh
