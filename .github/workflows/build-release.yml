@@ -160,7 +160,19 @@ jobs:
           working-directory: ft8cn
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: ./gradlew connectedDebugAndroidTest --stacktrace
+          # Stream test progress into the job log. By default
+          # connectedDebugAndroidTest sits silently on a single "> Task" line
+          # for minutes; backgrounding logcat's TestRunner tag (plus any
+          # error-level lines) surfaces each test's started:/finished: events —
+          # and any crash — live instead of leaving the step a black box.
+          script: |
+            adb logcat -c || true
+            adb logcat -s TestRunner:I '*:E' &
+            logcat_pid=$!
+            ./gradlew connectedDebugAndroidTest --stacktrace
+            status=$?
+            kill "$logcat_pid" 2>/dev/null || true
+            exit $status
 
       - name: Upload instrumented test reports on failure
         if: failure()
