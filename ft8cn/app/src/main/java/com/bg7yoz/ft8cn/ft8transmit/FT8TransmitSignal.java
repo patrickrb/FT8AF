@@ -23,7 +23,9 @@ import com.bg7yoz.ft8cn.wave.UsbAudioNative;
 import androidx.lifecycle.MutableLiveData;
 
 import com.bg7yoz.ft8cn.FT8Common;
+import com.bg7yoz.ft8cn.ModeProfile;
 import com.bg7yoz.ft8cn.Ft8Message;
+import com.bg7yoz.ft8cn.ft8signal.FT8Package;
 import com.bg7yoz.ft8cn.GeneralVariables;
 import com.bg7yoz.ft8cn.R;
 import com.bg7yoz.ft8cn.connector.ConnectMode;
@@ -162,11 +164,22 @@ public class FT8TransmitSignal {
         setActivated(false);
 
 
-        // Volume is baked into the TX samples per-cycle (see playFT8Signal / playViaUsbAudio),
-        // so there is no live mid-cycle setVolume() observer here: a volume change takes effect
-        // on the next cycle. This matches the ALC auto-volume model (MeterProtectionController).
+        // TX volume is applied live, mid-transmission: the chunked MODE_STREAM AudioTrack
+        // loop re-reads GeneralVariables.volumePercent for each chunk (see playFT8Signal),
+        // and the USB-direct path applies gain live via UsbAudioNative.setTxVolume. A slider
+        // change therefore takes effect within the current cycle, so no per-cycle setVolume()
+        // observer is needed here.
 
-        utcTimer = new UtcTimer(FT8Common.FT8_SLOT_TIME_M, false, new OnUtcTimer() {
+        // Cycle timer on the current mode's period (FT8 = 15s/150, FT4 = 7.5s/75).
+        utcTimer = new UtcTimer(GeneralVariables.currentMode().slotTenths, false, makeTimerCallback());
+
+        utcTimer.start();
+
+    }
+
+    /** The cycle-trigger callback, shared between the constructor and {@link #rebuildTimer}. */
+    private OnUtcTimer makeTimerCallback() {
+        return new OnUtcTimer() {
             @Override
             public void doHeartBeatTimer(long utc) {
 
@@ -175,12 +188,27 @@ public class FT8TransmitSignal {
             //@RequiresApi(api = Build.VERSION_CODES.N)
             @Override
             public void doOnSecTimer(long utc) {
+                // Hunt (auto-answer) is armed via setActivated(true) so it CAN reply, but it
+                // only answers other stations' CQs — it never calls CQ itself. While no
+                // caller is locked yet it's just listening, so keep the TX watchdog fresh;
+                // otherwise an idle hunt would auto-stop after the timeout even though it's
+                // behaving correctly. A stuck *active* QSO still ages the watchdog (this is
+                // false once a real target is locked).
+                if (isHuntListeningIdle(GeneralVariables.autoFollowCQ, functionOrder, toCallsign)) {
+                    GeneralVariables.resetLaunchSupervision();
+                }
                 // stop if auto-supervision timeout exceeded
                 if (GeneralVariables.isLaunchSupervisionTimeout()) {
                     setActivated(false);
                     return;
                 }
                 if (UtcTimer.getNowSequential() == sequential && activated) {
+                    // Idle hunt: stay silent this slot and keep listening rather than keying
+                    // up a CQ. Once parseMessageToFunction locks a caller (order advances,
+                    // target becomes a real callsign) this is false and the reply transmits.
+                    if (isHuntListeningIdle(GeneralVariables.autoFollowCQ, functionOrder, toCallsign)) {
+                        return;
+                    }
                     if (GeneralVariables.myCallsign.length() < 3) {
                         // my callsign is invalid, cannot transmit!
                         ToastMessage.show(GeneralVariables.getStringFromResource(R.string.callsign_error));
@@ -189,10 +217,18 @@ public class FT8TransmitSignal {
                     doTransmit();// transmit action follows precise timing; delay is the audio signal delay
                 }
             }
-        });
+        };
+    }
 
+    /**
+     * Recreate the cycle timer for a new operating mode. {@link UtcTimer}'s period is fixed
+     * at construction, so a mode change (FT8 15s -> FT4 7.5s) requires a fresh timer. The
+     * timer is always restarted; callers should ensure we are not mid-transmit first.
+     */
+    public void rebuildTimer(ModeProfile mode) {
+        utcTimer.delete();
+        utcTimer = new UtcTimer(mode.slotTenths, false, makeTimerCallback());
         utcTimer.start();
-
     }
 
     /**
@@ -211,7 +247,7 @@ public class FT8TransmitSignal {
         resetTargetReport();
 
         if (UtcTimer.getNowSequential() == sequential) {
-            long msInCycle = UtcTimer.getSystemTime() % 15000;
+            long msInCycle = UtcTimer.getSystemTime() % GeneralVariables.currentMode().slotMillis;
             int tolerance = GeneralVariables.lateStartTolerance;
             if (tolerance < 0) tolerance = 0;
             if (tolerance > 4000) tolerance = 4000;
@@ -810,7 +846,7 @@ public class FT8TransmitSignal {
                     toMaidenheadGrid,
                     sentTargetReport != -100 ? sentTargetReport : sendReport,
                     receiveTargetReport != -100 ? receiveTargetReport : receivedReport,// if signal report for the other party is not -100, use the sent signal report record
-                    "FT8",
+                    GeneralVariables.currentMode().displayName,
                     GeneralVariables.band,
                     Math.round(GeneralVariables.getBaseFrequency())
             ));
@@ -965,6 +1001,30 @@ public class FT8TransmitSignal {
         return checkCQMeOrFollowCQMessage(messages, false);
     }
 
+    /**
+     * Whether Hunt (auto-answer) is armed but still idle — i.e. we are in the CQ baseline
+     * state ({@code functionOrder == 6}, target null/"CQ") with no station locked to answer.
+     *
+     * <p>Hunt arms the sequencer with {@code setActivated(true)} so it can reply, but it
+     * answers other stations' CQs and must never call CQ itself. In this idle state the
+     * transmit slot stays silent and we just keep listening; once
+     * {@link #checkCQMeOrFollowCQMessage} locks a caller (order advances past 6 and the
+     * target becomes a real callsign) this returns false and the reply transmits normally.
+     * When Hunt is off ({@code autoFollowCQ == false}) this is always false, so a normal
+     * user CQ run is unaffected.
+     *
+     * @param autoFollowCQ  the Hunt flag (GeneralVariables.autoFollowCQ)
+     * @param functionOrder the current TX sequence step (6 == CQ baseline)
+     * @param toCallsign    the current TX target, if any
+     */
+    static boolean isHuntListeningIdle(boolean autoFollowCQ, int functionOrder,
+                                       TransmitCallsign toCallsign) {
+        if (!autoFollowCQ) return false;
+        if (functionOrder != 6) return false;
+        // "no target" == null or the CQ placeholder (see TransmitCallsign.haveTargetCallsign).
+        return toCallsign == null || !toCallsign.haveTargetCallsign();
+    }
+
     private boolean checkCQMeOrFollowCQMessage(ArrayList<Ft8Message> messages, boolean suppressHunt) {
         // these messages are freshly decoded
         // both loops check for CQ-me messages. The first loop prioritizes checking for my target callsign,
@@ -1045,9 +1105,8 @@ public class FT8TransmitSignal {
             // is CQing, not already worked, not myself, and either Hunt mode is on
             // (auto-answer any CQ) or this is a followed callsign we auto-call
             if (msg.checkIsCQ()// is CQing
-                    && (GeneralVariables.autoFollowCQ// Hunt: auto-answer any CQ
-                    || (GeneralVariables.autoCallFollow
-                    && GeneralVariables.callsignInFollow(msg.getCallsignFrom())))// followed callsign
+                    && mayAutoCall(GeneralVariables.autoFollowCQ, GeneralVariables.autoCallFollow,
+                    GeneralVariables.callsignInFollow(msg.getCallsignFrom()))// Hunt or followed callsign
                     // skip directional CQs aimed at a different DXCC/continent (opt-in)
                     && (!GeneralVariables.respectDirectionalCQ
                     || GeneralVariables.directionalCQIsForMe(msg.callsignTo))
@@ -1085,7 +1144,7 @@ public class FT8TransmitSignal {
                     toMaidenheadGrid,
                     sentTargetReport != -100 ? sentTargetReport : sendReport,
                     receiveTargetReport != -100 ? receiveTargetReport : receivedReport,// if signal report is not -100, use the sent signal report record
-                    "FT8",
+                    GeneralVariables.currentMode().displayName,
                     GeneralVariables.band,
                     Math.round(GeneralVariables.getBaseFrequency()
                     )));
@@ -1170,6 +1229,10 @@ public class FT8TransmitSignal {
         }
         ArrayList<Ft8Message> messages = new ArrayList<>(msgList);// prevent thread conflicts
 
+        if (GeneralVariables.houndMode) {// DXpedition Hound: dedicated QSO handler
+            handleHoundCycle(messages);
+            return;
+        }
 
         int newOrder = checkFunctionOrdFromMessages(messages);// check reply message sequence from the other party; -1 means not received
         // Per-cycle spine of the QSO trace: current state, what (if anything) the
@@ -1321,6 +1384,144 @@ public class FT8TransmitSignal {
 
     }
 
+    // ==================== FT8 DXpedition Hound ====================
+
+    /**
+     * Begin DXpedition Hound operation: call the Fox high (1000-4000 Hz) and let
+     * {@link #handleHoundCycle} auto-QSY and sequence the QSO. The caller sets
+     * {@code GeneralVariables.houndMode = true} first.
+     *
+     * @param foxCall    the Fox's base callsign
+     * @param callFreqHz initial Hound TX audio frequency (1000-4000 Hz)
+     */
+    public void startHound(String foxCall, float callFreqHz) {
+        int i3 = GenerateFT8.checkI3ByCallsign(GeneralVariables.myCallsign);
+        // Seed the Fox callsign's hashes. DXpedition combo messages carry the Fox
+        // only as a 10-bit hash, so without this the combo renders "<...>" in the
+        // UI and handleHoundCycle can't tell whose combo it is. (No-op for a
+        // compound Fox whose combo hashes its full call while the user enters the
+        // base call — handleHoundCycle degrades gracefully in that case.)
+        Ft8Message.hashList.addHash(FT8Package.getHash22(foxCall), foxCall);
+        Ft8Message.hashList.addHash(FT8Package.getHash12(foxCall), foxCall);
+        Ft8Message.hashList.addHash(FT8Package.getHash10(foxCall), foxCall);
+        // Fox transmits in the even/1st slot (sequential 0); setTransmit derives
+        // our slot as (fox.sequential + 1) % 2 = 1 (odd), which is where Hounds
+        // are required to transmit.
+        resetTargetReport();
+        setTransmit(new TransmitCallsign(i3, 0, foxCall, callFreqHz, 0, 0), 1, "");
+        setBaseFrequency(callFreqHz);// call Fox at the chosen high frequency
+        setActivated(true);
+        GeneralVariables.fileLog("HOUND: start, fox=" + foxCall
+                + " callFreq=" + Math.round(callFreqHz) + "Hz slot=" + sequential);
+    }
+
+    /**
+     * DXpedition Hound per-cycle handler. Reacts to the Fox's reply to us:
+     * <ul>
+     *   <li>RR73 to me (combo where I'm the acknowledged call, or an explicit
+     *       standard RR73 from Fox) -&gt; log + complete.</li>
+     *   <li>Report/invite to me (combo where I'm the invited second call, or a
+     *       standard "&lt;me&gt; &lt;fox&gt; -rpt") -&gt; QSY to the frequency Fox
+     *       called me on and reply "&lt;fox&gt; &lt;me&gt; R-rpt".</li>
+     *   <li>Otherwise keep calling at the current order (grid-call or R+rpt).</li>
+     * </ul>
+     */
+    private void handleHoundCycle(ArrayList<Ft8Message> messages) {
+        if (toCallsign == null || !toCallsign.haveTargetCallsign()) return;
+        String fox = toCallsign.callsign;
+
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            Ft8Message msg = messages.get(i);
+            if (msg.getSequence() == sequential) continue;// our own slot
+            if (msg.band != GeneralVariables.band) continue;
+
+            boolean combo = (msg.i3 == 0 && msg.n3 == 1);// Fox DXpedition combo
+            boolean toMe = GeneralVariables.checkIsMyCallsign(msg.getCallsignTo());
+
+            // A combo names the Fox only by a 10-bit hash. If that hash resolves
+            // to a known callsign that isn't our Fox, it belongs to a different
+            // Fox's pileup — skip it so we don't QSY/log against the wrong station.
+            if (combo && !comboFromOurFox(msg, fox)) continue;
+
+            // 1) RR73 to me => QSO complete & logged. Combo: I'm the acknowledged
+            //    (first) call. Standard: an explicit RR73 addressed to me by Fox.
+            if ((combo && toMe)
+                    || (msg.i3 == 1 && toMe
+                        && checkCallsignIsCallTo(msg.getCallsignFrom(), fox)
+                        && GeneralVariables.checkFun4(msg.extraInfo))) {
+                GeneralVariables.fileLog("HOUND: RR73 from " + fox + " -> complete");
+                houndComplete();
+                return;
+            }
+
+            // 2) Fox reported / invited me => reply R+rpt at Fox's frequency.
+            //    Combo: I'm the invited second call (dx_call_to2), report = msg.report.
+            //    Standard: "<me> <fox> -rpt" or "<me> <fox> R-rpt".
+            String invited = msg.dx_call_to2 == null ? ""
+                    : msg.dx_call_to2.replace("<", "").replace(">", "");
+            boolean invitedByCombo = combo && GeneralVariables.checkIsMyCallsign(invited);
+            boolean reportStd = msg.i3 == 1 && toMe
+                    && checkCallsignIsCallTo(msg.getCallsignFrom(), fox)
+                    && (GeneralVariables.checkFun2(msg.extraInfo)
+                        || GeneralVariables.checkFun3(msg.extraInfo));
+            if (invitedByCombo || reportStd) {
+                int rpt = invitedByCombo ? msg.report : getReportFromExtraInfo(msg.extraInfo);
+                if (rpt != -100) {
+                    receivedReport = rpt;
+                    receiveTargetReport = rpt;
+                }
+                toCallsign.snr = msg.snr;// Fox's SNR as I hear it -> goes in my R+rpt
+                setBaseFrequency(msg.freq_hz);// auto-QSY to where Fox called me
+                functionOrder = 3;// "<fox> <me> R-rpt"
+                generateFun();
+                setCurrentFunctionOrder(functionOrder);
+                mutableFunctionOrder.postValue(functionOrder);
+                GeneralVariables.fileLog(String.format(
+                        "HOUND: report from %s rpt=%d -> QSY %.0fHz, send R%s",
+                        fox, rpt, msg.freq_hz, toCallsign.getSnr()));
+                return;
+            }
+        }
+        // Nothing relevant this cycle: keep calling at the current order.
+    }
+
+    /** Hound QSO complete: log it, fire the celebration, and stop transmitting. */
+    private void houndComplete() {
+        if (toCallsign == null) return;
+        doComplete();// saves the QSL record + posts mutableQsoCompletedAt
+        setActivated(false);// worked the Fox; stop calling
+        GeneralVariables.fileLog("HOUND: QSO logged with " + toCallsign.callsign);
+    }
+
+    /**
+     * Whether a DXpedition combo can be attributed to our Fox. The combo names
+     * the Fox only by a 10-bit hash; if that hash resolves to a known callsign
+     * that doesn't match our Fox (base or compound), it's a different Fox's combo.
+     * Returns true when the hash is unknown/unresolved, so we never reject a valid
+     * QSO just because the Fox's (possibly compound) call hasn't been hashed yet.
+     */
+    private boolean comboFromOurFox(Ft8Message msg, String fox) {
+        String resolved = Ft8Message.hashList
+                .getCallsign(new long[]{msg.callFromHash10})
+                .replace("<", "").replace(">", "");
+        if (resolved.isEmpty() || resolved.equals("...")) return true;// unknown -> allow
+        return resolved.equals(fox) || resolved.contains(fox) || fox.contains(resolved);
+    }
+
+    // ==================== End FT8 DXpedition Hound ====================
+
+    /**
+     * Whether we're allowed to auto-call a station that's calling CQ, given the auto-call
+     * settings. Hunt ({@code autoFollowCQ}) answers any CQ; with Hunt off, auto-call-follow
+     * answers only CQs from {@code isFollowed} callsigns; with both off we never auto-call.
+     * Shared rule so the give-up fallback ({@link #getNewTargetCallsign}) and the live
+     * auto-answer scan ({@link #checkCQMeOrFollowCQMessage}) agree on who we'll call.
+     */
+    static boolean mayAutoCall(boolean autoFollowCQ, boolean autoCallFollow, boolean isFollowed) {
+        if (autoFollowCQ) return true;
+        return autoCallFollow && isFollowed;
+    }
+
     /**
      * Check watch list for active CQ messages that are not my current target callsign.
      *
@@ -1329,6 +1530,14 @@ public class FT8TransmitSignal {
      */
     public boolean getNewTargetCallsign(ArrayList<Ft8Message> messages) {
         if (toCallsign == null) return false;
+        // Only auto-pick a fresh CQ target when an auto-call mode is on. With Hunt
+        // (autoFollowCQ) and auto-call-follow both off, a manually-started QSO that gets no
+        // reply must fall back to idle/CQ — it must NOT start answering some other station's
+        // CQ. (This is the give-up fallback after the no-reply limit; it previously chased
+        // any CQ regardless of the Hunt toggle.)
+        if (!GeneralVariables.autoFollowCQ && !GeneralVariables.autoCallFollow) {
+            return false;
+        }
         for (int i = messages.size() - 1; i >= 0; i--) {
             Ft8Message ft8Message = messages.get(i);
             if (ft8Message.band != GeneralVariables.band) {//ignore messages not on the same band
@@ -1336,6 +1545,12 @@ public class FT8TransmitSignal {
             }
             // not CQ, ignore
             if (!ft8Message.checkIsCQ()) {
+                continue;
+            }
+            // With Hunt off but auto-call-follow on, only auto-call *followed* callsigns —
+            // mirror checkCQMeOrFollowCQMessage so the two paths agree on who we'll call.
+            if (!mayAutoCall(GeneralVariables.autoFollowCQ, GeneralVariables.autoCallFollow,
+                    GeneralVariables.callsignInFollow(ft8Message.getCallsignFrom()))) {
                 continue;
             }
             // not the current target callsign, and no previous successful QSO
@@ -1424,6 +1639,12 @@ public class FT8TransmitSignal {
                     // Worker already released the track between our read and here.
                 }
             }
+            // Clear the "currently transmitting" message on TX end. It's only shown while
+            // transmitting (banner), and clearing it means the next transmission's rising
+            // edge starts from empty rather than the previous over's text — so the mini-log
+            // logs each transmission's REAL message instead of, on a new-and-different over,
+            // the stale prior one. (mutableTransmittingMessage is posted fresh at TX start.)
+            mutableTransmittingMessage.postValue("");
         }
 
         mutableIsTransmitting.postValue(transmitting);
@@ -1485,6 +1706,18 @@ public class FT8TransmitSignal {
         // A user-initiated CQ run is not a single tapped QSO: it should keep
         // calling CQ after each contact, so clear the one-shot flag.
         singleQsoMode = false;
+    }
+
+    /**
+     * Arm the sequencer for Hunt: enter the CQ baseline and clear the caller queue, but do
+     * NOT set {@code pendingUserCQ}. Unlike {@link #userResetToCQ()} (a user-initiated CQ,
+     * which deliberately skips one cycle so the CQ transmits cleanly first), Hunt should be
+     * able to lock onto and answer a CQ on the very next decode cycle, so it must not
+     * suppress the first {@code checkCQMeOrFollowCQMessage} pass.
+     */
+    public void armForHunt() {
+        resetToCQ();
+        clearCallerQueue();
     }
 
     /**
@@ -1726,28 +1959,31 @@ public class FT8TransmitSignal {
                 e.printStackTrace();
             }
 
-            // Compute how late we are *vs. when FT8 audio should start*, and only
-            // clip leading audio if we'd overrun the 15-second cycle otherwise.
+            // Compute how late we are *vs. when the audio should start*, and only
+            // clip leading audio if we'd overrun the cycle otherwise. The numbers
+            // are per-mode (see ModeProfile): the slot length and the audio length.
             //
-            // FT8 = 79 GFSK symbols at 0.16s each = 12.64s of audio. The spec
-            // expects audio to start ~+0.5s into each 15s cycle, so any start
-            // between 0 and (15.00 - 12.64) = 2.36s into the cycle fits without
-            // clipping. The original `msLate = position % 15000` treated every
+            // FT8 = 79 GFSK symbols at 0.16s each = 12.64s of audio in a 15s slot,
+            // so the slack (last moment we can start without overrunning) is
+            // 15.00 - 12.64 = 2.36s. FT4 = 105 symbols at 0.048s = 5.04s in a 7.5s
+            // slot, slack 2.46s. Any start within the slack fits without clipping.
+            //
+            // The naive `msLate = position % slotMillis` would treat every
             // millisecond past the cycle boundary as lateness — so a normal
             // on-time TX that fires ~500-800ms into the cycle (totally fine)
-            // would chop 500-800ms off the *start* of the audio buffer, which
-            // is exactly where the leading Costas sync array lives (symbols
-            // 0-6, the first 1.12s). Receivers couldn't lock, and the signal
-            // came across as audible-but-undecodable.
+            // would chop that many ms off the *start* of the audio buffer, which
+            // is exactly where the leading Costas sync array lives. Receivers
+            // couldn't lock, and the signal came across as audible-but-undecodable.
             //
-            // New behavior: skip only the excess past 2.36s. On-time and
-            // mildly-late TXs send the full waveform; only genuinely late
-            // starts (over ~2.4s into cycle) start clipping leading audio.
-            int msIntoCycle = (int) (UtcTimer.getSystemTime() % 15000);
-            int msMaxStart = 15000 - 12640; // 2360ms — last moment we can start without overrunning
+            // New behavior: skip only the excess past the slack. On-time and
+            // mildly-late TXs send the full waveform; only genuinely late starts
+            // begin clipping leading audio.
+            ModeProfile mode = GeneralVariables.currentMode();
+            int msIntoCycle = (int) (UtcTimer.getSystemTime() % mode.slotMillis);
+            int msMaxStart = mode.audioSlackMillis; // last moment we can start without overrunning
             int msLate = msIntoCycle - msMaxStart;
             if (msLate < 0) msLate = 0;
-            if (msLate >= 15000) msLate = 14999;
+            if (msLate >= mode.slotMillis) msLate = mode.slotMillis - 1;
             transmitSignal.lateStartSkipMs = msLate;
             if (msLate > 100) {
                 Log.d(TAG, String.format("Late start: skipping %d ms of leading audio", msLate));

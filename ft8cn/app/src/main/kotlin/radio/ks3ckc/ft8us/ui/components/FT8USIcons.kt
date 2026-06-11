@@ -338,6 +338,31 @@ object FT8USIcons {
         }
     }
 
+    /** Upward arrow — the TX time-slot button (we key up / transmit). */
+    @Composable
+    fun ArrowUp(
+        modifier: Modifier = Modifier,
+        color: Color = Color.Unspecified,
+        size: Dp = 22.dp,
+        strokeWidth: Float = 1.6f,
+    ) {
+        val tint = if (color == Color.Unspecified) androidx.compose.material3.MaterialTheme.colorScheme.onSurface else color
+        Canvas(modifier = modifier.then(Modifier.sizeOf(size))) {
+            val s = this.size.width / 24f
+            val stroke = strokeStyle(strokeWidth * s)
+            // Shaft
+            drawLine(tint, Offset(12f * s, 19f * s), Offset(12f * s, 5f * s),
+                strokeWidth * s, StrokeCap.Round)
+            // Head
+            val head = Path().apply {
+                moveTo(6f * s, 11f * s)
+                lineTo(12f * s, 5f * s)
+                lineTo(18f * s, 11f * s)
+            }
+            drawPath(head, tint, style = stroke)
+        }
+    }
+
     /** Three tightly-spaced horizontal lines — switch to compact decode list. */
     @Composable
     fun ViewCompact(
@@ -390,18 +415,20 @@ object FT8USIcons {
         Canvas(modifier = modifier.then(Modifier.sizeOf(size))) {
             val s = this.size.width / 24f
             val stroke = strokeStyle(strokeWidth * s)
-            // Loop with a gap at the top-right where the arrowhead sits.
+            // Near-full clockwise loop with a gap at the top for the arrowhead.
             drawArc(
-                tint, -60f, 300f, false,
+                tint, -50f, 300f, false,
                 Offset(5f * s, 5f * s), Size(14f * s, 14f * s), style = stroke,
             )
-            // Arrowhead at the leading end of the arc (top-right), pointing tangentially.
+            // Filled triangular arrowhead at the arc's leading (clockwise) end, sitting at
+            // the top of the loop and pointing along the tangent — a clean refresh arrow.
             val head = Path().apply {
-                moveTo(11.8f * s, 5.2f * s)
-                lineTo(15.5f * s, 5.6f * s)
-                lineTo(15.0f * s, 9.4f * s)
+                moveTo(13.4f * s, 4.05f * s)   // tip (up-right, along tangent)
+                lineTo(8.05f * s, 2.6f * s)    // outer base corner
+                lineTo(10.25f * s, 8.6f * s)   // inner base corner (on the arc end)
+                close()
             }
-            drawPath(head, tint, style = stroke)
+            drawPath(head, tint)
         }
     }
 

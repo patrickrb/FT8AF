@@ -35,6 +35,9 @@ data class PotaQso(
     val timeOn: String,
     val sig: String?,
     val sigInfo: String?,
+    /** The operator's own grid at the time of this QSO (my_gridsquare). Lets the
+     *  activation map place the operator for historical activations. */
+    val myGrid: String = "",
 )
 
 /** A logged activation session (row from pota_activation). */

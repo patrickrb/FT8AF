@@ -63,6 +63,8 @@
     <string name="app_set_callsign_first">Set your callsign in Settings before calling CQ</string>
     <string name="app_hunt_on">Hunt on — auto-answering CQs</string>
     <string name="app_hunt_off">Hunt off — running CQ, working answers only</string>
+    <string name="app_mode_switched">Mode: %1$s</string>
+    <string name="app_mode_switch_busy">Can\'t switch mode while transmitting</string>
     <string name="main_tx_volume">TX Volume: %1$d%%</string>
 
     <!-- ===== Exit dialog ===== -->
@@ -106,6 +108,23 @@
     <!-- ===== TX strip ===== -->
     <string name="tx_transmitting">TRANSMITTING</string>
     <string name="tx_listening">LISTENING</string>
+    <string name="tx_hunt">Hunt</string>
+    <string name="tx_call_cq">Call CQ</string>
+    <string name="tx_stop">Stop</string>
+
+    <!-- ===== Hound (DXpedition) setup ===== -->
+    <string name="hound_title">Work a DXpedition (Hound)</string>
+    <string name="hound_help">Tune the rig to the Fox\'s published dial frequency first. You call high (1000–4000 Hz); the app auto-QSYs you down to where the Fox answers and replies with your report.</string>
+    <string name="hound_fox_callsign">Fox callsign</string>
+    <string name="hound_call_frequency">Call frequency (Hz, 1000–4000)</string>
+    <string name="hound_start">Start</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT connected — tap to reconnect</string>
+    <string name="cat_status_connecting">CAT connecting…</string>
+    <string name="cat_status_disconnected">CAT disconnected — tap to connect</string>
+    <string name="cat_status_error">CAT connection error — tap to retry</string>
 
     <!-- ===== SWR lockout banner ===== -->
     <string name="swr_lockout_title">TX HALTED — High SWR detected (%1$s)</string>
@@ -239,6 +258,8 @@
     <string name="pota_self_spot_failed">Self-spot failed — check log</string>
     <string name="pota_active_park">ACTIVE — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_contacts_map">Contacts map</string>
+    <string name="pota_back">Back</string>
     <string name="pota_valid_activation">valid activation</string>
     <string name="pota_to_valid">%1$d to valid</string>
     <string name="pota_elapsed">Elapsed</string>
@@ -257,6 +278,19 @@
     <string name="pota_qso_count">%1$d QSO</string>
     <string name="pota_share_adif">Share ADIF</string>
     <string name="pota_open_pota_app">Open pota.app</string>
+    <string name="pota_upload_to_pota">Upload to POTA</string>
+    <string name="pota_upload_success">Uploaded %1$d park log(s) to POTA</string>
+    <string name="pota_upload_failed">Upload failed: %1$s</string>
+    <string name="pota_login_title">Sign in to POTA</string>
+    <string name="pota_login_desc">Use your pota.app account email and password.</string>
+    <string name="pota_login_email">Email</string>
+    <string name="pota_login_password">Password</string>
+    <string name="pota_login_button">Sign in</string>
+    <string name="pota_login_cancel">Cancel</string>
+    <string name="pota_login_failed">Sign-in failed: %1$s</string>
+    <string name="pota_login_or">or</string>
+    <string name="pota_login_social">Sign in with Google / Facebook / Amazon</string>
+    <string name="pota_oauth_title">Sign in to POTA</string>
     <string name="pota_add_park">Add park</string>
     <string name="pota_remove_park">Remove</string>
     <string name="pota_max_parks_reached">Maximum of 10 parks reached</string>
@@ -327,6 +361,18 @@
     <string name="settings_cat_logging">Logging &amp; Awards</string>
     <string name="settings_cat_advanced">Advanced</string>
     <string name="settings_cat_about">About</string>
+    <string name="settings_cat_time_sync">Time Sync</string>
+    <string name="settings_cat_time_sync_desc">Manual clock correction for offline operating</string>
+
+    <!-- ===== Settings: Time Sync (manual clock correction) ===== -->
+    <string name="settings_time_correction_section">Manual Correction</string>
+    <string name="settings_time_current_label">Current correction</string>
+    <string name="settings_time_correction_reset">Reset to 0</string>
+    <string name="settings_time_correction_desc">Nudge the app clock when you have no internet to sync. FT8 needs UTC within about 1 second. Adjust until the DT column on decoded stations centers near 0.</string>
+    <string name="settings_time_suggest_section">Suggested from decodes</string>
+    <string name="settings_time_suggest_none">No decodes yet — start receiving to get a suggestion.</string>
+    <string name="settings_time_suggest_label">Recent average DT: %1$s</string>
+    <string name="settings_time_suggest_apply">Apply suggested correction</string>
 
     <!-- ===== Settings: operator identity ===== -->
     <string name="settings_auto_update_grid">Auto-update Grid (GPS)</string>

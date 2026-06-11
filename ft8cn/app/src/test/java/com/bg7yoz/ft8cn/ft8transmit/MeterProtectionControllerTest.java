@@ -90,4 +90,19 @@ public class MeterProtectionControllerTest {
         int n = MeterProtectionController.swrRatioToNormalized(3.0f); // 120
         assertThat(MeterProtectionController.normalizedSwrToRatio(n)).isEqualTo("3.0:1");
     }
+
+    // ---- shouldHaltForSwr ---------------------------------------------------
+
+    @Test
+    public void shouldHalt_onlyWhenEnabledValidAndOverThreshold() {
+        // Over threshold with protection on -> halt.
+        assertThat(MeterProtectionController.shouldHaltForSwr(150, true, 120)).isTrue();
+        // At/under threshold -> no halt (strictly greater-than).
+        assertThat(MeterProtectionController.shouldHaltForSwr(120, true, 120)).isFalse();
+        assertThat(MeterProtectionController.shouldHaltForSwr(90, true, 120)).isFalse();
+        // Protection off -> never halt, even at high SWR.
+        assertThat(MeterProtectionController.shouldHaltForSwr(200, false, 120)).isFalse();
+        // No reading from the rig (-1) -> never halt.
+        assertThat(MeterProtectionController.shouldHaltForSwr(-1, true, 120)).isFalse();
+    }
 }

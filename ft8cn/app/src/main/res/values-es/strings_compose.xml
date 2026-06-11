@@ -215,6 +215,8 @@
     <string name="pota_self_spot_failed">Error en el auto-spot — revisa el registro</string>
     <string name="pota_active_park">ACTIVO — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_contacts_map">Mapa de contactos</string>
+    <string name="pota_back">Atrás</string>
     <string name="pota_valid_activation">activación válida</string>
     <string name="pota_to_valid">%1$d para válida</string>
     <string name="pota_elapsed">Transcurrido</string>
@@ -458,10 +460,37 @@
 
     <string name="tx_transmitting">TRANSMITIENDO</string>
     <string name="tx_listening">ESCUCHANDO</string>
+    <string name="tx_hunt">Caza</string>
+    <string name="tx_call_cq">Llamar CQ</string>
+    <string name="tx_stop">Detener</string>
+    <string name="hound_title">Trabajar una DXpedición (Hound)</string>
+    <string name="hound_help">Primero sintoniza el equipo en la frecuencia de dial publicada del Fox. Tú llamas alto (1000–4000 Hz); la app te hace QSY automáticamente a donde responde el Fox y envía tu informe.</string>
+    <string name="hound_fox_callsign">Indicativo del Fox</string>
+    <string name="hound_call_frequency">Frecuencia de llamada (Hz, 1000–4000)</string>
+    <string name="hound_start">Iniciar</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT conectado — toca para reconectar</string>
+    <string name="cat_status_connecting">Conectando CAT…</string>
+    <string name="cat_status_disconnected">CAT desconectado — toca para conectar</string>
+    <string name="cat_status_error">Error de conexión CAT — toca para reintentar</string>
     <string name="qsopanel_log_action">LOG</string>
     <string name="qsopanel_queue">COLA</string>
     <string name="swr_lockout_title">TX DETENIDO — SWR alto detectado (%1$s)</string>
     <string name="swr_lockout_body">Verifique la antena / línea de alimentación antes de transmitir.</string>
     <string name="swr_lockout_dismiss">DESCARTAR</string>
     <string name="swr_lockout_toast">TX bloqueado — bloqueo por SWR activo. Descarte el aviso primero.</string>
+
+    <!-- ===== Time sync / manual correction ===== -->
+    <string name="settings_cat_time_sync">Sincronización de hora</string>
+    <string name="settings_cat_time_sync_desc">Corrección manual del reloj para operar sin conexión</string>
+    <string name="settings_time_correction_section">Corrección manual</string>
+    <string name="settings_time_correction_desc">Ajusta el reloj de la app cuando no tienes internet para sincronizar. FT8 necesita UTC con una precisión de aproximadamente 1 segundo. Ajusta hasta que la columna DT de las estaciones decodificadas se centre cerca de 0.</string>
+    <string name="settings_time_current_label">Corrección actual</string>
+    <string name="settings_time_correction_reset">Restablecer a 0</string>
+    <string name="settings_time_suggest_section">Sugerido a partir de decodificaciones</string>
+    <string name="settings_time_suggest_label">DT promedio reciente: %1$s</string>
+    <string name="settings_time_suggest_none">Aún no hay decodificaciones — empieza a recibir para obtener una sugerencia.</string>
+    <string name="settings_time_suggest_apply">Aplicar corrección sugerida</string>
 </resources>

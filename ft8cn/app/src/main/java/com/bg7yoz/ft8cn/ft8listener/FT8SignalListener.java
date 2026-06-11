@@ -14,6 +14,7 @@ import androidx.lifecycle.MutableLiveData;
 import com.bg7yoz.ft8cn.FT8Common;
 import com.bg7yoz.ft8cn.Ft8Message;
 import com.bg7yoz.ft8cn.GeneralVariables;
+import com.bg7yoz.ft8cn.ModeProfile;
 import com.bg7yoz.ft8cn.database.DatabaseOpr;
 import com.bg7yoz.ft8cn.ft8transmit.GenerateFT8;
 import com.bg7yoz.ft8cn.timer.OnUtcTimer;
@@ -26,7 +27,9 @@ import java.util.ArrayList;
 
 public class FT8SignalListener {
     private static final String TAG = "FT8SignalListener";
-    private final UtcTimer utcTimer;
+    // Not final: rebuildTimer() recreates it when the operating mode (and thus cycle
+    // length) changes. See rebuildTimer().
+    private UtcTimer utcTimer;
     //private HamRecorder hamRecorder;
     private final OnFt8Listen onFt8Listen;// event triggered when listening starts and decoding finishes
     //private long band;
@@ -42,7 +45,18 @@ public class FT8SignalListener {
 
 
     static {
-        System.loadLibrary("ft8cn");
+        try {
+            System.loadLibrary("ft8cn");
+            // The FT2 decoder JNI entry points (InitDecoderFt2 etc.) live in ft8af_usb (our
+            // from-source ft8_lib build), not the prebuilt ft8cn. Load it so they resolve when
+            // the user operates in FT2 mode. Idempotent if GenerateFT8 already loaded it.
+            System.loadLibrary("ft8af_usb");
+        } catch (UnsatisfiedLinkError e) {
+            // Best-effort load (mirrors GenerateFT8): JVM unit tests don't have the native
+            // libs on java.library.path. The native decode methods throw if actually invoked
+            // without the library; class init must not crash.
+            Log.w(TAG, "native library not loaded: " + e.getMessage());
+        }
     }
 
     public interface OnWaveDataListener {
@@ -54,9 +68,14 @@ public class FT8SignalListener {
         this.onFt8Listen = onFt8Listen;
         this.db = db;
 
-        // Create action trigger, synchronized with UTC time, on a 15-second cycle.
-        // DoOnSecTimer is the event triggered at the start of each cycle. 150 means 15 seconds.
-        utcTimer = new UtcTimer(FT8Common.FT8_SLOT_TIME_M, false, new OnUtcTimer() {
+        // Create action trigger, synchronized with UTC time, on the current mode's cycle
+        // (FT8 = 15s/150, FT4 = 7.5s/75). DoOnSecTimer fires at the start of each cycle.
+        utcTimer = new UtcTimer(GeneralVariables.currentMode().slotTenths, false, makeTimerCallback());
+    }
+
+    /** The cycle-trigger callback, shared between the constructor and {@link #rebuildTimer}. */
+    private OnUtcTimer makeTimerCallback() {
+        return new OnUtcTimer() {
             @Override
             public void doHeartBeatTimer(long utc) {// clock info when not triggered
             }
@@ -66,7 +85,21 @@ public class FT8SignalListener {
                 Log.d(TAG, String.format("Recording triggered, %d", utc));
                 runRecorde(utc);
             }
-        });
+        };
+    }
+
+    /**
+     * Recreate the cycle timer for a new operating mode. {@link UtcTimer}'s period is fixed
+     * at construction, so switching from FT8 (15s) to FT4 (7.5s) means tearing down the old
+     * timer and building a fresh one. Preserves the listening state.
+     */
+    public void rebuildTimer(ModeProfile mode) {
+        boolean wasListening = utcTimer.isRunning();
+        utcTimer.delete();
+        utcTimer = new UtcTimer(mode.slotTenths, false, makeTimerCallback());
+        if (wasListening) {
+            utcTimer.start();
+        }
     }
 
     public void startListen() {
@@ -103,10 +136,11 @@ public class FT8SignalListener {
         if (onWaveDataListener != null) {
             // Fast turnaround: collect a shorter window so decoding finishes (and CQ
             // decodes appear) ~1s before the cycle boundary, leaving time to answer
-            // on the next slot. Off = full 15s window (max sensitivity).
+            // on the next slot. Off = full slot window (max sensitivity).
+            ModeProfile mode = GeneralVariables.currentMode();
             int recordMs = GeneralVariables.earlyDecode
-                    ? FT8Common.FT8_EARLY_DECODE_MILLISECOND
-                    : FT8Common.FT8_SLOT_TIME_MILLISECOND;
+                    ? mode.earlyDecodeMillis
+                    : mode.slotMillis;
             onWaveDataListener.getVoiceData(recordMs, true
                     , new OnGetVoiceDataDone() {
                         @Override
@@ -140,16 +174,18 @@ public class FT8SignalListener {
 
                 /// Read audio data and perform preprocessing
                 // Note: decoding must complete within one cycle, otherwise a new decode cycle will begin
-                long ft8Decoder = InitDecoder(utc, FT8Common.SAMPLE_RATE
-                        , voiceData.length, true);
+                // FT2 and FT4 receive use the from-source decoder (ft8af_usb); FT8 uses the
+                // prebuilt (ft8cn). All native ops dispatch through the *Decode helpers on this flag.
+                final boolean fromSource = GeneralVariables.currentMode().usesFromSourceDecoder();
+                long ft8Decoder = initDecoder(utc, voiceData.length, fromSource);
 //                        , tempData.length, true);
-                DecoderMonitorPressFloat(voiceData, ft8Decoder);// load audio data
+                pressFloatDecode(voiceData, ft8Decoder, fromSource);// load audio data
 //                DecoderMonitorPressFloat(tempData, ft8Decoder);// load audio data
 
 
                 ArrayList<Ft8Message> allMsg = new ArrayList<>();
 //                ArrayList<Ft8Message> msgs = runDecode(utc, voiceData,false);
-                ArrayList<Ft8Message> msgs = runDecode(ft8Decoder, utc, false);
+                ArrayList<Ft8Message> msgs = runDecode(ft8Decoder, utc, false, fromSource);
                 addMsgToList(allMsg, msgs);
                 timeSec = System.currentTimeMillis() - time;
                 decodeTimeSec.postValue(timeSec);// decode elapsed time
@@ -160,7 +196,7 @@ public class FT8SignalListener {
 
                 if (GeneralVariables.deepDecodeMode) {// enter deep decode mode
                     //float[] newSignal=tempData;
-                    msgs = runDecode(ft8Decoder, utc, true);
+                    msgs = runDecode(ft8Decoder, utc, true, fromSource);
                     addMsgToList(allMsg, msgs);
                     timeSec = System.currentTimeMillis() - time;
                     decodeTimeSec.postValue(timeSec);// decode elapsed time
@@ -171,10 +207,10 @@ public class FT8SignalListener {
                     do {
                         if (timeSec > FT8Common.DEEP_DECODE_TIMEOUT) break;// timeout check: if exceeding a certain time (7 sec), skip signal subtraction
                         // subtract decoded signals
-                        ReBuildSignal.subtractSignal(ft8Decoder, a91List);
+                        subtractDecode(ft8Decoder, a91List, fromSource);
 
                         // perform another decode pass
-                        msgs = runDecode(ft8Decoder, utc, true);
+                        msgs = runDecode(ft8Decoder, utc, true, fromSource);
                         addMsgToList(allMsg, msgs);
                         timeSec = System.currentTimeMillis() - time;
                         decodeTimeSec.postValue(timeSec);// decode elapsed time
@@ -186,7 +222,7 @@ public class FT8SignalListener {
 
                 }
                 // Moved to finalize() method
-                DeleteDecoder(ft8Decoder);
+                deleteDecoder(ft8Decoder, fromSource);
 
                 Log.d(TAG, String.format("Decode took: %d ms", System.currentTimeMillis() - time));
 
@@ -195,26 +231,26 @@ public class FT8SignalListener {
     }
 
 
-    private ArrayList<Ft8Message> runDecode(long ft8Decoder, long utc, boolean isDeep) {
+    private ArrayList<Ft8Message> runDecode(long ft8Decoder, long utc, boolean isDeep, boolean fromSource) {
         ArrayList<Ft8Message> ft8Messages = new ArrayList<>();
-        Ft8Message ft8Message = new Ft8Message(FT8Common.FT8_MODE);
+        Ft8Message ft8Message = new Ft8Message(GeneralVariables.operatingMode);
 
         ft8Message.utcTime = utc;
         ft8Message.band = GeneralVariables.band;
         a91List.clear();
 
-        setDecodeMode(ft8Decoder, isDeep);// set iteration count; isDeep==true increases iterations
+        setDeepDecode(ft8Decoder, isDeep, fromSource);// set iteration count; isDeep==true increases iterations
 
-        int num_candidates = DecoderFt8FindSync(ft8Decoder);// up to 120 candidates
+        int num_candidates = findSyncDecode(ft8Decoder, fromSource);// up to 120 candidates
         //long startTime = System.currentTimeMillis();
         for (int idx = 0; idx < num_candidates; ++idx) {
             //todo should add timeout calculation
             try {// protect against decode failure
-                if (DecoderFt8Analysis(idx, ft8Decoder, ft8Message)) {
+                if (analysisDecode(idx, ft8Decoder, ft8Message, fromSource)) {
 
                     if (ft8Message.isValid) {
                         Ft8Message msg = new Ft8Message(ft8Message);// using msg here because some hashed callsigns will replace <...>
-                        byte[] a91 = DecoderGetA91(ft8Decoder);
+                        byte[] a91 = getA91Decode(ft8Decoder, fromSource);
                         a91List.add(a91, ft8Message.freq_hz, ft8Message.time_sec);
 
                         if (checkMessageSame(ft8Messages, msg)) {
@@ -234,6 +270,55 @@ public class FT8SignalListener {
 
 
         return ft8Messages;
+    }
+
+    // ---- Decoder backend dispatch -----------------------------------------------------
+    // FT2 and FT4 receive run on the from-source decoder (ft8af_usb, *Ft2 entry points);
+    // FT8 runs on the prebuilt (ft8cn). The decode loop above stays backend-agnostic by
+    // routing every native op through these helpers on the per-cycle `fromSource` flag
+    // (= ModeProfile.usesFromSourceDecoder()). The from-source init takes the ftx protocol
+    // so it configures the monitor for FT2 vs FT4 symbol timing.
+
+    private long initDecoder(long utc, int numSamples, boolean fromSource) {
+        if (fromSource) {
+            return InitDecoderFt2(utc, FT8Common.SAMPLE_RATE, numSamples,
+                    GeneralVariables.currentMode().ftxProtocol());
+        }
+        return InitDecoder(utc, FT8Common.SAMPLE_RATE, numSamples,
+                GeneralVariables.currentMode().isFt8);
+    }
+
+    private void pressFloatDecode(float[] data, long decoder, boolean fromSource) {
+        if (fromSource) DecoderFt2MonitorPressFloat(data, decoder);
+        else DecoderMonitorPressFloat(data, decoder);
+    }
+
+    private void setDeepDecode(long decoder, boolean isDeep, boolean fromSource) {
+        if (fromSource) setDecodeModeFt2(decoder, isDeep);
+        else setDecodeMode(decoder, isDeep);
+    }
+
+    private int findSyncDecode(long decoder, boolean fromSource) {
+        return fromSource ? DecoderFt2FindSync(decoder) : DecoderFt8FindSync(decoder);
+    }
+
+    private boolean analysisDecode(int idx, long decoder, Ft8Message msg, boolean fromSource) {
+        return fromSource ? DecoderFt2Analysis(idx, decoder, msg)
+                : DecoderFt8Analysis(idx, decoder, msg);
+    }
+
+    private byte[] getA91Decode(long decoder, boolean fromSource) {
+        return fromSource ? DecoderFt2GetA91(decoder) : DecoderGetA91(decoder);
+    }
+
+    private void deleteDecoder(long decoder, boolean fromSource) {
+        if (fromSource) DeleteDecoderFt2(decoder);
+        else DeleteDecoder(decoder);
+    }
+
+    private void subtractDecode(long decoder, A91List list, boolean fromSource) {
+        if (fromSource) ReBuildSignal.subtractSignalFt2(decoder, list);
+        else ReBuildSignal.subtractSignal(decoder, list);
     }
 
     /**
@@ -374,4 +459,22 @@ public class FT8SignalListener {
     public native byte[] DecoderGetA91(long decoder);// get the a91 data of the current message
 
     public native void setDecodeMode(long decoder, boolean isDeep);// set decode mode: isDeep=true for multi-iteration, =false for fast iteration
+
+    // ---- FT2 decoder (from-source ft8_lib in libft8af_usb.so) -------------------------
+    // Distinct entry points so they never collide with the prebuilt's InitDecoder/etc.
+    // The from-source decoder serves FT2 and FT4; the protocol (FTX_PROTOCOL_FT2 / _FT4) is
+    // passed in via the `protocol` arg. See cpp/ft8cn_glue/ft2_decode_jni.cpp.
+    public native long InitDecoderFt2(long utcTime, int sampleRate, int num_samples, int protocol);
+
+    public native void DecoderFt2MonitorPressFloat(float[] buffer, long decoder);
+
+    public native int DecoderFt2FindSync(long decoder);
+
+    public native boolean DecoderFt2Analysis(int idx, long decoder, Ft8Message ft8Message);
+
+    public native byte[] DecoderFt2GetA91(long decoder);
+
+    public native void DeleteDecoderFt2(long decoder);
+
+    public native void setDecodeModeFt2(long decoder, boolean isDeep);
 }
