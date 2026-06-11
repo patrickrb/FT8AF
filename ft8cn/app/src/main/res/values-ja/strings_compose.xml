@@ -406,6 +406,10 @@
 
     <!-- ===== Settings: about ===== -->
     <string name="settings_faq_support">FAQ &amp; サポート</string>
+    <string name="settings_report_bug">バグを報告</string>
+    <string name="bug_report_description_hint">問題の内容を説明してください…</string>
+    <string name="bug_report_send_email">メールを送信</string>
+    <string name="bug_report_open_github">GitHub Issue を開く</string>
     <string name="settings_debug">デバッグ</string>
     <string name="settings_debug_desc">debug.log を表示 / 共有</string>
     <string name="settings_about_body">バージョン %1$s (ビルド %2$s)\nビルド日 %3$s\n\nFT8 を、もっと手軽に。\n\nAndroid 向けのスタンドアロン FT8 トランシーバーアプリ。USB、Bluetooth、ネットワークでの無線機制御に対応し、自動シーケンスとログ記録を備えています。</string>

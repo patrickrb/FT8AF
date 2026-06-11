@@ -406,6 +406,10 @@
 
     <!-- ===== 设置：关于 ===== -->
     <string name="settings_faq_support">FAQ 与支持</string>
+    <string name="settings_report_bug">报告问题</string>
+    <string name="bug_report_description_hint">描述出现的问题…</string>
+    <string name="bug_report_send_email">发送邮件</string>
+    <string name="bug_report_open_github">打开 GitHub issue</string>
     <string name="settings_debug">调试</string>
     <string name="settings_debug_desc">查看 / 分享 debug.log</string>
     <string name="settings_about_body">版本 %1$s（构建 %2$s）\n构建日期 %3$s\n\nFT8，轻松上手。\n\n一款用于 Android 的独立 FT8 收发应用。支持 USB、Bluetooth 及网络电台控制，具备自动流程与日志记录功能。</string>

@@ -420,63 +420,6 @@ t71     Telemetry data, up to 18 hex digits
     }
 
     /**
-     * Whether {@code raw} is a callsign an FT8 frame can legitimately carry: the
-     * {@code [A-Z0-9/]} callsign alphabet (standard or compound, e.g.
-     * {@code K1ABC} or {@code PJ4/K1ABC}), optionally wrapped in {@code <...>}
-     * for a hashed / non-standard call, plus the bare {@code <...>} placeholder
-     * shown before a hash has been resolved.
-     *
-     * @param raw the callsign field as decoded (may include the {@code <...>} wrapper)
-     * @return true if the field looks like a real callsign field
-     */
-    public static boolean isPlausibleCallsign(String raw) {
-        if (raw == null) {
-            return false;
-        }
-        String s = raw.trim().toUpperCase(Locale.ROOT);
-        if (s.isEmpty()) {
-            return false;
-        }
-        if (s.equals("<...>")) {
-            return true;// unresolved hashed-call placeholder
-        }
-        if (s.startsWith("<") && s.endsWith(">")) {
-            s = s.substring(1, s.length() - 1);// strip the hashed / non-standard wrapper
-        }
-        return CALLSIGN_ALPHABET.matcher(s).matches();
-    }
-
-    /**
-     * The {@code [A-Z0-9/]} callsign alphabet, precompiled because
-     * {@link #isPlausibleCallsign(String)} runs on the per-cycle decode hot path
-     * (via {@link #isJunkDecode()} -> {@code OwnTxEchoFilter.filter}).
-     */
-    private static final Pattern CALLSIGN_ALPHABET = Pattern.compile("[A-Z0-9/]+");
-
-    /**
-     * True when this is a structured decode (one that carries real callsign
-     * fields) whose sender callsign is not a callsign any FT8 frame can hold.
-     *
-     * <p>FT8 guards each frame with only a 14-bit CRC, so on the order of one
-     * noise event in 16k survives as a "valid" decode. Those false frames render
-     * as garbage such as {@code ".<. >"} — stray angle brackets, spaces and dots
-     * that no real callsign field produces — and would otherwise show up as a
-     * bogus station in the decode list, QSO panel and SWL log. Free text
-     * ({@code i3=0,n3=0}) and telemetry ({@code i3=0,n3=5}) legitimately put
-     * non-callsign text in these fields, so they are never treated as junk;
-     * every other type must carry a plausible sender callsign.
-     *
-     * @return true if this decode should be dropped as a false/garbage frame
-     */
-    public boolean isJunkDecode() {
-        boolean freeFormText = i3 == 0 && (n3 == 0 || n3 == 5);
-        if (freeFormText) {
-            return false;
-        }
-        return !isPlausibleCallsign(callsignFrom);
-    }
-
-    /**
      * Get the receiving callsign from the QSO information.
      *
      * @return
@@ -534,6 +477,59 @@ t71     Telemetry data, up to 18 hex digits
         } else {
             return (s.equals("CQ") || s.equals("DE") || s.equals("QRZ"));
         }
+    }
+
+    /**
+     * Decide whether a callsign field could be a real callsign.
+     *
+     * <p>A real callsign field uses only the {@code [A-Z0-9/]} alphabet,
+     * optionally wrapped in {@code <...>} (a hashed / non-standard call), or is
+     * the bare {@code <...>} placeholder shown before a hash resolves. Anything
+     * else — stray angle brackets, embedded spaces, dots — is the junk a
+     * CRC-collision false decode renders into the sender field (e.g. {@code .<. >}).
+     *
+     * @param callsign the raw sender field (may be null, may be {@code <...>}-wrapped)
+     * @return true if it could be a real callsign or the unresolved-hash placeholder
+     */
+    public static boolean isPlausibleCallsign(String callsign) {
+        if (callsign == null) {
+            return false;
+        }
+        String s = callsign.trim();
+        if (s.isEmpty()) {
+            return false;
+        }
+        if (s.equals("<...>")) {//unresolved hashed-call placeholder
+            return true;
+        }
+        //Strip a single matching <...> wrapper around a hashed / non-standard call.
+        if (s.startsWith("<") && s.endsWith(">") && s.length() > 2) {
+            s = s.substring(1, s.length() - 1);
+        }
+        //No leftover angle brackets, spaces, or dots — just the call alphabet.
+        return s.matches("[A-Z0-9/]+");
+    }
+
+    /**
+     * Detect a junk/false decode by its sender callsign.
+     *
+     * <p>FT8 guards each 77-bit frame with only a 14-bit CRC, so roughly one
+     * noise event in 16k slips through as a "valid" decode. When that garbage
+     * lands in a callsign-bearing frame, the corrupt sender field renders as
+     * junk like {@code .<. >}. A structured decode is junk when its sender isn't
+     * a {@link #isPlausibleCallsign plausible callsign}. Free text
+     * ({@code i3=0,n3=0}) and telemetry ({@code i3=0,n3=5}) legitimately carry
+     * non-callsign text in that field, so they are never treated as junk here.
+     *
+     * @return true if this decode should be dropped as garbage
+     */
+    public boolean isJunkDecode() {
+        boolean freeText = (i3 == 0 && n3 == 0);
+        boolean telemetry = (i3 == 0 && n3 == 5);
+        if (freeText || telemetry) {
+            return false;
+        }
+        return !isPlausibleCallsign(callsignFrom);
     }
 
     /**

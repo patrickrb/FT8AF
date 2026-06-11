@@ -482,6 +482,11 @@
 
     <!-- ===== Settings: about ===== -->
     <string name="settings_faq_support">FAQ &amp; Support</string>
+    <string name="settings_report_bug">Report a Bug</string>
+    <string name="bug_report_description_hint">Describe what went wrong…</string>
+    <string name="bug_report_send_email">Send email</string>
+    <string name="bug_report_open_github">Open GitHub issue</string>
+    <string name="bug_report_email" translatable="false">k1af@FT8AF.app</string>
     <string name="settings_debug">Debug</string>
     <string name="settings_debug_desc">View / share debug.log</string>
     <string name="settings_about_body">Version %1$s (build %2$s)\nBuild date %3$s\n\nFT8, made easy.\n\nA standalone FT8 transceiver app for Android. USB, Bluetooth, and network rig control with automatic sequencing and logging.</string>

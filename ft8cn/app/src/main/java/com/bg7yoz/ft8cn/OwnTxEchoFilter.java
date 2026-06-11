@@ -47,9 +47,11 @@ public final class OwnTxEchoFilter {
     /**
      * Filter one cycle's decode list.
      *
-     * <p>A message is dropped when its sender ({@link Ft8Message#getCallsignFrom()})
-     * matches our own callsign per {@link GeneralVariables#checkIsMyCallsign}.
-     * Both callsign accessors return "" rather than null, so this is null-safe.
+     * <p>A message is dropped when it is a {@link Ft8Message#isJunkDecode() junk
+     * decode} (CRC-collision garbage with an implausible sender), or when its
+     * sender ({@link Ft8Message#getCallsignFrom()}) matches our own callsign per
+     * {@link GeneralVariables#checkIsMyCallsign}. Both callsign accessors return
+     * "" rather than null, so this is null-safe.
      *
      * @param decoded the raw decode list for one cycle (not modified)
      * @return the kept messages plus echo/junk/reply diagnostics
