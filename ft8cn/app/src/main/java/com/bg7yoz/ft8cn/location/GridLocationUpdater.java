@@ -145,15 +145,27 @@ public class GridLocationUpdater {
     }
 
     private void applyGridFromLatLng(double lat, double lon, MainViewModel mainViewModel) {
-        LatLng latLng = new LatLng(lat, lon);
-        String grid = MaidenheadGrid.getGridSquare(latLng);
-        if (grid == null || grid.isEmpty()) return;
-        String current = GeneralVariables.getMyMaidenheadGrid();
-        if (grid.equals(current)) return;
+        String grid = gridUpdateFor(lat, lon, GeneralVariables.getMyMaidenheadGrid());
+        if (grid == null) return;
         GeneralVariables.setMyMaidenheadGrid(grid);
         if (mainViewModel != null && mainViewModel.databaseOpr != null) {
             mainViewModel.databaseOpr.writeConfig("grid", grid, null);
         }
         Log.d(TAG, "Updated grid from GPS: " + grid);
+    }
+
+    /**
+     * Decide the grid to write for a GPS fix: the Maidenhead grid at
+     * (lat, lon) if it is valid and differs from {@code currentGrid},
+     * otherwise {@code null} (meaning "no change, don't write").
+     *
+     * Extracted from {@link #applyGridFromLatLng} so the update-decision
+     * logic can be unit-tested without a {@link LocationManager}.
+     */
+    static String gridUpdateFor(double lat, double lon, String currentGrid) {
+        String grid = MaidenheadGrid.getGridSquare(new LatLng(lat, lon));
+        if (grid == null || grid.isEmpty()) return null;
+        if (grid.equals(currentGrid)) return null;
+        return grid;
     }
 }

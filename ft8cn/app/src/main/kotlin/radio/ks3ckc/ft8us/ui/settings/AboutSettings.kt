@@ -47,6 +47,7 @@ fun AboutSettings(
     var debugEnabled by remember { mutableStateOf(GeneralVariables.debugModeEnabled) }
     var showAbout by remember { mutableStateOf(false) }
     var showDebugScreen by remember { mutableStateOf(false) }
+    var showBugReport by remember { mutableStateOf(false) }
 
     // -- About / FAQ Dialog --
     if (showAbout) {
@@ -74,6 +75,11 @@ fun AboutSettings(
         DebugLogScreen(onDismiss = { showDebugScreen = false })
     }
 
+    // -- Report a bug --
+    if (showBugReport) {
+        BugReportDialog(onDismiss = { showBugReport = false })
+    }
+
     SettingsDetailScaffold(
         title = stringResource(R.string.settings_cat_about),
         onBack = onBack,
@@ -97,6 +103,12 @@ fun AboutSettings(
                         label = stringResource(R.string.settings_faq_support),
                         showChevron = true,
                         onClick = { showAbout = true },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_report_bug),
+                        showChevron = true,
+                        onClick = { showBugReport = true },
                     )
                     if (debugEnabled) {
                         SectionDivider()

@@ -281,6 +281,8 @@
     <string name="pota_upload_to_pota">Upload to POTA</string>
     <string name="pota_upload_success">Uploaded %1$d park log(s) to POTA</string>
     <string name="pota_upload_failed">Upload failed: %1$s</string>
+    <string name="pota_upload_server_error">POTA couldn\'t process the upload. Check that the park reference is valid and your callsign is registered with POTA, then try again.</string>
+    <string name="pota_upload_network_error">Couldn\'t reach POTA. Check your internet connection and try again.</string>
     <string name="pota_login_title">Sign in to POTA</string>
     <string name="pota_login_desc">Use your pota.app account email and password.</string>
     <string name="pota_login_email">Email</string>
@@ -313,6 +315,7 @@
     <string name="map_no_grid_set">No grid set</string>
     <string name="map_station_count">%1$d stations</string>
     <string name="map_station_count_with_heard">%1$d stations · %2$d heard</string>
+    <string name="map_psk_error">PSK Reporter unavailable: %1$s</string>
     <string name="map_projection_equirectangular">Equirectangular</string>
     <string name="map_projection_azimuthal">Azimuthal Equidistant</string>
     <string name="map_mode_standard">STD</string>
@@ -479,6 +482,12 @@
 
     <!-- ===== Settings: about ===== -->
     <string name="settings_faq_support">FAQ &amp; Support</string>
+    <string name="settings_report_bug">Report a Bug</string>
+    <string name="bug_report_description_hint">Describe what went wrong…</string>
+    <string name="bug_report_send_email">Send email</string>
+    <string name="bug_report_no_email_app">No email app found to send the report</string>
+    <string name="bug_report_open_github">Open GitHub issue</string>
+    <string name="bug_report_email" translatable="false">k1af@FT8AF.app</string>
     <string name="settings_debug">Debug</string>
     <string name="settings_debug_desc">View / share debug.log</string>
     <string name="settings_about_body">Version %1$s (build %2$s)\nBuild date %3$s\n\nFT8, made easy.\n\nA standalone FT8 transceiver app for Android. USB, Bluetooth, and network rig control with automatic sequencing and logging.</string>

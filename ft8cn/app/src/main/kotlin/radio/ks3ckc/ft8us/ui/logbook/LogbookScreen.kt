@@ -117,7 +117,7 @@ private fun bandColor(band: String): Color =
 // Tab enum
 // ---------------------------------------------------------------------------
 
-private enum class LogbookTab(@StringRes val labelRes: Int) {
+internal enum class LogbookTab(@StringRes val labelRes: Int) {
     STATS(R.string.log_tab_stats),
     RECENT(R.string.log_tab_recent),
     AWARDS(R.string.log_tab_awards),
@@ -510,7 +510,7 @@ private fun StatsLoadingPlaceholder() {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun SegmentedTabRow(
+internal fun SegmentedTabRow(
     tabs: List<LogbookTab>,
     selected: LogbookTab,
     onSelected: (LogbookTab) -> Unit,
@@ -1185,31 +1185,37 @@ private fun QsoRow(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Time column
-            Column(modifier = Modifier.width(52.dp)) {
+            // Band chip — color-coded per band, with the frequency moved to the
+            // meta line below so it never clips the way the old packed column did.
+            val meter = parseBandMeter(band)
+            val freqLabel = parseFreqMhz(band)
+            val chipColor = bandColor(meter)
+            Box(
+                modifier = Modifier
+                    .width(46.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(chipColor.copy(alpha = 0.14f))
+                    .border(1.dp, chipColor.copy(alpha = 0.34f), RoundedCornerShape(6.dp))
+                    .padding(vertical = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
                 Text(
-                    text = formatTime(time),
-                    color = TextMuted,
-                    fontSize = 10.sp,
+                    text = meter.ifBlank { "—" },
+                    color = chipColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
                     fontFamily = GeistMonoFamily,
                     maxLines = 1,
                 )
-                if (band.isNotBlank()) {
-                    Text(
-                        text = band.uppercase(),
-                        color = bandColor(band),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = GeistMonoFamily,
-                        maxLines = 1,
-                    )
-                }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
-            // Callsign + grid + state/DX entity
-            Column(modifier = Modifier.weight(1f)) {
+            // Callsign, then grid/state/DX, then a muted "freq · time · date" meta line.
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 Text(
                     text = callsign,
                     color = TextPrimary,
@@ -1219,17 +1225,36 @@ private fun QsoRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    secondaryParts.forEach { (text, color) ->
-                        Text(
-                            text = text,
-                            color = color,
-                            fontSize = 10.sp,
-                            fontFamily = GeistMonoFamily,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                if (secondaryParts.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        secondaryParts.forEach { (text, color) ->
+                            Text(
+                                text = text,
+                                color = color,
+                                fontSize = 10.sp,
+                                fontFamily = GeistMonoFamily,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
+                }
+                val metaLine = buildList {
+                    if (freqLabel.isNotBlank()) add(freqLabel)
+                    val t = formatQsoTime(record.timeOn)
+                    if (t != "--:--") add("${t}z")
+                    val d = formatQsoDate(time)
+                    if (d.isNotBlank()) add(d)
+                }.joinToString(" · ")
+                if (metaLine.isNotBlank()) {
+                    Text(
+                        text = metaLine,
+                        color = TextFaint,
+                        fontSize = 10.sp,
+                        fontFamily = GeistMonoFamily,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
 
@@ -1349,18 +1374,59 @@ private fun SyncChip(label: String) {
 }
 
 // ---------------------------------------------------------------------------
-// Format time helper: "20230320-143000" -> "14:30"
+// Row display helpers (extracted as internal top-level funs so they're unit-testable)
 // ---------------------------------------------------------------------------
 
-private fun formatTime(raw: String): String {
-    if (raw.isBlank()) return "--:--"
-    // Try to extract HH:MM from various formats
-    val timepart = if ("-" in raw) raw.substringAfter("-") else raw
-    return if (timepart.length >= 4) {
-        "${timepart.substring(0, 2)}:${timepart.substring(2, 4)}"
-    } else {
-        raw.take(5)
-    }
+/**
+ * Format a stored time-of-day (`time_on`, UTC) as "HH:MM". The SQL query already
+ * normalizes `time_on` to 6-digit HHMMSS, but we route through [normalizeTimeOn]
+ * anyway so odd-width inputs (HHMM, or a dropped leading zero) still render right.
+ * Blank / non-numeric input → "--:--".
+ */
+internal fun formatQsoTime(timeOn: String): String {
+    // Reject anything that isn't purely numeric, not just the all-non-digit case:
+    // a partial like "12:30" or "12ab" would otherwise be silently stripped to digits
+    // by normalizeTimeOn and rendered as a real time, masking malformed data. Legit
+    // inputs are pure-digit strings of varying width (HHMMSS / HHMM / dropped zero).
+    if (timeOn.isEmpty() || timeOn.any { !it.isDigit() }) return "--:--"
+    val norm = normalizeTimeOn(timeOn)
+    return "${norm.substring(0, 2)}:${norm.substring(2, 4)}"
+}
+
+/**
+ * Format a stored `qso_date` ("yyyyMMdd", UTC) as a short "11 Jun". Blank or
+ * malformed (anything that isn't a valid 8-digit yyyyMMdd) → "".
+ */
+internal fun formatQsoDate(qsoDate: String): String {
+    // Require exactly 8 digits, not merely "contains ≥8 digits": stripping non-digits
+    // and taking the first 8 would render a date from malformed input like
+    // "20260611xxx" or "2026-06-11", contradicting the documented yyyyMMdd contract.
+    if (qsoDate.length != 8 || qsoDate.any { !it.isDigit() }) return ""
+    val month = qsoDate.substring(4, 6).toIntOrNull() ?: return ""
+    val day = qsoDate.substring(6, 8).toIntOrNull() ?: return ""
+    if (month !in 1..12 || day !in 1..31) return ""
+    val months = arrayOf(
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    )
+    return "$day ${months[month - 1]}"
+}
+
+/**
+ * The grouped logbook query packs band + frequency into one column as
+ * "20M(14.084 MHz)". Pull out just the band meter ("20M") so it can be
+ * color-coded; a plain "20M" passes through unchanged.
+ */
+internal fun parseBandMeter(band: String): String =
+    band.substringBefore("(").trim()
+
+/**
+ * Pull the "14.084 MHz" frequency out of the packed "20M(14.084 MHz)" band column.
+ * Returns "" when the column carries no parenthesized frequency.
+ */
+internal fun parseFreqMhz(band: String): String {
+    if (!band.contains("(")) return ""
+    return band.substringAfter("(").substringBefore(")").trim()
 }
 
 // ===========================================================================

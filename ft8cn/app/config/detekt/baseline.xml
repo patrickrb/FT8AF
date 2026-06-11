@@ -1,0 +1,17 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>ImplicitDefaultLocale:MapScreen.kt$String.format("%.0f", bearing)</ID>
+    <ID>ImplicitDefaultLocale:QsoSheet.kt$String.format("%.0f", bearing)</ID>
+    <ID>TooGenericExceptionCaught:ComposeMainActivity.kt$ComposeMainActivity$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:ComposeMainActivity.kt$ComposeMainActivity.&lt;no name provided&gt;$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:PotaAdifExporter.kt$PotaAdifExporter$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:PotaAuth.kt$PotaAuth$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:PotaClient.kt$PotaClient$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:PskReporterClient.kt$PskReporterClient$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:PskReporterSender.kt$PskReporterSender$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:QrzWebClient.kt$QrzWebClient$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:QrzXmlClient.kt$QrzXmlClient$e: Exception</ID>
+  </CurrentIssues>
+</SmellBaseline>

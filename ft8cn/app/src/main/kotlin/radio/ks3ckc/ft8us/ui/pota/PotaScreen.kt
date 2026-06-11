@@ -73,8 +73,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import radio.ks3ckc.ft8us.pota.PotaAuth
 import radio.ks3ckc.ft8us.pota.PotaClient
+import radio.ks3ckc.ft8us.pota.PotaUploadException
 import radio.ks3ckc.ft8us.pota.PotaSessionManager
 import radio.ks3ckc.ft8us.pota.PotaSpotsRepository
+import radio.ks3ckc.ft8us.pota.potaSpotFrequencyKhz
 import radio.ks3ckc.ft8us.pota.model.PotaActivation
 import radio.ks3ckc.ft8us.pota.model.PotaQso
 import radio.ks3ckc.ft8us.pota.model.PotaSpot
@@ -306,7 +308,7 @@ private fun ActivateTab() {
                                     val ok = PotaClient.selfSpot(
                                         activator = myCall,
                                         spotter = myCall,
-                                        frequencyKhz = GeneralVariables.getBaseFrequency() / 1000.0,
+                                        frequencyKhz = potaSpotFrequencyKhz(GeneralVariables.band),
                                         mode = GeneralVariables.currentMode().displayName,
                                         reference = ref,
                                         comments = "CQ POTA via FT8AF",
@@ -639,17 +641,34 @@ private suspend fun uploadActivation(
     val docs = withContext(Dispatchers.IO) { PotaAdifExporter.buildActivationAdif(db, activation) }
     if (docs.isEmpty()) return Result.failure(IllegalStateException("no QSOs to upload"))
     var ok = 0
-    var lastErr: String? = null
+    var firstError: Throwable? = null
     for (doc in docs) {
         PotaClient.uploadAdif(token, doc.filename, doc.content)
             .onSuccess { ok++ }
-            .onFailure { lastErr = it.message }
+            .onFailure { if (firstError == null) firstError = it }
     }
     return if (ok == docs.size) {
         Result.success(ok)
     } else {
-        Result.failure(IllegalStateException(lastErr ?: "uploaded $ok of ${docs.size}"))
+        // Preserve the original throwable (e.g. PotaUploadException) so the caller
+        // can classify it for a useful message rather than a raw HTTP dump.
+        Result.failure(firstError ?: IllegalStateException("uploaded $ok of ${docs.size}"))
     }
+}
+
+/** How an upload failed, mapped to a user-facing message in [startUpload]. */
+internal enum class UploadFailureKind { SERVER, NETWORK, OTHER }
+
+/**
+ * Classify an upload failure so the UI can explain it. A 5xx is POTA's backend
+ * rejecting the log (almost always a bad park ref or a callsign not registered to
+ * the account); an [java.io.IOException] is a connectivity problem; anything else
+ * falls back to the raw message.
+ */
+internal fun classifyUploadFailure(error: Throwable?): UploadFailureKind = when {
+    error is PotaUploadException && error.httpCode in 500..599 -> UploadFailureKind.SERVER
+    error is java.io.IOException -> UploadFailureKind.NETWORK
+    else -> UploadFailureKind.OTHER
 }
 
 @Composable
@@ -853,7 +872,12 @@ private fun ActivationDetailScreen(
                 if (e is NotSignedInException) {
                     loginPending = true
                 } else {
-                    Toast.makeText(context, context.getString(R.string.pota_upload_failed, e.message ?: "?"), Toast.LENGTH_LONG).show()
+                    val msg = when (classifyUploadFailure(e)) {
+                        UploadFailureKind.SERVER -> context.getString(R.string.pota_upload_server_error)
+                        UploadFailureKind.NETWORK -> context.getString(R.string.pota_upload_network_error)
+                        UploadFailureKind.OTHER -> context.getString(R.string.pota_upload_failed, e.message ?: "?")
+                    }
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                 }
             }
         }

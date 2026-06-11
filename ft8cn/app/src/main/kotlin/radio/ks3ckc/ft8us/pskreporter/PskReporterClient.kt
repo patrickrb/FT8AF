@@ -71,14 +71,28 @@ object PskReporterClient {
     @Volatile
     private var rateLimitedUntilEpochMs: Long = 0L
 
-    suspend fun fetchSpotsForMe(call: String, secondsBack: Int): List<PskReporterSpot>? = withContext(Dispatchers.IO) {
+    /**
+     * Fetch reception reports for [call] over the last [secondsBack] seconds.
+     *
+     * [force] bypasses only the client-side 5-min cooldown — used for the first
+     * fetch when the map overlay is (re)entered so a returning user isn't shown
+     * an empty overlay just because a prior visit's fetch was recent. The 429/503
+     * rate-limit back-off is always honoured, so a forced call never hammers a
+     * server that has asked us to wait.
+     */
+    suspend fun fetchSpotsForMe(call: String, secondsBack: Int, force: Boolean = false): List<PskReporterSpot>? = withContext(Dispatchers.IO) {
         val now = clock()
         if (now < rateLimitedUntilEpochMs) {
             log("skipped (rate-limit back-off ${(rateLimitedUntilEpochMs - now) / 1000}s remaining)")
             return@withContext null
         }
-        if (lastFetchEpochMs != 0L && now - lastFetchEpochMs < COOLDOWN_MS) {
+        if (!force && lastFetchEpochMs != 0L && now - lastFetchEpochMs < COOLDOWN_MS) {
             log("skipped (client cooldown ${(COOLDOWN_MS - (now - lastFetchEpochMs)) / 1000}s remaining)")
+            // A cooldown skip is benign (not a failed attempt), so clear any stale
+            // error — otherwise a caller surfacing lastError (the map overlay) would
+            // keep showing a prior transport/HTTP error during normal throttling.
+            // The rate-limit back-off skip above intentionally keeps lastError set.
+            lastError = null
             return@withContext null
         }
         lastFetchEpochMs = now
@@ -93,6 +107,7 @@ object PskReporterClient {
 
         val body = fetch(url) ?: return@withContext null
         val spots = parseSpots(body)
+        lastError = null
         log("fetch ok N=${spots.size}")
         spots
     }

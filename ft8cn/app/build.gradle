@@ -5,6 +5,9 @@ plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
     id 'jacoco'
+    // Static analysis (issue #63).
+    id 'io.gitlab.arturbosch.detekt'
+    id 'org.jlleitschuh.gradle.ktlint'
 }
 
 def currentTime = getCurrentTime()
@@ -204,13 +207,49 @@ dependencies {
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
 
     // --- Connected (instrumented) tests ---
+    // The compose BOM is on `implementation`, which does NOT flow into the
+    // androidTest classpath (unlike testImplementation), so the versionless
+    // ui-test-junit4 below resolves to no version and fails. Apply the BOM here
+    // too so it gets the same managed version the main + unit-test classpaths do.
+    androidTestImplementation composeBom
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
     androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
+    // AppSmokeTest asserts with Truth (assertThat). Truth is on testImplementation
+    // for the JVM unit tests but does not flow into the androidTest classpath, so
+    // the instrumented build needs its own copy or compileDebugAndroidTestKotlin
+    // fails with "Unresolved reference: truth".
+    androidTestImplementation 'com.google.truth:truth:1.4.2'
 }
 
 jacoco {
     toolVersion = '0.8.12'
+}
+
+// --- Static analysis (issue #63) ---
+//
+// Both tools fail their own task on a NEW violation so a developer running
+// them locally gets a clear signal. CI keeps them warn-only during the rollout
+// (see .github/workflows/static-analysis.yml) by not gating on the step; the
+// flip to blocking is a one-line change there.
+
+detekt {
+    // Layer our correctness-only overrides on top of detekt's bundled defaults.
+    buildUponDefaultConfig = true
+    config.setFrom(files("$projectDir/config/detekt/detekt.yml"))
+    // Existing findings are recorded here so only new code is policed.
+    baseline = file("$projectDir/config/detekt/baseline.xml")
+    parallel = true
+}
+
+ktlint {
+    version = '1.2.1'
+    android = true
+    // Reports for CI to upload as artifacts.
+    reporters {
+        reporter org.jlleitschuh.gradle.ktlint.reporter.ReporterType.PLAIN
+        reporter org.jlleitschuh.gradle.ktlint.reporter.ReporterType.HTML
+    }
 }
 
 // Robolectric loads app classes through its own classloader, which JaCoCo's

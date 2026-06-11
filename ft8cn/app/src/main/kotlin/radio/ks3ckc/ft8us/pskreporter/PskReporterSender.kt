@@ -52,19 +52,24 @@ object PskReporterSender {
     private const val RECEIVER_DATA_SET_ID = RECEIVER_TEMPLATE_ID
     private const val SENDER_DATA_SET_ID = SENDER_TEMPLATE_ID
 
-    // IPFIX field type IDs (enterprise-specific under 30351)
-    // Receiver fields
-    private const val FT_RX_CALLSIGN = 1       // receiverCallsign
-    private const val FT_RX_LOCATOR = 2        // receiverLocator
-    private const val FT_DECODING_SW = 3       // decodingSoftware
-    // Sender fields
-    private const val FT_TX_CALLSIGN = 1       // senderCallsign
-    private const val FT_FREQUENCY = 2         // frequency
-    private const val FT_SNR = 3               // sNR
-    private const val FT_MODE = 4              // mode
-    private const val FT_TX_LOCATOR = 5        // senderLocator
-    private const val FT_INFO_SOURCE = 6       // informationSource
-    private const val FT_FLOW_START = 7        // flowStartSeconds
+    // IPFIX field type IDs. PSKReporter assigns specific element IDs under
+    // enterprise 30351 (see WSJT-X PSKReporter.cpp / pskreporter.info/pskdev.html);
+    // the collector maps element-ID -> column, so these must match exactly or the
+    // records are parsed structurally but discarded as unrecognized.
+    // Receiver (options) fields — all enterprise-specific under 30351.
+    private const val FT_RX_CALLSIGN = 2       // receiverCallsign  (0x8002)
+    private const val FT_RX_LOCATOR = 4        // receiverLocator   (0x8004)
+    private const val FT_DECODING_SW = 8       // decodingSoftware  (0x8008)
+    // Sender (data) fields — enterprise-specific under 30351, EXCEPT flowStart.
+    private const val FT_TX_CALLSIGN = 1       // senderCallsign    (0x8001)
+    private const val FT_FREQUENCY = 5         // frequency         (0x8005)
+    private const val FT_SNR = 6               // sNR               (0x8006)
+    private const val FT_MODE = 10             // mode              (0x800A)
+    private const val FT_TX_LOCATOR = 3        // senderLocator     (0x8003)
+    private const val FT_INFO_SOURCE = 11      // informationSource (0x800B)
+    // flowStartSeconds is the STANDARD IANA IPFIX element 150 (0x0096): no
+    // enterprise bit, no enterprise number in its template descriptor.
+    private const val FT_FLOW_START = 150      // flowStartSeconds  (0x0096, standard)
 
     data class SpotRecord(
         val senderCallsign: String,
@@ -346,10 +351,14 @@ object PskReporterSender {
 
     private fun encodeSenderTemplate(): ByteArray {
         // Data template set (set ID = 0x0002)
-        // Template ID = 0x50E3, field count = 7
+        // Template ID = 0x50E3, field count = 7. Six fields are enterprise-specific
+        // (8-byte descriptor: type+length+enterprise); flowStartSeconds is the
+        // standard element 0x0096 (4-byte descriptor: type+length, no enterprise).
         val fieldCount = 7
-        val fieldSize = 8 // enterprise fields: type(2) + length(2) + enterprise(4)
-        val templateRecordLen = 2 + 2 + (fieldCount * fieldSize) // templateId + fieldCount + fields
+        val enterpriseFieldSize = 8 // type(2) + length(2) + enterprise(4)
+        val standardFieldSize = 4   // type(2) + length(2)
+        val templateRecordLen =
+            2 + 2 + (6 * enterpriseFieldSize) + standardFieldSize // templateId + fieldCount + fields
         val setLen = 4 + templateRecordLen
         val padding = (4 - (setLen % 4)) % 4
         val totalLen = setLen + padding
@@ -367,8 +376,7 @@ object PskReporterSender {
         buf.putShort(0xFFFF.toShort())
         buf.putInt(ENTERPRISE_NUMBER)
 
-        // Field 2: frequency — uint32 (5 bytes per PSKReporter: 1 len + 4 data? No: fixed 4)
-        // PSKReporter uses uint32 for frequency
+        // Field 2: frequency — uint32 (4 bytes)
         buf.putShort((FT_FREQUENCY or 0x8000).toShort())
         buf.putShort(4.toShort())
         buf.putInt(ENTERPRISE_NUMBER)
@@ -393,10 +401,10 @@ object PskReporterSender {
         buf.putShort(1.toShort())
         buf.putInt(ENTERPRISE_NUMBER)
 
-        // Field 7: flowStartSeconds — uint32 (4 bytes)
-        buf.putShort((FT_FLOW_START or 0x8000).toShort())
+        // Field 7: flowStartSeconds — standard IPFIX element 0x0096, uint32 (4 bytes).
+        // No enterprise bit and no enterprise number (4-byte descriptor).
+        buf.putShort(FT_FLOW_START.toShort())
         buf.putShort(4.toShort())
-        buf.putInt(ENTERPRISE_NUMBER)
 
         repeat(padding) { buf.put(0) }
         return buf.array()

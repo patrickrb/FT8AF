@@ -1,0 +1,41 @@
+# detekt configuration — issue #63.
+#
+# Scope is deliberately narrow: CORRECTNESS rules only. Style, naming, and
+# formatting are ktlint's job; complexity/comments metrics are noise for this
+# codebase. We layer on top of detekt's bundled defaults
+# (buildUponDefaultConfig = true in app/build.gradle) and switch off every
+# ruleset that isn't about catching bugs.
+
+build:
+  # Any finding above the baseline fails the `detekt` task. Existing findings
+  # are recorded in config/detekt/baseline.xml so only NEW code is policed.
+  # (Warn-only at the CI level during rollout — see static-analysis.yml.)
+  maxIssues: 0
+  excludeCorrectable: false
+
+config:
+  validation: true
+  warningsAsErrors: false
+  checkExhaustiveness: false
+
+# --- Correctness rulesets: ON ---
+coroutines:
+  active: true
+exceptions:
+  active: true
+potential-bugs:
+  active: true
+
+# --- Everything else: OFF (owned by ktlint or just noise) ---
+comments:
+  active: false
+complexity:
+  active: false
+empty-blocks:
+  active: false
+naming:
+  active: false
+performance:
+  active: false
+style:
+  active: false

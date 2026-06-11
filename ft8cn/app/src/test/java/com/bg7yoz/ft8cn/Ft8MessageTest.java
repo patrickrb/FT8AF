@@ -245,6 +245,61 @@ public class Ft8MessageTest {
         assertThat(msg.getCallsignTo()).isEqualTo("K1ABC");
     }
 
+    // ---- isPlausibleCallsign / isJunkDecode ---------------------------------
+
+    @Test
+    public void isPlausibleCallsign_acceptsRealCallsigns() {
+        assertThat(Ft8Message.isPlausibleCallsign("K1ABC")).isTrue();
+        assertThat(Ft8Message.isPlausibleCallsign("PJ4/K1ABC")).isTrue();  // compound
+        assertThat(Ft8Message.isPlausibleCallsign("3DA0RS")).isTrue();     // leading digit
+        assertThat(Ft8Message.isPlausibleCallsign("<W9XYZ>")).isTrue();    // hashed wrapper
+        assertThat(Ft8Message.isPlausibleCallsign("<...>")).isTrue();      // unresolved placeholder
+        assertThat(Ft8Message.isPlausibleCallsign(" K1ABC ")).isTrue();    // trimmed
+    }
+
+    @Test
+    public void isPlausibleCallsign_rejectsGarbageAndEmpty() {
+        // The reported false decode: stray brackets, dots and a space.
+        assertThat(Ft8Message.isPlausibleCallsign(".<. >")).isFalse();
+        assertThat(Ft8Message.isPlausibleCallsign("<. .>")).isFalse();
+        assertThat(Ft8Message.isPlausibleCallsign("A B")).isFalse();      // embedded space
+        assertThat(Ft8Message.isPlausibleCallsign("")).isFalse();
+        assertThat(Ft8Message.isPlausibleCallsign("   ")).isFalse();
+        assertThat(Ft8Message.isPlausibleCallsign(null)).isFalse();
+    }
+
+    @Test
+    public void isJunkDecode_structuredMessageWithGarbageSender_isJunk() {
+        Ft8Message msg = new Ft8Message("CQ", ".<. >", "FN42");
+        msg.i3 = 1; // standard message — sender must be a real callsign
+        assertThat(msg.isJunkDecode()).isTrue();
+    }
+
+    @Test
+    public void isJunkDecode_structuredMessageWithRealSender_isNotJunk() {
+        Ft8Message msg = new Ft8Message("CQ", "K1ABC", "FN42");
+        msg.i3 = 1;
+        assertThat(msg.isJunkDecode()).isFalse();
+    }
+
+    @Test
+    public void isJunkDecode_freeTextAndTelemetry_neverJunk() {
+        // i3=0,n3=0 (free text) and i3=0,n3=5 (telemetry) legitimately carry
+        // non-callsign text in the callsign fields, so they are exempt even when
+        // the sender field is not a valid callsign.
+        Ft8Message freeText = new Ft8Message(FT8Common.FT8_MODE);
+        freeText.i3 = 0;
+        freeText.n3 = 0;
+        freeText.callsignFrom = "TNX 73 GL";
+        assertThat(freeText.isJunkDecode()).isFalse();
+
+        Ft8Message telemetry = new Ft8Message(FT8Common.FT8_MODE);
+        telemetry.i3 = 0;
+        telemetry.n3 = 5;
+        telemetry.callsignFrom = "123456789ABCDEF012";
+        assertThat(telemetry.isJunkDecode()).isFalse();
+    }
+
     // ---- simple formatters: getDt / getdB / getFreq_hz ----------------------
 
     @Test
@@ -294,6 +349,69 @@ public class Ft8MessageTest {
         msg.utcTime = 45000;
         assertThat(msg.getSequence4()).isEqualTo(3);
         msg.utcTime = 60000;
+        assertThat(msg.getSequence4()).isEqualTo(0);
+    }
+
+    @Test
+    public void getSequence_ft4_alternatesEachSevenAndHalfSeconds() {
+        // Unchanged FT4 path: 7.5s slot.
+        Ft8Message msg = new Ft8Message(FT8Common.FT4_MODE);
+        msg.utcTime = 0;
+        assertThat(msg.getSequence()).isEqualTo(0);
+        msg.utcTime = 7500;
+        assertThat(msg.getSequence()).isEqualTo(1);
+        msg.utcTime = 15000;
+        assertThat(msg.getSequence()).isEqualTo(0);
+    }
+
+    @Test
+    public void getSequence_ft2_alternatesEachShortSlot() {
+        // FT2's 3.8s slot — must alternate twice as fast as FT4's 7.5s.
+        Ft8Message msg = new Ft8Message(FT8Common.FT2_MODE);
+        msg.utcTime = 0;
+        assertThat(msg.getSequence()).isEqualTo(0);
+        msg.utcTime = 3800;
+        assertThat(msg.getSequence()).isEqualTo(1);
+        msg.utcTime = 7600;
+        assertThat(msg.getSequence()).isEqualTo(0);
+        msg.utcTime = 11400;
+        assertThat(msg.getSequence()).isEqualTo(1);
+    }
+
+    @Test
+    public void getSequence_ft2_adjacentSlotsHaveDistinctParity() {
+        // Regression for #205: the old code reused FT4's 7.5s period for FT2, so
+        // two adjacent 3.8s slots (0ms and 3800ms) both mapped to sequence 0.
+        // The QSO sequencer then saw the other station's reply as being in our
+        // own slot and skipped it, stalling on the report instead of sending RR73.
+        Ft8Message slotA = new Ft8Message(FT8Common.FT2_MODE);
+        slotA.utcTime = 0;
+        Ft8Message slotB = new Ft8Message(FT8Common.FT2_MODE);
+        slotB.utcTime = 3800;
+        assertThat(slotA.getSequence()).isNotEqualTo(slotB.getSequence());
+    }
+
+    @Test
+    public void getSequence_ft2_toleratesSlightEarlySkew() {
+        // utcTime is slot-aligned; the +slot/20 nudge keeps a timestamp a touch
+        // early (clock skew) in the correct slot rather than the previous one.
+        Ft8Message msg = new Ft8Message(FT8Common.FT2_MODE);
+        msg.utcTime = 3800 - 50; // 50ms before slot 1's boundary
+        assertThat(msg.getSequence()).isEqualTo(1);
+    }
+
+    @Test
+    public void getSequence4_ft2_cyclesModuloFourOnShortSlot() {
+        Ft8Message msg = new Ft8Message(FT8Common.FT2_MODE);
+        msg.utcTime = 0;
+        assertThat(msg.getSequence4()).isEqualTo(0);
+        msg.utcTime = 3800;
+        assertThat(msg.getSequence4()).isEqualTo(1);
+        msg.utcTime = 7600;
+        assertThat(msg.getSequence4()).isEqualTo(2);
+        msg.utcTime = 11400;
+        assertThat(msg.getSequence4()).isEqualTo(3);
+        msg.utcTime = 15200;
         assertThat(msg.getSequence4()).isEqualTo(0);
     }
 
