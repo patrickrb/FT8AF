@@ -1099,9 +1099,8 @@ public class FT8TransmitSignal {
             // is CQing, not already worked, not myself, and either Hunt mode is on
             // (auto-answer any CQ) or this is a followed callsign we auto-call
             if (msg.checkIsCQ()// is CQing
-                    && (GeneralVariables.autoFollowCQ// Hunt: auto-answer any CQ
-                    || (GeneralVariables.autoCallFollow
-                    && GeneralVariables.callsignInFollow(msg.getCallsignFrom())))// followed callsign
+                    && mayAutoCall(GeneralVariables.autoFollowCQ, GeneralVariables.autoCallFollow,
+                    GeneralVariables.callsignInFollow(msg.getCallsignFrom()))// Hunt or followed callsign
                     // skip directional CQs aimed at a different DXCC/continent (opt-in)
                     && (!GeneralVariables.respectDirectionalCQ
                     || GeneralVariables.directionalCQIsForMe(msg.callsignTo))
@@ -1463,23 +1462,23 @@ public class FT8TransmitSignal {
     // ==================== End FT8 DXpedition Hound ====================
 
     /**
-     * Check watch list for active CQ messages that are not my current target callsign.
-     *
-     * @param messages watched message list
-     * @return true if new target found, false otherwise
-     */
-    /**
      * Whether we're allowed to auto-call a station that's calling CQ, given the auto-call
      * settings. Hunt ({@code autoFollowCQ}) answers any CQ; with Hunt off, auto-call-follow
      * answers only CQs from {@code isFollowed} callsigns; with both off we never auto-call.
      * Shared rule so the give-up fallback ({@link #getNewTargetCallsign}) and the live
-     * auto-answer scan agree on who we'll call.
+     * auto-answer scan ({@link #checkCQMeOrFollowCQMessage}) agree on who we'll call.
      */
     static boolean mayAutoCall(boolean autoFollowCQ, boolean autoCallFollow, boolean isFollowed) {
         if (autoFollowCQ) return true;
         return autoCallFollow && isFollowed;
     }
 
+    /**
+     * Check watch list for active CQ messages that are not my current target callsign.
+     *
+     * @param messages watched message list
+     * @return true if new target found, false otherwise
+     */
     public boolean getNewTargetCallsign(ArrayList<Ft8Message> messages) {
         if (toCallsign == null) return false;
         // Only auto-pick a fresh CQ target when an auto-call mode is on. With Hunt
