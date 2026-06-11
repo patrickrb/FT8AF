@@ -28,7 +28,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -116,6 +118,55 @@ internal fun buildQsoLog(
 }
 
 /**
+ * Outcome of one evaluation of the synthesized-TX-log effect.
+ *
+ * @property shouldLog            append a TX row now (with the current transmit message)
+ * @property pendingAfter         carry a "still owe a log for this transmission" flag forward
+ * @property wasTransmittingAfter the transmitting state to remember for the next evaluation
+ */
+internal data class TxLogDecision(
+    val shouldLog: Boolean,
+    val pendingAfter: Boolean,
+    val wasTransmittingAfter: Boolean,
+)
+
+/**
+ * Decide whether to append one TX row to the mini-log, given the previous and current
+ * transmit state. We log exactly **one row per transmission** — keyed off the rising edge
+ * of [isTransmitting] — rather than de-duplicating by message text. That's the fix for
+ * "repeated RR73s only showed once": each time a (possibly identical) message is sent in a
+ * new cycle it is a fresh transmission and gets its own row.
+ *
+ * A "pending" flag bridges the case where [isTransmitting] flips true a frame before the
+ * transmit-message string is populated: the rising edge arms a pending log, and we emit the
+ * row on the first subsequent evaluation that actually has a non-empty message (and a live
+ * target). The pending flag clears when the row is logged or when transmit ends, so it can
+ * never leak a duplicate into the next transmission.
+ *
+ * @param wasTransmitting transmitting state at the previous evaluation
+ * @param isTransmitting  transmitting state now
+ * @param pending         whether a log is already owed for the in-flight transmission
+ * @param message         the current transmit-message text (empty until populated)
+ * @param hasTarget       whether a real target callsign is set (CQ has no mini-log)
+ */
+internal fun decideTxLog(
+    wasTransmitting: Boolean,
+    isTransmitting: Boolean,
+    pending: Boolean,
+    message: String,
+    hasTarget: Boolean,
+): TxLogDecision {
+    val armed = pending || (isTransmitting && !wasTransmitting) // rising edge arms a new log
+    val shouldLog = armed && isTransmitting && message.isNotEmpty() && hasTarget
+    val pendingAfter = when {
+        !isTransmitting -> false   // transmit ended — drop any unfulfilled pending log
+        shouldLog -> false         // just logged this transmission
+        else -> armed              // armed but message not ready yet; keep waiting
+    }
+    return TxLogDecision(shouldLog, pendingAfter, isTransmitting)
+}
+
+/**
  * Collapsible panel showing the active QSO with live RX/TX message history
  * and TX message selector buttons.
  */
@@ -148,22 +199,33 @@ fun ActiveQsoPanel(
     val hasTarget = displayCallsign != null
     val isCallingCq = isActivated && !hasTarget
 
-    // Synthesized TX log: append the message we're currently transmitting
-    // the moment TX begins, so the operator sees it in the log without
-    // waiting for the loopback decode (15–30s) to catch up.
+    // Synthesized TX log: append the message we're currently transmitting the moment TX
+    // begins, so the operator sees it without waiting for the loopback decode (15–30s) to
+    // catch up. We log one row per transmission (the rising edge of isTransmitting) rather
+    // than de-duplicating by text, so repeated messages — e.g. several unanswered RR73s —
+    // each get their own row. State resets per target. See decideTxLog for the rule.
     val synthTxLog = remember(displayCallsign) { mutableStateListOf<QsoLogEntry>() }
+    var wasTransmitting by remember(displayCallsign) { mutableStateOf(false) }
+    var pendingTxLog by remember(displayCallsign) { mutableStateOf(false) }
     LaunchedEffect(isTransmitting, transmittingMessage, displayCallsign) {
         val msg = transmittingMessage.orEmpty()
-        if (isTransmitting && msg.isNotEmpty() && displayCallsign != null) {
-            if (synthTxLog.none { it.messageText == msg }) {
-                synthTxLog.add(
-                    QsoLogEntry(
-                        direction = QsoLogEntry.Direction.TX,
-                        utcTime = System.currentTimeMillis(),
-                        messageText = msg,
-                    )
+        val decision = decideTxLog(
+            wasTransmitting = wasTransmitting,
+            isTransmitting = isTransmitting,
+            pending = pendingTxLog,
+            message = msg,
+            hasTarget = displayCallsign != null,
+        )
+        wasTransmitting = decision.wasTransmittingAfter
+        pendingTxLog = decision.pendingAfter
+        if (decision.shouldLog) {
+            synthTxLog.add(
+                QsoLogEntry(
+                    direction = QsoLogEntry.Direction.TX,
+                    utcTime = System.currentTimeMillis(),
+                    messageText = msg,
                 )
-            }
+            )
         }
     }
 

@@ -58,6 +58,12 @@ public class FT8TransmitSignal {
     public volatile int sequential;// transmit sequence
     public MutableLiveData<Integer> mutableSequential = new MutableLiveData<>();
     private volatile boolean pendingUserCQ = false;
+    // True when the active run was started by tapping a single decode (the
+    // decode-list row tap / QsoSheet "Call" button) to work one specific
+    // station. On QSO completion we stop rather than idling on CQ — unless the
+    // operator has Hunt or Auto-CQ-after-QSO enabled. Cleared when a CQ run
+    // starts (userResetToCQ) or TX is deactivated.
+    private volatile boolean singleQsoMode = false;
     private volatile boolean isTransmitting = false;
     public MutableLiveData<Boolean> mutableIsTransmitting = new MutableLiveData<>();// whether currently transmitting
     public MutableLiveData<String> mutableTransmittingMessage = new MutableLiveData<>();// current message content
@@ -182,12 +188,27 @@ public class FT8TransmitSignal {
             //@RequiresApi(api = Build.VERSION_CODES.N)
             @Override
             public void doOnSecTimer(long utc) {
+                // Hunt (auto-answer) is armed via setActivated(true) so it CAN reply, but it
+                // only answers other stations' CQs — it never calls CQ itself. While no
+                // caller is locked yet it's just listening, so keep the TX watchdog fresh;
+                // otherwise an idle hunt would auto-stop after the timeout even though it's
+                // behaving correctly. A stuck *active* QSO still ages the watchdog (this is
+                // false once a real target is locked).
+                if (isHuntListeningIdle(GeneralVariables.autoFollowCQ, functionOrder, toCallsign)) {
+                    GeneralVariables.resetLaunchSupervision();
+                }
                 // stop if auto-supervision timeout exceeded
                 if (GeneralVariables.isLaunchSupervisionTimeout()) {
                     setActivated(false);
                     return;
                 }
                 if (UtcTimer.getNowSequential() == sequential && activated) {
+                    // Idle hunt: stay silent this slot and keep listening rather than keying
+                    // up a CQ. Once parseMessageToFunction locks a caller (order advances,
+                    // target becomes a real callsign) this is false and the reply transmits.
+                    if (isHuntListeningIdle(GeneralVariables.autoFollowCQ, functionOrder, toCallsign)) {
+                        return;
+                    }
                     if (GeneralVariables.myCallsign.length() < 3) {
                         // my callsign is invalid, cannot transmit!
                         ToastMessage.show(GeneralVariables.getStringFromResource(R.string.callsign_error));
@@ -980,6 +1001,30 @@ public class FT8TransmitSignal {
         return checkCQMeOrFollowCQMessage(messages, false);
     }
 
+    /**
+     * Whether Hunt (auto-answer) is armed but still idle — i.e. we are in the CQ baseline
+     * state ({@code functionOrder == 6}, target null/"CQ") with no station locked to answer.
+     *
+     * <p>Hunt arms the sequencer with {@code setActivated(true)} so it can reply, but it
+     * answers other stations' CQs and must never call CQ itself. In this idle state the
+     * transmit slot stays silent and we just keep listening; once
+     * {@link #checkCQMeOrFollowCQMessage} locks a caller (order advances past 6 and the
+     * target becomes a real callsign) this returns false and the reply transmits normally.
+     * When Hunt is off ({@code autoFollowCQ == false}) this is always false, so a normal
+     * user CQ run is unaffected.
+     *
+     * @param autoFollowCQ  the Hunt flag (GeneralVariables.autoFollowCQ)
+     * @param functionOrder the current TX sequence step (6 == CQ baseline)
+     * @param toCallsign    the current TX target, if any
+     */
+    static boolean isHuntListeningIdle(boolean autoFollowCQ, int functionOrder,
+                                       TransmitCallsign toCallsign) {
+        if (!autoFollowCQ) return false;
+        if (functionOrder != 6) return false;
+        // "no target" == null or the CQ placeholder (see TransmitCallsign.haveTargetCallsign).
+        return toCallsign == null || !toCallsign.haveTargetCallsign();
+    }
+
     private boolean checkCQMeOrFollowCQMessage(ArrayList<Ft8Message> messages, boolean suppressHunt) {
         // these messages are freshly decoded
         // both loops check for CQ-me messages. The first loop prioritizes checking for my target callsign,
@@ -1060,9 +1105,8 @@ public class FT8TransmitSignal {
             // is CQing, not already worked, not myself, and either Hunt mode is on
             // (auto-answer any CQ) or this is a followed callsign we auto-call
             if (msg.checkIsCQ()// is CQing
-                    && (GeneralVariables.autoFollowCQ// Hunt: auto-answer any CQ
-                    || (GeneralVariables.autoCallFollow
-                    && GeneralVariables.callsignInFollow(msg.getCallsignFrom())))// followed callsign
+                    && mayAutoCall(GeneralVariables.autoFollowCQ, GeneralVariables.autoCallFollow,
+                    GeneralVariables.callsignInFollow(msg.getCallsignFrom()))// Hunt or followed callsign
                     // skip directional CQs aimed at a different DXCC/continent (opt-in)
                     && (!GeneralVariables.respectDirectionalCQ
                     || GeneralVariables.directionalCQIsForMe(msg.callsignTo))
@@ -1131,6 +1175,40 @@ public class FT8TransmitSignal {
                 break;
         }
 
+    }
+
+    /**
+     * Mark the active run as a single tapped QSO: started by tapping a decode
+     * (or the QsoSheet "Call" button) to work one specific station. When that
+     * QSO completes, {@link #parseMessageToFunction} stops transmitting instead
+     * of idling on CQ — unless Hunt or Auto-CQ-after-QSO is enabled, or a direct
+     * caller / Hunt target keeps the run alive. Cleared by {@link #userResetToCQ}
+     * (a CQ run) and {@link #setActivated}(false).
+     */
+    public void beginSingleQso() {
+        singleQsoMode = true;
+    }
+
+    /**
+     * Decide whether to stop transmitting after a QSO completes.
+     *
+     * <p>A QSO started by tapping a decode ({@code singleQsoMode}) is a single
+     * shot: when it finishes we stop rather than idling on CQ. The operator
+     * keeps the run going by enabling Hunt ({@code autoFollowCQ}) or Auto-CQ
+     * after QSO ({@code autoCQAfterQSO}); a queued caller or Hunt target that
+     * already picked up the next contact ({@code continued}) also keeps us
+     * active. A run that did not start as a single tapped QSO (e.g. pressing CQ)
+     * is never stopped here.
+     *
+     * @param continued      a dequeued caller or Hunt/auto-follow already set up the next QSO
+     * @param autoCQAfterQSO the Auto-CQ-after-QSO setting (keep calling CQ)
+     * @param autoFollowCQ   the Hunt toggle (auto-answer any CQ)
+     * @param singleQsoMode  the active run started as a single tapped QSO
+     * @return true if TX should be deactivated now
+     */
+    static boolean shouldStopAfterQso(boolean continued, boolean autoCQAfterQSO,
+                                      boolean autoFollowCQ, boolean singleQsoMode) {
+        return singleQsoMode && !continued && !autoCQAfterQSO && !autoFollowCQ;
     }
 
     /**
@@ -1212,9 +1290,18 @@ public class FT8TransmitSignal {
 
             // try queued callers first, then answer direct callers. When Auto-CQ
             // is on, suppress Hunt so we stay on our run frequency calling CQ
-            // instead of chasing someone else's CQ.
-            if (!dequeueNextCaller()) {
-                checkCQMeOrFollowCQMessage(messages, GeneralVariables.autoCQAfterQSO);
+            // instead of chasing someone else's CQ. `continued` is true when one
+            // of these picked up the next contact.
+            boolean continued = dequeueNextCaller()
+                    || checkCQMeOrFollowCQMessage(messages, GeneralVariables.autoCQAfterQSO);
+            // A QSO started by tapping a decode is a single shot: once it
+            // completes, stop transmitting rather than idling on CQ — unless the
+            // operator enabled Hunt or Auto-CQ after QSO, or a caller/Hunt target
+            // already kept the run alive.
+            if (shouldStopAfterQso(continued, GeneralVariables.autoCQAfterQSO,
+                    GeneralVariables.autoFollowCQ, singleQsoMode)) {
+                GeneralVariables.fileLog("QSO: single tapped QSO done, Hunt & Auto-CQ off -> stop TX");
+                setActivated(false);
             }
             setCurrentFunctionOrder(functionOrder);// set current message
             mutableFunctionOrder.postValue(functionOrder);
@@ -1424,6 +1511,18 @@ public class FT8TransmitSignal {
     // ==================== End FT8 DXpedition Hound ====================
 
     /**
+     * Whether we're allowed to auto-call a station that's calling CQ, given the auto-call
+     * settings. Hunt ({@code autoFollowCQ}) answers any CQ; with Hunt off, auto-call-follow
+     * answers only CQs from {@code isFollowed} callsigns; with both off we never auto-call.
+     * Shared rule so the give-up fallback ({@link #getNewTargetCallsign}) and the live
+     * auto-answer scan ({@link #checkCQMeOrFollowCQMessage}) agree on who we'll call.
+     */
+    static boolean mayAutoCall(boolean autoFollowCQ, boolean autoCallFollow, boolean isFollowed) {
+        if (autoFollowCQ) return true;
+        return autoCallFollow && isFollowed;
+    }
+
+    /**
      * Check watch list for active CQ messages that are not my current target callsign.
      *
      * @param messages watched message list
@@ -1431,6 +1530,14 @@ public class FT8TransmitSignal {
      */
     public boolean getNewTargetCallsign(ArrayList<Ft8Message> messages) {
         if (toCallsign == null) return false;
+        // Only auto-pick a fresh CQ target when an auto-call mode is on. With Hunt
+        // (autoFollowCQ) and auto-call-follow both off, a manually-started QSO that gets no
+        // reply must fall back to idle/CQ — it must NOT start answering some other station's
+        // CQ. (This is the give-up fallback after the no-reply limit; it previously chased
+        // any CQ regardless of the Hunt toggle.)
+        if (!GeneralVariables.autoFollowCQ && !GeneralVariables.autoCallFollow) {
+            return false;
+        }
         for (int i = messages.size() - 1; i >= 0; i--) {
             Ft8Message ft8Message = messages.get(i);
             if (ft8Message.band != GeneralVariables.band) {//ignore messages not on the same band
@@ -1438,6 +1545,12 @@ public class FT8TransmitSignal {
             }
             // not CQ, ignore
             if (!ft8Message.checkIsCQ()) {
+                continue;
+            }
+            // With Hunt off but auto-call-follow on, only auto-call *followed* callsigns —
+            // mirror checkCQMeOrFollowCQMessage so the two paths agree on who we'll call.
+            if (!mayAutoCall(GeneralVariables.autoFollowCQ, GeneralVariables.autoCallFollow,
+                    GeneralVariables.callsignInFollow(ft8Message.getCallsignFrom()))) {
                 continue;
             }
             // not the current target callsign, and no previous successful QSO
@@ -1482,6 +1595,7 @@ public class FT8TransmitSignal {
         if (!this.activated) {//force stop transmitting
             setTransmitting(false);
             clearCallerQueue();
+            singleQsoMode = false;
         }
         mutableIsActivated.postValue(activated);
     }
@@ -1525,6 +1639,12 @@ public class FT8TransmitSignal {
                     // Worker already released the track between our read and here.
                 }
             }
+            // Clear the "currently transmitting" message on TX end. It's only shown while
+            // transmitting (banner), and clearing it means the next transmission's rising
+            // edge starts from empty rather than the previous over's text — so the mini-log
+            // logs each transmission's REAL message instead of, on a new-and-different over,
+            // the stale prior one. (mutableTransmittingMessage is posted fresh at TX start.)
+            mutableTransmittingMessage.postValue("");
         }
 
         mutableIsTransmitting.postValue(transmitting);
@@ -1583,6 +1703,21 @@ public class FT8TransmitSignal {
         resetToCQ();
         clearCallerQueue();
         pendingUserCQ = true;
+        // A user-initiated CQ run is not a single tapped QSO: it should keep
+        // calling CQ after each contact, so clear the one-shot flag.
+        singleQsoMode = false;
+    }
+
+    /**
+     * Arm the sequencer for Hunt: enter the CQ baseline and clear the caller queue, but do
+     * NOT set {@code pendingUserCQ}. Unlike {@link #userResetToCQ()} (a user-initiated CQ,
+     * which deliberately skips one cycle so the CQ transmits cleanly first), Hunt should be
+     * able to lock onto and answer a CQ on the very next decode cycle, so it must not
+     * suppress the first {@code checkCQMeOrFollowCQMessage} pass.
+     */
+    public void armForHunt() {
+        resetToCQ();
+        clearCallerQueue();
     }
 
     /**
@@ -1603,10 +1738,18 @@ public class FT8TransmitSignal {
             GeneralVariables.resetLaunchSupervision();
         }
 
-        if (nextCallsign != null) {
-            dequeueSpecificCaller(nextCallsign);
-        } else if (!dequeueNextCaller()) {
-            // No queued callers — stay on CQ
+        boolean continued = (nextCallsign != null)
+                ? dequeueSpecificCaller(nextCallsign)
+                : dequeueNextCaller();
+
+        // Same single-shot rule as the normal completion path: a tapped QSO that
+        // the user force-logs should stop afterwards unless Hunt or Auto-CQ is on
+        // or a caller was queued. (Force-log never auto-follows a CQ, so Hunt
+        // keeps us active to pick up on a later cycle rather than chasing now.)
+        if (shouldStopAfterQso(continued, GeneralVariables.autoCQAfterQSO,
+                GeneralVariables.autoFollowCQ, singleQsoMode)) {
+            GeneralVariables.fileLog("QSO: force-logged single tapped QSO, Hunt & Auto-CQ off -> stop TX");
+            setActivated(false);
         }
 
         setCurrentFunctionOrder(functionOrder);

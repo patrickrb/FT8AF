@@ -463,6 +463,11 @@
     <string name="tx_hunt">Охота</string>
     <string name="tx_call_cq">Вызов CQ</string>
     <string name="tx_stop">Стоп</string>
+    <string name="hound_title">Работа с DX-экспедицией (Hound)</string>
+    <string name="hound_help">Сначала настройте трансивер на опубликованную частоту Fox. Вы вызываете на высокой частоте (1000–4000 Гц); приложение автоматически переходит (QSY) туда, где отвечает Fox, и отправляет ваш рапорт.</string>
+    <string name="hound_fox_callsign">Позывной Fox</string>
+    <string name="hound_call_frequency">Частота вызова (Гц, 1000–4000)</string>
+    <string name="hound_start">Старт</string>
 
     <!-- ===== CAT status chip ===== -->
     <string name="cat_status_chip_label">CAT</string>
@@ -476,4 +481,16 @@
     <string name="swr_lockout_body">Проверьте антенну / фидер перед передачей.</string>
     <string name="swr_lockout_dismiss">ЗАКРЫТЬ</string>
     <string name="swr_lockout_toast">TX заблокирован — блокировка КСВ активна. Сначала закройте баннер.</string>
+
+    <!-- ===== Time sync / manual correction ===== -->
+    <string name="settings_cat_time_sync">Синхронизация времени</string>
+    <string name="settings_cat_time_sync_desc">Ручная коррекция часов для работы офлайн</string>
+    <string name="settings_time_correction_section">Ручная коррекция</string>
+    <string name="settings_time_correction_desc">Подстройка часов приложения, когда нет интернета для синхронизации. Для FT8 нужно UTC с точностью около 1 секунды. Регулируйте, пока столбец DT у декодированных станций не будет около 0.</string>
+    <string name="settings_time_current_label">Текущая коррекция</string>
+    <string name="settings_time_correction_reset">Сбросить на 0</string>
+    <string name="settings_time_suggest_section">Предложение по декодированиям</string>
+    <string name="settings_time_suggest_label">Средний DT за последнее время: %1$s</string>
+    <string name="settings_time_suggest_none">Пока нет декодирований — включите приём, чтобы получить рекомендацию.</string>
+    <string name="settings_time_suggest_apply">Применить предложенную коррекцию</string>
 </resources>

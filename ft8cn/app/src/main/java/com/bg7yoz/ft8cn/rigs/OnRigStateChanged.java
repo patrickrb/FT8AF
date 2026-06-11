@@ -17,4 +17,13 @@ public interface OnRigStateChanged {
      * failed. Default no-op so existing implementers don't need to change.
      */
     default void onConnecting() {}
+
+    /**
+     * Called whenever the rig answers with a valid frequency, even if the dial hasn't
+     * moved. {@link #onFreqChanged(long)} only fires on an actual change, so it can't be
+     * used as a liveness signal — a rig parked on one frequency would look dead. The CAT
+     * liveness watchdog keys off this instead. Default no-op so existing implementers don't
+     * need to change.
+     */
+    default void onRigResponded() {}
 }

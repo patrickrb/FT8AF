@@ -463,6 +463,11 @@
     <string name="tx_hunt">ハント</string>
     <string name="tx_call_cq">CQを出す</string>
     <string name="tx_stop">停止</string>
+    <string name="hound_title">DXペディションと交信（Hound）</string>
+    <string name="hound_help">まず無線機を Fox の公開ダイヤル周波数に合わせます。高い周波数（1000〜4000 Hz）で呼び出すと、アプリが自動的に Fox が応答する周波数へ QSY し、レポートを送信します。</string>
+    <string name="hound_fox_callsign">Fox のコールサイン</string>
+    <string name="hound_call_frequency">呼び出し周波数（Hz、1000〜4000）</string>
+    <string name="hound_start">開始</string>
 
     <!-- ===== CAT status chip ===== -->
     <string name="cat_status_chip_label">CAT</string>
@@ -476,4 +481,16 @@
     <string name="swr_lockout_body">送信前にアンテナ / 給電線を確認してください。</string>
     <string name="swr_lockout_dismiss">解除</string>
     <string name="swr_lockout_toast">送信ブロック — SWRロック中。先にロックバナーを解除してください。</string>
+
+    <!-- ===== Time sync / manual correction ===== -->
+    <string name="settings_cat_time_sync">時刻同期</string>
+    <string name="settings_cat_time_sync_desc">オフライン運用のための手動時刻補正</string>
+    <string name="settings_time_correction_section">手動補正</string>
+    <string name="settings_time_correction_desc">同期できるインターネットがないときにアプリの時計を微調整します。FT8 には約1秒以内の UTC が必要です。デコードした局の DT 列が 0 付近になるまで調整してください。</string>
+    <string name="settings_time_current_label">現在の補正</string>
+    <string name="settings_time_correction_reset">0 にリセット</string>
+    <string name="settings_time_suggest_section">デコードからの提案</string>
+    <string name="settings_time_suggest_label">最近の平均 DT: %1$s</string>
+    <string name="settings_time_suggest_none">まだデコードがありません — 受信を開始すると提案が表示されます。</string>
+    <string name="settings_time_suggest_apply">提案された補正を適用</string>
 </resources>

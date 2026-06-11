@@ -80,6 +80,7 @@ import com.bg7yoz.ft8cn.log.ThirdPartyService;
 import com.bg7yoz.ft8cn.rigs.BaseRig;
 import com.bg7yoz.ft8cn.rigs.BaseRigOperation;
 import com.bg7yoz.ft8cn.rigs.CatConnectionState;
+import com.bg7yoz.ft8cn.rigs.CatLiveness;
 import com.bg7yoz.ft8cn.rigs.DiscoveryTX500Rig;
 import com.bg7yoz.ft8cn.rigs.ElecraftRig;
 import com.bg7yoz.ft8cn.rigs.Flex6000Rig;
@@ -118,6 +119,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Objects;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -236,6 +239,7 @@ public class MainViewModel extends ViewModel {
             //disconnected from rig. A failed connect fires onRunError() then
             //onDisconnected(); afterDisconnect() preserves ERROR so the chip can
             //stay red until the next connect attempt (onConnecting) or a success.
+            stopCatLivenessWatchdog();
             setCatConnectionState(CatConnectionState.afterDisconnect(catConnectionState));
             ToastMessage.show(getStringFromResource(R.string.disconnect_rig));
         }
@@ -251,11 +255,28 @@ public class MainViewModel extends ViewModel {
             //connected to rig
             setCatConnectionState(CatConnectionState.CONNECTED);
             ToastMessage.show(getStringFromResource(R.string.connected_rig));
+            // Push the app's current band/frequency to the rig on every connect —
+            // including an automatic reconnect, which previously left the rig on
+            // whatever frequency it powered up on ("no frequency set after connecting").
+            // setOperationBand() no-ops if the rig isn't actually connected and has its
+            // own settle delay, so a short post keeps us off the connect-callback thread
+            // without racing the link coming up.
+            new Handler(Looper.getMainLooper()).postDelayed(MainViewModel.this::setOperationBand, 1500);
+            // (Re)start the liveness watchdog for this connection.
+            startCatLivenessWatchdog();
         }
 
         @Override
         public void onPttChanged(boolean isOn) {
 
+        }
+
+        @Override
+        public void onRigResponded() {
+            // The rig answered with a valid frequency (changed or not) — the liveness signal.
+            // onFreqChanged only fires on a change, so it can't be used here (a stable dial
+            // would look dead and falsely trip the watchdog).
+            markRigResponded();
         }
 
         @Override
@@ -275,11 +296,79 @@ public class MainViewModel extends ViewModel {
         @Override
         public void onRunError(String message) {
             //rig communication error
+            stopCatLivenessWatchdog();
             setCatConnectionState(CatConnectionState.ERROR);
             ToastMessage.show(String.format(getStringFromResource(R.string.radio_communication_error)
                     , message));
         }
     };
+
+    // ===== CAT liveness watchdog =====
+    // A Bluetooth/serial CAT link can stay "connected" after the radio is powered off (the
+    // BT module keeps the socket up), so the chip stayed green and frequency writes went
+    // nowhere. This watchdog periodically reads the rig's frequency and, if a previously-
+    // responsive rig goes quiet for too long, flips the chip to error. See CatLiveness for
+    // the guard logic (never judges during TX; only arms after the first reply, so a rig
+    // that doesn't echo frequency reads is never falsely marked dead).
+    private static final long CAT_LIVENESS_TICK_MS = 3000;
+    private Timer catLivenessTimer;
+    private volatile long lastRigResponseMs = 0;
+    private volatile boolean sawRigResponseSinceConnect = false;
+
+    /** Record that the rig just demonstrably responded (called from onRigResponded). */
+    private void markRigResponded() {
+        lastRigResponseMs = System.currentTimeMillis();
+        sawRigResponseSinceConnect = true;
+    }
+
+    private synchronized void startCatLivenessWatchdog() {
+        stopCatLivenessWatchdog();
+        lastRigResponseMs = System.currentTimeMillis();
+        sawRigResponseSinceConnect = false;
+        catLivenessTimer = new Timer("cat-liveness");
+        catLivenessTimer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                catLivenessTick();
+            }
+        }, CAT_LIVENESS_TICK_MS, CAT_LIVENESS_TICK_MS);
+    }
+
+    private synchronized void stopCatLivenessWatchdog() {
+        if (catLivenessTimer != null) {
+            catLivenessTimer.cancel();
+            catLivenessTimer.purge();
+            catLivenessTimer = null;
+        }
+    }
+
+    /** One watchdog tick: probe the rig, then declare it dead if it's gone quiet too long. */
+    private void catLivenessTick() {
+        try {
+            boolean connected = isRigConnected();
+            boolean transmitting = ft8TransmitSignal != null && ft8TransmitSignal.isTransmitting();
+            // Actively probe (a frequency read); the reply lands in onRigResponded ->
+            // markRigResponded() (onFreqChanged only fires on a change, so a stable dial
+            // can't be used). On a dead-but-powered BT module the write succeeds but no
+            // reply comes, so the quiet timer below eventually trips.
+            if (CatLiveness.shouldProbe(connected, transmitting) && baseRig != null) {
+                baseRig.readFreqFromRig();
+            }
+            if (CatLiveness.isRigStale(connected, transmitting, sawRigResponseSinceConnect,
+                    System.currentTimeMillis(), lastRigResponseMs, CatLiveness.DEFAULT_TIMEOUT_MS)) {
+                stopCatLivenessWatchdog();
+                setCatConnectionState(CatConnectionState.ERROR);
+                ToastMessage.show(String.format(
+                        getStringFromResource(R.string.radio_communication_error),
+                        getStringFromResource(R.string.disconnect_rig)));
+            }
+        } catch (Exception e) {
+            // Never let a probe failure crash the timer thread; a real I/O error already
+            // surfaces via onRunError(). Log the exception object (not just getMessage(),
+            // which can be null) so the stack trace is preserved.
+            Log.w(TAG, "cat liveness tick failed", e);
+        }
+    }
 
     //message list for signal transmission
     //public ArrayList<Ft8Message> transmitMessages = new ArrayList<>();
@@ -828,6 +917,11 @@ public class MainViewModel extends ViewModel {
             GeneralVariables.transmitMessages.add(message);
             GeneralVariables.resetLaunchSupervision();
         }
+        // Tapping a decode works one specific station: mark this run as a single
+        // QSO so it stops after completion instead of idling on CQ — unless Hunt
+        // or Auto-CQ after QSO is enabled. (Must come after setActivated(true),
+        // which clears the flag on its deactivation path.)
+        ft8TransmitSignal.beginSingleQso();
         ft8TransmitSignal.setTransmit(
                 message.getFromCallTransmitCallsign(),
                 1,
@@ -1500,6 +1594,10 @@ public class MainViewModel extends ViewModel {
     @Override
     protected void onCleared() {
         super.onCleared();
+        // The liveness watchdog otherwise only stops on disconnect/error/stale; if the
+        // ViewModel is cleared while still "connected" the Timer thread would keep probing
+        // the rig indefinitely. Tear it down here too.
+        stopCatLivenessWatchdog();
         PskReporterSender.INSTANCE.stop();
     }
 

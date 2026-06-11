@@ -181,4 +181,90 @@ public class OperationBandTest {
         OperationBand.bandList.add(new OperationBand.Band("*:1840000:160m"));
         assertThat(OperationBand.getModeBandFreq("160m", com.bg7yoz.ft8cn.FT8Common.FT4_MODE))
                 .isEqualTo(-1L);
+    }
+
+    @Test
+    public void ft2BandPlan_dialsResolvePerBand() {
+        // Lock in the canonical FT2 band plan shipped in assets/bands.txt: each
+        // line is "*:freq:waveLength:FT2" and getModeBandFreq must return that dial
+        // for its band when operating in FT2 mode.
+        String[] ft2Lines = {
+                "*:1843000:160m:FT2", "*:3578000:80m:FT2", "*:5360000:60m:FT2",
+                "*:7062000:40m:FT2", "*:10144000:30m:FT2", "*:14084000:20m:FT2",
+                "*:18108000:17m:FT2", "*:21144000:15m:FT2", "*:24923000:12m:FT2",
+                "*:28184000:10m:FT2", "*:50316000:6m:FT2", "*:70157000:4m:FT2",
+                "*:144177000:2m:FT2", "*:222177000:1.25m:FT2", "*:432177000:70cm:FT2",
+                "*:1296177000:23cm:FT2", "*:2400040000:13cm:FT2", "*:10489540000:3cm:FT2"
+        };
+        for (String line : ft2Lines) {
+            OperationBand.bandList.add(new OperationBand.Band(line));
+        }
+        int ft2 = com.bg7yoz.ft8cn.FT8Common.FT2_MODE;
+        assertThat(OperationBand.getModeBandFreq("160m", ft2)).isEqualTo(1_843_000L);
+        assertThat(OperationBand.getModeBandFreq("20m", ft2)).isEqualTo(14_084_000L);
+        assertThat(OperationBand.getModeBandFreq("17m", ft2)).isEqualTo(18_108_000L);
+        assertThat(OperationBand.getModeBandFreq("10m", ft2)).isEqualTo(28_184_000L);
+        assertThat(OperationBand.getModeBandFreq("70cm", ft2)).isEqualTo(432_177_000L);
+        // QO-100 dials exceed 2^31, so they must round-trip as long, not int.
+        assertThat(OperationBand.getModeBandFreq("13cm", ft2)).isEqualTo(2_400_040_000L);
+        assertThat(OperationBand.getModeBandFreq("3cm", ft2)).isEqualTo(10_489_540_000L);
+    }
+
+    @Test
+    public void ft2BandPlan_coversEighteenDistinctBands() {
+        // Guard against an accidental drop of a band line: the plan has 18 entries,
+        // one per wavelength, all tagged FT2.
+        String[] waveLengths = {
+                "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m",
+                "10m", "6m", "4m", "2m", "1.25m", "70cm", "23cm", "13cm", "3cm"
+        };
+        long[] dials = {
+                1_843_000L, 3_578_000L, 5_360_000L, 7_062_000L, 10_144_000L,
+                14_084_000L, 18_108_000L, 21_144_000L, 24_923_000L, 28_184_000L,
+                50_316_000L, 70_157_000L, 144_177_000L, 222_177_000L, 432_177_000L,
+                1_296_177_000L, 2_400_040_000L, 10_489_540_000L
+        };
+        assertThat(waveLengths).hasLength(18);
+        for (int i = 0; i < waveLengths.length; i++) {
+            // Build the canonical "*:dial:waveLength:FT2" line so the entries are
+            // genuinely FT2-tagged (the long/String constructor would default to FT8).
+            OperationBand.bandList.add(new OperationBand.Band(
+                    "*:" + dials[i] + ":" + waveLengths[i] + ":FT2"));
+        }
+        assertThat(OperationBand.getAllWaveLengths()).hasSize(18);
+        // Every entry resolves in FT2 mode, confirming the FT2 tag round-tripped.
+        int ft2 = com.bg7yoz.ft8cn.FT8Common.FT2_MODE;
+        for (int i = 0; i < waveLengths.length; i++) {
+            assertThat(OperationBand.getModeBandFreq(waveLengths[i], ft2)).isEqualTo(dials[i]);
+        }
+    }
+
+    // ---- isBandLine ---------------------------------------------------------
+    // The bands loader must parse only real band entries; comment/blank lines are
+    // skipped so a comment containing a colon can't reach Long.parseLong and crash.
+
+    @Test
+    public void isBandLine_parsesMarkedAndUnmarkedEntries() {
+        assertThat(OperationBand.isBandLine("*:1843000:160m:FT2")).isTrue();
+        assertThat(OperationBand.isBandLine(" :7074000:40m")).isTrue();
+    }
+
+    @Test
+    public void isBandLine_skipsCommentsAndBlanks() {
+        assertThat(OperationBand.isBandLine("# FT2 dial frequencies")).isFalse();
+        assertThat(OperationBand.isBandLine("")).isFalse();
+        assertThat(OperationBand.isBandLine("   ")).isFalse();
+        assertThat(OperationBand.isBandLine(null)).isFalse();
+        // Plain text with no colon is not a band entry.
+        assertThat(OperationBand.isBandLine("just a note")).isFalse();
+    }
+
+    @Test
+    public void isBandLine_skipsCommentEvenWhenItContainsAColon() {
+        // Regression: the QO-100 comment contains a colon. Before the loader skipped
+        // '#' lines, this was parsed as a band and crashed band loading via
+        // Long.parseLong(" 2.4 GHz uplink / 10.489 GHz downlink.").
+        assertThat(OperationBand.isBandLine(
+                "# QO-100 geostationary satellite (Es'hail-2): 2.4 GHz uplink / 10.489 GHz downlink."))
+                .isFalse();
     }}

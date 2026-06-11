@@ -997,9 +997,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         logStr.append("FT8AF ADIF Export<eoh>\n");
         cursor.moveToPosition(-1);
         while (cursor.moveToNext()) {
-            logStr.append(String.format("<call:%d>%s "
-                    , cursor.getString(cursor.getColumnIndex("call")).length()
-                    , cursor.getString(cursor.getColumnIndex("call"))));
+            logStr.append(com.bg7yoz.ft8cn.log.AdifFormat.callField(
+                    cursor.getString(cursor.getColumnIndex("call"))));
             if (!isSWL) {
                 if (cursor.getInt(cursor.getColumnIndex("isLotW_QSL")) == 1) {
                     logStr.append("<QSL_RCVD:1>Y ");
@@ -2008,9 +2007,20 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             if (!showAll){
                 limitStr="limit 100 offset "+offset;
             }
+            // Normalize time_on to a fixed-width 6-digit HHMMSS before max()/ORDER BY.
+            // time_on is stored as variable-width TEXT (ADIF may carry HHMM; the edit
+            // dialog allows arbitrary input), so a value with a dropped leading zero like
+            // "815" (08:15) would otherwise sort after "103000". Restore the hour's leading
+            // zero on odd-length values, then right-pad seconds. Mirrors normalizeTimeOn()
+            // in LogbookScreen.kt so the DB ordering and the Compose sort agree.
+            String normTimeOn =
+                    "CASE WHEN q.time_on IS NULL OR q.time_on='' THEN '000000'\n" +
+                    " WHEN length(q.time_on)%2=1 THEN substr('0'||q.time_on||'000000',1,6)\n" +
+                    " ELSE substr(q.time_on||'000000',1,6) END";
             String querySQL = "select max(q.id) as id, q.[call] as callsign ,q.gridsquare as grid" +
                     ",q.band||\"(\"||q.freq||\" MHz)\" as band \n" +
                     ",q.qso_date as last_time ,q.mode ,q.isQSL,q.isLotW_QSL\n" +
+                    ",max(" + normTimeOn + ") as last_time_on\n" +
                     ",max(q.synced_cloudlog) as synced_cloudlog\n" +
                     ",max(q.synced_qrz) as synced_qrz\n" +
                     "from QSLTable q inner join QSLTable q2 ON q.id =q2.id \n" +
@@ -2019,7 +2029,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     "group by q.[call] ,q.gridsquare,q.freq ,q.qso_date,q.band\n" +
                     ",q.mode,q.isQSL,q.isLotW_QSL\n" +
                     "HAVING q.qso_date =MAX(q2.qso_date) \n" +
-                    "order by q.qso_date desc\n"+
+                    // newest first, by date then time-of-day so same-day QSOs order correctly
+                    "order by q.qso_date desc, last_time_on desc\n"+
                     limitStr;
 
 
@@ -2036,6 +2047,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 record.syncedCloudlog = idxCl >= 0 && cursor.getInt(idxCl) == 1;
                 record.syncedQrz = idxQrz >= 0 && cursor.getInt(idxQrz) == 1;
                 record.setLastTime(cursor.getString(cursor.getColumnIndex("last_time")));
+                int idxTimeOn = cursor.getColumnIndex("last_time_on");
+                if (idxTimeOn >= 0) {
+                    record.setTimeOn(cursor.getString(idxTimeOn));
+                }
                 record.setMode(cursor.getString(cursor.getColumnIndex("mode")));
                 record.setGrid(cursor.getString(cursor.getColumnIndex("grid")));
                 record.setBand(cursor.getString(cursor.getColumnIndex("band")));

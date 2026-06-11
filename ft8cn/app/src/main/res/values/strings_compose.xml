@@ -112,6 +112,13 @@
     <string name="tx_call_cq">Call CQ</string>
     <string name="tx_stop">Stop</string>
 
+    <!-- ===== Hound (DXpedition) setup ===== -->
+    <string name="hound_title">Work a DXpedition (Hound)</string>
+    <string name="hound_help">Tune the rig to the Fox\'s published dial frequency first. You call high (1000–4000 Hz); the app auto-QSYs you down to where the Fox answers and replies with your report.</string>
+    <string name="hound_fox_callsign">Fox callsign</string>
+    <string name="hound_call_frequency">Call frequency (Hz, 1000–4000)</string>
+    <string name="hound_start">Start</string>
+
     <!-- ===== CAT status chip ===== -->
     <string name="cat_status_chip_label">CAT</string>
     <string name="cat_status_connected">CAT connected — tap to reconnect</string>

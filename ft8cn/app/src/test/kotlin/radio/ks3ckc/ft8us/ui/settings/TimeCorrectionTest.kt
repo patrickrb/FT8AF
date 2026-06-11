@@ -14,14 +14,16 @@ class TimeCorrectionTest {
         assertThat(clampCorrectionMs(0)).isEqualTo(0)
         assertThat(clampCorrectionMs(500)).isEqualTo(500)
         assertThat(clampCorrectionMs(-500)).isEqualTo(-500)
-        assertThat(clampCorrectionMs(TIME_CORRECTION_MAX_MS)).isEqualTo(2000)
-        assertThat(clampCorrectionMs(TIME_CORRECTION_MIN_MS)).isEqualTo(-2000)
+        assertThat(clampCorrectionMs(TIME_CORRECTION_MAX_MS)).isEqualTo(5000)
+        assertThat(clampCorrectionMs(TIME_CORRECTION_MIN_MS)).isEqualTo(-5000)
+        // The reported real-world case: an offline phone needing ~3.4 s is now in range.
+        assertThat(clampCorrectionMs(3400)).isEqualTo(3400)
     }
 
     @Test
     fun clamp_pinsBeyondRange() {
-        assertThat(clampCorrectionMs(5000)).isEqualTo(2000)
-        assertThat(clampCorrectionMs(-5000)).isEqualTo(-2000)
+        assertThat(clampCorrectionMs(9000)).isEqualTo(5000)
+        assertThat(clampCorrectionMs(-9000)).isEqualTo(-5000)
     }
 
     @Test
@@ -29,10 +31,10 @@ class TimeCorrectionTest {
         assertThat(stepCorrectionMs(0, 100)).isEqualTo(100)
         assertThat(stepCorrectionMs(0, -100)).isEqualTo(-100)
         assertThat(stepCorrectionMs(400, 500)).isEqualTo(900)
-        // +0.5 s past the +2.0 s rail pins to the max.
-        assertThat(stepCorrectionMs(1800, 500)).isEqualTo(2000)
-        // -0.5 s past the -2.0 s rail pins to the min.
-        assertThat(stepCorrectionMs(-1800, -500)).isEqualTo(-2000)
+        // +0.5 s past the +5.0 s rail pins to the max.
+        assertThat(stepCorrectionMs(4800, 500)).isEqualTo(5000)
+        // -0.5 s past the -5.0 s rail pins to the min.
+        assertThat(stepCorrectionMs(-4800, -500)).isEqualTo(-5000)
     }
 
     @Test
@@ -49,8 +51,11 @@ class TimeCorrectionTest {
 
     @Test
     fun suggested_clampsToRange() {
-        assertThat(suggestedCorrectionMs(0, -5.0f)).isEqualTo(2000)
-        assertThat(suggestedCorrectionMs(0, 5.0f)).isEqualTo(-2000)
+        // Within ±5 s the suggestion passes through unclamped...
+        assertThat(suggestedCorrectionMs(0, -3.4f)).isEqualTo(3400)
+        // ...and only a larger-than-range DT pins to the rail.
+        assertThat(suggestedCorrectionMs(0, -7.0f)).isEqualTo(5000)
+        assertThat(suggestedCorrectionMs(0, 7.0f)).isEqualTo(-5000)
     }
 
     @Test

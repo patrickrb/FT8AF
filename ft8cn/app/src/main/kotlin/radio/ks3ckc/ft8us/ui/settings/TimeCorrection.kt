@@ -9,13 +9,17 @@ import kotlin.math.roundToInt
  * the Composable so it can be unit-tested directly (Compose/DrawScope code can't).
  *
  * The correction is a millisecond offset that drives `UtcTimer.delay`; positive
- * shifts the app's clock forward. FT8 only tolerates being a second or two off
- * the 15 s cycle, so the range is intentionally tight.
+ * shifts the app's clock forward.
+ *
+ * The range has to cover the *device clock error*, not FT8's much tighter decode
+ * tolerance: a phone that's been offline for a while (no NTP) can drift several
+ * seconds, and the correction is what pulls that back toward 0. A field report of
+ * a Samsung A50 needing over 3 s while offline is why this is ±5 s, not ±2 s.
  */
 
 /** Inclusive bounds for the manual correction, in milliseconds. */
-internal const val TIME_CORRECTION_MIN_MS = -2000
-internal const val TIME_CORRECTION_MAX_MS = 2000
+internal const val TIME_CORRECTION_MIN_MS = -5000
+internal const val TIME_CORRECTION_MAX_MS = 5000
 
 /** Coerce an arbitrary correction into the allowed range. */
 internal fun clampCorrectionMs(ms: Int): Int =
