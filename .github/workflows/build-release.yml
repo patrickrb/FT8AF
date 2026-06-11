@@ -167,7 +167,12 @@ jobs:
           # and any crash — live instead of leaving the step a black box.
           script: |
             adb logcat -c || true
-            adb logcat -s TestRunner:I '*:E' &
+            # TestRunner:I → each test's started:/finished:; AndroidRuntime:E and
+            # *:F → real app crashes/uncaught exceptions. Deliberately NOT '*:E':
+            # a fresh google_apis image floods error-level logs with unrelated
+            # Play-services noise (Firebase, ConnectivityService) that buries the
+            # test signal.
+            adb logcat -s TestRunner:I AndroidRuntime:E '*:F' &
             logcat_pid=$!
             ./gradlew connectedDebugAndroidTest --stacktrace
             status=$?
