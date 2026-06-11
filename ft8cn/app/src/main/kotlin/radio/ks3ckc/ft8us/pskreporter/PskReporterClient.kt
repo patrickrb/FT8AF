@@ -88,6 +88,11 @@ object PskReporterClient {
         }
         if (!force && lastFetchEpochMs != 0L && now - lastFetchEpochMs < COOLDOWN_MS) {
             log("skipped (client cooldown ${(COOLDOWN_MS - (now - lastFetchEpochMs)) / 1000}s remaining)")
+            // A cooldown skip is benign (not a failed attempt), so clear any stale
+            // error — otherwise a caller surfacing lastError (the map overlay) would
+            // keep showing a prior transport/HTTP error during normal throttling.
+            // The rate-limit back-off skip above intentionally keeps lastError set.
+            lastError = null
             return@withContext null
         }
         lastFetchEpochMs = now

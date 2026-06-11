@@ -99,6 +99,24 @@ class PskReporterClientTest {
     }
 
     @Test
+    fun fetchSpots_cooldownSkipClearsStaleError() = runBlocking<Unit> {
+        // First fetch fails with a server error, setting lastError.
+        server.enqueue(MockResponse().setResponseCode(500))
+        val failed = PskReporterClient.fetchSpotsForMe("W1AW", 900)
+        assertThat(failed).isNull()
+        assertThat(PskReporterClient.lastError).isNotNull()
+
+        // A second call within the cooldown is a benign skip (not a failed attempt),
+        // so it must clear lastError — the overlay shouldn't keep showing a stale error.
+        now += 30_000L
+        val skipped = PskReporterClient.fetchSpotsForMe("W1AW", 900)
+        assertThat(skipped).isNull()
+        assertThat(PskReporterClient.lastError).isNull()
+        // Confirm it really was a cooldown skip, not a network call.
+        assertThat(server.requestCount).isEqualTo(1)
+    }
+
+    @Test
     fun fetchSpots_forceStillRespectsRateLimitBackoff() = runBlocking<Unit> {
         server.enqueue(MockResponse().setResponseCode(429))
 

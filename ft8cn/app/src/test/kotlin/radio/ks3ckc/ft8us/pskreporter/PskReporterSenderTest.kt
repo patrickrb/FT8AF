@@ -459,12 +459,15 @@ class PskReporterSenderTest {
         }
     }
 
-    /** Decode a hex string (whitespace ignored) into bytes for golden-vector comparison. */
+    /** Decode a hex string (all whitespace ignored) into bytes for golden-vector comparison. */
     private fun hex(s: String): ByteArray {
-        val clean = s.replace(" ", "")
+        val clean = s.filterNot { it.isWhitespace() }
         require(clean.length % 2 == 0) { "odd-length hex string" }
         return ByteArray(clean.length / 2) {
-            ((Character.digit(clean[it * 2], 16) shl 4) or Character.digit(clean[it * 2 + 1], 16)).toByte()
+            val hi = Character.digit(clean[it * 2], 16)
+            val lo = Character.digit(clean[it * 2 + 1], 16)
+            require(hi >= 0 && lo >= 0) { "invalid hex digit at index ${it * 2} in: $clean" }
+            ((hi shl 4) or lo).toByte()
         }
     }
 }
