@@ -204,6 +204,11 @@ dependencies {
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
 
     // --- Connected (instrumented) tests ---
+    // The compose BOM is on `implementation`, which does NOT flow into the
+    // androidTest classpath (unlike testImplementation), so the versionless
+    // ui-test-junit4 below resolves to no version and fails. Apply the BOM here
+    // too so it gets the same managed version the main + unit-test classpaths do.
+    androidTestImplementation composeBom
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
     androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
