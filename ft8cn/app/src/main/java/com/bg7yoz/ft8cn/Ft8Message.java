@@ -27,6 +27,8 @@ import com.google.android.gms.maps.model.LatLng;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 public class Ft8Message {
     private static String TAG = "Ft8Message";
@@ -431,7 +433,7 @@ t71     Telemetry data, up to 18 hex digits
         if (raw == null) {
             return false;
         }
-        String s = raw.trim().toUpperCase();
+        String s = raw.trim().toUpperCase(Locale.ROOT);
         if (s.isEmpty()) {
             return false;
         }
@@ -441,8 +443,15 @@ t71     Telemetry data, up to 18 hex digits
         if (s.startsWith("<") && s.endsWith(">")) {
             s = s.substring(1, s.length() - 1);// strip the hashed / non-standard wrapper
         }
-        return s.matches("[A-Z0-9/]+");
+        return CALLSIGN_ALPHABET.matcher(s).matches();
     }
+
+    /**
+     * The {@code [A-Z0-9/]} callsign alphabet, precompiled because
+     * {@link #isPlausibleCallsign(String)} runs on the per-cycle decode hot path
+     * (via {@link #isJunkDecode()} -> {@code OwnTxEchoFilter.filter}).
+     */
+    private static final Pattern CALLSIGN_ALPHABET = Pattern.compile("[A-Z0-9/]+");
 
     /**
      * True when this is a structured decode (one that carries real callsign
