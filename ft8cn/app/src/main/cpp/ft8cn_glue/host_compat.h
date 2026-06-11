@@ -17,6 +17,12 @@
 
 // POSIX stpcpy: copy s into d (incl. NUL), return pointer to the NUL. Used by
 // ft8_lib message.c / unpack.c when assembling decoded message text.
+//
+// Only the MSVC CRT is missing stpcpy; glibc, bionic, musl, and MinGW-w64 all
+// provide it, and shadowing the real one there would conflict. Gate on
+// _MSC_VER so this shim only appears under MSVC (which is what our host clang
+// targets — it defines _MSC_VER). Skip it if something already defined stpcpy.
+#if defined(_MSC_VER) && !defined(stpcpy)
 static inline char* ft8cn_stpcpy(char* d, const char* s)
 {
     size_t n = strlen(s);
@@ -24,5 +30,6 @@ static inline char* ft8cn_stpcpy(char* d, const char* s)
     return d + n;
 }
 #define stpcpy ft8cn_stpcpy
+#endif
 
 #endif // FT8CN_HOST_COMPAT_H

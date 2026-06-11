@@ -114,9 +114,13 @@ static const uint32_t kGoldenHash[][3] = { // { h22, h12, h10 }
 #define N_CALL ((int)(sizeof(kCalls) / sizeof(kCalls[0])))
 
 // ---------------------------------------------------------------------------
-// compute_n22 — copied verbatim from ft8cn_glue/jni_ft8cn.cpp (the code that
-// backs FT8Package.getHash10/12/22). Reproduced here so the host test exercises
-// the same arithmetic the JNI layer ships.
+// compute_n22 — the WSJT-X callsign hash that backs FT8Package.getHash10/12/22.
+// This is the same arithmetic as save_callsign() in ft8_lib/ft8/message.c (the
+// authoritative, tracked source the prebuilt libft8cn.so was built from):
+// base-38 over an 11-char field via FT8_CHAR_TABLE_ALPHANUM_SPACE_SLASH, times
+// the 47055833459 magic constant, top 22 bits; h12 = n22>>10, h10 = n22>>12.
+// Reproduced inline (rather than linked) so the host test stays independent of
+// the JNI layer while exercising the identical computation getHash10/12/22 ships.
 // ---------------------------------------------------------------------------
 static uint32_t compute_n22(const char* call)
 {
@@ -145,7 +149,11 @@ static int is_costas_pos(int t)
 }
 
 // 79 tones -> 174-bit hard codeword (one byte per bit), via inverse Gray map.
-static void tones_to_codeword(const uint8_t tones[79], uint8_t cw[FTX_LDPC_N])
+// Returns 1 on success, 0 if any tone is out of range (> 7) or the bit count
+// doesn't land on exactly FTX_LDPC_N. Validating the tone range keeps a corrupt
+// golden table (or a regression that emits an out-of-range tone) from indexing
+// inv_gray[] out of bounds — the test reports a clean failure instead of UB.
+static int tones_to_codeword(const uint8_t tones[79], uint8_t cw[FTX_LDPC_N])
 {
     uint8_t inv_gray[8];
     for (int b = 0; b < 8; ++b) inv_gray[kFT8_Gray_map[b]] = (uint8_t)b;
@@ -153,11 +161,13 @@ static void tones_to_codeword(const uint8_t tones[79], uint8_t cw[FTX_LDPC_N])
     for (int t = 0; t < 79; ++t)
     {
         if (is_costas_pos(t)) continue;
+        if (tones[t] > 7) return 0; // out-of-range tone: bail before OOB read
         uint8_t b3 = inv_gray[tones[t]];
         cw[bit++] = (b3 >> 2) & 1;
         cw[bit++] = (b3 >> 1) & 1;
         cw[bit++] = (b3 >> 0) & 1;
     }
+    return bit == FTX_LDPC_N; // 58 data symbols * 3 bits == 174
 }
 
 // Count unsatisfied LDPC parity checks over a hard codeword. Verbatim port of
@@ -238,7 +248,11 @@ static void test_inverse_crosscheck(void)
     for (int k = 0; k < N_MSG; ++k)
     {
         uint8_t cw[FTX_LDPC_N];
-        tones_to_codeword(kGoldenTones[k], cw);
+        if (!tones_to_codeword(kGoldenTones[k], cw))
+        {
+            CHECK(0, "[%s] tones->codeword failed (out-of-range tone)", kMsgs[k]);
+            continue; // cw is undefined on failure; skip LDPC/CRC for this msg
+        }
 
         CHECK(ldpc_check_hard(cw) == 0,
               "[%s] LDPC parity not satisfied", kMsgs[k]);
