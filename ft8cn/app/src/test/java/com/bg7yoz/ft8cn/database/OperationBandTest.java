@@ -226,7 +226,45 @@ public class OperationBandTest {
         };
         assertThat(waveLengths).hasLength(18);
         for (int i = 0; i < waveLengths.length; i++) {
-            OperationBand.bandList.add(new OperationBand.Band(dials[i], waveLengths[i]));
+            // Build the canonical "*:dial:waveLength:FT2" line so the entries are
+            // genuinely FT2-tagged (the long/String constructor would default to FT8).
+            OperationBand.bandList.add(new OperationBand.Band(
+                    "*:" + dials[i] + ":" + waveLengths[i] + ":FT2"));
         }
         assertThat(OperationBand.getAllWaveLengths()).hasSize(18);
+        // Every entry resolves in FT2 mode, confirming the FT2 tag round-tripped.
+        int ft2 = com.bg7yoz.ft8cn.FT8Common.FT2_MODE;
+        for (int i = 0; i < waveLengths.length; i++) {
+            assertThat(OperationBand.getModeBandFreq(waveLengths[i], ft2)).isEqualTo(dials[i]);
+        }
+    }
+
+    // ---- isBandLine ---------------------------------------------------------
+    // The bands loader must parse only real band entries; comment/blank lines are
+    // skipped so a comment containing a colon can't reach Long.parseLong and crash.
+
+    @Test
+    public void isBandLine_parsesMarkedAndUnmarkedEntries() {
+        assertThat(OperationBand.isBandLine("*:1843000:160m:FT2")).isTrue();
+        assertThat(OperationBand.isBandLine(" :7074000:40m")).isTrue();
+    }
+
+    @Test
+    public void isBandLine_skipsCommentsAndBlanks() {
+        assertThat(OperationBand.isBandLine("# FT2 dial frequencies")).isFalse();
+        assertThat(OperationBand.isBandLine("")).isFalse();
+        assertThat(OperationBand.isBandLine("   ")).isFalse();
+        assertThat(OperationBand.isBandLine(null)).isFalse();
+        // Plain text with no colon is not a band entry.
+        assertThat(OperationBand.isBandLine("just a note")).isFalse();
+    }
+
+    @Test
+    public void isBandLine_skipsCommentEvenWhenItContainsAColon() {
+        // Regression: the QO-100 comment contains a colon. Before the loader skipped
+        // '#' lines, this was parsed as a band and crashed band loading via
+        // Long.parseLong(" 2.4 GHz uplink / 10.489 GHz downlink.").
+        assertThat(OperationBand.isBandLine(
+                "# QO-100 geostationary satellite (Es'hail-2): 2.4 GHz uplink / 10.489 GHz downlink."))
+                .isFalse();
     }}

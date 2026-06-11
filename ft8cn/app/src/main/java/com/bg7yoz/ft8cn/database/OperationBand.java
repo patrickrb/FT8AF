@@ -88,7 +88,7 @@ public class OperationBand {
             InputStream inputStream= assetManager.open("bands.txt");
             String[] st=getLinesFromInputStream(inputStream,"\n");
             for (int i = 0; i <st.length ; i++) {
-                if (!st[i].contains(":")){
+                if (!isBandLine(st[i])){
                     continue;
                 }
                bandList.add(new Band(st[i]));
@@ -98,6 +98,20 @@ public class OperationBand {
             e.printStackTrace();
             Log.e(TAG, "Error extracting data from band list file: "+e.getMessage() );
         }
+    }
+
+    /**
+     * Whether a bands.txt line is a band entry (vs. a comment or blank line).
+     * A line is parsed as a band only when it is non-blank, is not a {@code #}
+     * comment, and contains a colon. Skipping {@code #} comments lets comments
+     * contain colons (e.g. URLs, frequency ranges) without the loader trying to
+     * {@code Long.parseLong} them and crashing band-list loading.
+     */
+    static boolean isBandLine(String line) {
+        if (line == null) return false;
+        String trimmed = line.trim();
+        if (trimmed.isEmpty() || trimmed.startsWith("#")) return false;
+        return trimmed.contains(":");
     }
     public static String getBandInfo(int index){
         if (index>=bandList.size()){

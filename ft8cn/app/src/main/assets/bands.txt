@@ -48,7 +48,7 @@
 *:50318000:6m:FT4
 *:144170000:2m:FT4
 # FT2 dial frequencies (canonical FT2 band plan).
-# Comment lines contain no colon, so the bands loader skips them.
+# Lines beginning with # are comments and are skipped by the bands loader.
 *:1843000:160m:FT2
 *:3578000:80m:FT2
 *:5360000:60m:FT2
