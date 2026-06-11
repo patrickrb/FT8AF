@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -32,8 +33,6 @@ import radio.ks3ckc.ft8us.theme.TextMuted
 
 @Composable
 fun SlotTimerBar(
-    activeTxSlot: Int,
-    isActivated: Boolean,
     slotMillis: Long = 15_000L,
     modifier: Modifier = Modifier,
 ) {
@@ -48,7 +47,7 @@ fun SlotTimerBar(
     }
 
     val state = slotTimerState(nowMs, slotMillis)
-    val fillColor = if (isActivated && state.currentSlot == activeTxSlot) Accent else Signal
+    val fillColor = slotBarColor(state.currentSlot)
 
     Row(
         modifier = modifier
@@ -83,6 +82,17 @@ fun SlotTimerBar(
         )
     }
 }
+
+/**
+ * Color the slot bar by cycle parity, so the two alternating FT8 slots are visually
+ * distinguishable at a glance: the even slot ([UtcTimer.sequential] == 0) is the warm
+ * [Accent] (orange), the odd slot ([UtcTimer.sequential] == 1) is the cool [Signal] (blue).
+ *
+ * Extracted as a pure function so the parity→color mapping can be unit-tested without
+ * Compose, and so it can't silently regress to a single color again.
+ */
+internal fun slotBarColor(currentSlot: Int): Color =
+    if (currentSlot % 2 == 0) Accent else Signal
 
 /** The fill fraction, countdown label, and slot index the bar renders for a given instant. */
 internal data class SlotTimerState(
