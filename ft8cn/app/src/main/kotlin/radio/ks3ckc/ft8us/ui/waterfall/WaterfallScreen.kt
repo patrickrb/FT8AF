@@ -47,6 +47,24 @@ import radio.ks3ckc.ft8us.theme.*
 import radio.ks3ckc.ft8us.ui.components.TopBar
 
 /**
+ * Height of the columnar spectrum strip above the waterfall canvas. Taller than
+ * the original 56.dp so peaks have more vertical room to read at a glance
+ * (issue #206). The strip's [ColumnarView] is MATCH_PARENT, so it scales to
+ * whatever height this modifier gives it; the waterfall canvas below keeps the
+ * remaining space via weight(1f).
+ */
+internal val SpectrumStripHeight = 96.dp
+
+/**
+ * Height of the bottom info/toggle strip (clock, NR/MSG toggles, live status)
+ * at the bottom of the waterfall screen. Fixed so the floating QSO panel can
+ * offset itself by exactly this much (see FT8USApp.qsoPanelOverlaysContent) and
+ * leave the strip's controls reachable during an active QSO instead of covering
+ * them — all without resizing the waterfall AndroidView.
+ */
+internal val WaterfallBottomStripHeight = 34.dp
+
+/**
  * Holder for view references using plain @Volatile fields.
  * Avoids Compose snapshot system overhead when accessed from callbacks.
  */
@@ -183,7 +201,7 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
+                .height(SpectrumStripHeight),
         )
 
         FrequencyRuler(
@@ -215,12 +233,14 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
                 .fillMaxWidth(),
         )
 
-        // Bottom info strip
+        // Bottom info strip. Fixed height (WaterfallBottomStripHeight) so the
+        // floating QSO panel can sit just above it instead of covering it.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(WaterfallBottomStripHeight)
                 .background(BgSurface)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(

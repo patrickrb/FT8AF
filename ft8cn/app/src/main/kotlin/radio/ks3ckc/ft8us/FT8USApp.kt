@@ -54,7 +54,20 @@ import radio.ks3ckc.ft8us.ui.logbook.LogbookScreen
 import radio.ks3ckc.ft8us.ui.map.MapScreen
 import radio.ks3ckc.ft8us.ui.pota.PotaScreen
 import radio.ks3ckc.ft8us.ui.settings.SettingsScreen
+import radio.ks3ckc.ft8us.ui.waterfall.WaterfallBottomStripHeight
 import radio.ks3ckc.ft8us.ui.waterfall.WaterfallScreen
+
+/**
+ * Whether the active QSO panel should float over the screen content (true)
+ * rather than dock below it in the main column (false).
+ *
+ * The Waterfall tab overlays it: docking the panel shrinks the content area,
+ * and resizing the waterfall's AndroidView rescales it and wipes its
+ * accumulated history (see WaterfallView.onSizeChanged). Floating keeps the
+ * waterfall at a constant height. List-style screens (decode, log, settings,
+ * POTA, map) dock it, where pushing their content up is harmless.
+ */
+internal fun qsoPanelOverlaysContent(tab: FT8USTab): Boolean = tab == FT8USTab.WATERFALL
 
 @Composable
 fun FT8USApp(mainViewModel: MainViewModel) {
@@ -140,6 +153,31 @@ fun FT8USApp(mainViewModel: MainViewModel) {
     val swrLocked by mainViewModel.meterProtectionController.swrLockout.observeAsState(false)
     val lockoutSwrRatio by mainViewModel.meterProtectionController.lockoutSwrRatio.observeAsState("")
 
+    // Reopen the full QSO sheet from the panel header: jump to the Decode tab,
+    // bind the current TX target, and clear the minimized flag.
+    val reopenQsoSheet: () -> Unit = {
+        activeTab = FT8USTab.DECODE
+        val target = mainViewModel.ft8TransmitSignal.mutableToCallsign.value?.callsign
+        if (!target.isNullOrEmpty() && target != "CQ") {
+            if (mainViewModel.qsoSheetCallsign.value != target) {
+                mainViewModel.qsoSheetCallsign.postValue(target)
+            }
+        }
+        mainViewModel.qsoSheetMinimized.postValue(false)
+    }
+
+    // Single definition of the panel, placed either docked in the column or
+    // floated over the content (see qsoPanelOverlaysContent).
+    val qsoPanel: @Composable (Modifier) -> Unit = { panelModifier ->
+        ActiveQsoPanel(
+            mainViewModel = mainViewModel,
+            expanded = qsoPanelExpanded,
+            onCollapse = { qsoPanelExpanded = false },
+            onReopenSheet = reopenQsoSheet,
+            modifier = panelModifier,
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(BgApp)) {
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -199,27 +237,30 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                     FT8USTab.LOG -> LogbookScreen(mainViewModel)
                     FT8USTab.SETTINGS -> SettingsScreen(mainViewModel)
                 }
+
+                // On the Waterfall tab the QSO panel floats over the bottom of
+                // the waterfall instead of docking below it, so the waterfall
+                // keeps its full height (docking would resize the AndroidView,
+                // rescaling and wiping it). It sits directly above the waterfall's
+                // own bottom info/toggle strip (offset by WaterfallBottomStripHeight)
+                // so those controls stay reachable during an active QSO instead of
+                // being covered — still without resizing the AndroidView.
+                if (qsoPanelOverlaysContent(activeTab)) {
+                    qsoPanel(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = WaterfallBottomStripHeight),
+                    )
+                }
             }
 
-            // Active QSO panel — slides up above TxStrip when a QSO is in progress
-            ActiveQsoPanel(
-                mainViewModel = mainViewModel,
-                expanded = qsoPanelExpanded,
-                onCollapse = { qsoPanelExpanded = false },
-                onReopenSheet = {
-                    // Switch to the Decode tab so the bottom sheet is visible,
-                    // then expand it (clears minimized flag, ensures a callsign
-                    // is bound to the current TX target).
-                    activeTab = FT8USTab.DECODE
-                    val target = mainViewModel.ft8TransmitSignal.mutableToCallsign.value?.callsign
-                    if (!target.isNullOrEmpty() && target != "CQ") {
-                        if (mainViewModel.qsoSheetCallsign.value != target) {
-                            mainViewModel.qsoSheetCallsign.postValue(target)
-                        }
-                    }
-                    mainViewModel.qsoSheetMinimized.postValue(false)
-                },
-            )
+            // Active QSO panel (docked) — slides up above TxStrip when a QSO is
+            // in progress. On the Waterfall tab it is floated over the content
+            // above instead (see qsoPanelOverlaysContent) so it never resizes
+            // the waterfall.
+            if (!qsoPanelOverlaysContent(activeTab)) {
+                qsoPanel(Modifier)
+            }
 
             // Slot timer bar — fills 0→100% across each slot (15s FT8 / 7.5s FT4)
             SlotTimerBar(
