@@ -10,11 +10,18 @@ import org.junit.Test
 class WaterfallScreenLayoutTest {
 
     @Test
-    fun spectrumStrip_isTallerThanOriginalAndTheRulerBelowIt() {
+    fun spectrumStrip_isTallerThanOriginal() {
         // #206: the spectrum strip was enlarged from the original 56.dp. Guard
-        // against a regression that shrinks it back below that legible height,
-        // and keep it clearly taller than the 20.dp frequency ruler beneath it.
+        // against a regression that shrinks it back below that legible height.
         assertThat(SpectrumStripHeight.value).isAtLeast(56f)
-        assertThat(SpectrumStripHeight.value).isGreaterThan(20f)
+    }
+
+    @Test
+    fun bottomStripHeight_isAPositiveOffset() {
+        // The floating QSO panel offsets itself up by this much so the waterfall's
+        // bottom info/toggle strip stays reachable during a QSO. It must be a real
+        // (positive) reservation, and a thin strip rather than a full-height panel.
+        assertThat(WaterfallBottomStripHeight.value).isGreaterThan(0f)
+        assertThat(WaterfallBottomStripHeight.value).isLessThan(SpectrumStripHeight.value)
     }
 }

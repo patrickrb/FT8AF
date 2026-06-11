@@ -54,6 +54,7 @@ import radio.ks3ckc.ft8us.ui.logbook.LogbookScreen
 import radio.ks3ckc.ft8us.ui.map.MapScreen
 import radio.ks3ckc.ft8us.ui.pota.PotaScreen
 import radio.ks3ckc.ft8us.ui.settings.SettingsScreen
+import radio.ks3ckc.ft8us.ui.waterfall.WaterfallBottomStripHeight
 import radio.ks3ckc.ft8us.ui.waterfall.WaterfallScreen
 
 /**
@@ -240,11 +241,16 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                 // On the Waterfall tab the QSO panel floats over the bottom of
                 // the waterfall instead of docking below it, so the waterfall
                 // keeps its full height (docking would resize the AndroidView,
-                // rescaling and wiping it). The panel sits flush with the bottom
-                // of the content area, directly above the slot/TX/tab bars —
-                // visually the same place as when docked.
+                // rescaling and wiping it). It sits directly above the waterfall's
+                // own bottom info/toggle strip (offset by WaterfallBottomStripHeight)
+                // so those controls stay reachable during an active QSO instead of
+                // being covered — still without resizing the AndroidView.
                 if (qsoPanelOverlaysContent(activeTab)) {
-                    qsoPanel(Modifier.align(Alignment.BottomCenter))
+                    qsoPanel(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = WaterfallBottomStripHeight),
+                    )
                 }
             }
 
