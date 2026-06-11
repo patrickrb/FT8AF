@@ -26,6 +26,12 @@ android {
         applicationId "radio.ks3ckc.ft8af"
         minSdk 23
         targetSdk 35
+        // Required for the androidTest suite to actually run: our instrumented
+        // tests use @RunWith(AndroidJUnit4::class). Without this, AGP falls back
+        // to the legacy android.test.InstrumentationTestRunner, which discovers
+        // none of them — connectedDebugAndroidTest then reports "Starting 0
+        // tests" and passes vacuously (a false green).
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         // CI builds derive versionCode from GITHUB_RUN_NUMBER + offset, so each
         // run gets a unique, monotonically increasing value Play Console will
         // accept. Offset clears the manual-upload history (current max in
