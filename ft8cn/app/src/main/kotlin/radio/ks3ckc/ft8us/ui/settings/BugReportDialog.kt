@@ -2,6 +2,7 @@ package radio.ks3ckc.ft8us.ui.settings
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -136,12 +137,21 @@ private fun gatherInfo(): BugReportInfo = BugReportInfo(
  * Fire an email intent prefilled with the report body, addressed to the maintainer,
  * attaching debug.log when it exists. Mirrors the FileProvider/flags handling in
  * [DebugLogScreen.shareDebugLog].
+ *
+ * Uses an ACTION_SEND intent (so the debug.log attachment rides along via
+ * EXTRA_STREAM) narrowed with a `mailto:` selector. The selector restricts the
+ * candidate apps to email handlers, so the report — which carries the operator's
+ * callsign and device info — can't be sent to an arbitrary share target like a
+ * messaging or social app.
  */
 private fun sendBugReportEmail(context: Context, description: String) {
     val info = gatherInfo()
     val logFile = context.getExternalFilesDir(null)?.let { File(it, "debug.log") }
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
+        // Narrow the chooser to email apps only; a bare ACTION_SEND would let any
+        // share target (messaging, social, etc.) receive the callsign/device block.
+        selector = Intent(Intent.ACTION_SENDTO).apply { data = Uri.parse("mailto:") }
         putExtra(Intent.EXTRA_EMAIL, arrayOf(context.getString(R.string.bug_report_email)))
         putExtra(Intent.EXTRA_SUBJECT, buildBugReportTitle(info))
         putExtra(Intent.EXTRA_TEXT, buildBugReportBody(description, info))
@@ -152,10 +162,7 @@ private fun sendBugReportEmail(context: Context, description: String) {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
-    context.startActivity(
-        Intent.createChooser(intent, context.getString(R.string.settings_report_bug)).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        },
-    )
+    context.startActivity(intent)
 }
