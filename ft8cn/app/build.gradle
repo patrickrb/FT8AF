@@ -5,6 +5,9 @@ plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
     id 'jacoco'
+    // Static analysis (issue #63).
+    id 'io.gitlab.arturbosch.detekt'
+    id 'org.jlleitschuh.gradle.ktlint'
 }
 
 def currentTime = getCurrentTime()
@@ -211,6 +214,32 @@ dependencies {
 
 jacoco {
     toolVersion = '0.8.12'
+}
+
+// --- Static analysis (issue #63) ---
+//
+// Both tools fail their own task on a NEW violation so a developer running
+// them locally gets a clear signal. CI keeps them warn-only during the rollout
+// (see .github/workflows/static-analysis.yml) by not gating on the step; the
+// flip to blocking is a one-line change there.
+
+detekt {
+    // Layer our correctness-only overrides on top of detekt's bundled defaults.
+    buildUponDefaultConfig = true
+    config.setFrom(files("$projectDir/config/detekt/detekt.yml"))
+    // Existing findings are recorded here so only new code is policed.
+    baseline = file("$projectDir/config/detekt/baseline.xml")
+    parallel = true
+}
+
+ktlint {
+    version = '1.2.1'
+    android = true
+    // Reports for CI to upload as artifacts.
+    reporters {
+        reporter org.jlleitschuh.gradle.ktlint.reporter.ReporterType.PLAIN
+        reporter org.jlleitschuh.gradle.ktlint.reporter.ReporterType.HTML
+    }
 }
 
 // Robolectric loads app classes through its own classloader, which JaCoCo's
