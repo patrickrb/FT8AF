@@ -19,6 +19,14 @@ import java.util.Date
 import java.util.Locale
 
 /**
+ * Thrown by [PotaClient.uploadAdif] when POTA's endpoint returns a non-2xx HTTP
+ * status. Carries the status so the UI can tell a server-side rejection (5xx —
+ * usually a bad park ref or unregistered callsign) from a client/auth problem.
+ */
+class PotaUploadException(val httpCode: Int, val body: String) :
+    Exception("HTTP $httpCode${if (body.isNotBlank()) ": ${body.take(160)}" else ""}")
+
+/**
  * Talks to pota.app's read+write endpoints. Mirrors [radio.ks3ckc.ft8us.pskreporter.PskReporterClient]:
  *   - HttpURLConnection only (no extra deps).
  *   - Coroutine-friendly suspend functions on Dispatchers.IO.
@@ -147,7 +155,7 @@ object PotaClient {
                 if (code !in 200..299) {
                     val err = conn.errorStream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() } ?: ""
                     log("uploadAdif $filename -> http $code ${err.take(200)}")
-                    return@withContext Result.failure(IllegalStateException("HTTP $code${if (err.isNotBlank()) ": ${err.take(160)}" else ""}"))
+                    return@withContext Result.failure(PotaUploadException(code, err))
                 }
                 val resp = conn.inputStream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() } ?: ""
                 log("uploadAdif ok $filename (${payload.size}B) -> ${resp.take(120)}")
