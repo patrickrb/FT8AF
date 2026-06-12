@@ -180,4 +180,34 @@ class BluetoothAutoConnectTest {
             ),
         ).isEqualTo(BtAutoConnectDecision.ALREADY_CONNECTED)
     }
+
+    // --- maskBluetoothAddress: keep debug.log free of the raw MAC (PR #228 review) ---
+
+    @Test
+    fun maskKeepsOnlyFirstAndLastOctet() {
+        assertThat(maskBluetoothAddress("AA:BB:CC:DD:EE:FF")).isEqualTo("AA:**:**:**:**:FF")
+    }
+
+    @Test
+    fun maskHidesEveryMiddleOctet() {
+        // None of the four middle octets may survive anywhere in the output.
+        val masked = maskBluetoothAddress("11:22:33:44:55:66")
+        for (octet in listOf("22", "33", "44", "55")) {
+            assertThat(masked).doesNotContain(octet)
+        }
+    }
+
+    @Test
+    fun maskNullOrBlankAddressIsNone() {
+        assertThat(maskBluetoothAddress(null)).isEqualTo("<none>")
+        assertThat(maskBluetoothAddress("")).isEqualTo("<none>")
+        assertThat(maskBluetoothAddress("   ")).isEqualTo("<none>")
+    }
+
+    @Test
+    fun maskMalformedAddressLeaksOnlyLengthNotValue() {
+        val masked = maskBluetoothAddress("not-a-mac-address")
+        assertThat(masked).isEqualTo("<malformed:17>")
+        assertThat(masked).doesNotContain("mac")
+    }
 }

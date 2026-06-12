@@ -204,7 +204,7 @@ public class UtcTimer {
                     //time_sec is the time offset
                     if (running && isCycleBoundary(utc, time_sec, slotMillis)) {
                         //cycle action
-                        //IMPORTANT! doHeartBeatTimer must not perform time-consuming operations and must complete within the heartbeat interval, otherwise thread backlog may occur and affect performance.
+                        //IMPORTANT! the cycle callback (doSomething -> doOnSecTimer) must not perform time-consuming operations and must complete within the cycle interval, otherwise thread backlog may occur and affect performance.
                         cachedThreadPool.execute(doSomething);//use thread pool for invocation to reduce system overhead
                         //thread.run();
 
