@@ -1,5 +1,6 @@
 package radio.ks3ckc.ft8us.ui.settings
 
+import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,11 +20,54 @@ import radio.ks3ckc.ft8us.ui.components.GlassCard
 import radio.ks3ckc.ft8us.ui.components.SettingsRow
 
 /**
- * BCP-47 language tags for the in-app Language picker, parallel to the label list
- * built in the picker dialog. Index 0 ("") means "System default" (empty locale
- * list). Keep in sync with res/xml/locales_config.xml and the values-<locale>/ dirs.
+ * One selectable app language: its BCP-47 tag (as handed to
+ * [AppCompatDelegate.setApplicationLocales]) and the display-name resource shown
+ * in its own script.
  */
-private val LANGUAGE_TAGS = listOf("", "en", "zh-CN", "zh-TW", "ru", "es", "fr", "ja")
+internal data class AppLanguage(val tag: String, @StringRes val nameRes: Int)
+
+/**
+ * Single source of truth for the in-app Language picker, in display order. Adding
+ * a language is one entry here — the tag list, picker labels, and current-language
+ * label all derive from it. Keep in sync with res/xml/locales_config.xml and the
+ * values-<locale>/ translation dirs (English lives in the default values/ dir, so
+ * "en" has no dedicated folder; Indonesian "id" compiles to the legacy values-in).
+ */
+internal val SUPPORTED_LANGUAGES: List<AppLanguage> = listOf(
+    AppLanguage("en", R.string.language_name_en),
+    AppLanguage("zh-CN", R.string.language_name_zh_cn),
+    AppLanguage("zh-TW", R.string.language_name_zh_tw),
+    AppLanguage("ru", R.string.language_name_ru),
+    AppLanguage("es", R.string.language_name_es),
+    AppLanguage("fr", R.string.language_name_fr),
+    AppLanguage("ja", R.string.language_name_ja),
+    AppLanguage("it", R.string.language_name_it),
+    AppLanguage("pl", R.string.language_name_pl),
+    AppLanguage("ko", R.string.language_name_ko),
+    AppLanguage("nl", R.string.language_name_nl),
+    AppLanguage("cs", R.string.language_name_cs),
+    AppLanguage("tr", R.string.language_name_tr),
+    AppLanguage("id", R.string.language_name_id),
+    AppLanguage("uk", R.string.language_name_uk),
+    AppLanguage("ar", R.string.language_name_ar),
+)
+
+/**
+ * BCP-47 language tags for the picker, parallel to the label list built in the
+ * dialog. Index 0 ("") means "System default" (empty locale list).
+ */
+internal val LANGUAGE_TAGS: List<String> = listOf("") + SUPPORTED_LANGUAGES.map { it.tag }
+
+/**
+ * The display-name resource for the currently-applied app locale tags (as returned
+ * by `getApplicationLocales().toLanguageTags()`), or the "system default" label
+ * when nothing matches. The first supported language whose tag prefixes the current
+ * tags wins (e.g. "en-US" → English). Pure logic, unit-tested.
+ */
+@StringRes
+internal fun currentLanguageNameRes(currentTags: String): Int =
+    SUPPORTED_LANGUAGES.firstOrNull { currentTags.startsWith(it.tag) }?.nameRes
+        ?: R.string.settings_language_system
 
 /**
  * Advanced settings: PTT/TX timing delays, late-start tolerance, and the
@@ -113,16 +157,13 @@ fun AdvancedSettings(
     // older) and recreates the activity so the new locale takes effect immediately.
     if (showLanguagePicker) {
         val languageTags = LANGUAGE_TAGS
-        val languageLabels = listOf(
-            stringResource(R.string.settings_language_system),
-            stringResource(R.string.language_name_en),
-            stringResource(R.string.language_name_zh_cn),
-            stringResource(R.string.language_name_zh_tw),
-            stringResource(R.string.language_name_ru),
-            stringResource(R.string.language_name_es),
-            stringResource(R.string.language_name_fr),
-            stringResource(R.string.language_name_ja),
-        )
+        // Built with a for-loop (not map/forEach) so the @Composable stringResource
+        // calls run in a permitted context; mirrors LANGUAGE_TAGS index-for-index.
+        val languageLabels = ArrayList<String>(LANGUAGE_TAGS.size)
+        languageLabels.add(stringResource(R.string.settings_language_system))
+        for (lang in SUPPORTED_LANGUAGES) {
+            languageLabels.add(stringResource(lang.nameRes))
+        }
         val currentTags = AppCompatDelegate.getApplicationLocales().toLanguageTags()
         val currentIndex = languageTags.indexOfFirst { it.isNotEmpty() && currentTags.startsWith(it) }
             .let { if (it >= 0) it else 0 }
@@ -187,18 +228,7 @@ fun AdvancedSettings(
         SettingsSection(title = stringResource(R.string.settings_section_language)) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 val currentTags = AppCompatDelegate.getApplicationLocales().toLanguageTags()
-                val currentLangIndex = LANGUAGE_TAGS
-                    .indexOfFirst { it.isNotEmpty() && currentTags.startsWith(it) }
-                val currentLangRes = when (LANGUAGE_TAGS.getOrElse(currentLangIndex) { "" }) {
-                    "en" -> R.string.language_name_en
-                    "zh-CN" -> R.string.language_name_zh_cn
-                    "zh-TW" -> R.string.language_name_zh_tw
-                    "ru" -> R.string.language_name_ru
-                    "es" -> R.string.language_name_es
-                    "fr" -> R.string.language_name_fr
-                    "ja" -> R.string.language_name_ja
-                    else -> R.string.settings_language_system
-                }
+                val currentLangRes = currentLanguageNameRes(currentTags)
                 SettingsRow(
                     label = stringResource(R.string.settings_language),
                     description = stringResource(R.string.settings_language_desc),

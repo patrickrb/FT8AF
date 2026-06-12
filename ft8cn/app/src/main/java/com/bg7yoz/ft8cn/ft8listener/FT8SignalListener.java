@@ -69,8 +69,8 @@ public class FT8SignalListener {
         this.db = db;
 
         // Create action trigger, synchronized with UTC time, on the current mode's cycle
-        // (FT8 = 15s/150, FT4 = 7.5s/75). DoOnSecTimer fires at the start of each cycle.
-        utcTimer = new UtcTimer(GeneralVariables.currentMode().slotTenths, false, makeTimerCallback());
+        // (FT8 = 15000ms, FT4 = 7500ms, FT2 = 3750ms). DoOnSecTimer fires at the start of each cycle.
+        utcTimer = new UtcTimer(GeneralVariables.currentMode().slotMillis, false, makeTimerCallback());
     }
 
     /** The cycle-trigger callback, shared between the constructor and {@link #rebuildTimer}. */
@@ -96,7 +96,7 @@ public class FT8SignalListener {
     public void rebuildTimer(ModeProfile mode) {
         boolean wasListening = utcTimer.isRunning();
         utcTimer.delete();
-        utcTimer = new UtcTimer(mode.slotTenths, false, makeTimerCallback());
+        utcTimer = new UtcTimer(mode.slotMillis, false, makeTimerCallback());
         if (wasListening) {
             utcTimer.start();
         }

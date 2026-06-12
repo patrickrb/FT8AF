@@ -16,9 +16,10 @@ extern "C"
 
 // FT2: same channel structure as FT4 (4-GFSK, 4 Costas blocks, 105 symbols, same LDPC),
 // but double the baud — half the FT4 symbol period. ~41.67 Hz tone spacing, ~167 Hz BW,
-// 3.8s T/R cycle. Reuses every FT4_* symbol constant below; only the period/slot differ.
+// 3.75s T/R cycle (exactly half FT4's 7.5s). Reuses every FT4_* symbol constant below;
+// only the period/slot differ.
 #define FT2_SYMBOL_PERIOD (0.024f) ///< FT2 symbol duration (NSPS 288 @ 12kHz)
-#define FT2_SLOT_TIME     (3.8f)   ///< FT2 slot period
+#define FT2_SLOT_TIME     (3.75f)  ///< FT2 slot period
 
 // Define FT8 symbol counts
 // FT8 message structure:

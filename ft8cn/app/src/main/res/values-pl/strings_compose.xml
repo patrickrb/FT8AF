@@ -1,0 +1,532 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- ===== Common / shared ===== -->
+    <string name="action_cancel">Anuluj</string>
+    <string name="action_save">Zapisz</string>
+    <string name="action_done">Gotowe</string>
+    <string name="action_ok">OK</string>
+    <string name="action_exit">Wyjdź</string>
+    <string name="common_none">Brak</string>
+    <string name="common_off">Wył.</string>
+    <string name="common_not_configured">Nie skonfigurowano</string>
+    <string name="common_not_connected">Nie połączono</string>
+    <string name="common_pass">Zaliczone</string>
+    <string name="common_fail">Niezaliczone</string>
+    <string name="common_test_connection">Testuj połączenie</string>
+
+    <!-- ===== Continents ===== -->
+    <string name="continent_na">Ameryka Północna</string>
+    <string name="continent_sa">Ameryka Południowa</string>
+    <string name="continent_eu">Europa</string>
+    <string name="continent_af">Afryka</string>
+    <string name="continent_as">Azja</string>
+    <string name="continent_oc">Oceania</string>
+    <string name="continent_an">Antarktyda</string>
+
+    <!-- ===== Bottom navigation tabs ===== -->
+    <string name="tab_decode">Dekodowanie</string>
+    <string name="tab_map">Mapa</string>
+    <string name="tab_waterfall">Wodospad</string>
+    <string name="tab_pota">POTA</string>
+    <string name="tab_logbook">Dziennik</string>
+    <string name="tab_settings">Ustawienia</string>
+
+    <!-- ===== Status pills (decode list badges) ===== -->
+    <string name="status_new_dxcc">NOWY DXCC</string>
+    <string name="status_new_grid">NOWY LOKATOR</string>
+    <string name="status_new_band">NOWE PASMO</string>
+    <string name="status_pota">POTA</string>
+    <string name="status_new_pota">NOWY POTA</string>
+    <string name="status_sota">SOTA</string>
+    <string name="status_needed">POTRZEBNY</string>
+    <string name="status_worked">PRZEPROWADZONY</string>
+    <string name="status_confirmed">POTWIERDZONY</string>
+    <string name="status_cq">CQ</string>
+    <string name="status_pending">OCZEKUJE</string>
+
+    <!-- ===== Splash / app-level ===== -->
+    <string name="splash_tagline">FT8 · MOBILNY TOWARZYSZ</string>
+    <string name="splash_initializing">INICJALIZACJA RADIA</string>
+    <string name="splash_version">v%1$s · kompilacja %2$s</string>
+    <string name="app_set_callsign_first">Ustaw swój znak w Ustawieniach przed wywołaniem CQ</string>
+    <string name="app_hunt_on">Polowanie wł. — auto-odpowiadanie na CQ</string>
+    <string name="app_hunt_off">Polowanie wył. — nadajesz CQ, obsługujesz tylko odpowiedzi</string>
+    <string name="app_mode_switched">Tryb: %1$s</string>
+    <string name="app_mode_switch_busy">Nie można zmienić trybu podczas nadawania</string>
+    <string name="main_tx_volume">Głośność TX: %1$d%%</string>
+
+    <!-- ===== Exit dialog ===== -->
+    <string name="exit_title">ZAMKNĄĆ FT8AF?</string>
+    <string name="exit_message">Na pewno chcesz zamknąć aplikację? Każde aktywne QSO zostanie anulowane.</string>
+
+    <!-- ===== Frequency picker ===== -->
+    <string name="freq_select_title">WYBIERZ CZĘSTOTLIWOŚĆ</string>
+    <string name="freq_show_alternates">POKAŻ ALTERNATYWNE</string>
+    <string name="freq_hide_alternates">UKRYJ ALTERNATYWNE</string>
+    <string name="freq_alt_prefix">"ALT "</string>
+
+    <!-- ===== Operator card ===== -->
+    <string name="op_no_call">BRAK ZNAKU</string>
+    <string name="op_no_grid">Brak lokatora</string>
+    <string name="op_tap_to_edit">Dotknij, aby edytować</string>
+    <string name="op_stat_rig">RADIO</string>
+    <string name="op_stat_antenna">ANTENA</string>
+    <string name="op_stat_power">MOC</string>
+
+    <!-- ===== Export log sheet ===== -->
+    <string name="export_title">EKSPORTUJ QSO</string>
+    <string name="export_date_range">ZAKRES DAT</string>
+    <string name="export_date_from_placeholder">"Od  RRRRMMDD"</string>
+    <string name="export_date_to_placeholder">"Do  RRRRMMDD"</string>
+    <string name="export_share">Udostępnij</string>
+    <string name="export_filter_confirmed">tylko potwierdzone</string>
+    <string name="export_filter_unconfirmed">tylko niepotwierdzone</string>
+    <string name="export_record_singular">rekord</string>
+    <string name="export_record_plural">rekordów</string>
+    <string name="export_summary_all">wszystkie</string>
+    <string name="export_summary_key">\'%1$s\'</string>
+    <string name="export_summary_suffix">" · %1$s"</string>
+    <string name="export_summary">%1$d %2$s pasujących do %3$s%4$s</string>
+    <string name="export_preparing">Przygotowywanie…</string>
+    <string name="export_share_chooser_title">Udostępnij dzienniki QSO</string>
+    <string name="export_saved_to">Zapisano w %1$s</string>
+    <string name="export_save_failed">Zapis do Pobranych nie powiódł się</string>
+    <string name="export_temp_file_failed">Nie udało się utworzyć pliku tymczasowego</string>
+
+    <!-- ===== TX strip ===== -->
+    <string name="tx_transmitting">NADAWANIE</string>
+    <string name="tx_listening">NASŁUCH</string>
+    <string name="tx_hunt">Polowanie</string>
+    <string name="tx_call_cq">Wywołaj CQ</string>
+    <string name="tx_stop">Stop</string>
+
+    <!-- ===== Hound (DXpedition) setup ===== -->
+    <string name="hound_title">Pracuj z DXpedycją (Hound)</string>
+    <string name="hound_help">Najpierw nastrój radio na opublikowaną częstotliwość Foxa. Wołasz wysoko (1000–4000 Hz); aplikacja automatycznie przestraja Cię w dół tam, gdzie Fox odpowiada, i wysyła Twój raport.</string>
+    <string name="hound_fox_callsign">Znak Foxa</string>
+    <string name="hound_call_frequency">Częstotliwość wywołania (Hz, 1000–4000)</string>
+    <string name="hound_start">Start</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT połączony — dotknij, aby połączyć ponownie</string>
+    <string name="cat_status_connecting">Łączenie CAT…</string>
+    <string name="cat_status_disconnected">CAT rozłączony — dotknij, aby połączyć</string>
+    <string name="cat_status_error">Błąd połączenia CAT — dotknij, aby spróbować ponownie</string>
+
+    <!-- ===== SWR lockout banner ===== -->
+    <string name="swr_lockout_title">TX WSTRZYMANY — Wykryto wysokie SWR (%1$s)</string>
+    <string name="swr_lockout_body">Sprawdź antenę / linię zasilającą przed nadawaniem.</string>
+    <string name="swr_lockout_dismiss">ODRZUĆ</string>
+    <string name="swr_lockout_toast">TX zablokowany — blokada SWR aktywna. Najpierw odrzuć baner blokady.</string>
+
+    <!-- ===== Active QSO panel ===== -->
+    <string name="qsopanel_calling_cq">Wywoływanie CQ</string>
+    <string name="qsopanel_searching">Szukanie...</string>
+    <string name="qsopanel_qsoing_with">QSO z %1$s</string>
+    <string name="qsopanel_waiting_for">Oczekiwanie na %1$s</string>
+    <string name="qsopanel_tap_to_view">dotknij, aby zobaczyć ↗</string>
+    <string name="qsopanel_tx_message">TX: %1$s</string>
+    <string name="qsopanel_waiting_messages">Oczekiwanie na wiadomości...</string>
+    <string name="qsopanel_log_action">ZAPISZ</string>
+    <string name="qsopanel_queue">KOLEJKA</string>
+
+    <!-- ===== Decode screen ===== -->
+    <string name="decode_title">Dekodowanie</string>
+    <string name="decode_subtitle">"%1$s  •  %2$d zdekodowanych w tym cyklu"</string>
+    <string name="decode_clear_list">Wyczyść listę dekodowania</string>
+    <string name="decode_utc_placeholder">UTC : --:--:--</string>
+    <string name="decode_time_group_utc">%1$s UTC</string>
+    <string name="decode_filter_all">Wszystkie</string>
+    <string name="decode_filter_cq_calls">Wywołania CQ</string>
+    <string name="decode_filter_cq_pota">CQ POTA</string>
+    <string name="decode_filter_new_dxcc">Nowy DXCC</string>
+    <string name="decode_filter_needed">Potrzebne</string>
+    <string name="decode_filter_for_me">Dla mnie</string>
+    <string name="decode_empty_cq_title">Brak wywołań CQ</string>
+    <string name="decode_empty_cq_body">Na tym paśmie nikt teraz nie wywołuje CQ.</string>
+    <string name="decode_empty_pota_title">Brak spotów POTA</string>
+    <string name="decode_empty_pota_body">Na tym paśmie nie zdekodowano jeszcze aktywacji parku — otwórz POTA → Polowanie, aby zobaczyć listę spotów.</string>
+    <string name="decode_empty_dxcc_title">Brak nowych DXCC</string>
+    <string name="decode_empty_dxcc_body">Nie zdekodowano jeszcze żadnych nieprzepracowanych podmiotów DXCC.</string>
+    <string name="decode_empty_needed_title">Nic potrzebnego</string>
+    <string name="decode_empty_needed_body">Nie znaleziono stacji wymagających potwierdzenia.</string>
+    <string name="decode_empty_forme_title">Brak wywołań dla Ciebie</string>
+    <string name="decode_empty_forme_body">Żadna stacja nie wywołuje teraz Twojego znaku.</string>
+    <string name="decode_empty_default_title">Brak zdekodowanych sygnałów</string>
+    <string name="decode_empty_default_body">Oczekiwanie na sygnały FT8...</string>
+    <string name="decode_label_calling">→ WYWOŁUJE</string>
+    <string name="decode_label_cq">CQ</string>
+    <string name="decode_label_to_you">↓ DO CIEBIE</string>
+
+    <!-- ===== QSO sheet ===== -->
+    <string name="qso_complete">QSO zakończone</string>
+    <string name="qso_call_action">Wywołaj %1$s</string>
+    <string name="qso_qrz_link">QRZ ↗</string>
+    <string name="qso_stat_signal">Sygnał</string>
+    <string name="qso_stat_distance">Odległość</string>
+    <string name="qso_stat_azimuth">Azymut</string>
+    <string name="qso_stat_band">Pasmo</string>
+    <string name="qso_sequence_header">SEKWENCJA QSO</string>
+    <string name="qso_step_send_call">Wyślij znak</string>
+    <string name="qso_step_report_sent">Raport wysłany</string>
+    <string name="qso_step_roger">Roger</string>
+    <string name="qso_step_confirm">Potwierdź</string>
+    <string name="qso_step_logged">Zapisano</string>
+    <string name="qso_live_sending">QSO z %1$s — Wysyłanie %2$s</string>
+    <string name="qso_live_waiting">Oczekiwanie na odpowiedź %1$s…</string>
+    <string name="qso_live_transmitting">Nadawanie…</string>
+    <string name="qso_live_step_fallback">wiadomość</string>
+    <string name="qso_tx_now">TX TERAZ</string>
+    <string name="qso_tx_next">TX NASTĘPNY</string>
+
+    <!-- ===== Logbook ===== -->
+    <string name="log_tab_stats">Statystyki</string>
+    <string name="log_tab_recent">Ostatnie</string>
+    <string name="log_tab_awards">Dyplomy</string>
+    <string name="log_title">Dziennik</string>
+    <string name="log_subtitle_qsos_all_bands">%1$d QSO · Wszystkie pasma</string>
+    <string name="log_cd_sync_to_logging_services">Synchronizuj z usługami logowania</string>
+    <string name="log_cd_export_qsos">Eksportuj QSO</string>
+    <string name="log_stat_total_qsos">Łącznie QSO</string>
+    <string name="log_stat_dxcc_entities">Podmioty DXCC</string>
+    <string name="log_stat_cq_zones">Strefy CQ</string>
+    <string name="log_stat_itu_zones">Strefy ITU</string>
+    <string name="log_section_band_distribution">Rozkład pasm</string>
+    <string name="log_section_award_progress">Postęp dyplomów</string>
+    <string name="log_award_dxcc_mixed">DXCC Mixed</string>
+    <string name="log_award_vucc_grid_squares">Pola lokatora VUCC</string>
+    <string name="log_award_dxcc_challenge">DXCC Challenge</string>
+    <string name="log_section_grid_coverage">Pokrycie lokatorów</string>
+    <string name="log_section_signal_trend">Trend sygnału</string>
+    <string name="log_no_qsos_yet">Brak QSO</string>
+    <string name="log_no_qsos_recorded_yet">Nie zapisano jeszcze żadnych QSO</string>
+    <string name="log_state_usa">%1$s, USA</string>
+    <string name="log_cd_qso_actions">Akcje QSO</string>
+    <string name="log_action_edit">Edytuj</string>
+    <string name="log_action_delete">Usuń</string>
+    <string name="log_award_dxcc_mixed_desc">Przeprowadź i potwierdź 100 podmiotów DXCC na dowolnym paśmie/emisji</string>
+    <string name="log_award_was">WAS</string>
+    <string name="log_award_was_desc">Przeprowadź i potwierdź wszystkie 50 stanów USA</string>
+    <string name="log_award_waz">WAZ</string>
+    <string name="log_award_waz_desc">Przeprowadź i potwierdź wszystkie 40 stref CQ</string>
+    <string name="log_award_vucc">VUCC</string>
+    <string name="log_award_vucc_desc">VHF/UHF Century Club -- 100 pól lokatora na jednym paśmie</string>
+    <string name="log_award_iota">IOTA</string>
+    <string name="log_award_iota_desc">Islands on the Air -- pracuj ze stacjami na wyznaczonych wyspach</string>
+    <string name="log_edit_qso">Edytuj QSO</string>
+    <string name="log_field_callsign">Znak</string>
+    <string name="log_field_grid_locator">Lokator</string>
+    <string name="log_field_mode">Emisja</string>
+    <string name="log_delete_qso_title">USUNĄĆ QSO?</string>
+    <string name="log_delete_qso_body_callsign">Usunąć QSO z %1$s z dziennika? Tej operacji nie można cofnąć.</string>
+    <string name="log_delete_qso_body">Usunąć to QSO z dziennika? Tej operacji nie można cofnąć.</string>
+    <string name="log_sync_title_no_services">BRAK WŁĄCZONYCH USŁUG</string>
+    <string name="log_sync_title_syncing">SYNCHRONIZACJA…</string>
+    <string name="log_sync_title_complete">SYNCHRONIZACJA ZAKOŃCZONA</string>
+    <string name="log_sync_enable_services">Włącz Cloudlog/Wavelog/Nextlog lub QRZ w Ustawieniach, a następnie spróbuj ponownie.</string>
+    <string name="log_sync_progress_count">%1$d z %2$d QSO</string>
+    <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d zaakceptowano</string>
+    <string name="log_sync_qrz_accepted">QRZ: %1$d zaakceptowano</string>
+    <string name="log_sync_nothing_to_upload">Brak QSO w dzienniku do wysłania.</string>
+    <string name="log_sync_working">Praca…</string>
+
+    <!-- ===== POTA ===== -->
+    <string name="pota_tab_activate">Aktywuj</string>
+    <string name="pota_tab_hunt">Polowanie</string>
+    <string name="pota_tab_history">Historia</string>
+    <string name="pota_start_activation">Rozpocznij aktywację</string>
+    <string name="pota_park_reference_label">Identyfikator parku (np. K-1234)</string>
+    <string name="pota_notes_optional_label">Notatki (opcjonalnie)</string>
+    <string name="pota_enter_park_reference_first">Najpierw wpisz identyfikator parku</string>
+    <string name="pota_activating">Aktywacja %1$s</string>
+    <string name="pota_activation_ended">Aktywacja zakończona</string>
+    <string name="pota_set_callsign_first">Najpierw ustaw swój znak w Ustawieniach</string>
+    <string name="pota_self_spot_posted">Spot własny wysłany</string>
+    <string name="pota_self_spot_failed">Spot własny nieudany — sprawdź log</string>
+    <string name="pota_active_park">AKTYWNY — %1$s</string>
+    <string name="pota_qsos">QSO</string>
+    <string name="pota_contacts_map">Mapa łączności</string>
+    <string name="pota_back">Wstecz</string>
+    <string name="pota_valid_activation">ważna aktywacja</string>
+    <string name="pota_to_valid">%1$d do ważności</string>
+    <string name="pota_elapsed">Upłynęło</string>
+    <string name="pota_since_start">od startu</string>
+    <string name="pota_self_spot">Spot własny</string>
+    <string name="pota_end_activation">Zakończ aktywację</string>
+    <string name="pota_notes_quote">“%1$s”</string>
+    <string name="pota_tx_cq_preview">TX CQ zostanie nadane jako „CQ POTA %1$s %2$s”.</string>
+    <string name="pota_no_spots">Brak spotów FT8 POTA w tej chwili.</string>
+    <string name="pota_active_spots">%1$d aktywnych spotów FT8</string>
+    <string name="pota_targeting">Cel %1$s @ %2$s kHz (%3$s) — przełącz na Dekodowanie, aby wywołać</string>
+    <string name="pota_no_past_activations">Brak wcześniejszych aktywacji.</string>
+    <string name="pota_no_browser_available">Brak dostępnej przeglądarki</string>
+    <string name="pota_export_failed">Eksport nieudany — sprawdź log</string>
+    <string name="pota_status_active">aktywny</string>
+    <string name="pota_qso_count">%1$d QSO</string>
+    <string name="pota_share_adif">Udostępnij ADIF</string>
+    <string name="pota_open_pota_app">Otwórz pota.app</string>
+    <string name="pota_upload_to_pota">Wyślij do POTA</string>
+    <string name="pota_upload_success">Wysłano %1$d dziennik(ów) parków do POTA</string>
+    <string name="pota_upload_failed">Wysyłanie nieudane: %1$s</string>
+    <string name="pota_upload_server_error">POTA nie mogło przetworzyć przesyłki. Sprawdź, czy identyfikator parku jest poprawny i czy Twój znak jest zarejestrowany w POTA, a następnie spróbuj ponownie.</string>
+    <string name="pota_upload_network_error">Nie udało się połączyć z POTA. Sprawdź połączenie z internetem i spróbuj ponownie.</string>
+    <string name="pota_login_title">Zaloguj się do POTA</string>
+    <string name="pota_login_desc">Użyj e-maila i hasła swojego konta pota.app.</string>
+    <string name="pota_login_email">E-mail</string>
+    <string name="pota_login_password">Hasło</string>
+    <string name="pota_login_button">Zaloguj się</string>
+    <string name="pota_login_cancel">Anuluj</string>
+    <string name="pota_login_failed">Logowanie nieudane: %1$s</string>
+    <string name="pota_login_or">lub</string>
+    <string name="pota_login_social">Zaloguj się przez Google / Facebook / Amazon</string>
+    <string name="pota_oauth_title">Zaloguj się do POTA</string>
+    <string name="pota_add_park">Dodaj park</string>
+    <string name="pota_remove_park">Usuń</string>
+    <string name="pota_max_parks_reached">Osiągnięto maksimum 10 parków</string>
+    <string name="pota_spotted_n_parks">Wypatrzony w %1$d parkach</string>
+    <string name="pota_parks_more">+%1$d więcej</string>
+
+    <!-- ===== Debug log / Map / Waterfall ===== -->
+    <string name="debug_title">Debug</string>
+    <string name="debug_line_count">%1$d wierszy</string>
+    <string name="debug_logcat_on_suffix">" · logcat WŁ."</string>
+    <string name="debug_close">Zamknij</string>
+    <string name="debug_share">Udostępnij</string>
+    <string name="debug_clear">Wyczyść</string>
+    <string name="debug_logcat_on">Logcat: WŁ.</string>
+    <string name="debug_logcat_off">Logcat: WYŁ.</string>
+    <string name="debug_no_log_file">brak pliku logu</string>
+    <string name="debug_log_cleared">log wyczyszczony</string>
+    <string name="debug_share_chooser_title">Udostępnij debug.log</string>
+    <string name="map_title">Mapa</string>
+    <string name="map_no_grid_set">Brak lokatora</string>
+    <string name="map_station_count">%1$d stacji</string>
+    <string name="map_station_count_with_heard">%1$d stacji · %2$d usłyszanych</string>
+    <string name="map_psk_error">PSK Reporter niedostępny: %1$s</string>
+    <string name="map_projection_equirectangular">Walcowa równoodległościowa</string>
+    <string name="map_projection_azimuthal">Azymutalna równoodległościowa</string>
+    <string name="map_mode_standard">STD</string>
+    <string name="map_mode_azimuthal">AZ</string>
+    <string name="map_overlay_psk">PSK</string>
+    <string name="map_info_distance">Odległość</string>
+    <string name="map_info_bearing">Namiar</string>
+    <string name="map_info_snr">SNR</string>
+    <string name="waterfall_title">Wodospad</string>
+    <string name="waterfall_toggle_nr">NR</string>
+    <string name="waterfall_toggle_msg">MSG</string>
+    <string name="waterfall_status_live">NA ŻYWO</string>
+
+    <!-- ===== Settings: format helpers ===== -->
+    <string name="settings_minutes_format">%1$d min</string>
+    <string name="settings_tries_format">%1$d prób</string>
+    <string name="settings_milliseconds_format">%1$d ms</string>
+    <string name="settings_hz_format">%1$d Hz</string>
+    <string name="settings_hz_str_format">%1$s Hz</string>
+    <string name="settings_percent_format">%1$d%%</string>
+    <string name="settings_bands_enabled_format">%1$d z %2$d włączonych</string>
+    <string name="settings_min_max_suffix">%1$d–%2$d %3$s</string>
+    <string name="settings_build_date_format">Kompilacja %1$s</string>
+    <string name="settings_version_value">v%1$s</string>
+
+    <!-- ===== Settings: sections ===== -->
+    <string name="settings_title">Ustawienia</string>
+    <string name="settings_section_operator_identity">TOŻSAMOŚĆ OPERATORA</string>
+    <string name="settings_section_radio">RADIO</string>
+    <string name="settings_section_audio">DŹWIĘK</string>
+    <string name="settings_section_transmission">NADAWANIE</string>
+    <string name="settings_section_auto_sequence">AUTO-SEKWENCJA</string>
+    <string name="settings_section_decode_highlights">WYRÓŻNIENIA DEKODOWANIA</string>
+    <string name="settings_section_callsign_blocklist">LISTA BLOKOWANYCH ZNAKÓW</string>
+    <string name="settings_section_decode_filters">FILTRY DEKODOWANIA</string>
+    <string name="settings_section_needed_dx_alerts">ALERTY POTRZEBNEGO DX</string>
+    <string name="settings_section_logging_awards">DZIENNIK I DYPLOMY</string>
+    <string name="settings_section_advanced">ZAAWANSOWANE</string>
+    <string name="settings_section_about">O APLIKACJI</string>
+    <string name="settings_section_language">JĘZYK</string>
+
+    <!-- ===== Settings: drill-down category labels ===== -->
+    <string name="settings_cat_radio_audio">Radio i dźwięk</string>
+    <string name="settings_cat_transmission">Nadawanie</string>
+    <string name="settings_cat_decode_filters">Dekodowanie i filtry</string>
+    <string name="settings_cat_logging">Dziennik i dyplomy</string>
+    <string name="settings_cat_advanced">Zaawansowane</string>
+    <string name="settings_cat_about">O aplikacji</string>
+    <string name="settings_cat_time_sync">Synchronizacja czasu</string>
+    <string name="settings_cat_time_sync_desc">Ręczna korekcja zegara do pracy offline</string>
+
+    <!-- ===== Settings: Time Sync (manual clock correction) ===== -->
+    <string name="settings_time_correction_section">Korekcja ręczna</string>
+    <string name="settings_time_current_label">Bieżąca korekcja</string>
+    <string name="settings_time_correction_reset">Zeruj</string>
+    <string name="settings_time_correction_desc">Skoryguj zegar aplikacji, gdy nie masz internetu do synchronizacji. FT8 wymaga UTC z dokładnością do około 1 sekundy. Dostosuj, aż kolumna DT zdekodowanych stacji wycentruje się blisko 0.</string>
+    <string name="settings_time_suggest_section">Sugerowane z dekodów</string>
+    <string name="settings_time_suggest_none">Brak dekodów — rozpocznij odbiór, aby uzyskać sugestię.</string>
+    <string name="settings_time_suggest_label">Ostatnia średnia DT: %1$s</string>
+    <string name="settings_time_suggest_apply">Zastosuj sugerowaną korekcję</string>
+
+    <!-- ===== Settings: operator identity ===== -->
+    <string name="settings_auto_update_grid">Auto-aktualizacja lokatora (GPS)</string>
+    <string name="settings_auto_update_grid_desc">Użyj GPS urządzenia, aby utrzymywać aktualny lokator Maidenhead</string>
+
+    <!-- ===== Settings: radio ===== -->
+    <string name="settings_rig_model">Model radia</string>
+    <string name="settings_control_mode">Tryb sterowania</string>
+    <string name="settings_connection_mode">Tryb połączenia</string>
+    <string name="settings_baud_rate">Prędkość transmisji</string>
+    <string name="settings_band_frequency">Pasmo i częstotliwość</string>
+    <string name="settings_enabled_bands">Włączone pasma</string>
+    <string name="settings_audio_frequency">Częstotliwość audio</string>
+    <string name="settings_spectrum_width">Szerokość widma</string>
+
+    <!-- ===== Settings: audio ===== -->
+    <string name="settings_audio_input">Wejście audio</string>
+    <string name="settings_audio_output">Wyjście audio</string>
+    <string name="settings_tx_volume">Głośność TX</string>
+    <string name="settings_tx_volume_desc" formatted="false">Poziom audio nadawania (przyciski sprzętowe ±5%)</string>
+
+    <!-- ===== Settings: transmission ===== -->
+    <string name="settings_tx_rx_split">Split TX/RX</string>
+    <string name="settings_tx_rx_split_desc">Nadawanie na innej częstotliwości niż odbiór</string>
+    <string name="settings_tx_watchdog">Watchdog TX</string>
+    <string name="settings_tx_watchdog_desc">Automatyczne zatrzymanie nadawania po przekroczeniu czasu</string>
+    <string name="settings_stop_after">Zatrzymaj po</string>
+    <string name="settings_stop_after_desc">Przestań wywoływać po N nieodebranych próbach</string>
+
+    <!-- ===== Settings: auto-sequence ===== -->
+    <string name="settings_hunt">Polowanie (auto-odpowiedź na CQ)</string>
+    <string name="settings_hunt_desc">Aktywnie wywołuj stacje nadające CQ. To samo co przycisk POLOWANIE na pasku TX. Wył. = nadawaj CQ i obsługuj tylko stacje, które Ci odpowiedzą.</string>
+    <string name="settings_auto_call_followed">Auto-wywołanie obserwowanych</string>
+    <string name="settings_auto_call_followed_desc">Automatycznie wywołuj obserwowane znaki</string>
+    <string name="settings_fast_turnaround">Szybki obrót</string>
+    <string name="settings_fast_turnaround_desc">Dekoduj ~1s wcześniej, aby odpowiedzieć na CQ w następnym slocie zamiast czekać. Może pomijać stacje z dużym przesunięciem zegara.</string>
+    <string name="settings_auto_cq_after_qso">Auto-CQ po QSO</string>
+    <string name="settings_auto_cq_after_qso_desc">Automatycznie nadawaj CQ po każdej zakończonej łączności — bez ponownego dotknięcia. Pozostaje na Twojej częstotliwości (ignoruje Polowanie). Działa, dopóki nie zatrzymasz lub Watchdog TX nie wygaśnie bez odpowiedzi.</string>
+
+    <!-- ===== Settings: decode highlights ===== -->
+    <string name="settings_highlight_new_dxcc">Nowy DXCC</string>
+    <string name="settings_highlight_new_dxcc_desc">Wyróżniaj stacje z nieprzepracowanego podmiotu DXCC</string>
+    <string name="settings_highlight_new_grid">Nowy lokator</string>
+    <string name="settings_highlight_new_grid_desc">Wyróżniaj jeszcze nieprzepracowane lokatory Maidenhead</string>
+    <string name="settings_highlight_new_band">Nowe pasmo</string>
+    <string name="settings_highlight_new_band_desc">Wyróżniaj stacje przepracowane tylko na innych pasmach</string>
+    <string name="settings_highlight_pota">Aktywatorzy POTA</string>
+    <string name="settings_highlight_pota_desc">Wyróżniaj wypatrzonych aktywatorów POTA; nowe parki wyróżniają się</string>
+    <string name="settings_highlight_worked">Wcześniej przepracowane</string>
+    <string name="settings_highlight_worked_desc">Oznaczaj stacje już obecne w dzienniku</string>
+    <string name="settings_distance_unit">Odległość w milach</string>
+    <string name="settings_distance_unit_desc">Pokazuj odległości w milach zamiast kilometrów</string>
+
+    <!-- ===== Settings: callsign blocklist ===== -->
+    <string name="settings_exact_callsigns">Dokładne znaki</string>
+    <string name="settings_exact_callsigns_desc">Blokuj dopasowania całego znaku</string>
+    <string name="settings_prefixes">Prefiksy</string>
+    <string name="settings_prefixes_desc">Blokuj wg prefiksu znaku (np. RA)</string>
+    <string name="settings_keywords">Słowa kluczowe</string>
+    <string name="settings_keywords_desc">Blokuj wg fragmentu w znaku lub wiadomości (np. POTA, /P)</string>
+
+    <!-- ===== Settings: decode filters ===== -->
+    <string name="settings_show_only_cq">Pokaż tylko CQ</string>
+    <string name="settings_show_only_cq_desc">Ukryj wszystko oprócz wiadomości typu CQ</string>
+    <string name="settings_dx_only">Tylko DX</string>
+    <string name="settings_dx_only_desc">Pokazuj tylko stacje spoza Twojego kontynentu</string>
+    <string name="settings_needed_only">Tylko potrzebne</string>
+    <string name="settings_needed_only_desc">Pokazuj tylko jeszcze niepotwierdzone stacje (QSL)</string>
+    <string name="settings_filter_by_continent">Filtruj wg kontynentu</string>
+    <string name="settings_filter_by_continent_desc">Pokazuj tylko stacje z wybranego kontynentu</string>
+    <string name="settings_continent">Kontynent</string>
+    <string name="settings_skip_directional_cq">Pomijaj kierunkowe CQ (auto-odpowiedź)</string>
+    <string name="settings_skip_directional_cq_desc">Nie odpowiadaj automatycznie na CQ DX/EU/JA… skierowane do innego DXCC</string>
+    <string name="settings_hide_directional_cq">Ukryj kierunkowe CQ nie dla mnie</string>
+    <string name="settings_hide_directional_cq_desc">Ukrywaj kierunkowe CQ, które nie celują w Twój DXCC</string>
+
+    <!-- ===== Settings: needed-DX alerts ===== -->
+    <string name="settings_alert_new_dxcc">Nowy DXCC</string>
+    <string name="settings_alert_new_dxcc_desc">Dźwięk + wibracja + powiadomienie, gdy nieprzepracowany podmiot DXCC wywołuje CQ</string>
+    <string name="settings_alert_new_state">Nowy stan USA</string>
+    <string name="settings_alert_new_state_desc">Dźwięk + wibracja + powiadomienie, gdy stacja z nieprzepracowanego stanu USA wywołuje CQ (stan z lokatora)</string>
+
+    <!-- ===== Settings: logging &amp; awards ===== -->
+    <string name="settings_save_swl_decodes">Zapisuj dekody SWL</string>
+    <string name="settings_save_swl_decodes_desc">Zapisuj wszystkie zdekodowane wiadomości do bazy</string>
+    <string name="settings_save_swl_qsos">Zapisuj QSO SWL</string>
+    <string name="settings_save_swl_qsos_desc">Zapisuj QSO wykryte między innymi stacjami</string>
+    <string name="settings_pskreporter">PSKReporter</string>
+    <string name="settings_pskreporter_desc">Wysyłaj zdekodowane spoty do pskreporter.info</string>
+    <string name="settings_qrz_com">QRZ.com</string>
+    <string name="settings_qrz_com_desc">Auto-wysyłka QSO do dziennika QRZ</string>
+    <string name="settings_qrz_profile_lookup">Wyszukiwanie profilu QRZ</string>
+    <string name="settings_qrz_profile_lookup_desc">Nazwa użytkownika + hasło do QRZ XML API (awatary)</string>
+    <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
+    <string name="settings_cloudlog_desc">Auto-wysyłka QSO do instancji Cloudlog, Wavelog lub Nextlog</string>
+
+    <!-- ===== Settings: advanced ===== -->
+    <string name="settings_ptt_delay">Opóźnienie PTT</string>
+    <string name="settings_ptt_delay_desc">Opóźnienie po PTT przed rozpoczęciem audio nadawania</string>
+    <string name="settings_tx_delay">Opóźnienie TX</string>
+    <string name="settings_tx_delay_desc">Opóźnienie przed nadawaniem, aby umożliwić dekodowanie poprzedniego cyklu</string>
+    <string name="settings_late_start_tolerance">Tolerancja spóźnionego startu</string>
+    <string name="settings_late_start_tolerance_desc">Zezwól na start TX do N ms w cyklu; początkowe audio jest przycinane, aby TX zakończył się na granicy cyklu</string>
+
+    <!-- ===== Settings: about ===== -->
+    <string name="settings_faq_support">FAQ i wsparcie</string>
+    <string name="settings_report_bug">Zgłoś błąd</string>
+    <string name="bug_report_description_hint">Opisz, co poszło nie tak…</string>
+    <string name="bug_report_send_email">Wyślij e-mail</string>
+    <string name="bug_report_no_email_app">Nie znaleziono aplikacji e-mail do wysłania zgłoszenia</string>
+    <string name="bug_report_open_github">Otwórz zgłoszenie na GitHub</string>
+    <string name="settings_debug">Debug</string>
+    <string name="settings_debug_desc">Wyświetl / udostępnij debug.log</string>
+    <string name="settings_about_body">Wersja %1$s (kompilacja %2$s)\nData kompilacji %3$s\n\nFT8, prosto i łatwo.\n\nSamodzielna aplikacja transceivera FT8 na Androida. Sterowanie radiem przez USB, Bluetooth i sieć z automatyczną sekwencją i logowaniem.</string>
+    <string name="settings_website">Strona internetowa</string>
+    <string name="settings_community">Społeczność</string>
+    <string name="settings_built_by">Stworzone przez</string>
+
+    <!-- ===== Settings: dialogs ===== -->
+    <string name="settings_block_exact_title">Blokuj dokładne znaki</string>
+    <string name="settings_block_exact_desc">Dopasowanie całego znaku. Oddzielone przecinkiem lub spacją, np. W1AW, K1ABC.</string>
+    <string name="settings_block_prefix_title">Blokuj prefiksy znaków</string>
+    <string name="settings_block_prefix_desc">Dopasowanie prefiksu, np. RA blokuje RA0AA..RA9ZZ. Oddzielone przecinkiem lub spacją.</string>
+    <string name="settings_block_keyword_title">Blokuj słowa kluczowe</string>
+    <string name="settings_block_keyword_desc">Dopasowanie fragmentu do znaku i tekstu wiadomości, np. POTA, /P, QRP.</string>
+    <string name="settings_blocklist_hint">np. W1AW, RA, /P</string>
+    <string name="settings_filter_continent_title">Filtruj kontynent</string>
+    <string name="settings_conn_usb_cable">Kabel USB</string>
+    <string name="settings_conn_bluetooth">Bluetooth</string>
+    <string name="settings_conn_network">Sieć</string>
+    <string name="settings_no_usb_serial">Nie wykryto urządzeń szeregowych USB. Podłącz kabel USB do radia i spróbuj ponownie.</string>
+    <string name="settings_no_bluetooth_devices">Nie znaleziono sparowanych urządzeń Bluetooth. Najpierw sparuj urządzenie w ustawieniach Bluetooth Androida.</string>
+    <string name="settings_debug_mode_enabled">Tryb debugowania włączony</string>
+    <string name="settings_debug_mode_disabled">Tryb debugowania wyłączony</string>
+    <string name="settings_edit_operator_identity">Edytuj tożsamość operatora</string>
+    <string name="settings_callsign">Znak</string>
+    <string name="settings_callsign_hint">np. W1AW</string>
+    <string name="settings_grid_locator">Lokator</string>
+    <string name="settings_grid_locator_hint">np. FN31pr</string>
+    <string name="settings_logging_server">Serwer dziennika</string>
+    <string name="settings_logging_server_desc">Cloudlog, Wavelog i Nextlog przyjmują te same przesyłki.</string>
+    <string name="settings_server_address">Adres serwera</string>
+    <string name="settings_api_key">Klucz API</string>
+    <string name="settings_api_key_hint">Twój klucz API Cloudlog</string>
+    <string name="settings_loading_stations">Ładowanie stacji...</string>
+    <string name="settings_station_id">ID stacji</string>
+    <string name="settings_station_id_hint">np. 1</string>
+    <string name="settings_select_a_station">Wybierz stację</string>
+    <string name="settings_enter_manually">Wpisz ręcznie</string>
+    <string name="settings_choose_from_server">Wybierz z serwera</string>
+    <string name="settings_station_profile">Profil stacji</string>
+    <string name="settings_qrz_creds_desc">Używane do pobierania zdjęć profilowych dla zdekodowanych znaków przez QRZ XML API. Wymaga subskrypcji QRZ XML.</string>
+    <string name="settings_username">Nazwa użytkownika</string>
+    <string name="settings_username_hint">Twoja nazwa użytkownika QRZ.com</string>
+    <string name="settings_password">Hasło</string>
+    <string name="settings_enabled_bands_dialog_desc">Ukryte pasma nie pojawią się w wyborze częstotliwości.</string>
+    <string name="settings_select_serial_port">Wybierz port szeregowy</string>
+    <string name="settings_tx_volume_advice">Dostosuj na żywo — następne TX użyje tego poziomu. Obserwuj ALC radia i zmniejszaj, aż ledwo dotyka linii.</string>
+
+    <!-- ===== Settings: language picker ===== -->
+    <string name="settings_language">Język</string>
+    <string name="settings_language_desc">Język wyświetlania aplikacji</string>
+    <string name="settings_language_system">Domyślny systemu</string>
+
+</resources>

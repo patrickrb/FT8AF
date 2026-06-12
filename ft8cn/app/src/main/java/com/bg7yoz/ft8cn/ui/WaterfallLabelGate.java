@@ -9,7 +9,7 @@ package com.bg7yoz.ft8cn.ui;
  * times, at different scroll offsets, and appear to repeat down the waterfall — including
  * over the next slot's blank rows where the signal is already gone. Keyed on a per-slot
  * index (the caller derives it from the current mode's slot length, e.g.
- * {@code utcMs / slotMillis} — 15s FT8, 7.5s FT4, 3.8s FT2), this returns true for only the
+ * {@code utcMs / slotMillis} — 15s FT8, 7.5s FT4, 3.75s FT2), this returns true for only the
  * first stamp of each slot.
  *
  * <p>The slot length is part of the key as well as the slot index, because a single

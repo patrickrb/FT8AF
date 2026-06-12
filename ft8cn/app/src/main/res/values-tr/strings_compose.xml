@@ -1,0 +1,532 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- ===== Common / shared ===== -->
+    <string name="action_cancel">İptal</string>
+    <string name="action_save">Kaydet</string>
+    <string name="action_done">Tamam</string>
+    <string name="action_ok">OK</string>
+    <string name="action_exit">Çıkış</string>
+    <string name="common_none">Yok</string>
+    <string name="common_off">Kapalı</string>
+    <string name="common_not_configured">Yapılandırılmadı</string>
+    <string name="common_not_connected">Bağlı değil</string>
+    <string name="common_pass">Geçti</string>
+    <string name="common_fail">Başarısız</string>
+    <string name="common_test_connection">Bağlantıyı Test Et</string>
+
+    <!-- ===== Continents ===== -->
+    <string name="continent_na">Kuzey Amerika</string>
+    <string name="continent_sa">Güney Amerika</string>
+    <string name="continent_eu">Avrupa</string>
+    <string name="continent_af">Afrika</string>
+    <string name="continent_as">Asya</string>
+    <string name="continent_oc">Okyanusya</string>
+    <string name="continent_an">Antarktika</string>
+
+    <!-- ===== Bottom navigation tabs ===== -->
+    <string name="tab_decode">Çözümle</string>
+    <string name="tab_map">Harita</string>
+    <string name="tab_waterfall">Şelale</string>
+    <string name="tab_pota">POTA</string>
+    <string name="tab_logbook">Günlük</string>
+    <string name="tab_settings">Ayarlar</string>
+
+    <!-- ===== Status pills (decode list badges) ===== -->
+    <string name="status_new_dxcc">YENİ DXCC</string>
+    <string name="status_new_grid">YENİ GRID</string>
+    <string name="status_new_band">YENİ BANT</string>
+    <string name="status_pota">POTA</string>
+    <string name="status_new_pota">YENİ POTA</string>
+    <string name="status_sota">SOTA</string>
+    <string name="status_needed">GEREKLİ</string>
+    <string name="status_worked">YAPILDI</string>
+    <string name="status_confirmed">ONAYLANDI</string>
+    <string name="status_cq">CQ</string>
+    <string name="status_pending">BEKLİYOR</string>
+
+    <!-- ===== Splash / app-level ===== -->
+    <string name="splash_tagline">FT8 · MOBİL YARDIMCI</string>
+    <string name="splash_initializing">RADYO BAŞLATILIYOR</string>
+    <string name="splash_version">v%1$s · derleme %2$s</string>
+    <string name="app_set_callsign_first">CQ çağrısı yapmadan önce Ayarlar\'da çağrı işaretinizi girin</string>
+    <string name="app_hunt_on">Av açık — CQ\'lara otomatik yanıt veriliyor</string>
+    <string name="app_hunt_off">Av kapalı — CQ yapılıyor, yalnızca yanıtlar işleniyor</string>
+    <string name="app_mode_switched">Mod: %1$s</string>
+    <string name="app_mode_switch_busy">Yayın sırasında mod değiştirilemez</string>
+    <string name="main_tx_volume">TX Sesi: %1$d%%</string>
+
+    <!-- ===== Exit dialog ===== -->
+    <string name="exit_title">FT8AF\'TEN ÇIKILSIN MI?</string>
+    <string name="exit_message">Uygulamayı kapatmak istediğinizden emin misiniz? Aktif tüm QSO\'lar iptal edilecek.</string>
+
+    <!-- ===== Frequency picker ===== -->
+    <string name="freq_select_title">FREKANS SEÇ</string>
+    <string name="freq_show_alternates">ALTERNATİFLERİ GÖSTER</string>
+    <string name="freq_hide_alternates">ALTERNATİFLERİ GİZLE</string>
+    <string name="freq_alt_prefix">"ALT "</string>
+
+    <!-- ===== Operator card ===== -->
+    <string name="op_no_call">ÇAĞRI YOK</string>
+    <string name="op_no_grid">Grid ayarlanmadı</string>
+    <string name="op_tap_to_edit">Düzenlemek için dokunun</string>
+    <string name="op_stat_rig">CİHAZ</string>
+    <string name="op_stat_antenna">ANTEN</string>
+    <string name="op_stat_power">GÜÇ</string>
+
+    <!-- ===== Export log sheet ===== -->
+    <string name="export_title">QSO\'LARI DIŞA AKTAR</string>
+    <string name="export_date_range">TARİH ARALIĞI</string>
+    <string name="export_date_from_placeholder">"Başlangıç  YYYYAAGG"</string>
+    <string name="export_date_to_placeholder">"Bitiş  YYYYAAGG"</string>
+    <string name="export_share">Paylaş</string>
+    <string name="export_filter_confirmed">yalnızca onaylı</string>
+    <string name="export_filter_unconfirmed">yalnızca onaysız</string>
+    <string name="export_record_singular">kayıt</string>
+    <string name="export_record_plural">kayıt</string>
+    <string name="export_summary_all">tümü</string>
+    <string name="export_summary_key">\'%1$s\'</string>
+    <string name="export_summary_suffix">" · %1$s"</string>
+    <string name="export_summary">%1$d %2$s, %3$s%4$s ile eşleşiyor</string>
+    <string name="export_preparing">Hazırlanıyor…</string>
+    <string name="export_share_chooser_title">QSO günlüklerini paylaş</string>
+    <string name="export_saved_to">%1$s konumuna kaydedildi</string>
+    <string name="export_save_failed">İndirilenler\'e kaydetme başarısız</string>
+    <string name="export_temp_file_failed">Geçici dosya oluşturulamadı</string>
+
+    <!-- ===== TX strip ===== -->
+    <string name="tx_transmitting">YAYINDA</string>
+    <string name="tx_listening">DİNLENİYOR</string>
+    <string name="tx_hunt">Av</string>
+    <string name="tx_call_cq">CQ Çağrısı</string>
+    <string name="tx_stop">Durdur</string>
+
+    <!-- ===== Hound (DXpedition) setup ===== -->
+    <string name="hound_title">DXpedition ile QSO yap (Hound)</string>
+    <string name="hound_help">Önce cihazı Fox\'un yayımladığı kadran frekansına ayarlayın. Siz yüksekten çağırırsınız (1000–4000 Hz); uygulama sizi Fox\'un yanıtladığı yere otomatik QSY eder ve raporunuzla yanıt verir.</string>
+    <string name="hound_fox_callsign">Fox çağrı işareti</string>
+    <string name="hound_call_frequency">Çağrı frekansı (Hz, 1000–4000)</string>
+    <string name="hound_start">Başlat</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT bağlı — yeniden bağlanmak için dokunun</string>
+    <string name="cat_status_connecting">CAT bağlanıyor…</string>
+    <string name="cat_status_disconnected">CAT bağlı değil — bağlanmak için dokunun</string>
+    <string name="cat_status_error">CAT bağlantı hatası — yeniden denemek için dokunun</string>
+
+    <!-- ===== SWR lockout banner ===== -->
+    <string name="swr_lockout_title">TX DURDURULDU — Yüksek SWR algılandı (%1$s)</string>
+    <string name="swr_lockout_body">Yayın yapmadan önce anteni / besleme hattını kontrol edin.</string>
+    <string name="swr_lockout_dismiss">KAPAT</string>
+    <string name="swr_lockout_toast">TX engellendi — SWR kilidi etkin. Önce kilit afişini kapatın.</string>
+
+    <!-- ===== Active QSO panel ===== -->
+    <string name="qsopanel_calling_cq">CQ çağrılıyor</string>
+    <string name="qsopanel_searching">Aranıyor...</string>
+    <string name="qsopanel_qsoing_with">%1$s ile QSO yapılıyor</string>
+    <string name="qsopanel_waiting_for">%1$s bekleniyor</string>
+    <string name="qsopanel_tap_to_view">görüntülemek için dokunun ↗</string>
+    <string name="qsopanel_tx_message">TX: %1$s</string>
+    <string name="qsopanel_waiting_messages">Mesajlar bekleniyor...</string>
+    <string name="qsopanel_log_action">GÜNLÜK</string>
+    <string name="qsopanel_queue">SIRA</string>
+
+    <!-- ===== Decode screen ===== -->
+    <string name="decode_title">Çözümle</string>
+    <string name="decode_subtitle">"%1$s  •  bu döngüde %2$d çözümlendi"</string>
+    <string name="decode_clear_list">Çözümleme listesini temizle</string>
+    <string name="decode_utc_placeholder">UTC : --:--:--</string>
+    <string name="decode_time_group_utc">%1$s UTC</string>
+    <string name="decode_filter_all">Tümü</string>
+    <string name="decode_filter_cq_calls">CQ Çağrıları</string>
+    <string name="decode_filter_cq_pota">CQ POTA</string>
+    <string name="decode_filter_new_dxcc">Yeni DXCC</string>
+    <string name="decode_filter_needed">Gerekli</string>
+    <string name="decode_filter_for_me">Bana</string>
+    <string name="decode_empty_cq_title">CQ çağrısı yok</string>
+    <string name="decode_empty_cq_body">Şu anda bu bantta CQ çağıran istasyon yok.</string>
+    <string name="decode_empty_pota_title">POTA spotu yok</string>
+    <string name="decode_empty_pota_body">Bu bantta henüz park aktivasyonu çözümlenmedi — spot listesi için POTA → Av\'ı açın.</string>
+    <string name="decode_empty_dxcc_title">Yeni DXCC yok</string>
+    <string name="decode_empty_dxcc_body">Henüz çözümlenmiş, daha önce yapılmamış DXCC bölgesi yok.</string>
+    <string name="decode_empty_needed_title">Gerekli bir şey yok</string>
+    <string name="decode_empty_needed_body">Onay gerektiren istasyon bulunamadı.</string>
+    <string name="decode_empty_forme_title">Size çağrı yok</string>
+    <string name="decode_empty_forme_body">Şu anda çağrı işaretinizi çağıran istasyon yok.</string>
+    <string name="decode_empty_default_title">Çözümlenen sinyal yok</string>
+    <string name="decode_empty_default_body">FT8 sinyallerinin görünmesi bekleniyor...</string>
+    <string name="decode_label_calling">→ ÇAĞIRIYOR</string>
+    <string name="decode_label_cq">CQ</string>
+    <string name="decode_label_to_you">↓ SİZE</string>
+
+    <!-- ===== QSO sheet ===== -->
+    <string name="qso_complete">QSO Tamamlandı</string>
+    <string name="qso_call_action">%1$s çağır</string>
+    <string name="qso_qrz_link">QRZ ↗</string>
+    <string name="qso_stat_signal">Sinyal</string>
+    <string name="qso_stat_distance">Mesafe</string>
+    <string name="qso_stat_azimuth">Azimut</string>
+    <string name="qso_stat_band">Bant</string>
+    <string name="qso_sequence_header">QSO SIRASI</string>
+    <string name="qso_step_send_call">Çağrı gönder</string>
+    <string name="qso_step_report_sent">Rapor gönderildi</string>
+    <string name="qso_step_roger">Roger</string>
+    <string name="qso_step_confirm">Onayla</string>
+    <string name="qso_step_logged">Günlüğe işlendi</string>
+    <string name="qso_live_sending">%1$s ile QSO — %2$s gönderiliyor</string>
+    <string name="qso_live_waiting">%1$s\'in yanıtı bekleniyor…</string>
+    <string name="qso_live_transmitting">Yayın yapılıyor…</string>
+    <string name="qso_live_step_fallback">mesaj</string>
+    <string name="qso_tx_now">ŞİMDİ TX</string>
+    <string name="qso_tx_next">SONRAKİ TX</string>
+
+    <!-- ===== Logbook ===== -->
+    <string name="log_tab_stats">İstatistik</string>
+    <string name="log_tab_recent">Son</string>
+    <string name="log_tab_awards">Ödüller</string>
+    <string name="log_title">Günlük</string>
+    <string name="log_subtitle_qsos_all_bands">%1$d QSO · Tüm bantlar</string>
+    <string name="log_cd_sync_to_logging_services">Günlükleme servisleriyle eşitle</string>
+    <string name="log_cd_export_qsos">QSO\'ları dışa aktar</string>
+    <string name="log_stat_total_qsos">Toplam QSO</string>
+    <string name="log_stat_dxcc_entities">DXCC Bölgeleri</string>
+    <string name="log_stat_cq_zones">CQ Bölgeleri</string>
+    <string name="log_stat_itu_zones">ITU Bölgeleri</string>
+    <string name="log_section_band_distribution">Bant Dağılımı</string>
+    <string name="log_section_award_progress">Ödül İlerlemesi</string>
+    <string name="log_award_dxcc_mixed">DXCC Karışık</string>
+    <string name="log_award_vucc_grid_squares">VUCC Grid Kareleri</string>
+    <string name="log_award_dxcc_challenge">DXCC Challenge</string>
+    <string name="log_section_grid_coverage">Grid Kapsamı</string>
+    <string name="log_section_signal_trend">Sinyal Eğilimi</string>
+    <string name="log_no_qsos_yet">Henüz QSO yok</string>
+    <string name="log_no_qsos_recorded_yet">Henüz kaydedilmiş QSO yok</string>
+    <string name="log_state_usa">%1$s, ABD</string>
+    <string name="log_cd_qso_actions">QSO işlemleri</string>
+    <string name="log_action_edit">Düzenle</string>
+    <string name="log_action_delete">Sil</string>
+    <string name="log_award_dxcc_mixed_desc">Herhangi bir bant/modda 100 DXCC bölgesi yapın ve onaylayın</string>
+    <string name="log_award_was">WAS</string>
+    <string name="log_award_was_desc">50 ABD eyaletinin tümünü onaylı olarak yapın</string>
+    <string name="log_award_waz">WAZ</string>
+    <string name="log_award_waz_desc">40 CQ bölgesinin tümünü onaylı olarak yapın</string>
+    <string name="log_award_vucc">VUCC</string>
+    <string name="log_award_vucc_desc">VHF/UHF Century Club -- tek bantta 100 grid karesi</string>
+    <string name="log_award_iota">IOTA</string>
+    <string name="log_award_iota_desc">Islands on the Air -- belirlenen adalardaki istasyonlarla QSO yapın</string>
+    <string name="log_edit_qso">QSO\'yu Düzenle</string>
+    <string name="log_field_callsign">Çağrı İşareti</string>
+    <string name="log_field_grid_locator">Grid Konumu</string>
+    <string name="log_field_mode">Mod</string>
+    <string name="log_delete_qso_title">QSO SİLİNSİN Mİ?</string>
+    <string name="log_delete_qso_body_callsign">%1$s ile yapılan QSO günlükten kaldırılsın mı? Bu işlem geri alınamaz.</string>
+    <string name="log_delete_qso_body">Bu QSO günlükten kaldırılsın mı? Bu işlem geri alınamaz.</string>
+    <string name="log_sync_title_no_services">ETKİN SERVİS YOK</string>
+    <string name="log_sync_title_syncing">EŞİTLENİYOR…</string>
+    <string name="log_sync_title_complete">EŞİTLEME TAMAMLANDI</string>
+    <string name="log_sync_enable_services">Ayarlar\'da Cloudlog/Wavelog/Nextlog veya QRZ\'yi etkinleştirip yeniden deneyin.</string>
+    <string name="log_sync_progress_count">%2$d QSO\'dan %1$d</string>
+    <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d kabul edildi</string>
+    <string name="log_sync_qrz_accepted">QRZ: %1$d kabul edildi</string>
+    <string name="log_sync_nothing_to_upload">Günlükte henüz yüklenecek QSO yok.</string>
+    <string name="log_sync_working">İşleniyor…</string>
+
+    <!-- ===== POTA ===== -->
+    <string name="pota_tab_activate">Aktive Et</string>
+    <string name="pota_tab_hunt">Av</string>
+    <string name="pota_tab_history">Geçmiş</string>
+    <string name="pota_start_activation">Aktivasyonu başlat</string>
+    <string name="pota_park_reference_label">Park referansı (ör. K-1234)</string>
+    <string name="pota_notes_optional_label">Notlar (isteğe bağlı)</string>
+    <string name="pota_enter_park_reference_first">Önce bir park referansı girin</string>
+    <string name="pota_activating">%1$s aktive ediliyor</string>
+    <string name="pota_activation_ended">Aktivasyon sona erdi</string>
+    <string name="pota_set_callsign_first">Önce Ayarlar\'da çağrı işaretinizi girin</string>
+    <string name="pota_self_spot_posted">Kendi spotunuz gönderildi</string>
+    <string name="pota_self_spot_failed">Kendi spotu başarısız — günlüğe bakın</string>
+    <string name="pota_active_park">AKTİF — %1$s</string>
+    <string name="pota_qsos">QSO</string>
+    <string name="pota_contacts_map">Bağlantı haritası</string>
+    <string name="pota_back">Geri</string>
+    <string name="pota_valid_activation">geçerli aktivasyon</string>
+    <string name="pota_to_valid">geçerlilik için %1$d</string>
+    <string name="pota_elapsed">Geçen süre</string>
+    <string name="pota_since_start">başlangıçtan beri</string>
+    <string name="pota_self_spot">Kendi spotu</string>
+    <string name="pota_end_activation">Aktivasyonu bitir</string>
+    <string name="pota_notes_quote">“%1$s”</string>
+    <string name="pota_tx_cq_preview">TX CQ şu şekilde yayımlanacak: “CQ POTA %1$s %2$s”.</string>
+    <string name="pota_no_spots">Şu anda FT8 POTA spotu yok.</string>
+    <string name="pota_active_spots">%1$d aktif FT8 spotu</string>
+    <string name="pota_targeting">%1$s @ %2$s kHz (%3$s) hedefleniyor — çağırmak için Çözümle\'ye geçin</string>
+    <string name="pota_no_past_activations">Henüz geçmiş aktivasyon yok.</string>
+    <string name="pota_no_browser_available">Kullanılabilir tarayıcı yok</string>
+    <string name="pota_export_failed">Dışa aktarma başarısız — günlüğe bakın</string>
+    <string name="pota_status_active">aktif</string>
+    <string name="pota_qso_count">%1$d QSO</string>
+    <string name="pota_share_adif">ADIF paylaş</string>
+    <string name="pota_open_pota_app">pota.app\'i aç</string>
+    <string name="pota_upload_to_pota">POTA\'ya yükle</string>
+    <string name="pota_upload_success">%1$d park günlüğü POTA\'ya yüklendi</string>
+    <string name="pota_upload_failed">Yükleme başarısız: %1$s</string>
+    <string name="pota_upload_server_error">POTA yüklemeyi işleyemedi. Park referansının geçerli ve çağrı işaretinizin POTA\'ya kayıtlı olduğundan emin olup yeniden deneyin.</string>
+    <string name="pota_upload_network_error">POTA\'ya ulaşılamadı. İnternet bağlantınızı kontrol edip yeniden deneyin.</string>
+    <string name="pota_login_title">POTA\'ya giriş yap</string>
+    <string name="pota_login_desc">pota.app hesabınızın e-posta ve parolasını kullanın.</string>
+    <string name="pota_login_email">E-posta</string>
+    <string name="pota_login_password">Parola</string>
+    <string name="pota_login_button">Giriş yap</string>
+    <string name="pota_login_cancel">İptal</string>
+    <string name="pota_login_failed">Giriş başarısız: %1$s</string>
+    <string name="pota_login_or">veya</string>
+    <string name="pota_login_social">Google / Facebook / Amazon ile giriş yap</string>
+    <string name="pota_oauth_title">POTA\'ya giriş yap</string>
+    <string name="pota_add_park">Park ekle</string>
+    <string name="pota_remove_park">Kaldır</string>
+    <string name="pota_max_parks_reached">En fazla 10 parka ulaşıldı</string>
+    <string name="pota_spotted_n_parks">%1$d parkta spotlandı</string>
+    <string name="pota_parks_more">+%1$d daha</string>
+
+    <!-- ===== Debug log / Map / Waterfall ===== -->
+    <string name="debug_title">Hata Ayıklama</string>
+    <string name="debug_line_count">%1$d satır</string>
+    <string name="debug_logcat_on_suffix">" · logcat AÇIK"</string>
+    <string name="debug_close">Kapat</string>
+    <string name="debug_share">Paylaş</string>
+    <string name="debug_clear">Temizle</string>
+    <string name="debug_logcat_on">Logcat: AÇIK</string>
+    <string name="debug_logcat_off">Logcat: KAPALI</string>
+    <string name="debug_no_log_file">günlük dosyası yok</string>
+    <string name="debug_log_cleared">günlük temizlendi</string>
+    <string name="debug_share_chooser_title">debug.log\'u paylaş</string>
+    <string name="map_title">Harita</string>
+    <string name="map_no_grid_set">Grid ayarlanmadı</string>
+    <string name="map_station_count">%1$d istasyon</string>
+    <string name="map_station_count_with_heard">%1$d istasyon · %2$d duyuldu</string>
+    <string name="map_psk_error">PSK Reporter kullanılamıyor: %1$s</string>
+    <string name="map_projection_equirectangular">Eşdörtgen</string>
+    <string name="map_projection_azimuthal">Azimutal Eşit Uzaklık</string>
+    <string name="map_mode_standard">STD</string>
+    <string name="map_mode_azimuthal">AZ</string>
+    <string name="map_overlay_psk">PSK</string>
+    <string name="map_info_distance">Mesafe</string>
+    <string name="map_info_bearing">Yön</string>
+    <string name="map_info_snr">SNR</string>
+    <string name="waterfall_title">Şelale</string>
+    <string name="waterfall_toggle_nr">NR</string>
+    <string name="waterfall_toggle_msg">MSG</string>
+    <string name="waterfall_status_live">CANLI</string>
+
+    <!-- ===== Settings: format helpers ===== -->
+    <string name="settings_minutes_format">%1$d min</string>
+    <string name="settings_tries_format">%1$d deneme</string>
+    <string name="settings_milliseconds_format">%1$d ms</string>
+    <string name="settings_hz_format">%1$d Hz</string>
+    <string name="settings_hz_str_format">%1$s Hz</string>
+    <string name="settings_percent_format">%1$d%%</string>
+    <string name="settings_bands_enabled_format">%2$d bandın %1$d\'i etkin</string>
+    <string name="settings_min_max_suffix">%1$d–%2$d %3$s</string>
+    <string name="settings_build_date_format">Derleme %1$s</string>
+    <string name="settings_version_value">v%1$s</string>
+
+    <!-- ===== Settings: sections ===== -->
+    <string name="settings_title">Ayarlar</string>
+    <string name="settings_section_operator_identity">OPERATÖR KİMLİĞİ</string>
+    <string name="settings_section_radio">RADYO</string>
+    <string name="settings_section_audio">SES</string>
+    <string name="settings_section_transmission">YAYIN</string>
+    <string name="settings_section_auto_sequence">OTOMATİK SIRA</string>
+    <string name="settings_section_decode_highlights">ÇÖZÜMLEME VURGULARI</string>
+    <string name="settings_section_callsign_blocklist">ÇAĞRI İŞARETİ ENGEL LİSTESİ</string>
+    <string name="settings_section_decode_filters">ÇÖZÜMLEME FİLTRELERİ</string>
+    <string name="settings_section_needed_dx_alerts">GEREKLİ-DX UYARILARI</string>
+    <string name="settings_section_logging_awards">GÜNLÜK &amp; ÖDÜLLER</string>
+    <string name="settings_section_advanced">GELİŞMİŞ</string>
+    <string name="settings_section_about">HAKKINDA</string>
+    <string name="settings_section_language">DİL</string>
+
+    <!-- ===== Settings: drill-down category labels ===== -->
+    <string name="settings_cat_radio_audio">Radyo &amp; Ses</string>
+    <string name="settings_cat_transmission">Yayın</string>
+    <string name="settings_cat_decode_filters">Çözümleme &amp; Filtreler</string>
+    <string name="settings_cat_logging">Günlük &amp; Ödüller</string>
+    <string name="settings_cat_advanced">Gelişmiş</string>
+    <string name="settings_cat_about">Hakkında</string>
+    <string name="settings_cat_time_sync">Zaman Eşitleme</string>
+    <string name="settings_cat_time_sync_desc">Çevrimdışı çalışma için manuel saat düzeltmesi</string>
+
+    <!-- ===== Settings: Time Sync (manual clock correction) ===== -->
+    <string name="settings_time_correction_section">Manuel Düzeltme</string>
+    <string name="settings_time_current_label">Geçerli düzeltme</string>
+    <string name="settings_time_correction_reset">0\'a sıfırla</string>
+    <string name="settings_time_correction_desc">Eşitlemek için internetiniz olmadığında uygulama saatini ayarlayın. FT8, UTC için yaklaşık 1 saniye hassasiyet gerektirir. Çözümlenen istasyonların DT sütunu 0\'a yakın ortalanana kadar ayarlayın.</string>
+    <string name="settings_time_suggest_section">Çözümlemelerden önerilen</string>
+    <string name="settings_time_suggest_none">Henüz çözümleme yok — öneri almak için alıma başlayın.</string>
+    <string name="settings_time_suggest_label">Son ortalama DT: %1$s</string>
+    <string name="settings_time_suggest_apply">Önerilen düzeltmeyi uygula</string>
+
+    <!-- ===== Settings: operator identity ===== -->
+    <string name="settings_auto_update_grid">Grid\'i Otomatik Güncelle (GPS)</string>
+    <string name="settings_auto_update_grid_desc">Maidenhead grid\'inizi güncel tutmak için cihaz GPS\'ini kullanın</string>
+
+    <!-- ===== Settings: radio ===== -->
+    <string name="settings_rig_model">Cihaz Modeli</string>
+    <string name="settings_control_mode">Kontrol Modu</string>
+    <string name="settings_connection_mode">Bağlantı Modu</string>
+    <string name="settings_baud_rate">Baud Hızı</string>
+    <string name="settings_band_frequency">Bant &amp; Frekans</string>
+    <string name="settings_enabled_bands">Etkin Bantlar</string>
+    <string name="settings_audio_frequency">Ses Frekansı</string>
+    <string name="settings_spectrum_width">Spektrum Genişliği</string>
+
+    <!-- ===== Settings: audio ===== -->
+    <string name="settings_audio_input">Ses Girişi</string>
+    <string name="settings_audio_output">Ses Çıkışı</string>
+    <string name="settings_tx_volume">TX Sesi</string>
+    <string name="settings_tx_volume_desc" formatted="false">Yayın ses düzeyi (donanım düğmeleri ±5%)</string>
+
+    <!-- ===== Settings: transmission ===== -->
+    <string name="settings_tx_rx_split">TX/RX Ayrımı</string>
+    <string name="settings_tx_rx_split_desc">Alımdan farklı bir frekansta yayın yapın</string>
+    <string name="settings_tx_watchdog">TX Bekçisi</string>
+    <string name="settings_tx_watchdog_desc">Zaman aşımından sonra yayını otomatik durdur</string>
+    <string name="settings_stop_after">Şundan Sonra Durdur</string>
+    <string name="settings_stop_after_desc">N yanıtsız denemeden sonra çağrıyı durdur</string>
+
+    <!-- ===== Settings: auto-sequence ===== -->
+    <string name="settings_hunt">Av (CQ\'lara otomatik yanıt)</string>
+    <string name="settings_hunt_desc">CQ çağıran istasyonları proaktif olarak çağırın. TX çubuğundaki AV düğmesiyle aynı. Kapalı = CQ yapın ve yalnızca size yanıt veren istasyonlarla QSO yapın.</string>
+    <string name="settings_auto_call_followed">Takip Edileni Otomatik Çağır</string>
+    <string name="settings_auto_call_followed_desc">Takip edilen çağrı işaretlerini otomatik olarak çağırmaya devam et</string>
+    <string name="settings_fast_turnaround">Hızlı dönüş</string>
+    <string name="settings_fast_turnaround_desc">Beklemek yerine bir sonraki yuvada CQ\'ya yanıt verebilmeniz için ~1s daha erken çözümleyin. Büyük saat sapması olan istasyonları kaçırabilir.</string>
+    <string name="settings_auto_cq_after_qso">QSO sonrası Otomatik CQ</string>
+    <string name="settings_auto_cq_after_qso_desc">Tamamlanan her bağlantıdan sonra otomatik olarak CQ çağırmaya devam et — yeniden dokunma yok. Frekansınızda kalır (Av\'ı yok sayar). Siz durdurana veya TX Bekçisi yanıtsız zaman aşımına uğrayana kadar çalışır.</string>
+
+    <!-- ===== Settings: decode highlights ===== -->
+    <string name="settings_highlight_new_dxcc">Yeni DXCC</string>
+    <string name="settings_highlight_new_dxcc_desc">Daha önce yapılmamış bir DXCC bölgesinden gelen istasyonları vurgula</string>
+    <string name="settings_highlight_new_grid">Yeni Grid</string>
+    <string name="settings_highlight_new_grid_desc">Henüz yapılmamış Maidenhead grid\'lerini vurgula</string>
+    <string name="settings_highlight_new_band">Yeni Bant</string>
+    <string name="settings_highlight_new_band_desc">Yalnızca diğer bantlarda yapılmış istasyonları vurgula</string>
+    <string name="settings_highlight_pota">POTA Aktivatörleri</string>
+    <string name="settings_highlight_pota_desc">Spotlanan POTA aktivatörlerini vurgula; yeni parklar öne çıkar</string>
+    <string name="settings_highlight_worked">Daha Önce Yapıldı</string>
+    <string name="settings_highlight_worked_desc">Günlüğünüzde zaten olan istasyonları işaretle</string>
+    <string name="settings_distance_unit">Mesafe Mil Olarak</string>
+    <string name="settings_distance_unit_desc">Mesafeleri kilometre yerine mil olarak göster</string>
+
+    <!-- ===== Settings: callsign blocklist ===== -->
+    <string name="settings_exact_callsigns">Tam Çağrı İşaretleri</string>
+    <string name="settings_exact_callsigns_desc">Tam çağrı eşleşmelerini engelle</string>
+    <string name="settings_prefixes">Ön Ekler</string>
+    <string name="settings_prefixes_desc">Çağrı işareti ön ekine göre engelle (ör. RA)</string>
+    <string name="settings_keywords">Anahtar Sözcükler</string>
+    <string name="settings_keywords_desc">Çağrı veya mesajdaki alt dizeye göre engelle (ör. POTA, /P)</string>
+
+    <!-- ===== Settings: decode filters ===== -->
+    <string name="settings_show_only_cq">Yalnızca CQ Göster</string>
+    <string name="settings_show_only_cq_desc">CQ türü mesajlar dışındaki her şeyi gizle</string>
+    <string name="settings_dx_only">Yalnızca DX</string>
+    <string name="settings_dx_only_desc">Yalnızca kendi kıtanız dışındaki istasyonları göster</string>
+    <string name="settings_needed_only">Yalnızca Gerekli</string>
+    <string name="settings_needed_only_desc">Yalnızca henüz onaylanmamış (QSL) istasyonları göster</string>
+    <string name="settings_filter_by_continent">Kıtaya Göre Filtrele</string>
+    <string name="settings_filter_by_continent_desc">Yalnızca seçilen bir kıtadan gelen istasyonları göster</string>
+    <string name="settings_continent">Kıta</string>
+    <string name="settings_skip_directional_cq">Yönlü CQ\'ları Atla (otomatik yanıt)</string>
+    <string name="settings_skip_directional_cq_desc">Farklı bir DXCC\'ye yönelik CQ DX/EU/JA… çağrılarına otomatik yanıt verme</string>
+    <string name="settings_hide_directional_cq">Bana Olmayan Yönlü CQ\'ları Gizle</string>
+    <string name="settings_hide_directional_cq_desc">DXCC\'nizi hedeflemeyen bölgesel CQ\'ları gizle</string>
+
+    <!-- ===== Settings: needed-DX alerts ===== -->
+    <string name="settings_alert_new_dxcc">Yeni DXCC</string>
+    <string name="settings_alert_new_dxcc_desc">Yapılmamış bir DXCC bölgesi CQ çağırdığında ses + titreşim + bildirim</string>
+    <string name="settings_alert_new_state">Yeni ABD Eyaleti</string>
+    <string name="settings_alert_new_state_desc">Yapılmamış bir ABD eyaletinden istasyon CQ çağırdığında ses + titreşim + bildirim (eyalet grid\'den)</string>
+
+    <!-- ===== Settings: logging &amp; awards ===== -->
+    <string name="settings_save_swl_decodes">SWL Çözümlemelerini Kaydet</string>
+    <string name="settings_save_swl_decodes_desc">Çözümlenen tüm mesajları veritabanına kaydet</string>
+    <string name="settings_save_swl_qsos">SWL QSO\'larını Kaydet</string>
+    <string name="settings_save_swl_qsos_desc">Diğer istasyonlar arasında algılanan QSO\'ları kaydet</string>
+    <string name="settings_pskreporter">PSKReporter</string>
+    <string name="settings_pskreporter_desc">Çözümlenen spotları pskreporter.info\'ya yükle</string>
+    <string name="settings_qrz_com">QRZ.com</string>
+    <string name="settings_qrz_com_desc">QSO\'ları QRZ Günlüğü\'ne otomatik yükle</string>
+    <string name="settings_qrz_profile_lookup">QRZ Profil Sorgulama</string>
+    <string name="settings_qrz_profile_lookup_desc">QRZ XML API için kullanıcı adı + parola (avatarlar)</string>
+    <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
+    <string name="settings_cloudlog_desc">QSO\'ları bir Cloudlog, Wavelog veya Nextlog örneğine otomatik yükle</string>
+
+    <!-- ===== Settings: advanced ===== -->
+    <string name="settings_ptt_delay">PTT Gecikmesi</string>
+    <string name="settings_ptt_delay_desc">PTT\'den sonra yayın sesi başlamadan önceki gecikme</string>
+    <string name="settings_tx_delay">TX Gecikmesi</string>
+    <string name="settings_tx_delay_desc">Önceki döngünün çözümlenmesine izin vermek için yayından önceki gecikme</string>
+    <string name="settings_late_start_tolerance">Geç Başlama Toleransı</string>
+    <string name="settings_late_start_tolerance_desc">TX\'in döngüye N ms\'ye kadar geç başlamasına izin ver; TX döngü sınırında bitsin diye baştaki ses kırpılır</string>
+
+    <!-- ===== Settings: about ===== -->
+    <string name="settings_faq_support">SSS &amp; Destek</string>
+    <string name="settings_report_bug">Hata Bildir</string>
+    <string name="bug_report_description_hint">Neyin yanlış gittiğini açıklayın…</string>
+    <string name="bug_report_send_email">E-posta gönder</string>
+    <string name="bug_report_no_email_app">Raporu göndermek için e-posta uygulaması bulunamadı</string>
+    <string name="bug_report_open_github">GitHub sorunu aç</string>
+    <string name="settings_debug">Hata Ayıklama</string>
+    <string name="settings_debug_desc">debug.log\'u görüntüle / paylaş</string>
+    <string name="settings_about_body">Sürüm %1$s (derleme %2$s)\nDerleme tarihi %3$s\n\nFT8, kolaylaştırıldı.\n\nAndroid için bağımsız bir FT8 alıcı-verici uygulaması. Otomatik sıralama ve günlükleme ile USB, Bluetooth ve ağ üzerinden cihaz kontrolü.</string>
+    <string name="settings_website">Web Sitesi</string>
+    <string name="settings_community">Topluluk</string>
+    <string name="settings_built_by">Yapan</string>
+
+    <!-- ===== Settings: dialogs ===== -->
+    <string name="settings_block_exact_title">Tam Çağrı İşaretlerini Engelle</string>
+    <string name="settings_block_exact_desc">Tam çağrı eşleşmesi. Virgül veya boşlukla ayrılmış, ör. W1AW, K1ABC.</string>
+    <string name="settings_block_prefix_title">Çağrı İşareti Ön Eklerini Engelle</string>
+    <string name="settings_block_prefix_desc">Ön ek eşleşmesi, ör. RA, RA0AA..RA9ZZ\'yi engeller. Virgül veya boşlukla ayrılmış.</string>
+    <string name="settings_block_keyword_title">Anahtar Sözcükleri Engelle</string>
+    <string name="settings_block_keyword_desc">Çağrı ve mesaj metnine karşı alt dize eşleşmesi, ör. POTA, /P, QRP.</string>
+    <string name="settings_blocklist_hint">ör. W1AW, RA, /P</string>
+    <string name="settings_filter_continent_title">Kıta Filtrele</string>
+    <string name="settings_conn_usb_cable">USB Kablo</string>
+    <string name="settings_conn_bluetooth">Bluetooth</string>
+    <string name="settings_conn_network">Ağ</string>
+    <string name="settings_no_usb_serial">USB seri cihaz algılanmadı. Lütfen radyonuza bir USB kablo bağlayıp yeniden deneyin.</string>
+    <string name="settings_no_bluetooth_devices">Eşleştirilmiş Bluetooth cihazı bulunamadı. Önce Android Bluetooth ayarlarında bir cihaz eşleştirin.</string>
+    <string name="settings_debug_mode_enabled">Hata ayıklama modu etkin</string>
+    <string name="settings_debug_mode_disabled">Hata ayıklama modu devre dışı</string>
+    <string name="settings_edit_operator_identity">Operatör Kimliğini Düzenle</string>
+    <string name="settings_callsign">Çağrı İşareti</string>
+    <string name="settings_callsign_hint">ör. W1AW</string>
+    <string name="settings_grid_locator">Grid Konumu</string>
+    <string name="settings_grid_locator_hint">ör. FN31pr</string>
+    <string name="settings_logging_server">Günlükleme Sunucusu</string>
+    <string name="settings_logging_server_desc">Cloudlog, Wavelog ve Nextlog aynı yüklemeleri kabul eder.</string>
+    <string name="settings_server_address">Sunucu Adresi</string>
+    <string name="settings_api_key">API Anahtarı</string>
+    <string name="settings_api_key_hint">Cloudlog API anahtarınız</string>
+    <string name="settings_loading_stations">İstasyonlar yükleniyor...</string>
+    <string name="settings_station_id">İstasyon Kimliği</string>
+    <string name="settings_station_id_hint">ör. 1</string>
+    <string name="settings_select_a_station">Bir istasyon seçin</string>
+    <string name="settings_enter_manually">Elle gir</string>
+    <string name="settings_choose_from_server">Sunucudan seç</string>
+    <string name="settings_station_profile">İstasyon Profili</string>
+    <string name="settings_qrz_creds_desc">QRZ XML API üzerinden çözümlenen çağrı işaretleri için profil fotoğrafı almakta kullanılır. QRZ XML aboneliği gerektirir.</string>
+    <string name="settings_username">Kullanıcı Adı</string>
+    <string name="settings_username_hint">QRZ.com kullanıcı adınız</string>
+    <string name="settings_password">Parola</string>
+    <string name="settings_enabled_bands_dialog_desc">Gizli bantlar frekans seçicilerde görünmez.</string>
+    <string name="settings_select_serial_port">Seri Port Seç</string>
+    <string name="settings_tx_volume_advice">Canlı ayarlayın — bir sonraki TX\'iniz bu düzeyi kullanır. Radyonuzun ALC\'sini izleyin ve çizgiye değecek kadar düşürün.</string>
+
+    <!-- ===== Settings: language picker ===== -->
+    <string name="settings_language">Dil</string>
+    <string name="settings_language_desc">Uygulama görüntüleme dili</string>
+    <string name="settings_language_system">Sistem varsayılanı</string>
+
+</resources>

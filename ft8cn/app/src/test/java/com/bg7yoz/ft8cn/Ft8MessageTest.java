@@ -366,28 +366,28 @@ public class Ft8MessageTest {
 
     @Test
     public void getSequence_ft2_alternatesEachShortSlot() {
-        // FT2's 3.8s slot — must alternate twice as fast as FT4's 7.5s.
+        // FT2's 3.75s slot — must alternate twice as fast as FT4's 7.5s.
         Ft8Message msg = new Ft8Message(FT8Common.FT2_MODE);
         msg.utcTime = 0;
         assertThat(msg.getSequence()).isEqualTo(0);
-        msg.utcTime = 3800;
+        msg.utcTime = 3750;
         assertThat(msg.getSequence()).isEqualTo(1);
-        msg.utcTime = 7600;
+        msg.utcTime = 7500;
         assertThat(msg.getSequence()).isEqualTo(0);
-        msg.utcTime = 11400;
+        msg.utcTime = 11250;
         assertThat(msg.getSequence()).isEqualTo(1);
     }
 
     @Test
     public void getSequence_ft2_adjacentSlotsHaveDistinctParity() {
         // Regression for #205: the old code reused FT4's 7.5s period for FT2, so
-        // two adjacent 3.8s slots (0ms and 3800ms) both mapped to sequence 0.
+        // two adjacent 3.75s slots (0ms and 3750ms) both mapped to sequence 0.
         // The QSO sequencer then saw the other station's reply as being in our
         // own slot and skipped it, stalling on the report instead of sending RR73.
         Ft8Message slotA = new Ft8Message(FT8Common.FT2_MODE);
         slotA.utcTime = 0;
         Ft8Message slotB = new Ft8Message(FT8Common.FT2_MODE);
-        slotB.utcTime = 3800;
+        slotB.utcTime = 3750;
         assertThat(slotA.getSequence()).isNotEqualTo(slotB.getSequence());
     }
 
@@ -396,7 +396,7 @@ public class Ft8MessageTest {
         // utcTime is slot-aligned; the +slot/20 nudge keeps a timestamp a touch
         // early (clock skew) in the correct slot rather than the previous one.
         Ft8Message msg = new Ft8Message(FT8Common.FT2_MODE);
-        msg.utcTime = 3800 - 50; // 50ms before slot 1's boundary
+        msg.utcTime = 3750 - 50; // 50ms before slot 1's boundary
         assertThat(msg.getSequence()).isEqualTo(1);
     }
 
@@ -405,13 +405,13 @@ public class Ft8MessageTest {
         Ft8Message msg = new Ft8Message(FT8Common.FT2_MODE);
         msg.utcTime = 0;
         assertThat(msg.getSequence4()).isEqualTo(0);
-        msg.utcTime = 3800;
+        msg.utcTime = 3750;
         assertThat(msg.getSequence4()).isEqualTo(1);
-        msg.utcTime = 7600;
+        msg.utcTime = 7500;
         assertThat(msg.getSequence4()).isEqualTo(2);
-        msg.utcTime = 11400;
+        msg.utcTime = 11250;
         assertThat(msg.getSequence4()).isEqualTo(3);
-        msg.utcTime = 15200;
+        msg.utcTime = 15000;
         assertThat(msg.getSequence4()).isEqualTo(0);
     }
 

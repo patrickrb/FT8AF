@@ -77,14 +77,14 @@ public class UtcTimerTest {
     }
 
     @Test
-    public void sequential_withSlotMillis_ft2AlternatesEvery3point8s() {
-        // FT2's 3800ms slot isn't a whole number of seconds; sequential() works in ms
-        // directly so the boundary lands exactly on each 3.8s multiple.
-        assertThat(UtcTimer.sequential(0L, 3_800)).isEqualTo(0);
-        assertThat(UtcTimer.sequential(3_799L, 3_800)).isEqualTo(0);
-        assertThat(UtcTimer.sequential(3_800L, 3_800)).isEqualTo(1);
-        assertThat(UtcTimer.sequential(7_600L, 3_800)).isEqualTo(0);
-        assertThat(UtcTimer.sequential(11_400L, 3_800)).isEqualTo(1);
+    public void sequential_withSlotMillis_ft2AlternatesEvery3point75s() {
+        // FT2's 3750ms slot isn't a whole number of seconds; sequential() works in ms
+        // directly so the boundary lands exactly on each 3.75s multiple.
+        assertThat(UtcTimer.sequential(0L, 3_750)).isEqualTo(0);
+        assertThat(UtcTimer.sequential(3_749L, 3_750)).isEqualTo(0);
+        assertThat(UtcTimer.sequential(3_750L, 3_750)).isEqualTo(1);
+        assertThat(UtcTimer.sequential(7_500L, 3_750)).isEqualTo(0);
+        assertThat(UtcTimer.sequential(11_250L, 3_750)).isEqualTo(1);
     }
 
     @Test
@@ -97,83 +97,90 @@ public class UtcTimerTest {
         assertThat(UtcTimer.sequential(29_999L)).isEqualTo(1);
     }
 
-    /** The legacy minute-anchored predicate, kept here to prove equivalence for FT8/FT4. */
-    private static boolean legacyBoundary(long utc, int offsetMs, int sec) {
-        return (((utc - offsetMs) / 100) % 600) % sec == 0;
+    /**
+     * The slot-boundary predicate before this change worked in tenths of a second
+     * ({@code (utc/100) % tenths == 0}). Kept here to prove the new millisecond-window
+     * predicate fires on exactly the same 100ms ticks for FT8 and FT4 — whose slot lengths
+     * are whole tenths (150, 75) — so only FT2 (3.75s, not a whole tenth) changes.
+     */
+    private static boolean tenthsBoundary(long utc, int offsetMs, int tenths) {
+        return (((utc - offsetMs) / 100) % tenths) == 0;
     }
 
     @Test
-    public void isCycleBoundary_ft8MatchesLegacyMinuteAnchoredFormula() {
-        // 150 tenths (15s) divides 600, so the new epoch-anchored test must agree with the
-        // old minute-anchored one at every 100ms tick across a full minute.
+    public void isCycleBoundary_ft8MatchesPreviousTenthsPredicate() {
         for (long ms = 0; ms < 60_000; ms += 100) {
-            assertThat(UtcTimer.isCycleBoundary(ms, 0, 150))
-                    .isEqualTo(legacyBoundary(ms, 0, 150));
+            assertThat(UtcTimer.isCycleBoundary(ms, 0, 15_000))
+                    .isEqualTo(tenthsBoundary(ms, 0, 150));
         }
     }
 
     @Test
-    public void isCycleBoundary_ft4MatchesLegacyMinuteAnchoredFormula() {
-        // 75 tenths (7.5s) also divides 600 — behaviour is unchanged for FT4.
+    public void isCycleBoundary_ft4MatchesPreviousTenthsPredicate() {
         for (long ms = 0; ms < 60_000; ms += 100) {
-            assertThat(UtcTimer.isCycleBoundary(ms, 0, 75))
-                    .isEqualTo(legacyBoundary(ms, 0, 75));
+            assertThat(UtcTimer.isCycleBoundary(ms, 0, 7_500))
+                    .isEqualTo(tenthsBoundary(ms, 0, 75));
         }
     }
 
     @Test
     public void isCycleBoundary_ft8FiresOnAbsoluteSlotGrid() {
-        assertThat(UtcTimer.isCycleBoundary(0L, 0, 150)).isTrue();
-        assertThat(UtcTimer.isCycleBoundary(15_000L, 0, 150)).isTrue();
-        assertThat(UtcTimer.isCycleBoundary(7_500L, 0, 150)).isFalse();
-        // Real-world instant: a boundary iff systemTime % 15000 == 0.
-        assertThat(UtcTimer.isCycleBoundary(T_2023, 0, 150))
-                .isEqualTo(T_2023 % 15_000 == 0);
+        assertThat(UtcTimer.isCycleBoundary(0L, 0, 15_000)).isTrue();
+        assertThat(UtcTimer.isCycleBoundary(15_000L, 0, 15_000)).isTrue();
+        assertThat(UtcTimer.isCycleBoundary(7_500L, 0, 15_000)).isFalse();
+        // Real-world instant: a boundary iff systemTime % 15000 is inside the open window.
+        assertThat(UtcTimer.isCycleBoundary(T_2023, 0, 15_000))
+                .isEqualTo(T_2023 % 15_000 < 100);
     }
 
     @Test
-    public void isCycleBoundary_ft2FiresOnAbsolute3point8sGrid() {
-        // FT2 (38 tenths) does NOT divide 600, so this is where old and new diverge.
-        // The new predicate fires exactly on multiples of 3.8s from the epoch...
-        assertThat(UtcTimer.isCycleBoundary(0L, 0, 38)).isTrue();
-        assertThat(UtcTimer.isCycleBoundary(3_800L, 0, 38)).isTrue();
-        assertThat(UtcTimer.isCycleBoundary(7_600L, 0, 38)).isTrue();
-        assertThat(UtcTimer.isCycleBoundary(3_700L, 0, 38)).isFalse();
-        assertThat(UtcTimer.isCycleBoundary(3_900L, 0, 38)).isFalse();
+    public void isCycleBoundary_ft2FiresOnAbsolute3point75sGrid() {
+        // FT2's 3750ms slot has no tenths-of-a-second form (37.5 tenths), so the
+        // millisecond predicate is what puts it on a clean grid. Fires in the 100ms
+        // window opening each slot.
+        assertThat(UtcTimer.isCycleBoundary(0L, 0, 3_750)).isTrue();
+        assertThat(UtcTimer.isCycleBoundary(3_750L, 0, 3_750)).isTrue();
+        assertThat(UtcTimer.isCycleBoundary(7_500L, 0, 3_750)).isTrue();
+        assertThat(UtcTimer.isCycleBoundary(11_250L, 0, 3_750)).isTrue();
+        // Mid-slot and just-outside-the-window instants do not fire.
+        assertThat(UtcTimer.isCycleBoundary(1_875L, 0, 3_750)).isFalse();
+        assertThat(UtcTimer.isCycleBoundary(3_700L, 0, 3_750)).isFalse();
+        assertThat(UtcTimer.isCycleBoundary(3_850L, 0, 3_750)).isFalse();
     }
 
     @Test
     public void isCycleBoundary_ft2EveryFireOpensASlotSoLateStartNeverClips() {
         // The transmit late-start math clips leading audio by (systemTime % slotMillis)
-        // beyond the slack. The FT2 regression was that the timer fired when
-        // systemTime % 3800 was large (up to ~3.0s), clipping the leading Costas sync.
-        // With the epoch-anchored predicate, every fire lands within one 100ms tick of a
-        // real 3800ms slot boundary, so msIntoCycle is always < 100 and nothing is clipped.
-        int slotMillis = 3_800;
+        // beyond the slack. Every fire must land within the 100ms slot-open window so
+        // msIntoCycle stays < 100 and the leading Costas sync is never clipped.
+        int slotMillis = 3_750;
         int fires = 0;
         for (long ms = 0; ms < 600_000; ms += 100) { // 10 minutes of ticks
-            if (UtcTimer.isCycleBoundary(ms, 0, 38)) {
+            if (UtcTimer.isCycleBoundary(ms, 0, slotMillis)) {
                 fires++;
                 long msIntoCycle = ms % slotMillis;
                 assertThat(msIntoCycle).isLessThan(100L);
             }
         }
-        // Sanity: ~ one fire per 3.8s over 10 minutes.
-        assertThat(fires).isEqualTo(600_000 / slotMillis + 1);
+        // Exactly one fire per slot over 10 minutes. When slotMillis divides 600000 the
+        // boundary at 600000 itself is excluded (loop is ms < 600000).
+        int expected = (600_000 % slotMillis == 0)
+                ? 600_000 / slotMillis
+                : 600_000 / slotMillis + 1;
+        assertThat(fires).isEqualTo(expected);
     }
 
     @Test
-    public void isCycleBoundary_legacyFormulaWouldHaveClippedFt2() {
-        // Guard the regression: the OLD predicate fired off the absolute slot grid for
-        // FT2, landing where systemTime % 3800 was large — that is the clip that broke TX.
-        boolean sawLargeOffset = false;
-        for (long ms = 0; ms < 600_000; ms += 100) {
-            if (legacyBoundary(ms, 0, 38) && (ms % 3_800) >= 1_280) {
-                sawLargeOffset = true; // >= FT2 audio slack -> leading audio clipped
-                break;
-            }
+    public void isCycleBoundary_oneSecondTickFiresOnSecondGrid() {
+        // MainViewModel's clock-display timer is a 1-second tick. It used to pass the
+        // tenths value 10 (= 1s); under the millisecond API it must pass 1000. Both forms
+        // fire once per second, second-aligned — guard against the unit regression.
+        for (long ms = 0; ms < 10_000; ms += 100) {
+            assertThat(UtcTimer.isCycleBoundary(ms, 0, 1_000))
+                    .isEqualTo(tenthsBoundary(ms, 0, 10));
         }
-        assertThat(sawLargeOffset).isTrue();
+        assertThat(UtcTimer.isCycleBoundary(1_000L, 0, 1_000)).isTrue();
+        assertThat(UtcTimer.isCycleBoundary(500L, 0, 1_000)).isFalse();
     }
 
     @Test

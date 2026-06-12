@@ -1,0 +1,532 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- ===== Common / shared ===== -->
+    <string name="action_cancel">Скасувати</string>
+    <string name="action_save">Зберегти</string>
+    <string name="action_done">Готово</string>
+    <string name="action_ok">OK</string>
+    <string name="action_exit">Вийти</string>
+    <string name="common_none">Немає</string>
+    <string name="common_off">Вимк.</string>
+    <string name="common_not_configured">Не налаштовано</string>
+    <string name="common_not_connected">Не під’єднано</string>
+    <string name="common_pass">Пройдено</string>
+    <string name="common_fail">Не пройдено</string>
+    <string name="common_test_connection">Перевірити з’єднання</string>
+
+    <!-- ===== Continents ===== -->
+    <string name="continent_na">Північна Америка</string>
+    <string name="continent_sa">Південна Америка</string>
+    <string name="continent_eu">Європа</string>
+    <string name="continent_af">Африка</string>
+    <string name="continent_as">Азія</string>
+    <string name="continent_oc">Океанія</string>
+    <string name="continent_an">Антарктида</string>
+
+    <!-- ===== Bottom navigation tabs ===== -->
+    <string name="tab_decode">Декод</string>
+    <string name="tab_map">Карта</string>
+    <string name="tab_waterfall">Водоспад</string>
+    <string name="tab_pota">POTA</string>
+    <string name="tab_logbook">Журнал</string>
+    <string name="tab_settings">Налаштування</string>
+
+    <!-- ===== Status pills (decode list badges) ===== -->
+    <string name="status_new_dxcc">НОВИЙ DXCC</string>
+    <string name="status_new_grid">НОВИЙ ЛОКАТОР</string>
+    <string name="status_new_band">НОВИЙ ДІАПАЗОН</string>
+    <string name="status_pota">POTA</string>
+    <string name="status_new_pota">НОВИЙ POTA</string>
+    <string name="status_sota">SOTA</string>
+    <string name="status_needed">ПОТРІБНО</string>
+    <string name="status_worked">ПРОВЕДЕНО</string>
+    <string name="status_confirmed">ПІДТВЕРДЖЕНО</string>
+    <string name="status_cq">CQ</string>
+    <string name="status_pending">В ОЧІКУВАННІ</string>
+
+    <!-- ===== Splash / app-level ===== -->
+    <string name="splash_tagline">FT8 · МОБІЛЬНИЙ ПОМІЧНИК</string>
+    <string name="splash_initializing">ІНІЦІАЛІЗАЦІЯ РАДІО</string>
+    <string name="splash_version">v%1$s · збірка %2$s</string>
+    <string name="app_set_callsign_first">Вкажіть свій позивний у Налаштуваннях, перш ніж викликати CQ</string>
+    <string name="app_hunt_on">Полювання увімк. — автовідповідь на CQ</string>
+    <string name="app_hunt_off">Полювання вимк. — виклик CQ, лише робота з відповідями</string>
+    <string name="app_mode_switched">Режим: %1$s</string>
+    <string name="app_mode_switch_busy">Неможливо змінити режим під час передавання</string>
+    <string name="main_tx_volume">Гучність TX: %1$d%%</string>
+
+    <!-- ===== Exit dialog ===== -->
+    <string name="exit_title">ВИЙТИ З FT8AF?</string>
+    <string name="exit_message">Ви впевнені, що хочете закрити застосунок? Будь-який активний QSO буде скасовано.</string>
+
+    <!-- ===== Frequency picker ===== -->
+    <string name="freq_select_title">ВИБІР ЧАСТОТИ</string>
+    <string name="freq_show_alternates">ПОКАЗАТИ АЛЬТЕРНАТИВНІ</string>
+    <string name="freq_hide_alternates">ПРИХОВАТИ АЛЬТЕРНАТИВНІ</string>
+    <string name="freq_alt_prefix">"ALT "</string>
+
+    <!-- ===== Operator card ===== -->
+    <string name="op_no_call">НЕМАЄ ПОЗИВНОГО</string>
+    <string name="op_no_grid">Локатор не вказано</string>
+    <string name="op_tap_to_edit">Торкніться, щоб змінити</string>
+    <string name="op_stat_rig">ТРАНСИВЕР</string>
+    <string name="op_stat_antenna">АНТЕНА</string>
+    <string name="op_stat_power">ПОТУЖНІСТЬ</string>
+
+    <!-- ===== Export log sheet ===== -->
+    <string name="export_title">ЕКСПОРТ QSOs</string>
+    <string name="export_date_range">ДІАПАЗОН ДАТ</string>
+    <string name="export_date_from_placeholder">"From  YYYYMMDD"</string>
+    <string name="export_date_to_placeholder">"To  YYYYMMDD"</string>
+    <string name="export_share">Поділитися</string>
+    <string name="export_filter_confirmed">лише підтверджені</string>
+    <string name="export_filter_unconfirmed">лише непідтверджені</string>
+    <string name="export_record_singular">запис</string>
+    <string name="export_record_plural">записів</string>
+    <string name="export_summary_all">усі</string>
+    <string name="export_summary_key">\'%1$s\'</string>
+    <string name="export_summary_suffix">" · %1$s"</string>
+    <string name="export_summary">%1$d %2$s відповідає %3$s%4$s</string>
+    <string name="export_preparing">Підготовка…</string>
+    <string name="export_share_chooser_title">Поділитися журналами QSO</string>
+    <string name="export_saved_to">Збережено в %1$s</string>
+    <string name="export_save_failed">Не вдалося зберегти в Завантаження</string>
+    <string name="export_temp_file_failed">Не вдалося створити тимчасовий файл</string>
+
+    <!-- ===== TX strip ===== -->
+    <string name="tx_transmitting">ПЕРЕДАВАННЯ</string>
+    <string name="tx_listening">ПРОСЛУХОВУВАННЯ</string>
+    <string name="tx_hunt">Полювання</string>
+    <string name="tx_call_cq">Викликати CQ</string>
+    <string name="tx_stop">Стоп</string>
+
+    <!-- ===== Hound (DXpedition) setup ===== -->
+    <string name="hound_title">Робота з DXpedition (Hound)</string>
+    <string name="hound_help">Спочатку налаштуйте трансивер на оголошену частоту Fox. Ви викликаєте вгорі (1000–4000 Hz); застосунок автоматично переводить вас (QSY) униз туди, де відповідає Fox, і надсилає ваш рапорт.</string>
+    <string name="hound_fox_callsign">Позивний Fox</string>
+    <string name="hound_call_frequency">Частота виклику (Hz, 1000–4000)</string>
+    <string name="hound_start">Старт</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT під’єднано — торкніться, щоб перепід’єднатися</string>
+    <string name="cat_status_connecting">CAT під’єднання…</string>
+    <string name="cat_status_disconnected">CAT від’єднано — торкніться, щоб під’єднатися</string>
+    <string name="cat_status_error">Помилка з’єднання CAT — торкніться, щоб повторити</string>
+
+    <!-- ===== SWR lockout banner ===== -->
+    <string name="swr_lockout_title">TX ЗУПИНЕНО — Виявлено високий SWR (%1$s)</string>
+    <string name="swr_lockout_body">Перевірте антену / фідер перед передаванням.</string>
+    <string name="swr_lockout_dismiss">ЗАКРИТИ</string>
+    <string name="swr_lockout_toast">TX заблоковано — активне блокування за SWR. Спочатку закрийте банер блокування.</string>
+
+    <!-- ===== Active QSO panel ===== -->
+    <string name="qsopanel_calling_cq">Виклик CQ</string>
+    <string name="qsopanel_searching">Пошук...</string>
+    <string name="qsopanel_qsoing_with">QSO з %1$s</string>
+    <string name="qsopanel_waiting_for">Очікування %1$s</string>
+    <string name="qsopanel_tap_to_view">торкніться, щоб переглянути ↗</string>
+    <string name="qsopanel_tx_message">TX: %1$s</string>
+    <string name="qsopanel_waiting_messages">Очікування повідомлень...</string>
+    <string name="qsopanel_log_action">ЖУРНАЛ</string>
+    <string name="qsopanel_queue">ЧЕРГА</string>
+
+    <!-- ===== Decode screen ===== -->
+    <string name="decode_title">Декод</string>
+    <string name="decode_subtitle">"%1$s  •  %2$d декодовано за цей цикл"</string>
+    <string name="decode_clear_list">Очистити список декодування</string>
+    <string name="decode_utc_placeholder">UTC : --:--:--</string>
+    <string name="decode_time_group_utc">%1$s UTC</string>
+    <string name="decode_filter_all">Усі</string>
+    <string name="decode_filter_cq_calls">Виклики CQ</string>
+    <string name="decode_filter_cq_pota">CQ POTA</string>
+    <string name="decode_filter_new_dxcc">Новий DXCC</string>
+    <string name="decode_filter_needed">Потрібні</string>
+    <string name="decode_filter_for_me">Для мене</string>
+    <string name="decode_empty_cq_title">Немає викликів CQ</string>
+    <string name="decode_empty_cq_body">Зараз на цьому діапазоні жодна станція не викликає CQ.</string>
+    <string name="decode_empty_pota_title">Немає спотів POTA</string>
+    <string name="decode_empty_pota_body">На цьому діапазоні ще не декодовано активацій парків — відкрийте POTA → Полювання, щоб переглянути список спотів.</string>
+    <string name="decode_empty_dxcc_title">Немає нових DXCC</string>
+    <string name="decode_empty_dxcc_body">Ще не декодовано непроведених об’єктів DXCC.</string>
+    <string name="decode_empty_needed_title">Нічого не потрібно</string>
+    <string name="decode_empty_needed_body">Станцій, що потребують підтвердження, не знайдено.</string>
+    <string name="decode_empty_forme_title">Немає викликів для вас</string>
+    <string name="decode_empty_forme_body">Зараз жодна станція не викликає ваш позивний.</string>
+    <string name="decode_empty_default_title">Сигналів не декодовано</string>
+    <string name="decode_empty_default_body">Очікування появи сигналів FT8...</string>
+    <string name="decode_label_calling">→ ВИКЛИК</string>
+    <string name="decode_label_cq">CQ</string>
+    <string name="decode_label_to_you">↓ ВАМ</string>
+
+    <!-- ===== QSO sheet ===== -->
+    <string name="qso_complete">QSO завершено</string>
+    <string name="qso_call_action">Викликати %1$s</string>
+    <string name="qso_qrz_link">QRZ ↗</string>
+    <string name="qso_stat_signal">Сигнал</string>
+    <string name="qso_stat_distance">Відстань</string>
+    <string name="qso_stat_azimuth">Азимут</string>
+    <string name="qso_stat_band">Діапазон</string>
+    <string name="qso_sequence_header">ПОСЛІДОВНІСТЬ QSO</string>
+    <string name="qso_step_send_call">Надіслати позивний</string>
+    <string name="qso_step_report_sent">Рапорт надіслано</string>
+    <string name="qso_step_roger">Roger</string>
+    <string name="qso_step_confirm">Підтвердити</string>
+    <string name="qso_step_logged">Записано</string>
+    <string name="qso_live_sending">QSO з %1$s — Надсилання %2$s</string>
+    <string name="qso_live_waiting">Очікування відповіді від %1$s…</string>
+    <string name="qso_live_transmitting">Передавання…</string>
+    <string name="qso_live_step_fallback">повідомлення</string>
+    <string name="qso_tx_now">TX ЗАРАЗ</string>
+    <string name="qso_tx_next">TX ДАЛІ</string>
+
+    <!-- ===== Logbook ===== -->
+    <string name="log_tab_stats">Статистика</string>
+    <string name="log_tab_recent">Нещодавні</string>
+    <string name="log_tab_awards">Нагороди</string>
+    <string name="log_title">Журнал</string>
+    <string name="log_subtitle_qsos_all_bands">%1$d QSOs · Усі діапазони</string>
+    <string name="log_cd_sync_to_logging_services">Синхронізація зі службами журналювання</string>
+    <string name="log_cd_export_qsos">Експорт QSOs</string>
+    <string name="log_stat_total_qsos">Усього QSOs</string>
+    <string name="log_stat_dxcc_entities">Об’єкти DXCC</string>
+    <string name="log_stat_cq_zones">Зони CQ</string>
+    <string name="log_stat_itu_zones">Зони ITU</string>
+    <string name="log_section_band_distribution">Розподіл за діапазонами</string>
+    <string name="log_section_award_progress">Прогрес нагород</string>
+    <string name="log_award_dxcc_mixed">DXCC Mixed</string>
+    <string name="log_award_vucc_grid_squares">Локатори VUCC</string>
+    <string name="log_award_dxcc_challenge">DXCC Challenge</string>
+    <string name="log_section_grid_coverage">Покриття локаторів</string>
+    <string name="log_section_signal_trend">Тренд сигналу</string>
+    <string name="log_no_qsos_yet">Ще немає QSOs</string>
+    <string name="log_no_qsos_recorded_yet">Ще не записано жодного QSO</string>
+    <string name="log_state_usa">%1$s, США</string>
+    <string name="log_cd_qso_actions">Дії QSO</string>
+    <string name="log_action_edit">Редагувати</string>
+    <string name="log_action_delete">Видалити</string>
+    <string name="log_award_dxcc_mixed_desc">Провести й підтвердити 100 об’єктів DXCC на будь-якому діапазоні/режимі</string>
+    <string name="log_award_was">WAS</string>
+    <string name="log_award_was_desc">Провести й підтвердити всі 50 штатів США</string>
+    <string name="log_award_waz">WAZ</string>
+    <string name="log_award_waz_desc">Провести й підтвердити всі 40 зон CQ</string>
+    <string name="log_award_vucc">VUCC</string>
+    <string name="log_award_vucc_desc">VHF/UHF Century Club -- 100 локаторів на одному діапазоні</string>
+    <string name="log_award_iota">IOTA</string>
+    <string name="log_award_iota_desc">Islands on the Air -- робота зі станціями на визначених островах</string>
+    <string name="log_edit_qso">Редагувати QSO</string>
+    <string name="log_field_callsign">Позивний</string>
+    <string name="log_field_grid_locator">Локатор</string>
+    <string name="log_field_mode">Режим</string>
+    <string name="log_delete_qso_title">ВИДАЛИТИ QSO?</string>
+    <string name="log_delete_qso_body_callsign">Видалити QSO з %1$s із журналу? Цю дію не можна скасувати.</string>
+    <string name="log_delete_qso_body">Видалити цей QSO із журналу? Цю дію не можна скасувати.</string>
+    <string name="log_sync_title_no_services">ЖОДНУ СЛУЖБУ НЕ УВІМКНЕНО</string>
+    <string name="log_sync_title_syncing">СИНХРОНІЗАЦІЯ…</string>
+    <string name="log_sync_title_complete">СИНХРОНІЗАЦІЮ ЗАВЕРШЕНО</string>
+    <string name="log_sync_enable_services">Увімкніть Cloudlog/Wavelog/Nextlog або QRZ у Налаштуваннях, потім повторіть.</string>
+    <string name="log_sync_progress_count">%1$d з %2$d QSOs</string>
+    <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d прийнято</string>
+    <string name="log_sync_qrz_accepted">QRZ: %1$d прийнято</string>
+    <string name="log_sync_nothing_to_upload">У журналі ще немає QSOs для вивантаження.</string>
+    <string name="log_sync_working">Робота…</string>
+
+    <!-- ===== POTA ===== -->
+    <string name="pota_tab_activate">Активація</string>
+    <string name="pota_tab_hunt">Полювання</string>
+    <string name="pota_tab_history">Історія</string>
+    <string name="pota_start_activation">Почати активацію</string>
+    <string name="pota_park_reference_label">Посилання на парк (напр. K-1234)</string>
+    <string name="pota_notes_optional_label">Нотатки (необов’язково)</string>
+    <string name="pota_enter_park_reference_first">Спочатку введіть посилання на парк</string>
+    <string name="pota_activating">Активація %1$s</string>
+    <string name="pota_activation_ended">Активацію завершено</string>
+    <string name="pota_set_callsign_first">Спочатку вкажіть свій позивний у Налаштуваннях</string>
+    <string name="pota_self_spot_posted">Самоспот опубліковано</string>
+    <string name="pota_self_spot_failed">Не вдалося опублікувати самоспот — перевірте журнал</string>
+    <string name="pota_active_park">АКТИВНО — %1$s</string>
+    <string name="pota_qsos">QSOs</string>
+    <string name="pota_contacts_map">Карта зв’язків</string>
+    <string name="pota_back">Назад</string>
+    <string name="pota_valid_activation">дійсна активація</string>
+    <string name="pota_to_valid">%1$d до дійсної</string>
+    <string name="pota_elapsed">Минуло</string>
+    <string name="pota_since_start">від початку</string>
+    <string name="pota_self_spot">Самоспот</string>
+    <string name="pota_end_activation">Завершити активацію</string>
+    <string name="pota_notes_quote">“%1$s”</string>
+    <string name="pota_tx_cq_preview">TX CQ буде передано як “CQ POTA %1$s %2$s”.</string>
+    <string name="pota_no_spots">Зараз немає спотів FT8 POTA.</string>
+    <string name="pota_active_spots">%1$d активних спотів FT8</string>
+    <string name="pota_targeting">Націлювання на %1$s @ %2$s kHz (%3$s) — перейдіть у Декод, щоб викликати</string>
+    <string name="pota_no_past_activations">Ще немає минулих активацій.</string>
+    <string name="pota_no_browser_available">Браузер недоступний</string>
+    <string name="pota_export_failed">Не вдалося експортувати — перевірте журнал</string>
+    <string name="pota_status_active">активна</string>
+    <string name="pota_qso_count">%1$d QSO</string>
+    <string name="pota_share_adif">Поділитися ADIF</string>
+    <string name="pota_open_pota_app">Відкрити pota.app</string>
+    <string name="pota_upload_to_pota">Вивантажити в POTA</string>
+    <string name="pota_upload_success">Вивантажено журналів парків: %1$d у POTA</string>
+    <string name="pota_upload_failed">Не вдалося вивантажити: %1$s</string>
+    <string name="pota_upload_server_error">POTA не зміг обробити вивантаження. Перевірте, що посилання на парк дійсне, а ваш позивний зареєстровано в POTA, потім повторіть.</string>
+    <string name="pota_upload_network_error">Не вдалося зв’язатися з POTA. Перевірте інтернет-з’єднання та повторіть.</string>
+    <string name="pota_login_title">Увійти в POTA</string>
+    <string name="pota_login_desc">Використайте email і пароль вашого облікового запису pota.app.</string>
+    <string name="pota_login_email">Email</string>
+    <string name="pota_login_password">Пароль</string>
+    <string name="pota_login_button">Увійти</string>
+    <string name="pota_login_cancel">Скасувати</string>
+    <string name="pota_login_failed">Не вдалося увійти: %1$s</string>
+    <string name="pota_login_or">або</string>
+    <string name="pota_login_social">Увійти через Google / Facebook / Amazon</string>
+    <string name="pota_oauth_title">Увійти в POTA</string>
+    <string name="pota_add_park">Додати парк</string>
+    <string name="pota_remove_park">Видалити</string>
+    <string name="pota_max_parks_reached">Досягнуто максимуму — 10 парків</string>
+    <string name="pota_spotted_n_parks">Споти на %1$d парках</string>
+    <string name="pota_parks_more">+%1$d ще</string>
+
+    <!-- ===== Debug log / Map / Waterfall ===== -->
+    <string name="debug_title">Налагодження</string>
+    <string name="debug_line_count">%1$d рядків</string>
+    <string name="debug_logcat_on_suffix">" · logcat ON"</string>
+    <string name="debug_close">Закрити</string>
+    <string name="debug_share">Поділитися</string>
+    <string name="debug_clear">Очистити</string>
+    <string name="debug_logcat_on">Logcat: ON</string>
+    <string name="debug_logcat_off">Logcat: OFF</string>
+    <string name="debug_no_log_file">немає файлу журналу</string>
+    <string name="debug_log_cleared">журнал очищено</string>
+    <string name="debug_share_chooser_title">Поділитися debug.log</string>
+    <string name="map_title">Карта</string>
+    <string name="map_no_grid_set">Локатор не вказано</string>
+    <string name="map_station_count">%1$d станцій</string>
+    <string name="map_station_count_with_heard">%1$d станцій · %2$d почуто</string>
+    <string name="map_psk_error">PSK Reporter недоступний: %1$s</string>
+    <string name="map_projection_equirectangular">Рівнопрямокутна</string>
+    <string name="map_projection_azimuthal">Азимутальна рівновіддалена</string>
+    <string name="map_mode_standard">STD</string>
+    <string name="map_mode_azimuthal">AZ</string>
+    <string name="map_overlay_psk">PSK</string>
+    <string name="map_info_distance">Відстань</string>
+    <string name="map_info_bearing">Пеленг</string>
+    <string name="map_info_snr">SNR</string>
+    <string name="waterfall_title">Водоспад</string>
+    <string name="waterfall_toggle_nr">NR</string>
+    <string name="waterfall_toggle_msg">MSG</string>
+    <string name="waterfall_status_live">НАЖИВО</string>
+
+    <!-- ===== Settings: format helpers ===== -->
+    <string name="settings_minutes_format">%1$d min</string>
+    <string name="settings_tries_format">%1$d спроб</string>
+    <string name="settings_milliseconds_format">%1$d ms</string>
+    <string name="settings_hz_format">%1$d Hz</string>
+    <string name="settings_hz_str_format">%1$s Hz</string>
+    <string name="settings_percent_format">%1$d%%</string>
+    <string name="settings_bands_enabled_format">%1$d з %2$d увімкнено</string>
+    <string name="settings_min_max_suffix">%1$d–%2$d %3$s</string>
+    <string name="settings_build_date_format">Збірка %1$s</string>
+    <string name="settings_version_value">v%1$s</string>
+
+    <!-- ===== Settings: sections ===== -->
+    <string name="settings_title">Налаштування</string>
+    <string name="settings_section_operator_identity">ДАНІ ОПЕРАТОРА</string>
+    <string name="settings_section_radio">РАДІО</string>
+    <string name="settings_section_audio">АУДІО</string>
+    <string name="settings_section_transmission">ПЕРЕДАВАННЯ</string>
+    <string name="settings_section_auto_sequence">АВТОПОСЛІДОВНІСТЬ</string>
+    <string name="settings_section_decode_highlights">ПІДСВІЧУВАННЯ ДЕКОДУ</string>
+    <string name="settings_section_callsign_blocklist">ЧОРНИЙ СПИСОК ПОЗИВНИХ</string>
+    <string name="settings_section_decode_filters">ФІЛЬТРИ ДЕКОДУ</string>
+    <string name="settings_section_needed_dx_alerts">СПОВІЩЕННЯ ПРО ПОТРІБНІ DX</string>
+    <string name="settings_section_logging_awards">ЖУРНАЛЮВАННЯ &amp; НАГОРОДИ</string>
+    <string name="settings_section_advanced">ДОДАТКОВО</string>
+    <string name="settings_section_about">ПРО ЗАСТОСУНОК</string>
+    <string name="settings_section_language">МОВА</string>
+
+    <!-- ===== Settings: drill-down category labels ===== -->
+    <string name="settings_cat_radio_audio">Радіо &amp; Аудіо</string>
+    <string name="settings_cat_transmission">Передавання</string>
+    <string name="settings_cat_decode_filters">Декод &amp; Фільтри</string>
+    <string name="settings_cat_logging">Журналювання &amp; Нагороди</string>
+    <string name="settings_cat_advanced">Додатково</string>
+    <string name="settings_cat_about">Про застосунок</string>
+    <string name="settings_cat_time_sync">Синхронізація часу</string>
+    <string name="settings_cat_time_sync_desc">Ручне коригування годинника для роботи офлайн</string>
+
+    <!-- ===== Settings: Time Sync (manual clock correction) ===== -->
+    <string name="settings_time_correction_section">Ручне коригування</string>
+    <string name="settings_time_current_label">Поточне коригування</string>
+    <string name="settings_time_correction_reset">Скинути на 0</string>
+    <string name="settings_time_correction_desc">Підлаштуйте годинник застосунку, коли немає інтернету для синхронізації. FT8 потребує UTC з точністю близько 1 секунди. Регулюйте, доки стовпець DT декодованих станцій не зосередиться біля 0.</string>
+    <string name="settings_time_suggest_section">Пропозиція з декодувань</string>
+    <string name="settings_time_suggest_none">Ще немає декодувань — почніть приймати, щоб отримати пропозицію.</string>
+    <string name="settings_time_suggest_label">Нещодавнє середнє DT: %1$s</string>
+    <string name="settings_time_suggest_apply">Застосувати запропоноване коригування</string>
+
+    <!-- ===== Settings: operator identity ===== -->
+    <string name="settings_auto_update_grid">Автооновлення локатора (GPS)</string>
+    <string name="settings_auto_update_grid_desc">Використовувати GPS пристрою для актуалізації вашого локатора Maidenhead</string>
+
+    <!-- ===== Settings: radio ===== -->
+    <string name="settings_rig_model">Модель трансивера</string>
+    <string name="settings_control_mode">Режим керування</string>
+    <string name="settings_connection_mode">Режим з’єднання</string>
+    <string name="settings_baud_rate">Швидкість (бод)</string>
+    <string name="settings_band_frequency">Діапазон &amp; Частота</string>
+    <string name="settings_enabled_bands">Увімкнені діапазони</string>
+    <string name="settings_audio_frequency">Аудіочастота</string>
+    <string name="settings_spectrum_width">Ширина спектра</string>
+
+    <!-- ===== Settings: audio ===== -->
+    <string name="settings_audio_input">Аудіовхід</string>
+    <string name="settings_audio_output">Аудіовихід</string>
+    <string name="settings_tx_volume">Гучність TX</string>
+    <string name="settings_tx_volume_desc" formatted="false">Рівень аудіо передавання (апаратні кнопки ±5%)</string>
+
+    <!-- ===== Settings: transmission ===== -->
+    <string name="settings_tx_rx_split">Рознос TX/RX</string>
+    <string name="settings_tx_rx_split_desc">Передавати на іншій частоті, ніж приймати</string>
+    <string name="settings_tx_watchdog">Сторож TX</string>
+    <string name="settings_tx_watchdog_desc">Автозупинка передавання після тайм-ауту</string>
+    <string name="settings_stop_after">Зупинити після</string>
+    <string name="settings_stop_after_desc">Припинити виклик після N спроб без відповіді</string>
+
+    <!-- ===== Settings: auto-sequence ===== -->
+    <string name="settings_hunt">Полювання (автовідповідь на CQ)</string>
+    <string name="settings_hunt_desc">Активно викликати станції, що дають CQ. Те саме, що кнопка HUNT на панелі TX. Вимк. = давати CQ і працювати лише зі станціями, що вам відповідають.</string>
+    <string name="settings_auto_call_followed">Авто-виклик відстежуваних</string>
+    <string name="settings_auto_call_followed_desc">Автоматично продовжувати виклик відстежуваних позивних</string>
+    <string name="settings_fast_turnaround">Швидкий оборот</string>
+    <string name="settings_fast_turnaround_desc">Декодувати на ~1 с раніше, щоб відповісти на CQ у наступному слоті, а не чекати. Може пропускати станції з великим зсувом годинника.</string>
+    <string name="settings_auto_cq_after_qso">Авто-CQ після QSO</string>
+    <string name="settings_auto_cq_after_qso_desc">Автоматично продовжувати давати CQ після кожного завершеного зв’язку — без повторного дотику. Залишається на вашій частоті (ігнорує Полювання). Працює, доки ви не зупините або Сторож TX не спрацює без відповідей.</string>
+
+    <!-- ===== Settings: decode highlights ===== -->
+    <string name="settings_highlight_new_dxcc">Новий DXCC</string>
+    <string name="settings_highlight_new_dxcc_desc">Підсвічувати станції з непроведеного об’єкта DXCC</string>
+    <string name="settings_highlight_new_grid">Новий локатор</string>
+    <string name="settings_highlight_new_grid_desc">Підсвічувати ще не проведені локатори Maidenhead</string>
+    <string name="settings_highlight_new_band">Новий діапазон</string>
+    <string name="settings_highlight_new_band_desc">Підсвічувати станції, проведені лише на інших діапазонах</string>
+    <string name="settings_highlight_pota">Активатори POTA</string>
+    <string name="settings_highlight_pota_desc">Підсвічувати споттені активатори POTA; нові парки виділяються</string>
+    <string name="settings_highlight_worked">Проведені раніше</string>
+    <string name="settings_highlight_worked_desc">Позначати станції, що вже є у вашому журналі</string>
+    <string name="settings_distance_unit">Відстань у милях</string>
+    <string name="settings_distance_unit_desc">Показувати відстані в милях замість кілометрів</string>
+
+    <!-- ===== Settings: callsign blocklist ===== -->
+    <string name="settings_exact_callsigns">Точні позивні</string>
+    <string name="settings_exact_callsigns_desc">Блокувати збіги цілого позивного</string>
+    <string name="settings_prefixes">Префікси</string>
+    <string name="settings_prefixes_desc">Блокувати за префіксом позивного (напр. RA)</string>
+    <string name="settings_keywords">Ключові слова</string>
+    <string name="settings_keywords_desc">Блокувати за підрядком у позивному чи повідомленні (напр. POTA, /P)</string>
+
+    <!-- ===== Settings: decode filters ===== -->
+    <string name="settings_show_only_cq">Показувати лише CQ</string>
+    <string name="settings_show_only_cq_desc">Приховати все, крім повідомлень типу CQ</string>
+    <string name="settings_dx_only">Лише DX</string>
+    <string name="settings_dx_only_desc">Показувати лише станції поза вашим власним континентом</string>
+    <string name="settings_needed_only">Лише потрібні</string>
+    <string name="settings_needed_only_desc">Показувати лише ще не підтверджені станції (QSL)</string>
+    <string name="settings_filter_by_continent">Фільтр за континентом</string>
+    <string name="settings_filter_by_continent_desc">Показувати лише станції з обраного континенту</string>
+    <string name="settings_continent">Континент</string>
+    <string name="settings_skip_directional_cq">Пропускати спрямовані CQ (автовідповідь)</string>
+    <string name="settings_skip_directional_cq_desc">Не відповідати автоматично на CQ DX/EU/JA…, спрямовані на інший DXCC</string>
+    <string name="settings_hide_directional_cq">Приховати спрямовані CQ не для мене</string>
+    <string name="settings_hide_directional_cq_desc">Приховати спрямовані на регіон CQ, що не націлені на ваш DXCC</string>
+
+    <!-- ===== Settings: needed-DX alerts ===== -->
+    <string name="settings_alert_new_dxcc">Новий DXCC</string>
+    <string name="settings_alert_new_dxcc_desc">Звук + вібрація + сповіщення, коли непроведений об’єкт DXCC дає CQ</string>
+    <string name="settings_alert_new_state">Новий штат США</string>
+    <string name="settings_alert_new_state_desc">Звук + вібрація + сповіщення, коли станція з непроведеного штату США дає CQ (штат за локатором)</string>
+
+    <!-- ===== Settings: logging &amp; awards ===== -->
+    <string name="settings_save_swl_decodes">Зберігати SWL декоди</string>
+    <string name="settings_save_swl_decodes_desc">Записувати всі декодовані повідомлення в базу даних</string>
+    <string name="settings_save_swl_qsos">Зберігати SWL QSOs</string>
+    <string name="settings_save_swl_qsos_desc">Записувати QSOs, виявлені між іншими станціями</string>
+    <string name="settings_pskreporter">PSKReporter</string>
+    <string name="settings_pskreporter_desc">Вивантажувати декодовані споти на pskreporter.info</string>
+    <string name="settings_qrz_com">QRZ.com</string>
+    <string name="settings_qrz_com_desc">Автоматично вивантажувати QSOs до QRZ Logbook</string>
+    <string name="settings_qrz_profile_lookup">Пошук профілю QRZ</string>
+    <string name="settings_qrz_profile_lookup_desc">Ім’я користувача + пароль для QRZ XML API (аватари)</string>
+    <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
+    <string name="settings_cloudlog_desc">Автоматично вивантажувати QSOs до екземпляра Cloudlog, Wavelog або Nextlog</string>
+
+    <!-- ===== Settings: advanced ===== -->
+    <string name="settings_ptt_delay">Затримка PTT</string>
+    <string name="settings_ptt_delay_desc">Затримка після PTT перед початком аудіо передавання</string>
+    <string name="settings_tx_delay">Затримка TX</string>
+    <string name="settings_tx_delay_desc">Затримка перед передаванням для декодування попереднього циклу</string>
+    <string name="settings_late_start_tolerance">Допуск пізнього старту</string>
+    <string name="settings_late_start_tolerance_desc">Дозволити починати TX до N ms у цикл; початкове аудіо обрізається, щоб TX завершувалося на межі циклу</string>
+
+    <!-- ===== Settings: about ===== -->
+    <string name="settings_faq_support">Поширені питання &amp; Підтримка</string>
+    <string name="settings_report_bug">Повідомити про помилку</string>
+    <string name="bug_report_description_hint">Опишіть, що пішло не так…</string>
+    <string name="bug_report_send_email">Надіслати email</string>
+    <string name="bug_report_no_email_app">Не знайдено застосунку email для надсилання звіту</string>
+    <string name="bug_report_open_github">Відкрити issue на GitHub</string>
+    <string name="settings_debug">Налагодження</string>
+    <string name="settings_debug_desc">Переглянути / поділитися debug.log</string>
+    <string name="settings_about_body">Версія %1$s (збірка %2$s)\nДата збірки %3$s\n\nFT8, просто.\n\nОкремий застосунок-трансивер FT8 для Android. Керування трансивером через USB, Bluetooth і мережу з автоматичним секвенуванням і журналюванням.</string>
+    <string name="settings_website">Вебсайт</string>
+    <string name="settings_community">Спільнота</string>
+    <string name="settings_built_by">Створено</string>
+
+    <!-- ===== Settings: dialogs ===== -->
+    <string name="settings_block_exact_title">Блокувати точні позивні</string>
+    <string name="settings_block_exact_desc">Збіг цілого позивного. Розділяйте комами або пробілами, напр. W1AW, K1ABC.</string>
+    <string name="settings_block_prefix_title">Блокувати префікси позивних</string>
+    <string name="settings_block_prefix_desc">Збіг за префіксом, напр. RA блокує RA0AA..RA9ZZ. Розділяйте комами або пробілами.</string>
+    <string name="settings_block_keyword_title">Блокувати ключові слова</string>
+    <string name="settings_block_keyword_desc">Збіг за підрядком у позивному та тексті повідомлення, напр. POTA, /P, QRP.</string>
+    <string name="settings_blocklist_hint">напр. W1AW, RA, /P</string>
+    <string name="settings_filter_continent_title">Фільтр континенту</string>
+    <string name="settings_conn_usb_cable">USB-кабель</string>
+    <string name="settings_conn_bluetooth">Bluetooth</string>
+    <string name="settings_conn_network">Мережа</string>
+    <string name="settings_no_usb_serial">USB-послідовних пристроїв не виявлено. Під’єднайте USB-кабель до радіо й повторіть.</string>
+    <string name="settings_no_bluetooth_devices">Сполучених пристроїв Bluetooth не знайдено. Спочатку сполучіть пристрій у налаштуваннях Bluetooth Android.</string>
+    <string name="settings_debug_mode_enabled">Режим налагодження увімкнено</string>
+    <string name="settings_debug_mode_disabled">Режим налагодження вимкнено</string>
+    <string name="settings_edit_operator_identity">Редагувати дані оператора</string>
+    <string name="settings_callsign">Позивний</string>
+    <string name="settings_callsign_hint">напр. W1AW</string>
+    <string name="settings_grid_locator">Локатор</string>
+    <string name="settings_grid_locator_hint">напр. FN31pr</string>
+    <string name="settings_logging_server">Сервер журналювання</string>
+    <string name="settings_logging_server_desc">Cloudlog, Wavelog і Nextlog приймають однакові вивантаження.</string>
+    <string name="settings_server_address">Адреса сервера</string>
+    <string name="settings_api_key">Ключ API</string>
+    <string name="settings_api_key_hint">Ваш ключ API Cloudlog</string>
+    <string name="settings_loading_stations">Завантаження станцій...</string>
+    <string name="settings_station_id">ID станції</string>
+    <string name="settings_station_id_hint">напр. 1</string>
+    <string name="settings_select_a_station">Виберіть станцію</string>
+    <string name="settings_enter_manually">Ввести вручну</string>
+    <string name="settings_choose_from_server">Вибрати з сервера</string>
+    <string name="settings_station_profile">Профіль станції</string>
+    <string name="settings_qrz_creds_desc">Використовується для отримання фото профілів декодованих позивних через QRZ XML API. Потрібна підписка QRZ XML.</string>
+    <string name="settings_username">Ім’я користувача</string>
+    <string name="settings_username_hint">Ваше ім’я користувача QRZ.com</string>
+    <string name="settings_password">Пароль</string>
+    <string name="settings_enabled_bands_dialog_desc">Приховані діапазони не з’являтимуться у виборі частоти.</string>
+    <string name="settings_select_serial_port">Виберіть послідовний порт</string>
+    <string name="settings_tx_volume_advice">Регулюйте наживо — ваш наступний TX використає цей рівень. Стежте за ALC радіо й зменшуйте, доки воно лише торкається лінії.</string>
+
+    <!-- ===== Settings: language picker ===== -->
+    <string name="settings_language">Мова</string>
+    <string name="settings_language_desc">Мова відображення застосунку</string>
+    <string name="settings_language_system">Системна за замовчуванням</string>
+
+</resources>
