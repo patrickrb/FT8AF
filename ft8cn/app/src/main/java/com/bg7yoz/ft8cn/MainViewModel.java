@@ -448,8 +448,8 @@ public class MainViewModel extends ViewModel {
         mutableIsFlexRadio.setValue(false);
         mutableIsXieguRadio.setValue(false);
 
-        //create timer for displaying time
-        utcTimer = new UtcTimer(10, false, new OnUtcTimer() {
+        //create timer for displaying time — a 1-second (1000ms) tick, just to refresh the clock.
+        utcTimer = new UtcTimer(1000, false, new OnUtcTimer() {
             @Override
             public void doHeartBeatTimer(long utc) {//clock info when not triggered
 

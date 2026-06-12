@@ -38,8 +38,8 @@ class SlotTimerStateTest {
     }
 
     @Test
-    fun `ft2 slot — 3point8s peaks at 4 seconds`() {
-        val s = slotTimerState(nowMs = 0L, slotMillis = 3_800L)
+    fun `ft2 slot — 3point75s peaks at 4 seconds`() {
+        val s = slotTimerState(nowMs = 0L, slotMillis = 3_750L)
         assertThat(s.secondsRemaining).isEqualTo(4)
     }
 

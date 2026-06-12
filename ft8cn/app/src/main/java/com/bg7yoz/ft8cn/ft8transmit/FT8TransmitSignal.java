@@ -170,8 +170,8 @@ public class FT8TransmitSignal {
         // change therefore takes effect within the current cycle, so no per-cycle setVolume()
         // observer is needed here.
 
-        // Cycle timer on the current mode's period (FT8 = 15s/150, FT4 = 7.5s/75).
-        utcTimer = new UtcTimer(GeneralVariables.currentMode().slotTenths, false, makeTimerCallback());
+        // Cycle timer on the current mode's period (FT8 = 15000ms, FT4 = 7500ms, FT2 = 3750ms).
+        utcTimer = new UtcTimer(GeneralVariables.currentMode().slotMillis, false, makeTimerCallback());
 
         utcTimer.start();
 
@@ -227,7 +227,7 @@ public class FT8TransmitSignal {
      */
     public void rebuildTimer(ModeProfile mode) {
         utcTimer.delete();
-        utcTimer = new UtcTimer(mode.slotTenths, false, makeTimerCallback());
+        utcTimer = new UtcTimer(mode.slotMillis, false, makeTimerCallback());
         utcTimer.start();
     }
 

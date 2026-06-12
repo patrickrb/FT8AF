@@ -16,7 +16,7 @@ import java.util.ArrayList;
  * the overlay on a non-empty decode, so a silent slot left the previous slot's
  * messages in place and they were re-stamped onto the waterfall each cycle,
  * appearing to repeat and never disappear. The effect is worst on FT4 (7.5s) and
- * especially FT2 (3.8s), whose short, often-empty slots re-stamp far more often
+ * especially FT2 (3.75s), whose short, often-empty slots re-stamp far more often
  * than FT8's 15s slots.
  */
 public final class WaterfallLabelMessages {
