@@ -411,7 +411,7 @@
     <string name="settings_auto_call_followed">Panggil Otomatis yang Diikuti</string>
     <string name="settings_auto_call_followed_desc">Terus memanggil tanda panggil yang diikuti secara otomatis</string>
     <string name="settings_fast_turnaround">Turnaround cepat</string>
-    <string name="settings_fast_turnaround_desc">Dekode ~1d lebih awal sehingga Anda bisa menjawab CQ pada slot berikutnya tanpa menunggu. Mungkin melewatkan stasiun dengan offset jam besar.</string>
+    <string name="settings_fast_turnaround_desc">Dekode ~1s lebih awal sehingga Anda bisa menjawab CQ pada slot berikutnya tanpa menunggu. Mungkin melewatkan stasiun dengan offset jam besar.</string>
     <string name="settings_auto_cq_after_qso">Auto-CQ setelah QSO</string>
     <string name="settings_auto_cq_after_qso_desc">Terus memanggil CQ otomatis setelah setiap kontak selesai — tanpa ketuk ulang. Tetap di frekuensi Anda (abaikan Hunt). Berjalan sampai Anda berhenti atau TX Watchdog habis tanpa jawaban.</string>
 
