@@ -334,7 +334,7 @@ public class WaterfallView extends View {
             // different scroll offsets, so they appear to repeat down the waterfall —
             // including over the next cycle's not-yet-populated rows where the signal is
             // gone. Stamp at most once per decode slot. Key the gate on the current mode's
-            // slot length (NOT a fixed 15s) so FT4 (7.5s) and FT2 (3.8s) each get one stamp
+            // slot length (NOT a fixed 15s) so FT4 (7.5s) and FT2 (3.75s) each get one stamp
             // per slot instead of one stamp per two-or-more slots. Pass slotMillis as part
             // of the key too: this view (and its gate) is reused across mode changes, and a
             // new mode's slotPeriod can collide with one already stamped under the old mode,

@@ -32,7 +32,8 @@ import java.util.concurrent.Executors;
 
 
 public class UtcTimer {
-    private final int sec;
+    /** Slot (cycle) length in milliseconds: 15000 FT8, 7500 FT4, 3750 FT2. */
+    private final int slotMillis;
     private final boolean doOnce;
     private final OnUtcTimer onUtcTimer;
 
@@ -112,18 +113,18 @@ public class UtcTimer {
 
     /**
      * Constructor for the clock trigger. Requires specifying the clock cycle period, typically 15 seconds or 7.5 seconds.
-     * Since the cycle parameter is an int, the unit is tenths of a second.
+     * The cycle parameter is an int in milliseconds.
      * Because the heartbeat frequency is fast (currently set to 100ms), heartbeat actions should be as concise as possible
      * and must complete before the next heartbeat starts, to prevent thread stacking and performance impact.
      * Heartbeat actions are not affected by cycle actions not triggering (running==false); as long as the UtcTimer instance exists, heartbeat actions run (convenient for displaying clock data).
      * This trigger requires calling the delete function to fully stop (heartbeat actions also stop).
      *
-     * @param sec        clock cycle period in tenths of a second, e.g.: 15 seconds = 150, 7.5 seconds = 75
+     * @param slotMillis clock cycle period in milliseconds, e.g.: 15 seconds = 15000, 7.5 seconds = 7500, FT2 = 3750
      * @param doOnce     whether to trigger only once
      * @param onUtcTimer callback functions, including heartbeat callback and cycle start action callback
      */
-    public UtcTimer(int sec, boolean doOnce, OnUtcTimer onUtcTimer) {
-        this.sec = sec;
+    public UtcTimer(int slotMillis, boolean doOnce, OnUtcTimer onUtcTimer) {
+        this.slotMillis = slotMillis;
         this.doOnce = doOnce;
         this.onUtcTimer = onUtcTimer;
 
@@ -137,7 +138,7 @@ public class UtcTimer {
 
     /**
      * Define the clock-triggered action.
-     * The clock cycle is typically 15 seconds or 7.5 seconds; since the cycle parameter is an int, the unit is tenths of a second.
+     * The clock cycle is typically 15 seconds or 7.5 seconds; the cycle parameter is an int in milliseconds.
      * Because the heartbeat frequency is fast (currently set to 100ms), heartbeat actions should be as concise as possible
      * and must complete before the next heartbeat starts, to prevent thread stacking and performance impact.
      * Heartbeat actions are not affected by cycle actions not triggering (running==false); as long as the UtcTimer instance exists, heartbeat actions run (convenient for displaying clock data).
@@ -156,29 +157,37 @@ public class UtcTimer {
         };
     }
 
+    /** Detection window (ms) for opening a slot — see {@link #isCycleBoundary}. */
+    private static final int SLOT_OPEN_WINDOW_MS = 100;
+
     /**
-     * Whether {@code utc} lands on a cycle (slot) boundary for a slot of {@code sec} tenths
-     * of a second, anchored to the Unix epoch.
+     * Whether {@code utc} lands on a cycle (slot) boundary for a slot of {@code slotMillis}
+     * milliseconds, anchored to the Unix epoch.
      *
-     * <p>The original test was {@code (((utc - offsetMs) / 100) % 600) % sec == 0}, which
-     * anchored the slot grid to each UTC minute (600 tenths of a second). That is identical
-     * to this epoch-anchored form only when {@code sec} evenly divides 600 — true for FT8
-     * (150) and FT4 (75), but NOT FT2 (38, since 600 / 38 is not whole). For FT2 the
-     * minute-anchored grid drifted off the absolute 3.8 s slot grid that
-     * {@link #sequential(long, int)} and the transmit late-start clip math both use, so a
-     * normal FT2 transmit fired part-way into its slot and had its leading Costas sync
-     * array clipped — audible on the air but undecodable. Anchoring to the epoch keeps the
-     * FT8/FT4 firing instants byte-for-byte identical while making every slot length
-     * internally consistent.
+     * <p>A slot opens in the {@link #SLOT_OPEN_WINDOW_MS}-millisecond window that starts at
+     * each epoch-anchored multiple of {@code slotMillis}. The 100 ms window is wide enough
+     * that the 10 ms heartbeat reliably lands at least one tick inside it, and the 1 s
+     * post-fire pause in {@link #secTask()} prevents a second fire within the same slot.
      *
-     * @param utc      system time in ms (epoch + {@link #delay})
-     * @param offsetMs manual time offset in ms (see {@link #setTime_sec(int)})
-     * @param sec      slot period in tenths of a second (see ModeProfile.slotTenths)
-     * @return true exactly on the 100 ms tick that opens a slot
+     * <p>This works in milliseconds rather than tenths of a second so a slot length that
+     * isn't a whole number of tenths — FT2's 3750 ms — sits on a clean grid. For FT8
+     * (15000) and FT4 (7500) the firing instants are byte-for-byte identical to the old
+     * tenths predicate {@code (utc/100) % (slotMillis/100) == 0}: both fire exactly in
+     * {@code [k*slotMillis, k*slotMillis + 99]}. The earlier tenths form rounded FT2 to a
+     * 3.8 s grid (37.5 tenths isn't an integer), which drifted off the absolute 3.75 s slot
+     * grid that {@link #sequential(long, int)} and the transmit late-start clip math use, so
+     * a normal FT2 transmit fired part-way into its slot and had its leading Costas sync
+     * array clipped — audible on the air but undecodable.
+     *
+     * @param utc        system time in ms (epoch + {@link #delay})
+     * @param offsetMs   manual time offset in ms (see {@link #setTime_sec(int)})
+     * @param slotMillis slot period in milliseconds (see ModeProfile.slotMillis)
+     * @return true on the heartbeat ticks that open a slot
      */
-    public static boolean isCycleBoundary(long utc, int offsetMs, int sec) {
-        if (sec <= 0) return false;
-        return (((utc - offsetMs) / 100) % sec) == 0;
+    public static boolean isCycleBoundary(long utc, int offsetMs, int slotMillis) {
+        if (slotMillis <= 0) return false;
+        long intoSlot = ((utc - offsetMs) % slotMillis + slotMillis) % slotMillis;
+        return intoSlot < SLOT_OPEN_WINDOW_MS;
     }
 
     private TimerTask secTask() {
@@ -192,7 +201,7 @@ public class UtcTimer {
                     utc = getSystemTime();//get current UTC time
                     //running determines whether to trigger cycle actions
                     //time_sec is the time offset
-                    if (running && isCycleBoundary(utc, time_sec, sec)) {
+                    if (running && isCycleBoundary(utc, time_sec, slotMillis)) {
                         //cycle action
                         //IMPORTANT! doHeartBeatTimer must not perform time-consuming operations and must complete within the heartbeat interval, otherwise thread backlog may occur and affect performance.
                         cachedThreadPool.execute(doSomething);//use thread pool for invocation to reduce system overhead

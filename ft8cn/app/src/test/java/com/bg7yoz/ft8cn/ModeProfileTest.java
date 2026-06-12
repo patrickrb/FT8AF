@@ -17,7 +17,6 @@ public class ModeProfileTest {
         assertThat(m.id).isEqualTo(FT8Common.FT8_MODE);
         assertThat(m.displayName).isEqualTo("FT8");
         assertThat(m.slotMillis).isEqualTo(15_000);
-        assertThat(m.slotTenths).isEqualTo(150);
         assertThat(m.numTones).isEqualTo(79);
         assertThat(m.isFt8).isTrue();
         // 79 * 0.160 * 1000 = 12640ms audio; slack = 15000 - 12640.
@@ -31,7 +30,6 @@ public class ModeProfileTest {
         assertThat(m.id).isEqualTo(FT8Common.FT4_MODE);
         assertThat(m.displayName).isEqualTo("FT4");
         assertThat(m.slotMillis).isEqualTo(7_500);
-        assertThat(m.slotTenths).isEqualTo(75);
         assertThat(m.numTones).isEqualTo(105);
         assertThat(m.isFt8).isFalse();
         // 105 * 0.048 * 1000 = 5040ms audio; slack = 7500 - 5040.
@@ -44,17 +42,18 @@ public class ModeProfileTest {
         ModeProfile m = ModeProfile.FT2;
         assertThat(m.id).isEqualTo(FT8Common.FT2_MODE);
         assertThat(m.displayName).isEqualTo("FT2");
-        assertThat(m.slotMillis).isEqualTo(3_800);
-        assertThat(m.slotTenths).isEqualTo(38);
+        // FT2's slot is exactly half FT4's 7.5s, so 3750ms.
+        assertThat(m.slotMillis).isEqualTo(3_750);
+        assertThat(m.slotMillis).isEqualTo(ModeProfile.FT4.slotMillis / 2);
         // FT2 reuses FT4's 105-symbol layout (same encoder/tones).
         assertThat(m.numTones).isEqualTo(105);
         // FT2 decodes as FT4-family (isFt8 false), but receives on the from-source decoder.
         assertThat(m.isFt8).isFalse();
         // Half FT4's symbol period -> double baud.
         assertThat(m.symbolPeriod).isEqualTo(0.024f);
-        // 105 * 0.024 * 1000 = 2520ms audio; slack = 3800 - 2520.
+        // 105 * 0.024 * 1000 = 2520ms audio; slack = 3750 - 2520.
         assertThat(m.audioMillis).isEqualTo(2_520);
-        assertThat(m.audioSlackMillis).isEqualTo(1_280);
+        assertThat(m.audioSlackMillis).isEqualTo(1_230);
     }
 
     @Test

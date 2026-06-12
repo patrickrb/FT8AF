@@ -15,23 +15,22 @@ import com.bg7yoz.ft8cn.ft8transmit.GenerateFT8;
  * @see FT8Common#FT4_MODE
  */
 public enum ModeProfile {
-    // id, name, slotMs, slotTenths, earlyDecodeMs, symPeriod, symBt, numTones, isFt8
-    FT8(FT8Common.FT8_MODE, "FT8", 15000, 150, 13500, 0.160f, 2.0f, 79, true),
-    FT4(FT8Common.FT4_MODE, "FT4", 7500, 75, 6500, 0.048f, 1.0f, 105, false),
+    // id, name, slotMs, earlyDecodeMs, symPeriod, symBt, numTones, isFt8
+    FT8(FT8Common.FT8_MODE, "FT8", 15000, 13500, 0.160f, 2.0f, 79, true),
+    FT4(FT8Common.FT4_MODE, "FT4", 7500, 6500, 0.048f, 1.0f, 105, false),
     // FT2 reuses FT4's tone layout (4-GFSK, 4 Costas, 105 symbols, same LDPC/encoder) at
-    // double the baud: 0.024s symbol period -> ~2.52s audio, 3.8s slot. isFt8=false so
-    // encode() dispatches to the shared ft4Encode; decode routes to the from-source
-    // decoder (see usesFromSourceDecoder) since the prebuilt has no FT2 protocol.
-    FT2(FT8Common.FT2_MODE, "FT2", 3800, 38, 3000, 0.024f, 1.0f, 105, false);
+    // double the baud: 0.024s symbol period -> ~2.52s audio, 3.75s slot (exactly half FT4's
+    // 7.5s). isFt8=false so encode() dispatches to the shared ft4Encode; decode routes to the
+    // from-source decoder (see usesFromSourceDecoder) since the prebuilt has no FT2 protocol.
+    FT2(FT8Common.FT2_MODE, "FT2", 3750, 3000, 0.024f, 1.0f, 105, false);
 
     /** Mode id, matching the {@code FT8Common.*_MODE} ints (also stored in config + Ft8Message). */
     public final int id;
     /** Human/protocol-facing name ("FT8"/"FT4"), used for logs, PSKReporter, POTA, ADIF. */
     public final String displayName;
-    /** TX/RX cycle length in milliseconds (15000 FT8, 7500 FT4). */
+    /** TX/RX cycle length in milliseconds (15000 FT8, 7500 FT4, 3750 FT2); the
+     * {@link com.bg7yoz.ft8cn.timer.UtcTimer} fires a slot boundary on this grid. */
     public final int slotMillis;
-    /** Cycle length in tenths of a second, as the {@link com.bg7yoz.ft8cn.timer.UtcTimer} expects. */
-    public final int slotTenths;
     /** Shorter RX capture window used when fast/early decode is on. */
     public final int earlyDecodeMillis;
     /** GFSK symbol period in seconds (0.160 FT8, 0.048 FT4). */
@@ -51,13 +50,12 @@ public enum ModeProfile {
      */
     public final int audioSlackMillis;
 
-    ModeProfile(int id, String displayName, int slotMillis, int slotTenths,
+    ModeProfile(int id, String displayName, int slotMillis,
                 int earlyDecodeMillis, float symbolPeriod, float symbolBt,
                 int numTones, boolean isFt8) {
         this.id = id;
         this.displayName = displayName;
         this.slotMillis = slotMillis;
-        this.slotTenths = slotTenths;
         this.earlyDecodeMillis = earlyDecodeMillis;
         this.symbolPeriod = symbolPeriod;
         this.symbolBt = symbolBt;
