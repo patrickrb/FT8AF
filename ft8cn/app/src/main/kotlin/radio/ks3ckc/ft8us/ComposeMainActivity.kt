@@ -569,18 +569,24 @@ class ComposeMainActivity : AppCompatActivity() {
     private fun autoConnectBluetoothIfNeeded() {
         val adapter = BluetoothAdapter.getDefaultAdapter()
         val addr = GeneralVariables.bluetoothDeviceAddress
+        // A corrupted/legacy persisted value would make getRemoteDevice() throw
+        // IllegalArgumentException and crash startup, so validate the MAC up front (PR #227 review).
+        val validAddr = !addr.isNullOrBlank() && BluetoothAdapter.checkBluetoothAddress(addr)
+        if (!addr.isNullOrBlank() && !validAddr) {
+            fileLog("autoConnectBT: ignoring invalid saved address=$addr")
+        }
         val hasPerm = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
             PackageManager.PERMISSION_GRANTED
         val bonded = try {
-            hasPerm && adapter != null && !addr.isNullOrBlank() &&
+            hasPerm && adapter != null && validAddr &&
                 adapter.bondedDevices.any { it.address == addr }
         } catch (_: SecurityException) {
             false
         }
         val decision = decideBluetoothAutoConnect(
             connectMode = GeneralVariables.connectMode,
-            savedAddress = addr,
+            savedAddress = if (validAddr) addr else null,
             rigConnected = mainViewModel.isRigConnected(),
             adapterOn = adapter?.isEnabled == true,
             hasConnectPermission = hasPerm,
