@@ -573,7 +573,7 @@ class ComposeMainActivity : AppCompatActivity() {
         // IllegalArgumentException and crash startup, so validate the MAC up front (PR #227 review).
         val validAddr = !addr.isNullOrBlank() && BluetoothAdapter.checkBluetoothAddress(addr)
         if (!addr.isNullOrBlank() && !validAddr) {
-            fileLog("autoConnectBT: ignoring invalid saved address=$addr")
+            fileLog("autoConnectBT: ignoring invalid saved address=${maskBluetoothAddress(addr)}")
         }
         val hasPerm = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
@@ -592,7 +592,7 @@ class ComposeMainActivity : AppCompatActivity() {
             hasConnectPermission = hasPerm,
             isBonded = bonded,
         )
-        fileLog("autoConnectBT: decision=$decision addr=$addr connectMode=${GeneralVariables.connectMode}")
+        fileLog("autoConnectBT: decision=$decision addr=${maskBluetoothAddress(addr)} connectMode=${GeneralVariables.connectMode}")
         if (decision == BtAutoConnectDecision.CONNECT) {
             mainViewModel.connectBluetoothRig(applicationContext, adapter!!.getRemoteDevice(addr))
         }

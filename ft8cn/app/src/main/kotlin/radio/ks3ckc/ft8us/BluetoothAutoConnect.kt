@@ -47,3 +47,16 @@ internal fun decideBluetoothAutoConnect(
     if (!isBonded) return BtAutoConnectDecision.NOT_BONDED
     return BtAutoConnectDecision.CONNECT
 }
+
+/**
+ * Redact a Bluetooth MAC for debug.log, which users attach to bug reports. A MAC is a stable
+ * device identifier, so we keep only the first and last octet (enough to correlate log lines)
+ * and hide the middle four (PR #228 review). A null/blank value becomes `<none>`; a corrupted
+ * non-MAC value reveals only its length so the raw identifier never lands in a shareable log.
+ */
+internal fun maskBluetoothAddress(addr: String?): String {
+    if (addr.isNullOrBlank()) return "<none>"
+    val parts = addr.split(":")
+    if (parts.size == 6) return "${parts.first()}:**:**:**:**:${parts.last()}"
+    return "<malformed:${addr.length}>"
+}

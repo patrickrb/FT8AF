@@ -88,8 +88,8 @@
     <!-- ===== Export log sheet ===== -->
     <string name="export_title">QSO 내보내기</string>
     <string name="export_date_range">날짜 범위</string>
-    <string name="export_date_from_placeholder">"From  YYYYMMDD"</string>
-    <string name="export_date_to_placeholder">"To  YYYYMMDD"</string>
+    <string name="export_date_from_placeholder">"시작  YYYYMMDD"</string>
+    <string name="export_date_to_placeholder">"종료  YYYYMMDD"</string>
     <string name="export_share">공유</string>
     <string name="export_filter_confirmed">확인된 것만</string>
     <string name="export_filter_unconfirmed">미확인만</string>

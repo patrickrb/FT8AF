@@ -37,7 +37,7 @@ class LanguagePickerTest {
         val tags = SUPPORTED_LANGUAGES.map { it.tag }
         for (a in tags) {
             for (b in tags) {
-                if (a !== b && b.startsWith(a)) {
+                if (a != b && b.startsWith(a)) {
                     throw AssertionError("Tag '$a' is a prefix of '$b'")
                 }
             }
