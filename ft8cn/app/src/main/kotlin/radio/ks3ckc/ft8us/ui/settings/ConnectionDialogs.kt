@@ -179,6 +179,8 @@ fun BluetoothPickerDialog(
                                             info.device.name,
                                         ),
                                     )
+                                    // connectBluetoothRig() persists the device address centrally
+                                    // so the SPP/CAT link auto-reconnects on the next launch (#223).
                                     mainViewModel.connectBluetoothRig(
                                         GeneralVariables.getMainContext(),
                                         info.device,

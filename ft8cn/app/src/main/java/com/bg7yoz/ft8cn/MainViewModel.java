@@ -1153,6 +1153,14 @@ public class MainViewModel extends ViewModel {
     }
 
     public void connectBluetoothRig(Context context, BluetoothDevice device) {
+        // Remember this device so the SPP/CAT link can auto-reconnect on the next app launch
+        // (issue #223). Centralized here so every entry point -- the Compose picker, the legacy
+        // SelectBluetoothDialog, and the startup auto-connect path -- persists consistently.
+        if (!device.getAddress().equals(GeneralVariables.bluetoothDeviceAddress)) {
+            GeneralVariables.bluetoothDeviceAddress = device.getAddress();
+            databaseOpr.writeConfig("bluetoothDeviceAddress", device.getAddress(), null);
+        }
+
         GeneralVariables.controlMode = ControlMode.CAT;//Bluetooth control mode, only CAT control is supported
         GeneralVariables.mutableControlMode.postValue(GeneralVariables.controlMode);
         connectRig();
@@ -1164,6 +1172,20 @@ public class MainViewModel extends ViewModel {
                 , GeneralVariables.controlMode);
         baseRig.setOnRigStateChanged(onRigStateChanged);
         baseRig.setConnector(connector);
+
+        // Route HFP audio over SCO as soon as the CAT rig is wired -- but only when a Bluetooth
+        // audio profile (headset/A2DP) is actually connected. SPP-only CAT adapters have no audio
+        // path, so forcing SCO + headset mode on them would be wrong and disruptive (PR #227
+        // review). Without this, SCO is only (re)started as a side effect of the TX/RX cycle
+        // (needControlSco()/startSco()), which never fires until a rig is connected -- so on
+        // relaunch audio was dead in both directions until the user manually reconfigured
+        // Bluetooth (issue #223). The BluetoothStateBroadcastReceive path remains the fallback
+        // for devices whose audio profile connects after this point.
+        new Handler(Looper.getMainLooper()).post(() -> {
+            if (isBTConnected()) {
+                setBlueToothOn();
+            }
+        });
 
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {//connection takes time, wait before setting frequency
             @Override

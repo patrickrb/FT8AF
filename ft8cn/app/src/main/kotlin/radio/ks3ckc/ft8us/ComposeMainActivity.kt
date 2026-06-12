@@ -277,6 +277,18 @@ class ComposeMainActivity : AppCompatActivity() {
             }
             GridLocationUpdater.refresh(applicationContext, mainViewModel)
         }
+
+        // On Android 12+ the BT auto-connect at config-load time may have bailed with
+        // NO_PERMISSION because BLUETOOTH_CONNECT was still pending. Once the user grants it,
+        // retry the SPP/CAT auto-reconnect in the same session (issue #223). The rigConnected
+        // guard inside makes this idempotent with the config-callback attempt.
+        val btIdx = permissions.indexOf(Manifest.permission.BLUETOOTH_CONNECT)
+        if (btIdx >= 0 && grantResults.getOrNull(btIdx) == PackageManager.PERMISSION_GRANTED
+            && mainViewModel.configIsLoaded
+        ) {
+            fileLog("onRequestPermissionsResult: BLUETOOTH_CONNECT granted, retrying BT auto-connect")
+            autoConnectBluetoothIfNeeded()
+        }
     }
 
     private fun initData() {
@@ -320,6 +332,11 @@ class ComposeMainActivity : AppCompatActivity() {
                 val ports = mainViewModel.mutableSerialPorts.value
                 fileLog("initData: found ${ports?.size ?: 0} serial port(s)")
                 mainViewModel.reinitializeAudioInput()
+
+                // USB auto-connect is driven by the mutableSerialPorts observer; Bluetooth has
+                // no such device-arrival event, so re-open the remembered SPP/CAT link here now
+                // that connectMode + the saved address are loaded (issue #223).
+                autoConnectBluetoothIfNeeded()
 
                 // Delayed re-scan for slow USB enumeration
                 Handler(Looper.getMainLooper()).postDelayed({
@@ -541,6 +558,44 @@ class ComposeMainActivity : AppCompatActivity() {
             "baudRate=${GeneralVariables.baudRate}, " +
             "controlMode=${GeneralVariables.controlMode})")
         mainViewModel.connectCableRig(applicationContext, ports[0])
+    }
+
+    /**
+     * Re-open the remembered Bluetooth (SPP/CAT) rig on startup when the user is in Bluetooth
+     * connect mode. Without this the CAT link never re-opened on relaunch, which also left
+     * HFP audio unrouted (issue #223). All branch logic lives in [decideBluetoothAutoConnect]
+     * so it is unit-testable; this method only collects Android state and acts on CONNECT.
+     */
+    private fun autoConnectBluetoothIfNeeded() {
+        val adapter = BluetoothAdapter.getDefaultAdapter()
+        val addr = GeneralVariables.bluetoothDeviceAddress
+        // A corrupted/legacy persisted value would make getRemoteDevice() throw
+        // IllegalArgumentException and crash startup, so validate the MAC up front (PR #227 review).
+        val validAddr = !addr.isNullOrBlank() && BluetoothAdapter.checkBluetoothAddress(addr)
+        if (!addr.isNullOrBlank() && !validAddr) {
+            fileLog("autoConnectBT: ignoring invalid saved address=$addr")
+        }
+        val hasPerm = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
+            PackageManager.PERMISSION_GRANTED
+        val bonded = try {
+            hasPerm && adapter != null && validAddr &&
+                adapter.bondedDevices.any { it.address == addr }
+        } catch (_: SecurityException) {
+            false
+        }
+        val decision = decideBluetoothAutoConnect(
+            connectMode = GeneralVariables.connectMode,
+            savedAddress = if (validAddr) addr else null,
+            rigConnected = mainViewModel.isRigConnected(),
+            adapterOn = adapter?.isEnabled == true,
+            hasConnectPermission = hasPerm,
+            isBonded = bonded,
+        )
+        fileLog("autoConnectBT: decision=$decision addr=$addr connectMode=${GeneralVariables.connectMode}")
+        if (decision == BtAutoConnectDecision.CONNECT) {
+            mainViewModel.connectBluetoothRig(applicationContext, adapter!!.getRemoteDevice(addr))
+        }
     }
 
     /** Write a line to /sdcard/Android/data/com.bg7yoz.ft8cn/files/debug.log */
