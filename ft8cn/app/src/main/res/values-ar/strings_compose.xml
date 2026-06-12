@@ -1,0 +1,543 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ Compose UI strings (FT8AF). The live app is the Jetpack Compose UI under
+  ~ radio.ks3ckc.ft8us; these are its user-facing strings, externalized for
+  ~ localization. The legacy strings.xml entries belong to the unreachable old
+  ~ XML/Fragment UI and are NOT used by the running app.
+  ~
+  ~ Translations live in values-<locale>/strings_compose.xml. English here is the
+  ~ source of truth — keep it byte-identical to the original UI text so the English
+  ~ layout never changes. Ham-radio abbreviations (CQ, QSO, DXCC, POTA, SOTA, RST)
+  ~ are intentionally left untranslated across all locales.
+-->
+<resources>
+
+    <!-- ===== Common / shared ===== -->
+    <string name="action_cancel">إلغاء</string>
+    <string name="action_save">حفظ</string>
+    <string name="action_done">تم</string>
+    <string name="action_ok">OK</string>
+    <string name="action_exit">خروج</string>
+    <string name="common_none">لا شيء</string>
+    <string name="common_off">إيقاف</string>
+    <string name="common_not_configured">غير مهيأ</string>
+    <string name="common_not_connected">غير متصل</string>
+    <string name="common_pass">نجاح</string>
+    <string name="common_fail">فشل</string>
+    <string name="common_test_connection">اختبار الاتصال</string>
+
+    <!-- ===== Continents ===== -->
+    <string name="continent_na">أمريكا الشمالية</string>
+    <string name="continent_sa">أمريكا الجنوبية</string>
+    <string name="continent_eu">أوروبا</string>
+    <string name="continent_af">أفريقيا</string>
+    <string name="continent_as">آسيا</string>
+    <string name="continent_oc">أوقيانوسيا</string>
+    <string name="continent_an">القارة القطبية الجنوبية</string>
+
+    <!-- ===== Bottom navigation tabs ===== -->
+    <string name="tab_decode">فك التشفير</string>
+    <string name="tab_map">الخريطة</string>
+    <string name="tab_waterfall">الشلال</string>
+    <string name="tab_pota">POTA</string>
+    <string name="tab_logbook">السجل</string>
+    <string name="tab_settings">الإعدادات</string>
+
+    <!-- ===== Status pills (decode list badges) ===== -->
+    <string name="status_new_dxcc">DXCC جديد</string>
+    <string name="status_new_grid">مربع جديد</string>
+    <string name="status_new_band">نطاق جديد</string>
+    <string name="status_pota">POTA</string>
+    <string name="status_new_pota">POTA جديد</string>
+    <string name="status_sota">SOTA</string>
+    <string name="status_needed">مطلوب</string>
+    <string name="status_worked">تم الاتصال</string>
+    <string name="status_confirmed">مؤكَّد</string>
+    <string name="status_cq">CQ</string>
+    <string name="status_pending">قيد الانتظار</string>
+
+    <!-- ===== Splash / app-level ===== -->
+    <string name="splash_tagline">FT8 · الرفيق المحمول</string>
+    <string name="splash_initializing">جارٍ تهيئة الراديو</string>
+    <string name="splash_version">v%1$s · بناء %2$s</string>
+    <string name="app_set_callsign_first">اضبط نداءك في الإعدادات قبل النداء بـ CQ</string>
+    <string name="app_hunt_on">الصيد مفعَّل — رد تلقائي على نداءات CQ</string>
+    <string name="app_hunt_off">الصيد متوقف — نداء CQ والرد على المستجيبين فقط</string>
+    <string name="app_mode_switched">الوضع: %1$s</string>
+    <string name="app_mode_switch_busy">لا يمكن تبديل الوضع أثناء الإرسال</string>
+    <string name="main_tx_volume">مستوى صوت TX: %1$d%%</string>
+
+    <!-- ===== Exit dialog ===== -->
+    <string name="exit_title">الخروج من FT8AF؟</string>
+    <string name="exit_message">هل أنت متأكد أنك تريد إغلاق التطبيق؟ سيُلغى أي QSO نشط.</string>
+
+    <!-- ===== Frequency picker ===== -->
+    <string name="freq_select_title">اختر التردد</string>
+    <string name="freq_show_alternates">إظهار البدائل</string>
+    <string name="freq_hide_alternates">إخفاء البدائل</string>
+    <string name="freq_alt_prefix">"ALT "</string>
+
+    <!-- ===== Operator card ===== -->
+    <string name="op_no_call">لا نداء</string>
+    <string name="op_no_grid">لم يُضبط مربع</string>
+    <string name="op_tap_to_edit">انقر للتحرير</string>
+    <string name="op_stat_rig">الجهاز</string>
+    <string name="op_stat_antenna">الهوائي</string>
+    <string name="op_stat_power">القدرة</string>
+
+    <!-- ===== Export log sheet ===== -->
+    <string name="export_title">تصدير QSOs</string>
+    <string name="export_date_range">النطاق الزمني</string>
+    <string name="export_date_from_placeholder">"من  YYYYMMDD"</string>
+    <string name="export_date_to_placeholder">"إلى  YYYYMMDD"</string>
+    <string name="export_share">مشاركة</string>
+    <string name="export_filter_confirmed">المؤكَّدة فقط</string>
+    <string name="export_filter_unconfirmed">غير المؤكَّدة فقط</string>
+    <string name="export_record_singular">سجل</string>
+    <string name="export_record_plural">سجلات</string>
+    <string name="export_summary_all">الكل</string>
+    <string name="export_summary_key">\'%1$s\'</string>
+    <string name="export_summary_suffix">" · %1$s"</string>
+    <string name="export_summary">%1$d %2$s مطابق %3$s%4$s</string>
+    <string name="export_preparing">جارٍ التحضير…</string>
+    <string name="export_share_chooser_title">مشاركة سجلات QSO</string>
+    <string name="export_saved_to">حُفظ في %1$s</string>
+    <string name="export_save_failed">فشل الحفظ في التنزيلات</string>
+    <string name="export_temp_file_failed">تعذّر إنشاء ملف مؤقت</string>
+
+    <!-- ===== TX strip ===== -->
+    <string name="tx_transmitting">جارٍ الإرسال</string>
+    <string name="tx_listening">جارٍ الاستماع</string>
+    <string name="tx_hunt">صيد</string>
+    <string name="tx_call_cq">نداء CQ</string>
+    <string name="tx_stop">إيقاف</string>
+
+    <!-- ===== Hound (DXpedition) setup ===== -->
+    <string name="hound_title">العمل مع بعثة DX (Hound)</string>
+    <string name="hound_help">اضبط الجهاز على تردد القرص المعلن للـ Fox أولاً. تنادي أنت في الأعلى (1000–4000 Hz)؛ يقوم التطبيق تلقائياً بنقل ترددك (QSY) إلى حيث يرد الـ Fox ويرد بتقريرك.</string>
+    <string name="hound_fox_callsign">نداء الـ Fox</string>
+    <string name="hound_call_frequency">تردد النداء (Hz، 1000–4000)</string>
+    <string name="hound_start">بدء</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT متصل — انقر لإعادة الاتصال</string>
+    <string name="cat_status_connecting">جارٍ اتصال CAT…</string>
+    <string name="cat_status_disconnected">CAT غير متصل — انقر للاتصال</string>
+    <string name="cat_status_error">خطأ في اتصال CAT — انقر لإعادة المحاولة</string>
+
+    <!-- ===== SWR lockout banner ===== -->
+    <string name="swr_lockout_title">توقف TX — تم رصد SWR مرتفع (%1$s)</string>
+    <string name="swr_lockout_body">تحقق من الهوائي / خط التغذية قبل الإرسال.</string>
+    <string name="swr_lockout_dismiss">تجاهل</string>
+    <string name="swr_lockout_toast">TX محظور — قفل SWR نشط. تجاهل لافتة القفل أولاً.</string>
+
+    <!-- ===== Active QSO panel ===== -->
+    <string name="qsopanel_calling_cq">نداء CQ</string>
+    <string name="qsopanel_searching">جارٍ البحث...</string>
+    <string name="qsopanel_qsoing_with">إجراء QSO مع %1$s</string>
+    <string name="qsopanel_waiting_for">في انتظار %1$s</string>
+    <string name="qsopanel_tap_to_view">انقر للعرض ↗</string>
+    <string name="qsopanel_tx_message">TX: %1$s</string>
+    <string name="qsopanel_waiting_messages">في انتظار الرسائل...</string>
+    <string name="qsopanel_log_action">تسجيل</string>
+    <string name="qsopanel_queue">قائمة الانتظار</string>
+
+    <!-- ===== Decode screen ===== -->
+    <string name="decode_title">فك التشفير</string>
+    <string name="decode_subtitle">"%1$s  •  %2$d مفكوك هذه الدورة"</string>
+    <string name="decode_clear_list">مسح قائمة فك التشفير</string>
+    <string name="decode_utc_placeholder">UTC : --:--:--</string>
+    <string name="decode_time_group_utc">%1$s UTC</string>
+    <string name="decode_filter_all">الكل</string>
+    <string name="decode_filter_cq_calls">نداءات CQ</string>
+    <string name="decode_filter_cq_pota">CQ POTA</string>
+    <string name="decode_filter_new_dxcc">DXCC جديد</string>
+    <string name="decode_filter_needed">مطلوب</string>
+    <string name="decode_filter_for_me">لي</string>
+    <string name="decode_empty_cq_title">لا نداءات CQ</string>
+    <string name="decode_empty_cq_body">لا توجد محطات تنادي CQ على هذا النطاق الآن.</string>
+    <string name="decode_empty_pota_title">لا رصدات POTA</string>
+    <string name="decode_empty_pota_body">لم تُفك أي تفعيلات حدائق على هذا النطاق بعد — افتح POTA → الصيد لقائمة الرصد.</string>
+    <string name="decode_empty_dxcc_title">لا DXCC جديد</string>
+    <string name="decode_empty_dxcc_body">لم تُفك أي كيانات DXCC لم يُتصل بها بعد.</string>
+    <string name="decode_empty_needed_title">لا شيء مطلوب</string>
+    <string name="decode_empty_needed_body">لم يُعثر على محطات بحاجة إلى تأكيد.</string>
+    <string name="decode_empty_forme_title">لا نداءات لك</string>
+    <string name="decode_empty_forme_body">لا توجد محطات تنادي نداءك الآن.</string>
+    <string name="decode_empty_default_title">لا إشارات مفكوكة</string>
+    <string name="decode_empty_default_body">في انتظار ظهور إشارات FT8...</string>
+    <string name="decode_label_calling">→ ينادي</string>
+    <string name="decode_label_cq">CQ</string>
+    <string name="decode_label_to_you">↓ إليك</string>
+
+    <!-- ===== QSO sheet ===== -->
+    <string name="qso_complete">اكتمل QSO</string>
+    <string name="qso_call_action">نداء %1$s</string>
+    <string name="qso_qrz_link">QRZ ↗</string>
+    <string name="qso_stat_signal">الإشارة</string>
+    <string name="qso_stat_distance">المسافة</string>
+    <string name="qso_stat_azimuth">السمت</string>
+    <string name="qso_stat_band">النطاق</string>
+    <string name="qso_sequence_header">تسلسل QSO</string>
+    <string name="qso_step_send_call">إرسال النداء</string>
+    <string name="qso_step_report_sent">أُرسل التقرير</string>
+    <string name="qso_step_roger">استلام</string>
+    <string name="qso_step_confirm">تأكيد</string>
+    <string name="qso_step_logged">مُسجَّل</string>
+    <string name="qso_live_sending">إجراء QSO مع %1$s — إرسال %2$s</string>
+    <string name="qso_live_waiting">في انتظار رد %1$s…</string>
+    <string name="qso_live_transmitting">جارٍ الإرسال…</string>
+    <string name="qso_live_step_fallback">رسالة</string>
+    <string name="qso_tx_now">TX الآن</string>
+    <string name="qso_tx_next">TX التالي</string>
+
+    <!-- ===== Logbook ===== -->
+    <string name="log_tab_stats">الإحصاءات</string>
+    <string name="log_tab_recent">الأخيرة</string>
+    <string name="log_tab_awards">الجوائز</string>
+    <string name="log_title">السجل</string>
+    <string name="log_subtitle_qsos_all_bands">%1$d QSOs · كل النطاقات</string>
+    <string name="log_cd_sync_to_logging_services">مزامنة مع خدمات التسجيل</string>
+    <string name="log_cd_export_qsos">تصدير QSOs</string>
+    <string name="log_stat_total_qsos">إجمالي QSOs</string>
+    <string name="log_stat_dxcc_entities">كيانات DXCC</string>
+    <string name="log_stat_cq_zones">مناطق CQ</string>
+    <string name="log_stat_itu_zones">مناطق ITU</string>
+    <string name="log_section_band_distribution">توزيع النطاقات</string>
+    <string name="log_section_award_progress">تقدم الجوائز</string>
+    <string name="log_award_dxcc_mixed">DXCC مختلط</string>
+    <string name="log_award_vucc_grid_squares">مربعات VUCC</string>
+    <string name="log_award_dxcc_challenge">تحدي DXCC</string>
+    <string name="log_section_grid_coverage">تغطية المربعات</string>
+    <string name="log_section_signal_trend">اتجاه الإشارة</string>
+    <string name="log_no_qsos_yet">لا QSOs بعد</string>
+    <string name="log_no_qsos_recorded_yet">لم تُسجَّل QSOs بعد</string>
+    <string name="log_state_usa">%1$s، الولايات المتحدة</string>
+    <string name="log_cd_qso_actions">إجراءات QSO</string>
+    <string name="log_action_edit">تحرير</string>
+    <string name="log_action_delete">حذف</string>
+    <string name="log_award_dxcc_mixed_desc">اتصل وأكِّد 100 كيان DXCC على أي نطاق/وضع</string>
+    <string name="log_award_was">WAS</string>
+    <string name="log_award_was_desc">اتصل بكل الولايات الأمريكية الخمسين مؤكَّدة</string>
+    <string name="log_award_waz">WAZ</string>
+    <string name="log_award_waz_desc">اتصل بكل مناطق CQ الأربعين مؤكَّدة</string>
+    <string name="log_award_vucc">VUCC</string>
+    <string name="log_award_vucc_desc">نادي القرن VHF/UHF -- 100 مربع على نطاق واحد</string>
+    <string name="log_award_iota">IOTA</string>
+    <string name="log_award_iota_desc">الجزر على الهواء -- اتصل بمحطات على جزر محددة</string>
+    <string name="log_edit_qso">تحرير QSO</string>
+    <string name="log_field_callsign">النداء</string>
+    <string name="log_field_grid_locator">محدد المربع</string>
+    <string name="log_field_mode">الوضع</string>
+    <string name="log_delete_qso_title">حذف QSO؟</string>
+    <string name="log_delete_qso_body_callsign">إزالة QSO مع %1$s من السجل؟ لا يمكن التراجع عن هذا.</string>
+    <string name="log_delete_qso_body">إزالة هذا QSO من السجل؟ لا يمكن التراجع عن هذا.</string>
+    <string name="log_sync_title_no_services">لا خدمات مفعَّلة</string>
+    <string name="log_sync_title_syncing">جارٍ المزامنة…</string>
+    <string name="log_sync_title_complete">اكتملت المزامنة</string>
+    <string name="log_sync_enable_services">فعِّل Cloudlog/Wavelog/Nextlog أو QRZ في الإعدادات، ثم أعد المحاولة.</string>
+    <string name="log_sync_progress_count">%1$d من %2$d QSOs</string>
+    <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d مقبول</string>
+    <string name="log_sync_qrz_accepted">QRZ: %1$d مقبول</string>
+    <string name="log_sync_nothing_to_upload">لا QSOs في السجل للرفع بعد.</string>
+    <string name="log_sync_working">جارٍ العمل…</string>
+
+    <!-- ===== POTA ===== -->
+    <string name="pota_tab_activate">تفعيل</string>
+    <string name="pota_tab_hunt">صيد</string>
+    <string name="pota_tab_history">السجل</string>
+    <string name="pota_start_activation">بدء التفعيل</string>
+    <string name="pota_park_reference_label">مرجع الحديقة (مثل K-1234)</string>
+    <string name="pota_notes_optional_label">ملاحظات (اختياري)</string>
+    <string name="pota_enter_park_reference_first">أدخل مرجع الحديقة أولاً</string>
+    <string name="pota_activating">جارٍ تفعيل %1$s</string>
+    <string name="pota_activation_ended">انتهى التفعيل</string>
+    <string name="pota_set_callsign_first">اضبط نداءك في الإعدادات أولاً</string>
+    <string name="pota_self_spot_posted">تم نشر الرصد الذاتي</string>
+    <string name="pota_self_spot_failed">فشل الرصد الذاتي — راجع السجل</string>
+    <string name="pota_active_park">نشط — %1$s</string>
+    <string name="pota_qsos">QSOs</string>
+    <string name="pota_contacts_map">خريطة الاتصالات</string>
+    <string name="pota_back">رجوع</string>
+    <string name="pota_valid_activation">تفعيل صالح</string>
+    <string name="pota_to_valid">%1$d حتى الصلاحية</string>
+    <string name="pota_elapsed">المنقضي</string>
+    <string name="pota_since_start">منذ البدء</string>
+    <string name="pota_self_spot">رصد ذاتي</string>
+    <string name="pota_end_activation">إنهاء التفعيل</string>
+    <string name="pota_notes_quote">“%1$s”</string>
+    <string name="pota_tx_cq_preview">سيخرج TX CQ كـ “CQ POTA %1$s %2$s”.</string>
+    <string name="pota_no_spots">لا رصدات FT8 POTA الآن.</string>
+    <string name="pota_active_spots">%1$d رصد FT8 نشط</string>
+    <string name="pota_targeting">استهداف %1$s @ %2$s kHz (%3$s) — بدّل إلى فك التشفير للنداء</string>
+    <string name="pota_no_past_activations">لا تفعيلات سابقة بعد.</string>
+    <string name="pota_no_browser_available">لا متصفح متاح</string>
+    <string name="pota_export_failed">فشل التصدير — راجع السجل</string>
+    <string name="pota_status_active">نشط</string>
+    <string name="pota_qso_count">%1$d QSO</string>
+    <string name="pota_share_adif">مشاركة ADIF</string>
+    <string name="pota_open_pota_app">فتح pota.app</string>
+    <string name="pota_upload_to_pota">الرفع إلى POTA</string>
+    <string name="pota_upload_success">تم رفع %1$d سجل حديقة إلى POTA</string>
+    <string name="pota_upload_failed">فشل الرفع: %1$s</string>
+    <string name="pota_upload_server_error">تعذّر على POTA معالجة الرفع. تحقق من صلاحية مرجع الحديقة وأن نداءك مسجَّل لدى POTA، ثم أعد المحاولة.</string>
+    <string name="pota_upload_network_error">تعذّر الوصول إلى POTA. تحقق من اتصالك بالإنترنت وأعد المحاولة.</string>
+    <string name="pota_login_title">تسجيل الدخول إلى POTA</string>
+    <string name="pota_login_desc">استخدم بريد وكلمة مرور حساب pota.app الخاص بك.</string>
+    <string name="pota_login_email">البريد الإلكتروني</string>
+    <string name="pota_login_password">كلمة المرور</string>
+    <string name="pota_login_button">تسجيل الدخول</string>
+    <string name="pota_login_cancel">إلغاء</string>
+    <string name="pota_login_failed">فشل تسجيل الدخول: %1$s</string>
+    <string name="pota_login_or">أو</string>
+    <string name="pota_login_social">تسجيل الدخول عبر Google / Facebook / Amazon</string>
+    <string name="pota_oauth_title">تسجيل الدخول إلى POTA</string>
+    <string name="pota_add_park">إضافة حديقة</string>
+    <string name="pota_remove_park">إزالة</string>
+    <string name="pota_max_parks_reached">تم بلوغ الحد الأقصى وهو 10 حدائق</string>
+    <string name="pota_spotted_n_parks">مرصود في %1$d حدائق</string>
+    <string name="pota_parks_more">+%1$d أخرى</string>
+
+    <!-- ===== Debug log / Map / Waterfall ===== -->
+    <string name="debug_title">تصحيح</string>
+    <string name="debug_line_count">%1$d سطر</string>
+    <string name="debug_logcat_on_suffix">" · logcat ON"</string>
+    <string name="debug_close">إغلاق</string>
+    <string name="debug_share">مشاركة</string>
+    <string name="debug_clear">مسح</string>
+    <string name="debug_logcat_on">Logcat: مفعَّل</string>
+    <string name="debug_logcat_off">Logcat: متوقف</string>
+    <string name="debug_no_log_file">لا ملف سجل</string>
+    <string name="debug_log_cleared">مُسح السجل</string>
+    <string name="debug_share_chooser_title">مشاركة debug.log</string>
+    <string name="map_title">الخريطة</string>
+    <string name="map_no_grid_set">لم يُضبط مربع</string>
+    <string name="map_station_count">%1$d محطة</string>
+    <string name="map_station_count_with_heard">%1$d محطة · %2$d مسموعة</string>
+    <string name="map_psk_error">PSK Reporter غير متاح: %1$s</string>
+    <string name="map_projection_equirectangular">مستطيلي متساوٍ</string>
+    <string name="map_projection_azimuthal">سمتي متساوي البعد</string>
+    <string name="map_mode_standard">STD</string>
+    <string name="map_mode_azimuthal">AZ</string>
+    <string name="map_overlay_psk">PSK</string>
+    <string name="map_info_distance">المسافة</string>
+    <string name="map_info_bearing">الاتجاه</string>
+    <string name="map_info_snr">SNR</string>
+    <string name="waterfall_title">الشلال</string>
+    <string name="waterfall_toggle_nr">NR</string>
+    <string name="waterfall_toggle_msg">MSG</string>
+    <string name="waterfall_status_live">مباشر</string>
+
+    <!-- ===== Settings: format helpers ===== -->
+    <string name="settings_minutes_format">%1$d min</string>
+    <string name="settings_tries_format">%1$d محاولة</string>
+    <string name="settings_milliseconds_format">%1$d ms</string>
+    <string name="settings_hz_format">%1$d Hz</string>
+    <string name="settings_hz_str_format">%1$s Hz</string>
+    <string name="settings_percent_format">%1$d%%</string>
+    <string name="settings_bands_enabled_format">%1$d من %2$d مفعَّل</string>
+    <string name="settings_min_max_suffix">%1$d–%2$d %3$s</string>
+    <string name="settings_build_date_format">بناء %1$s</string>
+    <string name="settings_version_value">v%1$s</string>
+
+    <!-- ===== Settings: sections ===== -->
+    <string name="settings_title">الإعدادات</string>
+    <string name="settings_section_operator_identity">هوية المشغِّل</string>
+    <string name="settings_section_radio">الراديو</string>
+    <string name="settings_section_audio">الصوت</string>
+    <string name="settings_section_transmission">الإرسال</string>
+    <string name="settings_section_auto_sequence">التسلسل التلقائي</string>
+    <string name="settings_section_decode_highlights">إبرازات فك التشفير</string>
+    <string name="settings_section_callsign_blocklist">قائمة حظر النداءات</string>
+    <string name="settings_section_decode_filters">مرشحات فك التشفير</string>
+    <string name="settings_section_needed_dx_alerts">تنبيهات DX المطلوبة</string>
+    <string name="settings_section_logging_awards">التسجيل &amp; الجوائز</string>
+    <string name="settings_section_advanced">متقدم</string>
+    <string name="settings_section_about">حول</string>
+    <string name="settings_section_language">اللغة</string>
+
+    <!-- ===== Settings: drill-down category labels ===== -->
+    <string name="settings_cat_radio_audio">الراديو &amp; الصوت</string>
+    <string name="settings_cat_transmission">الإرسال</string>
+    <string name="settings_cat_decode_filters">فك التشفير &amp; المرشحات</string>
+    <string name="settings_cat_logging">التسجيل &amp; الجوائز</string>
+    <string name="settings_cat_advanced">متقدم</string>
+    <string name="settings_cat_about">حول</string>
+    <string name="settings_cat_time_sync">مزامنة الوقت</string>
+    <string name="settings_cat_time_sync_desc">تصحيح يدوي للساعة للتشغيل دون اتصال</string>
+
+    <!-- ===== Settings: Time Sync (manual clock correction) ===== -->
+    <string name="settings_time_correction_section">تصحيح يدوي</string>
+    <string name="settings_time_current_label">التصحيح الحالي</string>
+    <string name="settings_time_correction_reset">إعادة إلى 0</string>
+    <string name="settings_time_correction_desc">عدِّل ساعة التطبيق عندما لا يتوفر إنترنت للمزامنة. يحتاج FT8 إلى UTC ضمن حوالي ثانية واحدة. اضبط حتى يتمركز عمود DT للمحطات المفكوكة قرب 0.</string>
+    <string name="settings_time_suggest_section">مقترح من فك التشفير</string>
+    <string name="settings_time_suggest_none">لا فك تشفير بعد — ابدأ الاستقبال للحصول على اقتراح.</string>
+    <string name="settings_time_suggest_label">متوسط DT الأخير: %1$s</string>
+    <string name="settings_time_suggest_apply">تطبيق التصحيح المقترح</string>
+
+    <!-- ===== Settings: operator identity ===== -->
+    <string name="settings_auto_update_grid">تحديث المربع تلقائياً (GPS)</string>
+    <string name="settings_auto_update_grid_desc">استخدم GPS الجهاز لإبقاء مربع Maidenhead محدثاً</string>
+
+    <!-- ===== Settings: radio ===== -->
+    <string name="settings_rig_model">طراز الجهاز</string>
+    <string name="settings_control_mode">وضع التحكم</string>
+    <string name="settings_connection_mode">وضع الاتصال</string>
+    <string name="settings_baud_rate">معدل البود</string>
+    <string name="settings_band_frequency">النطاق &amp; التردد</string>
+    <string name="settings_enabled_bands">النطاقات المفعَّلة</string>
+    <string name="settings_audio_frequency">تردد الصوت</string>
+    <string name="settings_spectrum_width">عرض الطيف</string>
+
+    <!-- ===== Settings: audio ===== -->
+    <string name="settings_audio_input">دخل الصوت</string>
+    <string name="settings_audio_output">خرج الصوت</string>
+    <string name="settings_tx_volume">مستوى صوت TX</string>
+    <string name="settings_tx_volume_desc" formatted="false">مستوى صوت الإرسال (أزرار العتاد ±5%)</string>
+
+    <!-- ===== Settings: transmission ===== -->
+    <string name="settings_tx_rx_split">تقسيم TX/RX</string>
+    <string name="settings_tx_rx_split_desc">الإرسال على تردد مختلف عن الاستقبال</string>
+    <string name="settings_tx_watchdog">مراقب TX</string>
+    <string name="settings_tx_watchdog_desc">إيقاف الإرسال تلقائياً بعد المهلة</string>
+    <string name="settings_stop_after">التوقف بعد</string>
+    <string name="settings_stop_after_desc">التوقف عن النداء بعد N محاولات بلا رد</string>
+
+    <!-- ===== Settings: auto-sequence ===== -->
+    <string name="settings_hunt">الصيد (رد تلقائي على CQ)</string>
+    <string name="settings_hunt_desc">نادِ المحطات التي تنادي CQ بشكل استباقي. مثل زر HUNT على شريط TX. الإيقاف = نداء CQ والاتصال فقط بالمحطات التي تجيبك.</string>
+    <string name="settings_auto_call_followed">نداء المتابَعين تلقائياً</string>
+    <string name="settings_auto_call_followed_desc">متابعة نداء النداءات المتابَعة تلقائياً</string>
+    <string name="settings_fast_turnaround">استجابة سريعة</string>
+    <string name="settings_fast_turnaround_desc">فك التشفير قبل ~1 ثانية حتى تتمكن من الرد على CQ في الفتحة التالية بدلاً من الانتظار. قد يفوّت محطات ذات إزاحة ساعة كبيرة.</string>
+    <string name="settings_auto_cq_after_qso">CQ تلقائي بعد QSO</string>
+    <string name="settings_auto_cq_after_qso_desc">واصل نداء CQ تلقائياً بعد كل اتصال مكتمل — دون نقر جديد. يبقى على ترددك (يتجاهل الصيد). يستمر حتى تتوقف أو تنتهي مهلة مراقب TX بلا ردود.</string>
+
+    <!-- ===== Settings: decode highlights ===== -->
+    <string name="settings_highlight_new_dxcc">DXCC جديد</string>
+    <string name="settings_highlight_new_dxcc_desc">إبراز المحطات من كيان DXCC لم يُتصل به</string>
+    <string name="settings_highlight_new_grid">مربع جديد</string>
+    <string name="settings_highlight_new_grid_desc">إبراز مربعات Maidenhead التي لم يُتصل بها بعد</string>
+    <string name="settings_highlight_new_band">نطاق جديد</string>
+    <string name="settings_highlight_new_band_desc">إبراز المحطات التي اتُّصل بها على نطاقات أخرى فقط</string>
+    <string name="settings_highlight_pota">مفعِّلو POTA</string>
+    <string name="settings_highlight_pota_desc">إبراز مفعِّلي POTA المرصودين؛ تبرز الحدائق الجديدة</string>
+    <string name="settings_highlight_worked">اتُّصل به سابقاً</string>
+    <string name="settings_highlight_worked_desc">وسم المحطات الموجودة في سجلك بالفعل</string>
+    <string name="settings_distance_unit">المسافة بالأميال</string>
+    <string name="settings_distance_unit_desc">إظهار المسافات بالأميال بدلاً من الكيلومترات</string>
+
+    <!-- ===== Settings: callsign blocklist ===== -->
+    <string name="settings_exact_callsigns">نداءات دقيقة</string>
+    <string name="settings_exact_callsigns_desc">حظر مطابقات النداء الكامل</string>
+    <string name="settings_prefixes">البادئات</string>
+    <string name="settings_prefixes_desc">الحظر حسب بادئة النداء (مثل RA)</string>
+    <string name="settings_keywords">كلمات مفتاحية</string>
+    <string name="settings_keywords_desc">الحظر حسب سلسلة فرعية في النداء أو الرسالة (مثل POTA، /P)</string>
+
+    <!-- ===== Settings: decode filters ===== -->
+    <string name="settings_show_only_cq">إظهار CQ فقط</string>
+    <string name="settings_show_only_cq_desc">إخفاء كل شيء عدا رسائل نوع CQ</string>
+    <string name="settings_dx_only">DX فقط</string>
+    <string name="settings_dx_only_desc">إظهار المحطات خارج قارتك فقط</string>
+    <string name="settings_needed_only">المطلوب فقط</string>
+    <string name="settings_needed_only_desc">إظهار المحطات غير المؤكَّدة بعد فقط (QSL)</string>
+    <string name="settings_filter_by_continent">التصفية حسب القارة</string>
+    <string name="settings_filter_by_continent_desc">إظهار المحطات من قارة مختارة فقط</string>
+    <string name="settings_continent">القارة</string>
+    <string name="settings_skip_directional_cq">تخطي CQ الموجَّهة (رد تلقائي)</string>
+    <string name="settings_skip_directional_cq_desc">لا ترد تلقائياً على CQ DX/EU/JA… الموجَّهة إلى DXCC مختلف</string>
+    <string name="settings_hide_directional_cq">إخفاء CQ الموجَّهة ليست لي</string>
+    <string name="settings_hide_directional_cq_desc">إخفاء CQ الموجَّهة لمنطقة لا تستهدف DXCC الخاص بك</string>
+
+    <!-- ===== Settings: needed-DX alerts ===== -->
+    <string name="settings_alert_new_dxcc">DXCC جديد</string>
+    <string name="settings_alert_new_dxcc_desc">صوت + اهتزاز + إشعار عند نداء كيان DXCC لم يُتصل به بـ CQ</string>
+    <string name="settings_alert_new_state">ولاية أمريكية جديدة</string>
+    <string name="settings_alert_new_state_desc">صوت + اهتزاز + إشعار عند نداء محطة من ولاية أمريكية لم يُتصل بها بـ CQ (الولاية من المربع)</string>
+
+    <!-- ===== Settings: logging &amp; awards ===== -->
+    <string name="settings_save_swl_decodes">حفظ فك تشفير SWL</string>
+    <string name="settings_save_swl_decodes_desc">تسجيل كل الرسائل المفكوكة في قاعدة البيانات</string>
+    <string name="settings_save_swl_qsos">حفظ QSOs الخاصة بـ SWL</string>
+    <string name="settings_save_swl_qsos_desc">تسجيل QSOs المرصودة بين محطات أخرى</string>
+    <string name="settings_pskreporter">PSKReporter</string>
+    <string name="settings_pskreporter_desc">رفع الرصدات المفكوكة إلى pskreporter.info</string>
+    <string name="settings_qrz_com">QRZ.com</string>
+    <string name="settings_qrz_com_desc">رفع QSOs تلقائياً إلى سجل QRZ</string>
+    <string name="settings_qrz_profile_lookup">بحث ملف QRZ الشخصي</string>
+    <string name="settings_qrz_profile_lookup_desc">اسم المستخدم + كلمة المرور لواجهة QRZ XML API (الصور الرمزية)</string>
+    <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
+    <string name="settings_cloudlog_desc">رفع QSOs تلقائياً إلى نسخة Cloudlog أو Wavelog أو Nextlog</string>
+
+    <!-- ===== Settings: advanced ===== -->
+    <string name="settings_ptt_delay">تأخير PTT</string>
+    <string name="settings_ptt_delay_desc">التأخير بعد PTT قبل بدء صوت الإرسال</string>
+    <string name="settings_tx_delay">تأخير TX</string>
+    <string name="settings_tx_delay_desc">تأخير قبل الإرسال للسماح بفك تشفير الدورة السابقة</string>
+    <string name="settings_late_start_tolerance">تحمل البدء المتأخر</string>
+    <string name="settings_late_start_tolerance_desc">السماح ببدء TX حتى N ms داخل الدورة؛ يُقتطع الصوت الأمامي لينتهي TX عند حدود الدورة</string>
+
+    <!-- ===== Settings: about ===== -->
+    <string name="settings_faq_support">الأسئلة الشائعة &amp; الدعم</string>
+    <string name="settings_report_bug">الإبلاغ عن خطأ</string>
+    <string name="bug_report_description_hint">صف ما حدث من خطأ…</string>
+    <string name="bug_report_send_email">إرسال بريد إلكتروني</string>
+    <string name="bug_report_no_email_app">لم يُعثر على تطبيق بريد لإرسال التقرير</string>
+    <string name="bug_report_open_github">فتح مشكلة GitHub</string>
+    <string name="settings_debug">تصحيح</string>
+    <string name="settings_debug_desc">عرض / مشاركة debug.log</string>
+    <string name="settings_about_body">الإصدار %1$s (بناء %2$s)\nتاريخ البناء %3$s\n\nFT8، بكل سهولة.\n\nتطبيق جهاز إرسال واستقبال FT8 مستقل لنظام Android. تحكم في الجهاز عبر USB وBluetooth والشبكة مع التسلسل والتسجيل التلقائيين.</string>
+    <string name="settings_website">الموقع الإلكتروني</string>
+    <string name="settings_community">المجتمع</string>
+    <string name="settings_built_by">بُني بواسطة</string>
+
+    <!-- ===== Settings: dialogs ===== -->
+    <string name="settings_block_exact_title">حظر نداءات دقيقة</string>
+    <string name="settings_block_exact_desc">مطابقة النداء الكامل. مفصولة بفاصلة أو مسافة، مثل W1AW، K1ABC.</string>
+    <string name="settings_block_prefix_title">حظر بادئات النداءات</string>
+    <string name="settings_block_prefix_desc">مطابقة البادئة، مثل RA تحظر RA0AA..RA9ZZ. مفصولة بفاصلة أو مسافة.</string>
+    <string name="settings_block_keyword_title">حظر الكلمات المفتاحية</string>
+    <string name="settings_block_keyword_desc">مطابقة السلسلة الفرعية مع النداء ونص الرسالة، مثل POTA، /P، QRP.</string>
+    <string name="settings_blocklist_hint">مثل W1AW، RA، /P</string>
+    <string name="settings_filter_continent_title">تصفية القارة</string>
+    <string name="settings_conn_usb_cable">كابل USB</string>
+    <string name="settings_conn_bluetooth">Bluetooth</string>
+    <string name="settings_conn_network">الشبكة</string>
+    <string name="settings_no_usb_serial">لم تُرصد أجهزة USB تسلسلية. يرجى توصيل كابل USB براديوك وإعادة المحاولة.</string>
+    <string name="settings_no_bluetooth_devices">لم يُعثر على أجهزة Bluetooth مقترنة. اقترن بجهاز في إعدادات Bluetooth بنظام Android أولاً.</string>
+    <string name="settings_debug_mode_enabled">وضع التصحيح مفعَّل</string>
+    <string name="settings_debug_mode_disabled">وضع التصحيح متوقف</string>
+    <string name="settings_edit_operator_identity">تحرير هوية المشغِّل</string>
+    <string name="settings_callsign">النداء</string>
+    <string name="settings_callsign_hint">مثل W1AW</string>
+    <string name="settings_grid_locator">محدد المربع</string>
+    <string name="settings_grid_locator_hint">مثل FN31pr</string>
+    <string name="settings_logging_server">خادم التسجيل</string>
+    <string name="settings_logging_server_desc">يقبل Cloudlog وWavelog وNextlog جميعها نفس عمليات الرفع.</string>
+    <string name="settings_server_address">عنوان الخادم</string>
+    <string name="settings_api_key">مفتاح API</string>
+    <string name="settings_api_key_hint">مفتاح Cloudlog API الخاص بك</string>
+    <string name="settings_loading_stations">جارٍ تحميل المحطات...</string>
+    <string name="settings_station_id">معرّف المحطة</string>
+    <string name="settings_station_id_hint">مثل 1</string>
+    <string name="settings_select_a_station">اختر محطة</string>
+    <string name="settings_enter_manually">إدخال يدوي</string>
+    <string name="settings_choose_from_server">الاختيار من الخادم</string>
+    <string name="settings_station_profile">ملف المحطة الشخصي</string>
+    <string name="settings_qrz_creds_desc">يُستخدم لجلب صور الملف الشخصي للنداءات المفكوكة عبر واجهة QRZ XML API. يتطلب اشتراك QRZ XML.</string>
+    <string name="settings_username">اسم المستخدم</string>
+    <string name="settings_username_hint">اسم مستخدم QRZ.com الخاص بك</string>
+    <string name="settings_password">كلمة المرور</string>
+    <string name="settings_enabled_bands_dialog_desc">لن تظهر النطاقات المخفية في منتقيات التردد.</string>
+    <string name="settings_select_serial_port">اختر المنفذ التسلسلي</string>
+    <string name="settings_tx_volume_advice">عدِّل مباشرة — يستخدم TX التالي هذا المستوى. راقب ALC في راديوك وخفِّضه حتى يلامس الخط بالكاد.</string>
+
+    <!-- ===== Settings: language picker ===== -->
+    <string name="settings_language">اللغة</string>
+    <string name="settings_language_desc">لغة عرض التطبيق</string>
+    <string name="settings_language_system">افتراضي النظام</string>
+
+</resources>
