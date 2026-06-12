@@ -171,6 +171,19 @@ public class UtcTimerTest {
     }
 
     @Test
+    public void isCycleBoundary_oneSecondTickFiresOnSecondGrid() {
+        // MainViewModel's clock-display timer is a 1-second tick. It used to pass the
+        // tenths value 10 (= 1s); under the millisecond API it must pass 1000. Both forms
+        // fire once per second, second-aligned — guard against the unit regression.
+        for (long ms = 0; ms < 10_000; ms += 100) {
+            assertThat(UtcTimer.isCycleBoundary(ms, 0, 1_000))
+                    .isEqualTo(tenthsBoundary(ms, 0, 10));
+        }
+        assertThat(UtcTimer.isCycleBoundary(1_000L, 0, 1_000)).isTrue();
+        assertThat(UtcTimer.isCycleBoundary(500L, 0, 1_000)).isFalse();
+    }
+
+    @Test
     public void isCycleBoundary_nonPositivePeriodNeverFires() {
         assertThat(UtcTimer.isCycleBoundary(0L, 0, 0)).isFalse();
         assertThat(UtcTimer.isCycleBoundary(15_000L, 0, -5)).isFalse();

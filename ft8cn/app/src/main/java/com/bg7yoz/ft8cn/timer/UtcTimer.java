@@ -114,9 +114,10 @@ public class UtcTimer {
     /**
      * Constructor for the clock trigger. Requires specifying the clock cycle period, typically 15 seconds or 7.5 seconds.
      * The cycle parameter is an int in milliseconds.
-     * Because the heartbeat frequency is fast (currently set to 100ms), heartbeat actions should be as concise as possible
-     * and must complete before the next heartbeat starts, to prevent thread stacking and performance impact.
-     * Heartbeat actions are not affected by cycle actions not triggering (running==false); as long as the UtcTimer instance exists, heartbeat actions run (convenient for displaying clock data).
+     * The cycle-boundary check runs on a fast 10ms task, so cycle (doOnSecTimer) callbacks should be as concise as
+     * possible and must complete before the next tick, to prevent thread stacking and performance impact.
+     * The heartbeat callback (doHeartBeatTimer) runs on a separate 1000ms task and is independent of whether cycle
+     * actions are triggering (running==false); as long as the UtcTimer instance exists it runs (convenient for displaying clock data).
      * This trigger requires calling the delete function to fully stop (heartbeat actions also stop).
      *
      * @param slotMillis clock cycle period in milliseconds, e.g.: 15 seconds = 15000, 7.5 seconds = 7500, FT2 = 3750
@@ -129,8 +130,7 @@ public class UtcTimer {
         this.onUtcTimer = onUtcTimer;
 
         //initialize Timer tasks
-        //TimerTask timerTask = initTask();
-        //execute timer, 0 delay, 100ms period
+        //secTask checks the cycle boundary every 10ms; heartBeatTask fires the display callback every 1000ms.
 
         secTimer.schedule(secTask(), 0, 10);
         heartBeatTimer.schedule(heartBeatTask(), 0, 1000);
@@ -139,9 +139,10 @@ public class UtcTimer {
     /**
      * Define the clock-triggered action.
      * The clock cycle is typically 15 seconds or 7.5 seconds; the cycle parameter is an int in milliseconds.
-     * Because the heartbeat frequency is fast (currently set to 100ms), heartbeat actions should be as concise as possible
-     * and must complete before the next heartbeat starts, to prevent thread stacking and performance impact.
-     * Heartbeat actions are not affected by cycle actions not triggering (running==false); as long as the UtcTimer instance exists, heartbeat actions run (convenient for displaying clock data).
+     * The cycle-boundary check runs on a fast 10ms task, so callbacks should be as concise as possible
+     * and must complete before the next tick, to prevent thread stacking and performance impact.
+     * The heartbeat callback runs on a separate 1000ms task and is independent of whether cycle actions are
+     * triggering (running==false); as long as the UtcTimer instance exists it runs (convenient for displaying clock data).
      *
      * @return TimerTask the action instance
      */
