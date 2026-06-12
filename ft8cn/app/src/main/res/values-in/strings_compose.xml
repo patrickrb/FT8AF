@@ -1,0 +1,543 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ Compose UI strings (FT8AF). The live app is the Jetpack Compose UI under
+  ~ radio.ks3ckc.ft8us; these are its user-facing strings, externalized for
+  ~ localization. The legacy strings.xml entries belong to the unreachable old
+  ~ XML/Fragment UI and are NOT used by the running app.
+  ~
+  ~ Translations live in values-<locale>/strings_compose.xml. English here is the
+  ~ source of truth — keep it byte-identical to the original UI text so the English
+  ~ layout never changes. Ham-radio abbreviations (CQ, QSO, DXCC, POTA, SOTA, RST)
+  ~ are intentionally left untranslated across all locales.
+-->
+<resources>
+
+    <!-- ===== Common / shared ===== -->
+    <string name="action_cancel">Batal</string>
+    <string name="action_save">Simpan</string>
+    <string name="action_done">Selesai</string>
+    <string name="action_ok">OK</string>
+    <string name="action_exit">Keluar</string>
+    <string name="common_none">Tidak ada</string>
+    <string name="common_off">Mati</string>
+    <string name="common_not_configured">Belum dikonfigurasi</string>
+    <string name="common_not_connected">Tidak terhubung</string>
+    <string name="common_pass">Lulus</string>
+    <string name="common_fail">Gagal</string>
+    <string name="common_test_connection">Uji Koneksi</string>
+
+    <!-- ===== Continents ===== -->
+    <string name="continent_na">Amerika Utara</string>
+    <string name="continent_sa">Amerika Selatan</string>
+    <string name="continent_eu">Eropa</string>
+    <string name="continent_af">Afrika</string>
+    <string name="continent_as">Asia</string>
+    <string name="continent_oc">Oseania</string>
+    <string name="continent_an">Antarktika</string>
+
+    <!-- ===== Bottom navigation tabs ===== -->
+    <string name="tab_decode">Dekode</string>
+    <string name="tab_map">Peta</string>
+    <string name="tab_waterfall">Waterfall</string>
+    <string name="tab_pota">POTA</string>
+    <string name="tab_logbook">Buku Log</string>
+    <string name="tab_settings">Setelan</string>
+
+    <!-- ===== Status pills (decode list badges) ===== -->
+    <string name="status_new_dxcc">DXCC BARU</string>
+    <string name="status_new_grid">GRID BARU</string>
+    <string name="status_new_band">BAND BARU</string>
+    <string name="status_pota">POTA</string>
+    <string name="status_new_pota">POTA BARU</string>
+    <string name="status_sota">SOTA</string>
+    <string name="status_needed">DIBUTUHKAN</string>
+    <string name="status_worked">DIKERJAKAN</string>
+    <string name="status_confirmed">DIKONFIRMASI</string>
+    <string name="status_cq">CQ</string>
+    <string name="status_pending">TERTUNDA</string>
+
+    <!-- ===== Splash / app-level ===== -->
+    <string name="splash_tagline">FT8 · PENDAMPING SELULER</string>
+    <string name="splash_initializing">MENGINISIALISASI RADIO</string>
+    <string name="splash_version">v%1$s · build %2$s</string>
+    <string name="app_set_callsign_first">Atur tanda panggil Anda di Setelan sebelum memanggil CQ</string>
+    <string name="app_hunt_on">Hunt aktif — menjawab CQ otomatis</string>
+    <string name="app_hunt_off">Hunt mati — memanggil CQ, hanya menjawab balasan</string>
+    <string name="app_mode_switched">Mode: %1$s</string>
+    <string name="app_mode_switch_busy">Tidak bisa ganti mode saat transmisi</string>
+    <string name="main_tx_volume">Volume TX: %1$d%%</string>
+
+    <!-- ===== Exit dialog ===== -->
+    <string name="exit_title">KELUAR DARI FT8AF?</string>
+    <string name="exit_message">Yakin ingin menutup aplikasi? QSO yang aktif akan dibatalkan.</string>
+
+    <!-- ===== Frequency picker ===== -->
+    <string name="freq_select_title">PILIH FREKUENSI</string>
+    <string name="freq_show_alternates">TAMPILKAN ALTERNATIF</string>
+    <string name="freq_hide_alternates">SEMBUNYIKAN ALTERNATIF</string>
+    <string name="freq_alt_prefix">"ALT "</string>
+
+    <!-- ===== Operator card ===== -->
+    <string name="op_no_call">TANPA PANGGIL</string>
+    <string name="op_no_grid">Grid belum diatur</string>
+    <string name="op_tap_to_edit">Ketuk untuk ubah</string>
+    <string name="op_stat_rig">RIG</string>
+    <string name="op_stat_antenna">ANTENA</string>
+    <string name="op_stat_power">DAYA</string>
+
+    <!-- ===== Export log sheet ===== -->
+    <string name="export_title">EKSPOR QSO</string>
+    <string name="export_date_range">RENTANG TANGGAL</string>
+    <string name="export_date_from_placeholder">"Dari  YYYYMMDD"</string>
+    <string name="export_date_to_placeholder">"Sampai  YYYYMMDD"</string>
+    <string name="export_share">Bagikan</string>
+    <string name="export_filter_confirmed">hanya yang dikonfirmasi</string>
+    <string name="export_filter_unconfirmed">hanya yang belum dikonfirmasi</string>
+    <string name="export_record_singular">rekaman</string>
+    <string name="export_record_plural">rekaman</string>
+    <string name="export_summary_all">semua</string>
+    <string name="export_summary_key">\'%1$s\'</string>
+    <string name="export_summary_suffix">" · %1$s"</string>
+    <string name="export_summary">%1$d %2$s cocok dengan %3$s%4$s</string>
+    <string name="export_preparing">Menyiapkan…</string>
+    <string name="export_share_chooser_title">Bagikan log QSO</string>
+    <string name="export_saved_to">Disimpan ke %1$s</string>
+    <string name="export_save_failed">Gagal menyimpan ke Unduhan</string>
+    <string name="export_temp_file_failed">Tidak dapat membuat berkas sementara</string>
+
+    <!-- ===== TX strip ===== -->
+    <string name="tx_transmitting">TRANSMISI</string>
+    <string name="tx_listening">MENDENGARKAN</string>
+    <string name="tx_hunt">Hunt</string>
+    <string name="tx_call_cq">Panggil CQ</string>
+    <string name="tx_stop">Hentikan</string>
+
+    <!-- ===== Hound (DXpedition) setup ===== -->
+    <string name="hound_title">Kerjakan DXpedition (Hound)</string>
+    <string name="hound_help">Tune rig ke frekuensi dial yang dipublikasikan Fox terlebih dahulu. Anda memanggil di frekuensi tinggi (1000–4000 Hz); aplikasi otomatis QSY menurunkan Anda ke tempat Fox menjawab dan membalas dengan laporan Anda.</string>
+    <string name="hound_fox_callsign">Tanda panggil Fox</string>
+    <string name="hound_call_frequency">Frekuensi panggil (Hz, 1000–4000)</string>
+    <string name="hound_start">Mulai</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT terhubung — ketuk untuk sambung ulang</string>
+    <string name="cat_status_connecting">CAT menyambung…</string>
+    <string name="cat_status_disconnected">CAT terputus — ketuk untuk menyambung</string>
+    <string name="cat_status_error">Galat koneksi CAT — ketuk untuk coba lagi</string>
+
+    <!-- ===== SWR lockout banner ===== -->
+    <string name="swr_lockout_title">TX DIHENTIKAN — SWR tinggi terdeteksi (%1$s)</string>
+    <string name="swr_lockout_body">Periksa antena / saluran umpan sebelum transmisi.</string>
+    <string name="swr_lockout_dismiss">TUTUP</string>
+    <string name="swr_lockout_toast">TX diblokir — penguncian SWR aktif. Tutup banner penguncian terlebih dahulu.</string>
+
+    <!-- ===== Active QSO panel ===== -->
+    <string name="qsopanel_calling_cq">Memanggil CQ</string>
+    <string name="qsopanel_searching">Mencari...</string>
+    <string name="qsopanel_qsoing_with">QSO dengan %1$s</string>
+    <string name="qsopanel_waiting_for">Menunggu %1$s</string>
+    <string name="qsopanel_tap_to_view">ketuk untuk lihat ↗</string>
+    <string name="qsopanel_tx_message">TX: %1$s</string>
+    <string name="qsopanel_waiting_messages">Menunggu pesan...</string>
+    <string name="qsopanel_log_action">LOG</string>
+    <string name="qsopanel_queue">ANTRE</string>
+
+    <!-- ===== Decode screen ===== -->
+    <string name="decode_title">Dekode</string>
+    <string name="decode_subtitle">"%1$s  •  %2$d didekode siklus ini"</string>
+    <string name="decode_clear_list">Bersihkan daftar dekode</string>
+    <string name="decode_utc_placeholder">UTC : --:--:--</string>
+    <string name="decode_time_group_utc">%1$s UTC</string>
+    <string name="decode_filter_all">Semua</string>
+    <string name="decode_filter_cq_calls">Panggilan CQ</string>
+    <string name="decode_filter_cq_pota">CQ POTA</string>
+    <string name="decode_filter_new_dxcc">DXCC Baru</string>
+    <string name="decode_filter_needed">Dibutuhkan</string>
+    <string name="decode_filter_for_me">Untuk Saya</string>
+    <string name="decode_empty_cq_title">Tidak ada panggilan CQ</string>
+    <string name="decode_empty_cq_body">Tidak ada stasiun yang memanggil CQ di band ini saat ini.</string>
+    <string name="decode_empty_pota_title">Tidak ada spot POTA</string>
+    <string name="decode_empty_pota_body">Belum ada aktivasi taman yang didekode di band ini — buka POTA → Hunt untuk daftar spot.</string>
+    <string name="decode_empty_dxcc_title">Tidak ada DXCC baru</string>
+    <string name="decode_empty_dxcc_body">Belum ada entitas DXCC yang belum dikerjakan yang didekode.</string>
+    <string name="decode_empty_needed_title">Tidak ada yang dibutuhkan</string>
+    <string name="decode_empty_needed_body">Tidak ditemukan stasiun yang perlu konfirmasi.</string>
+    <string name="decode_empty_forme_title">Tidak ada panggilan untuk Anda</string>
+    <string name="decode_empty_forme_body">Tidak ada stasiun yang memanggil tanda panggil Anda saat ini.</string>
+    <string name="decode_empty_default_title">Tidak ada sinyal didekode</string>
+    <string name="decode_empty_default_body">Menunggu sinyal FT8 muncul...</string>
+    <string name="decode_label_calling">→ MEMANGGIL</string>
+    <string name="decode_label_cq">CQ</string>
+    <string name="decode_label_to_you">↓ UNTUK ANDA</string>
+
+    <!-- ===== QSO sheet ===== -->
+    <string name="qso_complete">QSO Selesai</string>
+    <string name="qso_call_action">Panggil %1$s</string>
+    <string name="qso_qrz_link">QRZ ↗</string>
+    <string name="qso_stat_signal">Sinyal</string>
+    <string name="qso_stat_distance">Jarak</string>
+    <string name="qso_stat_azimuth">Azimut</string>
+    <string name="qso_stat_band">Band</string>
+    <string name="qso_sequence_header">URUTAN QSO</string>
+    <string name="qso_step_send_call">Kirim panggilan</string>
+    <string name="qso_step_report_sent">Laporan terkirim</string>
+    <string name="qso_step_roger">Roger</string>
+    <string name="qso_step_confirm">Konfirmasi</string>
+    <string name="qso_step_logged">Tercatat</string>
+    <string name="qso_live_sending">QSO dengan %1$s — Mengirim %2$s</string>
+    <string name="qso_live_waiting">Menunggu %1$s membalas…</string>
+    <string name="qso_live_transmitting">Transmisi…</string>
+    <string name="qso_live_step_fallback">pesan</string>
+    <string name="qso_tx_now">TX SEKARANG</string>
+    <string name="qso_tx_next">TX BERIKUTNYA</string>
+
+    <!-- ===== Logbook ===== -->
+    <string name="log_tab_stats">Statistik</string>
+    <string name="log_tab_recent">Terbaru</string>
+    <string name="log_tab_awards">Penghargaan</string>
+    <string name="log_title">Buku Log</string>
+    <string name="log_subtitle_qsos_all_bands">%1$d QSO · Semua band</string>
+    <string name="log_cd_sync_to_logging_services">Sinkronkan ke layanan logging</string>
+    <string name="log_cd_export_qsos">Ekspor QSO</string>
+    <string name="log_stat_total_qsos">Total QSO</string>
+    <string name="log_stat_dxcc_entities">Entitas DXCC</string>
+    <string name="log_stat_cq_zones">Zona CQ</string>
+    <string name="log_stat_itu_zones">Zona ITU</string>
+    <string name="log_section_band_distribution">Distribusi Band</string>
+    <string name="log_section_award_progress">Progres Penghargaan</string>
+    <string name="log_award_dxcc_mixed">DXCC Mixed</string>
+    <string name="log_award_vucc_grid_squares">Grid Square VUCC</string>
+    <string name="log_award_dxcc_challenge">DXCC Challenge</string>
+    <string name="log_section_grid_coverage">Cakupan Grid</string>
+    <string name="log_section_signal_trend">Tren Sinyal</string>
+    <string name="log_no_qsos_yet">Belum ada QSO</string>
+    <string name="log_no_qsos_recorded_yet">Belum ada QSO yang tercatat</string>
+    <string name="log_state_usa">%1$s, USA</string>
+    <string name="log_cd_qso_actions">Tindakan QSO</string>
+    <string name="log_action_edit">Ubah</string>
+    <string name="log_action_delete">Hapus</string>
+    <string name="log_award_dxcc_mixed_desc">Kerjakan dan konfirmasi 100 entitas DXCC di band/mode apa pun</string>
+    <string name="log_award_was">WAS</string>
+    <string name="log_award_was_desc">Kerjakan semua 50 negara bagian AS terkonfirmasi</string>
+    <string name="log_award_waz">WAZ</string>
+    <string name="log_award_waz_desc">Kerjakan semua 40 zona CQ terkonfirmasi</string>
+    <string name="log_award_vucc">VUCC</string>
+    <string name="log_award_vucc_desc">VHF/UHF Century Club -- 100 grid square di satu band</string>
+    <string name="log_award_iota">IOTA</string>
+    <string name="log_award_iota_desc">Islands on the Air -- kerjakan stasiun di pulau yang ditentukan</string>
+    <string name="log_edit_qso">Ubah QSO</string>
+    <string name="log_field_callsign">Tanda Panggil</string>
+    <string name="log_field_grid_locator">Lokator Grid</string>
+    <string name="log_field_mode">Mode</string>
+    <string name="log_delete_qso_title">HAPUS QSO?</string>
+    <string name="log_delete_qso_body_callsign">Hapus QSO dengan %1$s dari buku log? Ini tidak bisa dibatalkan.</string>
+    <string name="log_delete_qso_body">Hapus QSO ini dari buku log? Ini tidak bisa dibatalkan.</string>
+    <string name="log_sync_title_no_services">TIDAK ADA LAYANAN AKTIF</string>
+    <string name="log_sync_title_syncing">MENYINKRONKAN…</string>
+    <string name="log_sync_title_complete">SINKRONISASI SELESAI</string>
+    <string name="log_sync_enable_services">Aktifkan Cloudlog/Wavelog/Nextlog atau QRZ di Setelan, lalu coba lagi.</string>
+    <string name="log_sync_progress_count">%1$d dari %2$d QSO</string>
+    <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d diterima</string>
+    <string name="log_sync_qrz_accepted">QRZ: %1$d diterima</string>
+    <string name="log_sync_nothing_to_upload">Belum ada QSO di buku log untuk diunggah.</string>
+    <string name="log_sync_working">Memproses…</string>
+
+    <!-- ===== POTA ===== -->
+    <string name="pota_tab_activate">Aktivasi</string>
+    <string name="pota_tab_hunt">Hunt</string>
+    <string name="pota_tab_history">Riwayat</string>
+    <string name="pota_start_activation">Mulai aktivasi</string>
+    <string name="pota_park_reference_label">Referensi taman (mis. K-1234)</string>
+    <string name="pota_notes_optional_label">Catatan (opsional)</string>
+    <string name="pota_enter_park_reference_first">Masukkan referensi taman terlebih dahulu</string>
+    <string name="pota_activating">Mengaktivasi %1$s</string>
+    <string name="pota_activation_ended">Aktivasi berakhir</string>
+    <string name="pota_set_callsign_first">Atur tanda panggil Anda di Setelan terlebih dahulu</string>
+    <string name="pota_self_spot_posted">Self-spot diposting</string>
+    <string name="pota_self_spot_failed">Self-spot gagal — periksa log</string>
+    <string name="pota_active_park">AKTIF — %1$s</string>
+    <string name="pota_qsos">QSO</string>
+    <string name="pota_contacts_map">Peta kontak</string>
+    <string name="pota_back">Kembali</string>
+    <string name="pota_valid_activation">aktivasi valid</string>
+    <string name="pota_to_valid">%1$d lagi untuk valid</string>
+    <string name="pota_elapsed">Berlalu</string>
+    <string name="pota_since_start">sejak mulai</string>
+    <string name="pota_self_spot">Self-spot</string>
+    <string name="pota_end_activation">Akhiri aktivasi</string>
+    <string name="pota_notes_quote">“%1$s”</string>
+    <string name="pota_tx_cq_preview">TX CQ akan dikirim sebagai “CQ POTA %1$s %2$s”.</string>
+    <string name="pota_no_spots">Tidak ada spot FT8 POTA saat ini.</string>
+    <string name="pota_active_spots">%1$d spot FT8 aktif</string>
+    <string name="pota_targeting">Menargetkan %1$s @ %2$s kHz (%3$s) — beralih ke Dekode untuk memanggil</string>
+    <string name="pota_no_past_activations">Belum ada aktivasi sebelumnya.</string>
+    <string name="pota_no_browser_available">Tidak ada browser tersedia</string>
+    <string name="pota_export_failed">Ekspor gagal — periksa log</string>
+    <string name="pota_status_active">aktif</string>
+    <string name="pota_qso_count">%1$d QSO</string>
+    <string name="pota_share_adif">Bagikan ADIF</string>
+    <string name="pota_open_pota_app">Buka pota.app</string>
+    <string name="pota_upload_to_pota">Unggah ke POTA</string>
+    <string name="pota_upload_success">Mengunggah %1$d log taman ke POTA</string>
+    <string name="pota_upload_failed">Unggah gagal: %1$s</string>
+    <string name="pota_upload_server_error">POTA tidak dapat memproses unggahan. Pastikan referensi taman valid dan tanda panggil Anda terdaftar di POTA, lalu coba lagi.</string>
+    <string name="pota_upload_network_error">Tidak dapat menjangkau POTA. Periksa koneksi internet Anda dan coba lagi.</string>
+    <string name="pota_login_title">Masuk ke POTA</string>
+    <string name="pota_login_desc">Gunakan email dan kata sandi akun pota.app Anda.</string>
+    <string name="pota_login_email">Email</string>
+    <string name="pota_login_password">Kata Sandi</string>
+    <string name="pota_login_button">Masuk</string>
+    <string name="pota_login_cancel">Batal</string>
+    <string name="pota_login_failed">Gagal masuk: %1$s</string>
+    <string name="pota_login_or">atau</string>
+    <string name="pota_login_social">Masuk dengan Google / Facebook / Amazon</string>
+    <string name="pota_oauth_title">Masuk ke POTA</string>
+    <string name="pota_add_park">Tambah taman</string>
+    <string name="pota_remove_park">Hapus</string>
+    <string name="pota_max_parks_reached">Maksimum 10 taman tercapai</string>
+    <string name="pota_spotted_n_parks">Di-spot di %1$d taman</string>
+    <string name="pota_parks_more">+%1$d lagi</string>
+
+    <!-- ===== Debug log / Map / Waterfall ===== -->
+    <string name="debug_title">Debug</string>
+    <string name="debug_line_count">%1$d baris</string>
+    <string name="debug_logcat_on_suffix">" · logcat ON"</string>
+    <string name="debug_close">Tutup</string>
+    <string name="debug_share">Bagikan</string>
+    <string name="debug_clear">Bersihkan</string>
+    <string name="debug_logcat_on">Logcat: ON</string>
+    <string name="debug_logcat_off">Logcat: OFF</string>
+    <string name="debug_no_log_file">tidak ada berkas log</string>
+    <string name="debug_log_cleared">log dibersihkan</string>
+    <string name="debug_share_chooser_title">Bagikan debug.log</string>
+    <string name="map_title">Peta</string>
+    <string name="map_no_grid_set">Grid belum diatur</string>
+    <string name="map_station_count">%1$d stasiun</string>
+    <string name="map_station_count_with_heard">%1$d stasiun · %2$d terdengar</string>
+    <string name="map_psk_error">PSK Reporter tidak tersedia: %1$s</string>
+    <string name="map_projection_equirectangular">Equirectangular</string>
+    <string name="map_projection_azimuthal">Azimuthal Equidistant</string>
+    <string name="map_mode_standard">STD</string>
+    <string name="map_mode_azimuthal">AZ</string>
+    <string name="map_overlay_psk">PSK</string>
+    <string name="map_info_distance">Jarak</string>
+    <string name="map_info_bearing">Arah</string>
+    <string name="map_info_snr">SNR</string>
+    <string name="waterfall_title">Waterfall</string>
+    <string name="waterfall_toggle_nr">NR</string>
+    <string name="waterfall_toggle_msg">MSG</string>
+    <string name="waterfall_status_live">LIVE</string>
+
+    <!-- ===== Settings: format helpers ===== -->
+    <string name="settings_minutes_format">%1$d min</string>
+    <string name="settings_tries_format">%1$d percobaan</string>
+    <string name="settings_milliseconds_format">%1$d ms</string>
+    <string name="settings_hz_format">%1$d Hz</string>
+    <string name="settings_hz_str_format">%1$s Hz</string>
+    <string name="settings_percent_format">%1$d%%</string>
+    <string name="settings_bands_enabled_format">%1$d dari %2$d aktif</string>
+    <string name="settings_min_max_suffix">%1$d–%2$d %3$s</string>
+    <string name="settings_build_date_format">Build %1$s</string>
+    <string name="settings_version_value">v%1$s</string>
+
+    <!-- ===== Settings: sections ===== -->
+    <string name="settings_title">Setelan</string>
+    <string name="settings_section_operator_identity">IDENTITAS OPERATOR</string>
+    <string name="settings_section_radio">RADIO</string>
+    <string name="settings_section_audio">AUDIO</string>
+    <string name="settings_section_transmission">TRANSMISI</string>
+    <string name="settings_section_auto_sequence">AUTO-SEQUENCE</string>
+    <string name="settings_section_decode_highlights">SOROTAN DEKODE</string>
+    <string name="settings_section_callsign_blocklist">DAFTAR BLOKIR TANDA PANGGIL</string>
+    <string name="settings_section_decode_filters">FILTER DEKODE</string>
+    <string name="settings_section_needed_dx_alerts">PERINGATAN DX DIBUTUHKAN</string>
+    <string name="settings_section_logging_awards">LOGGING &amp; PENGHARGAAN</string>
+    <string name="settings_section_advanced">LANJUTAN</string>
+    <string name="settings_section_about">TENTANG</string>
+    <string name="settings_section_language">BAHASA</string>
+
+    <!-- ===== Settings: drill-down category labels ===== -->
+    <string name="settings_cat_radio_audio">Radio &amp; Audio</string>
+    <string name="settings_cat_transmission">Transmisi</string>
+    <string name="settings_cat_decode_filters">Dekode &amp; Filter</string>
+    <string name="settings_cat_logging">Logging &amp; Penghargaan</string>
+    <string name="settings_cat_advanced">Lanjutan</string>
+    <string name="settings_cat_about">Tentang</string>
+    <string name="settings_cat_time_sync">Sinkronisasi Waktu</string>
+    <string name="settings_cat_time_sync_desc">Koreksi jam manual untuk operasi offline</string>
+
+    <!-- ===== Settings: Time Sync (manual clock correction) ===== -->
+    <string name="settings_time_correction_section">Koreksi Manual</string>
+    <string name="settings_time_current_label">Koreksi saat ini</string>
+    <string name="settings_time_correction_reset">Setel ulang ke 0</string>
+    <string name="settings_time_correction_desc">Sesuaikan jam aplikasi saat Anda tidak punya internet untuk sinkronisasi. FT8 perlu UTC dalam sekitar 1 detik. Sesuaikan hingga kolom DT pada stasiun yang didekode berpusat di sekitar 0.</string>
+    <string name="settings_time_suggest_section">Saran dari dekode</string>
+    <string name="settings_time_suggest_none">Belum ada dekode — mulai menerima untuk mendapat saran.</string>
+    <string name="settings_time_suggest_label">Rata-rata DT terbaru: %1$s</string>
+    <string name="settings_time_suggest_apply">Terapkan koreksi yang disarankan</string>
+
+    <!-- ===== Settings: operator identity ===== -->
+    <string name="settings_auto_update_grid">Perbarui Grid Otomatis (GPS)</string>
+    <string name="settings_auto_update_grid_desc">Gunakan GPS perangkat untuk menjaga grid Maidenhead tetap terkini</string>
+
+    <!-- ===== Settings: radio ===== -->
+    <string name="settings_rig_model">Model Rig</string>
+    <string name="settings_control_mode">Mode Kontrol</string>
+    <string name="settings_connection_mode">Mode Koneksi</string>
+    <string name="settings_baud_rate">Baud Rate</string>
+    <string name="settings_band_frequency">Band &amp; Frekuensi</string>
+    <string name="settings_enabled_bands">Band Aktif</string>
+    <string name="settings_audio_frequency">Frekuensi Audio</string>
+    <string name="settings_spectrum_width">Lebar Spektrum</string>
+
+    <!-- ===== Settings: audio ===== -->
+    <string name="settings_audio_input">Input Audio</string>
+    <string name="settings_audio_output">Output Audio</string>
+    <string name="settings_tx_volume">Volume TX</string>
+    <string name="settings_tx_volume_desc" formatted="false">Tingkat audio transmisi (tombol perangkat keras ±5%)</string>
+
+    <!-- ===== Settings: transmission ===== -->
+    <string name="settings_tx_rx_split">Split TX/RX</string>
+    <string name="settings_tx_rx_split_desc">Transmisi pada frekuensi berbeda dari penerimaan</string>
+    <string name="settings_tx_watchdog">TX Watchdog</string>
+    <string name="settings_tx_watchdog_desc">Hentikan transmisi otomatis setelah waktu habis</string>
+    <string name="settings_stop_after">Hentikan Setelah</string>
+    <string name="settings_stop_after_desc">Berhenti memanggil setelah N percobaan tak terjawab</string>
+
+    <!-- ===== Settings: auto-sequence ===== -->
+    <string name="settings_hunt">Hunt (jawab CQ otomatis)</string>
+    <string name="settings_hunt_desc">Secara proaktif memanggil stasiun yang memanggil CQ. Sama dengan tombol HUNT di bilah TX. Mati = memanggil CQ dan hanya mengerjakan stasiun yang menjawab Anda.</string>
+    <string name="settings_auto_call_followed">Panggil Otomatis yang Diikuti</string>
+    <string name="settings_auto_call_followed_desc">Terus memanggil tanda panggil yang diikuti secara otomatis</string>
+    <string name="settings_fast_turnaround">Turnaround cepat</string>
+    <string name="settings_fast_turnaround_desc">Dekode ~1s lebih awal sehingga Anda bisa menjawab CQ pada slot berikutnya tanpa menunggu. Mungkin melewatkan stasiun dengan offset jam besar.</string>
+    <string name="settings_auto_cq_after_qso">Auto-CQ setelah QSO</string>
+    <string name="settings_auto_cq_after_qso_desc">Terus memanggil CQ otomatis setelah setiap kontak selesai — tanpa ketuk ulang. Tetap di frekuensi Anda (abaikan Hunt). Berjalan sampai Anda berhenti atau TX Watchdog habis tanpa jawaban.</string>
+
+    <!-- ===== Settings: decode highlights ===== -->
+    <string name="settings_highlight_new_dxcc">DXCC Baru</string>
+    <string name="settings_highlight_new_dxcc_desc">Sorot stasiun dari entitas DXCC yang belum dikerjakan</string>
+    <string name="settings_highlight_new_grid">Grid Baru</string>
+    <string name="settings_highlight_new_grid_desc">Sorot grid Maidenhead yang belum dikerjakan</string>
+    <string name="settings_highlight_new_band">Band Baru</string>
+    <string name="settings_highlight_new_band_desc">Sorot stasiun yang hanya dikerjakan di band lain</string>
+    <string name="settings_highlight_pota">Aktivator POTA</string>
+    <string name="settings_highlight_pota_desc">Sorot aktivator POTA yang di-spot; taman baru menonjol</string>
+    <string name="settings_highlight_worked">Pernah Dikerjakan</string>
+    <string name="settings_highlight_worked_desc">Tandai stasiun yang sudah ada di log Anda</string>
+    <string name="settings_distance_unit">Jarak dalam Mil</string>
+    <string name="settings_distance_unit_desc">Tampilkan jarak dalam mil bukan kilometer</string>
+
+    <!-- ===== Settings: callsign blocklist ===== -->
+    <string name="settings_exact_callsigns">Tanda Panggil Persis</string>
+    <string name="settings_exact_callsigns_desc">Blokir kecocokan panggilan penuh</string>
+    <string name="settings_prefixes">Prefiks</string>
+    <string name="settings_prefixes_desc">Blokir berdasarkan prefiks tanda panggil (mis. RA)</string>
+    <string name="settings_keywords">Kata Kunci</string>
+    <string name="settings_keywords_desc">Blokir berdasarkan substring di panggilan atau pesan (mis. POTA, /P)</string>
+
+    <!-- ===== Settings: decode filters ===== -->
+    <string name="settings_show_only_cq">Tampilkan Hanya CQ</string>
+    <string name="settings_show_only_cq_desc">Sembunyikan semua kecuali pesan tipe CQ</string>
+    <string name="settings_dx_only">Hanya DX</string>
+    <string name="settings_dx_only_desc">Tampilkan hanya stasiun di luar benua Anda sendiri</string>
+    <string name="settings_needed_only">Hanya yang Dibutuhkan</string>
+    <string name="settings_needed_only_desc">Tampilkan hanya stasiun yang belum dikonfirmasi (QSL)</string>
+    <string name="settings_filter_by_continent">Filter Berdasarkan Benua</string>
+    <string name="settings_filter_by_continent_desc">Tampilkan hanya stasiun dari benua yang dipilih</string>
+    <string name="settings_continent">Benua</string>
+    <string name="settings_skip_directional_cq">Lewati CQ Terarah (balas otomatis)</string>
+    <string name="settings_skip_directional_cq_desc">Jangan menjawab otomatis CQ DX/EU/JA… yang ditujukan ke DXCC berbeda</string>
+    <string name="settings_hide_directional_cq">Sembunyikan CQ Terarah Bukan Untuk Saya</string>
+    <string name="settings_hide_directional_cq_desc">Sembunyikan CQ terarah wilayah yang tidak menargetkan DXCC Anda</string>
+
+    <!-- ===== Settings: needed-DX alerts ===== -->
+    <string name="settings_alert_new_dxcc">DXCC Baru</string>
+    <string name="settings_alert_new_dxcc_desc">Suara + getar + notifikasi saat entitas DXCC yang belum dikerjakan memanggil CQ</string>
+    <string name="settings_alert_new_state">Negara Bagian AS Baru</string>
+    <string name="settings_alert_new_state_desc">Suara + getar + notifikasi saat stasiun dari negara bagian AS yang belum dikerjakan memanggil CQ (negara bagian dari grid)</string>
+
+    <!-- ===== Settings: logging &amp; awards ===== -->
+    <string name="settings_save_swl_decodes">Simpan Dekode SWL</string>
+    <string name="settings_save_swl_decodes_desc">Catat semua pesan yang didekode ke basis data</string>
+    <string name="settings_save_swl_qsos">Simpan QSO SWL</string>
+    <string name="settings_save_swl_qsos_desc">Catat QSO yang terdeteksi antara stasiun lain</string>
+    <string name="settings_pskreporter">PSKReporter</string>
+    <string name="settings_pskreporter_desc">Unggah spot yang didekode ke pskreporter.info</string>
+    <string name="settings_qrz_com">QRZ.com</string>
+    <string name="settings_qrz_com_desc">Unggah QSO otomatis ke QRZ Logbook</string>
+    <string name="settings_qrz_profile_lookup">Pencarian Profil QRZ</string>
+    <string name="settings_qrz_profile_lookup_desc">Nama pengguna + kata sandi untuk QRZ XML API (avatar)</string>
+    <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
+    <string name="settings_cloudlog_desc">Unggah QSO otomatis ke instans Cloudlog, Wavelog, atau Nextlog</string>
+
+    <!-- ===== Settings: advanced ===== -->
+    <string name="settings_ptt_delay">Penundaan PTT</string>
+    <string name="settings_ptt_delay_desc">Penundaan setelah PTT sebelum audio transmisi dimulai</string>
+    <string name="settings_tx_delay">Penundaan TX</string>
+    <string name="settings_tx_delay_desc">Penundaan sebelum transmisi untuk memungkinkan dekode siklus sebelumnya</string>
+    <string name="settings_late_start_tolerance">Toleransi Mulai Terlambat</string>
+    <string name="settings_late_start_tolerance_desc">Izinkan memulai TX hingga N ms ke dalam siklus; audio awal dipotong sehingga TX berakhir pada batas siklus</string>
+
+    <!-- ===== Settings: about ===== -->
+    <string name="settings_faq_support">FAQ &amp; Dukungan</string>
+    <string name="settings_report_bug">Laporkan Bug</string>
+    <string name="bug_report_description_hint">Jelaskan apa yang salah…</string>
+    <string name="bug_report_send_email">Kirim email</string>
+    <string name="bug_report_no_email_app">Tidak ditemukan aplikasi email untuk mengirim laporan</string>
+    <string name="bug_report_open_github">Buka isu GitHub</string>
+    <string name="settings_debug">Debug</string>
+    <string name="settings_debug_desc">Lihat / bagikan debug.log</string>
+    <string name="settings_about_body">Versi %1$s (build %2$s)\nTanggal build %3$s\n\nFT8, dipermudah.\n\nAplikasi transceiver FT8 mandiri untuk Android. Kontrol rig via USB, Bluetooth, dan jaringan dengan sequencing dan logging otomatis.</string>
+    <string name="settings_website">Situs Web</string>
+    <string name="settings_community">Komunitas</string>
+    <string name="settings_built_by">Dibuat oleh</string>
+
+    <!-- ===== Settings: dialogs ===== -->
+    <string name="settings_block_exact_title">Blokir Tanda Panggil Persis</string>
+    <string name="settings_block_exact_desc">Kecocokan panggilan penuh. Dipisah koma atau spasi, mis. W1AW, K1ABC.</string>
+    <string name="settings_block_prefix_title">Blokir Prefiks Tanda Panggil</string>
+    <string name="settings_block_prefix_desc">Kecocokan prefiks, mis. RA memblokir RA0AA..RA9ZZ. Dipisah koma atau spasi.</string>
+    <string name="settings_block_keyword_title">Blokir Kata Kunci</string>
+    <string name="settings_block_keyword_desc">Kecocokan substring terhadap panggilan dan teks pesan, mis. POTA, /P, QRP.</string>
+    <string name="settings_blocklist_hint">mis. W1AW, RA, /P</string>
+    <string name="settings_filter_continent_title">Filter Benua</string>
+    <string name="settings_conn_usb_cable">Kabel USB</string>
+    <string name="settings_conn_bluetooth">Bluetooth</string>
+    <string name="settings_conn_network">Jaringan</string>
+    <string name="settings_no_usb_serial">Tidak ada perangkat serial USB terdeteksi. Hubungkan kabel USB ke radio Anda dan coba lagi.</string>
+    <string name="settings_no_bluetooth_devices">Tidak ditemukan perangkat Bluetooth terpasang. Pasangkan perangkat di setelan Bluetooth Android terlebih dahulu.</string>
+    <string name="settings_debug_mode_enabled">Mode debug diaktifkan</string>
+    <string name="settings_debug_mode_disabled">Mode debug dinonaktifkan</string>
+    <string name="settings_edit_operator_identity">Ubah Identitas Operator</string>
+    <string name="settings_callsign">Tanda Panggil</string>
+    <string name="settings_callsign_hint">mis. W1AW</string>
+    <string name="settings_grid_locator">Lokator Grid</string>
+    <string name="settings_grid_locator_hint">mis. FN31pr</string>
+    <string name="settings_logging_server">Server Logging</string>
+    <string name="settings_logging_server_desc">Cloudlog, Wavelog, dan Nextlog semua menerima unggahan yang sama.</string>
+    <string name="settings_server_address">Alamat Server</string>
+    <string name="settings_api_key">Kunci API</string>
+    <string name="settings_api_key_hint">Kunci API Cloudlog Anda</string>
+    <string name="settings_loading_stations">Memuat stasiun...</string>
+    <string name="settings_station_id">ID Stasiun</string>
+    <string name="settings_station_id_hint">mis. 1</string>
+    <string name="settings_select_a_station">Pilih stasiun</string>
+    <string name="settings_enter_manually">Masukkan manual</string>
+    <string name="settings_choose_from_server">Pilih dari server</string>
+    <string name="settings_station_profile">Profil Stasiun</string>
+    <string name="settings_qrz_creds_desc">Digunakan untuk mengambil foto profil tanda panggil yang didekode via QRZ XML API. Memerlukan langganan QRZ XML.</string>
+    <string name="settings_username">Nama Pengguna</string>
+    <string name="settings_username_hint">Nama pengguna QRZ.com Anda</string>
+    <string name="settings_password">Kata Sandi</string>
+    <string name="settings_enabled_bands_dialog_desc">Band yang disembunyikan tidak akan muncul di pemilih frekuensi.</string>
+    <string name="settings_select_serial_port">Pilih Port Serial</string>
+    <string name="settings_tx_volume_advice">Sesuaikan langsung — TX berikutnya menggunakan tingkat ini. Perhatikan ALC radio Anda dan turunkan sampai hanya menyentuh garis.</string>
+
+    <!-- ===== Settings: language picker ===== -->
+    <string name="settings_language">Bahasa</string>
+    <string name="settings_language_desc">Bahasa tampilan aplikasi</string>
+    <string name="settings_language_system">Default sistem</string>
+
+</resources>
