@@ -2372,6 +2372,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("connectMode")) {
                     GeneralVariables.connectMode = result.equals("") ? ConnectMode.USB_CABLE : Integer.parseInt(result);
                 }
+                if (name.equalsIgnoreCase("bluetoothDeviceAddress")) {//last-selected BT (SPP/CAT) device, for auto-reconnect
+                    GeneralVariables.bluetoothDeviceAddress = result;
+                }
                 if (name.equalsIgnoreCase("model")) {//Radio model
                     GeneralVariables.modelNo = result.equals("") ? 0 : Integer.parseInt(result);
                 }

@@ -319,7 +319,7 @@ public class GeneralVariables {
 
     public static int connectMode = ConnectMode.USB_CABLE;//Connection mode: USB==0, BLUE_TOOTH==1
 
-    //public static String bluetoothDeviceAddress=null;//Bluetooth device address available for connection
+    public static String bluetoothDeviceAddress = null;//last-selected Bluetooth (SPP/CAT) device address, persisted for auto-reconnect
 
 
     //Records callsign-to-grid mapping. todo---should also add this list to background tracking info

@@ -179,6 +179,14 @@ fun BluetoothPickerDialog(
                                             info.device.name,
                                         ),
                                     )
+                                    // Remember this device so we can auto-reconnect the
+                                    // SPP/CAT link on the next app launch (issue #223).
+                                    GeneralVariables.bluetoothDeviceAddress = info.device.address
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "bluetoothDeviceAddress",
+                                        info.device.address,
+                                        null,
+                                    )
                                     mainViewModel.connectBluetoothRig(
                                         GeneralVariables.getMainContext(),
                                         info.device,

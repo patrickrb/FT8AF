@@ -1165,6 +1165,12 @@ public class MainViewModel extends ViewModel {
         baseRig.setOnRigStateChanged(onRigStateChanged);
         baseRig.setConnector(connector);
 
+        // Route HFP audio over SCO as soon as the CAT rig is wired. Without this, SCO is
+        // only (re)started as a side effect of the TX/RX cycle (needControlSco()/startSco()),
+        // which never fires until a rig is connected -- so on relaunch audio was dead in both
+        // directions until the user manually reconfigured Bluetooth (issue #223).
+        new Handler(Looper.getMainLooper()).post(this::setBlueToothOn);
+
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {//connection takes time, wait before setting frequency
             @Override
             public void run() {
