@@ -75,7 +75,7 @@ public class OperationBandTest {
 
     @Test
     public void getBandFreq_outOfRangeIndex_returnsDefault() {
-        // index strictly greater than size falls back to the 20m default.
+        // an out-of-range index falls back to the 20m default.
         assertThat(OperationBand.getBandFreq(99)).isEqualTo(14_074_000L);
     }
 
@@ -267,4 +267,88 @@ public class OperationBandTest {
         assertThat(OperationBand.isBandLine(
                 "# QO-100 geostationary satellite (Es'hail-2): 2.4 GHz uplink / 10.489 GHz downlink."))
                 .isFalse();
-    }}
+    }
+
+    // ---- index bounds hardening --------------------------------------------
+    // Index accessors must reject negative indices and indices at/after the end
+    // of bandList. getBandFreq previously used an off-by-one `index > size`
+    // guard, so index == size fell through into bandList.get(index) and threw
+    // IndexOutOfBounds; getBandInfo did bandList.get(0) on an empty list.
+
+    @Test
+    public void isValidBandIndex_acceptsInRangeRejectsNegativeAndEnd() {
+        OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
+        OperationBand.bandList.add(new OperationBand.Band(7_074_000L, "40m"));
+        assertThat(OperationBand.isValidBandIndex(0)).isTrue();
+        assertThat(OperationBand.isValidBandIndex(1)).isTrue();
+        assertThat(OperationBand.isValidBandIndex(-1)).isFalse();
+        assertThat(OperationBand.isValidBandIndex(2)).isFalse();   // == size (the off-by-one)
+        assertThat(OperationBand.isValidBandIndex(99)).isFalse();
+    }
+
+    @Test
+    public void getBandFreq_indexEqualToSize_returnsDefault() {
+        // The off-by-one: index == size passed the old `index > size` guard and
+        // dereferenced past the end. It must now fall back to the default band.
+        OperationBand.bandList.add(new OperationBand.Band(7_074_000L, "40m"));
+        assertThat(OperationBand.getBandFreq(1)).isEqualTo(OperationBand.getDefaultBand());
+    }
+
+    @Test
+    public void getBandFreq_negativeIndex_returnsDefault() {
+        OperationBand.bandList.add(new OperationBand.Band(7_074_000L, "40m"));
+        assertThat(OperationBand.getBandFreq(-1)).isEqualTo(OperationBand.getDefaultBand());
+    }
+
+    @Test
+    public void getBandInfo_emptyList_returnsDefaultInsteadOfCrashing() {
+        // bandList empty (bands.txt missing/corrupt): the old code did
+        // bandList.get(0) and threw. Now it formats the default band.
+        assertThat(OperationBand.bandList).isEmpty();
+        assertThat(OperationBand.getBandInfo(0)).isEqualTo("  14.074 MHz (20m)");
+    }
+
+    @Test
+    public void getBandInfo_negativeIndex_fallsBackToFirst() {
+        OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
+        assertThat(OperationBand.getBandInfo(-1)).isEqualTo("  14.074 MHz (20m)");
+    }
+
+    // ---- parseBandLines -----------------------------------------------------
+    // A single malformed line must be logged and skipped, not abort the whole
+    // band-list load and leave the app with no bands.
+
+    @Test
+    public void parseBandLines_keepsValidSkipsCommentsAndBlanks() {
+        String[] lines = {"*:14074000:20m", "# a comment", "", " :7074000:40m"};
+        java.util.ArrayList<OperationBand.Band> bands = OperationBand.parseBandLines(lines);
+        assertThat(bands).hasSize(2);
+        assertThat(bands.get(0).band).isEqualTo(14_074_000L);
+        assertThat(bands.get(1).band).isEqualTo(7_074_000L);
+    }
+
+    @Test
+    public void parseBandLines_skipsTruncatedLineButKeepsNeighbours() {
+        // "20m:" has a colon (so isBandLine accepts it) but splits to a single
+        // field, so the Band constructor throws AIOOBE. It must be skipped while
+        // the surrounding valid lines still load.
+        String[] lines = {"*:14074000:20m", "20m:", " :7074000:40m"};
+        java.util.ArrayList<OperationBand.Band> bands = OperationBand.parseBandLines(lines);
+        assertThat(bands).hasSize(2);
+        assertThat(bands.get(0).waveLength).isEqualTo("20m");
+        assertThat(bands.get(1).waveLength).isEqualTo("40m");
+    }
+
+    @Test
+    public void parseBandLines_skipsNonNumericFrequency() {
+        String[] lines = {"*:notanumber:20m", " :7074000:40m"};
+        java.util.ArrayList<OperationBand.Band> bands = OperationBand.parseBandLines(lines);
+        assertThat(bands).hasSize(1);
+        assertThat(bands.get(0).band).isEqualTo(7_074_000L);
+    }
+
+    @Test
+    public void parseBandLines_nullInput_returnsEmpty() {
+        assertThat(OperationBand.parseBandLines(null)).isEmpty();
+    }
+}

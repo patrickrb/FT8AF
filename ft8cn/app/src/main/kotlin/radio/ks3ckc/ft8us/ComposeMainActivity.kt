@@ -305,6 +305,7 @@ class ComposeMainActivity : AppCompatActivity() {
 
             override fun doOnAfterQueryConfig(keyName: String?, value: String?) {
                 mainViewModel.configIsLoaded = true
+                mainViewModel.mutableConfigLoaded.postValue(true)
                 fileLog("configLoaded: instructionSet=${GeneralVariables.instructionSet}, " +
                     "baudRate=${GeneralVariables.baudRate}, " +
                     "controlMode=${GeneralVariables.controlMode}, " +
