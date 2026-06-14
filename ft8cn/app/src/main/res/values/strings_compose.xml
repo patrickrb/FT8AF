@@ -408,6 +408,8 @@
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Hunt (auto-answer CQ)</string>
     <string name="settings_hunt_desc">Proactively call stations calling CQ. Same as the HUNT button on the TX bar. Off = run CQ and work only stations that answer you.</string>
+    <string name="settings_hunt_cq">Hunt + CQ</string>
+    <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
     <string name="settings_auto_call_followed">Auto-call Followed</string>
     <string name="settings_auto_call_followed_desc">Continue calling followed callsigns automatically</string>
     <string name="settings_fast_turnaround">Fast turnaround</string>

@@ -51,6 +51,7 @@ fun TransmissionSettings(
 
     // Auto-sequence state
     var autoFollowCQ by remember { mutableStateOf(GeneralVariables.autoFollowCQ) }
+    var huntCallsCQ by remember { mutableStateOf(GeneralVariables.huntCallsCQ) }
     var autoCallFollow by remember { mutableStateOf(GeneralVariables.autoCallFollow) }
     var earlyDecode by remember { mutableStateOf(GeneralVariables.earlyDecode) }
     var autoCQAfterQSO by remember { mutableStateOf(GeneralVariables.autoCQAfterQSO) }
@@ -326,6 +327,19 @@ fun TransmissionSettings(
                             GeneralVariables.autoFollowCQ = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "autoFollowCQ", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_hunt_cq),
+                        description = stringResource(R.string.settings_hunt_cq_desc),
+                        toggle = huntCallsCQ,
+                        onToggleChange = { checked ->
+                            huntCallsCQ = checked
+                            GeneralVariables.huntCallsCQ = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "huntCallsCQ", if (checked) "1" else "0", null,
                             )
                         },
                     )
