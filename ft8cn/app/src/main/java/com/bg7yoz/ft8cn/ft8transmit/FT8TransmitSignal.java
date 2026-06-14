@@ -1774,7 +1774,9 @@ public class FT8TransmitSignal {
      * <p>Package-visible for testing.
      */
     static boolean shouldForceLog(int functionOrder) {
-        return functionOrder >= 3;
+        // Orders 3-5 indicate a real QSO in progress (report exchanged).
+        // Order 6 is the CQ baseline (idle) — not a real contact.
+        return functionOrder >= 3 && functionOrder != 6;
     }
 
     // ==================== Caller Queue Methods ====================

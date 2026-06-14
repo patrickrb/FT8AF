@@ -38,10 +38,7 @@ public class ForceLogGuardTest {
 
     @Test
     public void order6_cq_shouldNotLog() {
-        // Edge case: if somehow forceLog is called while on CQ baseline,
-        // order 6 >= 3 is true. This is acceptable — forceLogAndMoveOn
-        // exits early for CQ via the toCallsign.callsign == "CQ" check
-        // in updateQSlRecordList.
-        assertThat(FT8TransmitSignal.shouldForceLog(6)).isTrue();
+        // Order 6 is the CQ baseline (idle state) — not a real contact.
+        assertThat(FT8TransmitSignal.shouldForceLog(6)).isFalse();
     }
 }
