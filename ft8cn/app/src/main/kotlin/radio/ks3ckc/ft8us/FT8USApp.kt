@@ -127,12 +127,14 @@ fun FT8USApp(mainViewModel: MainViewModel) {
         }
     }
 
-    // If Hunt was persisted as "on", arm the sequencer on first composition so
-    // it actually answers CQs. Without this the button renders as "on" but the
-    // sequencer is never activated — nothing happens until the user toggles Hunt
-    // off and on again. (Issues #1 / #5 / #10)
-    LaunchedEffect(Unit) {
-        if (shouldArmHuntOnStartup(huntEnabled, GeneralVariables.myCallsign)) {
+    // Wait for config (callsign, autoFollowCQ, etc.) to finish loading from
+    // the database before arming Hunt. LaunchedEffect(Unit) would race with
+    // the async config load and see an empty callsign. (#231)
+    val configLoaded by mainViewModel.mutableConfigLoaded.observeAsState(false)
+    LaunchedEffect(configLoaded) {
+        if (configLoaded && shouldArmHuntOnStartup(
+                GeneralVariables.autoFollowCQ, GeneralVariables.myCallsign)) {
+            huntEnabled = GeneralVariables.autoFollowCQ
             mainViewModel.ft8TransmitSignal.armForHunt()
             mainViewModel.ft8TransmitSignal.setActivated(true)
             GeneralVariables.resetLaunchSupervision()
