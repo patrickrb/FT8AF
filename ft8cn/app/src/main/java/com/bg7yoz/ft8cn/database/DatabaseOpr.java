@@ -1148,6 +1148,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 CallsignDatabase callsignDatabase = GeneralVariables.callsignDatabase;
                 if (callsignDatabase == null) {
                     Log.w(TAG, "run: callsign database not ready, skipping zone import");
+                    // Still open the gate: an empty log means nothing is worked,
+                    // which is the correct baseline (everything truly is new).
+                    GeneralVariables.zoneMapReady = true;
                     return;
                 }
 
@@ -1194,6 +1197,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 Log.d(TAG, "run: zone import complete, resolved " + count + " logged callsigns, "
                         + stateCount + " gridded QSOs -> " + GeneralVariables.workedStates.size()
                         + " worked states");
+                GeneralVariables.zoneMapReady = true;
             }
         }).start();
 

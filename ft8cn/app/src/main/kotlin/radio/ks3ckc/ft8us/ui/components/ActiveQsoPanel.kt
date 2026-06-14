@@ -204,9 +204,29 @@ fun ActiveQsoPanel(
     // catch up. We log one row per transmission (the rising edge of isTransmitting) rather
     // than de-duplicating by text, so repeated messages — e.g. several unanswered RR73s —
     // each get their own row. State resets per target. See decideTxLog for the rule.
-    val synthTxLog = remember(displayCallsign) { mutableStateListOf<QsoLogEntry>() }
-    var wasTransmitting by remember(displayCallsign) { mutableStateOf(false) }
-    var pendingTxLog by remember(displayCallsign) { mutableStateOf(false) }
+    //
+    // NOTE: no key parameter on remember — keying on displayCallsign caused the TX log
+    // to be lost on tab switches when LiveData observers briefly emit null. Instead we
+    // track the target manually and clear only on genuine target changes. (#250)
+    val synthTxLog = remember { mutableStateListOf<QsoLogEntry>() }
+    var wasTransmitting by remember { mutableStateOf(false) }
+    var pendingTxLog by remember { mutableStateOf(false) }
+    var synthTxTarget by remember { mutableStateOf<String?>(null) }
+
+    // Clear TX state when the target genuinely changes to a different station.
+    // Ignore null transitions: when displayCallsign flickers to null during a
+    // tab switch (LiveData observer re-registration), the log must survive.
+    // The panel hides via AnimatedVisibility when hasTarget is false, so stale
+    // entries from the previous QSO are invisible until a new target arrives.
+    LaunchedEffect(displayCallsign) {
+        if (displayCallsign != null && displayCallsign != synthTxTarget) {
+            synthTxLog.clear()
+            wasTransmitting = false
+            pendingTxLog = false
+            synthTxTarget = displayCallsign
+        }
+    }
+
     LaunchedEffect(isTransmitting, transmittingMessage, displayCallsign) {
         val msg = transmittingMessage.orEmpty()
         val decision = decideTxLog(
