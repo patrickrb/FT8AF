@@ -63,7 +63,15 @@ public class MicRecorder {
         // Check if USB audio input is selected
         if (GeneralVariables.audioInputDeviceId == -1
                 && GeneralVariables.usbAudioInputVendorId != 0) {
-            usbAudioDevice = openUsbAudioInput();
+            try {
+                usbAudioDevice = openUsbAudioInput();
+            } catch (Exception e) {
+                GeneralVariables.fileLog(
+                        "MicRecorder: USB audio open CRASHED: " + e.getClass().getSimpleName()
+                                + ": " + e.getMessage());
+                Log.e(TAG, "USB audio open failed", e);
+                usbAudioDevice = null;
+            }
             if (usbAudioDevice != null) {
                 useUsbAudio = true;
                 UsbAudioDevice.setActiveInputDevice(usbAudioDevice);
@@ -76,9 +84,23 @@ public class MicRecorder {
 
         //calculate minimum buffer size
         bufferSize = AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat);
-//        audioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC, sampleRateInHz
-        audioRecord = new AudioRecord(MediaRecorder.AudioSource.DEFAULT, sampleRateInHz
-                , channelConfig, audioFormat, bufferSize);//create AudioRecorder object
+        if (bufferSize <= 0) {
+            GeneralVariables.fileLog(String.format(
+                    "MicRecorder: getMinBufferSize returned %d, using fallback 4096", bufferSize));
+            Log.e(TAG, "getMinBufferSize returned " + bufferSize);
+            bufferSize = 4096;
+        }
+
+        try {
+            audioRecord = new AudioRecord(MediaRecorder.AudioSource.DEFAULT, sampleRateInHz
+                    , channelConfig, audioFormat, bufferSize);//create AudioRecorder object
+        } catch (Exception e) {
+            GeneralVariables.fileLog(
+                    "MicRecorder: AudioRecord init CRASHED: " + e.getClass().getSimpleName()
+                            + ": " + e.getMessage());
+            Log.e(TAG, "AudioRecord init failed", e);
+            return; // audioRecord stays null — start() will be a no-op
+        }
 
         //set preferred input device
         if (GeneralVariables.audioInputDeviceId > 0) {
@@ -176,12 +198,15 @@ public class MicRecorder {
 
     public void start(){
         if (isRunning) return;
-        isRunning = true;
 
         if (useUsbAudio && usbAudioDevice != null) {
+            isRunning = true;
             startUsbCapture();
-        } else {
+        } else if (audioRecord != null) {
+            isRunning = true;
             startAudioRecordCapture();
+        } else {
+            GeneralVariables.fileLog("MicRecorder: start() skipped — no audio source available");
         }
     }
 
