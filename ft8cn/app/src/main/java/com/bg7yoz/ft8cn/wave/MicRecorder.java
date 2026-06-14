@@ -47,6 +47,7 @@ public class MicRecorder {
     private volatile boolean usbAudioSawData = false;
     private static final long MIN_REINIT_INTERVAL_MS = 2000;
     private static final int MAX_CONSECUTIVE_USB_FAILURES = 3;
+    static final int FALLBACK_BUFFER_SIZE = 4096;
 
     public interface OnDataListener{
         void onDataReceived(float[] data,int len);
@@ -83,13 +84,8 @@ public class MicRecorder {
         }
 
         //calculate minimum buffer size
-        bufferSize = AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat);
-        if (bufferSize <= 0) {
-            GeneralVariables.fileLog(String.format(
-                    "MicRecorder: getMinBufferSize returned %d, using fallback 4096", bufferSize));
-            Log.e(TAG, "getMinBufferSize returned " + bufferSize);
-            bufferSize = 4096;
-        }
+        bufferSize = safeBufferSize(
+                AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat));
 
         try {
             audioRecord = new AudioRecord(MediaRecorder.AudioSource.DEFAULT, sampleRateInHz
@@ -382,7 +378,15 @@ public class MicRecorder {
         // Re-check for USB audio input
         if (GeneralVariables.audioInputDeviceId == -1
                 && GeneralVariables.usbAudioInputVendorId != 0) {
-            usbAudioDevice = openUsbAudioInput();
+            try {
+                usbAudioDevice = openUsbAudioInput();
+            } catch (Exception e) {
+                GeneralVariables.fileLog(
+                        "MicRecorder: reinit USB audio CRASHED: " + e.getClass().getSimpleName()
+                                + ": " + e.getMessage());
+                Log.e(TAG, "reinitialize: USB audio open failed", e);
+                usbAudioDevice = null;
+            }
             if (usbAudioDevice != null) {
                 useUsbAudio = true;
                 UsbAudioDevice.setActiveInputDevice(usbAudioDevice);
@@ -394,11 +398,20 @@ public class MicRecorder {
 
         // Set up standard AudioRecord if not using USB audio
         if (!useUsbAudio) {
-            bufferSize = AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat);
-            audioRecord = new AudioRecord(MediaRecorder.AudioSource.DEFAULT, sampleRateInHz,
-                    channelConfig, audioFormat, bufferSize);
+            bufferSize = safeBufferSize(
+                    AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat));
+            try {
+                audioRecord = new AudioRecord(MediaRecorder.AudioSource.DEFAULT, sampleRateInHz,
+                        channelConfig, audioFormat, bufferSize);
+            } catch (Exception e) {
+                GeneralVariables.fileLog(
+                        "MicRecorder: reinit AudioRecord CRASHED: " + e.getClass().getSimpleName()
+                                + ": " + e.getMessage());
+                Log.e(TAG, "reinitialize: AudioRecord init failed", e);
+                // audioRecord stays null — start() will be a no-op
+            }
 
-            if (GeneralVariables.audioInputDeviceId > 0) {
+            if (audioRecord != null && GeneralVariables.audioInputDeviceId > 0) {
                 AudioDeviceInfo deviceInfo = findAudioDeviceById(
                         GeneralVariables.audioInputDeviceId, AudioManager.GET_DEVICES_INPUTS);
                 audioRecord.setPreferredDevice(deviceInfo);
@@ -410,5 +423,19 @@ public class MicRecorder {
         if (wasRunning) {
             start();
         }
+    }
+
+    /**
+     * Returns a safe buffer size for AudioRecord. If {@code rawSize} is an
+     * error value ({@code <= 0}), returns {@link #FALLBACK_BUFFER_SIZE}.
+     *
+     * <p>Package-visible for testing.
+     */
+    static int safeBufferSize(int rawSize) {
+        if (rawSize <= 0) {
+            Log.e(TAG, "getMinBufferSize returned " + rawSize + ", using fallback");
+            return FALLBACK_BUFFER_SIZE;
+        }
+        return rawSize;
     }
 }
