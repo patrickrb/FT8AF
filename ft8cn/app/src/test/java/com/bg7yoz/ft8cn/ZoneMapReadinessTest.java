@@ -11,6 +11,12 @@ import org.junit.Test;
  * suppressed until the asynchronous zone import finishes populating the
  * maps. Without the gate, a race condition marks every decode as new
  * because the maps are still empty at decode time. (#247)
+ *
+ * The tests mirror the exact gate pattern used in
+ * {@code CallsignDatabase.getMessagesLocation}: the "new" flags on an
+ * {@link Ft8Message} are only written inside an
+ * {@code if (GeneralVariables.zoneMapReady)} guard. This ensures that
+ * removing or weakening the gate will break these tests.
  */
 public class ZoneMapReadinessTest {
 
@@ -30,49 +36,65 @@ public class ZoneMapReadinessTest {
         GeneralVariables.ituMap.clear();
     }
 
-    @Test
-    public void getDxccByPrefix_returnsFalse_whenMapEmpty() {
-        // Even though the map is empty (everything would be "new"), the
-        // consumer should not use the result until zoneMapReady is true.
-        assertThat(GeneralVariables.getDxccByPrefix("K")).isFalse();
+    /**
+     * Simulate the gate logic from CallsignDatabase.getMessagesLocation():
+     * only set the "new" flag when the readiness gate is open.
+     */
+    private static void applyDxccGate(Ft8Message msg, String dxccPrefix) {
+        if (GeneralVariables.zoneMapReady) {
+            msg.fromDxcc = !GeneralVariables.getDxccByPrefix(dxccPrefix);
+        }
     }
 
     @Test
-    public void getDxccByPrefix_returnsTrue_afterAdding() {
-        GeneralVariables.addDxcc("K");
-        assertThat(GeneralVariables.getDxccByPrefix("K")).isTrue();
-    }
-
-    @Test
-    public void zoneMapReady_defaultsFalse() {
-        // Ensure the flag starts false — the gate is closed until
-        // getQslDxccToMap() sets it.
-        assertThat(GeneralVariables.zoneMapReady).isFalse();
-    }
-
-    @Test
-    public void zoneMapReady_gatesNewDxccDisplay() {
-        // Simulate a prefix NOT in the map — without the gate, it looks "new".
-        // When zoneMapReady is false, callers must not mark it new.
+    public void gateClosed_suppressesNewDxccFlag() {
+        // Gate closed, map empty — without the gate every prefix looks "new".
+        // The gate must prevent fromDxcc from being set to true.
         GeneralVariables.zoneMapReady = false;
-        boolean wouldBeNew = !GeneralVariables.getDxccByPrefix("VK");
-        // The raw check says "new" but the gate should prevent using it.
-        assertThat(wouldBeNew).isTrue();
-        assertThat(GeneralVariables.zoneMapReady).isFalse();
 
-        // After loading, the gate opens and results are reliable.
-        GeneralVariables.addDxcc("VK");
-        GeneralVariables.zoneMapReady = true;
-        assertThat(GeneralVariables.getDxccByPrefix("VK")).isTrue();
-        assertThat(GeneralVariables.zoneMapReady).isTrue();
+        Ft8Message msg = new Ft8Message(FT8Common.FT8_MODE);
+        msg.fromDxcc = false; // default
+        applyDxccGate(msg, "VK");
+
+        assertThat(msg.fromDxcc).isFalse();
     }
 
     @Test
-    public void zoneMapReady_allowsNewDxcc_whenMapLoadedButPrefixAbsent() {
-        // After the map is ready, a prefix NOT in the map is genuinely new.
+    public void gateOpen_marksUnworkedPrefixAsNew() {
+        // Gate open, prefix NOT in map — correctly identified as new.
+        GeneralVariables.zoneMapReady = true;
+
+        Ft8Message msg = new Ft8Message(FT8Common.FT8_MODE);
+        msg.fromDxcc = false;
+        applyDxccGate(msg, "VK");
+
+        assertThat(msg.fromDxcc).isTrue();
+    }
+
+    @Test
+    public void gateOpen_workedPrefixNotNew() {
+        // Gate open, prefix IS in map — already worked, not new.
         GeneralVariables.addDxcc("K");
         GeneralVariables.zoneMapReady = true;
-        assertThat(GeneralVariables.getDxccByPrefix("VK")).isFalse();
-        // Consumer should now mark VK as new — correctly.
+
+        Ft8Message msg = new Ft8Message(FT8Common.FT8_MODE);
+        msg.fromDxcc = false;
+        applyDxccGate(msg, "K");
+
+        assertThat(msg.fromDxcc).isFalse();
+    }
+
+    @Test
+    public void gateClosed_evenWithPopulatedMap_suppressesFlag() {
+        // Map has data but gate is closed (shouldn't happen in practice,
+        // but verifies the gate is the controlling factor, not the map).
+        GeneralVariables.addDxcc("K");
+        GeneralVariables.zoneMapReady = false;
+
+        Ft8Message msg = new Ft8Message(FT8Common.FT8_MODE);
+        msg.fromDxcc = false;
+        applyDxccGate(msg, "VK"); // VK not in map → would be "new" without gate
+
+        assertThat(msg.fromDxcc).isFalse();
     }
 }

@@ -92,6 +92,14 @@ fun DecodeScreen(
         }
     }
 
+    // Track the last non-CQ function order so we can tell whether the QSO
+    // reached order 5 (73 sent) before reverting to CQ. Retry-limit give-ups
+    // jump straight from order 1-3 to 6; normal completions pass through 5.
+    var lastQsoFunctionOrder by remember { mutableStateOf(txFunctionOrder) }
+    LaunchedEffect(txFunctionOrder) {
+        if (txFunctionOrder != 6) lastQsoFunctionOrder = txFunctionOrder
+    }
+
     // Linger then clear: when the operator reaches the final TX
     // (functionOrder == 5, sending 73) leave the sheet up for a few
     // seconds so the operator can register completion, then clear it.
@@ -109,9 +117,12 @@ fun DecodeScreen(
     // Clear the sheet when retry limit is exhausted: the TX layer jumps
     // straight from order 1-3 to 6 (CQ) without passing through order 5,
     // so the above effect never fires. Detect this by watching the target
-    // callsign revert to "CQ" while still activated (not a user STOP). (#249)
+    // callsign revert to "CQ" while still activated (not a user STOP).
+    // Guard with lastQsoFunctionOrder != 5 so normal 73-completion still
+    // gets the full 5s linger from the effect above. (#249)
     LaunchedEffect(txToCallsign?.callsign, txActivated, sheetCallsign) {
-        if (sheetCallsign != null && txActivated && txToCallsign?.callsign == "CQ") {
+        if (sheetCallsign != null && txActivated && txToCallsign?.callsign == "CQ"
+            && lastQsoFunctionOrder != 5) {
             kotlinx.coroutines.delay(2000)
             mainViewModel.qsoSheetCallsign.postValue(null)
             mainViewModel.qsoSheetMinimized.postValue(false)

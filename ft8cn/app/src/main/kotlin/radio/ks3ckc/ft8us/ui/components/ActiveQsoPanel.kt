@@ -213,9 +213,13 @@ fun ActiveQsoPanel(
     var pendingTxLog by remember { mutableStateOf(false) }
     var synthTxTarget by remember { mutableStateOf<String?>(null) }
 
-    // Clear TX state when the target genuinely changes.
+    // Clear TX state when the target genuinely changes to a different station.
+    // Ignore null transitions: when displayCallsign flickers to null during a
+    // tab switch (LiveData observer re-registration), the log must survive.
+    // The panel hides via AnimatedVisibility when hasTarget is false, so stale
+    // entries from the previous QSO are invisible until a new target arrives.
     LaunchedEffect(displayCallsign) {
-        if (displayCallsign != synthTxTarget) {
+        if (displayCallsign != null && displayCallsign != synthTxTarget) {
             synthTxLog.clear()
             wasTransmitting = false
             pendingTxLog = false
