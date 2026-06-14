@@ -934,11 +934,35 @@ public class MainViewModel extends ViewModel {
         // or Auto-CQ after QSO is enabled. (Must come after setActivated(true),
         // which clears the flag on its deactivation path.)
         ft8TransmitSignal.beginSingleQso();
+        // When the tapped message is directed at us (someone answering our CQ),
+        // auto-derive the function order so we reply with RPT (order 2) instead
+        // of grid (order 1). For messages not directed at us (we're initiating),
+        // start at order 1 as before.
+        int order = callStationOrder(message.getCallsignTo(), message.extraInfo);
         ft8TransmitSignal.setTransmit(
                 message.getFromCallTransmitCallsign(),
-                1,
+                order,
                 message.extraInfo);
         ft8TransmitSignal.transmitNow();
+    }
+
+    /**
+     * Determine the starting function order when the user taps a decoded message
+     * to call a station. If the message is directed at us (someone answering our
+     * CQ), auto-derive so we reply with the correct next step (RPT). Otherwise
+     * start at order 1 (grid, initiating a new QSO).
+     *
+     * <p>Package-visible for testing.
+     *
+     * @param callsignTo message's "to" callsign (empty/CQ for broadcast messages)
+     * @param extraInfo  the message's extraInfo field (grid / report / RR73 / 73)
+     * @return function order: -1 for auto-derive, 1 for initiate
+     */
+    static int callStationOrder(String callsignTo, String extraInfo) {
+        if (callsignTo != null && GeneralVariables.checkIsMyCallsign(callsignTo)) {
+            return -1; // auto-derive: setTransmit will compute the correct next step
+        }
+        return 1; // initiating: start with grid
     }
 
     // ===== FT8 DXpedition Hound mode =====
