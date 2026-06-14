@@ -69,6 +69,14 @@ import radio.ks3ckc.ft8us.ui.waterfall.WaterfallScreen
  */
 internal fun qsoPanelOverlaysContent(tab: FT8USTab): Boolean = tab == FT8USTab.WATERFALL
 
+/**
+ * Whether the sequencer should be armed for Hunt on app startup. True when the
+ * persisted Hunt setting is "on" and the operator has set a callsign (Hunt
+ * transmits replies, so a callsign is required).
+ */
+internal fun shouldArmHuntOnStartup(huntEnabled: Boolean, callsign: String?): Boolean =
+    huntEnabled && !callsign.isNullOrEmpty()
+
 @Composable
 fun FT8USApp(mainViewModel: MainViewModel) {
     val context = LocalContext.current
@@ -116,6 +124,18 @@ fun FT8USApp(mainViewModel: MainViewModel) {
     LaunchedEffect(preselectCallsign) {
         if (!preselectCallsign.isNullOrBlank()) {
             activeTab = FT8USTab.DECODE
+        }
+    }
+
+    // If Hunt was persisted as "on", arm the sequencer on first composition so
+    // it actually answers CQs. Without this the button renders as "on" but the
+    // sequencer is never activated — nothing happens until the user toggles Hunt
+    // off and on again. (Issues #1 / #5 / #10)
+    LaunchedEffect(Unit) {
+        if (shouldArmHuntOnStartup(huntEnabled, GeneralVariables.myCallsign)) {
+            mainViewModel.ft8TransmitSignal.armForHunt()
+            mainViewModel.ft8TransmitSignal.setActivated(true)
+            GeneralVariables.resetLaunchSupervision()
         }
     }
 
