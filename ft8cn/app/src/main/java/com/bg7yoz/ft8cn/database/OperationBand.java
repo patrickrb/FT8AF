@@ -136,7 +136,7 @@ public class OperationBand {
             try {
                 out.add(new Band(line));
             } catch (RuntimeException e) {
-                Log.e(TAG, "Skipping malformed band line \""+line+"\": "+e.getMessage());
+                Log.e(TAG, "Skipping malformed band line \""+line+"\"", e);
             }
         }
         return out;
