@@ -127,6 +127,10 @@ public class GeneralVariables {
     public static final Map<String, String> dxccMap = new ConcurrentHashMap<>();
     public static final Map<Integer, Integer> cqMap = new ConcurrentHashMap<>();
     public static final Map<Integer, Integer> ituMap = new ConcurrentHashMap<>();
+    // Set to true after getQslDxccToMap() finishes populating the zone maps.
+    // Until then, "new DXCC/zone" flags are suppressed to avoid a race where
+    // everything shows as new because the maps haven't loaded yet.
+    public static volatile boolean zoneMapReady = false;
     // Already-contacted US states (USPS code, e.g. "ND"). Populated at startup from the
     // logbook by DatabaseOpr.getQslDxccToMap(), deriving each QSO's state from its grid.
     public static final java.util.Set<String> workedStates =

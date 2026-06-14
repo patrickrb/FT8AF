@@ -1194,6 +1194,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 Log.d(TAG, "run: zone import complete, resolved " + count + " logged callsigns, "
                         + stateCount + " gridded QSOs -> " + GeneralVariables.workedStates.size()
                         + " worked states");
+                GeneralVariables.zoneMapReady = true;
             }
         }).start();
 

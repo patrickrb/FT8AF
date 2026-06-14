@@ -106,6 +106,18 @@ fun DecodeScreen(
         }
     }
 
+    // Clear the sheet when retry limit is exhausted: the TX layer jumps
+    // straight from order 1-3 to 6 (CQ) without passing through order 5,
+    // so the above effect never fires. Detect this by watching the target
+    // callsign revert to "CQ" while still activated (not a user STOP). (#249)
+    LaunchedEffect(txToCallsign?.callsign, txActivated, sheetCallsign) {
+        if (sheetCallsign != null && txActivated && txToCallsign?.callsign == "CQ") {
+            kotlinx.coroutines.delay(2000)
+            mainViewModel.qsoSheetCallsign.postValue(null)
+            mainViewModel.qsoSheetMinimized.postValue(false)
+        }
+    }
+
     // The message bound to the current sheet (latest decode from that
     // callsign). Recomputes when the decode list updates.
     val selectedMessage: Ft8Message? = remember(sheetCallsign, messageList, messageList?.size) {

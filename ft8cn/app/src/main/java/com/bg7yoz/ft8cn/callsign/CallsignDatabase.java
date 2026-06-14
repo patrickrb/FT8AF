@@ -119,9 +119,13 @@ public class CallsignDatabase extends SQLiteOpenHelper {
             CallsignInfo fromCallsignInfo = getCallsignInfo(db,
                     msg.callsignFrom.replace("<","").replace(">",""));
             if (fromCallsignInfo != null) {
-                    msg.fromDxcc = !GeneralVariables.getDxccByPrefix(fromCallsignInfo.DXCC);
-                    msg.fromItu = !GeneralVariables.getItuZoneById(fromCallsignInfo.ITUZone);
-                    msg.fromCq = !GeneralVariables.getCqZoneById(fromCallsignInfo.CQZone);
+                    // Suppress "new" flags until the zone maps are populated; otherwise
+                    // the async load race makes everything appear new. (#247)
+                    if (GeneralVariables.zoneMapReady) {
+                        msg.fromDxcc = !GeneralVariables.getDxccByPrefix(fromCallsignInfo.DXCC);
+                        msg.fromItu = !GeneralVariables.getItuZoneById(fromCallsignInfo.ITUZone);
+                        msg.fromCq = !GeneralVariables.getCqZoneById(fromCallsignInfo.CQZone);
+                    }
                     msg.fromWhere = fromCallsignInfo.CountryNameEn;
                     msg.continent = fromCallsignInfo.Continent;
                     msg.fromLatLng = new LatLng(fromCallsignInfo.Latitude, fromCallsignInfo.Longitude * -1);
@@ -153,9 +157,11 @@ public class CallsignDatabase extends SQLiteOpenHelper {
             CallsignInfo toCallsignInfo = getCallsignInfo(db,
                     msg.callsignTo.replace("<","").replace(">",""));
             if (toCallsignInfo != null) {
-                msg.toDxcc = !GeneralVariables.getDxccByPrefix(toCallsignInfo.DXCC);
-                msg.toItu = !GeneralVariables.getItuZoneById(toCallsignInfo.ITUZone);
-                msg.toCq = !GeneralVariables.getCqZoneById(toCallsignInfo.CQZone);
+                if (GeneralVariables.zoneMapReady) {
+                    msg.toDxcc = !GeneralVariables.getDxccByPrefix(toCallsignInfo.DXCC);
+                    msg.toItu = !GeneralVariables.getItuZoneById(toCallsignInfo.ITUZone);
+                    msg.toCq = !GeneralVariables.getCqZoneById(toCallsignInfo.CQZone);
+                }
 
                 msg.toWhere = toCallsignInfo.CountryNameEn;
                 msg.toLatLng = new LatLng(toCallsignInfo.Latitude, toCallsignInfo.Longitude*-1);
