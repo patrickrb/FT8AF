@@ -128,6 +128,7 @@ import java.util.concurrent.Executors;
 
 public class MainViewModel extends ViewModel {
     String TAG = "ft8cn MainViewModel";
+    public final MutableLiveData<Boolean> mutableConfigLoaded = new MutableLiveData<>(false);
     public boolean configIsLoaded = false;
 
     /** Write debug line to the app's external files debug.log */
