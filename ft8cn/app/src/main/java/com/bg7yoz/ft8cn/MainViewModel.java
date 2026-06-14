@@ -1416,6 +1416,11 @@ public class MainViewModel extends ViewModel {
                 break;
         }
 
+        // Store the rig name for PSKReporter software string
+        GeneralVariables.myRigName = (baseRig != null)
+                ? baseRig.getClass().getSimpleName().replace("Rig", "")
+                : "";
+
         if ((GeneralVariables.instructionSet == InstructionSet.FLEX_NETWORK)
                 || ((GeneralVariables.instructionSet == InstructionSet.ICOM
                 || GeneralVariables.instructionSet==InstructionSet.XIEGU_6100
