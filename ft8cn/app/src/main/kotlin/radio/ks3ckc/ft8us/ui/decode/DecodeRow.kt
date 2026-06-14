@@ -341,7 +341,11 @@ private fun MetaText(text: String) {
  */
 internal fun resolveQsoStatus(message: Ft8Message): QsoStatus? {
     val isCQ = message.checkIsCQ()
-    val isWorked = message.isQSL_Callsign
+    // Use live lookup instead of the cached field: isQSL_Callsign is set at
+    // decode time, so a QSO completed after the message was decoded would leave
+    // the stale field as false. The live check catches newly-worked callsigns.
+    val isWorked = message.isQSL_Callsign ||
+        GeneralVariables.checkQSLCallsign(message.callsignFrom ?: "")
     val isToMe = GeneralVariables.checkIsMyCallsign(message.callsignTo ?: "")
     val modifier = message.modifier
     val grid = message.maidenGrid
