@@ -64,6 +64,10 @@ public class FT8TransmitSignal {
     // operator has Hunt or Auto-CQ-after-QSO enabled. Cleared when a CQ run
     // starts (userResetToCQ) or TX is deactivated.
     private volatile boolean singleQsoMode = false;
+    // Tracks the callsign for which noReplyCount is accumulating. When
+    // generateFun() is called for the same target (e.g. Hunt re-targets the
+    // same CQ station), the counter is preserved instead of being reset to 0.
+    private String lastNoReplyTarget = "";
     private volatile boolean isTransmitting = false;
     public MutableLiveData<Boolean> mutableIsTransmitting = new MutableLiveData<>();// whether currently transmitting
     public MutableLiveData<String> mutableTransmittingMessage = new MutableLiveData<>();// current message content
@@ -116,7 +120,6 @@ public class FT8TransmitSignal {
     // never answers instead of transmitting at it forever. RR73 (order 4): the
     // QSO is already logged, so only repeat RR73 a few times for the partner's
     // benefit, then return to CQ / next caller.
-    private static final int NO_REPLY_GIVEUP_CYCLES = 4;
     private static final int RR73_GIVEUP_CYCLES = 3;
 
     // Caller queue: stations that called us while we're in an active QSO
@@ -391,8 +394,15 @@ public class FT8TransmitSignal {
      * Generate the command sequence.
      */
     public void generateFun() {
-        //ArrayList<FunctionOfTransmit> functions = new ArrayList<>();
-        GeneralVariables.noReplyCount = 0;
+        // Only reset the no-reply counter when the target callsign actually
+        // changes. Previously this was unconditional, so Hunt re-targeting the
+        // SAME station (still calling CQ) would reset the counter every cycle,
+        // preventing the retry limit from ever triggering.
+        String currentTarget = (toCallsign != null) ? toCallsign.callsign : "";
+        if (shouldResetNoReplyCount(currentTarget, lastNoReplyTarget)) {
+            GeneralVariables.noReplyCount = 0;
+            lastNoReplyTarget = currentTarget;
+        }
         functionList.clear();
         for (int i = 1; i <= 6; i++) {
             if (functionOrder == 6) {// if current command is 6 (CQ), generate only one message
@@ -1369,21 +1379,15 @@ public class FT8TransmitSignal {
                 GeneralVariables.noReplyCount, functionOrder,
                 toCallsign != null ? toCallsign.callsign : "?"));
 
-        // Give up the current target and fall back to CQ / next caller when:
-        //  - the user-configured no-reply limit is hit (noReplyLimit > 0), OR
-        //  - the limit is "ignore" (0) but we're calling a station (order 1-3)
-        //    that never answers — a hard failsafe so we don't transmit at a
-        //    no-reply station forever. (Order 4/RR73 has its own cap in the
-        //    completion check above; order 5/73 already completes there.)
-        boolean limitHit = (GeneralVariables.noReplyLimit > 0)
-                && (GeneralVariables.noReplyCount > GeneralVariables.noReplyLimit);
-        boolean failsafeHit = (GeneralVariables.noReplyLimit == 0)
-                && (functionOrder >= 1 && functionOrder <= 3)
-                && (GeneralVariables.noReplyCount > NO_REPLY_GIVEUP_CYCLES);
-        if (limitHit || failsafeHit) {
+        // Give up the current target and fall back to CQ / next caller when
+        // the user-configured no-reply limit is hit (noReplyLimit > 0). When
+        // the limit is "unlimited" (0), honour the user's choice — the TX
+        // supervision timeout (launchSupervision) already acts as the ultimate
+        // safety net. (Order 4/RR73 has its own cap in the completion check
+        // above; order 5/73 already completes there.)
+        if (shouldGiveUpTarget(GeneralVariables.noReplyLimit, GeneralVariables.noReplyCount)) {
             GeneralVariables.fileLog("QSO: give up calling " + toCallsign.callsign
-                    + " (order=" + functionOrder + ", "
-                    + (failsafeHit ? "failsafe" : "limit") + ") -> CQ/next");
+                    + " (order=" + functionOrder + ", limit) -> CQ/next");
             // try queued callers first, then check watched messages, then fall back to CQ
             if (!dequeueNextCaller()) {
                 if (!getNewTargetCallsign(messages)) {//check CQ messages in watch list; returns true if a new target is found
@@ -1612,6 +1616,10 @@ public class FT8TransmitSignal {
             setTransmitting(false);
             clearCallerQueue();
             singleQsoMode = false;
+            // Reset retry counters so a fresh run to the same callsign
+            // doesn't inherit a stale noReplyCount from the previous session.
+            GeneralVariables.noReplyCount = 0;
+            lastNoReplyTarget = "";
         }
         mutableIsActivated.postValue(activated);
     }
@@ -1780,6 +1788,27 @@ public class FT8TransmitSignal {
     /** Convenience overload: log and move on to the head of the queue. */
     public void forceLogAndMoveOn() {
         forceLogAndMoveOn(null);
+    }
+
+    /**
+     * Whether the no-reply counter should be reset when generating the transmit
+     * command list. Only resets when the target callsign has actually changed.
+     *
+     * <p>Package-visible for testing.
+     */
+    static boolean shouldResetNoReplyCount(String currentTarget, String lastTarget) {
+        return !currentTarget.equals(lastTarget);
+    }
+
+    /**
+     * Whether to give up calling the current target based on the retry limit.
+     * When the user selects "unlimited" (noReplyLimit == 0), we never give up
+     * via this check — the TX supervision timeout is the ultimate safety net.
+     *
+     * <p>Package-visible for testing.
+     */
+    static boolean shouldGiveUpTarget(int noReplyLimit, int noReplyCount) {
+        return noReplyLimit > 0 && noReplyCount >= noReplyLimit;
     }
 
     /**
