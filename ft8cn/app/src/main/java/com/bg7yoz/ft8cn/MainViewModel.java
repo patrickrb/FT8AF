@@ -938,7 +938,7 @@ public class MainViewModel extends ViewModel {
         // auto-derive the function order so we reply with RPT (order 2) instead
         // of grid (order 1). For messages not directed at us (we're initiating),
         // start at order 1 as before.
-        int order = callStationOrder(message.getCallsignTo(), message.extraInfo);
+        int order = callStationOrder(message.getCallsignTo());
         ft8TransmitSignal.setTransmit(
                 message.getFromCallTransmitCallsign(),
                 order,
@@ -955,10 +955,9 @@ public class MainViewModel extends ViewModel {
      * <p>Package-visible for testing.
      *
      * @param callsignTo message's "to" callsign (empty/CQ for broadcast messages)
-     * @param extraInfo  the message's extraInfo field (grid / report / RR73 / 73)
      * @return function order: -1 for auto-derive, 1 for initiate
      */
-    static int callStationOrder(String callsignTo, String extraInfo) {
+    static int callStationOrder(String callsignTo) {
         if (callsignTo != null && GeneralVariables.checkIsMyCallsign(callsignTo)) {
             return -1; // auto-derive: setTransmit will compute the correct next step
         }
