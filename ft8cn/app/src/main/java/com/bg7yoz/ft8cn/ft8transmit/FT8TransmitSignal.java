@@ -120,7 +120,6 @@ public class FT8TransmitSignal {
     // never answers instead of transmitting at it forever. RR73 (order 4): the
     // QSO is already logged, so only repeat RR73 a few times for the partner's
     // benefit, then return to CQ / next caller.
-    private static final int NO_REPLY_GIVEUP_CYCLES = 4;
     private static final int RR73_GIVEUP_CYCLES = 3;
 
     // Caller queue: stations that called us while we're in an active QSO
@@ -1601,6 +1600,10 @@ public class FT8TransmitSignal {
             setTransmitting(false);
             clearCallerQueue();
             singleQsoMode = false;
+            // Reset retry counters so a fresh run to the same callsign
+            // doesn't inherit a stale noReplyCount from the previous session.
+            GeneralVariables.noReplyCount = 0;
+            lastNoReplyTarget = "";
         }
         mutableIsActivated.postValue(activated);
     }
@@ -1784,7 +1787,7 @@ public class FT8TransmitSignal {
      * <p>Package-visible for testing.
      */
     static boolean shouldGiveUpTarget(int noReplyLimit, int noReplyCount) {
-        return noReplyLimit > 0 && noReplyCount > noReplyLimit;
+        return noReplyLimit > 0 && noReplyCount >= noReplyLimit;
     }
 
     // ==================== Caller Queue Methods ====================

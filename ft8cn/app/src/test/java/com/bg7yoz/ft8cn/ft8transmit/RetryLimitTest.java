@@ -60,9 +60,9 @@ public class RetryLimitTest {
     }
 
     @Test
-    public void limitSet_atLimit_noGiveUp() {
-        // "noReplyCount > noReplyLimit" so at-limit is not yet give-up
-        assertThat(FT8TransmitSignal.shouldGiveUpTarget(3, 3)).isFalse();
+    public void limitSet_atLimit_givesUp() {
+        // "Stop after N unanswered attempts" — give up at exactly N
+        assertThat(FT8TransmitSignal.shouldGiveUpTarget(3, 3)).isTrue();
     }
 
     @Test
@@ -71,8 +71,7 @@ public class RetryLimitTest {
     }
 
     @Test
-    public void limitOf1_exceedsAfterSecondNoReply() {
-        assertThat(FT8TransmitSignal.shouldGiveUpTarget(1, 1)).isFalse();
-        assertThat(FT8TransmitSignal.shouldGiveUpTarget(1, 2)).isTrue();
+    public void limitOf1_givesUpAfterFirstNoReply() {
+        assertThat(FT8TransmitSignal.shouldGiveUpTarget(1, 1)).isTrue();
     }
 }
