@@ -6,6 +6,9 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import radio.ks3ckc.ft8us.ui.components.QsoStatus
 
 /**
  * Tests that [resolveQsoStatus] uses the live QSL callsign list, not just the
@@ -15,12 +18,27 @@ import org.junit.Test
  * "worked" marker on the decode list even though the waterfall (which uses a
  * live check) showed it correctly.
  */
+@RunWith(RobolectricTestRunner::class)
 class QslDisplayFreshnessTest {
 
-    private val savedCallsign = GeneralVariables.myCallsign
+    private var savedCallsign: String? = null
+    private var savedHighlightPota = false
+    private var savedHighlightNewDxcc = false
+    private var savedHighlightNewGrid = false
+    private var savedHighlightNewBand = false
+    private var savedHighlightWorked = false
+    private lateinit var savedQslList: ArrayList<String>
 
     @Before
     fun setUp() {
+        savedCallsign = GeneralVariables.myCallsign
+        savedHighlightPota = GeneralVariables.highlightPota
+        savedHighlightNewDxcc = GeneralVariables.highlightNewDxcc
+        savedHighlightNewGrid = GeneralVariables.highlightNewGrid
+        savedHighlightNewBand = GeneralVariables.highlightNewBand
+        savedHighlightWorked = GeneralVariables.highlightWorked
+        savedQslList = ArrayList(GeneralVariables.QSL_Callsign_list)
+
         GeneralVariables.myCallsign = "W1AW"
         GeneralVariables.QSL_Callsign_list.clear()
         // Disable all highlight toggles except "worked" so the when-chain
@@ -35,7 +53,13 @@ class QslDisplayFreshnessTest {
     @After
     fun tearDown() {
         GeneralVariables.myCallsign = savedCallsign
+        GeneralVariables.highlightPota = savedHighlightPota
+        GeneralVariables.highlightNewDxcc = savedHighlightNewDxcc
+        GeneralVariables.highlightNewGrid = savedHighlightNewGrid
+        GeneralVariables.highlightNewBand = savedHighlightNewBand
+        GeneralVariables.highlightWorked = savedHighlightWorked
         GeneralVariables.QSL_Callsign_list.clear()
+        GeneralVariables.QSL_Callsign_list.addAll(savedQslList)
     }
 
     private fun makeCqMessage(from: String, cachedQsl: Boolean): Ft8Message {
