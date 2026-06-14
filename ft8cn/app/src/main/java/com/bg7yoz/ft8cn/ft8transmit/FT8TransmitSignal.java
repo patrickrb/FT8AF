@@ -1728,8 +1728,13 @@ public class FT8TransmitSignal {
      *                     instead of the head of the queue.
      */
     public void forceLogAndMoveOn(String nextCallsign) {
-        // Ensure QSO is saved (no-op if already saved at function order 4/5)
-        updateQSlRecordList(4, toCallsign);
+        // Only log and celebrate if the QSO progressed enough (at least one
+        // report exchanged, i.e. order >= 3). Skipping to the next caller at
+        // order 1 or 2 means no real QSO took place — logging it would show a
+        // bogus contact and the celebration animation would be misleading.
+        if (shouldForceLog(functionOrder)) {
+            updateQSlRecordList(4, toCallsign);
+        }
 
         // Mirror the normal QSO-completion path from parseMessageToFunction
         resetToCQ();
@@ -1759,6 +1764,17 @@ public class FT8TransmitSignal {
     /** Convenience overload: log and move on to the head of the queue. */
     public void forceLogAndMoveOn() {
         forceLogAndMoveOn(null);
+    }
+
+    /**
+     * Whether a force-log should actually save the QSO record and trigger the
+     * celebration. A QSO that never progressed past order 2 (no report
+     * exchanged) is not a real contact.
+     *
+     * <p>Package-visible for testing.
+     */
+    static boolean shouldForceLog(int functionOrder) {
+        return functionOrder >= 3;
     }
 
     // ==================== Caller Queue Methods ====================
