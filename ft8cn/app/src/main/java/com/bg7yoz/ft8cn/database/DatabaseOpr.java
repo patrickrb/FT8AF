@@ -2391,6 +2391,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("autoFollowCQ")) {//Auto-follow CQ
                     GeneralVariables.autoFollowCQ = (result.equals("") || result.equals("1"));
                 }
+                if (name.equalsIgnoreCase("huntCallsCQ")) {//Hunt+CQ hybrid
+                    GeneralVariables.huntCallsCQ = result.equals("1");
+                }
                 if (name.equalsIgnoreCase("autoCallFollow")) {//Auto-call followed stations
                     GeneralVariables.autoCallFollow = (result.equals("") || result.equals("1"));
                 }

@@ -206,7 +206,10 @@ public class FT8TransmitSignal {
                     // Idle hunt: stay silent this slot and keep listening rather than keying
                     // up a CQ. Once parseMessageToFunction locks a caller (order advances,
                     // target becomes a real callsign) this is false and the reply transmits.
-                    if (isHuntListeningIdle(GeneralVariables.autoFollowCQ, functionOrder, toCallsign)) {
+                    // When huntCallsCQ is true, skip this check — let doTransmit send CQ
+                    // while idle, and checkCQMeOrFollowCQMessage will interrupt to answer.
+                    if (shouldSuppressIdleHunt(GeneralVariables.huntCallsCQ,
+                            GeneralVariables.autoFollowCQ, functionOrder, toCallsign)) {
                         return;
                     }
                     if (GeneralVariables.myCallsign.length() < 3) {
@@ -1023,6 +1026,19 @@ public class FT8TransmitSignal {
         if (functionOrder != 6) return false;
         // "no target" == null or the CQ placeholder (see TransmitCallsign.haveTargetCallsign).
         return toCallsign == null || !toCallsign.haveTargetCallsign();
+    }
+
+    /**
+     * Whether the idle-hunt state should suppress transmission this slot.
+     * When {@code huntCallsCQ} is true (Hunt+CQ mode), we let the idle hunt
+     * fall through to {@code doTransmit()} which sends CQ. The existing
+     * {@code checkCQMeOrFollowCQMessage} path will interrupt CQ to answer
+     * any incoming callers.
+     */
+    static boolean shouldSuppressIdleHunt(boolean huntCallsCQ, boolean autoFollowCQ,
+                                          int functionOrder, TransmitCallsign toCallsign) {
+        if (huntCallsCQ) return false;
+        return isHuntListeningIdle(autoFollowCQ, functionOrder, toCallsign);
     }
 
     private boolean checkCQMeOrFollowCQMessage(ArrayList<Ft8Message> messages, boolean suppressHunt) {
