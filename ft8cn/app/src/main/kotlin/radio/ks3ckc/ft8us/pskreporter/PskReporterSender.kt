@@ -214,7 +214,7 @@ object PskReporterSender {
         val antenna = GeneralVariables.myAntenna ?: ""
 
         // Build IPFIX packets, respecting MTU limit
-        val packets = buildPackets(myCall, myGrid, software, antenna, spots)
+        val packets = buildPackets(myCall, myGrid, software, spots, antenna)
         for (pkt in packets) {
             try {
                 sendDatagram(pkt)
@@ -234,8 +234,8 @@ object PskReporterSender {
         rxCall: String,
         rxGrid: String,
         software: String,
-        antenna: String = "",
         spots: List<SpotRecord>,
+        antenna: String = "",
     ): List<ByteArray> {
         val packets = mutableListOf<ByteArray>()
         val includeTemplates = needTemplates()
