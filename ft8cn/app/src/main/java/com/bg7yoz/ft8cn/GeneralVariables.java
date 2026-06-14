@@ -329,6 +329,7 @@ public class GeneralVariables {
 
     public static String myCallsign = "";//My callsign
     public static String myAntenna = "";
+    public static String myRigName = "";  // Set by MainViewModel.connectRig(); used in PSKReporter software string
     public static int myPowerWatts = 0;    // 0 = not set, displays as "--"
     public static String toModifier = "";//Call modifier
     private static float baseFrequency = 1000;//Audio frequency

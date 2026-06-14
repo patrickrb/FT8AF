@@ -63,6 +63,7 @@ import com.bg7yoz.ft8cn.database.ControlMode;
 import com.bg7yoz.ft8cn.database.DatabaseOpr;
 import com.bg7yoz.ft8cn.database.OnAfterQueryFollowCallsigns;
 import com.bg7yoz.ft8cn.database.OperationBand;
+import com.bg7yoz.ft8cn.database.RigNameList;
 import com.bg7yoz.ft8cn.flex.FlexRadio;
 import com.bg7yoz.ft8cn.flex.RadioTcpClient;
 import com.bg7yoz.ft8cn.ft8listener.FT8SignalListener;
@@ -1438,6 +1439,21 @@ public class MainViewModel extends ViewModel {
             case InstructionSet.KENWOOD_TS440:
                 baseRig = new KenwoodTS440Rig();//KENWOOD TS-440S (TS-570 CAT, USB mode)
                 break;
+        }
+
+        // Store the rig name for PSKReporter software string.
+        // Use the user-selected model name from RigNameList (same source as the
+        // Settings rig picker) rather than the Java class name, which can
+        // differ (e.g. YaesuDX10Rig for FT-710).
+        try {
+            android.content.Context ctx = GeneralVariables.getMainContext();
+            if (ctx != null) {
+                RigNameList rigList = RigNameList.getInstance(ctx);
+                GeneralVariables.myRigName =
+                        rigList.getRigNameByIndex(GeneralVariables.modelNo).modelName;
+            }
+        } catch (Exception e) {
+            GeneralVariables.myRigName = "";
         }
 
         if ((GeneralVariables.instructionSet == InstructionSet.FLEX_NETWORK)
