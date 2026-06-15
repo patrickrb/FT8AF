@@ -298,6 +298,14 @@ class ComposeMainActivity : AppCompatActivity() {
             mainViewModel.operationBand = OperationBand.getInstance(baseContext)
         }
 
+        // Callsign database must be ready before getQslDxccToMap() — that
+        // method's background thread needs it to resolve DXCC prefixes. If it
+        // runs first, the null-check early-return leaves zoneMapReady false
+        // permanently and DXCC/zone "new" flags never compute. (#251 review)
+        if (GeneralVariables.callsignDatabase == null) {
+            GeneralVariables.callsignDatabase = CallsignDatabase.getInstance(baseContext, null, 1)
+        }
+
         mainViewModel.databaseOpr.getQslDxccToMap()
 
         mainViewModel.databaseOpr.getAllConfigParameter(object : OnAfterQueryConfig {
@@ -355,10 +363,6 @@ class ComposeMainActivity : AppCompatActivity() {
 
         DatabaseOpr.GetCallsignMapGrid(mainViewModel.databaseOpr.db).execute()
         mainViewModel.getFollowCallsignsFromDataBase()
-
-        if (GeneralVariables.callsignDatabase == null) {
-            GeneralVariables.callsignDatabase = CallsignDatabase.getInstance(baseContext, null, 1)
-        }
     }
 
     private fun doReceiveShareFile(intent: Intent) {
