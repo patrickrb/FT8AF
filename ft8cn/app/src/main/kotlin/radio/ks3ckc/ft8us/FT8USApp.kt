@@ -34,6 +34,7 @@ import com.bg7yoz.ft8cn.MainViewModel
 import com.bg7yoz.ft8cn.ModeProfile
 import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.database.OperationBand
+import com.bg7yoz.ft8cn.ft8transmit.FT8TransmitSignal
 import com.bg7yoz.ft8cn.rigs.CatConnectionState
 import com.bg7yoz.ft8cn.rigs.BaseRigOperation
 import radio.ks3ckc.ft8us.theme.BgApp
@@ -346,6 +347,12 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                     val newSlot = if (current == 0) 1 else 0
                     mainViewModel.ft8TransmitSignal.sequential = newSlot
                     mainViewModel.ft8TransmitSignal.mutableSequential.postValue(newSlot)
+                    // Switching slots mid-QSO abandons the current contact.
+                    val target = mainViewModel.ft8TransmitSignal.mutableToCallsign.value
+                    val order = mainViewModel.ft8TransmitSignal.mutableFunctionOrder.value ?: 6
+                    if (FT8TransmitSignal.shouldResetTargetOnSlotToggle(order, target?.callsign)) {
+                        mainViewModel.ft8TransmitSignal.userResetToCQ()
+                    }
                 },
                 onToggleHunt = {
                     val newVal = !huntEnabled

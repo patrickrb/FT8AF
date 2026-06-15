@@ -1051,6 +1051,25 @@ public class FT8TransmitSignal {
         return isHuntListeningIdle(autoFollowCQ, functionOrder, toCallsign);
     }
 
+    /**
+     * Whether toggling the TX time-slot should reset the target callsign back to CQ.
+     * Switching slots mid-QSO means the operator is abandoning the current contact,
+     * so the sequencer must return to the CQ baseline. When already at CQ baseline
+     * (order 6, target is "CQ" or absent) no reset is needed — the operator is just
+     * picking a different slot before starting a new run.
+     *
+     * @param functionOrder   the current TX sequence step (6 == CQ baseline)
+     * @param targetCallsign  the current target callsign string, if any
+     */
+    public static boolean shouldResetTargetOnSlotToggle(int functionOrder, String targetCallsign) {
+        if (functionOrder == 6
+                && (targetCallsign == null || targetCallsign.isEmpty()
+                    || "CQ".equals(targetCallsign))) {
+            return false;
+        }
+        return true;
+    }
+
     private boolean checkCQMeOrFollowCQMessage(ArrayList<Ft8Message> messages, boolean suppressHunt) {
         // these messages are freshly decoded
         // both loops check for CQ-me messages. The first loop prioritizes checking for my target callsign,
