@@ -349,8 +349,7 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                     mainViewModel.ft8TransmitSignal.mutableSequential.postValue(newSlot)
                     // Switching slots mid-QSO abandons the current contact.
                     val target = mainViewModel.ft8TransmitSignal.mutableToCallsign.value
-                    val order = mainViewModel.ft8TransmitSignal.mutableFunctionOrder.value ?: 6
-                    if (FT8TransmitSignal.shouldResetTargetOnSlotToggle(order, target?.callsign)) {
+                    if (FT8TransmitSignal.shouldResetTargetOnSlotToggle(target?.callsign)) {
                         mainViewModel.ft8TransmitSignal.userResetToCQ()
                     }
                 },

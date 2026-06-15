@@ -1054,20 +1054,22 @@ public class FT8TransmitSignal {
     /**
      * Whether toggling the TX time-slot should reset the target callsign back to CQ.
      * Switching slots mid-QSO means the operator is abandoning the current contact,
-     * so the sequencer must return to the CQ baseline. When already at CQ baseline
-     * (order 6, target is "CQ" or absent) no reset is needed — the operator is just
-     * picking a different slot before starting a new run.
+     * so the sequencer must return to the CQ baseline. When the target is already
+     * "CQ" (or absent) there is nothing to abandon, so no reset is needed.
      *
-     * @param functionOrder   the current TX sequence step (6 == CQ baseline)
+     * <p>The decision is based solely on the target callsign, not on
+     * {@code functionOrder}. {@code resetToCQ()} sets {@code functionOrder = 6}
+     * but does not post {@code mutableFunctionOrder}, so callers reading the
+     * LiveData can see a stale order while the target is already at CQ. Using
+     * only the callsign avoids an unnecessary reset (and its side-effects:
+     * clearing the caller queue, setting pendingUserCQ) in that case.
+     *
      * @param targetCallsign  the current target callsign string, if any
      */
-    public static boolean shouldResetTargetOnSlotToggle(int functionOrder, String targetCallsign) {
-        if (functionOrder == 6
-                && (targetCallsign == null || targetCallsign.isEmpty()
-                    || "CQ".equals(targetCallsign))) {
-            return false;
-        }
-        return true;
+    public static boolean shouldResetTargetOnSlotToggle(String targetCallsign) {
+        return targetCallsign != null
+                && !targetCallsign.trim().isEmpty()
+                && !"CQ".equalsIgnoreCase(targetCallsign.trim());
     }
 
     private boolean checkCQMeOrFollowCQMessage(ArrayList<Ft8Message> messages, boolean suppressHunt) {
