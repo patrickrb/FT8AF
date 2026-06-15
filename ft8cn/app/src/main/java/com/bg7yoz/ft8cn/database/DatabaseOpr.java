@@ -1761,6 +1761,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             } finally {
                 cursor.close();
             }
+            callsigns.add(String.format("-----------Total %d -----------", sum));
             if (onAffterQueryFollowCallsigns != null) {
                 onAffterQueryFollowCallsigns.doOnAfterQueryFollowCallsigns(callsigns);
             }
@@ -1799,6 +1800,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             } finally {
                 cursor.close();
             }
+            callsigns.add(String.format("-----------Total %d -----------", sum));
             if (onAffterQueryFollowCallsigns != null) {
                 onAffterQueryFollowCallsigns.doOnAfterQueryFollowCallsigns(callsigns);
             }

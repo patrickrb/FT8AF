@@ -362,6 +362,7 @@ public class ShareLogs {
                 if (uri == null) return null;
                 try (OutputStream os = context.getContentResolver().openOutputStream(uri);
                      FileInputStream is = new FileInputStream(source)) {
+                    if (os == null) return null;
                     copyStream(is, os);
                 }
                 return "Download/FT8AF/" + displayName;
