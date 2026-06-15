@@ -90,10 +90,12 @@ public class LogFileImport {
                                     int valueLen = Integer.parseInt(ttt[1]);//Field length
                                     if (valueLen > 0) {
                                         if (values[1].length() < valueLen) {
-                                            valueLen = values[1].length() - 1;
+                                            valueLen = values[1].length();
                                         }
-                                        String value = values[1].substring(0, valueLen);//Field value
-                                        record.put(name.toUpperCase(), value);//Save field, key must be uppercase
+                                        if (valueLen > 0) {
+                                            String value = values[1].substring(0, valueLen);//Field value
+                                            record.put(name.toUpperCase(), value);//Save field, key must be uppercase
+                                        }
                                     }
                                 }
 

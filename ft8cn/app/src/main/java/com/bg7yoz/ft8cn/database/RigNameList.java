@@ -135,9 +135,16 @@ public class RigNameList {
                 return;
             }
             modelName= info[0].trim();
-            address=Integer.parseInt(info[1].trim(),16);
-            bauRate=Integer.parseInt(info[2].trim());
-            instructionSet=Integer.parseInt(info[3].trim());
+            try {
+                address=Integer.parseInt(info[1].trim(),16);
+                bauRate=Integer.parseInt(info[2].trim());
+                instructionSet=Integer.parseInt(info[3].trim());
+            } catch (NumberFormatException e) {
+                Log.e(TAG, "Error parsing rig parameters: " + s, e);
+                address=0xA4;
+                bauRate=19200;
+                instructionSet=0;
+            }
         }
 
         public String getName(){

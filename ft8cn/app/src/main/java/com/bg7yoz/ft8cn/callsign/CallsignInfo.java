@@ -58,15 +58,19 @@ public class CallsignInfo {
             Log.e(TAG,"Callsign data format error! "+s);
             return;
         }
-        CountryNameEn = info[0].replace("\n", "").trim();
-        CQZone = Integer.parseInt(info[1].replace("\n", "").replace(" ", ""));
-        ITUZone = Integer.parseInt(info[2].replace("\n", "").replace(" ", ""));
-        Continent = info[3].replace("\n", "").replace(" ", "");
-        Latitude = Float.parseFloat(info[4].replace("\n", "").replace(" ", ""));
-        Longitude = Float.parseFloat(info[5].replace("\n", "").replace(" ", ""));
-        GMT_offset = Float.parseFloat(info[6].replace("\n", "").replace(" ", ""));
-        DXCC = info[7].replace("\n", "").replace(" ", "");
-        CallSign= info[8].replace("\n", "").replace(" ", "");
+        try {
+            CountryNameEn = info[0].replace("\n", "").trim();
+            CQZone = Integer.parseInt(info[1].replace("\n", "").replace(" ", ""));
+            ITUZone = Integer.parseInt(info[2].replace("\n", "").replace(" ", ""));
+            Continent = info[3].replace("\n", "").replace(" ", "");
+            Latitude = Float.parseFloat(info[4].replace("\n", "").replace(" ", ""));
+            Longitude = Float.parseFloat(info[5].replace("\n", "").replace(" ", ""));
+            GMT_offset = Float.parseFloat(info[6].replace("\n", "").replace(" ", ""));
+            DXCC = info[7].replace("\n", "").replace(" ", "");
+            CallSign= info[8].replace("\n", "").replace(" ", "");
+        } catch (NumberFormatException e) {
+            Log.e(TAG, "Error parsing callsign info fields: " + s, e);
+        }
     }
 }
 
