@@ -1154,6 +1154,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     return;
                 }
 
+                // The in-memory callsign database imports CTY.DAT asynchronously.
+                // Wait for that import to finish so the tables are populated before
+                // we try to resolve DXCC prefixes from logged QSOs.
+                CallsignDatabase.awaitImport(30_000);
+
                 Cursor cursor = db.rawQuery(
                         "SELECT DISTINCT \"call\" FROM QSLTable WHERE \"call\" IS NOT NULL AND \"call\" <> ''",
                         null);

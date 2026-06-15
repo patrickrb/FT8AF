@@ -466,7 +466,7 @@ public class MainActivity extends AppCompatActivity {
         // runs first, the null-check early-return leaves zoneMapReady false
         // permanently and DXCC/zone "new" flags never compute. (#251 review)
         if (GeneralVariables.callsignDatabase == null) {
-            GeneralVariables.callsignDatabase = CallsignDatabase.getInstance(getBaseContext(), null, 1);
+            GeneralVariables.callsignDatabase = CallsignDatabase.getInstance(getApplicationContext(), null, 1);
         }
 
         mainViewModel.databaseOpr.getQslDxccToMap();
