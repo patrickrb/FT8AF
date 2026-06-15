@@ -174,9 +174,15 @@ class ActiveQsoPanelLogicTest {
     }
 
     @Test
-    fun `target calling CQ DX is not marked BUSY`() {
-        // Directed CQ (DE/QRZ) should also be skipped. (#254)
+    fun `target calling DE is not marked BUSY`() {
         val list = listOf(msg("DE", target, 1_000L))
+        val result = buildQsoLog(list, target, myCall, emptyList())
+        assertThat(result).isEmpty()
+    }
+
+    @Test
+    fun `target calling QRZ is not marked BUSY`() {
+        val list = listOf(msg("QRZ", target, 1_000L))
         val result = buildQsoLog(list, target, myCall, emptyList())
         assertThat(result).isEmpty()
     }
