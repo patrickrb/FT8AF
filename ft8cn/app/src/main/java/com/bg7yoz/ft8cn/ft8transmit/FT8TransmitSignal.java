@@ -398,7 +398,7 @@ public class FT8TransmitSignal {
         // changes. Previously this was unconditional, so Hunt re-targeting the
         // SAME station (still calling CQ) would reset the counter every cycle,
         // preventing the retry limit from ever triggering.
-        String currentTarget = (toCallsign != null) ? toCallsign.callsign : "";
+        String currentTarget = (toCallsign != null && toCallsign.callsign != null) ? toCallsign.callsign : "";
         if (shouldResetNoReplyCount(currentTarget, lastNoReplyTarget)) {
             GeneralVariables.noReplyCount = 0;
             lastNoReplyTarget = currentTarget;
@@ -1385,7 +1385,11 @@ public class FT8TransmitSignal {
         // supervision timeout (launchSupervision) already acts as the ultimate
         // safety net. (Order 4/RR73 has its own cap in the completion check
         // above; order 5/73 already completes there.)
-        if (shouldGiveUpTarget(GeneralVariables.noReplyLimit, GeneralVariables.noReplyCount)) {
+        // Orders 4 (RR73) and 5 (73) have dedicated completion caps in the
+        // check above (noReplyLimit * 2 / RR73_GIVEUP_CYCLES); don't let the
+        // generic limit fire first at a lower threshold.
+        if (functionOrder < 4
+                && shouldGiveUpTarget(GeneralVariables.noReplyLimit, GeneralVariables.noReplyCount)) {
             GeneralVariables.fileLog("QSO: give up calling " + toCallsign.callsign
                     + " (order=" + functionOrder + ", limit) -> CQ/next");
             // try queued callers first, then check watched messages, then fall back to CQ
@@ -1797,6 +1801,7 @@ public class FT8TransmitSignal {
      * <p>Package-visible for testing.
      */
     static boolean shouldResetNoReplyCount(String currentTarget, String lastTarget) {
+        if (currentTarget == null) return lastTarget != null;
         return !currentTarget.equals(lastTarget);
     }
 

@@ -132,12 +132,17 @@ fun FT8USApp(mainViewModel: MainViewModel) {
     // the async config load and see an empty callsign. (#231)
     val configLoaded by mainViewModel.mutableConfigLoaded.observeAsState(false)
     LaunchedEffect(configLoaded) {
-        if (configLoaded && shouldArmHuntOnStartup(
-                GeneralVariables.autoFollowCQ, GeneralVariables.myCallsign)) {
+        if (configLoaded) {
+            // Always sync the UI toggle from the persisted value so the Hunt
+            // chip reflects the correct state even when arming is skipped
+            // (e.g. callsign not yet configured).
             huntEnabled = GeneralVariables.autoFollowCQ
-            mainViewModel.ft8TransmitSignal.armForHunt()
-            mainViewModel.ft8TransmitSignal.setActivated(true)
-            GeneralVariables.resetLaunchSupervision()
+            if (shouldArmHuntOnStartup(
+                    GeneralVariables.autoFollowCQ, GeneralVariables.myCallsign)) {
+                mainViewModel.ft8TransmitSignal.armForHunt()
+                mainViewModel.ft8TransmitSignal.setActivated(true)
+                GeneralVariables.resetLaunchSupervision()
+            }
         }
     }
 

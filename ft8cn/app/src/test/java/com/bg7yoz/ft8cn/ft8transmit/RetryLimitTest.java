@@ -44,6 +44,16 @@ public class RetryLimitTest {
         assertThat(FT8TransmitSignal.shouldResetNoReplyCount("K5ABC", "CQ")).isTrue();
     }
 
+    @Test
+    public void nullCurrentTarget_resetsWhenLastNonNull() {
+        assertThat(FT8TransmitSignal.shouldResetNoReplyCount(null, "K5ABC")).isTrue();
+    }
+
+    @Test
+    public void nullCurrentTarget_noResetWhenLastAlsoNull() {
+        assertThat(FT8TransmitSignal.shouldResetNoReplyCount(null, null)).isFalse();
+    }
+
     // ===== shouldGiveUpTarget =====
 
     @Test
