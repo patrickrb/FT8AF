@@ -164,4 +164,29 @@ class ActiveQsoPanelLogicTest {
         assertThat(result).hasSize(1)
         assertThat(result[0].direction).isEqualTo(QsoLogEntry.Direction.RX)
     }
+
+    @Test
+    fun `target calling CQ is not marked BUSY`() {
+        // A CQ from the target means they are available, not busy. (#254)
+        val list = listOf(msg("CQ", target, 1_000L))
+        val result = buildQsoLog(list, target, myCall, emptyList())
+        assertThat(result).isEmpty()
+    }
+
+    @Test
+    fun `target calling CQ DX is not marked BUSY`() {
+        // Directed CQ (DE/QRZ) should also be skipped. (#254)
+        val list = listOf(msg("DE", target, 1_000L))
+        val result = buildQsoLog(list, target, myCall, emptyList())
+        assertThat(result).isEmpty()
+    }
+
+    @Test
+    fun `hashed callsign with angle brackets matches display callsign`() {
+        // Hashed calls are stored as "<CALL>" but displayCallsign has no brackets. (#255)
+        val list = listOf(rawMsg(to = myCall, from = "<$target>", utc = 1_000L))
+        val result = buildQsoLog(list, target, myCall, emptyList())
+        assertThat(result).hasSize(1)
+        assertThat(result[0].direction).isEqualTo(QsoLogEntry.Direction.RX)
+    }
 }
