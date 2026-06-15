@@ -89,12 +89,19 @@ internal fun buildQsoLog(
 
     val entries = mutableListOf<QsoLogEntry>()
     messageList?.forEach { msg ->
-        val from = msg.callsignFrom ?: ""
+        // getCallsignFrom() handles null and strips angle brackets from
+        // hashed callsigns (e.g. "<CALL>" → "CALL") so they match displayCallsign. (#255)
+        val from = msg.getCallsignFrom()
         // Only the target station's traffic appears in this panel. Own-callsign
         // loopback (from == us) is filtered upstream (OwnTxEchoFilter) and there
         // is deliberately no decoded-list TX branch, so anything not from the
         // target is skipped here — TX rows come solely from synthTx below.
         if (!from.equals(displayCallsign, ignoreCase = true)) return@forEach
+
+        // Skip CQ/DE/QRZ messages — the target is calling for contacts, not
+        // working someone else, so they are neither RX nor BUSY. (#254)
+        // Guard: checkIsCQ() calls callsignTo.trim() which NPEs on null.
+        if (msg.callsignTo != null && msg.checkIsCQ()) return@forEach
 
         val to = msg.callsignTo ?: ""
         val toIsMe = to.equals(myCallsign, ignoreCase = true) ||
