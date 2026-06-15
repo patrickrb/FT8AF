@@ -411,7 +411,7 @@ public class GeneralVariables {
     public static String icomPassword = "";
 
 
-    public static boolean autoFollowCQ = true;//Auto-follow CQ
+    public static boolean autoFollowCQ = false;//Auto-follow CQ
     public static boolean huntCallsCQ = false;//Hunt+CQ hybrid: call CQ when idle, answer CQs when heard
     public static boolean autoCallFollow = true;//Auto-call followed callsigns
     public static boolean autoUpdateGridFromGPS = false;//Use device GPS to keep Maidenhead grid current

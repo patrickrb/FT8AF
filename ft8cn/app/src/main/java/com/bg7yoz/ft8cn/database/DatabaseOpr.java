@@ -2393,7 +2393,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.noReplyLimit = result.equals("") ? 0 : Integer.parseInt(result);
                 }
                 if (name.equalsIgnoreCase("autoFollowCQ")) {//Auto-follow CQ
-                    GeneralVariables.autoFollowCQ = (result.equals("") || result.equals("1"));
+                    GeneralVariables.autoFollowCQ = result.equals("1");
                 }
                 if (name.equalsIgnoreCase("huntCallsCQ")) {//Hunt+CQ hybrid
                     GeneralVariables.huntCallsCQ = result.equals("1");
