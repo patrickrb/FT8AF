@@ -975,15 +975,14 @@ public class X6100Radio {
          */
         private void getHeadAndContent(String line, String split) {
             String[] temp = line.split(split);
+            resultCode = -1;
+            head = temp.length > 0 ? temp[0] : "";
             if (temp.length > 1) {
-                head = temp[0];
                 try {
                     resultCode = Integer.parseInt(temp[1]);
                 } catch (NumberFormatException e) {
                     Log.e(TAG, "Error parsing resultCode: " + temp[1], e);
                 }
-            } else {
-                head = "";
             }
 
             if (temp.length > 2) {
