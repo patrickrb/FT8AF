@@ -647,14 +647,22 @@ public class X6100Radio {
                     for (int i = 0; i < status.length; i++) {//find PTT state and set PTT
                         if (status[i].startsWith("ptt")) {//check PTT
                             String temp[] = status[i].split("=");
-                            isPttOn = temp[1].equalsIgnoreCase("on");
+                            if (temp.length > 1) {
+                                isPttOn = temp[1].equalsIgnoreCase("on");
+                            }
                         }
 
                         if (status[i].startsWith("play_volume")) {//check play volume
                             String temp[] = status[i].split("=");
-                            float vol = Integer.parseInt(temp[1].trim()) * 1.0f / 100f;
-                            GeneralVariables.volumePercent = vol;
-                            GeneralVariables.mutableVolumePercent.postValue(vol);
+                            if (temp.length > 1) {
+                                try {
+                                    float vol = Integer.parseInt(temp[1].trim()) * 1.0f / 100f;
+                                    GeneralVariables.volumePercent = vol;
+                                    GeneralVariables.mutableVolumePercent.postValue(vol);
+                                } catch (NumberFormatException e) {
+                                    Log.e(TAG, "Error parsing play_volume: " + temp[1], e);
+                                }
+                            }
                         }
                     }
                 }
@@ -676,8 +684,13 @@ public class X6100Radio {
         String[] keys = result.split(" ");
         for (int i = 0; i < keys.length; i++) {
             String[] val = keys[i].split("=");
-            if (val[0].equalsIgnoreCase("period")) period = Integer.parseInt(val[1]) / 1000;
-            if (val[0].equalsIgnoreCase("frames")) frames = Integer.parseInt(val[1]);
+            if (val.length < 2) continue;
+            try {
+                if (val[0].equalsIgnoreCase("period")) period = Integer.parseInt(val[1]) / 1000;
+                if (val[0].equalsIgnoreCase("frames")) frames = Integer.parseInt(val[1]);
+            } catch (NumberFormatException e) {
+                Log.e(TAG, "Error parsing audio info: " + keys[i], e);
+            }
         }
         Log.d(TAG, String.format("set audio para:frames=%d,period=%d", frames, period));
     }
@@ -924,7 +937,10 @@ public class X6100Radio {
                     getHeadAndContent(line, "\\|");
                     try {
                         seq_number = Integer.parseInt(head.substring(1));//parse command sequence number
-                        xieguCommand = XieguCommand.values()[seq_number % 1000];
+                        int cmdIndex = seq_number % 1000;
+                        if (cmdIndex >= 0 && cmdIndex < XieguCommand.values().length) {
+                            xieguCommand = XieguCommand.values()[cmdIndex];
+                        }
                     } catch (NumberFormatException e) {
                         e.printStackTrace();
                         Log.e(TAG, "XieguResponse parseInt seq_number exception: " + e.getMessage());
@@ -961,9 +977,11 @@ public class X6100Radio {
             String[] temp = line.split(split);
             if (temp.length > 1) {
                 head = temp[0];
-
-                resultCode = Integer.parseInt(temp[1]);
-
+                try {
+                    resultCode = Integer.parseInt(temp[1]);
+                } catch (NumberFormatException e) {
+                    Log.e(TAG, "Error parsing resultCode: " + temp[1], e);
+                }
             } else {
                 head = "";
             }

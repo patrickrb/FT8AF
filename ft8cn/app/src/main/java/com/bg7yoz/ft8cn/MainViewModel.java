@@ -1673,6 +1673,8 @@ public class MainViewModel extends ViewModel {
         // the rig indefinitely. Tear it down here too.
         stopCatLivenessWatchdog();
         PskReporterSender.INSTANCE.stop();
+        getQTHThreadPool.shutdown();
+        sendWaveDataThreadPool.shutdown();
     }
 
     private static final String ACTION_USB_AUDIO_PERMISSION =

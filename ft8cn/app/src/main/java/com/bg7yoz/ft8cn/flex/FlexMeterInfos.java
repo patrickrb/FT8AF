@@ -32,7 +32,12 @@ public class FlexMeterInfos extends HashMap<Integer, FlexMeterInfos.FlexMeterInf
             String[] val = temp[i].split("=");
             if (val.length == 2) {
                 if (val[0].contains(".")) {
-                    int index = Integer.parseInt(val[0].substring(0, val[0].indexOf(".")));
+                    int index;
+                    try {
+                        index = Integer.parseInt(val[0].substring(0, val[0].indexOf(".")));
+                    } catch (NumberFormatException e) {
+                        continue;
+                    }
                     FlexMeterInfo meterInfo;
 
                     meterInfo = this.get(index);
@@ -66,10 +71,12 @@ public class FlexMeterInfos extends HashMap<Integer, FlexMeterInfos.FlexMeterInf
 
                     }
                     if (val[0].toLowerCase().contains(".low")) {
-                        meterInfo.low = Float.parseFloat(val[1]);
+                        try { meterInfo.low = Float.parseFloat(val[1]); }
+                        catch (NumberFormatException ignored) {}
                     }
                     if (val[0].toLowerCase().contains(".hi")) {
-                        meterInfo.hi = Float.parseFloat(val[1]);
+                        try { meterInfo.hi = Float.parseFloat(val[1]); }
+                        catch (NumberFormatException ignored) {}
                     }
                     if (val[0].toLowerCase().contains(".desc")) {
                         meterInfo.desc = val[1];

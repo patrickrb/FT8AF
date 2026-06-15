@@ -24,6 +24,11 @@ public class ShareLogsProgressDialog extends Dialog {
     private final boolean isImportMode;
     //private final int progressMax;
 
+    private Observer<String> shareInfoObserver;
+    private Observer<Integer> sharePositionObserver;
+    private Observer<Boolean> importShareRunningObserver;
+    private Observer<Boolean> shareRunningObserver;
+    private Observer<Integer> shareCountObserver;
 
     public ShareLogsProgressDialog(@NonNull Context context
             , MainViewModel projectsViewModel, boolean isImportMode) {
@@ -51,44 +56,49 @@ public class ShareLogsProgressDialog extends Dialog {
         Button cancelShareButton = findViewById(R.id.cancelShareButton);
 
 
-        mainViewModel.mutableShareInfo.observeForever(new Observer<String>() {
+        shareInfoObserver = new Observer<String>() {
             @Override
             public void onChanged(String s) {
                 shareDataInfoTextView.setText(s);
             }
-        });
-        mainViewModel.mutableSharePosition.observeForever(new Observer<Integer>() {
+        };
+        mainViewModel.mutableShareInfo.observeForever(shareInfoObserver);
+
+        sharePositionObserver = new Observer<Integer>() {
             @Override
             public void onChanged(Integer integer) {
                 shareFileDataProgressBar.setProgress(integer);
             }
-        });
+        };
+        mainViewModel.mutableSharePosition.observeForever(sharePositionObserver);
 
-        mainViewModel.mutableImportShareRunning.observeForever(new Observer<Boolean>() {
+        importShareRunningObserver = new Observer<Boolean>() {
             @Override
             public void onChanged(Boolean aBoolean) {
                 if (!aBoolean) {
                     dismiss();
                 }
             }
-        });
+        };
+        mainViewModel.mutableImportShareRunning.observeForever(importShareRunningObserver);
 
-        mainViewModel.mutableShareRunning.observeForever(new Observer<Boolean>() {
+        shareRunningObserver = new Observer<Boolean>() {
             @Override
             public void onChanged(Boolean aBoolean) {
                 if (!aBoolean) {
                     dismiss();
                 }
             }
-        });
+        };
+        mainViewModel.mutableShareRunning.observeForever(shareRunningObserver);
 
-
-        mainViewModel.mutableShareCount.observeForever(new Observer<Integer>() {
+        shareCountObserver = new Observer<Integer>() {
             @Override
             public void onChanged(Integer integer) {
                 shareFileDataProgressBar.setMax(integer);
             }
-        });
+        };
+        mainViewModel.mutableShareCount.observeForever(shareCountObserver);
 
         cancelShareButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -101,5 +111,29 @@ public class ShareLogsProgressDialog extends Dialog {
             }
         });
 
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        removeObservers();
+    }
+
+    private void removeObservers() {
+        if (shareInfoObserver != null) {
+            mainViewModel.mutableShareInfo.removeObserver(shareInfoObserver);
+        }
+        if (sharePositionObserver != null) {
+            mainViewModel.mutableSharePosition.removeObserver(sharePositionObserver);
+        }
+        if (importShareRunningObserver != null) {
+            mainViewModel.mutableImportShareRunning.removeObserver(importShareRunningObserver);
+        }
+        if (shareRunningObserver != null) {
+            mainViewModel.mutableShareRunning.removeObserver(shareRunningObserver);
+        }
+        if (shareCountObserver != null) {
+            mainViewModel.mutableShareCount.removeObserver(shareCountObserver);
+        }
     }
 }
