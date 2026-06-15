@@ -1224,17 +1224,16 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 , record.getStartTime()
                 , record.getEndTime()
                 , record.getMode()});
-        if (cursor.getCount() > 0) {
-            cursor.moveToFirst();
-            newRecord.isLotW_QSL = cursor.getInt(cursor.getColumnIndex("isLotW_QSL")) == 1
-                    || record.isLotW_QSL;
-            newRecord.id = cursor.getLong(cursor.getColumnIndex("ID"));
+        try {
+            if (cursor.getCount() > 0) {
+                cursor.moveToFirst();
+                newRecord.isLotW_QSL = cursor.getInt(cursor.getColumnIndex("isLotW_QSL")) == 1
+                        || record.isLotW_QSL;
+                newRecord.id = cursor.getLong(cursor.getColumnIndex("ID"));
+            }
+        } finally {
+            cursor.close();
         }
-        cursor.close();
-//        if (newRecord.id != -1) {//Record already exists
-//            querySQL = "UPDATE   QslCallsigns set isLotW_QSL=? WHERE ID=?";
-//            db.execSQL(querySQL, new Object[]{newRecord.isLotW_QSL ? "1" : "0", newRecord.id});
-//        }
         return newRecord.id != -1;//
     }
 
@@ -1252,18 +1251,16 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 , record.getQso_date()
                 , record.getTime_on()
                 , record.getMode()});
-        if (cursor.getCount() > 0) {
-            cursor.moveToFirst();
-            newRecord.isLotW_QSL = cursor.getInt(cursor.getColumnIndex("isLotW_QSL")) == 1
-                    || record.isLotW_QSL;
-            newRecord.id = cursor.getLong(cursor.getColumnIndex("id"));
+        try {
+            if (cursor.getCount() > 0) {
+                cursor.moveToFirst();
+                newRecord.isLotW_QSL = cursor.getInt(cursor.getColumnIndex("isLotW_QSL")) == 1
+                        || record.isLotW_QSL;
+                newRecord.id = cursor.getLong(cursor.getColumnIndex("id"));
+            }
+        } finally {
+            cursor.close();
         }
-        cursor.close();
-
-//        if (newRecord.id != -1) {//Record already exists
-//            querySQL = "UPDATE   QSLTable set isLotW_QSL=? WHERE ID=?";
-//            db.execSQL(querySQL, new Object[]{newRecord.isLotW_QSL ? "1" : "0", newRecord.id});
-//        }
         return newRecord.id != -1;//
     }
 
@@ -1458,16 +1455,19 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         protected Void doInBackground(Void... voids) {
             String querySQL = "select keyName,Value from config where KeyName =?";
             Cursor cursor = db.rawQuery(querySQL, new String[]{KeyName.toString()});
-            if (cursor.moveToFirst()) {
-                if (afterQueryConfig != null) {
-                    afterQueryConfig.doOnAfterQueryConfig(KeyName, cursor.getString(cursor.getColumnIndex("Value")));
+            try {
+                if (cursor.moveToFirst()) {
+                    if (afterQueryConfig != null) {
+                        afterQueryConfig.doOnAfterQueryConfig(KeyName, cursor.getString(cursor.getColumnIndex("Value")));
+                    }
+                } else {
+                    if (afterQueryConfig != null) {
+                        afterQueryConfig.doOnAfterQueryConfig(KeyName, "");
+                    }
                 }
-            } else {
-                if (afterQueryConfig != null) {
-                    afterQueryConfig.doOnAfterQueryConfig(KeyName, "");
-                }
+            } finally {
+                cursor.close();
             }
-            cursor.close();
             return null;
         }
     }
@@ -1494,17 +1494,19 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             String sql = String.format("select count(%s) as a FROM %s where %s=\"%s\" limit 1"
                     , fieldName, tableName, fieldName, callSign);
             Cursor cursor = db.rawQuery(sql, null);
-            if (cursor.moveToFirst()) {
-                if (onGetCallsign != null) {
-                    onGetCallsign.doOnAfterGetCallSign(cursor.getInt(cursor.getColumnIndex("a")) > 0);
+            try {
+                if (cursor.moveToFirst()) {
+                    if (onGetCallsign != null) {
+                        onGetCallsign.doOnAfterGetCallSign(cursor.getInt(cursor.getColumnIndex("a")) > 0);
+                    }
+                } else {
+                    if (onGetCallsign != null) {
+                        onGetCallsign.doOnAfterGetCallSign(false);
+                    }
                 }
-            } else {
-                if (onGetCallsign != null) {
-                    onGetCallsign.doOnAfterGetCallSign(false);
-                }
-
+            } finally {
+                cursor.close();
             }
-            cursor.close();
             return null;
         }
     }
@@ -1749,14 +1751,16 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             callsigns.add(GeneralVariables.getStringFromResource(R.string.band_total));
             callsigns.add("---------------------------------------");
             int sum = 0;
-            while (cursor.moveToNext()) {
-                long s = cursor.getLong(cursor.getColumnIndex("BAND")); //Get band
-                int total = cursor.getInt(cursor.getColumnIndex("c")); //Get count
-                callsigns.add(String.format("%.3fMHz \t %d", s / 1000000f, total));
-                sum = sum + total;
+            try {
+                while (cursor.moveToNext()) {
+                    long s = cursor.getLong(cursor.getColumnIndex("BAND")); //Get band
+                    int total = cursor.getInt(cursor.getColumnIndex("c")); //Get count
+                    callsigns.add(String.format("%.3fMHz \t %d", s / 1000000f, total));
+                    sum = sum + total;
+                }
+            } finally {
+                cursor.close();
             }
-            callsigns.add(String.format("-----------Total %d -----------", sum));
-            cursor.close();
             if (onAffterQueryFollowCallsigns != null) {
                 onAffterQueryFollowCallsigns.doOnAfterQueryFollowCallsigns(callsigns);
             }
@@ -1785,14 +1789,16 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             //callsigns.add(GeneralVariables.getStringFromResource(R.string.band_total));
             callsigns.add("---------------------------------------");
             int sum = 0;
-            while (cursor.moveToNext()) {
-                String date = cursor.getString(cursor.getColumnIndex("t")); //Get date
-                int total = cursor.getInt(cursor.getColumnIndex("c")); //Get count
-                callsigns.add(String.format("%s \t %d ", date, total));
-                sum = sum + total;
+            try {
+                while (cursor.moveToNext()) {
+                    String date = cursor.getString(cursor.getColumnIndex("t")); //Get date
+                    int total = cursor.getInt(cursor.getColumnIndex("c")); //Get count
+                    callsigns.add(String.format("%s \t %d ", date, total));
+                    sum = sum + total;
+                }
+            } finally {
+                cursor.close();
             }
-            callsigns.add(String.format("-----------Total %d -----------", sum));
-            cursor.close();
             if (onAffterQueryFollowCallsigns != null) {
                 onAffterQueryFollowCallsigns.doOnAfterQueryFollowCallsigns(callsigns);
             }
@@ -1819,14 +1825,17 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             String querySQL = "select callsign from followCallsigns";
             Cursor cursor = db.rawQuery(querySQL, new String[]{});
             ArrayList<String> callsigns = new ArrayList<>();
-            while (cursor.moveToNext()) {
-                @SuppressLint("Range")
-                String s = cursor.getString(cursor.getColumnIndex("callsign")); //Get the first column value (index starts at 0)
-                if (s != null) {
-                    callsigns.add(s);
+            try {
+                while (cursor.moveToNext()) {
+                    @SuppressLint("Range")
+                    String s = cursor.getString(cursor.getColumnIndex("callsign")); //Get the first column value (index starts at 0)
+                    if (s != null) {
+                        callsigns.add(s);
+                    }
                 }
+            } finally {
+                cursor.close();
             }
-            cursor.close();
             if (onAffterQueryFollowCallsigns != null) {
                 onAffterQueryFollowCallsigns.doOnAfterQueryFollowCallsigns(callsigns);
             }
@@ -1849,12 +1858,14 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     "where LENGTH(grid)>3\n" +
                     "order by ID ";
             Cursor cursor = db.rawQuery(querySQL, null);
-            while (cursor.moveToNext()) {
-                GeneralVariables.addCallsignAndGrid(cursor.getString(cursor.getColumnIndex("callsign"))
-                        , cursor.getString(cursor.getColumnIndex("grid")));
-
+            try {
+                while (cursor.moveToNext()) {
+                    GeneralVariables.addCallsignAndGrid(cursor.getString(cursor.getColumnIndex("callsign"))
+                            , cursor.getString(cursor.getColumnIndex("grid")));
+                }
+            } finally {
+                cursor.close();
             }
-            cursor.close();
             return null;
         }
     }
@@ -1884,13 +1895,14 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     "group by qc.gridsquare\n" +
                     "ORDER by SUM(isQSL)+SUM(isLotW_QSL) desc";
             Cursor cursor = db.rawQuery(querySQL, null);
-
-            while (cursor.moveToNext()) {
-                grids.put(cursor.getString(cursor.getColumnIndex("gridsquare"))
-                        , cursor.getInt(cursor.getColumnIndex("isQSL")) != 0);
-
+            try {
+                while (cursor.moveToNext()) {
+                    grids.put(cursor.getString(cursor.getColumnIndex("gridsquare"))
+                            , cursor.getInt(cursor.getColumnIndex("isQSL")) != 0);
+                }
+            } finally {
+                cursor.close();
             }
-            cursor.close();
             if (onGetQsoGrids != null) {
                 onGetQsoGrids.onAfterQuery(grids);
             }
@@ -1940,32 +1952,35 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     limitStr;
             Cursor cursor = db.rawQuery(querySQL, new String[]{"%" + callsign + "%"});
             ArrayList<QSLRecordStr> records = new ArrayList<>();
-            while (cursor.moveToNext()) {
-                QSLRecordStr record = new QSLRecordStr();
-                record.id = cursor.getInt(cursor.getColumnIndex("id"));
-                record.setCall(cursor.getString(cursor.getColumnIndex("call")));
-                record.isQSL = cursor.getInt(cursor.getColumnIndex("isQSL")) == 1;
-                record.isLotW_import = cursor.getInt(cursor.getColumnIndex("isLotW_import")) == 1;
-                record.isLotW_QSL = cursor.getInt(cursor.getColumnIndex("isLotW_QSL")) == 1;
-                record.setGridsquare(cursor.getString(cursor.getColumnIndex("gridsquare")));
-                record.setMode(cursor.getString(cursor.getColumnIndex("mode")));
-                record.setRst_sent(cursor.getString(cursor.getColumnIndex("rst_sent")));
-                record.setRst_rcvd(cursor.getString(cursor.getColumnIndex("rst_rcvd")));
-                record.setTime_on(String.format("%s-%s"
-                        , cursor.getString(cursor.getColumnIndex("qso_date"))
-                        , cursor.getString(cursor.getColumnIndex("time_on"))));
+            try {
+                while (cursor.moveToNext()) {
+                    QSLRecordStr record = new QSLRecordStr();
+                    record.id = cursor.getInt(cursor.getColumnIndex("id"));
+                    record.setCall(cursor.getString(cursor.getColumnIndex("call")));
+                    record.isQSL = cursor.getInt(cursor.getColumnIndex("isQSL")) == 1;
+                    record.isLotW_import = cursor.getInt(cursor.getColumnIndex("isLotW_import")) == 1;
+                    record.isLotW_QSL = cursor.getInt(cursor.getColumnIndex("isLotW_QSL")) == 1;
+                    record.setGridsquare(cursor.getString(cursor.getColumnIndex("gridsquare")));
+                    record.setMode(cursor.getString(cursor.getColumnIndex("mode")));
+                    record.setRst_sent(cursor.getString(cursor.getColumnIndex("rst_sent")));
+                    record.setRst_rcvd(cursor.getString(cursor.getColumnIndex("rst_rcvd")));
+                    record.setTime_on(String.format("%s-%s"
+                            , cursor.getString(cursor.getColumnIndex("qso_date"))
+                            , cursor.getString(cursor.getColumnIndex("time_on"))));
 
-                record.setTime_off(String.format("%s-%s"
-                        , cursor.getString(cursor.getColumnIndex("qso_date_off"))
-                        , cursor.getString(cursor.getColumnIndex("time_off"))));
-                record.setBand(cursor.getString(cursor.getColumnIndex("band")));//Band wavelength
-                record.setFreq(cursor.getString(cursor.getColumnIndex("freq")));//Frequency
-                record.setStation_callsign(cursor.getString(cursor.getColumnIndex("station_callsign")));
-                record.setMy_gridsquare(cursor.getString(cursor.getColumnIndex("my_gridsquare")));
-                record.setComment(cursor.getString(cursor.getColumnIndex("comment")));
-                records.add(record);
+                    record.setTime_off(String.format("%s-%s"
+                            , cursor.getString(cursor.getColumnIndex("qso_date_off"))
+                            , cursor.getString(cursor.getColumnIndex("time_off"))));
+                    record.setBand(cursor.getString(cursor.getColumnIndex("band")));//Band wavelength
+                    record.setFreq(cursor.getString(cursor.getColumnIndex("freq")));//Frequency
+                    record.setStation_callsign(cursor.getString(cursor.getColumnIndex("station_callsign")));
+                    record.setMy_gridsquare(cursor.getString(cursor.getColumnIndex("my_gridsquare")));
+                    record.setComment(cursor.getString(cursor.getColumnIndex("comment")));
+                    records.add(record);
+                }
+            } finally {
+                cursor.close();
             }
-            cursor.close();
             if (onQueryQSLRecordCallsign != null) {
                 onQueryQSLRecordCallsign.afterQuery(records);
             }
@@ -2040,27 +2055,30 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
             Cursor cursor = db.rawQuery(querySQL, new String[]{"%" + callsign + "%"});
             ArrayList<QSLCallsignRecord> records = new ArrayList<>();
-            while (cursor.moveToNext()) {
-                QSLCallsignRecord record = new QSLCallsignRecord();
-                record.id = cursor.getInt(cursor.getColumnIndex("id"));
-                record.setCallsign(cursor.getString(cursor.getColumnIndex("callsign")));
-                record.isQSL = cursor.getInt(cursor.getColumnIndex("isQSL")) == 1;
-                record.isLotW_QSL = cursor.getInt(cursor.getColumnIndex("isLotW_QSL")) == 1;
-                int idxCl = cursor.getColumnIndex("synced_cloudlog");
-                int idxQrz = cursor.getColumnIndex("synced_qrz");
-                record.syncedCloudlog = idxCl >= 0 && cursor.getInt(idxCl) == 1;
-                record.syncedQrz = idxQrz >= 0 && cursor.getInt(idxQrz) == 1;
-                record.setLastTime(cursor.getString(cursor.getColumnIndex("last_time")));
-                int idxTimeOn = cursor.getColumnIndex("last_time_on");
-                if (idxTimeOn >= 0) {
-                    record.setTimeOn(cursor.getString(idxTimeOn));
+            try {
+                while (cursor.moveToNext()) {
+                    QSLCallsignRecord record = new QSLCallsignRecord();
+                    record.id = cursor.getInt(cursor.getColumnIndex("id"));
+                    record.setCallsign(cursor.getString(cursor.getColumnIndex("callsign")));
+                    record.isQSL = cursor.getInt(cursor.getColumnIndex("isQSL")) == 1;
+                    record.isLotW_QSL = cursor.getInt(cursor.getColumnIndex("isLotW_QSL")) == 1;
+                    int idxCl = cursor.getColumnIndex("synced_cloudlog");
+                    int idxQrz = cursor.getColumnIndex("synced_qrz");
+                    record.syncedCloudlog = idxCl >= 0 && cursor.getInt(idxCl) == 1;
+                    record.syncedQrz = idxQrz >= 0 && cursor.getInt(idxQrz) == 1;
+                    record.setLastTime(cursor.getString(cursor.getColumnIndex("last_time")));
+                    int idxTimeOn = cursor.getColumnIndex("last_time_on");
+                    if (idxTimeOn >= 0) {
+                        record.setTimeOn(cursor.getString(idxTimeOn));
+                    }
+                    record.setMode(cursor.getString(cursor.getColumnIndex("mode")));
+                    record.setGrid(cursor.getString(cursor.getColumnIndex("grid")));
+                    record.setBand(cursor.getString(cursor.getColumnIndex("band")));
+                    records.add(record);
                 }
-                record.setMode(cursor.getString(cursor.getColumnIndex("mode")));
-                record.setGrid(cursor.getString(cursor.getColumnIndex("grid")));
-                record.setBand(cursor.getString(cursor.getColumnIndex("band")));
-                records.add(record);
+            } finally {
+                cursor.close();
             }
-            cursor.close();
             if (onQueryQSLCallsign != null) {
                 onQueryQSLCallsign.afterQuery(records);
             }
@@ -2082,14 +2100,17 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             Cursor cursor = db.rawQuery(querySQL, new String[]{
                     BaseRigOperation.getMeterFromFreq(GeneralVariables.band)});
             ArrayList<String> callsigns = new ArrayList<>();
-            while (cursor.moveToNext()) {
-                @SuppressLint("Range")
-                String s = cursor.getString(cursor.getColumnIndex("call"));
-                if (s != null) {
-                    callsigns.add(s);
+            try {
+                while (cursor.moveToNext()) {
+                    @SuppressLint("Range")
+                    String s = cursor.getString(cursor.getColumnIndex("call"));
+                    if (s != null) {
+                        callsigns.add(s);
+                    }
                 }
+            } finally {
+                cursor.close();
             }
-            cursor.close();
             GeneralVariables.QSL_Callsign_list = callsigns;
 
             querySQL = "select distinct [call] from QSLTable where band<>?";
@@ -2097,14 +2118,17 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     BaseRigOperation.getMeterFromFreq(GeneralVariables.band)});
 
             ArrayList<String> other_callsigns = new ArrayList<>();
-            while (cursor.moveToNext()) {
-                @SuppressLint("Range")
-                String s = cursor.getString(cursor.getColumnIndex("call"));
-                if (s != null) {
-                    other_callsigns.add(s);
+            try {
+                while (cursor.moveToNext()) {
+                    @SuppressLint("Range")
+                    String s = cursor.getString(cursor.getColumnIndex("call"));
+                    if (s != null) {
+                        other_callsigns.add(s);
+                    }
                 }
+            } finally {
+                cursor.close();
             }
-            cursor.close();
             GeneralVariables.QSL_Callsign_list_other_band = other_callsigns;
 
             // Load distinct 4-char worked grids (any band) into in-memory set
@@ -2112,14 +2136,17 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     " where gridsquare is not null and length(gridsquare) >= 4";
             cursor = db.rawQuery(querySQL, null);
             java.util.HashSet<String> grids = new java.util.HashSet<>();
-            while (cursor.moveToNext()) {
-                @SuppressLint("Range")
-                String g = cursor.getString(cursor.getColumnIndex("g"));
-                if (g != null && g.length() >= 4) {
-                    grids.add(g);
+            try {
+                while (cursor.moveToNext()) {
+                    @SuppressLint("Range")
+                    String g = cursor.getString(cursor.getColumnIndex("g"));
+                    if (g != null && g.length() >= 4) {
+                        grids.add(g);
+                    }
                 }
+            } finally {
+                cursor.close();
             }
-            cursor.close();
             GeneralVariables.QSL_Grid_list = grids;
 
             // Load distinct hunted POTA park refs (any band) into in-memory set.
@@ -2255,12 +2282,15 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         private String getConfigByKey(String KeyName) {
             String querySQL = "select keyName,Value from config where KeyName =?";
             Cursor cursor = db.rawQuery(querySQL, new String[]{KeyName});
-            String result = "";
-            if (cursor.moveToFirst()) {
-                result = cursor.getString(cursor.getColumnIndex("Value"));
+            try {
+                String result = "";
+                if (cursor.moveToFirst()) {
+                    result = cursor.getString(cursor.getColumnIndex("Value"));
+                }
+                return result;
+            } finally {
+                cursor.close();
             }
-            cursor.close();
-            return result;
         }
 
         @SuppressLint("Range")
@@ -2269,6 +2299,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
             String querySQL = "select keyName,Value from config ";
             Cursor cursor = db.rawQuery(querySQL, null);
+            try {
             while (cursor.moveToNext()) {
                 @SuppressLint("Range")
                 //String result = "";
@@ -2353,13 +2384,14 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
 
                 if (name.equalsIgnoreCase("excludedBands")) {
-                    GeneralVariables.excludedBands.clear();
+                    java.util.HashSet<String> newSet = new java.util.HashSet<>();
                     if (!result.trim().isEmpty()) {
                         for (String w : result.split(",")) {
                             String t = w.trim();
-                            if (!t.isEmpty()) GeneralVariables.excludedBands.add(t);
+                            if (!t.isEmpty()) newSet.add(t);
                         }
                     }
+                    GeneralVariables.excludedBands = newSet;
                 }
 
                 if (name.equalsIgnoreCase("msgMode")) {
@@ -2622,7 +2654,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
             }
 
-            cursor.close();
+            } finally {
+                cursor.close();
+            }
 
             GetAllQSLCallsign.get(db);//Get previously contacted callsigns
 
