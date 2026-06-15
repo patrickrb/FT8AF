@@ -370,8 +370,7 @@ fun RadioAudioSettings(
                 // Never let the user hide every band; at least one must remain.
                 if (updated.size >= OperationBand.getAllWaveLengths().size) return@BandToggleDialog
                 excludedBands = updated
-                GeneralVariables.excludedBands.clear()
-                GeneralVariables.excludedBands.addAll(updated)
+                GeneralVariables.excludedBands = java.util.HashSet(updated)
                 mainViewModel.databaseOpr.writeConfig(
                     "excludedBands", GeneralVariables.excludedBandsToCsv(), null,
                 )

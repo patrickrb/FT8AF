@@ -383,7 +383,7 @@ public class GeneralVariables {
     public static MutableLiveData<Integer> mutableBandChange = new MutableLiveData<>();//Band index change
     //Band names (e.g. "6m","60m") the user has hidden from the band pickers. Empty = show all.
     //Persisted in config as a comma-separated list under the key "excludedBands".
-    public static java.util.HashSet<String> excludedBands = new java.util.HashSet<>();
+    public static volatile java.util.HashSet<String> excludedBands = new java.util.HashSet<>();
 
     public static boolean isBandExcluded(String waveLength) {
         return excludedBands.contains(waveLength);
