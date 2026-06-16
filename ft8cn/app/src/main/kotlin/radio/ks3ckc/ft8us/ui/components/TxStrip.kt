@@ -18,8 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -318,19 +316,16 @@ fun TxStrip(
                 }
 
                 // Slider
-                Slider(
-                    value = txVolume.toFloat(),
+                IntSlider(
+                    value = txVolume,
                     onValueChange = { v ->
-                        val clamped = v.toInt().coerceIn(0, 100)
-                        onVolumeChange(clamped)
+                        onVolumeChange(v.coerceIn(0, 100))
                     },
                     onValueChangeFinished = onVolumeChangeFinished,
                     valueRange = 0f..100f,
                     modifier = Modifier.weight(1f),
-                    colors = SliderDefaults.colors(
-                        thumbColor = Accent,
-                        activeTrackColor = Accent,
-                    ),
+                    thumbColor = Accent,
+                    activeTrackColor = Accent,
                 )
 
                 // Plus button
