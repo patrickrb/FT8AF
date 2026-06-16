@@ -21,11 +21,11 @@ git worktree add ../NEXT-FT8CN-<short-task-name> -b feat/<task>
 
 Two gotchas for a fresh worktree:
 
-- The `ft8cn/app/src/main/cpp/` native sources (`ft8_lib`, `ft8cn_glue`,
+- The `ft8af/app/src/main/cpp/` native sources (`ft8_lib`, `ft8af_glue`,
   `libsamplerate`) are **untracked** (see `git status` / memory
   `ft8af-untracked-native-sources.md`), so a new worktree won't have them and the
   NDK build fails. Copy them over from the primary checkout before building.
-- Build/install still uses the Windows wrapper from inside the worktree's `ft8cn`
+- Build/install still uses the Windows wrapper from inside the worktree's `ft8af`
   dir (`cmd.exe /c "gradlew.bat installDebug"`).
 
 Remove the worktree when the branch is merged: `git worktree remove <path>`.
@@ -41,13 +41,13 @@ extract the decision/geometry logic into a plain top-level `internal` function
 or class (e.g. `buildQsoLog`, `QsoPathProjection`) and test that. Keep the
 Composable a thin wrapper that just calls the extracted logic.
 
-Tests live in `ft8cn/app/src/test/` (Kotlin under `.../kotlin`, Java under
+Tests live in `ft8af/app/src/test/` (Kotlin under `.../kotlin`, Java under
 `.../java`), use JUnit4 + Truth (`assertThat`), and add
 `@RunWith(RobolectricTestRunner::class)` when the code under test touches
 Android/Play-Services types (e.g. anything reaching `MaidenheadGrid`,
 `GeneralVariables`, `LatLng`). Pure math/logic needs no runner.
 
-Run from the worktree's `ft8cn` dir:
+Run from the worktree's `ft8af` dir:
 
 ```
 cmd.exe /c "gradlew.bat testDebugUnitTest"
@@ -63,7 +63,7 @@ The WSL shell has no Linux JDK, so `./gradlew` fails with `JAVA_HOME is not set`
 Use the Windows wrapper instead — it picks up the Android Studio JBR automatically:
 
 ```
-cd ft8cn && cmd.exe /c "gradlew.bat installDebug"
+cd ft8af && cmd.exe /c "gradlew.bat installDebug"
 ```
 
 The user's phone is a Pixel 8 (transport_id changes; identify by `adb devices -l`

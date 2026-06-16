@@ -30,4 +30,4 @@ jobs:
         run: clang --version
 
       - name: Build & run golden tests
-        run: bash ft8cn/app/src/main/cpp/ft8cn_glue/run_host_tests.sh
+        run: bash ft8af/app/src/main/cpp/ft8af_glue/run_host_tests.sh
