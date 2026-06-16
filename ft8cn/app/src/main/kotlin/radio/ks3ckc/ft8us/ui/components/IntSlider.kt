@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -17,6 +18,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
@@ -56,12 +62,12 @@ internal fun pixelToValue(
 internal fun IntSlider(
     value: Int,
     onValueChange: (Int) -> Unit,
+    thumbColor: Color,
+    activeTrackColor: Color,
     modifier: Modifier = Modifier,
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
     onValueChangeFinished: (() -> Unit)? = null,
-    thumbColor: Color = Color.Unspecified,
-    activeTrackColor: Color = Color.Unspecified,
-    inactiveTrackColor: Color = Color.Unspecified,
+    inactiveTrackColor: Color = activeTrackColor.copy(alpha = 0.24f),
 ) {
     val rangeStart = valueRange.start
     val rangeEnd = valueRange.endInclusive
@@ -70,8 +76,11 @@ internal fun IntSlider(
     var rawPos by remember { mutableFloatStateOf(value.toFloat()) }
 
     // Sync when value changes externally (e.g. +/- buttons).
-    if (shouldSyncSliderPos(rawPos, value)) {
-        rawPos = value.toFloat()
+    // Done in SideEffect to avoid state writes during composition.
+    SideEffect {
+        if (shouldSyncSliderPos(rawPos, value)) {
+            rawPos = value.toFloat().coerceIn(rangeStart, rangeEnd)
+        }
     }
 
     val fraction = if (rangeEnd > rangeStart) {
@@ -80,16 +89,25 @@ internal fun IntSlider(
 
     val thumbRadius = 10.dp
     val trackHeight = 4.dp
-    val inactiveColor = if (inactiveTrackColor != Color.Unspecified) {
-        inactiveTrackColor
-    } else {
-        thumbColor.copy(alpha = 0.24f)
-    }
 
     Box(
         modifier = modifier
             .height(48.dp) // Minimum touch target
             .fillMaxWidth()
+            .semantics {
+                progressBarRangeInfo = ProgressBarRangeInfo(
+                    current = value.toFloat(),
+                    range = rangeStart..rangeEnd,
+                )
+                stateDescription = "${value.toFloat().roundToInt()}"
+                setProgress { targetValue ->
+                    val clamped = targetValue.roundToInt()
+                        .coerceIn(rangeStart.roundToInt(), rangeEnd.roundToInt())
+                    onValueChange(clamped)
+                    onValueChangeFinished?.invoke()
+                    true
+                }
+            }
             .pointerInput(rangeStart, rangeEnd) {
                 detectTapGestures { offset ->
                     val padding = thumbRadius.toPx()
@@ -135,7 +153,7 @@ internal fun IntSlider(
 
             // Inactive track
             drawLine(
-                color = inactiveColor,
+                color = inactiveTrackColor,
                 start = Offset(activeEndX, centerY),
                 end = Offset(trackEndX, centerY),
                 strokeWidth = trackHeightPx,
