@@ -12,6 +12,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -55,15 +56,17 @@ void synth_gfsk_offset(const uint8_t *symbols, int n_sym, float f0,
 
     float dphi_peak = 2 * (float)M_PI * hmod / n_spsym;
 
-    // VLA for the extended dphi array (n_wave + 2 guard symbols).
-    float dphi[n_wave + 2 * n_spsym];
+    // Heap-allocate the extended dphi array (n_wave + 2 guard symbols).
+    // At 12 kHz this is ~607 KiB — too large for default stack sizes.
+    int dphi_len = n_wave + 2 * n_spsym;
+    float *dphi = (float *)malloc(dphi_len * sizeof(float));
+    float *pulse = (float *)malloc(3 * n_spsym * sizeof(float));
 
     // Initialise every sample to the base-frequency phase increment.
-    for (int i = 0; i < n_wave + 2 * n_spsym; ++i)
+    for (int i = 0; i < dphi_len; ++i)
         dphi[i] = 2 * (float)M_PI * f0 / signal_rate;
 
     // Compute the Gaussian pulse shape (3 symbol periods wide).
-    float pulse[3 * n_spsym];
     gfsk_pulse(n_spsym, symbol_bt, pulse);
 
     // Accumulate each symbol's frequency deviation through the pulse.
@@ -98,4 +101,7 @@ void synth_gfsk_offset(const uint8_t *symbols, int n_sym, float f0,
         signal[offset + i]              *= env;
         signal[offset + n_wave - 1 - i] *= env;
     }
+
+    free(dphi);
+    free(pulse);
 }

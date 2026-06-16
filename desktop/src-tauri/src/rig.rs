@@ -13,6 +13,7 @@
 use serde::{Deserialize, Serialize};
 use std::ffi::CString;
 use std::os::raw::{c_char, c_int, c_long, c_void};
+use std::io::Write;
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

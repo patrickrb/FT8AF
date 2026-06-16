@@ -48,8 +48,11 @@ pub fn query_offset_ms(server: &str) -> anyhow::Result<i64> {
     let t1 = util::now_unix_ms();
     sock.send_to(&pkt, addr)?;
     let mut buf = [0u8; 48];
-    let n = sock.recv(&mut buf)?;
+    let (n, src) = sock.recv_from(&mut buf)?;
     let t4 = util::now_unix_ms();
+    if src.ip() != addr.ip() {
+        anyhow::bail!("NTP reply from unexpected source {src}, expected {addr}");
+    }
     if n < 48 {
         anyhow::bail!("short NTP reply ({n} bytes)");
     }

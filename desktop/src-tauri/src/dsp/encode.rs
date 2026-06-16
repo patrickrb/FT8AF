@@ -44,7 +44,17 @@ pub fn add_crc(payload: &[u8; 10]) -> [u8; 12] {
 }
 
 /// Render `tones` as a GFSK waveform into `signal[offset..]`.
+///
+/// # Panics
+/// Panics if `signal` is too short for the waveform starting at `offset`.
 pub fn synth_gfsk(tones: &[u8], f0: f32, sample_rate: i32, signal: &mut [f32], offset: usize) {
+    let n_spsym = (0.5 + sample_rate as f64 * FT8_SYMBOL_PERIOD as f64) as usize;
+    let n_wave = tones.len() * n_spsym;
+    assert!(
+        offset + n_wave <= signal.len(),
+        "synth_gfsk: signal buffer too short (need {} samples from offset {}, have {})",
+        n_wave, offset, signal.len(),
+    );
     unsafe {
         ffi::synth_gfsk_offset(
             tones.as_ptr(),
