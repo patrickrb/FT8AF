@@ -111,6 +111,8 @@
     <string name="tx_hunt">Hunt</string>
     <string name="tx_call_cq">Call CQ</string>
     <string name="tx_stop">Stop</string>
+    <string name="tx_volume_decrease">Decrease TX volume</string>
+    <string name="tx_volume_increase">Increase TX volume</string>
 
     <!-- ===== Hound (DXpedition) setup ===== -->
     <string name="hound_title">Work a DXpedition (Hound)</string>

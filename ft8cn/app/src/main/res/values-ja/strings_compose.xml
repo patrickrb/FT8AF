@@ -498,4 +498,11 @@
     <string name="settings_time_suggest_label">最近の平均 DT: %1$s</string>
     <string name="settings_time_suggest_none">まだデコードがありません — 受信を開始すると提案が表示されます。</string>
     <string name="settings_time_suggest_apply">提案された補正を適用</string>
+    <!-- Untranslated — added for parity; translate when localization pass runs -->
+    <string name="settings_show_volume_slider">Show Volume Slider</string>
+    <string name="settings_show_volume_slider_desc">Display TX volume slider on main screen</string>
+    <string name="settings_hunt_cq">Hunt + CQ</string>
+    <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
+    <string name="tx_volume_decrease">Decrease TX volume</string>
+    <string name="tx_volume_increase">Increase TX volume</string>
 </resources>
