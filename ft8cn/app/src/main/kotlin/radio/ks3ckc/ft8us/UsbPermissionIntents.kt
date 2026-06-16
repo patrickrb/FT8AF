@@ -13,7 +13,7 @@ import android.os.Build
  *
  * 1. **API 31+ (Android 12 / S):** `FLAG_MUTABLE` is required so the system
  *    can attach `EXTRA_PERMISSION_GRANTED` to the result intent. Older APIs
- *    use `FLAG_IMMUTABLE`.
+ *    pass `0` (no mutability flag) to preserve legacy behaviour.
  *
  * 2. **API 34+ (Android 14 / U) with targetSdk 34+:** A mutable
  *    `PendingIntent` backed by an *implicit* intent (no component or package)
@@ -35,7 +35,7 @@ fun createUsbPermissionIntent(context: Context, action: String): PendingIntent {
     val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         PendingIntent.FLAG_MUTABLE
     } else {
-        PendingIntent.FLAG_IMMUTABLE
+        0
     }
     return PendingIntent.getBroadcast(context, 0, intent, flags)
 }

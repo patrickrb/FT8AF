@@ -1,7 +1,6 @@
 package radio.ks3ckc.ft8us
 
 import android.app.PendingIntent
-import android.os.Build
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
@@ -18,11 +17,11 @@ import org.robolectric.Shadows
  * `IllegalArgumentException` at runtime.
  *
  * Robolectric runs at the default SDK level (matching compileSdk 35).
- * The utility function branches on [Build.VERSION.SDK_INT] at runtime,
+ * The utility function branches on `Build.VERSION.SDK_INT` at runtime,
  * so these tests verify the structural invariants that hold at *every*
  * API level: the intent is always explicit, and the action is propagated.
- * The FLAG_MUTABLE / FLAG_IMMUTABLE branching is tested indirectly
- * because the default SDK >= 31.
+ * The FLAG_MUTABLE / no-flag branching is tested indirectly because the
+ * default SDK >= 31.
  */
 @RunWith(RobolectricTestRunner::class)
 class UsbPermissionIntentsTest {
