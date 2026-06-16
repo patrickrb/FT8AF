@@ -155,7 +155,7 @@
     <string name="decode_empty_forme_title">Nessuna chiamata per te</string>
     <string name="decode_empty_forme_body">Nessuna stazione sta chiamando il tuo nominativo al momento.</string>
     <string name="decode_empty_default_title">Nessun segnale decodificato</string>
-    <string name="decode_empty_default_body">In attesa di segnali FT8...</string>
+    <string name="decode_empty_default_body">In attesa di segnali %s...</string>
     <string name="decode_label_calling">→ CHIAMA</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ PER TE</string>
