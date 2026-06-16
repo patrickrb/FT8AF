@@ -245,10 +245,15 @@ public class FT8SignalListener {
         //long startTime = System.currentTimeMillis();
         for (int idx = 0; idx < num_candidates; ++idx) {
             //todo should add timeout calculation
+            ft8Message.snr = Ft8Message.SNR_UNKNOWN; // reset before each candidate
             try {// protect against decode failure
                 if (analysisDecode(idx, ft8Decoder, ft8Message, fromSource)) {
 
                     if (ft8Message.isValid) {
+                        if (!ft8Message.hasSnr()) {
+                            Log.d(TAG, "SNR not set by decoder for candidate " + idx
+                                    + " (" + ft8Message.callsignFrom + ")");
+                        }
                         Ft8Message msg = new Ft8Message(ft8Message);// using msg here because some hashed callsigns will replace <...>
                         byte[] a91 = getA91Decode(ft8Decoder, fromSource);
                         a91List.add(a91, ft8Message.freq_hz, ft8Message.time_sec);
@@ -363,7 +368,10 @@ public class FT8SignalListener {
     private boolean checkMessageSame(ArrayList<Ft8Message> ft8Messages, Ft8Message ft8Message) {
         for (Ft8Message msg : ft8Messages) {
             if (msg.getMessageText().equals(ft8Message.getMessageText())) {
-                if (msg.snr < ft8Message.snr) {
+                // Prefer known SNR over unknown; when both are known, keep the higher value.
+                if (!msg.hasSnr() && ft8Message.hasSnr()) {
+                    msg.snr = ft8Message.snr;
+                } else if (msg.hasSnr() && ft8Message.hasSnr() && msg.snr < ft8Message.snr) {
                     msg.snr = ft8Message.snr;
                 }
                 return true;

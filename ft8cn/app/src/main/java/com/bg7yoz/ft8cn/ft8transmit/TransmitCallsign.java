@@ -50,10 +50,11 @@ public class TransmitCallsign {
 
     @SuppressLint("DefaultLocale")
     public String getSnr(){
-        if (snr>0){
-            return String.format("+%d",snr);
+        int s = (snr == com.bg7yoz.ft8cn.Ft8Message.SNR_UNKNOWN) ? 0 : snr;
+        if (s>0){
+            return String.format("+%d",s);
         }else {
-            return String.format("%d",snr);
+            return String.format("%d",s);
         }
     }
 }

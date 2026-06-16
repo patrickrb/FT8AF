@@ -191,7 +191,7 @@ object PskReporterSender {
         return SpotRecord(
             senderCallsign = cleanCall,
             frequencyHz = freqHz,
-            snr = msg.snr,
+            snr = if (msg.hasSnr()) msg.snr else 0,
             mode = mode,
             senderLocator = msg.maidenGrid?.takeIf { it.length >= 4 },
             flowStartSeconds = msg.utcTime / 1000,

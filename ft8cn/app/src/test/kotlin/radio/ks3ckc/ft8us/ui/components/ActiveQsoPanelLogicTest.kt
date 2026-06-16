@@ -195,4 +195,36 @@ class ActiveQsoPanelLogicTest {
         assertThat(result).hasSize(1)
         assertThat(result[0].direction).isEqualTo(QsoLogEntry.Direction.RX)
     }
+
+    @Test
+    fun `message with unknown SNR produces null snr in QsoLogEntry`() {
+        // When the decoder doesn't set SNR, the entry should have null snr.
+        val unknownSnrMsg = Ft8Message(FT8Common.FT8_MODE).apply {
+            callsignTo = myCall
+            callsignFrom = target
+            extraInfo = "RR73"
+            utcTime = 1_000L
+            // snr defaults to SNR_UNKNOWN
+        }
+        val result = buildQsoLog(listOf(unknownSnrMsg), target, myCall, emptyList())
+        assertThat(result).hasSize(1)
+        assertThat(result[0].snr).isNull()
+    }
+
+    @Test
+    fun `message with known SNR produces non-null snr in QsoLogEntry`() {
+        val list = listOf(msg(myCall, target, 1_000L, snr = -12))
+        val result = buildQsoLog(list, target, myCall, emptyList())
+        assertThat(result).hasSize(1)
+        assertThat(result[0].snr).isEqualTo(-12)
+    }
+
+    @Test
+    fun `message with zero SNR produces zero snr in QsoLogEntry`() {
+        // 0 dB is a legitimate SNR value — not unknown.
+        val list = listOf(msg(myCall, target, 1_000L, snr = 0))
+        val result = buildQsoLog(list, target, myCall, emptyList())
+        assertThat(result).hasSize(1)
+        assertThat(result[0].snr).isEqualTo(0)
+    }
 }
