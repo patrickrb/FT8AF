@@ -13,6 +13,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Build;
+import android.util.Log;
 
 import java.io.IOException;
 import java.security.InvalidParameterException;
@@ -22,6 +24,7 @@ import java.util.concurrent.Executors;
 
 public class BluetoothSerialSocket implements Runnable {
 
+    private static final String TAG = "BluetoothSerialSocket";
     private static final UUID BLUETOOTH_SPP = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
     private final BroadcastReceiver disconnectBroadcastReceiver;
@@ -57,7 +60,15 @@ public class BluetoothSerialSocket implements Runnable {
      */
     void connect(BluetoothSerialListener listener) throws IOException {
         this.listener = listener;
-        context.registerReceiver(disconnectBroadcastReceiver, new IntentFilter(BluetoothConstants.INTENT_ACTION_DISCONNECT));
+        // On API 33+ (Android 13) with targetSdk >= 33, registerReceiver() without an
+        // export flag throws SecurityException for non-system broadcasts, silently aborting
+        // the entire SPP/RFCOMM connection (issue #223 – CAT over Bluetooth).
+        IntentFilter filter = new IntentFilter(BluetoothConstants.INTENT_ACTION_DISCONNECT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(disconnectBroadcastReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            context.registerReceiver(disconnectBroadcastReceiver, filter);
+        }
         Executors.newCachedThreadPool().submit(this);
     }
 
@@ -87,11 +98,14 @@ public class BluetoothSerialSocket implements Runnable {
     @Override
     public void run() { // connect & read
         try {
+            Log.d(TAG, "run: creating RFCOMM socket to " + device.getAddress());
             socket = device.createRfcommSocketToServiceRecord(BLUETOOTH_SPP);
             socket.connect();
+            Log.d(TAG, "run: RFCOMM connected to " + device.getAddress());
             if(listener != null)
                 listener.onSerialConnect();
         } catch (Exception e) {
+            Log.e(TAG, "run: RFCOMM connect failed: " + e.getMessage());
             if(listener != null)
                 listener.onSerialConnectError(e);
             try {

@@ -24,23 +24,36 @@ import com.bg7yoz.ft8cn.ui.ToastMessage;
 
 import java.io.IOException;
 
+import radio.ks3ckc.ft8us.BluetoothAutoConnectKt;
+import radio.ks3ckc.ft8us.BtConnectorAction;
+
 public class BluetoothRigConnector extends BaseRigConnector implements ServiceConnection, BluetoothSerialListener {
     private enum Connected {False, Pending, True}
     private static BluetoothRigConnector connector=null;
 
     public static BluetoothRigConnector getInstance(Context context, String address, int controlMode){
-        if (connector!=null){
-            if (!connector.getDeviceAddress().equals(address)) {
-                if (connector.connected== Connected.True) {
+        BtConnectorAction action = BluetoothAutoConnectKt.decideBtConnectorAction(
+                connector != null,
+                connector != null && connector.getDeviceAddress().equals(address),
+                connector != null && connector.connected == Connected.True,
+                connector != null && connector.connected == Connected.Pending);
+
+        switch (action) {
+            case CREATE_NEW:
+                return new BluetoothRigConnector(context, address, controlMode);
+            case RECONNECT_NEW_ADDRESS:
+                if (connector.connected == Connected.True) {
                     connector.socketDisconnect();
                 }
                 connector.setDeviceAddress(address);
                 connector.socketConnect();
-            }
-
-            return connector;
-        }else {
-            return new BluetoothRigConnector(context,address,controlMode);
+                return connector;
+            case RETRY:
+                connector.socketConnect();
+                return connector;
+            case NO_ACTION:
+            default:
+                return connector;
         }
     }
 
@@ -92,6 +105,7 @@ public class BluetoothRigConnector extends BaseRigConnector implements ServiceCo
     @Override
     public void onSerialConnect() {
         Log.d(TAG, "onSerialConnect: connected");
+        GeneralVariables.fileLog("BT SPP: connected to " + deviceAddress);
         connected = Connected.True;
         getOnConnectorStateChanged().onConnected();
     }
@@ -99,6 +113,7 @@ public class BluetoothRigConnector extends BaseRigConnector implements ServiceCo
     @Override
     public void onSerialConnectError(Exception e) {
         Log.e(TAG, "onSerialConnectError: " + e.getMessage());
+        GeneralVariables.fileLog("BT SPP: connect error: " + e.getMessage());
         getOnConnectorStateChanged().onRunError(e.getMessage());
         socketDisconnect();
     }
@@ -117,6 +132,7 @@ public class BluetoothRigConnector extends BaseRigConnector implements ServiceCo
     @Override
     public void onSerialIoError(Exception e) {
         Log.e(TAG, "onSerialIoError: " + e.getMessage());
+        GeneralVariables.fileLog("BT SPP: I/O error: " + e.getMessage());
         getOnConnectorStateChanged().onRunError(e.getMessage());
         socketDisconnect();
     }
@@ -138,6 +154,7 @@ public class BluetoothRigConnector extends BaseRigConnector implements ServiceCo
             BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
             BluetoothDevice device = bluetoothAdapter.getRemoteDevice(deviceAddress);
             Log.d(TAG, "connecting...");
+            GeneralVariables.fileLog("BT SPP: connecting to " + deviceAddress);
             connected = Connected.Pending;
             getOnConnectorStateChanged().onConnecting();
             BluetoothSerialSocket socket = new BluetoothSerialSocket(context, device);

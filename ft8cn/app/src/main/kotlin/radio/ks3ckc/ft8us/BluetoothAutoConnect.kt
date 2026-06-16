@@ -49,6 +49,43 @@ internal fun decideBluetoothAutoConnect(
 }
 
 /**
+ * What the [BluetoothRigConnector.getInstance] singleton should do when called.
+ */
+internal enum class BtConnectorAction {
+    /** No existing connector; create one from scratch (binds the service). */
+    CREATE_NEW,
+    /** A connector exists but for a different address — disconnect and reconnect to the new one. */
+    RECONNECT_NEW_ADDRESS,
+    /** Same address, but the previous attempt failed or was disconnected — retry. */
+    RETRY,
+    /** Same address, already connected or a connection attempt is in progress — do nothing. */
+    NO_ACTION,
+}
+
+/**
+ * Pure decision logic for [BluetoothRigConnector.getInstance] (issue #223 — CAT over Bluetooth).
+ * Before this was extracted, a stale singleton whose previous connect failed would silently
+ * refuse to reconnect when the user re-entered Settings, because `getInstance()` only retried
+ * when the address *changed*.
+ *
+ * @param hasExisting  true when the static singleton is non-null
+ * @param sameAddress  true when the existing singleton's address equals the requested address
+ * @param isConnected  true when the existing singleton has an active RFCOMM link
+ * @param isPending    true when the existing singleton has a connection attempt in flight
+ */
+internal fun decideBtConnectorAction(
+    hasExisting: Boolean,
+    sameAddress: Boolean,
+    isConnected: Boolean,
+    isPending: Boolean,
+): BtConnectorAction {
+    if (!hasExisting) return BtConnectorAction.CREATE_NEW
+    if (!sameAddress) return BtConnectorAction.RECONNECT_NEW_ADDRESS
+    if (isConnected || isPending) return BtConnectorAction.NO_ACTION
+    return BtConnectorAction.RETRY
+}
+
+/**
  * Redact a Bluetooth MAC for debug.log, which users attach to bug reports. A MAC is a stable
  * device identifier, so we keep only the first and last octet (enough to correlate log lines)
  * and hide the middle four (PR #228 review). A null/blank value becomes `<none>`; a corrupted
