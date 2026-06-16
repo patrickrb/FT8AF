@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,6 +34,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Observer
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
+import com.bg7yoz.ft8cn.R
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -43,6 +45,24 @@ import com.bg7yoz.ft8cn.ui.SpectrumFragment
 import com.bg7yoz.ft8cn.ui.WaterfallView
 import radio.ks3ckc.ft8us.theme.*
 import radio.ks3ckc.ft8us.ui.components.TopBar
+
+/**
+ * Height of the columnar spectrum strip above the waterfall canvas. Taller than
+ * the original 56.dp so peaks have more vertical room to read at a glance
+ * (issue #206). The strip's [ColumnarView] is MATCH_PARENT, so it scales to
+ * whatever height this modifier gives it; the waterfall canvas below keeps the
+ * remaining space via weight(1f).
+ */
+internal val SpectrumStripHeight = 96.dp
+
+/**
+ * Height of the bottom info/toggle strip (clock, NR/MSG toggles, live status)
+ * at the bottom of the waterfall screen. Fixed so the floating QSO panel can
+ * offset itself by exactly this much (see FT8USApp.qsoPanelOverlaysContent) and
+ * leave the strip's controls reachable during an active QSO instead of covering
+ * them — all without resizing the waterfall AndroidView.
+ */
+internal val WaterfallBottomStripHeight = 34.dp
 
 /**
  * Holder for view references using plain @Volatile fields.
@@ -68,7 +88,6 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
     var touchedFreqHz by remember { mutableIntStateOf(-1) }
     var updateCount by remember { mutableIntStateOf(0) }
 
-    val isDecoding by mainViewModel.mutableIsDecoding.observeAsState(false)
     val isTransmitting by mainViewModel.ft8TransmitSignal.mutableIsTransmitting.observeAsState(false)
     val txFreq by GeneralVariables.mutableBaseFrequency.observeAsState(GeneralVariables.getBaseFrequency())
     val spectrumWidth by GeneralVariables.mutableSpectrumWidth.observeAsState(GeneralVariables.getSpectrumWidth())
@@ -109,9 +128,12 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             }
 
             viewHolder.waterfall?.let { wView ->
-                val currentlyDecoding = mainViewModel.mutableIsDecoding.value ?: false
+                // drawMessage is armed elsewhere, edge-triggered off the
+                // decode-state LiveData (see decodingObserver below). The
+                // view stamps the labels onto its scrolling bitmap on the
+                // first setWaveData after it's armed, then self-resets the
+                // flag, so labels appear exactly once per decode cycle.
                 wView.setSpectrumWidth(GeneralVariables.getSpectrumWidth())
-                wView.setDrawMessage(mainViewModel.markMessage && !currentlyDecoding)
                 wView.setTxFrequency(currentTxFreq)
                 wView.setTxActive(currentTxActive)
                 val messages = if (mainViewModel.markMessage) mainViewModel.currentMessages else null
@@ -119,9 +141,23 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
                 wView.invalidate()
             }
         }
+        // Arm the decode-label draw edge-triggered off the decode-state
+        // LiveData, exactly like the old SpectrumFragment did
+        // (setDrawMessage(!isDecoding)). A decode lasts only ~60ms and can
+        // fall entirely between two ~160ms audio frames, so sampling
+        // isDecoding inside the audio observer misses the transition and the
+        // labels never draw. LiveData delivers every true/false transition on
+        // the main thread regardless of audio cadence. currentMessages is
+        // populated before isDecoding goes false (MainViewModel), so by the
+        // time we arm the draw the labels are ready for the next setWaveData.
+        val decodingObserver = Observer<Boolean> { decoding ->
+            viewHolder.waterfall?.setDrawMessage(!decoding && mainViewModel.markMessage)
+        }
         mainViewModel.spectrumListener.mutableDataBuffer.observeForever(observer)
+        mainViewModel.mutableIsDecoding.observeForever(decodingObserver)
         onDispose {
             mainViewModel.spectrumListener.mutableDataBuffer.removeObserver(observer)
+            mainViewModel.mutableIsDecoding.removeObserver(decodingObserver)
             viewHolder.columnar = null
             viewHolder.waterfall = null
         }
@@ -132,7 +168,7 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             .fillMaxSize()
             .background(BgApp),
     ) {
-        TopBar(title = "Waterfall") {
+        TopBar(title = stringResource(R.string.waterfall_title)) {
             val freqText = if (touchedFreqHz > 0) {
                 "$touchedFreqHz Hz"
             } else {
@@ -165,7 +201,7 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
+                .height(SpectrumStripHeight),
         )
 
         FrequencyRuler(
@@ -179,8 +215,6 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
         // Main waterfall display
         WaterfallCanvas(
             spectrumWidth = spectrumWidth,
-            showMessages = showMessages,
-            isDecoding = isDecoding,
             txFrequency = txFreq,
             txActive = isTransmitting,
             onViewCreated = { viewHolder.waterfall = it },
@@ -199,12 +233,14 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
                 .fillMaxWidth(),
         )
 
-        // Bottom info strip
+        // Bottom info strip. Fixed height (WaterfallBottomStripHeight) so the
+        // floating QSO panel can sit just above it instead of covering it.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(WaterfallBottomStripHeight)
                 .background(BgSurface)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -217,7 +253,7 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             Spacer(modifier = Modifier.width(12.dp))
 
             ToggleChip(
-                label = "NR",
+                label = stringResource(R.string.waterfall_toggle_nr),
                 active = deNoise,
                 onClick = {
                     deNoise = !deNoise
@@ -228,7 +264,7 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             Spacer(modifier = Modifier.width(8.dp))
 
             ToggleChip(
-                label = "MSG",
+                label = stringResource(R.string.waterfall_toggle_msg),
                 active = showMessages,
                 onClick = {
                     showMessages = !showMessages
@@ -248,7 +284,7 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             Spacer(modifier = Modifier.width(6.dp))
 
             Text(
-                text = "LIVE",
+                text = stringResource(R.string.waterfall_status_live),
                 color = StatusConfirmed,
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
@@ -321,8 +357,6 @@ private fun ColumnarStrip(
 @Composable
 private fun WaterfallCanvas(
     spectrumWidth: Int,
-    showMessages: Boolean,
-    isDecoding: Boolean,
     txFrequency: Float,
     txActive: Boolean,
     onViewCreated: (WaterfallView) -> Unit,
@@ -330,6 +364,10 @@ private fun WaterfallCanvas(
     onTouchUp: (freqHz: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Note: drawMessage is NOT set here. It is armed exclusively by the audio
+    // observer in WaterfallScreen, edge-triggered once per decode cycle.
+    // Re-arming it on recomposition would re-stamp labels onto the scrolling
+    // bitmap and smear them down the waterfall.
     AndroidView(
         factory = { context ->
             WaterfallView(context).apply {
@@ -339,7 +377,6 @@ private fun WaterfallCanvas(
                 )
                 setBackgroundColor(0xFF000000.toInt())
                 setSpectrumWidth(spectrumWidth)
-                setDrawMessage(showMessages && !isDecoding)
                 setTxFrequency(txFrequency)
                 setTxActive(txActive)
 
@@ -363,7 +400,6 @@ private fun WaterfallCanvas(
         },
         update = { view ->
             view.setSpectrumWidth(spectrumWidth)
-            view.setDrawMessage(showMessages && !isDecoding)
             view.setTxFrequency(txFrequency)
             view.setTxActive(txActive)
         },
@@ -376,7 +412,7 @@ private fun WaterfallCanvas(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun FrequencyRuler(spectrumWidth: Int, modifier: Modifier = Modifier) {
+internal fun FrequencyRuler(spectrumWidth: Int, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier.background(BgSurface),
         verticalAlignment = Alignment.CenterVertically,
@@ -406,7 +442,7 @@ private fun FrequencyRuler(spectrumWidth: Int, modifier: Modifier = Modifier) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun ToggleChip(
+internal fun ToggleChip(
     label: String,
     active: Boolean,
     onClick: () -> Unit,

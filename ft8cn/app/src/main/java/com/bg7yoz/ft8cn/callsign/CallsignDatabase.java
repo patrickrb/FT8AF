@@ -22,6 +22,8 @@ import com.google.android.gms.maps.model.LatLng;
 
 import java.util.ArrayList;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public class CallsignDatabase extends SQLiteOpenHelper {
     private static final String TAG = "CallsignDatabase";
@@ -29,6 +31,10 @@ public class CallsignDatabase extends SQLiteOpenHelper {
     private static CallsignDatabase instance;
     private final Context context;
     private SQLiteDatabase db;
+
+    // Signals when the async CTY.DAT import (InitDatabase) completes.
+    // getQslDxccToMap() waits on this so it doesn't query empty tables.
+    private static final CountDownLatch importLatch = new CountDownLatch(1);
 
     public static CallsignDatabase getInstance(@Nullable Context context, @Nullable String databaseName, int version) {
         if (instance == null) {
@@ -49,6 +55,19 @@ public class CallsignDatabase extends SQLiteOpenHelper {
 
     public SQLiteDatabase getDb() {
         return db;
+    }
+
+    /**
+     * Block until the async CTY.DAT import finishes, or until the timeout
+     * elapses. Safe to call from a background thread; must NOT be called
+     * from the main thread.
+     */
+    public static void awaitImport(long timeoutMs) {
+        try {
+            importLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /**
@@ -119,11 +138,35 @@ public class CallsignDatabase extends SQLiteOpenHelper {
             CallsignInfo fromCallsignInfo = getCallsignInfo(db,
                     msg.callsignFrom.replace("<","").replace(">",""));
             if (fromCallsignInfo != null) {
-                    msg.fromDxcc = !GeneralVariables.getDxccByPrefix(fromCallsignInfo.DXCC);
-                    msg.fromItu = !GeneralVariables.getItuZoneById(fromCallsignInfo.ITUZone);
-                    msg.fromCq = !GeneralVariables.getCqZoneById(fromCallsignInfo.CQZone);
+                    // Suppress "new" flags until the zone maps are populated; otherwise
+                    // the async load race makes everything appear new. (#247)
+                    if (GeneralVariables.zoneMapReady) {
+                        msg.fromDxcc = !GeneralVariables.getDxccByPrefix(fromCallsignInfo.DXCC);
+                        msg.fromItu = !GeneralVariables.getItuZoneById(fromCallsignInfo.ITUZone);
+                        msg.fromCq = !GeneralVariables.getCqZoneById(fromCallsignInfo.CQZone);
+                    }
                     msg.fromWhere = fromCallsignInfo.CountryNameEn;
+                    msg.continent = fromCallsignInfo.Continent;
                     msg.fromLatLng = new LatLng(fromCallsignInfo.Latitude, fromCallsignInfo.Longitude * -1);
+            }
+
+            // US state from the sender's grid (US-only table → null for non-US grids).
+            // fromNewState mirrors fromDxcc: true when the state is not yet worked.
+            msg.fromState = GeneralVariables.stateForGrid(msg.maidenGrid);
+            msg.fromNewState = msg.fromState != null
+                    && !GeneralVariables.getStateWorked(msg.fromState);
+
+            // Resolve the operator's own continent + DXCC once (continent for the DX
+            // decode filter, DXCC for the directional-CQ matcher).
+            if ((GeneralVariables.myContinent == null || GeneralVariables.myDxcc == null)
+                    && GeneralVariables.myCallsign != null
+                    && GeneralVariables.myCallsign.length() > 0) {
+                CallsignInfo myInfo = getCallsignInfo(db,
+                        GeneralVariables.myCallsign.replace("<", "").replace(">", ""));
+                if (myInfo != null) {
+                    GeneralVariables.myContinent = myInfo.Continent;
+                    GeneralVariables.myDxcc = myInfo.DXCC;
+                }
             }
 
             if (msg.checkIsCQ() || msg.getCallsignTo().contains("...")) { // Skip CQ messages
@@ -133,9 +176,11 @@ public class CallsignDatabase extends SQLiteOpenHelper {
             CallsignInfo toCallsignInfo = getCallsignInfo(db,
                     msg.callsignTo.replace("<","").replace(">",""));
             if (toCallsignInfo != null) {
-                msg.toDxcc = !GeneralVariables.getDxccByPrefix(toCallsignInfo.DXCC);
-                msg.toItu = !GeneralVariables.getItuZoneById(toCallsignInfo.ITUZone);
-                msg.toCq = !GeneralVariables.getCqZoneById(toCallsignInfo.CQZone);
+                if (GeneralVariables.zoneMapReady) {
+                    msg.toDxcc = !GeneralVariables.getDxccByPrefix(toCallsignInfo.DXCC);
+                    msg.toItu = !GeneralVariables.getItuZoneById(toCallsignInfo.ITUZone);
+                    msg.toCq = !GeneralVariables.getCqZoneById(toCallsignInfo.CQZone);
+                }
 
                 msg.toWhere = toCallsignInfo.CountryNameEn;
                 msg.toLatLng = new LatLng(toCallsignInfo.Latitude, toCallsignInfo.Longitude*-1);
@@ -231,43 +276,47 @@ public class CallsignDatabase extends SQLiteOpenHelper {
 
         @Override
         protected Void doInBackground(Void... voids) {
-            Log.d(TAG, "Starting callsign location data import...");
-            String insertCountriesSQL = "INSERT INTO countries (id,CountryNameEn,CountryNameCN,CQZone" +
-                    ",ITUZone,Continent,Latitude,Longitude,GMT_offset,DXCC)\n" +
-                    "VALUES(?,?,?,?,?,?,?,?,?,?)";
+            try {
+                Log.d(TAG, "Starting callsign location data import...");
+                String insertCountriesSQL = "INSERT INTO countries (id,CountryNameEn,CountryNameCN,CQZone" +
+                        ",ITUZone,Continent,Latitude,Longitude,GMT_offset,DXCC)\n" +
+                        "VALUES(?,?,?,?,?,?,?,?,?,?)";
 
-            ArrayList<CallsignInfo> callsignInfos =
-                    CallsignFileOperation.getCallSingInfoFromFile(context);
-            ContentValues values = new ContentValues();
-            for (int i = 0; i < callsignInfos.size(); i++) {
-                try {
-                    // Write country and region data into the table; id is used to associate with callsigns
-                    db.execSQL(insertCountriesSQL, new Object[]{
-                            i, // ID number
-                            callsignInfos.get(i).CountryNameEn,
-                            callsignInfos.get(i).CountryNameCN,
-                            callsignInfos.get(i).CQZone,
-                            callsignInfos.get(i).ITUZone,
-                            callsignInfos.get(i).Continent,
-                            callsignInfos.get(i).Latitude,
-                            callsignInfos.get(i).Longitude,
-                            callsignInfos.get(i).GMT_offset,
-                            callsignInfos.get(i).DXCC});
-                    Set<String> calls = CallsignFileOperation.getCallsigns(callsignInfos.get(i).CallSign);
+                ArrayList<CallsignInfo> callsignInfos =
+                        CallsignFileOperation.getCallSingInfoFromFile(context);
+                ContentValues values = new ContentValues();
+                for (int i = 0; i < callsignInfos.size(); i++) {
+                    try {
+                        // Write country and region data into the table; id is used to associate with callsigns
+                        db.execSQL(insertCountriesSQL, new Object[]{
+                                i, // ID number
+                                callsignInfos.get(i).CountryNameEn,
+                                callsignInfos.get(i).CountryNameCN,
+                                callsignInfos.get(i).CQZone,
+                                callsignInfos.get(i).ITUZone,
+                                callsignInfos.get(i).Continent,
+                                callsignInfos.get(i).Latitude,
+                                callsignInfos.get(i).Longitude,
+                                callsignInfos.get(i).GMT_offset,
+                                callsignInfos.get(i).DXCC});
+                        Set<String> calls = CallsignFileOperation.getCallsigns(callsignInfos.get(i).CallSign);
 
-                    for (String s : calls
-                    ) {
-                        values.put("countryId", i);
-                        values.put("callsign", s);
-                        db.insert("callsigns", null, values);
-                        values.clear();
+                        for (String s : calls
+                        ) {
+                            values.put("countryId", i);
+                            values.put("callsign", s);
+                            db.insert("callsigns", null, values);
+                            values.clear();
+                        }
+
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error: " + e.getMessage());
                     }
-
-                } catch (Exception e) {
-                    Log.e(TAG, "Error: " + e.getMessage());
                 }
+                Log.d(TAG, "Callsign location data import complete!");
+            } finally {
+                importLatch.countDown();
             }
-            Log.d(TAG, "Callsign location data import complete!");
             return null;
         }
     }

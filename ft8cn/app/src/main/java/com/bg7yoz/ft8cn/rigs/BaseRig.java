@@ -58,9 +58,16 @@ public abstract class BaseRig {
     }
 
     public void setFreq(long freq) {
-        if (freq == this.freq) return;
         if (freq == 0) return;
         if (freq == -1) return;
+        // The rig answered with a valid frequency — proof the link is alive even if the dial
+        // didn't move. Fire this BEFORE the unchanged-frequency early return below so the CAT
+        // liveness watchdog (which keys off onRigResponded, not onFreqChanged) sees every
+        // reply and doesn't falsely trip on a stable dial.
+        if (onRigStateChanged != null) {
+            onRigStateChanged.onRigResponded();
+        }
+        if (freq == this.freq) return;
         mutableFrequency.postValue(freq);
         this.freq = freq;
         if (onRigStateChanged != null) {
@@ -140,6 +147,16 @@ public abstract class BaseRig {
     }
 
     public void onDisconnecting() {
+    }
+
+    // Meter data callback for MeterProtectionController (ALC auto-volume, SWR halt)
+    public interface OnMeterData {
+        void onMeterUpdate(int normalizedAlc, int normalizedSwr);
+    }
+    private OnMeterData onMeterData;
+    public void setOnMeterData(OnMeterData listener) { this.onMeterData = listener; }
+    protected void notifyMeterData(int alc, int swr) {
+        if (onMeterData != null) onMeterData.onMeterUpdate(alc, swr);
     }
 
 }

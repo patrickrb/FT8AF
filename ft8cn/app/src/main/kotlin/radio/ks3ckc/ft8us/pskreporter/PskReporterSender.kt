@@ -2,7 +2,7 @@ package radio.ks3ckc.ft8us.pskreporter
 
 import android.util.Log
 import androidx.annotation.VisibleForTesting
-import com.bg7yoz.ft8cn.FT8Common
+import com.bg7yoz.ft8cn.ModeProfile
 import com.bg7yoz.ft8cn.Ft8Message
 import com.bg7yoz.ft8cn.GeneralVariables
 import kotlinx.coroutines.*
@@ -52,19 +52,25 @@ object PskReporterSender {
     private const val RECEIVER_DATA_SET_ID = RECEIVER_TEMPLATE_ID
     private const val SENDER_DATA_SET_ID = SENDER_TEMPLATE_ID
 
-    // IPFIX field type IDs (enterprise-specific under 30351)
-    // Receiver fields
-    private const val FT_RX_CALLSIGN = 1       // receiverCallsign
-    private const val FT_RX_LOCATOR = 2        // receiverLocator
-    private const val FT_DECODING_SW = 3       // decodingSoftware
-    // Sender fields
-    private const val FT_TX_CALLSIGN = 1       // senderCallsign
-    private const val FT_FREQUENCY = 2         // frequency
-    private const val FT_SNR = 3               // sNR
-    private const val FT_MODE = 4              // mode
-    private const val FT_TX_LOCATOR = 5        // senderLocator
-    private const val FT_INFO_SOURCE = 6       // informationSource
-    private const val FT_FLOW_START = 7        // flowStartSeconds
+    // IPFIX field type IDs. PSKReporter assigns specific element IDs under
+    // enterprise 30351 (see WSJT-X PSKReporter.cpp / pskreporter.info/pskdev.html);
+    // the collector maps element-ID -> column, so these must match exactly or the
+    // records are parsed structurally but discarded as unrecognized.
+    // Receiver (options) fields — all enterprise-specific under 30351.
+    private const val FT_RX_CALLSIGN = 2       // receiverCallsign  (0x8002)
+    private const val FT_RX_LOCATOR = 4        // receiverLocator   (0x8004)
+    private const val FT_DECODING_SW = 8       // decodingSoftware  (0x8008)
+    private const val FT_RX_ANTENNA = 9        // antennaInformation (0x8009)
+    // Sender (data) fields — enterprise-specific under 30351, EXCEPT flowStart.
+    private const val FT_TX_CALLSIGN = 1       // senderCallsign    (0x8001)
+    private const val FT_FREQUENCY = 5         // frequency         (0x8005)
+    private const val FT_SNR = 6               // sNR               (0x8006)
+    private const val FT_MODE = 10             // mode              (0x800A)
+    private const val FT_TX_LOCATOR = 3        // senderLocator     (0x8003)
+    private const val FT_INFO_SOURCE = 11      // informationSource (0x800B)
+    // flowStartSeconds is the STANDARD IANA IPFIX element 150 (0x0096): no
+    // enterprise bit, no enterprise number in its template descriptor.
+    private const val FT_FLOW_START = 150      // flowStartSeconds  (0x0096, standard)
 
     data class SpotRecord(
         val senderCallsign: String,
@@ -87,6 +93,16 @@ object PskReporterSender {
 
     @VisibleForTesting
     internal var sequenceNumber = 0
+
+    /**
+     * Build the PSKReporter "decodingSoftware" string, optionally including the
+     * connected rig name. Pure function — testable without Android.
+     */
+    @VisibleForTesting
+    internal fun buildSoftwareString(version: String, rigName: String?): String {
+        val base = "FT8AF $version"
+        return if (!rigName.isNullOrBlank()) "$base ($rigName)" else base
+    }
 
     /** For testing: override the socket send behaviour. */
     @VisibleForTesting
@@ -154,12 +170,12 @@ object PskReporterSender {
         // Skip free-text messages (i3=0, n3=0)
         if (msg.i3 == 0 && msg.n3 == 0) return null
 
-        // Only FT8 (and FT4 if present)
-        val mode = when (msg.signalFormat) {
-            FT8Common.FT8_MODE -> "FT8"
-            FT8Common.FT4_MODE -> "FT4"
-            else -> return null
-        }
+        // Mode string (FT8/FT4/FT2) derived from the message's mode descriptor. fromId()
+        // falls back to FT8 for unknown ids, so guard against a corrupt/unexpected
+        // signalFormat by dropping the spot rather than mislabelling it (prior behavior).
+        val profile = ModeProfile.fromId(msg.signalFormat)
+        if (profile.id != msg.signalFormat) return null
+        val mode = profile.displayName
 
         // Frequency = carrier band + audio offset
         val freqHz = msg.band + msg.freq_hz.toLong()
@@ -193,10 +209,12 @@ object PskReporterSender {
         val myCall = GeneralVariables.myCallsign ?: return
         if (myCall.isEmpty()) return
         val myGrid = GeneralVariables.getMyMaidenheadGrid() ?: ""
-        val software = "FT8AF ${GeneralVariables.VERSION}"
+        val software = buildSoftwareString(
+            GeneralVariables.VERSION, GeneralVariables.myRigName)
+        val antenna = GeneralVariables.myAntenna ?: ""
 
         // Build IPFIX packets, respecting MTU limit
-        val packets = buildPackets(myCall, myGrid, software, spots)
+        val packets = buildPackets(myCall, myGrid, software, spots, antenna)
         for (pkt in packets) {
             try {
                 sendDatagram(pkt)
@@ -217,6 +235,7 @@ object PskReporterSender {
         rxGrid: String,
         software: String,
         spots: List<SpotRecord>,
+        antenna: String = "",
     ): List<ByteArray> {
         val packets = mutableListOf<ByteArray>()
         val includeTemplates = needTemplates()
@@ -224,7 +243,7 @@ object PskReporterSender {
         var remaining = spots.toMutableList()
         while (remaining.isNotEmpty()) {
             val templateBytes = if (includeTemplates) encodeTemplates() else ByteArray(0)
-            val receiverBytes = encodeReceiverDataSet(rxCall, rxGrid, software)
+            val receiverBytes = encodeReceiverDataSet(rxCall, rxGrid, software, antenna)
 
             // Header is 16 bytes
             val overhead = 16 + templateBytes.size + receiverBytes.size
@@ -307,10 +326,10 @@ object PskReporterSender {
 
     private fun encodeReceiverTemplate(): ByteArray {
         // Options template set (set ID = 0x0003)
-        // Template ID = 0x50E2, field count = 3, scope field count = 0
+        // Template ID = 0x50E2, field count = 4, scope field count = 0
         // Each field: type(2) + length(2) + enterprise(4)
         val fieldSize = 8 // 2+2+4 per field
-        val fieldCount = 3
+        val fieldCount = 4
         val templateRecordLen = 2 + 2 + 2 + (fieldCount * fieldSize) // templateId + fieldCount + scopeFieldCount + fields
         val setLen = 4 + templateRecordLen // setHeader (id+len) + record
         val padding = (4 - (setLen % 4)) % 4
@@ -340,16 +359,25 @@ object PskReporterSender {
         buf.putShort(0xFFFF.toShort())
         buf.putInt(ENTERPRISE_NUMBER)
 
+        // Field 4: antennaInformation — variable length string
+        buf.putShort((FT_RX_ANTENNA or 0x8000).toShort())
+        buf.putShort(0xFFFF.toShort())
+        buf.putInt(ENTERPRISE_NUMBER)
+
         repeat(padding) { buf.put(0) }
         return buf.array()
     }
 
     private fun encodeSenderTemplate(): ByteArray {
         // Data template set (set ID = 0x0002)
-        // Template ID = 0x50E3, field count = 7
+        // Template ID = 0x50E3, field count = 7. Six fields are enterprise-specific
+        // (8-byte descriptor: type+length+enterprise); flowStartSeconds is the
+        // standard element 0x0096 (4-byte descriptor: type+length, no enterprise).
         val fieldCount = 7
-        val fieldSize = 8 // enterprise fields: type(2) + length(2) + enterprise(4)
-        val templateRecordLen = 2 + 2 + (fieldCount * fieldSize) // templateId + fieldCount + fields
+        val enterpriseFieldSize = 8 // type(2) + length(2) + enterprise(4)
+        val standardFieldSize = 4   // type(2) + length(2)
+        val templateRecordLen =
+            2 + 2 + (6 * enterpriseFieldSize) + standardFieldSize // templateId + fieldCount + fields
         val setLen = 4 + templateRecordLen
         val padding = (4 - (setLen % 4)) % 4
         val totalLen = setLen + padding
@@ -367,8 +395,7 @@ object PskReporterSender {
         buf.putShort(0xFFFF.toShort())
         buf.putInt(ENTERPRISE_NUMBER)
 
-        // Field 2: frequency — uint32 (5 bytes per PSKReporter: 1 len + 4 data? No: fixed 4)
-        // PSKReporter uses uint32 for frequency
+        // Field 2: frequency — uint32 (4 bytes)
         buf.putShort((FT_FREQUENCY or 0x8000).toShort())
         buf.putShort(4.toShort())
         buf.putInt(ENTERPRISE_NUMBER)
@@ -393,10 +420,10 @@ object PskReporterSender {
         buf.putShort(1.toShort())
         buf.putInt(ENTERPRISE_NUMBER)
 
-        // Field 7: flowStartSeconds — uint32 (4 bytes)
-        buf.putShort((FT_FLOW_START or 0x8000).toShort())
+        // Field 7: flowStartSeconds — standard IPFIX element 0x0096, uint32 (4 bytes).
+        // No enterprise bit and no enterprise number (4-byte descriptor).
+        buf.putShort(FT_FLOW_START.toShort())
         buf.putShort(4.toShort())
-        buf.putInt(ENTERPRISE_NUMBER)
 
         repeat(padding) { buf.put(0) }
         return buf.array()
@@ -407,11 +434,14 @@ object PskReporterSender {
      * Set ID = [RECEIVER_DATA_SET_ID].
      */
     @VisibleForTesting
-    internal fun encodeReceiverDataSet(call: String, grid: String, software: String): ByteArray {
+    internal fun encodeReceiverDataSet(
+        call: String, grid: String, software: String, antenna: String,
+    ): ByteArray {
         val callBytes = encodeVarString(call)
         val gridBytes = encodeVarString(grid)
         val swBytes = encodeVarString(software)
-        val bodyLen = callBytes.size + gridBytes.size + swBytes.size
+        val antBytes = encodeVarString(antenna)
+        val bodyLen = callBytes.size + gridBytes.size + swBytes.size + antBytes.size
         val setLen = 4 + bodyLen
         val padding = (4 - (setLen % 4)) % 4
         val totalLen = setLen + padding
@@ -422,6 +452,7 @@ object PskReporterSender {
         buf.put(callBytes)
         buf.put(gridBytes)
         buf.put(swBytes)
+        buf.put(antBytes)
         repeat(padding) { buf.put(0) }
         return buf.array()
     }

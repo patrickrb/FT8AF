@@ -28,18 +28,22 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bg7yoz.ft8cn.Ft8Message
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
+import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.ft8transmit.FunctionOfTransmit
 import com.bg7yoz.ft8cn.ft8transmit.QueuedCaller
 import radio.ks3ckc.ft8us.theme.*
@@ -51,13 +55,122 @@ import java.util.TimeZone
 /**
  * Data class representing a single message in the QSO log.
  */
-private data class QsoLogEntry(
+internal data class QsoLogEntry(
     val direction: Direction,
     val utcTime: Long,
     val messageText: String,
     val snr: Int? = null,
 ) {
     enum class Direction { TX, RX, BUSY }
+}
+
+/**
+ * Build the ordered QSO conversation log for [displayCallsign] from the decoded
+ * [messageList] plus our own synthesized TX entries ([synthTx]).
+ *
+ * Classification:
+ *  - RX   — from the target, addressed to us.
+ *  - BUSY — from the target, addressed to someone else (context for the hunter).
+ *  - TX   — our own transmissions, sourced *solely* from [synthTx]. Own-callsign
+ *           loopback echoes never appear here because they are filtered upstream
+ *           in MainViewModel.afterDecode (see OwnTxEchoFilter), so there is no
+ *           decoded-list TX branch and no de-dup against loopback to do.
+ *
+ * Extracted from the composable so the (pure) classification/ordering is unit
+ * testable. Entries are returned sorted ascending by [QsoLogEntry.utcTime].
+ */
+internal fun buildQsoLog(
+    messageList: List<Ft8Message>?,
+    displayCallsign: String,
+    myCallsign: String,
+    synthTx: List<QsoLogEntry>,
+): List<QsoLogEntry> {
+    if (displayCallsign.isEmpty()) return emptyList()
+
+    val entries = mutableListOf<QsoLogEntry>()
+    messageList?.forEach { msg ->
+        // getCallsignFrom() handles null and strips angle brackets from
+        // hashed callsigns (e.g. "<CALL>" → "CALL") so they match displayCallsign. (#255)
+        val from = msg.getCallsignFrom()
+        // Only the target station's traffic appears in this panel. Own-callsign
+        // loopback (from == us) is filtered upstream (OwnTxEchoFilter) and there
+        // is deliberately no decoded-list TX branch, so anything not from the
+        // target is skipped here — TX rows come solely from synthTx below.
+        if (!from.equals(displayCallsign, ignoreCase = true)) return@forEach
+
+        // Skip CQ/DE/QRZ messages — the target is calling for contacts, not
+        // working someone else, so they are neither RX nor BUSY. (#254)
+        // Guard: checkIsCQ() calls callsignTo.trim() which NPEs on null.
+        if (msg.callsignTo != null && msg.checkIsCQ()) return@forEach
+
+        val to = msg.callsignTo ?: ""
+        val toIsMe = to.equals(myCallsign, ignoreCase = true) ||
+            GeneralVariables.checkIsMyCallsign(to)
+
+        // RX when the target is calling us, BUSY when it's working someone else.
+        entries.add(
+            QsoLogEntry(
+                direction = if (toIsMe) QsoLogEntry.Direction.RX else QsoLogEntry.Direction.BUSY,
+                utcTime = msg.utcTime,
+                messageText = msg.getMessageText(),
+                snr = msg.snr,
+            )
+        )
+    }
+
+    // Our own transmissions — the sole source of TX rows.
+    entries.addAll(synthTx)
+
+    return entries.sortedBy { it.utcTime }
+}
+
+/**
+ * Outcome of one evaluation of the synthesized-TX-log effect.
+ *
+ * @property shouldLog            append a TX row now (with the current transmit message)
+ * @property pendingAfter         carry a "still owe a log for this transmission" flag forward
+ * @property wasTransmittingAfter the transmitting state to remember for the next evaluation
+ */
+internal data class TxLogDecision(
+    val shouldLog: Boolean,
+    val pendingAfter: Boolean,
+    val wasTransmittingAfter: Boolean,
+)
+
+/**
+ * Decide whether to append one TX row to the mini-log, given the previous and current
+ * transmit state. We log exactly **one row per transmission** — keyed off the rising edge
+ * of [isTransmitting] — rather than de-duplicating by message text. That's the fix for
+ * "repeated RR73s only showed once": each time a (possibly identical) message is sent in a
+ * new cycle it is a fresh transmission and gets its own row.
+ *
+ * A "pending" flag bridges the case where [isTransmitting] flips true a frame before the
+ * transmit-message string is populated: the rising edge arms a pending log, and we emit the
+ * row on the first subsequent evaluation that actually has a non-empty message (and a live
+ * target). The pending flag clears when the row is logged or when transmit ends, so it can
+ * never leak a duplicate into the next transmission.
+ *
+ * @param wasTransmitting transmitting state at the previous evaluation
+ * @param isTransmitting  transmitting state now
+ * @param pending         whether a log is already owed for the in-flight transmission
+ * @param message         the current transmit-message text (empty until populated)
+ * @param hasTarget       whether a real target callsign is set (CQ has no mini-log)
+ */
+internal fun decideTxLog(
+    wasTransmitting: Boolean,
+    isTransmitting: Boolean,
+    pending: Boolean,
+    message: String,
+    hasTarget: Boolean,
+): TxLogDecision {
+    val armed = pending || (isTransmitting && !wasTransmitting) // rising edge arms a new log
+    val shouldLog = armed && isTransmitting && message.isNotEmpty() && hasTarget
+    val pendingAfter = when {
+        !isTransmitting -> false   // transmit ended — drop any unfulfilled pending log
+        shouldLog -> false         // just logged this transmission
+        else -> armed              // armed but message not ready yet; keep waiting
+    }
+    return TxLogDecision(shouldLog, pendingAfter, isTransmitting)
 }
 
 /**
@@ -93,88 +206,65 @@ fun ActiveQsoPanel(
     val hasTarget = displayCallsign != null
     val isCallingCq = isActivated && !hasTarget
 
-    // Synthesized TX log: append the message we're currently transmitting
-    // the moment TX begins, so the operator sees it in the log without
-    // waiting for the loopback decode (15–30s) to catch up.
-    val synthTxLog = remember(displayCallsign) { mutableStateListOf<QsoLogEntry>() }
-    LaunchedEffect(isTransmitting, transmittingMessage, displayCallsign) {
-        val msg = transmittingMessage.orEmpty()
-        if (isTransmitting && msg.isNotEmpty() && displayCallsign != null) {
-            if (synthTxLog.none { it.messageText == msg }) {
-                synthTxLog.add(
-                    QsoLogEntry(
-                        direction = QsoLogEntry.Direction.TX,
-                        utcTime = System.currentTimeMillis(),
-                        messageText = msg,
-                    )
-                )
-            }
+    // Synthesized TX log: append the message we're currently transmitting the moment TX
+    // begins, so the operator sees it without waiting for the loopback decode (15–30s) to
+    // catch up. We log one row per transmission (the rising edge of isTransmitting) rather
+    // than de-duplicating by text, so repeated messages — e.g. several unanswered RR73s —
+    // each get their own row. State resets per target. See decideTxLog for the rule.
+    //
+    // NOTE: no key parameter on remember — keying on displayCallsign caused the TX log
+    // to be lost on tab switches when LiveData observers briefly emit null. Instead we
+    // track the target manually and clear only on genuine target changes. (#250)
+    val synthTxLog = remember { mutableStateListOf<QsoLogEntry>() }
+    var wasTransmitting by remember { mutableStateOf(false) }
+    var pendingTxLog by remember { mutableStateOf(false) }
+    var synthTxTarget by remember { mutableStateOf<String?>(null) }
+
+    // Clear TX state when the target genuinely changes to a different station.
+    // Ignore null transitions: when displayCallsign flickers to null during a
+    // tab switch (LiveData observer re-registration), the log must survive.
+    // The panel hides via AnimatedVisibility when hasTarget is false, so stale
+    // entries from the previous QSO are invisible until a new target arrives.
+    LaunchedEffect(displayCallsign) {
+        if (displayCallsign != null && displayCallsign != synthTxTarget) {
+            synthTxLog.clear()
+            wasTransmitting = false
+            pendingTxLog = false
+            synthTxTarget = displayCallsign
         }
     }
 
-    // Filter messages to/from the target station
+    LaunchedEffect(isTransmitting, transmittingMessage, displayCallsign) {
+        val msg = transmittingMessage.orEmpty()
+        val decision = decideTxLog(
+            wasTransmitting = wasTransmitting,
+            isTransmitting = isTransmitting,
+            pending = pendingTxLog,
+            message = msg,
+            hasTarget = displayCallsign != null,
+        )
+        wasTransmitting = decision.wasTransmittingAfter
+        pendingTxLog = decision.pendingAfter
+        if (decision.shouldLog) {
+            synthTxLog.add(
+                QsoLogEntry(
+                    direction = QsoLogEntry.Direction.TX,
+                    utcTime = System.currentTimeMillis(),
+                    messageText = msg,
+                )
+            )
+        }
+    }
+
+    // Build the conversation log to/from the target station. The classification
+    // and ordering live in buildQsoLog() so they can be unit tested.
     val qsoMessages: List<QsoLogEntry> = remember(messageList, messageList?.size, displayCallsign, transmittingMessage, synthTxLog.size) {
-        if (!hasTarget || displayCallsign == null) return@remember emptyList()
-
-        val entries = mutableListOf<QsoLogEntry>()
-
-        // RX messages from the target station directed at us, or from us to the target
-        val myCallsign = GeneralVariables.myCallsign ?: ""
-        messageList?.forEach { msg ->
-            val from = msg.callsignFrom ?: ""
-            val to = msg.callsignTo ?: ""
-
-            val fromIsTarget = from.equals(displayCallsign, ignoreCase = true)
-            val toIsMe = to.equals(myCallsign, ignoreCase = true) ||
-                GeneralVariables.checkIsMyCallsign(to)
-
-            when {
-                // RX: target station calling us
-                fromIsTarget && toIsMe -> {
-                    entries.add(
-                        QsoLogEntry(
-                            direction = QsoLogEntry.Direction.RX,
-                            utcTime = msg.utcTime,
-                            messageText = msg.getMessageText() ?: "$from $to ${msg.extraInfo ?: ""}",
-                            snr = msg.snr,
-                        )
-                    )
-                }
-                // BUSY: target is transmitting but to someone else — useful so
-                // the hunter can see what their target is doing (calling CQ,
-                // exchanging reports with another station, etc.) instead of
-                // staring at an empty log wondering whether they're still on.
-                fromIsTarget && !toIsMe -> {
-                    entries.add(
-                        QsoLogEntry(
-                            direction = QsoLogEntry.Direction.BUSY,
-                            utcTime = msg.utcTime,
-                            messageText = msg.getMessageText() ?: "$from $to ${msg.extraInfo ?: ""}",
-                            snr = msg.snr,
-                        )
-                    )
-                }
-                // TX: us calling the target station (messages from us in the decoded list)
-                from.equals(myCallsign, ignoreCase = true) && to.equals(displayCallsign, ignoreCase = true) -> {
-                    entries.add(
-                        QsoLogEntry(
-                            direction = QsoLogEntry.Direction.TX,
-                            utcTime = msg.utcTime,
-                            messageText = msg.getMessageText() ?: "$from $to ${msg.extraInfo ?: ""}",
-                        )
-                    )
-                }
-            }
-        }
-
-        // Add synthesized TX entries (skip duplicates already present from decode loopback).
-        synthTxLog.forEach { synth ->
-            if (entries.none { it.messageText == synth.messageText && it.direction == QsoLogEntry.Direction.TX }) {
-                entries.add(synth)
-            }
-        }
-
-        entries.sortedBy { it.utcTime }
+        buildQsoLog(
+            messageList = messageList,
+            displayCallsign = displayCallsign ?: "",
+            myCallsign = GeneralVariables.myCallsign ?: "",
+            synthTx = synthTxLog.toList(),
+        )
     }
 
     AnimatedVisibility(
@@ -201,13 +291,20 @@ fun ActiveQsoPanel(
             // minimized it, the header acts as the "reopen" affordance.
             StationHeader(
                 targetCallsign = when {
-                    isCallingCq -> "Calling CQ"
-                    displayCallsign == null -> "Searching..."
-                    isTransmitting -> "QSOing with $displayCallsign"
-                    else -> "Waiting for $displayCallsign"
+                    isCallingCq -> stringResource(R.string.qsopanel_calling_cq)
+                    displayCallsign == null -> stringResource(R.string.qsopanel_searching)
+                    isTransmitting -> stringResource(R.string.qsopanel_qsoing_with, displayCallsign)
+                    else -> stringResource(R.string.qsopanel_waiting_for, displayCallsign)
                 },
                 snr = if (displayCallsign != null) toCallsign?.snr else null,
                 onClick = if (displayCallsign != null) onReopenSheet else null,
+                onLog = if (displayCallsign != null) {
+                    {
+                        mainViewModel.ft8TransmitSignal.forceLogAndMoveOn()
+                        mainViewModel.qsoSheetCallsign.postValue(null)
+                        mainViewModel.qsoSheetMinimized.postValue(false)
+                    }
+                } else null,
                 onClear = if (displayCallsign != null) {
                     {
                         mainViewModel.ft8TransmitSignal.userResetToCQ()
@@ -238,8 +335,15 @@ fun ActiveQsoPanel(
                 },
             )
 
-            // Caller queue display
-            CallerQueueBar(queue = callerQueue ?: arrayListOf())
+            // Caller queue display — tap a callsign to log current QSO and work them next
+            CallerQueueBar(
+                queue = callerQueue ?: arrayListOf(),
+                onCallerTap = if (displayCallsign != null) { callsign ->
+                    mainViewModel.ft8TransmitSignal.forceLogAndMoveOn(callsign)
+                    mainViewModel.qsoSheetCallsign.postValue(null)
+                    mainViewModel.qsoSheetMinimized.postValue(false)
+                } else null,
+            )
         }
     }
 }
@@ -249,6 +353,7 @@ private fun StationHeader(
     targetCallsign: String,
     snr: Int?,
     onClick: (() -> Unit)? = null,
+    onLog: (() -> Unit)? = null,
     onClear: (() -> Unit)? = null,
 ) {
     Row(
@@ -290,16 +395,35 @@ private fun StationHeader(
         }
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (onClick != null) {
                 Text(
-                    text = "tap to view ↗",
+                    text = stringResource(R.string.qsopanel_tap_to_view),
                     color = Accent,
                     fontSize = 10.sp,
                     fontFamily = GeistMonoFamily,
                     fontWeight = FontWeight.SemiBold,
                 )
+            }
+            if (onLog != null) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(SignalSoft)
+                        .clickable(onClick = onLog)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = stringResource(R.string.qsopanel_log_action),
+                        color = Signal,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = GeistMonoFamily,
+                        letterSpacing = 0.04.sp,
+                    )
+                }
             }
             if (onClear != null) {
                 // Tap target uses its own Box so the parent header's reopen
@@ -335,9 +459,9 @@ private fun MessageLog(
 
     if (entries.isEmpty()) {
         val placeholder = if (isTransmitting && transmittingMessage.isNotEmpty()) {
-            "TX: $transmittingMessage"
+            stringResource(R.string.qsopanel_tx_message, transmittingMessage)
         } else {
-            "Waiting for messages..."
+            stringResource(R.string.qsopanel_waiting_messages)
         }
         Box(
             modifier = Modifier
@@ -531,7 +655,10 @@ private fun TxSelector(
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun CallerQueueBar(queue: ArrayList<QueuedCaller>) {
+private fun CallerQueueBar(
+    queue: ArrayList<QueuedCaller>,
+    onCallerTap: ((String) -> Unit)? = null,
+) {
     if (queue.isEmpty()) return
 
     Spacer(modifier = Modifier.height(6.dp))
@@ -542,7 +669,7 @@ private fun CallerQueueBar(queue: ArrayList<QueuedCaller>) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
-            text = "QUEUE",
+            text = stringResource(R.string.qsopanel_queue),
             color = TextFaint,
             fontSize = 9.sp,
             fontWeight = FontWeight.SemiBold,
@@ -559,6 +686,10 @@ private fun CallerQueueBar(queue: ArrayList<QueuedCaller>) {
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
                         .background(SignalSoft)
+                        .then(
+                            if (onCallerTap != null) Modifier.clickable { onCallerTap(caller.callsign) }
+                            else Modifier
+                        )
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                     contentAlignment = Alignment.Center,
                 ) {

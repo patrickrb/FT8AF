@@ -292,29 +292,45 @@ public class MaidenheadGrid {
         }
     }
 
+    private static final double KM_TO_MILES = 0.621371;
+
     /**
-     * Calculate distance between two grids
-     *
-     * @param mGrid1 grid
-     * @param mGrid2 grid
-     * @return distance
+     * Convert a distance in km to the user's preferred unit (miles or km).
      */
+    public static double convertDist(double distKm) {
+        return GeneralVariables.distanceInMiles ? distKm * KM_TO_MILES : distKm;
+    }
+
+    /**
+     * Return the abbreviated unit label for the current distance setting.
+     */
+    public static String getDistUnitLabel() {
+        return GeneralVariables.distanceInMiles ? "mi" : "km";
+    }
+
+    /**
+     * Format a distance (given in km) as a rounded string with the user's preferred unit.
+     */
+    @SuppressLint("DefaultLocale")
+    public static String formatDist(double distKm) {
+        return String.format("%.0f %s", convertDist(distKm), getDistUnitLabel());
+    }
+
     @SuppressLint("DefaultLocale")
     public static String getDistStr(String mGrid1, String mGrid2) {
         double dist = getDist(mGrid1, mGrid2);
         if (dist == 0) {
             return "";
         } else {
-            return String.format(GeneralVariables.getStringFromResource(R.string.distance), dist);
+            return formatDist(dist);
         }
     }
     public static String getDistLatLngStr(LatLng latLng1,LatLng latLng2){
-        return String.format(GeneralVariables.getStringFromResource(R.string.distance), getDist(latLng1,latLng2));
-
+        return formatDist(getDist(latLng1,latLng2));
     }
 
     /**
-     * Calculate distance between two grids, displaying kilometers in English
+     * Calculate distance between two grids, displaying in user's preferred unit
      *
      * @param mGrid1 grid
      * @param mGrid2 grid
@@ -326,7 +342,7 @@ public class MaidenheadGrid {
         if (dist == 0) {
             return "";
         } else {
-            return String.format("%.0f km", dist);
+            return formatDist(dist);
         }
     }
 

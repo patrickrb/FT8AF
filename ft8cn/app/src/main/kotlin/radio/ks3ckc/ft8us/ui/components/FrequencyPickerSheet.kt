@@ -22,11 +22,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
+import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.database.ControlMode
 import com.bg7yoz.ft8cn.database.OperationBand
 import radio.ks3ckc.ft8us.theme.*
@@ -91,6 +93,9 @@ private fun buildBandGroups(): List<BandGroup> {
     val order = LinkedHashMap<String, MutableList<Pair<Int, OperationBand.Band>>>()
     for (i in 0 until OperationBand.bandList.size) {
         val b = OperationBand.bandList[i]
+        // Only the current operating mode's dials (FT8 vs FT4 use different frequencies).
+        if (b.mode != GeneralVariables.operatingMode) continue
+        if (GeneralVariables.isBandExcluded(b.waveLength)) continue
         order.getOrPut(b.waveLength) { mutableListOf() }.add(i to b)
     }
     return order.map { (wave, entries) ->
@@ -119,7 +124,7 @@ fun FrequencyPickerSheet(
     onSelect: (Int) -> Unit,
 ) {
     FT8USBottomSheet(visible = visible, onDismiss = onDismiss) {
-        val groups = remember { buildBandGroups() }
+        val groups = remember(GeneralVariables.excludedBands.toSet(), GeneralVariables.operatingMode) { buildBandGroups() }
         var showAlternates by remember { mutableStateOf(false) }
 
         Column(
@@ -129,7 +134,7 @@ fun FrequencyPickerSheet(
                 .padding(top = 8.dp, bottom = 24.dp),
         ) {
             Text(
-                text = "SELECT FREQUENCY",
+                text = stringResource(R.string.freq_select_title),
                 color = TextPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -156,7 +161,7 @@ fun FrequencyPickerSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = if (showAlternates) "HIDE ALTERNATES" else "SHOW ALTERNATES",
+                    text = if (showAlternates) stringResource(R.string.freq_hide_alternates) else stringResource(R.string.freq_show_alternates),
                     color = TextMuted,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -254,7 +259,7 @@ private fun BandTile(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (isAlternate) {
                     Text(
-                        text = "ALT ",
+                        text = stringResource(R.string.freq_alt_prefix),
                         color = freqColor,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.SemiBold,

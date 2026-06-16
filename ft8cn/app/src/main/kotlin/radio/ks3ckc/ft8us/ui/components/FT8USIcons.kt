@@ -338,6 +338,100 @@ object FT8USIcons {
         }
     }
 
+    /** Upward arrow — the TX time-slot button (we key up / transmit). */
+    @Composable
+    fun ArrowUp(
+        modifier: Modifier = Modifier,
+        color: Color = Color.Unspecified,
+        size: Dp = 22.dp,
+        strokeWidth: Float = 1.6f,
+    ) {
+        val tint = if (color == Color.Unspecified) androidx.compose.material3.MaterialTheme.colorScheme.onSurface else color
+        Canvas(modifier = modifier.then(Modifier.sizeOf(size))) {
+            val s = this.size.width / 24f
+            val stroke = strokeStyle(strokeWidth * s)
+            // Shaft
+            drawLine(tint, Offset(12f * s, 19f * s), Offset(12f * s, 5f * s),
+                strokeWidth * s, StrokeCap.Round)
+            // Head
+            val head = Path().apply {
+                moveTo(6f * s, 11f * s)
+                lineTo(12f * s, 5f * s)
+                lineTo(18f * s, 11f * s)
+            }
+            drawPath(head, tint, style = stroke)
+        }
+    }
+
+    /** Three tightly-spaced horizontal lines — switch to compact decode list. */
+    @Composable
+    fun ViewCompact(
+        modifier: Modifier = Modifier,
+        color: Color = Color.Unspecified,
+        size: Dp = 22.dp,
+        strokeWidth: Float = 1.6f,
+    ) {
+        val tint = if (color == Color.Unspecified) androidx.compose.material3.MaterialTheme.colorScheme.onSurface else color
+        Canvas(modifier = modifier.then(Modifier.sizeOf(size))) {
+            val s = this.size.width / 24f
+            val stroke = strokeStyle(strokeWidth * s)
+            drawLine(tint, Offset(4f * s, 8f * s), Offset(20f * s, 8f * s), stroke.width, StrokeCap.Round)
+            drawLine(tint, Offset(4f * s, 12f * s), Offset(20f * s, 12f * s), stroke.width, StrokeCap.Round)
+            drawLine(tint, Offset(4f * s, 16f * s), Offset(20f * s, 16f * s), stroke.width, StrokeCap.Round)
+        }
+    }
+
+    /** Three widely-spaced horizontal lines — switch to expanded decode list. */
+    @Composable
+    fun ViewExpanded(
+        modifier: Modifier = Modifier,
+        color: Color = Color.Unspecified,
+        size: Dp = 22.dp,
+        strokeWidth: Float = 1.6f,
+    ) {
+        val tint = if (color == Color.Unspecified) androidx.compose.material3.MaterialTheme.colorScheme.onSurface else color
+        Canvas(modifier = modifier.then(Modifier.sizeOf(size))) {
+            val s = this.size.width / 24f
+            val stroke = strokeStyle(strokeWidth * s)
+            drawLine(tint, Offset(4f * s, 5f * s), Offset(20f * s, 5f * s), stroke.width, StrokeCap.Round)
+            drawLine(tint, Offset(4f * s, 12f * s), Offset(20f * s, 12f * s), stroke.width, StrokeCap.Round)
+            drawLine(tint, Offset(4f * s, 19f * s), Offset(20f * s, 19f * s), stroke.width, StrokeCap.Round)
+        }
+    }
+
+    /**
+     * Circular arrow — toggles "clear the decode list every cycle". A near-full
+     * loop with an arrowhead conveys the per-slot refresh; tint with [Accent]
+     * when the mode is on, [TextMuted] when off.
+     */
+    @Composable
+    fun AutoClear(
+        modifier: Modifier = Modifier,
+        color: Color = Color.Unspecified,
+        size: Dp = 22.dp,
+        strokeWidth: Float = 1.6f,
+    ) {
+        val tint = if (color == Color.Unspecified) androidx.compose.material3.MaterialTheme.colorScheme.onSurface else color
+        Canvas(modifier = modifier.then(Modifier.sizeOf(size))) {
+            val s = this.size.width / 24f
+            val stroke = strokeStyle(strokeWidth * s)
+            // Near-full clockwise loop with a gap at the top for the arrowhead.
+            drawArc(
+                tint, -50f, 300f, false,
+                Offset(5f * s, 5f * s), Size(14f * s, 14f * s), style = stroke,
+            )
+            // Filled triangular arrowhead at the arc's leading (clockwise) end, sitting at
+            // the top of the loop and pointing along the tangent — a clean refresh arrow.
+            val head = Path().apply {
+                moveTo(13.4f * s, 4.05f * s)   // tip (up-right, along tangent)
+                lineTo(8.05f * s, 2.6f * s)    // outer base corner
+                lineTo(10.25f * s, 8.6f * s)   // inner base corner (on the arc end)
+                close()
+            }
+            drawPath(head, tint)
+        }
+    }
+
     /** Triangular pine tree on a small trunk — POTA tab. */
     @Composable
     fun Tree(

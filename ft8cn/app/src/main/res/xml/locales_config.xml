@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ Supported app languages. Drives the Android 13+ per-app language picker in
+  ~ system Settings and constrains AppCompatDelegate.setApplicationLocales. Keep
+  ~ in sync with the in-app Language picker (SettingsScreen) and the
+  ~ values-<locale>/ translation folders.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="zh-CN" />
+    <locale android:name="zh-TW" />
+    <locale android:name="ru" />
+    <locale android:name="es" />
+    <locale android:name="fr" />
+    <locale android:name="ja" />
+    <locale android:name="it" />
+    <locale android:name="pl" />
+    <locale android:name="ko" />
+    <locale android:name="nl" />
+    <locale android:name="cs" />
+    <locale android:name="tr" />
+    <locale android:name="id" />
+    <locale android:name="uk" />
+    <locale android:name="ar" />
+</locale-config>

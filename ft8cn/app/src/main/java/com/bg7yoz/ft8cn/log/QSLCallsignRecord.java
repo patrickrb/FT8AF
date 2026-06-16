@@ -15,6 +15,10 @@ public class QSLCallsignRecord {
     private String grid;
     private String band;
     private String lastTime;
+    // Latest UTC time (HHMMSS) of the underlying QSO for this grouped row. Paired
+    // with lastTime (YYYYMMDD) it gives a sortable date+time so the recent list can
+    // order same-day QSOs by time. Empty when unknown (e.g. legacy/ADIF rows).
+    private String timeOn = "";
     public String where=null;
     public String dxccStr="";
     public boolean isQSL=false;//Whether manually confirmed
@@ -44,6 +48,14 @@ public class QSLCallsignRecord {
         }else {
             this.lastTime="";
         }
+    }
+
+    public String getTimeOn() {
+        return timeOn;
+    }
+
+    public void setTimeOn(String timeOn) {
+        this.timeOn = timeOn != null ? timeOn : "";
     }
 
 

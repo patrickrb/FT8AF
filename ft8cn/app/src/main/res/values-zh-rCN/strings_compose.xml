@@ -1,0 +1,501 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- ===== 通用 / 共享 ===== -->
+    <string name="action_cancel">取消</string>
+    <string name="action_save">保存</string>
+    <string name="action_done">完成</string>
+    <string name="action_ok">确定</string>
+    <string name="action_exit">退出</string>
+    <string name="common_none">无</string>
+    <string name="common_off">关闭</string>
+    <string name="common_not_configured">未配置</string>
+    <string name="common_not_connected">未连接</string>
+    <string name="common_pass">通过</string>
+    <string name="common_fail">失败</string>
+    <string name="common_test_connection">测试连接</string>
+
+    <!-- ===== 大洲 ===== -->
+    <string name="continent_na">北美洲</string>
+    <string name="continent_sa">南美洲</string>
+    <string name="continent_eu">欧洲</string>
+    <string name="continent_af">非洲</string>
+    <string name="continent_as">亚洲</string>
+    <string name="continent_oc">大洋洲</string>
+    <string name="continent_an">南极洲</string>
+
+    <!-- ===== 底部导航标签 ===== -->
+    <string name="tab_decode">解码</string>
+    <string name="tab_map">地图</string>
+    <string name="tab_waterfall">瀑布图</string>
+    <string name="tab_pota">POTA</string>
+    <string name="tab_logbook">日志本</string>
+    <string name="tab_settings">设置</string>
+
+    <!-- ===== 状态标记（解码列表徽章） ===== -->
+    <string name="status_new_dxcc">新 DXCC</string>
+    <string name="status_new_grid">新网格</string>
+    <string name="status_new_band">新波段</string>
+    <string name="status_pota">POTA</string>
+    <string name="status_new_pota">新 POTA</string>
+    <string name="status_sota">SOTA</string>
+    <string name="status_needed">需要</string>
+    <string name="status_worked">已通联</string>
+    <string name="status_confirmed">已确认</string>
+    <string name="status_cq">CQ</string>
+    <string name="status_pending">待处理</string>
+
+    <!-- ===== 启动页 / 应用级 ===== -->
+    <string name="splash_tagline">FT8 · 移动伴侣</string>
+    <string name="splash_initializing">正在初始化电台</string>
+    <string name="splash_version">v%1$s · 构建 %2$s</string>
+    <string name="app_set_callsign_first">呼叫 CQ 前请先在设置中填写您的呼号</string>
+    <string name="app_hunt_on">猎台开启 — 自动应答 CQ</string>
+    <string name="app_hunt_off">猎台关闭 — 呼叫 CQ，仅通联应答方</string>
+    <string name="main_tx_volume">TX 音量：%1$d%%</string>
+
+    <!-- ===== 退出对话框 ===== -->
+    <string name="exit_title">退出 FT8AF？</string>
+    <string name="exit_message">确定要关闭应用吗？任何进行中的 QSO 将被取消。</string>
+
+    <!-- ===== 频率选择器 ===== -->
+    <string name="freq_select_title">选择频率</string>
+    <string name="freq_show_alternates">显示备用</string>
+    <string name="freq_hide_alternates">隐藏备用</string>
+    <string name="freq_alt_prefix">"备用 "</string>
+
+    <!-- ===== 操作员卡片 ===== -->
+    <string name="op_no_call">无呼号</string>
+    <string name="op_no_grid">未设置网格</string>
+    <string name="op_tap_to_edit">点击编辑</string>
+    <string name="op_stat_rig">RIG</string>
+    <string name="op_stat_antenna">ANTENNA</string>
+    <string name="op_stat_power">POWER</string>
+
+    <!-- ===== 导出日志面板 ===== -->
+    <string name="export_title">导出 QSO</string>
+    <string name="export_date_range">日期范围</string>
+    <string name="export_date_from_placeholder">"起始  YYYYMMDD"</string>
+    <string name="export_date_to_placeholder">"结束  YYYYMMDD"</string>
+    <string name="export_share">分享</string>
+    <string name="export_filter_confirmed">仅已确认</string>
+    <string name="export_filter_unconfirmed">仅未确认</string>
+    <string name="export_record_singular">条记录</string>
+    <string name="export_record_plural">条记录</string>
+    <string name="export_summary_all">全部</string>
+    <string name="export_summary_key">\'%1$s\'</string>
+    <string name="export_summary_suffix">" · %1$s"</string>
+    <string name="export_summary">%1$d %2$s 匹配 %3$s%4$s</string>
+    <string name="export_preparing">正在准备…</string>
+    <string name="export_share_chooser_title">分享 QSO 日志</string>
+    <string name="export_saved_to">已保存至 %1$s</string>
+    <string name="export_save_failed">保存到下载目录失败</string>
+    <string name="export_temp_file_failed">无法创建临时文件</string>
+
+    <!-- ===== 进行中 QSO 面板 ===== -->
+    <string name="qsopanel_calling_cq">正在呼叫 CQ</string>
+    <string name="qsopanel_searching">正在搜索...</string>
+    <string name="qsopanel_qsoing_with">正在与 %1$s 通联</string>
+    <string name="qsopanel_waiting_for">正在等待 %1$s</string>
+    <string name="qsopanel_tap_to_view">点击查看 ↗</string>
+    <string name="qsopanel_tx_message">TX：%1$s</string>
+    <string name="qsopanel_waiting_messages">正在等待消息...</string>
+
+    <!-- ===== 解码界面 ===== -->
+    <string name="decode_title">解码</string>
+    <string name="decode_subtitle">"%1$s  •  本周期已解码 %2$d 条"</string>
+    <string name="decode_clear_list">清空解码列表</string>
+    <string name="decode_utc_placeholder">UTC : --:--:--</string>
+    <string name="decode_time_group_utc">%1$s UTC</string>
+    <string name="decode_filter_all">全部</string>
+    <string name="decode_filter_cq_calls">CQ 呼叫</string>
+    <string name="decode_filter_cq_pota">CQ POTA</string>
+    <string name="decode_filter_new_dxcc">新 DXCC</string>
+    <string name="decode_filter_needed">需要</string>
+    <string name="decode_filter_for_me">呼叫我</string>
+    <string name="decode_empty_cq_title">没有 CQ 呼叫</string>
+    <string name="decode_empty_cq_body">当前波段暂无电台在呼叫 CQ。</string>
+    <string name="decode_empty_pota_title">没有 POTA 点位</string>
+    <string name="decode_empty_pota_body">该波段尚未解码到公园激活信号 — 打开 POTA → 猎台查看点位列表。</string>
+    <string name="decode_empty_dxcc_title">没有新 DXCC</string>
+    <string name="decode_empty_dxcc_body">尚未解码到未通联的 DXCC 实体。</string>
+    <string name="decode_empty_needed_title">没有需要的</string>
+    <string name="decode_empty_needed_body">未找到需要确认的电台。</string>
+    <string name="decode_empty_forme_title">没有呼叫您的电台</string>
+    <string name="decode_empty_forme_body">当前没有电台在呼叫您的呼号。</string>
+    <string name="decode_empty_default_title">未解码到信号</string>
+    <string name="decode_empty_default_body">正在等待 FT8 信号出现...</string>
+    <string name="decode_label_calling">→ 正在呼叫</string>
+    <string name="decode_label_cq">CQ</string>
+    <string name="decode_label_to_you">↓ 呼叫您</string>
+
+    <!-- ===== QSO 面板 ===== -->
+    <string name="qso_complete">QSO 完成</string>
+    <string name="qso_call_action">呼叫 %1$s</string>
+    <string name="qso_qrz_link">QRZ ↗</string>
+    <string name="qso_stat_signal">信号</string>
+    <string name="qso_stat_azimuth">方位角</string>
+    <string name="qso_stat_band">波段</string>
+    <string name="qso_sequence_header">QSO 流程</string>
+    <string name="qso_step_send_call">发送呼叫</string>
+    <string name="qso_step_report_sent">报告已发送</string>
+    <string name="qso_step_roger">收到</string>
+    <string name="qso_step_confirm">确认</string>
+    <string name="qso_step_logged">已记录</string>
+    <string name="qso_live_sending">正在与 %1$s 通联 — 发送 %2$s</string>
+    <string name="qso_live_waiting">正在等待 %1$s 回复…</string>
+    <string name="qso_live_transmitting">正在发射…</string>
+    <string name="qso_live_step_fallback">消息</string>
+    <string name="qso_tx_now">立即 TX</string>
+    <string name="qso_tx_next">下一个 TX</string>
+
+    <!-- ===== 日志本 ===== -->
+    <string name="log_tab_stats">统计</string>
+    <string name="log_tab_recent">最近</string>
+    <string name="log_tab_awards">奖项</string>
+    <string name="log_title">日志本</string>
+    <string name="log_subtitle_qsos_all_bands">%1$d 个 QSO · 全部波段</string>
+    <string name="log_cd_sync_to_logging_services">同步到日志服务</string>
+    <string name="log_cd_export_qsos">导出 QSO</string>
+    <string name="log_stat_total_qsos">QSO 总数</string>
+    <string name="log_stat_dxcc_entities">DXCC 实体</string>
+    <string name="log_stat_cq_zones">CQ 分区</string>
+    <string name="log_stat_itu_zones">ITU 分区</string>
+    <string name="log_section_band_distribution">波段分布</string>
+    <string name="log_section_award_progress">奖项进度</string>
+    <string name="log_award_dxcc_mixed">DXCC 混合</string>
+    <string name="log_award_vucc_grid_squares">VUCC 网格</string>
+    <string name="log_award_dxcc_challenge">DXCC 挑战</string>
+    <string name="log_section_grid_coverage">网格覆盖</string>
+    <string name="log_section_signal_trend">信号趋势</string>
+    <string name="log_no_qsos_yet">还没有 QSO</string>
+    <string name="log_no_qsos_recorded_yet">尚未记录任何 QSO</string>
+    <string name="log_state_usa">%1$s, USA</string>
+    <string name="log_cd_qso_actions">QSO 操作</string>
+    <string name="log_action_edit">编辑</string>
+    <string name="log_action_delete">删除</string>
+    <string name="log_award_dxcc_mixed_desc">在任意波段/模式下通联并确认 100 个 DXCC 实体</string>
+    <string name="log_award_was">WAS</string>
+    <string name="log_award_was_desc">通联并确认全部 50 个 US 州</string>
+    <string name="log_award_waz">WAZ</string>
+    <string name="log_award_waz_desc">通联并确认全部 40 个 CQ 分区</string>
+    <string name="log_award_vucc">VUCC</string>
+    <string name="log_award_vucc_desc">VHF/UHF 世纪俱乐部 -- 单一波段上 100 个网格</string>
+    <string name="log_award_iota">IOTA</string>
+    <string name="log_award_iota_desc">海岛通联 -- 通联指定岛屿上的电台</string>
+    <string name="log_edit_qso">编辑 QSO</string>
+    <string name="log_field_callsign">呼号</string>
+    <string name="log_field_grid_locator">网格定位</string>
+    <string name="log_field_mode">模式</string>
+    <string name="log_delete_qso_title">删除 QSO？</string>
+    <string name="log_delete_qso_body_callsign">将与 %1$s 的 QSO 从日志本中移除？此操作无法撤销。</string>
+    <string name="log_delete_qso_body">将此 QSO 从日志本中移除？此操作无法撤销。</string>
+    <string name="log_sync_title_no_services">未启用任何服务</string>
+    <string name="log_sync_title_syncing">正在同步…</string>
+    <string name="log_sync_title_complete">同步完成</string>
+    <string name="log_sync_enable_services">请在设置中启用 Cloudlog/Wavelog/Nextlog 或 QRZ，然后重试。</string>
+    <string name="log_sync_progress_count">%2$d 个 QSO 中的第 %1$d 个</string>
+    <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog：已接受 %1$d 个</string>
+    <string name="log_sync_qrz_accepted">QRZ：已接受 %1$d 个</string>
+    <string name="log_sync_nothing_to_upload">日志本中暂无可上传的 QSO。</string>
+    <string name="log_sync_working">正在处理…</string>
+
+    <!-- ===== POTA ===== -->
+    <string name="pota_tab_activate">激活</string>
+    <string name="pota_tab_hunt">猎台</string>
+    <string name="pota_tab_history">历史</string>
+    <string name="pota_start_activation">开始激活</string>
+    <string name="pota_park_reference_label">公园编号（例如 K-1234）</string>
+    <string name="pota_notes_optional_label">备注（可选）</string>
+    <string name="pota_enter_park_reference_first">请先输入公园编号</string>
+    <string name="pota_activating">正在激活 %1$s</string>
+    <string name="pota_activation_ended">激活已结束</string>
+    <string name="pota_set_callsign_first">请先在设置中填写您的呼号</string>
+    <string name="pota_self_spot_posted">自助点位已发布</string>
+    <string name="pota_self_spot_failed">自助点位发布失败 — 请检查日志</string>
+    <string name="pota_active_park">激活中 — %1$s</string>
+    <string name="pota_qsos">QSO</string>
+    <string name="pota_contacts_map">通联地图</string>
+    <string name="pota_back">返回</string>
+    <string name="pota_valid_activation">有效激活</string>
+    <string name="pota_to_valid">还差 %1$d 个有效</string>
+    <string name="pota_elapsed">已用时</string>
+    <string name="pota_since_start">自开始起</string>
+    <string name="pota_self_spot">自助点位</string>
+    <string name="pota_end_activation">结束激活</string>
+    <string name="pota_notes_quote">“%1$s”</string>
+    <string name="pota_tx_cq_preview">TX CQ 将以 “CQ POTA %1$s %2$s” 发出。</string>
+    <string name="pota_no_spots">当前没有 FT8 POTA 点位。</string>
+    <string name="pota_active_spots">%1$d 个活跃 FT8 点位</string>
+    <string name="pota_targeting">正在锁定 %1$s @ %2$s kHz（%3$s）— 切换到解码进行呼叫</string>
+    <string name="pota_no_past_activations">暂无过往激活记录。</string>
+    <string name="pota_no_browser_available">没有可用的浏览器</string>
+    <string name="pota_export_failed">导出失败 — 请检查日志</string>
+    <string name="pota_status_active">活跃</string>
+    <string name="pota_qso_count">%1$d 个 QSO</string>
+    <string name="pota_share_adif">分享 ADIF</string>
+    <string name="pota_open_pota_app">打开 pota.app</string>
+
+    <!-- ===== 调试日志 / 地图 / 瀑布图 ===== -->
+    <string name="debug_title">调试</string>
+    <string name="debug_line_count">%1$d 行</string>
+    <string name="debug_logcat_on_suffix">" · logcat 开启"</string>
+    <string name="debug_close">关闭</string>
+    <string name="debug_share">分享</string>
+    <string name="debug_clear">清空</string>
+    <string name="debug_logcat_on">Logcat：开启</string>
+    <string name="debug_logcat_off">Logcat：关闭</string>
+    <string name="debug_no_log_file">无日志文件</string>
+    <string name="debug_log_cleared">日志已清空</string>
+    <string name="debug_share_chooser_title">分享 debug.log</string>
+    <string name="map_title">地图</string>
+    <string name="map_no_grid_set">未设置网格</string>
+    <string name="map_station_count">%1$d 个电台</string>
+    <string name="map_station_count_with_heard">%1$d 个电台 · 收到 %2$d 个</string>
+    <string name="map_projection_equirectangular">等距圆柱投影</string>
+    <string name="map_projection_azimuthal">方位等距投影</string>
+    <string name="map_mode_standard">STD</string>
+    <string name="map_mode_azimuthal">AZ</string>
+    <string name="map_overlay_psk">PSK</string>
+    <string name="map_info_distance">距离</string>
+    <string name="map_info_bearing">方位</string>
+    <string name="map_info_snr">SNR</string>
+    <string name="waterfall_title">瀑布图</string>
+    <string name="waterfall_toggle_nr">NR</string>
+    <string name="waterfall_toggle_msg">MSG</string>
+    <string name="waterfall_status_live">实时</string>
+
+    <!-- ===== 设置：格式辅助 ===== -->
+    <string name="settings_minutes_format">%1$d 分钟</string>
+    <string name="settings_tries_format">%1$d 次</string>
+    <string name="settings_milliseconds_format">%1$d ms</string>
+    <string name="settings_hz_format">%1$d Hz</string>
+    <string name="settings_hz_str_format">%1$s Hz</string>
+    <string name="settings_percent_format">%1$d%%</string>
+    <string name="settings_bands_enabled_format">已启用 %2$d 个中的 %1$d 个</string>
+    <string name="settings_min_max_suffix">%1$d–%2$d %3$s</string>
+    <string name="settings_build_date_format">构建 %1$s</string>
+    <string name="settings_version_value">v%1$s</string>
+
+    <!-- ===== 设置：分区 ===== -->
+    <string name="settings_title">设置</string>
+    <string name="settings_section_operator_identity">操作员身份</string>
+    <string name="settings_section_radio">电台</string>
+    <string name="settings_section_audio">音频</string>
+    <string name="settings_section_transmission">发射</string>
+    <string name="settings_section_auto_sequence">自动流程</string>
+    <string name="settings_section_decode_highlights">解码高亮</string>
+    <string name="settings_section_callsign_blocklist">呼号屏蔽列表</string>
+    <string name="settings_section_decode_filters">解码过滤</string>
+    <string name="settings_section_needed_dx_alerts">需要的 DX 提醒</string>
+    <string name="settings_section_logging_awards">日志与奖项</string>
+    <string name="settings_section_advanced">高级</string>
+    <string name="settings_section_about">关于</string>
+    <string name="settings_section_language">语言</string>
+
+    <!-- ===== Settings: drill-down category labels ===== -->
+    <string name="settings_cat_radio_audio">电台与音频</string>
+    <string name="settings_cat_transmission">发射</string>
+    <string name="settings_cat_decode_filters">解码与过滤</string>
+    <string name="settings_cat_logging">日志与奖项</string>
+    <string name="settings_cat_advanced">高级</string>
+    <string name="settings_cat_about">关于</string>
+
+    <!-- ===== 设置：操作员身份 ===== -->
+    <string name="settings_auto_update_grid">自动更新网格（GPS）</string>
+    <string name="settings_auto_update_grid_desc">使用设备 GPS 实时更新您的 Maidenhead 网格</string>
+
+    <!-- ===== 设置：电台 ===== -->
+    <string name="settings_rig_model">电台型号</string>
+    <string name="settings_control_mode">控制模式</string>
+    <string name="settings_connection_mode">连接模式</string>
+    <string name="settings_baud_rate">波特率</string>
+    <string name="settings_band_frequency">波段与频率</string>
+    <string name="settings_enabled_bands">已启用波段</string>
+    <string name="settings_audio_frequency">音频频率</string>
+    <string name="settings_spectrum_width">频谱宽度</string>
+
+    <!-- ===== 设置：音频 ===== -->
+    <string name="settings_audio_input">音频输入</string>
+    <string name="settings_audio_output">音频输出</string>
+    <string name="settings_tx_volume">TX 音量</string>
+    <string name="settings_tx_volume_desc" formatted="false">发射音频电平（硬件按键 ±5%）</string>
+
+    <!-- ===== 设置：发射 ===== -->
+    <string name="settings_tx_rx_split">TX/RX 分离</string>
+    <string name="settings_tx_rx_split_desc">在与接收不同的频率上发射</string>
+    <string name="settings_tx_watchdog">TX 看门狗</string>
+    <string name="settings_tx_watchdog_desc">超时后自动停止发射</string>
+    <string name="settings_stop_after">停止条件</string>
+    <string name="settings_stop_after_desc">呼叫 N 次无应答后停止</string>
+
+    <!-- ===== 设置：自动流程 ===== -->
+    <string name="settings_hunt">猎台（自动应答 CQ）</string>
+    <string name="settings_hunt_desc">主动呼叫正在呼叫 CQ 的电台。与 TX 栏上的猎台按钮相同。关闭 = 呼叫 CQ，仅通联应答您的电台。</string>
+    <string name="settings_auto_call_followed">自动呼叫已关注</string>
+    <string name="settings_auto_call_followed_desc">自动持续呼叫已关注的呼号</string>
+    <string name="settings_fast_turnaround">快速周转</string>
+    <string name="settings_fast_turnaround_desc">提前约 1 秒解码，使您能在下一时隙应答 CQ 而无需等待。可能错过时钟偏移较大的电台。</string>
+    <string name="settings_auto_cq_after_qso">QSO 后自动 CQ</string>
+    <string name="settings_auto_cq_after_qso_desc">每次完成通联后自动继续呼叫 CQ — 无需重新点击。保持在您的频率上（忽略猎台）。持续运行直到您停止或 TX 看门狗在无应答时超时。</string>
+
+    <!-- ===== 设置：解码高亮 ===== -->
+    <string name="settings_highlight_new_dxcc">新 DXCC</string>
+    <string name="settings_highlight_new_dxcc_desc">高亮显示来自未通联 DXCC 实体的电台</string>
+    <string name="settings_highlight_new_grid">新网格</string>
+    <string name="settings_highlight_new_grid_desc">高亮显示尚未通联的 Maidenhead 网格</string>
+    <string name="settings_highlight_new_band">新波段</string>
+    <string name="settings_highlight_new_band_desc">高亮显示仅在其他波段通联过的电台</string>
+    <string name="settings_highlight_pota">POTA 激活者</string>
+    <string name="settings_highlight_pota_desc">高亮显示被点位的 POTA 激活者；新公园更醒目</string>
+    <string name="settings_highlight_worked">此前已通联</string>
+    <string name="settings_highlight_worked_desc">标记已在您日志中的电台</string>
+    <string name="settings_distance_unit">以英里显示距离</string>
+    <string name="settings_distance_unit_desc">以英里代替公里显示距离</string>
+
+    <!-- ===== 设置：呼号屏蔽列表 ===== -->
+    <string name="settings_exact_callsigns">精确呼号</string>
+    <string name="settings_exact_callsigns_desc">屏蔽整呼号匹配</string>
+    <string name="settings_prefixes">前缀</string>
+    <string name="settings_prefixes_desc">按呼号前缀屏蔽（例如 RA）</string>
+    <string name="settings_keywords">关键词</string>
+    <string name="settings_keywords_desc">按呼号或消息中的子串屏蔽（例如 POTA、/P）</string>
+
+    <!-- ===== 设置：解码过滤 ===== -->
+    <string name="settings_show_only_cq">仅显示 CQ</string>
+    <string name="settings_show_only_cq_desc">隐藏除 CQ 类消息外的所有内容</string>
+    <string name="settings_dx_only">仅 DX</string>
+    <string name="settings_dx_only_desc">仅显示您所在大洲以外的电台</string>
+    <string name="settings_needed_only">仅需要的</string>
+    <string name="settings_needed_only_desc">仅显示尚未确认（QSL）的电台</string>
+    <string name="settings_filter_by_continent">按大洲过滤</string>
+    <string name="settings_filter_by_continent_desc">仅显示来自所选大洲的电台</string>
+    <string name="settings_continent">大洲</string>
+    <string name="settings_skip_directional_cq">跳过定向 CQ（自动回复）</string>
+    <string name="settings_skip_directional_cq_desc">不自动应答面向其他 DXCC 的 CQ DX/EU/JA…</string>
+    <string name="settings_hide_directional_cq">隐藏非面向我的定向 CQ</string>
+    <string name="settings_hide_directional_cq_desc">隐藏未面向您 DXCC 的区域定向 CQ</string>
+
+    <!-- ===== 设置：需要的 DX 提醒 ===== -->
+    <string name="settings_alert_new_dxcc">新 DXCC</string>
+    <string name="settings_alert_new_dxcc_desc">当未通联的 DXCC 实体呼叫 CQ 时发声 + 振动 + 通知</string>
+    <string name="settings_alert_new_state">新 US 州</string>
+    <string name="settings_alert_new_state_desc">当来自未通联 US 州的电台呼叫 CQ 时发声 + 振动 + 通知（州由网格推算）</string>
+
+    <!-- ===== 设置：日志与奖项 ===== -->
+    <string name="settings_save_swl_decodes">保存 SWL 解码</string>
+    <string name="settings_save_swl_decodes_desc">将所有已解码消息记录到数据库</string>
+    <string name="settings_save_swl_qsos">保存 SWL QSO</string>
+    <string name="settings_save_swl_qsos_desc">记录在其他电台之间检测到的 QSO</string>
+    <string name="settings_pskreporter">PSKReporter</string>
+    <string name="settings_pskreporter_desc">将已解码点位上传至 pskreporter.info</string>
+    <string name="settings_qrz_com">QRZ.com</string>
+    <string name="settings_qrz_com_desc">自动将 QSO 上传至 QRZ 日志本</string>
+    <string name="settings_qrz_profile_lookup">QRZ 资料查询</string>
+    <string name="settings_qrz_profile_lookup_desc">QRZ XML API 的用户名 + 密码（头像）</string>
+    <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
+    <string name="settings_cloudlog_desc">自动将 QSO 上传至 Cloudlog、Wavelog 或 Nextlog 实例</string>
+
+    <!-- ===== 设置：高级 ===== -->
+    <string name="settings_ptt_delay">PTT 延迟</string>
+    <string name="settings_ptt_delay_desc">PTT 后开始发射音频前的延迟</string>
+    <string name="settings_tx_delay">TX 延迟</string>
+    <string name="settings_tx_delay_desc">发射前的延迟，以便完成上一周期的解码</string>
+    <string name="settings_late_start_tolerance">迟启动容差</string>
+    <string name="settings_late_start_tolerance_desc">允许在一个周期开始后最多 N ms 内启动 TX；前导音频会被裁剪，使 TX 在周期边界结束</string>
+
+    <!-- ===== 设置：关于 ===== -->
+    <string name="settings_faq_support">FAQ 与支持</string>
+    <string name="settings_report_bug">报告问题</string>
+    <string name="bug_report_description_hint">描述出现的问题…</string>
+    <string name="bug_report_send_email">发送邮件</string>
+    <string name="bug_report_no_email_app">未找到可发送报告的邮件应用</string>
+    <string name="bug_report_open_github">打开 GitHub issue</string>
+    <string name="settings_debug">调试</string>
+    <string name="settings_debug_desc">查看 / 分享 debug.log</string>
+    <string name="settings_about_body">版本 %1$s（构建 %2$s）\n构建日期 %3$s\n\nFT8，轻松上手。\n\n一款用于 Android 的独立 FT8 收发应用。支持 USB、Bluetooth 及网络电台控制，具备自动流程与日志记录功能。</string>
+    <string name="settings_website">网站</string>
+    <string name="settings_community">社区</string>
+    <string name="settings_built_by">开发者</string>
+
+    <!-- ===== 设置：对话框 ===== -->
+    <string name="settings_block_exact_title">屏蔽精确呼号</string>
+    <string name="settings_block_exact_desc">整呼号匹配。以逗号或空格分隔，例如 W1AW、K1ABC。</string>
+    <string name="settings_block_prefix_title">屏蔽呼号前缀</string>
+    <string name="settings_block_prefix_desc">前缀匹配，例如 RA 屏蔽 RA0AA..RA9ZZ。以逗号或空格分隔。</string>
+    <string name="settings_block_keyword_title">屏蔽关键词</string>
+    <string name="settings_block_keyword_desc">对呼号和消息文本进行子串匹配，例如 POTA、/P、QRP。</string>
+    <string name="settings_blocklist_hint">例如 W1AW、RA、/P</string>
+    <string name="settings_filter_continent_title">过滤大洲</string>
+    <string name="settings_conn_usb_cable">USB 线缆</string>
+    <string name="settings_conn_bluetooth">Bluetooth</string>
+    <string name="settings_conn_network">网络</string>
+    <string name="settings_no_usb_serial">未检测到 USB 串口设备。请将 USB 线缆连接至您的电台后重试。</string>
+    <string name="settings_debug_mode_enabled">调试模式已启用</string>
+    <string name="settings_debug_mode_disabled">调试模式已禁用</string>
+    <string name="settings_edit_operator_identity">编辑操作员身份</string>
+    <string name="settings_callsign">呼号</string>
+    <string name="settings_callsign_hint">例如 W1AW</string>
+    <string name="settings_grid_locator">网格定位</string>
+    <string name="settings_grid_locator_hint">例如 FN31pr</string>
+    <string name="settings_logging_server">日志服务器</string>
+    <string name="settings_logging_server_desc">Cloudlog、Wavelog 和 Nextlog 都接受相同的上传。</string>
+    <string name="settings_server_address">服务器地址</string>
+    <string name="settings_api_key">API 密钥</string>
+    <string name="settings_api_key_hint">您的 Cloudlog API 密钥</string>
+    <string name="settings_loading_stations">正在加载站点...</string>
+    <string name="settings_station_id">站点 ID</string>
+    <string name="settings_station_id_hint">例如 1</string>
+    <string name="settings_select_a_station">选择一个站点</string>
+    <string name="settings_enter_manually">手动输入</string>
+    <string name="settings_choose_from_server">从服务器选择</string>
+    <string name="settings_station_profile">站点配置</string>
+    <string name="settings_qrz_creds_desc">用于通过 QRZ XML API 为已解码呼号获取资料照片。需要 QRZ XML 订阅。</string>
+    <string name="settings_username">用户名</string>
+    <string name="settings_username_hint">您的 QRZ.com 用户名</string>
+    <string name="settings_password">密码</string>
+    <string name="settings_enabled_bands_dialog_desc">隐藏的波段不会出现在频率选择器中。</string>
+    <string name="settings_select_serial_port">选择串口</string>
+    <string name="settings_tx_volume_advice">实时调整 — 您的下一次 TX 将使用此电平。注意您电台的 ALC，逐渐调低直到刚好触及临界线。</string>
+
+    <!-- ===== 设置：语言选择器 ===== -->
+    <string name="settings_language">语言</string>
+    <string name="settings_language_desc">应用显示语言</string>
+    <string name="settings_language_system">跟随系统</string>
+
+    <string name="tx_transmitting">发射中</string>
+    <string name="tx_listening">监听中</string>
+    <string name="tx_hunt">猎台</string>
+    <string name="tx_call_cq">呼叫CQ</string>
+    <string name="tx_stop">停止</string>
+    <string name="hound_title">工作 DX 远征（Hound）</string>
+    <string name="hound_help">请先将电台调到 Fox 公布的拨盘频率。你在高频处呼叫（1000–4000 Hz）；应用会自动将你 QSY 到 Fox 应答的频率并回复你的报告。</string>
+    <string name="hound_fox_callsign">Fox 呼号</string>
+    <string name="hound_call_frequency">呼叫频率（Hz，1000–4000）</string>
+    <string name="hound_start">开始</string>
+
+    <!-- ===== CAT status chip ===== -->
+    <string name="cat_status_chip_label">CAT</string>
+    <string name="cat_status_connected">CAT 已连接 — 点按重新连接</string>
+    <string name="cat_status_connecting">CAT 连接中…</string>
+    <string name="cat_status_disconnected">CAT 未连接 — 点按连接</string>
+    <string name="cat_status_error">CAT 连接错误 — 点按重试</string>
+    <string name="qsopanel_log_action">LOG</string>
+    <string name="qsopanel_queue">队列</string>
+    <string name="swr_lockout_title">发射已停止 — 检测到高驻波比 (%1$s)</string>
+    <string name="swr_lockout_body">发射前请检查天线 / 馈线。</string>
+    <string name="swr_lockout_dismiss">关闭</string>
+    <string name="swr_lockout_toast">发射已阻止 — 驻波比锁定中，请先关闭锁定横幅。</string>
+
+    <!-- ===== Time sync / manual correction ===== -->
+    <string name="settings_cat_time_sync">时间同步</string>
+    <string name="settings_cat_time_sync_desc">离线操作的手动时钟校正</string>
+    <string name="settings_time_correction_section">手动校正</string>
+    <string name="settings_time_correction_desc">在没有网络同步时微调应用时钟。FT8 需要 UTC 精确到约 1 秒。请调整到解码站点的 DT 列接近 0。</string>
+    <string name="settings_time_current_label">当前校正</string>
+    <string name="settings_time_correction_reset">重置为 0</string>
+    <string name="settings_time_suggest_section">根据解码建议</string>
+    <string name="settings_time_suggest_label">近期平均 DT：%1$s</string>
+    <string name="settings_time_suggest_none">暂无解码 — 开始接收以获取建议。</string>
+    <string name="settings_time_suggest_apply">应用建议的校正</string>
+</resources>

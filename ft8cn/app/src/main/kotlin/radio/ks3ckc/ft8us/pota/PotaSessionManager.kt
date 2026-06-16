@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import radio.ks3ckc.ft8us.pota.model.PotaActivation
+import radio.ks3ckc.ft8us.pota.model.PotaQso
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
@@ -33,30 +34,50 @@ object PotaSessionManager {
     private val _currentActivation = MutableStateFlow<PotaActivation?>(null)
     val currentActivation: StateFlow<PotaActivation?> = _currentActivation.asStateFlow()
 
+    private val _activationQsos = MutableStateFlow<List<PotaQso>>(emptyList())
+    val activationQsos: StateFlow<List<PotaQso>> = _activationQsos.asStateFlow()
+
     @Volatile
     private var savedModifier: String = ""
 
     val isActive: Boolean get() = _currentActivation.value != null
-    val currentParkRef: String? get() = _currentActivation.value?.parkRef
+    val currentParkRefs: List<String> get() = _currentActivation.value?.parkRefs ?: emptyList()
 
     @Synchronized
-    fun start(parkRef: String, notes: String?): PotaActivation? {
+    fun start(parkRefs: List<String>, notes: String?): PotaActivation? {
         if (_currentActivation.value != null) {
-            log("start ignored — activation already running for ${currentParkRef}")
+            log("start ignored — activation already running for ${currentParkRefs}")
             return _currentActivation.value
         }
-        val ref = parkRef.trim().uppercase()
-        if (ref.isEmpty()) {
-            log("start rejected — empty park ref")
+        val refs = parkRefs
+            .map { it.trim().uppercase() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .take(10)
+        if (refs.isEmpty()) {
+            log("start rejected — no valid park refs")
             return null
         }
+        val joined = refs.joinToString(",")
         savedModifier = GeneralVariables.toModifier ?: ""
         GeneralVariables.toModifier = MY_SIG_POTA
         val operator = GeneralVariables.myCallsign?.takeIf { it.isNotBlank() }
-        val activation = PotaActivationDao.startActivation(ref, operator, notes)
+        val activation = PotaActivationDao.startActivation(joined, operator, notes)
         _currentActivation.value = activation
-        log("start ref=$ref id=${activation.id} priorModifier='${savedModifier}'")
+        _activationQsos.value = emptyList()
+        log("start refs=$joined id=${activation.id} priorModifier='${savedModifier}'")
         return activation
+    }
+
+    @Synchronized
+    fun resume() {
+        if (_currentActivation.value != null) return
+        val active = PotaActivationDao.findActiveActivation() ?: return
+        savedModifier = GeneralVariables.toModifier ?: ""
+        GeneralVariables.toModifier = MY_SIG_POTA
+        _currentActivation.value = active
+        _activationQsos.value = PotaActivationDao.getActivationQsos(active)
+        log("resume ref=${active.parkRef} id=${active.id} qsoCount=${active.qsoCount}")
     }
 
     @Synchronized
@@ -70,15 +91,22 @@ object PotaSessionManager {
         savedModifier = ""
         log("end ref=${active.parkRef} id=${active.id} qsoCount=${active.qsoCount} restoredModifier='${GeneralVariables.toModifier}'")
         _currentActivation.value = null
+        _activationQsos.value = emptyList()
     }
 
-    /** Pull the latest qso_count from the DB so the UI counter stays accurate. */
+    /** Pull the latest qso_count and contacts from the DB so the UI stays accurate. */
     fun refreshCounter() {
         val active = _currentActivation.value ?: return
-        PotaActivationDao.reload(active.id)?.let { _currentActivation.value = it }
+        PotaActivationDao.reload(active.id)?.let {
+            _currentActivation.value = it
+            _activationQsos.value = PotaActivationDao.getActivationQsos(it)
+        }
     }
 
     fun history(): List<PotaActivation> = PotaActivationDao.history()
+
+    fun getQsosForActivation(activation: PotaActivation): List<PotaQso> =
+        PotaActivationDao.getActivationQsos(activation)
 
     /**
      * Stamp POTA ADIF fields onto a QSO record about to be inserted. Mutates
@@ -88,7 +116,7 @@ object PotaSessionManager {
      */
     @JvmStatic
     fun stampQso(record: com.bg7yoz.ft8cn.log.QSLRecord, spottedParkRef: String?) {
-        currentParkRef?.let {
+        _currentActivation.value?.parkRef?.let {
             record.mySig = MY_SIG_POTA
             record.mySigInfo = it
         }

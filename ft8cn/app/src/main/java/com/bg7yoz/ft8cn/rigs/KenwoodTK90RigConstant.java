@@ -36,6 +36,7 @@ public class KenwoodTK90RigConstant {
     private static final String TS590_PTT_OFF = "RX;";//KENWOOD TS590,PTT
     private static final String FLEX_SET_USB_DATA = "MD9;";//FLEX6000 DIGU
     private static final String TS590_SET_USB = "MD2;";//KENWOOD USB MODE
+    private static final String TS2000_SET_DATA = "MD6;";//KENWOOD/TX-500 DATA mode (USB line input)
     private static final String TS590_READ_FREQ = "FA;";//KENWOOD read frequency
     private static final String TS590_READ_METERS = "RM;";//KENWOOD read METER
 
@@ -129,6 +130,10 @@ public class KenwoodTK90RigConstant {
 
     public static byte[] setTS590OperationUSBMode() {
         return TS590_SET_USB.getBytes();
+    }
+
+    public static byte[] setTS2000OperationDataMode() {
+        return TS2000_SET_DATA.getBytes();
     }
 
     public static byte[] setFLEX6000OperationUSBMode() {

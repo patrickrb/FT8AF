@@ -1,0 +1,560 @@
+<resources>
+    <string name="app_name">FT8AF</string>
+    <string name="nav_menu_title_call_list">Содержание</string>
+    <string name="nav_menu_title_decode_list">Декодирование</string>
+    <string name="nav_menu_title_my_calling">Вызов</string>
+    <string name="nav_menu_title_history">Журнал QSO</string>
+    <string name="nav_menu_title_config">Настройки</string>
+    <string name="map_name" translatable="false">nightUSGS4Layer.sqlite</string>
+
+
+    <string name="run_decode">Начать декодирование</string>
+    <string name="db">dB</string>
+    <string name="dt">Δt</string>
+    <string name="locate">Позиция</string>
+    <string name="message">Сообщение</string>
+    <string name="freq">Частота</string>
+    <string name="decode">Декодировать</string>
+    <string name="delete">Удалить</string>
+    <string name="sequence">S.</string>
+    <string name="dist">Расстояние</string>
+    <string name="location">Местоположение</string>
+    <string name="mycall">Позывной</string>
+    <string name="pl_mycall">Введите позывной</string>
+    <string name="headGrid">Квадрат сетки</string>
+    <string name="pl_grid">Введите Maidenhead-локатор</string>
+    <string name="decoding">Декодирование…</string>
+    <string name="send">TX</string>
+    <string name="check">Проверка</string>
+    <string name="sendFreq">Частота TX</string>
+    <string name="sendDefaultFreq">Звуковая частота</string>
+    <string name="pl_sendFreq">Диапазон звуковой частоты 0~2900</string>
+    <string name="transmitting">TX …</string>
+    <string name="synFrequency">Блок. TX=RX</string>
+    <string name="spectrum">Спектр</string>
+    <string name="pl_trans_delay">Задержка передачи (мс)</string>
+    <string name="tran_delay">Задержка TX</string>
+
+    <string name="timeOffset">Смещение времени</string>
+    <string name="help">Справка</string>
+    <string name="scroll_down">▾</string>
+    <string name="about_me">О программе FT8AF</string>
+
+    <string name="connectMode">Управление</string>
+    <string name="VOX">VOX</string>
+    <string name="CAT">CAT</string>
+    <string name="operationBand">Частота</string>
+    <string name="civ_address">CI-V</string>
+    <string name="pl_civ_address">CI-V адрес трансивера</string>
+    <string name="serial_port">Последовательный порт</string>
+    <string name="bau_rate">Скорость (бод)</string>
+    <string name="pl_select_serial_port">Выберите последовательный порт</string>
+    <string name="close">Закрыть</string>
+    <string name="rig_name">Трансивер</string>
+    <string name="debug">Отладка</string>
+    <string name="logo_image">FT8AF</string>
+    <string name="RTS">RTS</string>
+    <string name="FAQ">FAQ</string>
+    <string name="launch_supervision">Сторожевой таймер TX</string>
+    <string name="no_response_count">Нет ответа</string>
+    <string name="break_launch">остановлено</string>
+    <string name="follow_cq">Автослежение за CQ</string>
+    <string name="auto_call_follow">Автоматическое отслеживание вызова</string>
+    <string name="DTR">DTR</string>
+    <string name="launch">TX</string>
+    <string name="export">Экспорт</string>
+    <string name="view_style">Режим отображения</string>
+    <string name="ptt_delay">Задержка PTT</string>
+    <string name="filter">Фильтр</string>
+    <string name="pl_filter">Выберите фильтр</string>
+    <string name="filter_all">Показать все</string>
+    <string name="filter_is_qsl">Показать подтверждённые</string>
+    <string name="filter_none_qsl">Показать неподтверждённые</string>
+    <string name="cable_connect">USB</string>
+    <string name="bluetooth_connect">Bluetooth</string>
+    <string name="cable_mode">Тип подключения</string>
+    <string name="pl_select_bluetooth">Выберите доступное Bluetooth-устройство</string>
+    <string name="bluetooth_set">Настройки Bluetooth</string>
+    <string name="spp_device">Bluetooth SPP-устройство</string>
+    <string name="headset_device">Bluetooth-гарнитура</string>>
+    <string name="disconnect_rig">Соединение с трансивером разорвано</string>>
+    <string name="connected_rig">Подключение к трансиверу выполнено.</string>>
+    <string name="current_frequency">Текущая частота: %s</string>>
+    <string name="radio_communication_error">Ошибка связи с трансивером: %s</string>>
+    <string name="does_not_support_recording">Bluetooth-устройство не поддерживает запись</string>>
+    <string name="bluetooth_headset_mode">Включён режим Bluetooth-гарнитуры</string>>
+    <string name="bluetooth_Headset_mode_cancelled">Выключен режим Bluetooth-гарнитуры</string>>
+
+    <string name="version_info">FT8AF Ver %s\nKS3CKC\n%s</string>>
+
+
+    <string name="exit">Выход</string>>
+    <string name="cancel">Отмена</string>>
+    <string name="exit_confirmation">Вы уверены, что хотите выйти?</string>>
+
+    <!--   FT8Message-->
+    <string name="std_msg">Стд. сообщение</string>>
+    <string name="none_std_msg">Нестд. позывной</string>>
+    <string name="free_text">Свободный текст</string>>
+    <string name="dXpedition">DXpedition</string>>
+    <string name="field_day">Field Day</string>>
+    <string name="telemetry">Телеметрия</string>>
+    <string name="rtty_ru_msg">RTTY RU</string>>
+
+
+    <!--   Settings bar-->
+    <string name="offset_time_sec">%.1f сек</string>>
+
+    <!--   Spectrum chart-->
+    <string name="decoding_takes_milliseconds">Декодировано: %d мс</string>>
+    <string name="sound_frequency_is_set_to">Звуковая частота: %d Гц</string>>
+    <string name="de_noise">Шумоподавление</string>
+    <string name="raw_spectrum_data">Исходный</string>
+    <string name="markMessage">Показать сообщ.</string>
+    <string name="unMarkMessage">Скрыть сообщ.</string>
+
+    <!--   Select Bluetooth device dialog-->
+    <string name="select_bluetooth_device">Выберите Bluetooth-устройство: %s</string>
+
+    <!--   PTT delay in milliseconds-->
+    <string name="milliseconds">%d мс</string>
+    <!--   No-reply count-->
+    <string name="ignore">Игнорировать</string>
+    <string name="times">%d вызовов</string>
+
+    <!--   Calling bar-->
+    <string name="sound_frequency_is">Частота: %.0f Гц</string>
+    <string name="target_callsign">Цель: %s</string>
+    <string name="transmission_sequence">Последовательность: %d</string>
+    <string name="message_count">Сообщения(%d)</string>
+
+    <!--   Log export bar-->
+    <string name="export_info">Для экспорта используйте веб-браузер на другом устройстве в той же локальной сети.\nВведите URL в браузере:\nhttp://%s:%d</string>
+    <!--   TX watchdog-->
+    <string name="minutes">%d мин</string>
+
+    <!--   TX watchdog-->
+    <string name="freq_syn">Блок. TX=RX</string>
+    <string name="freq_asyn">Tx/Rx раздельно</string>
+    <string name="auto_follow_cq">Автослежение за CQ</string>
+    <string name="not_concerned_about_CQ">Без слежения за CQ</string>
+    <string name="automatic_call_following">Автослежение за вызовом</string>
+    <string name="do_not_call_the_following_callsign">Без слежения за вызовом</string>
+
+    <!--   Decode bar-->
+    <string name="message_count_count">Сообщения(%d/%d)</string>
+    <string name="average_offset_seconds">Смещение ср.: %.2f сек</string>
+    <string name="my_grid">Локатор: %s</string>
+
+    <!--   Decode list-->
+    <string name="tracking_receiver">Слежение за приёмником %s(%s)</string>
+    <string name="calling_receiver">Вызов приёмника %s(%s)</string>
+    <string name="reply_to">Ответ %s(%s)</string>
+    <string name="tracking">Слежение %s(%s)</string>
+    <string name="calling">Вызов %s(%s)</string>
+
+    <!--   Grid distance calculation-->
+    <string name="distance">%.0f км</string>
+
+    <!--   Log list-->
+    <string name="confirmed">Подтверждено</string>
+    <string name="unconfirmed">Не подтверждено</string>
+    <string name="lotw_confirmation">Подтверждено LoTW</string>
+    <string name="manual_confirmation">Подтверждено вручную</string>
+    <string name="log_start_time">Начало: %s</string>
+    <string name="log_end_time">Окончание: %s</string>
+    <string name="log_last_time">Последнее QSO: %s</string>
+    <string name="log_grid">Локатор: %s</string>
+    <string name="log_mode">Режим: %s</string>
+    <string name="log_cancel_confirmation">Отменить подтверждение (%s)</string>
+    <string name="log_manual_confirmation">Подтвердить вручную (%s)</string>
+
+    <!--   QSL log list-->
+    <string name="qsl_grid">Локатор:%s</string>
+    <string name="qsl_start_time">Начало: %s</string>
+    <string name="qsl_end_time">Окончание: %s</string>
+    <string name="qsl_rst_rcvd">RST принято: %s</string>
+    <string name="html_rst_rcvd">RST принято</string>
+    <string name="qsl_rst_sent">RST передано: %s</string>
+    <string name="html_rst_sent">RST передано</string>
+    <string name="qsl_band">Диапазон: %s</string>
+    <string name="qsl_freq">Частота: %s</string>
+    <string name="qsl_mode">Режим: %s</string>
+    <string name="qsl_lotw_confirmation">Подтверждено LoTW</string>
+    <string name="qsl_manual_confirmation">Подтверждено вручную</string>
+    <string name="qsl_unconfirmed">Не подтверждено</string>
+    <string name="qsl_cancel_confirmation">Отменить подтверждение (%s)</string>
+    <string name="qsl_manual_confirmation_s">Подтвердить вручную (%s)</string>
+    <string name="qsl_qrz_confirmation_s">QRZ (%s)</string>
+
+    <!--   QSL record-->
+    <string name="qsl_record_import_time">Время импорта:%s</string>
+
+    <!--   HTML -->
+    <string name="html_track_operation_information">Мониторинг операционной информации</string>
+    <string name="html_track_callsign_hash_table">Мониторинг хеш-таблицы позывных</string>
+    <string name="html_trace_parsed_messages">Мониторинг разобранных сообщений</string>
+    <string name="html_trace_callsign_and_grid_correspondence_table">Мониторинг соответствия позывных и локаторов</string>
+    <string name="html_query_communication_message">Запрос QSO</string>
+    <string name="html_query_configuration_information">Запрос информации о конфигурации</string>
+    <string name="html_query_all_table">Запрос всех таблиц данных</string>
+    <string name="html_manage_tracking_callsign">Управление отслеживаемыми позывными</string>
+    <string name="html_manage_communication_callsigns">Управление позывными QSO</string>
+    <string name="html_show_communication_callsigns">Показать позывные QSO</string>
+    <string name="html_export_log">Экспорт журнала</string>
+    <string name="html_import_log">Импорт журнала</string>
+    <string name="html_to_the_third_party">Экспорт журнала (для резервного копирования и загрузки на стороннюю платформу для подтверждения)</string>
+    <string name="html_from_jtdx_lotw">Экспорт журналов (для резервного копирования, загрузки на стороннюю платформу для подтверждения, синхронизации журналов JTDX и подтверждения LoTW. Рекомендуется использовать ADI-данные JTDX, LoTW, Log32 и N1mm для синхронизации)</string>
+    <string name="html_return">Назад</string>
+
+
+    <string name="html_import_count">В ADI-файле %d записей, импортировано %d записей. Формат %d записей некорректен.</string>
+    <string name="html_import_failed">Импорт не удался! %s</string>
+    <string name="html_illegal_command">Недопустимая команда, загрузка не удалась!</string>
+    <string name="html_callsign">Позывной</string>
+    <string name="html_operation">Операция</string>
+    <string name="html_delete">Удалить</string>
+    <string name="html_qsl_start_time">Время начала QSO</string>
+    <string name="html_qsl_start_day">Дата начала QSO</string>
+    <string name="html_qsl_end_time">Время окончания QSO</string>
+    <string name="html_qsl_end_date">Дата окончания QSO</string>
+    <string name="html_qsl_mode">Режим</string>
+    <string name="html_qsl_grid">Локатор</string>
+    <string name="html_qsl_band">Диапазон</string>
+    <string name="html_qsl_freq">Частота</string>
+    <string name="html_qsl_manual_confirmation">Подтверждено вручную</string>
+    <string name="html_qsl_lotw_confirmation">Подтверждено LoTW</string>
+    <string name="html_qsl_data_source">Источник данных</string>
+    <string name="html_qsl_import_data_from_external">Из внешнего источника</string>
+    <string name="html_qsl_native_data">Локальные</string>
+    <string name="html_variable">Переменные</string>
+    <string name="html_value">Значения</string>
+    <string name="html_my_callsign">Позывной</string>
+    <string name="html_my_grid">Локатор</string>
+    <string name="html_decodes_in_this_cycle">Декодировано в этом цикле</string>
+    <string name="html_total_number_of_decodes">Всего декодировано</string>
+    <string name="html_in_recording_state">Состояние записи</string>
+    <string name="html_recording">Запись</string>
+    <string name="html_no_recording">Нет записи</string>
+    <string name="html_time_consuming_for_this_decoding">Время декодирования</string>
+    <string name="html_milliseconds">%d миллисекунд</string>
+    <string name="html_average_delay_time_of_this_cycle">Средняя задержка за период</string>
+    <string name="html_seconds">%.3f секунд</string>
+    <string name="html_sound_frequency">Звуковая частота сигнала</string>
+    <string name="html_transmission_delay_time">Задержка TX</string>
+    <string name="html_launch_supervision">Сторожевой таймер TX</string>
+    <string name="html_automatic_program_run_time">Время работы автоматической программы</string>
+    <string name="html_no_reply_limit">Лимит без ответа</string>
+    <string name="html_no_reply_count">Счётчик без ответа</string>
+    <string name="html_mark_message">Отметки сообщений на водопаде</string>
+    <string name="html_marking_message">Показать отметки</string>
+    <string name="html_do_not_mark_message">Скрыть отметки</string>
+    <string name="html_operation_mode">Режим работы</string>
+    <string name="html_civ_address">Адрес CI-V</string>
+    <string name="html_baud_rate">Скорость (бод)</string>
+    <string name="html_connect_mode">Режим подключения</string>
+    <string name="html_available_serial_ports">Доступные порты</string>
+    <string name="html_serial_port_in_use">Используемый порт</string>
+    <string name="html_instruction_set">Набор команд</string>
+    <string name="html_target_callsign">Целевой позывной</string>
+    <string name="html_sequential">Последовательность</string>
+
+
+    <string name="html_carrier_frequency_band">Диапазон</string>
+    <string name="html_radio_frequency">Частота трансивера</string>
+    <string name="html_successful_callsign">Успешные QSO-позывные в %s</string>
+    <string name="html_tracking_callsign">Отслеживаемый позывной</string>
+    <string name="html_tracking_qso_information">Отслеживание информации QSO</string>
+
+    <string name="html_hash_value">Хеш</string>
+    <string name="html_please_select">Выберите</string>
+    <string name="html_adi_format">Файл журнала в формате ADI</string>
+    <string name="html_file_in_other_format">файлы в других форматах могут быть некорректно разобраны и импортированы.</string>
+    <string name="html_time">Время</string>
+    <string name="html_total">Всего</string>
+    <string name="html_all_logs">Все записи</string>
+    <string name="html_download">Скачать</string>
+    <string name="html_today_log">Записи за сегодня</string>
+    <string name="html_download_all">Скачать все</string>
+    <string name="html_download_unconfirmed">Скачать неподтверждённые</string>
+    <string name="callsign_error">Позывной указан неверно!</string>
+    <string name="adjust_call_target">Изменение цели вызова: %s</string>
+    <string name="use_wspr2_error">Текущая частота %s используется для WSPR-2. Передача FT8-сигналов запрещена!</string>
+    <string name="none">Нет</string>
+    <string name="connect_bluetooth_spp">Подключение Bluetooth-порта %s …</string>
+    <string name="bluetooth_is_connected">Bluetooth-устройство %s подключено.</string>
+    <string name="bluetooth_is_diconnected">Bluetooth-устройство %s отключено.</string>
+    <string name="sound_source_switched">Источник звука переключён.</string>
+    <string name="bluetooth_turn_off">Bluetooth выключен.</string>
+    <string name="bluetooth_turn_on">Bluetooth включён.</string>
+    <string name="can_not_location">Не удалось определить местоположение. Проверьте разрешения на определение местоположения.</string>
+    <string name="statistical">Статистика</string>
+    <string name="count_up">Вверх</string>
+    <string name="count_down">Вниз</string>
+    <string name="band_statistics">Статистика по диапазонам</string>
+    <string name="count_total">Всего: %d</string>
+    <string name="confirmation_statistics">Статистика подтверждений журнала</string>
+    <string name="count_confirmed">Подтверждено</string>
+    <string name="count_unconfirmed">Не подтверждено</string>
+    <string name="count_total_logs">Всего: %d</string>
+    <string name="count_confirmed_log">Подтверждено: %d</string>
+    <string name="count_lotw_confirmed">Подтверждено LoTW: %d</string>
+    <string name="count_manually_confirmed">Подтверждено вручную: %d</string>
+    <string name="count_confirmed_proportion">Доля подтверждённых: %.1f%%</string>
+    <string name="count_tota_callsigns">Всего позывных: %d</string>
+    <string name="count_zone">Зона %s</string>
+    <string name="itu_completion_statistics">Статистика заполнения ITU</string>
+    <string name="count_incomplete">Не завершено</string>
+    <string name="count_completed">Завершено</string>
+    <string name="count_total_itu">Всего ITU: %d\nЗавершено %d(%.1f%%)</string>
+    <string name="count_itu_completed_scale">Статистика ITU</string>
+    <string name="count_cqzone_completed">Статистика CQ-зон</string>
+    <string name="count_total_cqzone">Всего CQ-зон: %d \n Завершено: %d(%.1f%%)</string>
+    <string name="count_cqzone_proportion">Статистика CQ-зон</string>
+    <string name="dxcc_completion_statistics">Статистика DXCC</string>
+    <string name="count_total_dxcc">Всего DXCC: %d \nЗавершено: %d(%.1f%%)</string>
+    <string name="count_dxcc_proportion">Статистика DXCC</string>
+    <string name="callsign_info">Позывной:%s\nМестоположение:%s\nCQ-зона:%d\nITU-зона:%d\nКонтинент:%s\nШирота и долгота:%.2f,%.2f\nЧасовой пояс:%.0f\nПрефикс DXCC:%s</string>
+    <string name="maximum_distance">Максимальное расстояние\n\n%s</string>
+    <string name="minimum_distance">Минимальное расстояние\n\n%s</string>
+    <string name="count_distance_info">Максимальное расстояние:%.0f %s (%s)\nМинимальное расстояние:%.0f %s (%s)</string>
+    <string name="distance_statistics">Статистика расстояний</string>
+    <string name="dxcc_image">dxcc</string>
+    <string name="cqzone">cq zone</string>
+    <string name="itu_image">itu zone</string>
+    <string name="recorder_cannot_record">Невозможно записать. Проверьте разрешения. %s</string>
+    <string name="recorder_stop_record_error">Ошибка остановки записи! %s</string>
+    <string name="delete_confirmation">Подтверждение удаления</string>
+    <string name="are_you_sure_delete">Вы уверены, что хотите удалить?</string>
+    <string name="ok_confirmed">OK</string>
+    <string name="network_connect">Сеть</string>
+    <string name="pl_select_flex_radio">Выберите доступный FlexRadio</string>
+    <string name="select_flex_device">Выберите FlexRadio: %s</string>
+    <string name="select_xiegu_device">Выберите XIEGU: %s</string>
+    <string name="only_flex_supported">В настоящее время поддерживаются только FlexRadio и ICom!</string>
+    <string name="flex_connect_failed">Подключение к FlexRadio %s не удалось!</string>
+    <string name="xiegu_connect_failed">Подключение к XIEGU %s не удалось!</string>
+    <string name="init_flex_operation">%s — инициализация операции.</string>
+    <string name="html_max_message_cache">Максимальное количество кешированных сообщений</string>
+    <string name="instruction_failed">Команда %s не выполнена. Сообщение: %s</string>
+    <string name="instruction_success">Команда %s выполнена успешно.</string>
+    <string name="flex_ip_addr">IP</string>
+    <string name="pl_input_flex_ip">Введите IP-адрес</string>
+    <string name="connect_flex">Подключить FlexRadio</string>
+    <string name="connect_flex_ip">Подключение к FlexRadio %s …</string>
+    <string name="get_new_version">Получить последнюю версию</string>
+    <string name="login_icom_help">Вход в ICom</string>
+    <string name="pl_input_icom_port">Порт управления (UDP)</string>
+    <string name="icom_port">Порт</string>
+    <string name="icom_user_name">Пользователь</string>
+    <string name="pl_icom_user">Введите имя пользователя</string>
+    <string name="icom_password">Пароль</string>
+    <string name="pl_icom_password">Введите пароль</string>
+    <string name="icom_login_button">Войти</string>
+    <string name="show_password">Показать пароль</string>
+    <string name="connect_icom_ip">Подключение к ICom %s …</string>
+    <string name="connect_xiegu_ip">Подключение к XIEGU %s …</string>
+    <string name="network_exception">%s: Ошибка сетевой передачи: %s</string>
+    <string name="login_succeed">Вход выполнен!</string>
+    <string name="loging_failed">Вход не удался, неверное имя пользователя или пароль.</string>
+    <string name="data_stream">Поток данных</string>
+    <string name="control_stream">Поток управления</string>
+    <string name="civ_stream">Поток CI-V</string>
+    <string name="audio_stream">Аудиопоток</string>
+    <string name="alc_high_alert">Внимание! ALC слишком высок.</string>
+
+    <string name="swr_high_alert">Внимание! SWR слишком высок.</string>
+    <string name="volume_percent">Мощность выходного сигнала %.0f %%</string>
+    <string name="signal_strength">Мощность выходного сигнала</string>
+    <string name="html_distance">Расстояние</string>
+    <string name="html_callsign_qth">QTH позывного</string>
+    <string name="html_update_time">Время обновления</string>
+    <string name="grid_tracker_new_grid">Обнаружен новый локатор: %s</string>
+    <string name="tracker_open_messages">Открыть сообщения</string>
+    <string name="tracker_close_messages">Закрыть сообщения</string>
+    <string name="tracker_decoded_new">Декодировано %d сообщений.</string>
+    <string name="tracker_call_this">Вызвать этот позывной</string>
+    <string name="tracker_show_info_mode">Режим подсказок</string>
+    <string name="tracker_tips_all">Все</string>
+    <string name="tracker_tips_new">Новые</string>
+    <string name="tracker_tips_none">Нет</string>
+    <string name="tracker_show_cq_tips">Показать подсказки CQ</string>
+    <string name="tracker_hide_cq_tips">Скрыть подсказки CQ</string>
+    <string name="tracker_show_qsx_tips">Показать подсказки QSX</string>
+    <string name="tracker_hide_qsx_tips">Скрыть подсказки QSX</string>
+    <string name="track_sample_text_qsl">QSL</string>
+    <string name="tracker_sample_qso_text">QSO</string>
+    <string name="tracker_sample_qsx_text">QSX</string>
+    <string name="tracker_cq_text">CQ</string>
+    <string name="tracker_qso_text">QSO</string>
+    <string name="tracker_new_zone_found">Обнаружена новая зона: %s</string>
+    <string name="transmit_freeText">Введите свободный текст</string>
+    <string name="trans_free_text_mode">Режим свободного текста</string>
+    <string name="trans_standard_messge_mode">Режим стандартного сообщения</string>
+    <string name="launch_supervision_ignore">Игнорировать</string>
+    <string name="be_excluded_callsigns">Исключённые префиксы позывных</string>
+    <string name="pl_callsing_prefix">Введите префиксы позывных</string>
+    <string name="cache_clear">Очистить</string>
+    <string name="cache_clear_title">Очистка кеша</string>
+    <string name="follow_callsign_data">Отслеживаемые позывные</string>
+    <string name="cancel_clear_cache">Отмена</string>
+    <string name="log_statistics_cache">Кешировано записей журнала</string>
+    <string name="logs_cache">Декодированные сообщения</string>
+    <string name="band_total">Диапазон \t Всего</string>
+    <string name="modifier_editor">Модификатор CQ</string>
+    <string name="pl_input_modifier">Введите модификатор</string>
+    <string name="flex_start_atu">Запуск ATU</string>
+    <string name="flex_max_tx_power">Макс. мощность TX: %d Вт</string>
+    <string name="flex_tune_power">Мощность настройки ATU: %d Вт</string>
+    <string name="html_flex_max_rf_power">Макс. мощность TX</string>
+    <string name="html_atu_tune_power">Мощность настройки ATU</string>
+    <string name="flex_atu_tune_off">TUNE OFF</string>
+    <string name="flex_atu_tune_on">TUNE ON</string>
+    <string name="flex_logo_text">FlexRadio</string>
+    <string name="map_location_image">Показать на карте</string>
+    <string name="log_menu_location">Местоположение</string>
+    <string name="tracker_query_qso_info">Запрос данных QSO…</string>
+    <string name="html_callsign_grid_total">Всего: %d</string>
+    <string name="html_message_page_count">Количество страниц: %d</string>
+    <string name="html_message_page_size">Размер страницы:</string>
+    <string name="html_message_query">Поиск</string>
+    <string name="config_save_swl">Сохранять декодированные</string>
+    <string name="config_donot_save_swl">Не сохранять декодированные</string>
+    <string name="config_save_swl_qso">Сохранять QSO для SWL</string>
+    <string name="config_donot_save_swl_qso">Не сохранять QSO для SWL</string>
+    <string name="html_query_swl_message">Запрос декодированных сообщений (SWL)</string>
+    <string name="log_statistics_decode_msg">Всего декодировано сообщений</string>
+    <string name="config_Syn_time">Синхронизация времени</string>
+    <string name="utc_time_sync_delay_slow">Синхронизировано. Местные часы отстают на %d мс</string>
+    <string name="utc_time_sync_delay_faster">Синхронизировано. Местные часы спешат на %d мс</string>
+    <string name="config_clock_is_accurate">Местные часы точны!</string>
+    <string name="html_start_date_swl_message">Дата начала</string>
+    <string name="html_end_date_swl_message">Дата окончания</string>
+    <string name="html_query_qso_swl">Запрос QSO для SWL</string>
+    <string name="html_export_csv">Экспорт в CSV-файл</string>
+    <string name="html_export_text">Экспорт в текстовый файл</string>
+    <string name="html_export_adi">Экспорт в ADIF-файл</string>
+    <string name="log_statistics_swl_qso">Всего декодировано QSO</string>
+    <string name="config_clear_swl_qso">Декодированные QSO</string>
+    <string name="audioOutput">Аудиовыход</string>
+    <string name="audio_input_device">Аудиовход</string>
+    <string name="audio_output_device">Устройство аудиовыхода</string>
+    <string name="audio_device_default">По умолчанию</string>
+    <string name="audio_device_help">audio_device_help_en.txt</string>
+    <string name="audio16_bit">16-bit int</string>
+    <string name="audio32_bit">32-bit float</string>
+    <string name="html_audio_bits">Аудио — разрядность</string>
+    <string name="audio_rate_12k">12kHz</string>
+    <string name="audio_rate_24k">24kHz</string>
+    <string name="audio_rate_48k">48kHz</string>
+    <string name="audio_rate">Частота дискретизации</string>
+    <string name="html_audio_rate">Аудио — частота дискретизации</string>
+    <string name="audio_bit_depth">Разрядность</string>
+    <string name="callsign_help">callsign_en.txt</string>
+    <string name="maidenhead_help">maidenhead_en.txt</string>
+    <string name="frequency_help">frequency_en.txt</string>
+    <string name="transDelay_help">transDelay_en.txt</string>
+    <string name="timeoffset_help">timeoffset_en.txt</string>
+    <string name="pttdelay_help">pttdelay_en.txt</string>
+    <string name="operationBand_help">operationBand_en.txt</string>
+    <string name="controlMode_help">controlMode_en.txt</string>
+    <string name="civ_help">civ_help_en.txt</string>
+    <string name="rig_model_help">rig_model_help_en.txt</string>
+    <string name="launch_supervision_help">launch_supervision_en.txt</string>
+    <string name="no_response_help">no_response_help_en.txt</string>
+    <string name="auto_follow_help">auto_follow_help_en.txt</string>
+    <string name="connectMode_help">connectMode_en.txt</string>
+    <string name="excludeCallsign_help">excludeCallsign_en.txt</string>
+    <string name="swlMode_help">swlMode_en.txt</string>
+    <string name="audio_output_help">audio_output_help_en.txt</string>
+    <string name="deep_mode_help">decode_help_en.txt</string>
+    <string name="clear_cache_data_help">clear_cache_data_en.txt</string>
+    <string name="html_query_logs">Запрос журнала</string>
+    <string name="html_qso_all">Все</string>
+    <string name="html_qso_source">Источники данных</string>
+    <string name="html_qso_unconfirmed">Не подтверждено</string>
+    <string name="html_qso_confirmed">Подтверждено</string>
+    <string name="html_qso_raw_log">Локальные записи</string>
+    <string name="html_qso_external_logs">Внешние записи</string>
+    <string name="html_qso_external">Внешние</string>
+    <string name="html_qso_raw">Локальная запись</string>
+    <string name="html_protocol">Протокол</string>
+    <string name="html_comment">Комментарий</string>
+    <string name="decode_mode_text">Режим декодирования</string>
+    <string name="fast_mode">Быстрое декодирование</string>
+    <string name="deep_mode">Глубокое декодирование</string>
+    <string name="export_null">Экспортируйте через веб-браузер на другом устройстве в той же локальной сети.\nПодключитесь к Wi-Fi</string>
+    <string name="null_task_html">Задача не существует!</string>
+    <string name="log_importing_html">Импорт...</string>
+    <string name="log_import_finished_html">Готово!</string>
+    <string name="import_read_error_count_html">Ошибочных строк: %d</string>
+    <string name="import_new_count_html">Добавлено QSL: %d</string>
+    <string name="import_update_count_html">Обновлено QSL: %d</string>
+    <string name="import_invalid_count_html">Недействительных QSL: %d</string>
+    <string name="import_progress_html">"Прогресс: "</string>
+    <string name="import_readed_html">Проверено QSL: %d</string>
+    <string name="import_canceled_html">Отменено!</string>
+    <string name="import_cancel_button">Стоп</string>
+    <string name="qsl_query_log_menu">Журнал (%s)</string>
+    <string name="message_list_simple_mode">Компактный режим списка</string>
+    <string name="message_list_standard_mode">Стандартный режим списка</string>
+    <string name="config_msg_mode">Режим сообщений</string>
+    <string name="config_msg_std_mode">Стандартный</string>
+    <string name="config_msg_simple_mode">Компактный</string>
+    <string name="message_mode_help">messageMode_en.txt</string>
+    <string name="pl_select_xiegu_radio">Выберите доступный XIEGU</string>
+    <string name="x6100_packet_lost">Потеря пакетов: %d</string>
+    <string name="xiegu_name_label">XIEGU</string>
+    <string name="xiegu_ping_value">Пинг: %d мс</string>
+    <string name="xiegu_start_atu">Запуск ATU</string>
+    <string name="xiegu_atu_on">ATU включён</string>
+    <string name="xiegu_atu_off">ATU выключен</string>
+    <string name="xiegu_band_str">Диапазон: %s</string>
+    <string name="alc_low_alert">Внимание! ALC слишком низок.</string>
+    <string name="xiegu_meter_info">S-метр: %.1f dBm\nSWR: %s\nALC: %.1f\nНапряжение: %.1fV\nМощность TX: %.1f Вт\nМакс. мощность TX: %.1f\nГромкость TX:%d%%</string>
+    <string name="serial_connect_no_access">Невозможно подключиться к последовательному порту. Проверьте доступ к USB-устройству!</string>
+    <string name="serial_connect_failed">Не удалось открыть последовательный порт!</string>
+    <string name="serial_no_driver">Невозможно подключиться к последовательному порту, порт не найден!</string>
+    <string name="serial_data_bits">Биты данных</string>
+    <string name="serial_parity">Контроль чётности</string>
+    <string name="serial_parity_none">Нет</string>
+    <string name="serial_parity_odd">Нечётный</string>
+    <string name="serial_parity_even">Чётный</string>
+    <string name="serial_parity_mark">Маркер</string>
+    <string name="serial_parity_space">Пробел</string>
+    <string name="serial_stop_bits">Стоп-биты</string>
+    <string name="serial_default">По умолчанию</string>
+    <string name="serial_setting_help">serial_help_en.txt</string>
+    <string name="tcp_connect_closed">Сетевое соединение разорвано.</string>
+    <string name="share_logs">Поделиться журналом</string>
+    <string name="config_clear_share_data">Удалить файлы кеша</string>
+    <string name="preparing_log_data">Подготовка данных журнала…</string>
+    <string name="total_logs">Всего %d записей в журнале.</string>
+    <string name="get_log_no">Скачано %d записей.</string>
+    <string name="write_file_error">Ошибка записи файла: %s</string>
+    <string name="import_share_failed">Импорт данных журнала не удался! %s</string>
+    <string name="preparing_import_logs">Подготовка к импорту журнала…</string>
+    <string name="share_logs_been_read">Прочитано %d записей.</string>
+    <string name="share_import_log_data">Импорт данных журнала…</string>
+    <string name="cloudlog_settings">Настройки Cloudlog</string>
+    <string name="config_enable_cloudlog">Включить синхронизацию Cloudlog</string>
+    <string name="cloudlog_addr">Адрес сервера</string>
+    <string name="cloudlog_api_key">API-ключ</string>
+    <string name="test_cloudlog_config">ТЕСТ</string>
+    <string name="cloudlog_station_id">ID станции</string>
+    <string name="cloudlog_help">cloudlog_en.txt</string>
+    <string name="pass">Успешно!</string>
+    <string name="fail">Ошибка!</string>
+    <string name="testing">Проверка…</string>
+    <string name="test">Тест</string>
+    <string name="qrz_settings">Настройки QRZ.com</string>
+    <string name="qrz_api_key">API KEY</string>
+    <string name="config_enable_qrz">Включить синхронизацию QRZ</string>
+    <string name="qrz_help">qrz_en.txt</string>
+    <string name="alram_switch">Переключатель оповещений</string>
+    <string name="swr_switch_on" translatable="false">SWR On</string>
+    <string name="swr_switch_off" translatable="false">SWR Off</string>
+    <string name="alc_switch_on" translatable="false">ALC On</string>
+    <string name="alc_switch_off" translatable="false">ALC Off</string>
+
+</resources>

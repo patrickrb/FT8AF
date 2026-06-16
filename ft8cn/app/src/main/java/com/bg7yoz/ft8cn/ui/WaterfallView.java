@@ -75,6 +75,10 @@ public class WaterfallView extends View {
 
     // FT8 period timestamp tracking
     private long lastTimestampPeriod = -1;
+    // Gates the decoded-label stamp to once per decode slot (the current mode's slot
+    // length, not a fixed 15s), so a slot's labels are painted exactly once even though the
+    // decode-done flag re-arms on every decode pass.
+    private final WaterfallLabelGate messageGate = new WaterfallLabelGate();
     private final Paint timestampLinePaint = new Paint();
 
     public WaterfallView(Context context) {
@@ -123,6 +127,8 @@ public class WaterfallView extends View {
         Log.d(TAG, String.format("Bitmap created: %dx%d, blockHeight=%d, freq_width=%.2f, spectrumWidth=%d",
                 w, h, blockHeight, freq_width, spectrumWidth));
         lastBitMap = Bitmap.createBitmap(w, h, ARGB_8888);
+        // Fresh bitmap wiped the stamped labels, so allow the current cycle to re-stamp.
+        messageGate.reset();
         _canvas = new Canvas(lastBitMap);
         Paint blackPaint = new Paint();
         blackPaint.setColor(0xFF000000);
@@ -321,9 +327,23 @@ public class WaterfallView extends View {
 
         //Messages have 3 types: normal, CQ, and involving me
         if (drawMessage && messages != null) {
-            Log.d(TAG, String.format("Drawing %d messages on waterfall", messages.size()));
-            drawMessage = false;//Only draw once
-            for (Ft8Message msg : messages) {
+            drawMessage = false;//Consume the one-shot arming
+            // FT8 decodes in more than one pass per cycle (a normal pass and a slower deep
+            // pass), and every completed pass re-arms drawMessage. Without this guard the
+            // same labels get stamped onto the scrolling bitmap several times per cycle, at
+            // different scroll offsets, so they appear to repeat down the waterfall —
+            // including over the next cycle's not-yet-populated rows where the signal is
+            // gone. Stamp at most once per decode slot. Key the gate on the current mode's
+            // slot length (NOT a fixed 15s) so FT4 (7.5s) and FT2 (3.75s) each get one stamp
+            // per slot instead of one stamp per two-or-more slots. Pass slotMillis as part
+            // of the key too: this view (and its gate) is reused across mode changes, and a
+            // new mode's slotPeriod can collide with one already stamped under the old mode,
+            // which would wrongly suppress the first label after the switch.
+            long slotMillis = GeneralVariables.currentMode().slotMillis;
+            long slotPeriod = slotMillis > 0 ? utcMs / slotMillis : period;
+            if (messageGate.shouldStamp(slotMillis, slotPeriod)) {
+                Log.d(TAG, String.format("Drawing %d messages on waterfall", messages.size()));
+                for (Ft8Message msg : messages) {
 
                 if (msg.inMyCall()) {//Related to me
                     messagePaint.setColor(0xffffb2b2);
@@ -353,6 +373,7 @@ public class WaterfallView extends View {
                     float text_high =dpToPixel(4);//messagePaint.getFontSpacing()/2;
                     _canvas.drawLine(msg.freq_hz * freq_width + text_high , text_start
                             , msg.freq_hz * freq_width + text_high, text_len + text_start, textLinePaint);
+                }
                 }
             }
         }

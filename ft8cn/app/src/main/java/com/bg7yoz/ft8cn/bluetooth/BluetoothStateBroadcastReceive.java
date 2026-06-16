@@ -67,6 +67,7 @@ public class BluetoothStateBroadcastReceive extends BroadcastReceiver {
                 // Permission revoked between the check above and the call — fall through with -1.
             }
         }
+        if (action == null) return;
         switch (action) {
             case BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED:
             case BluetoothAdapter.EXTRA_CONNECTION_STATE:

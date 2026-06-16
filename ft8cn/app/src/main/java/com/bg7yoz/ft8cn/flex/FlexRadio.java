@@ -729,8 +729,11 @@ public class FlexRadio {
         //Log.e(TAG, "getCommandStyleFromResponse: "+response.rawData );
 
         try {
-            return FlexCommand.values()[Integer.parseInt(response.head.substring(response.head.length() - 3))];
-        } catch (NumberFormatException e) {
+            int cmdIndex = Integer.parseInt(response.head.substring(response.head.length() - 3));
+            if (cmdIndex >= 0 && cmdIndex < FlexCommand.values().length) {
+                return FlexCommand.values()[cmdIndex];
+            }
+        } catch (NumberFormatException | StringIndexOutOfBoundsException e) {
             e.printStackTrace();
             Log.e(TAG, "getCommandStyleFromResponse exception: " + e.getMessage());
         }
@@ -1074,7 +1077,10 @@ public class FlexRadio {
                     getHeadAndContent(line, "\\|");
                     try {
                         seq_number = Integer.parseInt(head.substring(1));//Parse command sequence number
-                        flexCommand = FlexCommand.values()[seq_number % 1000];
+                        int cmdIndex = seq_number % 1000;
+                        if (cmdIndex >= 0 && cmdIndex < FlexCommand.values().length) {
+                            flexCommand = FlexCommand.values()[cmdIndex];
+                        }
                         switch (flexCommand) {
                             case STREAM_CREATE_DAX_RX:
                                 this.daxStreamId = getStreamId(line);
@@ -1169,11 +1175,11 @@ public class FlexRadio {
          */
         private void getHeadAndContent(String line, String split) {
             String[] temp = line.split(split);
-            if (line.length() > 1) {
+            if (temp.length > 1) {
                 head = temp[0];
                 content = temp[1];
             } else {
-                head = "";
+                head = temp.length > 0 ? temp[0] : "";
                 content = "";
 
             }

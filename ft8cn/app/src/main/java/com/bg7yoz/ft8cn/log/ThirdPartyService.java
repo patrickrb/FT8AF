@@ -5,6 +5,7 @@ import android.util.Log;
 
 import com.bg7yoz.ft8cn.GeneralVariables;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONStringer;
 import org.xmlpull.v1.XmlPullParser;
@@ -19,7 +20,9 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 enum ServiceType{
     Cloudlog,
@@ -29,11 +32,72 @@ enum ServiceType{
 public class ThirdPartyService {
     public static String TAG = "ThirdPartyService";
 
+    public static class StationProfile {
+        public final String stationId;
+        public final String profileName;
+        public final String callsign;
+        public final String gridsquare;
+
+        public StationProfile(String stationId, String profileName,
+                              String callsign, String gridsquare) {
+            this.stationId = stationId;
+            this.profileName = profileName;
+            this.callsign = callsign;
+            this.gridsquare = gridsquare;
+        }
+
+        public String displayLabel() {
+            StringBuilder sb = new StringBuilder();
+            sb.append(stationId);
+            if (profileName != null && !profileName.isEmpty()) {
+                sb.append(" - ").append(profileName);
+            }
+            if (callsign != null && !callsign.isEmpty()) {
+                sb.append(" (").append(callsign);
+                if (gridsquare != null && !gridsquare.isEmpty()) {
+                    sb.append(", ").append(gridsquare);
+                }
+                sb.append(")");
+            }
+            return sb.toString();
+        }
+    }
+
+    /**
+     * Fetches station profiles from a Cloudlog/Wavelog/Nextlog server.
+     * Returns an empty list on any failure (network, bad JSON, 404, etc.) — never null.
+     */
+    public static List<StationProfile> FetchCloudlogStations(String address, String apiKey) {
+        List<StationProfile> stations = new ArrayList<>();
+        if (address == null || address.isEmpty() || apiKey == null || apiKey.isEmpty()) {
+            return stations;
+        }
+        if (!address.endsWith("/")) {
+            address += "/";
+        }
+        try {
+            String url = address + "api/station_info/" + apiKey;
+            String result = sendGetRequest(url);
+            if (result == null || result.isEmpty()) return stations;
+            JSONArray arr = new JSONArray(result);
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject obj = arr.getJSONObject(i);
+                stations.add(new StationProfile(
+                        obj.optString("station_id", ""),
+                        obj.optString("station_profile_name", ""),
+                        obj.optString("station_callsign", ""),
+                        obj.optString("station_gridsquare", "")
+                ));
+            }
+        } catch (Exception e) {
+            Log.d(TAG, "FetchCloudlogStations error: " + e.getClass().getSimpleName());
+        }
+        return stations;
+    }
+
     private static String QSLRecordToADIF(QSLRecord qslRecord, ServiceType serv){
         StringBuilder logStr = new StringBuilder();
-        logStr.append(String.format("<call:%d>%s "
-                , qslRecord.getToCallsign().length()
-                , qslRecord.getToCallsign()));
+        logStr.append(AdifFormat.callField(qslRecord.getToCallsign()));
 
         if (qslRecord.getToMaidenGrid() != null) {
             logStr.append(String.format("<gridsquare:%d>%s "

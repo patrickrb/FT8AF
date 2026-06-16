@@ -47,19 +47,35 @@ fun QsoCelebration(
     // 0f = idle, (0,1] = playing
     var progress by remember { mutableStateOf(0f) }
 
+    // `triggerAt` mirrors a LiveData that a sibling effect resets to null right after
+    // a QSO completes. Keying the animation directly on `triggerAt` lets that null
+    // transition cancel the coroutine mid-flight, freezing a partial frame (the
+    // starting ring + centered particle cluster) painted on screen forever — the
+    // reported "leftover circle and dot" bug. Translate non-null triggers into a
+    // monotonic token instead, so the null reset neither cancels nor restarts a play.
+    var playToken by remember { mutableStateOf(0) }
     LaunchedEffect(triggerAt) {
-        if (triggerAt == null) return@LaunchedEffect
-        haptics.success()
-        progress = 0.0001f
-        val start = withFrameNanos { it }
-        while (true) {
-            val now = withFrameNanos { it }
-            val elapsed = (now - start) / 1_000_000L
-            val p = (elapsed.toFloat() / DURATION_MS.toFloat()).coerceIn(0f, 1f)
-            progress = p
-            if (p >= 1f) break
+        if (triggerAt != null) playToken++
+    }
+
+    LaunchedEffect(playToken) {
+        if (playToken == 0) return@LaunchedEffect
+        // Reset in a finally so a restart (or any cancellation) can never leave a
+        // frozen frame on screen.
+        try {
+            haptics.success()
+            progress = 0.0001f
+            val start = withFrameNanos { it }
+            while (true) {
+                val now = withFrameNanos { it }
+                val elapsed = (now - start) / 1_000_000L
+                val p = (elapsed.toFloat() / DURATION_MS.toFloat()).coerceIn(0f, 1f)
+                progress = p
+                if (p >= 1f) break
+            }
+        } finally {
+            progress = 0f
         }
-        progress = 0f
     }
 
     if (progress <= 0f) return

@@ -17,8 +17,9 @@ import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.activity.compose.setContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -34,6 +35,7 @@ import android.os.Looper
 import androidx.lifecycle.Observer
 import com.bg7yoz.ft8cn.GeneralVariables
 import com.bg7yoz.ft8cn.MainViewModel
+import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.bluetooth.BluetoothStateBroadcastReceive
 import com.bg7yoz.ft8cn.connector.CableSerialPort
 import com.bg7yoz.ft8cn.connector.ConnectMode
@@ -47,6 +49,7 @@ import com.bg7yoz.ft8cn.wave.UsbAudioNative
 import com.bg7yoz.ft8cn.log.OnShareLogEvents
 import com.bg7yoz.ft8cn.maidenhead.MaidenheadGrid
 import com.bg7yoz.ft8cn.ui.ToastMessage
+import radio.ks3ckc.ft8us.pota.PotaSessionManager
 import radio.ks3ckc.ft8us.theme.FT8USTheme
 import radio.ks3ckc.ft8us.ui.components.ExitConfirmDialog
 import java.io.File
@@ -55,7 +58,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class ComposeMainActivity : ComponentActivity() {
+class ComposeMainActivity : AppCompatActivity() {
 
     private var bluetoothReceiver: BluetoothStateBroadcastReceive? = null
     private var usbDetachReceiver: BroadcastReceiver? = null
@@ -68,6 +71,10 @@ class ComposeMainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Force night mode so the DayNight theme resolves to dark immediately,
+        // preventing any light-mode surface colors from flashing before Compose loads.
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+
         // Build permissions list
         val permissions = buildPermissionsList()
         checkPermission(permissions)
@@ -85,6 +92,22 @@ class ComposeMainActivity : ComponentActivity() {
         GeneralVariables.getInstance().setMainContext(applicationContext)
         mainViewModel = MainViewModel.getInstance(this)
         ToastMessage.getInstance()
+
+        // Forward every TX-volume change to the native USB-direct write loop so a
+        // slider move (or hardware-button / ALC auto-volume change) attenuates the
+        // in-progress transmission live, protecting the rig from overdrive. Every
+        // volume mutator posts to mutableVolumePercent, so this single wire covers
+        // them all; the AudioTrack and CAT/UDP paths read volumePercent directly.
+        // Seeded with the current value for the case where no change fires.
+        // Lifecycle-bound (observe(this), not observeForever) so the observer is
+        // removed automatically on destroy — otherwise every activity recreation
+        // (rotation, theme/locale change, process restart) would stack another
+        // observer and fire a redundant native setter per change. TX runs with the
+        // activity foregrounded (STARTED), so STARTED-only delivery loses nothing.
+        UsbAudioNative.setTxVolume(GeneralVariables.volumePercent)
+        GeneralVariables.mutableVolumePercent.observe(this) { v ->
+            if (v != null) UsbAudioNative.setTxVolume(v)
+        }
 
         // Register back press handler. Priority: dismiss the QSO sheet if
         // it's open, otherwise show exit confirm. Without this, back-from-
@@ -182,6 +205,22 @@ class ComposeMainActivity : ComponentActivity() {
         } else {
             doReceiveShareFile(intent)
         }
+
+        // Handle a tapped Needed-DX alert (cold start).
+        handleAlertIntent(intent)
+    }
+
+    /**
+     * If [intent] came from a tapped Needed-DX notification, publish the alerted callsign
+     * so the Decode screen can switch to itself and scroll to + highlight that station.
+     */
+    private fun handleAlertIntent(intent: Intent?) {
+        val callsign = intent?.getStringExtra(
+            com.bg7yoz.ft8cn.alert.DxAlertNotifier.EXTRA_CALLSIGN,
+        ) ?: return
+        if (callsign.isBlank()) return
+        fileLog("handleAlertIntent: preselect $callsign")
+        mainViewModel.mutablePreselectCallsign.postValue(callsign)
     }
 
     private fun buildPermissionsList(): Array<String> {
@@ -197,6 +236,9 @@ class ComposeMainActivity : ComponentActivity() {
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             base.add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            base.add(Manifest.permission.POST_NOTIFICATIONS)
         }
         return base.toTypedArray()
     }
@@ -216,7 +258,37 @@ class ComposeMainActivity : ComponentActivity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        // Proceed regardless; same behavior as original
+        // Proceed regardless; same behavior as original.
+
+        // GPS grid auto-update: the toggle in Settings (and the cold-start path)
+        // requests ACCESS_FINE_LOCATION *asynchronously* and then immediately calls
+        // GridLocationUpdater.refresh(). On the very first enable the permission is
+        // still ungranted at that point, so start() bails and the subscription never
+        // begins until the next app launch. Once the user grants location here, kick
+        // refresh() again so updates start in the same session (issue #59).
+        if (locationGrantedIn(permissions, grantResults)
+            && GeneralVariables.autoUpdateGridFromGPS
+        ) {
+            fileLog("onRequestPermissionsResult: location granted, starting GPS grid updater")
+            val grid = MaidenheadGrid.getMyMaidenheadGrid(applicationContext)
+            if (grid.isNotEmpty()) {
+                GeneralVariables.setMyMaidenheadGrid(grid)
+                mainViewModel.databaseOpr.writeConfig("grid", grid, null)
+            }
+            GridLocationUpdater.refresh(applicationContext, mainViewModel)
+        }
+
+        // On Android 12+ the BT auto-connect at config-load time may have bailed with
+        // NO_PERMISSION because BLUETOOTH_CONNECT was still pending. Once the user grants it,
+        // retry the SPP/CAT auto-reconnect in the same session (issue #223). The rigConnected
+        // guard inside makes this idempotent with the config-callback attempt.
+        val btIdx = permissions.indexOf(Manifest.permission.BLUETOOTH_CONNECT)
+        if (btIdx >= 0 && grantResults.getOrNull(btIdx) == PackageManager.PERMISSION_GRANTED
+            && mainViewModel.configIsLoaded
+        ) {
+            fileLog("onRequestPermissionsResult: BLUETOOTH_CONNECT granted, retrying BT auto-connect")
+            autoConnectBluetoothIfNeeded()
+        }
     }
 
     private fun initData() {
@@ -226,6 +298,14 @@ class ComposeMainActivity : ComponentActivity() {
             mainViewModel.operationBand = OperationBand.getInstance(baseContext)
         }
 
+        // Callsign database must be ready before getQslDxccToMap() — that
+        // method's background thread needs it to resolve DXCC prefixes. If it
+        // runs first, the null-check early-return leaves zoneMapReady false
+        // permanently and DXCC/zone "new" flags never compute. (#251 review)
+        if (GeneralVariables.callsignDatabase == null) {
+            GeneralVariables.callsignDatabase = CallsignDatabase.getInstance(applicationContext, null, 1)
+        }
+
         mainViewModel.databaseOpr.getQslDxccToMap()
 
         mainViewModel.databaseOpr.getAllConfigParameter(object : OnAfterQueryConfig {
@@ -233,6 +313,7 @@ class ComposeMainActivity : ComponentActivity() {
 
             override fun doOnAfterQueryConfig(keyName: String?, value: String?) {
                 mainViewModel.configIsLoaded = true
+                mainViewModel.mutableConfigLoaded.postValue(true)
                 fileLog("configLoaded: instructionSet=${GeneralVariables.instructionSet}, " +
                     "baudRate=${GeneralVariables.baudRate}, " +
                     "controlMode=${GeneralVariables.controlMode}, " +
@@ -247,12 +328,24 @@ class ComposeMainActivity : ComponentActivity() {
                 }
                 mainViewModel.ft8TransmitSignal.setTimer_sec(GeneralVariables.transmitDelay)
 
+                // The cycle timers were built (for FT8) before config loaded; now that the
+                // persisted operating mode is known, rebuild them for it and sync the UI.
+                mainViewModel.applyLoadedOperatingMode()
+
+                // Resume any POTA activation that was interrupted by app close
+                PotaSessionManager.resume()
+
                 // Scan for USB devices AFTER config is loaded
                 fileLog("initData: scanning USB devices")
                 mainViewModel.getUsbDevice()
                 val ports = mainViewModel.mutableSerialPorts.value
                 fileLog("initData: found ${ports?.size ?: 0} serial port(s)")
                 mainViewModel.reinitializeAudioInput()
+
+                // USB auto-connect is driven by the mutableSerialPorts observer; Bluetooth has
+                // no such device-arrival event, so re-open the remembered SPP/CAT link here now
+                // that connectMode + the saved address are loaded (issue #223).
+                autoConnectBluetoothIfNeeded()
 
                 // Delayed re-scan for slow USB enumeration
                 Handler(Looper.getMainLooper()).postDelayed({
@@ -270,10 +363,6 @@ class ComposeMainActivity : ComponentActivity() {
 
         DatabaseOpr.GetCallsignMapGrid(mainViewModel.databaseOpr.db).execute()
         mainViewModel.getFollowCallsignsFromDataBase()
-
-        if (GeneralVariables.callsignDatabase == null) {
-            GeneralVariables.callsignDatabase = CallsignDatabase.getInstance(baseContext, null, 1)
-        }
     }
 
     private fun doReceiveShareFile(intent: Intent) {
@@ -332,6 +421,26 @@ class ComposeMainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         if ("android.hardware.usb.action.USB_DEVICE_ATTACHED" == intent.action) {
             fileLog("onNewIntent: USB_DEVICE_ATTACHED")
+            // If the attached device is the one the user picked for direct USB
+            // audio, make sure we hold permission before the delayed reinit
+            // below tries to open it. USB permission can be dropped across an
+            // unplug/replug; without this, the recorder reopens, finds no
+            // permission, and silently falls back to the built-in mic. The
+            // grant callback (MainViewModel.requestUsbPermissionIfNeeded) then
+            // rebinds the input once the user allows it.
+            val attached: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            }
+            if (attached != null
+                && (GeneralVariables.isConfiguredUsbAudioInput(attached.vendorId, attached.productId)
+                    || GeneralVariables.isConfiguredUsbAudioOutput(attached.vendorId, attached.productId))
+            ) {
+                fileLog("onNewIntent: attached device is configured USB audio; ensuring permission")
+                mainViewModel.requestUsbPermissionIfNeeded(attached)
+            }
             // Immediate scan
             mainViewModel.getUsbDevice()
             val ports = mainViewModel.mutableSerialPorts.value
@@ -351,6 +460,8 @@ class ComposeMainActivity : ComponentActivity() {
         } else {
             setIntent(intent)
             doReceiveShareFile(intent)
+            // Handle a tapped Needed-DX alert (app already running).
+            handleAlertIntent(intent)
         }
     }
 
@@ -454,6 +565,44 @@ class ComposeMainActivity : ComponentActivity() {
         mainViewModel.connectCableRig(applicationContext, ports[0])
     }
 
+    /**
+     * Re-open the remembered Bluetooth (SPP/CAT) rig on startup when the user is in Bluetooth
+     * connect mode. Without this the CAT link never re-opened on relaunch, which also left
+     * HFP audio unrouted (issue #223). All branch logic lives in [decideBluetoothAutoConnect]
+     * so it is unit-testable; this method only collects Android state and acts on CONNECT.
+     */
+    private fun autoConnectBluetoothIfNeeded() {
+        val adapter = BluetoothAdapter.getDefaultAdapter()
+        val addr = GeneralVariables.bluetoothDeviceAddress
+        // A corrupted/legacy persisted value would make getRemoteDevice() throw
+        // IllegalArgumentException and crash startup, so validate the MAC up front (PR #227 review).
+        val validAddr = !addr.isNullOrBlank() && BluetoothAdapter.checkBluetoothAddress(addr)
+        if (!addr.isNullOrBlank() && !validAddr) {
+            fileLog("autoConnectBT: ignoring invalid saved address=${maskBluetoothAddress(addr)}")
+        }
+        val hasPerm = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
+            PackageManager.PERMISSION_GRANTED
+        val bonded = try {
+            hasPerm && adapter != null && validAddr &&
+                adapter.bondedDevices.any { it.address == addr }
+        } catch (_: SecurityException) {
+            false
+        }
+        val decision = decideBluetoothAutoConnect(
+            connectMode = GeneralVariables.connectMode,
+            savedAddress = if (validAddr) addr else null,
+            rigConnected = mainViewModel.isRigConnected(),
+            adapterOn = adapter?.isEnabled == true,
+            hasConnectPermission = hasPerm,
+            isBonded = bonded,
+        )
+        fileLog("autoConnectBT: decision=$decision addr=${maskBluetoothAddress(addr)} connectMode=${GeneralVariables.connectMode}")
+        if (decision == BtAutoConnectDecision.CONNECT) {
+            mainViewModel.connectBluetoothRig(applicationContext, adapter!!.getRemoteDevice(addr))
+        }
+    }
+
     /** Write a line to /sdcard/Android/data/com.bg7yoz.ft8cn/files/debug.log */
     private fun fileLog(msg: String) {
         try {
@@ -485,7 +634,7 @@ class ComposeMainActivity : ComponentActivity() {
 
                 // Show volume toast
                 volumeToast?.cancel()
-                volumeToast = android.widget.Toast.makeText(this, "TX Volume: $intVal%", android.widget.Toast.LENGTH_SHORT)
+                volumeToast = android.widget.Toast.makeText(this, getString(R.string.main_tx_volume, intVal), android.widget.Toast.LENGTH_SHORT)
                 volumeToast?.show()
 
                 return true
@@ -502,4 +651,26 @@ class ComposeMainActivity : ComponentActivity() {
         mainViewModel.utcTimer?.delete()
         System.exit(0)
     }
+}
+
+/**
+ * True if this permission result granted either fine or coarse location.
+ * Top-level + [internal] so the GPS-grid restart decision (issue #59) can be
+ * unit-tested without constructing the Activity.
+ */
+internal fun locationGrantedIn(
+    permissions: Array<out String>,
+    grantResults: IntArray,
+): Boolean {
+    for (i in permissions.indices) {
+        if (i >= grantResults.size) break
+        val p = permissions[i]
+        if ((p == Manifest.permission.ACCESS_FINE_LOCATION ||
+                p == Manifest.permission.ACCESS_COARSE_LOCATION) &&
+            grantResults[i] == PackageManager.PERMISSION_GRANTED
+        ) {
+            return true
+        }
+    }
+    return false
 }

@@ -317,7 +317,7 @@
     <string name="callsign_info">Callsign:%s\nLocation:%s\nCQ zone:%d\nITU zone:%d\nContinent:%s\nLongitude and latitude:%.2f,%.2f\nTime zone:%.0f\nDxcc prefix:%s</string>
     <string name="maximum_distance">Maximum distance\n\n%s</string>
     <string name="minimum_distance">Nearest distance\n\n%s</string>
-    <string name="count_distance_info">Maximum distance:%.0f km (%s)\nNearest distance:%.0f km (%s)</string>
+    <string name="count_distance_info">Maximum distance:%.0f %s (%s)\nNearest distance:%.0f %s (%s)</string>
     <string name="distance_statistics">Distance statistics</string>
     <string name="dxcc_image">dxcc</string>
     <string name="cqzone">cq zone</string>

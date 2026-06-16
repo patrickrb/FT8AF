@@ -106,6 +106,7 @@ public class CableConnector extends BaseRigConnector {
     @Override
     public void connect() {
         super.connect();
+        getOnConnectorStateChanged().onConnecting();
         cableSerialPort.connect();
     }
 

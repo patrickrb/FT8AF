@@ -1,0 +1,61 @@
+name: Discord — merge notify
+
+on:
+  push:
+    branches: [dev, main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    # Skip if the head commit message contains [skip discord] (e.g. for state-branch chores)
+    if: ${{ !contains(github.event.head_commit.message, '[skip discord]') }}
+    steps:
+      - name: Post to Discord
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          AUTHOR: ${{ github.event.head_commit.author.name }}
+          COMMIT_URL: ${{ github.event.head_commit.url }}
+          COMPARE_URL: ${{ github.event.compare }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${WEBHOOK_URL:-}" ]]; then
+            echo "::error::DISCORD_WEBHOOK_URL secret is not set"
+            exit 1
+          fi
+          if [[ "$BRANCH" == "main" ]]; then
+            color=3066993   # green
+            emoji="🚀"
+          else
+            color=15105570  # orange
+            emoji="🔧"
+          fi
+          sha_short="${SHA:0:7}"
+          first_line=$(printf '%s' "$COMMIT_MSG" | head -n1)
+          body=$(printf '%s' "$COMMIT_MSG" | tail -n +2 | sed -E '/^[[:space:]]*$/d' || true)
+          payload=$(jq -nc \
+            --arg branch  "$BRANCH" \
+            --arg sha     "$sha_short" \
+            --arg first   "$first_line" \
+            --arg body    "$body" \
+            --arg author  "$AUTHOR" \
+            --arg url     "$COMMIT_URL" \
+            --arg compare "$COMPARE_URL" \
+            --arg repo    "$REPO" \
+            --arg emoji   "$emoji" \
+            --argjson color "$color" \
+            '{embeds:[{
+               title: ($emoji + " " + $repo + " — merged into " + $branch + ": " + $first),
+               url: $url,
+               color: $color,
+               description: (if $body == "" then null else $body end),
+               fields: [
+                 {name:"Commit",  value:("[`"+$sha+"`]("+$url+")"), inline:true},
+                 {name:"Author",  value:$author, inline:true},
+                 {name:"Compare", value:("["+$sha+"]("+$compare+")"), inline:true}
+               ]
+             }]}')
+          curl -fsS -H "Content-Type: application/json" -d "$payload" "$WEBHOOK_URL"

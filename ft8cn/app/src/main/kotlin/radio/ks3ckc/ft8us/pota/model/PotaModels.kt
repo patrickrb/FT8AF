@@ -22,6 +22,24 @@ data class PotaPark(
     val locationDesc: String,
 )
 
+/** A single QSO row for the activation contacts list. */
+data class PotaQso(
+    val id: Long,
+    val callsign: String,
+    val grid: String,
+    val band: String,
+    val mode: String,
+    val rstSent: String,
+    val rstRcvd: String,
+    val qsoDate: String,
+    val timeOn: String,
+    val sig: String?,
+    val sigInfo: String?,
+    /** The operator's own grid at the time of this QSO (my_gridsquare). Lets the
+     *  activation map place the operator for historical activations. */
+    val myGrid: String = "",
+)
+
 /** A logged activation session (row from pota_activation). */
 data class PotaActivation(
     val id: Long,
@@ -33,4 +51,12 @@ data class PotaActivation(
     val notes: String?,
 ) {
     val isActive: Boolean get() = endedAtMs == null
+
+    /** Individual park references (splits comma-separated `parkRef`). */
+    val parkRefs: List<String>
+        get() = parkRef.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+
+    /** Human-readable display: "K-1234 + K-5678". */
+    val parkRefsDisplay: String
+        get() = parkRefs.joinToString(" + ")
 }

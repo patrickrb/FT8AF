@@ -1,0 +1,560 @@
+<resources>
+    <string name="app_name">FT8AF</string>
+    <string name="nav_menu_title_call_list">Contenu</string>
+    <string name="nav_menu_title_decode_list">Décodage</string>
+    <string name="nav_menu_title_my_calling">Appel</string>
+    <string name="nav_menu_title_history">Journaux QSO</string>
+    <string name="nav_menu_title_config">Paramètres</string>
+    <string name="map_name" translatable="false">nightUSGS4Layer.sqlite</string>
+
+
+    <string name="run_decode">Lancer le décodage</string>
+    <string name="db">dB</string>
+    <string name="dt">Δt</string>
+    <string name="locate">Position</string>
+    <string name="message">Message</string>
+    <string name="freq">Fréq</string>
+    <string name="decode">Décoder</string>
+    <string name="delete">Supprimer</string>
+    <string name="sequence">S.</string>
+    <string name="dist">Distance</string>
+    <string name="location">Emplacement</string>
+    <string name="mycall">Indicatif</string>
+    <string name="pl_mycall">Veuillez entrer votre indicatif</string>
+    <string name="headGrid">Locator</string>
+    <string name="pl_grid">Veuillez entrer votre locator Maidenhead</string>
+    <string name="decoding">Décodage…</string>
+    <string name="send">TX</string>
+    <string name="check">Vérifier</string>
+    <string name="sendFreq">Fréq TX</string>
+    <string name="sendDefaultFreq">Fréq audio</string>
+    <string name="pl_sendFreq">Plage de fréq audio 0~2900</string>
+    <string name="transmitting">TX …</string>
+    <string name="synFrequency">Verrouillé TX=RX</string>
+    <string name="spectrum">Spectre</string>
+    <string name="pl_trans_delay">Délai de transmission (MS)</string>
+    <string name="tran_delay">Délai TX</string>
+
+    <string name="timeOffset">Décalage horaire</string>
+    <string name="help">Aide</string>
+    <string name="scroll_down">▾</string>
+    <string name="about_me">À propos de FT8AF</string>
+
+    <string name="connectMode">Contrôle</string>
+    <string name="VOX">VOX</string>
+    <string name="CAT">CAT</string>
+    <string name="operationBand">Fréquence</string>
+    <string name="civ_address">CI-V</string>
+    <string name="pl_civ_address">Adresse CI-V de la radio</string>
+    <string name="serial_port">Port série</string>
+    <string name="bau_rate">Débit en bauds</string>
+    <string name="pl_select_serial_port">Veuillez sélectionner le port série</string>
+    <string name="close">Fermer</string>
+    <string name="rig_name">Radio</string>
+    <string name="debug">Débogage</string>
+    <string name="logo_image">FT8AF</string>
+    <string name="RTS">RTS</string>
+    <string name="FAQ">FAQ</string>
+    <string name="launch_supervision">Minuterie TX</string>
+    <string name="no_response_count">Sans réponse</string>
+    <string name="break_launch">arrêté</string>
+    <string name="follow_cq">Suivi auto des CQ</string>
+    <string name="auto_call_follow">Suivi automatique des appels</string>
+    <string name="DTR">DTR</string>
+    <string name="launch">TX</string>
+    <string name="export">Exporter</string>
+    <string name="view_style">Mode d\'affichage</string>
+    <string name="ptt_delay">Délai PTT</string>
+    <string name="filter">Filtre</string>
+    <string name="pl_filter">Veuillez sélectionner le filtre</string>
+    <string name="filter_all">Tout afficher</string>
+    <string name="filter_is_qsl">Afficher les confirmés</string>
+    <string name="filter_none_qsl">Afficher les non confirmés</string>
+    <string name="cable_connect">USB</string>
+    <string name="bluetooth_connect">Bluetooth</string>
+    <string name="cable_mode">Type de connexion</string>
+    <string name="pl_select_bluetooth">Veuillez sélectionner un appareil Bluetooth disponible</string>
+    <string name="bluetooth_set">Paramètres Bluetooth</string>
+    <string name="spp_device">Appareil Bluetooth SPP</string>
+    <string name="headset_device">Casque Bluetooth</string>>
+    <string name="disconnect_rig">La connexion à la radio est interrompue</string>>
+    <string name="connected_rig">Connexion à la radio réussie.</string>>
+    <string name="current_frequency">Fréquence actuelle : %s</string>>
+    <string name="radio_communication_error">Erreur de communication avec la radio : %s</string>>
+    <string name="does_not_support_recording">L\'appareil Bluetooth ne prend pas en charge l\'enregistrement</string>>
+    <string name="bluetooth_headset_mode">Mode casque Bluetooth activé</string>>
+    <string name="bluetooth_Headset_mode_cancelled">Mode casque Bluetooth désactivé</string>>
+
+    <string name="version_info">FT8AF Ver %s\nKS3CKC\n%s</string>>
+
+
+    <string name="exit">Quitter</string>>
+    <string name="cancel">Annuler</string>>
+    <string name="exit_confirmation">Voulez-vous vraiment quitter ?</string>>
+
+    <!--   FT8Message-->
+    <string name="std_msg">Msg standard</string>>
+    <string name="none_std_msg">Appel non std</string>>
+    <string name="free_text">Texte libre</string>>
+    <string name="dXpedition">DXpedition</string>>
+    <string name="field_day">Field Day</string>>
+    <string name="telemetry">Télémétrie</string>>
+    <string name="rtty_ru_msg">RTTY RU</string>>
+
+
+    <!--   Settings bar-->
+    <string name="offset_time_sec">%.1f sec</string>>
+
+    <!--   Spectrum chart-->
+    <string name="decoding_takes_milliseconds">Décodé : %d ms</string>>
+    <string name="sound_frequency_is_set_to">La fréquence audio est de %d Hz</string>>
+    <string name="de_noise">Réduction bruit</string>
+    <string name="raw_spectrum_data">Original</string>
+    <string name="markMessage">Afficher msg</string>
+    <string name="unMarkMessage">Masquer msg</string>
+
+    <!--   Select Bluetooth device dialog-->
+    <string name="select_bluetooth_device">Sélectionner l\'appareil Bluetooth : %s</string>
+
+    <!--   PTT delay in milliseconds-->
+    <string name="milliseconds">%d ms</string>
+    <!--   No-reply count-->
+    <string name="ignore">Ignorer</string>
+    <string name="times">%d appels</string>
+
+    <!--   Calling bar-->
+    <string name="sound_frequency_is">Fréq : %.0f Hz</string>
+    <string name="target_callsign">Cible : %s</string>
+    <string name="transmission_sequence">Séquence : %d</string>
+    <string name="message_count">Messages(%d)</string>
+
+    <!--   Log export bar-->
+    <string name="export_info">Veuillez utiliser le navigateur web d\'un autre appareil sur le même réseau local pour exporter.\nEntrez l\'URL dans le navigateur :\nhttp://%s:%d</string>
+    <!--   TX watchdog-->
+    <string name="minutes">%d min</string>
+
+    <!--   TX watchdog-->
+    <string name="freq_syn">Verrouillé TX=RX</string>
+    <string name="freq_asyn">TX/RX séparés</string>
+    <string name="auto_follow_cq">Suivi auto des CQ</string>
+    <string name="not_concerned_about_CQ">Pas de suivi CQ</string>
+    <string name="automatic_call_following">Suivi auto des appels</string>
+    <string name="do_not_call_the_following_callsign">Pas de suivi d\'appel</string>
+
+    <!--   Decode bar-->
+    <string name="message_count_count">Messages(%d/%d)</string>
+    <string name="average_offset_seconds">Décalage moy : %.2f sec</string>
+    <string name="my_grid">Locator : %s</string>
+
+    <!--   Decode list-->
+    <string name="tracking_receiver">Suivi du récepteur %s(%s)</string>
+    <string name="calling_receiver">Appel du récepteur %s(%s)</string>
+    <string name="reply_to">Répondre à %s(%s)</string>
+    <string name="tracking">Suivi de %s(%s)</string>
+    <string name="calling">Appel de %s(%s)</string>
+
+    <!--   Grid distance calculation-->
+    <string name="distance">%.0f km</string>
+
+    <!--   Log list-->
+    <string name="confirmed">Confirmé</string>
+    <string name="unconfirmed">Non confirmé</string>
+    <string name="lotw_confirmation">Confirmé par LoTW</string>
+    <string name="manual_confirmation">Confirmé manuellement</string>
+    <string name="log_start_time">Début : %s</string>
+    <string name="log_end_time">Fin : %s</string>
+    <string name="log_last_time">Dernier QSO : %s</string>
+    <string name="log_grid">Locator : %s</string>
+    <string name="log_mode">Mode : %s</string>
+    <string name="log_cancel_confirmation">Annuler la confirmation (%s)</string>
+    <string name="log_manual_confirmation">Confirmation manuelle (%s)</string>
+
+    <!--   QSL log list-->
+    <string name="qsl_grid">Locator : %s</string>
+    <string name="qsl_start_time">Début : %s</string>
+    <string name="qsl_end_time">Fin : %s</string>
+    <string name="qsl_rst_rcvd">RST reçu : %s</string>
+    <string name="html_rst_rcvd">RST reçu</string>
+    <string name="qsl_rst_sent">RST envoyé : %s</string>
+    <string name="html_rst_sent">RST envoyé</string>
+    <string name="qsl_band">Bande : %s</string>
+    <string name="qsl_freq">Fréq : %s</string>
+    <string name="qsl_mode">Mode : %s</string>
+    <string name="qsl_lotw_confirmation">Confirmé par LoTW</string>
+    <string name="qsl_manual_confirmation">Confirmé manuellement</string>
+    <string name="qsl_unconfirmed">Non confirmé</string>
+    <string name="qsl_cancel_confirmation">Annuler la confirmation (%s)</string>
+    <string name="qsl_manual_confirmation_s">Confirmation manuelle (%s)</string>
+    <string name="qsl_qrz_confirmation_s">QRZ (%s)</string>
+
+    <!--   QSL record-->
+    <string name="qsl_record_import_time">Date d\'importation : %s</string>
+
+    <!--   HTML -->
+    <string name="html_track_operation_information">Informations de surveillance</string>
+    <string name="html_track_callsign_hash_table">Table de hachage des indicatifs surveillés</string>
+    <string name="html_trace_parsed_messages">Surveiller les messages analysés</string>
+    <string name="html_trace_callsign_and_grid_correspondence_table">Surveiller la correspondance entre indicatifs et locators</string>
+    <string name="html_query_communication_message">Rechercher les QSO</string>
+    <string name="html_query_configuration_information">Consulter la configuration</string>
+    <string name="html_query_all_table">Consulter toutes les tables de données</string>
+    <string name="html_manage_tracking_callsign">Gérer les indicatifs suivis</string>
+    <string name="html_manage_communication_callsigns">Gérer les indicatifs QSO</string>
+    <string name="html_show_communication_callsigns">Afficher les indicatifs QSO</string>
+    <string name="html_export_log">Exporter le journal</string>
+    <string name="html_import_log">Importer le journal</string>
+    <string name="html_to_the_third_party">Exporter le journal (pour sauvegarde et envoi vers une plateforme tierce pour confirmation)</string>
+    <string name="html_from_jtdx_lotw">Exporter les journaux (pour sauvegarde, envoi vers une plateforme tierce pour confirmation, synchronisation des journaux JTDX et synchronisation LoTW pour confirmation. Il est recommandé d\'utiliser les données ADI de JTDX, LoTW, Log32 et N1mm pour la synchronisation)</string>
+    <string name="html_return">Retour</string>
+
+
+    <string name="html_import_count">Le fichier ADI contient %d enregistrements et %d ont été importés. Le format de %d journaux est incorrect.</string>
+    <string name="html_import_failed">Échec de l\'importation ! %s</string>
+    <string name="html_illegal_command">Commande invalide, échec du téléversement !</string>
+    <string name="html_callsign">Indicatif</string>
+    <string name="html_operation">Opération</string>
+    <string name="html_delete">Supprimer</string>
+    <string name="html_qsl_start_time">Heure de début du QSO</string>
+    <string name="html_qsl_start_day">Date de début du QSO</string>
+    <string name="html_qsl_end_time">Heure de fin du QSO</string>
+    <string name="html_qsl_end_date">Date de fin du QSO</string>
+    <string name="html_qsl_mode">Mode</string>
+    <string name="html_qsl_grid">Locator</string>
+    <string name="html_qsl_band">Bande</string>
+    <string name="html_qsl_freq">Fréq</string>
+    <string name="html_qsl_manual_confirmation">Confirmé manuellement</string>
+    <string name="html_qsl_lotw_confirmation">Confirmé par LoTW</string>
+    <string name="html_qsl_data_source">Source de données</string>
+    <string name="html_qsl_import_data_from_external">Externe</string>
+    <string name="html_qsl_native_data">Local</string>
+    <string name="html_variable">Variables</string>
+    <string name="html_value">Valeurs</string>
+    <string name="html_my_callsign">Indicatif</string>
+    <string name="html_my_grid">Locator</string>
+    <string name="html_decodes_in_this_cycle">Nombre de décodages dans ce cycle</string>
+    <string name="html_total_number_of_decodes">Nombre total de décodages</string>
+    <string name="html_in_recording_state">État d\'enregistrement</string>
+    <string name="html_recording">Enregistrement en cours</string>
+    <string name="html_no_recording">Pas d\'enregistrement</string>
+    <string name="html_time_consuming_for_this_decoding">Durée de ce décodage</string>
+    <string name="html_milliseconds">%d millisecondes</string>
+    <string name="html_average_delay_time_of_this_cycle">Délai moyen de cette période</string>
+    <string name="html_seconds">%.3f secondes</string>
+    <string name="html_sound_frequency">Fréquence audio du signal</string>
+    <string name="html_transmission_delay_time">Délai TX</string>
+    <string name="html_launch_supervision">Minuterie TX</string>
+    <string name="html_automatic_program_run_time">Durée d\'exécution automatique du programme</string>
+    <string name="html_no_reply_limit">Limite sans réponse</string>
+    <string name="html_no_reply_count">Compteur sans réponse</string>
+    <string name="html_mark_message">Marquer les messages sur le diagramme en cascade</string>
+    <string name="html_marking_message">Messages marqués</string>
+    <string name="html_do_not_mark_message">Messages non marqués</string>
+    <string name="html_operation_mode">Mode de fonctionnement</string>
+    <string name="html_civ_address">Adresse CI-V</string>
+    <string name="html_baud_rate">Débit en bauds</string>
+    <string name="html_connect_mode">Mode de connexion</string>
+    <string name="html_available_serial_ports">Ports série disponibles</string>
+    <string name="html_serial_port_in_use">Port série en cours d\'utilisation</string>
+    <string name="html_instruction_set">Jeu d\'instructions</string>
+    <string name="html_target_callsign">Indicatif cible</string>
+    <string name="html_sequential">Séquence</string>
+
+
+    <string name="html_carrier_frequency_band">Bande</string>
+    <string name="html_radio_frequency">Fréquence de la radio</string>
+    <string name="html_successful_callsign">Indicatifs QSO réussis en %s</string>
+    <string name="html_tracking_callsign">Indicatif suivi</string>
+    <string name="html_tracking_qso_information">Informations de suivi QSO</string>
+
+    <string name="html_hash_value">Hash</string>
+    <string name="html_please_select">Veuillez sélectionner</string>
+    <string name="html_adi_format">Fichier journal au format ADI</string>
+    <string name="html_file_in_other_format">et les fichiers dans d\'autres formats pourraient ne pas être analysés et importés correctement.</string>
+    <string name="html_time">Heure</string>
+    <string name="html_total">Total</string>
+    <string name="html_all_logs">Tous les journaux</string>
+    <string name="html_download">Télécharger</string>
+    <string name="html_today_log">Journaux du jour</string>
+    <string name="html_download_all">Tout télécharger</string>
+    <string name="html_download_unconfirmed">Télécharger les non confirmés</string>
+    <string name="callsign_error">L\'indicatif est incorrect !</string>
+    <string name="adjust_call_target">Cible d\'appel ajustée : %s</string>
+    <string name="use_wspr2_error">La fréquence actuellement utilisée %s est la fréquence utilisée par WSPR-2. Il est interdit de transmettre des signaux FT8 !</string>
+    <string name="none">Aucun</string>
+    <string name="connect_bluetooth_spp">Connexion au port série Bluetooth %s …</string>
+    <string name="bluetooth_is_connected">L\'appareil Bluetooth %s est connecté.</string>
+    <string name="bluetooth_is_diconnected">L\'appareil Bluetooth %s est déconnecté.</string>
+    <string name="sound_source_switched">La source audio a été changée.</string>
+    <string name="bluetooth_turn_off">Le Bluetooth est désactivé.</string>
+    <string name="bluetooth_turn_on">Le Bluetooth est activé.</string>
+    <string name="can_not_location">Impossible de localiser. Veuillez vérifier que vous avez autorisé la localisation.</string>
+    <string name="statistical">Statistiques</string>
+    <string name="count_up">Haut</string>
+    <string name="count_down">Bas</string>
+    <string name="band_statistics">Statistiques par bande</string>
+    <string name="count_total">Total : %d</string>
+    <string name="confirmation_statistics">Statistiques de confirmation des journaux</string>
+    <string name="count_confirmed">Confirmé</string>
+    <string name="count_unconfirmed">Non confirmé</string>
+    <string name="count_total_logs">Total : %d</string>
+    <string name="count_confirmed_log">Confirmé : %d</string>
+    <string name="count_lotw_confirmed">Confirmé par LoTW : %d</string>
+    <string name="count_manually_confirmed">Confirmé manuellement : %d</string>
+    <string name="count_confirmed_proportion">Proportion confirmée : %.1f%%</string>
+    <string name="count_tota_callsigns">Nombre total d\'indicatifs : %d</string>
+    <string name="count_zone">Zone %s</string>
+    <string name="itu_completion_statistics">Statistiques de complétion ITU</string>
+    <string name="count_incomplete">Incomplet</string>
+    <string name="count_completed">Complété</string>
+    <string name="count_total_itu">Total ITU : %d\nComplétés %d(%.1f%%)</string>
+    <string name="count_itu_completed_scale">Statistiques ITU</string>
+    <string name="count_cqzone_completed">Statistiques des zones CQ</string>
+    <string name="count_total_cqzone">Total zones CQ : %d \n Complétées : %d(%.1f%%)</string>
+    <string name="count_cqzone_proportion">Statistiques des zones CQ</string>
+    <string name="dxcc_completion_statistics">Statistiques DXCC</string>
+    <string name="count_total_dxcc">Total DXCC : %d \nComplétés : %d(%.1f%%)</string>
+    <string name="count_dxcc_proportion">Statistiques DXCC</string>
+    <string name="callsign_info">Indicatif : %s\nEmplacement : %s\nZone CQ : %d\nZone ITU : %d\nContinent : %s\nLongitude et latitude : %.2f,%.2f\nFuseau horaire : %.0f\nPréfixe DXCC : %s</string>
+    <string name="maximum_distance">Distance maximale\n\n%s</string>
+    <string name="minimum_distance">Distance minimale\n\n%s</string>
+    <string name="count_distance_info">Distance maximale : %.0f %s (%s)\nDistance minimale : %.0f %s (%s)</string>
+    <string name="distance_statistics">Statistiques de distance</string>
+    <string name="dxcc_image">dxcc</string>
+    <string name="cqzone">cq zone</string>
+    <string name="itu_image">itu zone</string>
+    <string name="recorder_cannot_record">Impossible d\'enregistrer, veuillez vérifier les autorisations. %s</string>
+    <string name="recorder_stop_record_error">Erreur à l\'arrêt de l\'enregistrement ! %s</string>
+    <string name="delete_confirmation">Confirmation de suppression</string>
+    <string name="are_you_sure_delete">Voulez-vous vraiment supprimer ?</string>
+    <string name="ok_confirmed">OK</string>
+    <string name="network_connect">Réseau</string>
+    <string name="pl_select_flex_radio">Veuillez sélectionner une FlexRadio disponible</string>
+    <string name="select_flex_device">Sélectionner l\'appareil FlexRadio : %s</string>
+    <string name="select_xiegu_device">Sélectionner l\'appareil XIEGU : %s</string>
+    <string name="only_flex_supported">Seules les séries FlexRadio ou ICom sont prises en charge !</string>
+    <string name="flex_connect_failed">Échec de la connexion à la FlexRadio %s !</string>
+    <string name="xiegu_connect_failed">Échec de la connexion à la XIEGU %s !</string>
+    <string name="init_flex_operation">%s est en cours d\'initialisation.</string>
+    <string name="html_max_message_cache">Nombre maximum de messages en cache</string>
+    <string name="instruction_failed">L\'instruction %s n\'a pas pu être exécutée. Message : %s</string>
+    <string name="instruction_success">L\'instruction %s a été exécutée avec succès.</string>
+    <string name="flex_ip_addr">IP</string>
+    <string name="pl_input_flex_ip">Veuillez entrer l\'adresse IP</string>
+    <string name="connect_flex">Connecter FlexRadio</string>
+    <string name="connect_flex_ip">Connexion à la FlexRadio %s …</string>
+    <string name="get_new_version">Obtenir la dernière version</string>
+    <string name="login_icom_help">Connexion à la ICom</string>
+    <string name="pl_input_icom_port">Port de contrôle (UDP)</string>
+    <string name="icom_port">Port</string>
+    <string name="icom_user_name">Utilisateur</string>
+    <string name="pl_icom_user">Veuillez entrer le nom d\'utilisateur</string>
+    <string name="icom_password">Mot de passe</string>
+    <string name="pl_icom_password">Veuillez entrer le mot de passe</string>
+    <string name="icom_login_button">Connexion</string>
+    <string name="show_password">Mot de passe visible</string>
+    <string name="connect_icom_ip">Connexion à la radio ICom %s …</string>
+    <string name="connect_xiegu_ip">Connexion à la radio XIEGU %s …</string>
+    <string name="network_exception">%s : Exception de transmission réseau : %s</string>
+    <string name="login_succeed">Connexion réussie !</string>
+    <string name="loging_failed">Échec de la connexion, nom d\'utilisateur ou mot de passe invalide.</string>
+    <string name="data_stream">Flux de données</string>
+    <string name="control_stream">Flux de contrôle</string>
+    <string name="civ_stream">Flux CI-V</string>
+    <string name="audio_stream">Flux audio</string>
+    <string name="alc_high_alert">Attention ! L\'ALC est trop élevé.</string>
+
+    <string name="swr_high_alert">Attention ! Le SWR est trop élevé.</string>
+    <string name="volume_percent">Puissance du signal en sortie %.0f %%</string>
+    <string name="signal_strength">Puissance du signal en sortie</string>
+    <string name="html_distance">Distance</string>
+    <string name="html_callsign_qth">QTH de l\'indicatif</string>
+    <string name="html_update_time">Heure de mise à jour</string>
+    <string name="grid_tracker_new_grid">Nouveau locator trouvé : %s</string>
+    <string name="tracker_open_messages">Ouvrir les messages</string>
+    <string name="tracker_close_messages">Fermer les messages</string>
+    <string name="tracker_decoded_new">%d messages décodés.</string>
+    <string name="tracker_call_this">Appeler cet indicatif</string>
+    <string name="tracker_show_info_mode">Mode info-bulles</string>
+    <string name="tracker_tips_all">Tout</string>
+    <string name="tracker_tips_new">Nouveau</string>
+    <string name="tracker_tips_none">Aucun</string>
+    <string name="tracker_show_cq_tips">Afficher les info-bulles CQ</string>
+    <string name="tracker_hide_cq_tips">Masquer les info-bulles CQ</string>
+    <string name="tracker_show_qsx_tips">Afficher les info-bulles QSX</string>
+    <string name="tracker_hide_qsx_tips">Masquer les info-bulles QSX</string>
+    <string name="track_sample_text_qsl">QSL</string>
+    <string name="tracker_sample_qso_text">QSO</string>
+    <string name="tracker_sample_qsx_text">QSX</string>
+    <string name="tracker_cq_text">CQ</string>
+    <string name="tracker_qso_text">QSO</string>
+    <string name="tracker_new_zone_found">Nouvelle zone trouvée : %s</string>
+    <string name="transmit_freeText">Veuillez entrer le texte libre</string>
+    <string name="trans_free_text_mode">Mode texte libre</string>
+    <string name="trans_standard_messge_mode">Mode message standard</string>
+    <string name="launch_supervision_ignore">Ignorer</string>
+    <string name="be_excluded_callsigns">Préfixes d\'indicatifs exclus</string>
+    <string name="pl_callsing_prefix">Veuillez entrer les préfixes d\'indicatifs</string>
+    <string name="cache_clear">Effacer</string>
+    <string name="cache_clear_title">Effacer le cache</string>
+    <string name="follow_callsign_data">Indicatifs suivis</string>
+    <string name="cancel_clear_cache">Annuler</string>
+    <string name="log_statistics_cache">Nombre de journaux en cache</string>
+    <string name="logs_cache">Msg décodés</string>
+    <string name="band_total">Bande \t Total</string>
+    <string name="modifier_editor">Modificateur CQ</string>
+    <string name="pl_input_modifier">Veuillez entrer le modificateur</string>
+    <string name="flex_start_atu">Démarrer l\'ATU</string>
+    <string name="flex_max_tx_power">Puissance TX maximale à %d W</string>
+    <string name="flex_tune_power">Puissance d\'accord ATU %d W</string>
+    <string name="html_flex_max_rf_power">Puissance TX maximale</string>
+    <string name="html_atu_tune_power">Puissance d\'accord ATU</string>
+    <string name="flex_atu_tune_off">ACCORD ARRÊT</string>
+    <string name="flex_atu_tune_on">ACCORD MARCHE</string>
+    <string name="flex_logo_text">FlexRadio</string>
+    <string name="map_location_image">Localiser sur la carte</string>
+    <string name="log_menu_location">Emplacement</string>
+    <string name="tracker_query_qso_info">Interrogation des données QSO…</string>
+    <string name="html_callsign_grid_total">Total : %d</string>
+    <string name="html_message_page_count">Nombre de pages : %d</string>
+    <string name="html_message_page_size">Taille de page :</string>
+    <string name="html_message_query">Rechercher</string>
+    <string name="config_save_swl">Sauvegarder les décodages</string>
+    <string name="config_donot_save_swl">Ne pas sauvegarder les décodages</string>
+    <string name="config_save_swl_qso">Sauvegarder les QSO pour SWL</string>
+    <string name="config_donot_save_swl_qso">Ne pas sauvegarder les QSO pour SWL</string>
+    <string name="html_query_swl_message">Consulter les messages décodés (SWL)</string>
+    <string name="log_statistics_decode_msg">Nombre total de messages décodés</string>
+    <string name="config_Syn_time">Synchroniser l\'heure</string>
+    <string name="utc_time_sync_delay_slow">Synchronisé. L\'horloge locale est en retard de %d millisecondes</string>
+    <string name="utc_time_sync_delay_faster">Synchronisé. L\'horloge locale est en avance de %d millisecondes</string>
+    <string name="config_clock_is_accurate">L\'horloge locale est exacte !</string>
+    <string name="html_start_date_swl_message">Date de début</string>
+    <string name="html_end_date_swl_message">Date de fin</string>
+    <string name="html_query_qso_swl">Consulter les QSO de SWL</string>
+    <string name="html_export_csv">Exporter en fichier CSV</string>
+    <string name="html_export_text">Exporter en fichier texte</string>
+    <string name="html_export_adi">Exporter en fichier ADIF</string>
+    <string name="log_statistics_swl_qso">Nombre total de QSO décodés</string>
+    <string name="config_clear_swl_qso">QSO décodés</string>
+    <string name="audioOutput">Sortie audio</string>
+    <string name="audio_input_device">Entrée audio</string>
+    <string name="audio_output_device">Périphérique de sortie audio</string>
+    <string name="audio_device_default">Par défaut</string>
+    <string name="audio_device_help">audio_device_help_en.txt</string>
+    <string name="audio16_bit">16 bits entier</string>
+    <string name="audio32_bit">32 bits flottant</string>
+    <string name="html_audio_bits">Audio - profondeur de bits</string>
+    <string name="audio_rate_12k">12kHz</string>
+    <string name="audio_rate_24k">24kHz</string>
+    <string name="audio_rate_48k">48kHz</string>
+    <string name="audio_rate">Taux d\'échantillonnage</string>
+    <string name="html_audio_rate">Audio - taux d\'échantillonnage</string>
+    <string name="audio_bit_depth">Profondeur de bits</string>
+    <string name="callsign_help">callsign_en.txt</string>
+    <string name="maidenhead_help">maidenhead_en.txt</string>
+    <string name="frequency_help">frequency_en.txt</string>
+    <string name="transDelay_help">transDelay_en.txt</string>
+    <string name="timeoffset_help">timeoffset_en.txt</string>
+    <string name="pttdelay_help">pttdelay_en.txt</string>
+    <string name="operationBand_help">operationBand_en.txt</string>
+    <string name="controlMode_help">controlMode_en.txt</string>
+    <string name="civ_help">civ_help_en.txt</string>
+    <string name="rig_model_help">rig_model_help_en.txt</string>
+    <string name="launch_supervision_help">launch_supervision_en.txt</string>
+    <string name="no_response_help">no_response_help_en.txt</string>
+    <string name="auto_follow_help">auto_follow_help_en.txt</string>
+    <string name="connectMode_help">connectMode_en.txt</string>
+    <string name="excludeCallsign_help">excludeCallsign_en.txt</string>
+    <string name="swlMode_help">swlMode_en.txt</string>
+    <string name="audio_output_help">audio_output_help_en.txt</string>
+    <string name="deep_mode_help">decode_help_en.txt</string>
+    <string name="clear_cache_data_help">clear_cache_data_en.txt</string>
+    <string name="html_query_logs">Consulter les journaux</string>
+    <string name="html_qso_all">Tout</string>
+    <string name="html_qso_source">Sources de données</string>
+    <string name="html_qso_unconfirmed">Non confirmé</string>
+    <string name="html_qso_confirmed">Confirmé</string>
+    <string name="html_qso_raw_log">Journaux locaux</string>
+    <string name="html_qso_external_logs">Journaux externes</string>
+    <string name="html_qso_external">Externe</string>
+    <string name="html_qso_raw">Journal local</string>
+    <string name="html_protocol">Protocole</string>
+    <string name="html_comment">Commentaire</string>
+    <string name="decode_mode_text">Mode de décodage</string>
+    <string name="fast_mode">Décodage rapide</string>
+    <string name="deep_mode">Décodage approfondi</string>
+    <string name="export_null">Exporter depuis l\'interface web via un navigateur sur un autre appareil connecté au même réseau local\n Veuillez vous connecter à un Wi-Fi valide</string>
+    <string name="null_task_html">La tâche n\'existe pas !</string>
+    <string name="log_importing_html">Importation en cours...</string>
+    <string name="log_import_finished_html">Terminé !</string>
+    <string name="import_read_error_count_html">Lignes en erreur : %d</string>
+    <string name="import_new_count_html">QSL ajoutées : %d</string>
+    <string name="import_update_count_html">QSL mises à jour : %d</string>
+    <string name="import_invalid_count_html">QSL invalides : %d</string>
+    <string name="import_progress_html">"Progression : "</string>
+    <string name="import_readed_html">QSL validées : %d</string>
+    <string name="import_canceled_html">Annulé !</string>
+    <string name="import_cancel_button">Arrêter</string>
+    <string name="qsl_query_log_menu">Journal (%s)</string>
+    <string name="message_list_simple_mode">Mode liste compact</string>
+    <string name="message_list_standard_mode">Mode liste standard</string>
+    <string name="config_msg_mode">Mode de message</string>
+    <string name="config_msg_std_mode">Standard</string>
+    <string name="config_msg_simple_mode">Simple</string>
+    <string name="message_mode_help">messageMode_en.txt</string>
+    <string name="pl_select_xiegu_radio">Veuillez sélectionner une radio XIEGU disponible</string>
+    <string name="x6100_packet_lost">Perte de paquets : %d</string>
+    <string name="xiegu_name_label">XIEGU</string>
+    <string name="xiegu_ping_value">Ping : %d ms</string>
+    <string name="xiegu_start_atu">Démarrer l\'ATU</string>
+    <string name="xiegu_atu_on">ATU activé</string>
+    <string name="xiegu_atu_off">ATU désactivé</string>
+    <string name="xiegu_band_str">Bande : %s</string>
+    <string name="alc_low_alert">Attention ! L\'ALC est trop faible.</string>
+    <string name="xiegu_meter_info">S.Meter : %.1f dBm\nSWR : %s\nALC : %.1f\nTension : %.1fV\nPuissance TX : %.1f W\nPuissance TX max : %.1f\nVolume TX : %d%%</string>
+    <string name="serial_connect_no_access">Impossible de se connecter au port série, veuillez vérifier que vous avez accès au périphérique USB !</string>
+    <string name="serial_connect_failed">Échec de l\'ouverture du port série !</string>
+    <string name="serial_no_driver">Impossible de se connecter au port série, port série introuvable !</string>
+    <string name="serial_data_bits">Bits de données</string>
+    <string name="serial_parity">Parité</string>
+    <string name="serial_parity_none">Aucune</string>
+    <string name="serial_parity_odd">Impaire</string>
+    <string name="serial_parity_even">Paire</string>
+    <string name="serial_parity_mark">Marque</string>
+    <string name="serial_parity_space">Espace</string>
+    <string name="serial_stop_bits">Bits d\'arrêt</string>
+    <string name="serial_default">Par défaut</string>
+    <string name="serial_setting_help">serial_help_en.txt</string>
+    <string name="tcp_connect_closed">La connexion réseau a été interrompue.</string>
+    <string name="share_logs">Partager les journaux</string>
+    <string name="config_clear_share_data">Supprimer les fichiers en cache</string>
+    <string name="preparing_log_data">Préparation des données du journal…</string>
+    <string name="total_logs">Il y a un total de %d journaux.</string>
+    <string name="get_log_no">%d journaux ont été téléchargés.</string>
+    <string name="write_file_error">Erreur lors de l\'écriture du fichier : %s</string>
+    <string name="import_share_failed">Échec de l\'importation des données du journal ! %s</string>
+    <string name="preparing_import_logs">Préparation de l\'importation des journaux…</string>
+    <string name="share_logs_been_read">%d journaux ont été lus.</string>
+    <string name="share_import_log_data">Importation des données du journal…</string>
+    <string name="cloudlog_settings">Paramètres Cloudlog</string>
+    <string name="config_enable_cloudlog">Activer la synchronisation Cloudlog</string>
+    <string name="cloudlog_addr">Adresse du serveur</string>
+    <string name="cloudlog_api_key">Clé API</string>
+    <string name="test_cloudlog_config">TEST</string>
+    <string name="cloudlog_station_id">ID de station</string>
+    <string name="cloudlog_help">cloudlog_en.txt</string>
+    <string name="pass">Réussi !</string>
+    <string name="fail">Échoué !</string>
+    <string name="testing">Test en cours…</string>
+    <string name="test">Test</string>
+    <string name="qrz_settings">Paramètres QRZ.com</string>
+    <string name="qrz_api_key">Clé API</string>
+    <string name="config_enable_qrz">Activer la synchronisation QRZ</string>
+    <string name="qrz_help">qrz_en.txt</string>
+    <string name="alram_switch">Interrupteur d\'alarme</string>
+    <string name="swr_switch_on" translatable="false">SWR On</string>
+    <string name="swr_switch_off" translatable="false">SWR Off</string>
+    <string name="alc_switch_on" translatable="false">ALC On</string>
+    <string name="alc_switch_off" translatable="false">ALC Off</string>
+
+</resources>

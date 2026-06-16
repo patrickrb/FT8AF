@@ -1,0 +1,81 @@
+name: Discord — Play track watch
+
+# Poll the Play Developer API for track contents (internal / closed-testing / production)
+# and post to Discord when a versionCode appears in a new track — i.e. a promotion or
+# a fresh internal upload. Google Play has no webhooks for this, so we poll every 10
+# minutes. Previous state is stored as tracks.json on an orphan branch `state/play-tracks`
+# so we can diff across runs.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to push state to the orphan branch
+
+concurrency:
+  group: discord-play-track-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo (for the script)
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: pip install --quiet google-auth requests
+
+      - name: Restore state branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir state
+          cd state
+          git init -q
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          if git fetch --depth 1 origin state/play-tracks 2>/dev/null; then
+            git checkout -q -B state/play-tracks FETCH_HEAD
+            echo "HAS_BRANCH=true" >> "$GITHUB_ENV"
+          else
+            git checkout --orphan state/play-tracks
+            git rm -rf . 2>/dev/null || true
+            : > tracks.json
+            echo "HAS_BRANCH=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Watch + notify
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          PACKAGE_NAME: radio.ks3ckc.ft8af
+        run: python .github/scripts/play_track_watch.py state/tracks.json
+
+      - name: Push updated state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd state
+          git add tracks.json
+          if git diff --cached --quiet; then
+            echo "No state changes."
+            exit 0
+          fi
+          if [[ "$HAS_BRANCH" == "true" ]]; then
+            git commit -q -m "Update play track state [skip discord]"
+          else
+            git commit -q -m "Initialize play track state [skip discord]"
+          fi
+          git push origin HEAD:refs/heads/state/play-tracks

@@ -2,7 +2,7 @@
 
 **FT8 on Android — modernized.**
 
-🌐 **[ft8af.app](https://ft8af.app)**
+🌐 **[ft8af.app](https://ft8af.app)** · 💬 **[Join the Discord](https://discord.gg/tz4spm5nWB)**
 
 A fork of [FT8CN](https://github.com/N0BOY/FT8CN) that takes the excellent original and brings it forward: a Jetpack Compose UI, full English localization, dozens of bug fixes, and a pile of new operating features built for real on-the-air use.
 
@@ -14,7 +14,7 @@ Run FT8 natively on your Android phone or tablet, drive your radio over USB CAT,
 
 ### UI & UX
 - **Jetpack Compose UI** with a Material 3 dark theme
-- **Full English localization** (the original was Chinese-only)
+- **Localized in 7 languages**: English, Simplified Chinese (ZH-CN), Traditional Chinese (ZH-TW), Russian (RU), Spanish (ES), French (FR), and Japanese (JA)
 - **Active QSO Monitor** — collapsible panel above the TX strip showing the current contact at a glance
 - **Caller queue** so you stay on target during an active QSO instead of bouncing to whoever's loudest
 - **CQ / Stop toggle** button right on the TX strip

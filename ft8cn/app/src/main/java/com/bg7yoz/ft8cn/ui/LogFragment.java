@@ -600,7 +600,9 @@ public class LogFragment extends Fragment {
     private String getLocalIp() {
         WifiManager wifiManager = (WifiManager) requireContext().getApplicationContext()
                 .getSystemService(Context.WIFI_SERVICE);
+        if (wifiManager == null) return null;
         WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+        if (wifiInfo == null) return null;
         int ipAddress = wifiInfo.getIpAddress();
         if (ipAddress == 0) {
             return null;

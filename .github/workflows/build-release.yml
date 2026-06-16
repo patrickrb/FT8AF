@@ -11,10 +11,29 @@ on:
 permissions:
   contents: write
 
+# Google Play allows only one active "edit" per app, so two release builds
+# publishing at once make the second fail with "This edit has expired, please
+# create a new Edit." Serialize the release-publishing runs (pushes to dev/main
+# and v* tags) into a single queue so they never overlap on the Play API.
+# cancel-in-progress is false so an in-flight publish finishes rather than being
+# killed mid-upload. Pull request runs get a unique group keyed to run id, so
+# they never queue and CI stays fast.
+concurrency:
+  group: >-
+    ${{
+      (github.event_name == 'push'
+        && (github.ref == 'refs/heads/main'
+          || github.ref == 'refs/heads/dev'
+          || startsWith(github.ref, 'refs/tags/v')))
+      && 'play-publish'
+      || format('build-{0}', github.run_id)
+    }}
+  cancel-in-progress: false
+
 jobs:
   test:
-    name: Unit tests (PR only)
-    if: github.event_name == 'pull_request'
+    name: Unit tests & coverage
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
 
     steps:
@@ -33,30 +52,167 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('ft8cn/**/*.gradle*', 'ft8cn/gradle-wrapper.properties') }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('ft8cn/**/*.gradle*', 'ft8cn/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: |
-            gradle-${{ runner.os }}--
+            gradle-${{ runner.os }}-
 
       - name: Grant execute permission for gradlew
         run: chmod +x ft8cn/gradlew
+
+      - name: Pre-install NDK (retry around flaky SDK downloads)
+        run: |
+          set -euo pipefail
+          NDK_VERSION=25.1.8937393
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          MARKER="$ANDROID_HOME/ndk/$NDK_VERSION/source.properties"
+          for attempt in 1 2 3; do
+            echo "::group::NDK install attempt $attempt"
+            rm -rf "$ANDROID_HOME/ndk/$NDK_VERSION" "$HOME/.android/cache"
+            yes | "$SDKMANAGER" --install "ndk;$NDK_VERSION" || true
+            echo "::endgroup::"
+            if [[ -f "$MARKER" ]]; then
+              echo "NDK $NDK_VERSION ready at $ANDROID_HOME/ndk/$NDK_VERSION"
+              exit 0
+            fi
+            echo "Attempt $attempt failed; retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::Failed to install NDK $NDK_VERSION after 3 attempts"
+          exit 1
 
       - name: Run unit tests
         working-directory: ft8cn
         run: ./gradlew testDebugUnitTest --stacktrace
 
+      - name: Generate coverage report
+        working-directory: ft8cn
+        run: ./gradlew jacocoTestReport --stacktrace
+
+      - name: Upload coverage to Codecov
+        continue-on-error: true
+        id: codecov
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ft8cn/app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
+
       - name: Upload test reports on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
+        if: steps.codecov.outcome == 'failure'
+        uses: actions/upload-artifact@v7
         with:
           name: unit-test-reports
           path: |
             ft8cn/app/build/reports/tests/
             ft8cn/app/build/test-results/
+            ft8cn/app/build/reports/jacoco/
+
+  instrumented:
+    name: Instrumented tests (emulator)
+    # Exercises the androidTest suite (AppSmokeTest launches the real
+    # ComposeMainActivity) on an emulator. Same trigger as the unit-test job:
+    # every PR plus pushes to main. This job is intentionally NOT a dependency
+    # of `build` and is left out of branch protection's required checks while it
+    # stabilises (issue #60) — a flaky emulator must never block a release.
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('ft8cn/**/*.gradle*', 'ft8cn/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ft8cn/gradlew
+
+      # Hardware acceleration (KVM) is required for a usable x86_64 emulator on
+      # the GitHub-hosted Ubuntu runners; without it the AVD falls back to slow
+      # software rendering and connectedAndroidTest reliably times out.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # Pre-build the app + androidTest APKs (and resolve all dependencies)
+      # BEFORE booting the emulator. The androidTest classpath pulls espresso /
+      # hamcrest from Maven Central, which rate-limits the shared GitHub runner
+      # IPs (transient HTTP 429). Doing it here, with a retry+backoff, means a
+      # 429 is retried cheaply instead of wasting a full emulator boot; the
+      # emulator step then runs against already-cached dependencies.
+      - name: Assemble instrumented test APKs
+        working-directory: ft8cn
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if ./gradlew assembleDebug assembleDebugAndroidTest --stacktrace; then
+              exit 0
+            fi
+            echo "::warning::Gradle assemble failed (attempt ${attempt}/3) — retrying after backoff"
+            sleep $((attempt * 30))
+          done
+          echo "::error::Gradle assemble failed after 3 attempts (likely Maven Central 429)"
+          exit 1
+
+      # google_apis image (not plain default) so Google Play services types the
+      # app links against — play-services-maps — resolve at runtime and the
+      # activity reaches RESUMED. API 30 matches the Compose UI test floor.
+      - name: Run instrumented tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: Nexus 6
+          working-directory: ft8cn
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          # Stream test progress into the job log. By default
+          # connectedDebugAndroidTest sits silently on a single "> Task" line
+          # for minutes; backgrounding logcat's TestRunner tag (plus any
+          # error-level lines) surfaces each test's started:/finished: events —
+          # and any crash — live instead of leaving the step a black box.
+          script: |
+            adb logcat -c || true
+            # TestRunner:I → each test's started:/finished:; AndroidRuntime:E and
+            # *:F → real app crashes/uncaught exceptions. Deliberately NOT '*:E':
+            # a fresh google_apis image floods error-level logs with unrelated
+            # Play-services noise (Firebase, ConnectivityService) that buries the
+            # test signal.
+            adb logcat -s TestRunner:I AndroidRuntime:E '*:F' &
+            logcat_pid=$!
+            ./gradlew connectedDebugAndroidTest --stacktrace
+            status=$?
+            kill "$logcat_pid" 2>/dev/null || true
+            exit $status
+
+      - name: Upload instrumented test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: instrumented-test-reports
+          path: |
+            ft8cn/app/build/reports/androidTests/
+            ft8cn/app/build/outputs/androidTest-results/
 
   build:
     name: Build APK
     needs: test
-    # Run when tests pass (PR), or when tests were skipped (push to main/dev/tags).
+    # Run when tests pass (PR/main push), or when tests were skipped (push to main/dev/tags).
     # Block only on actual test failure or cancellation.
     if: ${{ always() && needs.test.result != 'failure' && needs.test.result != 'cancelled' }}
     runs-on: ubuntu-latest
@@ -129,12 +285,45 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('ft8cn/**/*.gradle*', 'ft8cn/gradle-wrapper.properties') }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('ft8cn/**/*.gradle*', 'ft8cn/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: |
-            gradle-${{ runner.os }}--
+            gradle-${{ runner.os }}-
 
       - name: Grant execute permission for gradlew
         run: chmod +x ft8cn/gradlew
+
+      - name: Pre-install NDK (retry around flaky SDK downloads)
+        run: |
+          set -euo pipefail
+          # AGP auto-downloads this NDK during the native build, but its installer
+          # aborts the whole build on the first corrupt/truncated archive from
+          # Google's SDK server (java.util.zip.ZipException: Archive is not a ZIP
+          # archive) with no retry — which intermittently broke PR builds (#208,
+          # #212). Install it up front with retry and a clean slate between tries
+          # so AGP finds it already present and never runs its fragile downloader.
+          # Keep NDK_VERSION in sync with the AGP-default NDK (the version named in
+          # that ZipException) if the Android Gradle Plugin is upgraded.
+          NDK_VERSION=25.1.8937393
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          # sdkmanager writes source.properties last, so its presence marks a
+          # complete install — judge success by that, not the pipeline's exit
+          # code: `yes` dies with SIGPIPE when sdkmanager closes the pipe, which
+          # under `set -o pipefail` would otherwise read as a (false) failure.
+          MARKER="$ANDROID_HOME/ndk/$NDK_VERSION/source.properties"
+          for attempt in 1 2 3; do
+            echo "::group::NDK install attempt $attempt"
+            rm -rf "$ANDROID_HOME/ndk/$NDK_VERSION" "$HOME/.android/cache"
+            yes | "$SDKMANAGER" --install "ndk;$NDK_VERSION" || true
+            echo "::endgroup::"
+            if [[ -f "$MARKER" ]]; then
+              echo "NDK $NDK_VERSION ready at $ANDROID_HOME/ndk/$NDK_VERSION"
+              exit 0
+            fi
+            echo "Attempt $attempt failed; retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::Failed to install NDK $NDK_VERSION after 3 attempts"
+          exit 1
 
       - name: Decode keystore (release builds only)
         if: steps.tag.outputs.should_release == 'true'
@@ -185,14 +374,14 @@ jobs:
           mv "$src" "FT8CN-${{ steps.tag.outputs.release_tag }}.apk"
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ft8cn-release
           path: ft8cn/app/build/outputs/apk/release/*.apk
 
       - name: Upload AAB artifact
         if: steps.tag.outputs.should_release == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ft8cn-release-aab
           path: ft8cn/app/build/outputs/bundle/release/*.aab

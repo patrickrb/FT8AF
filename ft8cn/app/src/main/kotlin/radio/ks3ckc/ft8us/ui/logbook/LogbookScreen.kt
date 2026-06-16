@@ -1,5 +1,6 @@
 package radio.ks3ckc.ft8us.ui.logbook
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -55,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.window.Dialog
@@ -73,6 +75,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bg7yoz.ft8cn.GeneralVariables
+import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.MainViewModel
 import com.bg7yoz.ft8cn.count.CountDbOpr
 import com.bg7yoz.ft8cn.log.QSLCallsignRecord
@@ -114,10 +117,10 @@ private fun bandColor(band: String): Color =
 // Tab enum
 // ---------------------------------------------------------------------------
 
-private enum class LogbookTab(val label: String) {
-    STATS("Stats"),
-    RECENT("Recent"),
-    AWARDS("Awards"),
+internal enum class LogbookTab(@StringRes val labelRes: Int) {
+    STATS(R.string.log_tab_stats),
+    RECENT(R.string.log_tab_recent),
+    AWARDS(R.string.log_tab_awards),
 }
 
 // ---------------------------------------------------------------------------
@@ -259,10 +262,10 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
         ) {
             // Top bar
             TopBar(
-                title = "Logbook",
+                title = stringResource(R.string.log_title),
                 subtitle = {
                     val count = if (stats.totalQsos > 0) stats.totalQsos else records.size
-                    TopBarSubtitle(text = "$count QSOs \u00b7 All bands")
+                    TopBarSubtitle(text = stringResource(R.string.log_subtitle_qsos_all_bands, count))
                 },
                 actions = {
                     IconButton(
@@ -324,14 +327,14 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
                     ) {
                         Icon(
                             imageVector = Icons.Filled.CloudUpload,
-                            contentDescription = "Sync to logging services",
+                            contentDescription = stringResource(R.string.log_cd_sync_to_logging_services),
                             tint = TextMuted,
                         )
                     }
                     IconButton(onClick = { exportSheetVisible = true }) {
                         Icon(
                             imageVector = Icons.Filled.Share,
-                            contentDescription = "Export QSOs",
+                            contentDescription = stringResource(R.string.log_cd_export_qsos),
                             tint = TextMuted,
                         )
                     }
@@ -507,7 +510,7 @@ private fun StatsLoadingPlaceholder() {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun SegmentedTabRow(
+internal fun SegmentedTabRow(
     tabs: List<LogbookTab>,
     selected: LogbookTab,
     onSelected: (LogbookTab) -> Unit,
@@ -548,7 +551,7 @@ private fun SegmentedTabRow(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = tab.label,
+                    text = stringResource(tab.labelRes),
                     color = textColor,
                     fontSize = 12.sp,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
@@ -596,13 +599,13 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             BigStatCard(
-                label = "Total QSOs",
+                label = stringResource(R.string.log_stat_total_qsos),
                 value = stats.totalQsos,
                 accentColor = Accent,
                 modifier = Modifier.weight(1f),
             )
             BigStatCard(
-                label = "DXCC Entities",
+                label = stringResource(R.string.log_stat_dxcc_entities),
                 value = stats.dxccEntities,
                 accentColor = Signal,
                 modifier = Modifier.weight(1f),
@@ -614,13 +617,13 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             BigStatCard(
-                label = "CQ Zones",
+                label = stringResource(R.string.log_stat_cq_zones),
                 value = stats.cqZones,
                 accentColor = StatusNew,
                 modifier = Modifier.weight(1f),
             )
             BigStatCard(
-                label = "ITU Zones",
+                label = stringResource(R.string.log_stat_itu_zones),
                 value = stats.ituZones,
                 accentColor = Band17m,
                 modifier = Modifier.weight(1f),
@@ -629,7 +632,7 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
 
         // Band donut chart
         if (stats.bandCounts.isNotEmpty()) {
-            SectionHeader("Band Distribution")
+            SectionHeader(stringResource(R.string.log_section_band_distribution))
             BandDonutChart(
                 bandCounts = stats.bandCounts,
                 progress = chartProgress,
@@ -638,23 +641,23 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
         }
 
         // Award progress bars
-        SectionHeader("Award Progress")
+        SectionHeader(stringResource(R.string.log_section_award_progress))
         AwardProgressBar(
-            label = "DXCC Mixed",
+            label = stringResource(R.string.log_award_dxcc_mixed),
             current = stats.dxccEntities,
             total = 340,
             gradientColors = listOf(Signal, StatusConfirmed),
             progress = chartProgress,
         )
         AwardProgressBar(
-            label = "VUCC Grid Squares",
+            label = stringResource(R.string.log_award_vucc_grid_squares),
             current = gridSquaresWorked(records),
             total = 100,
             gradientColors = listOf(StatusNew, Band12m),
             progress = chartProgress,
         )
         AwardProgressBar(
-            label = "DXCC Challenge",
+            label = stringResource(R.string.log_award_dxcc_challenge),
             current = stats.dxccEntities * stats.bandCounts.size.coerceAtLeast(1),
             total = 1000,
             gradientColors = listOf(Accent, Band17m),
@@ -662,7 +665,7 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
         )
 
         // Grid square heatmap
-        SectionHeader("Grid Coverage")
+        SectionHeader(stringResource(R.string.log_section_grid_coverage))
         GridSquareHeatmap(
             records = records,
             progress = chartProgress,
@@ -670,7 +673,7 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
         )
 
         // Signal trend sparkline
-        SectionHeader("Signal Trend")
+        SectionHeader(stringResource(R.string.log_section_signal_trend))
         SignalSparkline(
             records = records,
             progress = chartProgress,
@@ -953,7 +956,7 @@ private fun SignalSparkline(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "No QSOs yet",
+                    text = stringResource(R.string.log_no_qsos_yet),
                     color = TextFaint,
                     fontSize = 11.sp,
                     fontFamily = GeistMonoFamily,
@@ -1043,6 +1046,49 @@ private fun gridSquaresWorked(records: List<QSLCallsignRecord>): Int =
 // RECENT TAB
 // ===========================================================================
 
+/**
+ * Order the recent QSO list newest-first by full date + time.
+ *
+ * [QSLCallsignRecord.lastTime] is the QSO date (YYYYMMDD) and
+ * [QSLCallsignRecord.timeOn] is the UTC time of day (HHMMSS); concatenated they
+ * form a lexicographically sortable timestamp, so same-day QSOs order by time
+ * rather than by the database's grouping order. Short/missing values are padded
+ * so a row without a recorded time still sorts within its day. The sort is
+ * stable, so genuine ties keep their incoming order.
+ *
+ * Extracted from [RecentTab] so the ordering can be unit-tested.
+ */
+internal fun sortQsosByDateTimeDesc(
+    records: List<QSLCallsignRecord>,
+): List<QSLCallsignRecord> = records.sortedByDescending { qsoSortKey(it) }
+
+internal fun qsoSortKey(record: QSLCallsignRecord): String {
+    val date = (record.lastTime ?: "").padEnd(8, '0')
+    return date + normalizeTimeOn(record.timeOn)
+}
+
+/**
+ * Normalize a stored time-of-day to a fixed-width 6-digit HHMMSS string so it sorts
+ * lexicographically against any other time on the same day. Handles every shape that
+ * can reach the logbook:
+ *  - "" / null            -> "000000" (no recorded time; sorts to the start of its day)
+ *  - HHMMSS ("143005")    -> unchanged
+ *  - HHMM   ("1430")      -> "143000" (append the missing seconds)
+ *  - dropped leading zero ("815" = 08:15, "81500" = 08:15:00) -> restore the hour's
+ *    leading zero first, then append seconds: "081500"
+ *
+ * Plain `padEnd(6, '0')` only fixes missing *trailing* digits, so "815" would become
+ * "815000" (81:50:00) and sort after a real "103000". Restoring the leading zero on an
+ * odd-length value fixes that. Mirrors the normalization the grouped SQL query applies,
+ * so the DB ordering and this in-memory sort agree.
+ */
+internal fun normalizeTimeOn(timeOn: String?): String {
+    val digits = (timeOn ?: "").filter { it.isDigit() }
+    if (digits.isEmpty()) return "000000"
+    val evened = if (digits.length % 2 == 1) "0$digits" else digits
+    return evened.padEnd(6, '0').substring(0, 6)
+}
+
 @Composable
 private fun RecentTab(
     records: List<QSLCallsignRecord>,
@@ -1058,7 +1104,7 @@ private fun RecentTab(
             EmptyStateWaves(size = 180.dp)
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "No QSOs recorded yet",
+                text = stringResource(R.string.log_no_qsos_recorded_yet),
                 color = TextFaint,
                 fontSize = 13.sp,
             )
@@ -1073,7 +1119,7 @@ private fun RecentTab(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         items(
-            items = records.reversed(),
+            items = sortQsosByDateTimeDesc(records),
             // Include id so an edit that changes other fields still maps to a stable key,
             // and so two grouped rows with otherwise identical display fields don't collide.
             key = { "${it.id}_${it.callsign}_${it.lastTime}_${it.band}" },
@@ -1121,10 +1167,12 @@ private fun QsoRow(
     // Build the secondary line entries (state takes precedence over DXCC when present
     // because for US contacts the DXCC string is always just "United States" and the
     // state is the more useful information).
+    val stateUsaLabel = if (!state.isNullOrBlank())
+        stringResource(R.string.log_state_usa, state) else null
     val secondaryParts = buildList {
         if (grid.isNotBlank()) add(grid to Signal)
-        if (!state.isNullOrBlank()) {
-            add("$state, USA" to TextMuted)
+        if (stateUsaLabel != null) {
+            add(stateUsaLabel to TextMuted)
         } else if (dxcc.isNotBlank()) {
             add(dxcc to TextFaint)
         }
@@ -1137,31 +1185,37 @@ private fun QsoRow(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Time column
-            Column(modifier = Modifier.width(52.dp)) {
+            // Band chip — color-coded per band, with the frequency moved to the
+            // meta line below so it never clips the way the old packed column did.
+            val meter = parseBandMeter(band)
+            val freqLabel = parseFreqMhz(band)
+            val chipColor = bandColor(meter)
+            Box(
+                modifier = Modifier
+                    .width(46.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(chipColor.copy(alpha = 0.14f))
+                    .border(1.dp, chipColor.copy(alpha = 0.34f), RoundedCornerShape(6.dp))
+                    .padding(vertical = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
                 Text(
-                    text = formatTime(time),
-                    color = TextMuted,
-                    fontSize = 10.sp,
+                    text = meter.ifBlank { "—" },
+                    color = chipColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
                     fontFamily = GeistMonoFamily,
                     maxLines = 1,
                 )
-                if (band.isNotBlank()) {
-                    Text(
-                        text = band.uppercase(),
-                        color = bandColor(band),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = GeistMonoFamily,
-                        maxLines = 1,
-                    )
-                }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
-            // Callsign + grid + state/DX entity
-            Column(modifier = Modifier.weight(1f)) {
+            // Callsign, then grid/state/DX, then a muted "freq · time · date" meta line.
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 Text(
                     text = callsign,
                     color = TextPrimary,
@@ -1171,17 +1225,36 @@ private fun QsoRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    secondaryParts.forEach { (text, color) ->
-                        Text(
-                            text = text,
-                            color = color,
-                            fontSize = 10.sp,
-                            fontFamily = GeistMonoFamily,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                if (secondaryParts.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        secondaryParts.forEach { (text, color) ->
+                            Text(
+                                text = text,
+                                color = color,
+                                fontSize = 10.sp,
+                                fontFamily = GeistMonoFamily,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
+                }
+                val metaLine = buildList {
+                    if (freqLabel.isNotBlank()) add(freqLabel)
+                    val t = formatQsoTime(record.timeOn)
+                    if (t != "--:--") add("${t}z")
+                    val d = formatQsoDate(time)
+                    if (d.isNotBlank()) add(d)
+                }.joinToString(" · ")
+                if (metaLine.isNotBlank()) {
+                    Text(
+                        text = metaLine,
+                        color = TextFaint,
+                        fontSize = 10.sp,
+                        fontFamily = GeistMonoFamily,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
 
@@ -1208,7 +1281,7 @@ private fun QsoRow(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.MoreVert,
-                        contentDescription = "QSO actions",
+                        contentDescription = stringResource(R.string.log_cd_qso_actions),
                         tint = TextMuted,
                         modifier = Modifier.size(18.dp),
                     )
@@ -1218,7 +1291,7 @@ private fun QsoRow(
                     onDismissRequest = { menuOpen = false },
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Edit", color = TextPrimary) },
+                        text = { Text(stringResource(R.string.log_action_edit), color = TextPrimary) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Filled.Edit,
@@ -1232,7 +1305,7 @@ private fun QsoRow(
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Delete", color = StatusBad) },
+                        text = { Text(stringResource(R.string.log_action_delete), color = StatusBad) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Filled.Delete,
@@ -1301,18 +1374,59 @@ private fun SyncChip(label: String) {
 }
 
 // ---------------------------------------------------------------------------
-// Format time helper: "20230320-143000" -> "14:30"
+// Row display helpers (extracted as internal top-level funs so they're unit-testable)
 // ---------------------------------------------------------------------------
 
-private fun formatTime(raw: String): String {
-    if (raw.isBlank()) return "--:--"
-    // Try to extract HH:MM from various formats
-    val timepart = if ("-" in raw) raw.substringAfter("-") else raw
-    return if (timepart.length >= 4) {
-        "${timepart.substring(0, 2)}:${timepart.substring(2, 4)}"
-    } else {
-        raw.take(5)
-    }
+/**
+ * Format a stored time-of-day (`time_on`, UTC) as "HH:MM". The SQL query already
+ * normalizes `time_on` to 6-digit HHMMSS, but we route through [normalizeTimeOn]
+ * anyway so odd-width inputs (HHMM, or a dropped leading zero) still render right.
+ * Blank / non-numeric input → "--:--".
+ */
+internal fun formatQsoTime(timeOn: String): String {
+    // Reject anything that isn't purely numeric, not just the all-non-digit case:
+    // a partial like "12:30" or "12ab" would otherwise be silently stripped to digits
+    // by normalizeTimeOn and rendered as a real time, masking malformed data. Legit
+    // inputs are pure-digit strings of varying width (HHMMSS / HHMM / dropped zero).
+    if (timeOn.isEmpty() || timeOn.any { !it.isDigit() }) return "--:--"
+    val norm = normalizeTimeOn(timeOn)
+    return "${norm.substring(0, 2)}:${norm.substring(2, 4)}"
+}
+
+/**
+ * Format a stored `qso_date` ("yyyyMMdd", UTC) as a short "11 Jun". Blank or
+ * malformed (anything that isn't a valid 8-digit yyyyMMdd) → "".
+ */
+internal fun formatQsoDate(qsoDate: String): String {
+    // Require exactly 8 digits, not merely "contains ≥8 digits": stripping non-digits
+    // and taking the first 8 would render a date from malformed input like
+    // "20260611xxx" or "2026-06-11", contradicting the documented yyyyMMdd contract.
+    if (qsoDate.length != 8 || qsoDate.any { !it.isDigit() }) return ""
+    val month = qsoDate.substring(4, 6).toIntOrNull() ?: return ""
+    val day = qsoDate.substring(6, 8).toIntOrNull() ?: return ""
+    if (month !in 1..12 || day !in 1..31) return ""
+    val months = arrayOf(
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    )
+    return "$day ${months[month - 1]}"
+}
+
+/**
+ * The grouped logbook query packs band + frequency into one column as
+ * "20M(14.084 MHz)". Pull out just the band meter ("20M") so it can be
+ * color-coded; a plain "20M" passes through unchanged.
+ */
+internal fun parseBandMeter(band: String): String =
+    band.substringBefore("(").trim()
+
+/**
+ * Pull the "14.084 MHz" frequency out of the packed "20M(14.084 MHz)" band column.
+ * Returns "" when the column carries no parenthesized frequency.
+ */
+internal fun parseFreqMhz(band: String): String {
+    if (!band.contains("(")) return ""
+    return band.substringAfter("(").substringBefore(")").trim()
 }
 
 // ===========================================================================
@@ -1321,39 +1435,49 @@ private fun formatTime(raw: String): String {
 
 @Composable
 private fun AwardsTab(stats: LogbookStats) {
+    val dxccMixedName = stringResource(R.string.log_award_dxcc_mixed)
+    val dxccMixedDesc = stringResource(R.string.log_award_dxcc_mixed_desc)
+    val wasName = stringResource(R.string.log_award_was)
+    val wasDesc = stringResource(R.string.log_award_was_desc)
+    val wazName = stringResource(R.string.log_award_waz)
+    val wazDesc = stringResource(R.string.log_award_waz_desc)
+    val vuccName = stringResource(R.string.log_award_vucc)
+    val vuccDesc = stringResource(R.string.log_award_vucc_desc)
+    val iotaName = stringResource(R.string.log_award_iota)
+    val iotaDesc = stringResource(R.string.log_award_iota_desc)
     val awards = remember(stats) {
         listOf(
             AwardProgress(
-                name = "DXCC Mixed",
-                description = "Work and confirm 100 DXCC entities on any band/mode",
+                name = dxccMixedName,
+                description = dxccMixedDesc,
                 current = stats.dxccEntities,
                 total = 100,
                 color = Signal,
             ),
             AwardProgress(
-                name = "WAS",
-                description = "Work all 50 US states confirmed",
+                name = wasName,
+                description = wasDesc,
                 current = (stats.dxccEntities * 50 / 340.coerceAtLeast(1)).coerceAtMost(50),
                 total = 50,
                 color = Accent,
             ),
             AwardProgress(
-                name = "WAZ",
-                description = "Work all 40 CQ zones confirmed",
+                name = wazName,
+                description = wazDesc,
                 current = stats.cqZones,
                 total = 40,
                 color = StatusNew,
             ),
             AwardProgress(
-                name = "VUCC",
-                description = "VHF/UHF Century Club -- 100 grid squares on a single band",
+                name = vuccName,
+                description = vuccDesc,
                 current = 0, // Would need per-band grid counting
                 total = 100,
                 color = Band12m,
             ),
             AwardProgress(
-                name = "IOTA",
-                description = "Islands on the Air -- work stations on designated islands",
+                name = iotaName,
+                description = iotaDesc,
                 current = 0, // Not tracked in current DB
                 total = 100,
                 color = Band17m,
@@ -1511,7 +1635,7 @@ private fun EditQsoDialog(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(
-                text = "Edit QSO",
+                text = stringResource(R.string.log_edit_qso),
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 18.sp,
@@ -1520,7 +1644,7 @@ private fun EditQsoDialog(
             OutlinedTextField(
                 value = callsignInput,
                 onValueChange = { callsignInput = it },
-                label = { Text("Callsign") },
+                label = { Text(stringResource(R.string.log_field_callsign)) },
                 singleLine = true,
                 colors = fieldColors,
                 textStyle = TextStyle(
@@ -1534,7 +1658,7 @@ private fun EditQsoDialog(
             OutlinedTextField(
                 value = gridInput,
                 onValueChange = { gridInput = it },
-                label = { Text("Grid Locator") },
+                label = { Text(stringResource(R.string.log_field_grid_locator)) },
                 singleLine = true,
                 colors = fieldColors,
                 textStyle = TextStyle(
@@ -1547,7 +1671,7 @@ private fun EditQsoDialog(
             OutlinedTextField(
                 value = modeInput,
                 onValueChange = { modeInput = it },
-                label = { Text("Mode") },
+                label = { Text(stringResource(R.string.log_field_mode)) },
                 singleLine = true,
                 colors = fieldColors,
                 textStyle = TextStyle(
@@ -1563,14 +1687,14 @@ private fun EditQsoDialog(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = TextMuted)
+                    Text(stringResource(R.string.action_cancel), color = TextMuted)
                 }
                 TextButton(
                     onClick = {
                         onSave(callsignInput.text, gridInput.text, modeInput.text)
                     },
                 ) {
-                    Text("Save", color = Accent, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.action_save), color = Accent, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -1600,7 +1724,7 @@ private fun DeleteQsoConfirm(
                 .padding(horizontal = 20.dp, vertical = 20.dp),
         ) {
             Text(
-                text = "DELETE QSO?",
+                text = stringResource(R.string.log_delete_qso_title),
                 color = TextPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -1612,9 +1736,9 @@ private fun DeleteQsoConfirm(
 
             Text(
                 text = if (callsign.isNotBlank())
-                    "Remove the QSO with $callsign from the logbook? This cannot be undone."
+                    stringResource(R.string.log_delete_qso_body_callsign, callsign)
                 else
-                    "Remove this QSO from the logbook? This cannot be undone.",
+                    stringResource(R.string.log_delete_qso_body),
                 color = TextMuted,
                 fontSize = 13.sp,
                 lineHeight = 18.sp,
@@ -1634,7 +1758,7 @@ private fun DeleteQsoConfirm(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "Cancel",
+                        text = stringResource(R.string.action_cancel),
                         color = TextPrimary,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp,
@@ -1650,7 +1774,7 @@ private fun DeleteQsoConfirm(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "Delete",
+                        text = stringResource(R.string.log_action_delete),
                         color = BgApp,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
@@ -1682,9 +1806,9 @@ private fun CatchUpSyncDialog(
                 .padding(horizontal = 20.dp, vertical = 20.dp),
         ) {
             val title = when {
-                state.noServicesEnabled -> "NO SERVICES ENABLED"
-                state.inProgress -> "SYNCING…"
-                else -> "SYNC COMPLETE"
+                state.noServicesEnabled -> stringResource(R.string.log_sync_title_no_services)
+                state.inProgress -> stringResource(R.string.log_sync_title_syncing)
+                else -> stringResource(R.string.log_sync_title_complete)
             }
             Text(
                 text = title,
@@ -1699,7 +1823,7 @@ private fun CatchUpSyncDialog(
 
             if (state.noServicesEnabled) {
                 Text(
-                    text = "Enable Cloudlog/Wavelog/Nextlog or QRZ in Settings, then try again.",
+                    text = stringResource(R.string.log_sync_enable_services),
                     color = TextMuted,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
@@ -1712,14 +1836,14 @@ private fun CatchUpSyncDialog(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = "${state.done} of ${state.total} QSOs",
+                    text = stringResource(R.string.log_sync_progress_count, state.done, state.total),
                     color = TextMuted,
                     fontSize = 13.sp,
                 )
                 if (state.cloudlogAttempted) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Cloudlog / Wavelog / Nextlog: ${state.cloudlogOk} accepted",
+                        text = stringResource(R.string.log_sync_cloudlog_accepted, state.cloudlogOk),
                         color = TextMuted,
                         fontSize = 12.sp,
                     )
@@ -1727,7 +1851,7 @@ private fun CatchUpSyncDialog(
                 if (state.qrzAttempted) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "QRZ: ${state.qrzOk} accepted",
+                        text = stringResource(R.string.log_sync_qrz_accepted, state.qrzOk),
                         color = TextMuted,
                         fontSize = 12.sp,
                     )
@@ -1735,7 +1859,7 @@ private fun CatchUpSyncDialog(
                 if (state.finished && state.total == 0) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "No QSOs in the logbook to upload yet.",
+                        text = stringResource(R.string.log_sync_nothing_to_upload),
                         color = TextMuted,
                         fontSize = 12.sp,
                     )
@@ -1756,7 +1880,7 @@ private fun CatchUpSyncDialog(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = if (state.inProgress) "Working…" else "Done",
+                    text = if (state.inProgress) stringResource(R.string.log_sync_working) else stringResource(R.string.action_done),
                     color = if (state.inProgress) TextMuted else BgApp,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,

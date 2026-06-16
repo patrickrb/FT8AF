@@ -11,6 +11,7 @@ import android.util.Log;
 import androidx.lifecycle.MutableLiveData;
 
 import com.bg7yoz.ft8cn.callsign.CallsignDatabase;
+import com.bg7yoz.ft8cn.callsign.CallsignInfo;
 import com.bg7yoz.ft8cn.connector.ConnectMode;
 import com.bg7yoz.ft8cn.database.ControlMode;
 import com.bg7yoz.ft8cn.database.DatabaseOpr;
@@ -42,6 +43,8 @@ public class GeneralVariables {
     public static boolean enableQRZ = false;//Whether QRZ auto-sync is enabled
     public static boolean enablePskReporter = true;//Whether PSKReporter spot upload is enabled
 
+    public static boolean distanceInMiles = true;//Display distances in miles (true) or kilometers (false)
+
     public static boolean deepDecodeMode = false;//Whether deep decode mode is enabled
 
     public static boolean audioOutput32Bit = true;//Audio output type: true=float, false=int16
@@ -55,6 +58,27 @@ public class GeneralVariables {
     public static int usbAudioInputProductId = 0;
     public static int usbAudioOutputVendorId = 0;
     public static int usbAudioOutputProductId = 0;
+
+    /**
+     * Whether the given USB VID:PID is the device the user picked for direct
+     * USB audio <em>input</em> (audioInputDeviceId == -1 means "USB direct").
+     * Used on a USB-attach event to decide whether a freshly-plugged device
+     * needs an audio permission request so the recorder can rebind to it
+     * instead of staying on the built-in mic.
+     */
+    public static boolean isConfiguredUsbAudioInput(int vid, int pid) {
+        return audioInputDeviceId == -1 && usbAudioInputVendorId != 0
+                && usbAudioInputVendorId == vid && usbAudioInputProductId == pid;
+    }
+
+    /**
+     * Whether the given USB VID:PID is the device the user picked for direct
+     * USB audio <em>output</em> (audioOutputDeviceId == -1 means "USB direct").
+     */
+    public static boolean isConfiguredUsbAudioOutput(int vid, int pid) {
+        return audioOutputDeviceId == -1 && usbAudioOutputVendorId != 0
+                && usbAudioOutputVendorId == vid && usbAudioOutputProductId == pid;
+    }
 
     public static MutableLiveData<Float> mutableVolumePercent = new MutableLiveData<>();
     public static float volumePercent = 0.8f;//Audio playback volume, as a percentage
@@ -103,37 +127,128 @@ public class GeneralVariables {
     public static final Map<String, String> dxccMap = new ConcurrentHashMap<>();
     public static final Map<Integer, Integer> cqMap = new ConcurrentHashMap<>();
     public static final Map<Integer, Integer> ituMap = new ConcurrentHashMap<>();
+    // Set to true after getQslDxccToMap() finishes populating the zone maps.
+    // Until then, "new DXCC/zone" flags are suppressed to avoid a race where
+    // everything shows as new because the maps haven't loaded yet.
+    public static volatile boolean zoneMapReady = false;
+    // Already-contacted US states (USPS code, e.g. "ND"). Populated at startup from the
+    // logbook by DatabaseOpr.getQslDxccToMap(), deriving each QSO's state from its grid.
+    public static final java.util.Set<String> workedStates =
+            java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
 
+    // 4-char Maidenhead field -> US state code, lazily loaded from the bundled
+    // assets/us_grid_states.json (the same map the Compose UI reads via UsStateLookup).
+    private static volatile Map<String, String> gridStateMap = null;
+
+    // Callsign blocklist (Settings → Callsign Blocklist). Three independent match
+    // modes, generalizing the original prefix-only "excluded callsigns" feature. A
+    // blocked station is hidden from the decode list AND excluded from TX/auto-seq.
+    //   - excludedCallsigns: callsign PREFIX match (e.g. "RA" blocks RA0..RA9..).
+    //     Reuses the legacy "excludedCallsigns" config key for backward compat.
+    //   - blockedExactCallsigns: whole-call EXACT match.
+    //   - blockedKeywords: SUBSTRING match (against the call, and the full message
+    //     text via checkIsBlockedMessage) — catches POTA, /P, QRP, contest junk.
     private static final Map<String, Integer> excludedCallsigns = new HashMap<>();
+    private static final java.util.LinkedHashSet<String> blockedExactCallsigns = new java.util.LinkedHashSet<>();
+    private static final java.util.LinkedHashSet<String> blockedKeywords = new java.util.LinkedHashSet<>();
 
     /**
-     * Add excluded callsign prefixes
-     *
-     * @param callsigns callsigns
+     * Split a user-entered list on comma / space / pipe / Chinese comma and
+     * collect the non-empty, upper-cased tokens into {@code target}.
      */
-    public static synchronized void addExcludedCallsigns(String callsigns) {
-        excludedCallsigns.clear();
-        String[] s = callsigns.toUpperCase().replace(" ", ",")
+    private static void parseBlockTokens(String text, java.util.Collection<String> target) {
+        target.clear();
+        if (text == null) return;
+        String[] s = text.toUpperCase().replace(" ", ",")
                 .replace("|", ",")
                 .replace("，", ",").split(",");
-        for (int i = 0; i < s.length; i++) {
-            if (s[i].length() > 0) {
-                excludedCallsigns.put(s[i], 0);
+        for (String token : s) {
+            if (token.length() > 0) {
+                target.add(token);
             }
         }
     }
 
     /**
-     * Check if a callsign matches an excluded prefix
+     * Join a token collection back into the canonical comma-separated form used
+     * for persistence and for display in the Settings text field.
+     */
+    private static String joinBlockTokens(java.util.Collection<String> tokens) {
+        StringBuilder calls = new StringBuilder();
+        int i = 0;
+        for (String token : tokens) {
+            if (i++ == 0) {
+                calls.append(token);
+            } else {
+                calls.append(",").append(token);
+            }
+        }
+        return calls.toString();
+    }
+
+    /**
+     * Add excluded callsign prefixes (legacy name kept; this is the PREFIX list).
+     *
+     * @param callsigns callsigns
+     */
+    public static synchronized void addExcludedCallsigns(String callsigns) {
+        excludedCallsigns.clear();
+        if (callsigns == null) return;
+        String[] s = callsigns.toUpperCase().replace(" ", ",")
+                .replace("|", ",")
+                .replace("，", ",").split(",");
+        for (String token : s) {
+            if (token.length() > 0) {
+                excludedCallsigns.put(token, 0);
+            }
+        }
+    }
+
+    public static synchronized void addBlockedExactCallsigns(String callsigns) {
+        parseBlockTokens(callsigns, blockedExactCallsigns);
+    }
+
+    public static synchronized void addBlockedKeywords(String keywords) {
+        parseBlockTokens(keywords, blockedKeywords);
+    }
+
+    /**
+     * Get the list of excluded callsign prefixes (the PREFIX list).
+     *
+     * @return the list as a comma-separated string
+     */
+    public static synchronized String getExcludeCallsigns() {
+        return joinBlockTokens(excludedCallsigns.keySet());
+    }
+
+    public static synchronized String getBlockedExactCallsigns() {
+        return joinBlockTokens(blockedExactCallsigns);
+    }
+
+    public static synchronized String getBlockedKeywords() {
+        return joinBlockTokens(blockedKeywords);
+    }
+
+    /**
+     * Check whether a callsign is blocked by any match mode: exact whole-call,
+     * prefix, or keyword substring (against the callsign itself).
      *
      * @param callsign callsign
-     * @return whether it matches
+     * @return whether it is blocked
      */
-    public static synchronized boolean checkIsExcludeCallsign(String callsign) {
-        Iterator<String> iterator = excludedCallsigns.keySet().iterator();
-        while (iterator.hasNext()) {
-            String key = iterator.next();
-            if (callsign.toUpperCase().indexOf(key) == 0) {
+    public static synchronized boolean checkIsBlocked(String callsign) {
+        if (callsign == null) return false;
+        String up = callsign.toUpperCase();
+        if (blockedExactCallsigns.contains(up)) {
+            return true;
+        }
+        for (String prefix : excludedCallsigns.keySet()) {
+            if (up.indexOf(prefix) == 0) {
+                return true;
+            }
+        }
+        for (String keyword : blockedKeywords) {
+            if (up.contains(keyword)) {
                 return true;
             }
         }
@@ -141,24 +256,41 @@ public class GeneralVariables {
     }
 
     /**
-     * Get the list of excluded callsign prefixes
+     * Decode-list block check: blocked if the sender's callsign is blocked, or any
+     * keyword appears anywhere in the rendered message text (so keywords can match
+     * message content like "POTA", not just the callsign).
      *
-     * @return the list as a string
+     * @param msg the decoded message
+     * @return whether it is blocked
      */
-    public static synchronized String getExcludeCallsigns() {
-        StringBuilder calls = new StringBuilder();
-        Iterator<String> iterator = excludedCallsigns.keySet().iterator();
-        int i = 0;
-        while (iterator.hasNext()) {
-            String key = iterator.next();
-            if (i == 0) {
-                calls.append(key);
-            } else {
-                calls.append(",").append(key);
-            }
-            i++;
+    public static synchronized boolean checkIsBlockedMessage(Ft8Message msg) {
+        if (msg == null) return false;
+        if (checkIsBlocked(msg.callsignFrom)) {
+            return true;
         }
-        return calls.toString();
+        if (!blockedKeywords.isEmpty()) {
+            String text = msg.getMessageText();
+            if (text != null) {
+                String up = text.toUpperCase();
+                for (String keyword : blockedKeywords) {
+                    if (up.contains(keyword)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Backward-compatible alias. Existing TX-side call sites call this; it now
+     * covers all three blocklist match modes via {@link #checkIsBlocked}.
+     *
+     * @param callsign callsign
+     * @return whether it matches
+     */
+    public static synchronized boolean checkIsExcludeCallsign(String callsign) {
+        return checkIsBlocked(callsign);
     }
 
 
@@ -191,7 +323,7 @@ public class GeneralVariables {
 
     public static int connectMode = ConnectMode.USB_CABLE;//Connection mode: USB==0, BLUE_TOOTH==1
 
-    //public static String bluetoothDeviceAddress=null;//Bluetooth device address available for connection
+    public static String bluetoothDeviceAddress = null;//last-selected Bluetooth (SPP/CAT) device address, persisted for auto-reconnect
 
 
     //Records callsign-to-grid mapping. todo---should also add this list to background tracking info
@@ -200,13 +332,25 @@ public class GeneralVariables {
     //private static final Map<String,String> callsignAndGrids=new HashMap<>();
 
     public static String myCallsign = "";//My callsign
+    public static String myAntenna = "";
+    public static String myRigName = "";  // Set by MainViewModel.connectRig(); used in PSKReporter software string
+    public static int myPowerWatts = 0;    // 0 = not set, displays as "--"
     public static String toModifier = "";//Call modifier
     private static float baseFrequency = 1000;//Audio frequency
 
     public static boolean simpleCallItemMode = false;//Compact message mode
 
+    public static boolean clearDecodesEveryCycle = false;//Clear the decode list at the start of each cycle
+
     public static boolean swr_switch_on = true;//SWR alarm switch
     public static boolean alc_switch_on = true;//ALC alarm switch
+
+    // TX Protection: ALC auto-volume and SWR TX halt (MeterProtectionController)
+    public static boolean autoVolumeEnabled = false;  // ALC auto-volume control
+    public static boolean swrHaltEnabled = false;      // SWR TX halt + lockout
+    public static int swrHaltThreshold = 120;          // 0-255 normalized (~3.0:1)
+    public static int alcTargetLow = 60;               // ALC target window low (0-255)
+    public static int alcTargetHigh = 100;             // ALC target window high (0-255)
 
     public static MutableLiveData<Float> mutableBaseFrequency = new MutableLiveData<>();
 
@@ -224,6 +368,10 @@ public class GeneralVariables {
     public static int transmitDelay = 500;//Transmit delay; also allows decoding time for the previous cycle
     public static int pttDelay = 100;//PTT response time; radios typically need some response time after PTT command, default 100ms
     public static int lateStartTolerance = 2000;//Max ms into a cycle that a manual TX may start; leading audio is clipped so TX still ends on the cycle boundary. 0-4000.
+    public static int manualTimeCorrectionMs = 0;//Manual clock correction (ms) applied to UtcTimer.delay; for field use without internet NTP. Range -2000..2000. See TimeSyncSettings.
+    public static boolean earlyDecode = true;//Fast turnaround: decode a shorter RX window so CQ decodes appear ~1s before the cycle boundary, enabling a next-slot reply.
+    public static int operatingMode = FT8Common.FT8_MODE;//Current operating mode (FT8Common.FT8_MODE / FT4_MODE); persisted as config "operatingMode".
+    public static boolean autoCQAfterQSO = false;//Auto-CQ: keep calling CQ after each completed QSO (chain without re-tapping). Refreshes the TX watchdog per QSO and forces pure CQ (ignores Hunt).
     public static int civAddress = 0xa4;//CI-V address
     public static int baudRate = 19200;//Baud rate
     public static long band = 14074000;//Carrier frequency band
@@ -233,7 +381,22 @@ public class GeneralVariables {
     public static int instructionSet = 0;//Instruction set: 0=ICOM, 1=Yaesu gen 2, 2=Yaesu gen 3
     public static int bandListIndex = -1;//Radio band index value
     public static MutableLiveData<Integer> mutableBandChange = new MutableLiveData<>();//Band index change
+    //Band names (e.g. "6m","60m") the user has hidden from the band pickers. Empty = show all.
+    //Persisted in config as a comma-separated list under the key "excludedBands".
+    public static volatile java.util.HashSet<String> excludedBands = new java.util.HashSet<>();
+
+    public static boolean isBandExcluded(String waveLength) {
+        return excludedBands.contains(waveLength);
+    }
+
+    public static String excludedBandsToCsv() {
+        return android.text.TextUtils.join(",", excludedBands);
+    }
     public static int controlMode = ControlMode.VOX;
+    //Control-mode change signal so Compose can react when the user switches
+    //VOX <-> CAT/RTS/DTR (e.g. to show/hide the CAT status chip). No initial
+    //value: observers seed from the current controlMode until a change posts.
+    public static MutableLiveData<Integer> mutableControlMode = new MutableLiveData<>();
     public static int modelNo = 0;
     public static int launchSupervision = DEFAULT_LAUNCH_SUPERVISION;//Transmit supervision
     public static long launchSupervisionStart = UtcTimer.getSystemTime();//Auto-transmit start time
@@ -248,12 +411,100 @@ public class GeneralVariables {
     public static String icomPassword = "";
 
 
-    public static boolean autoFollowCQ = true;//Auto-follow CQ
+    public static boolean autoFollowCQ = false;//Auto-follow CQ
+    public static boolean huntCallsCQ = false;//Hunt+CQ hybrid: call CQ when idle, answer CQs when heard
     public static boolean autoCallFollow = true;//Auto-call followed callsigns
     public static boolean autoUpdateGridFromGPS = false;//Use device GPS to keep Maidenhead grid current
     public static ArrayList<String> QSL_Callsign_list = new ArrayList<>();//Successfully QSL'd callsigns
     public static ArrayList<String> QSL_Callsign_list_other_band = new ArrayList<>();//Successfully QSL'd callsigns on other bands
     public static HashSet<String> QSL_Grid_list = new HashSet<>();//Distinct worked 4-char Maidenhead grids (any band)
+    public static HashSet<String> QSL_Pota_list = new HashSet<>();//Distinct hunted POTA park refs (UPPER), any band
+
+    // Decode-list highlight toggles (Settings → Decode Highlights). Gate the
+    // status pill shown for each worked-before category in resolveQsoStatus().
+    public static boolean highlightNewDxcc = true;//Highlight stations from an unworked DXCC entity
+    public static boolean highlightNewGrid = false;//Off by default — most grids are "new", so it's noisy
+    public static boolean highlightNewBand = true;//Highlight stations worked only on other bands
+    public static boolean highlightWorked = true;//Tag stations already worked
+    public static boolean highlightPota = true;//Highlight spotted POTA activators (new parks stand out)
+
+    // Decode-list display filters (Settings → Decode Filters). Persistent
+    // "show only" filters applied to the decode list in DecodeScreen.filterMessages().
+    // Multiple enabled filters AND together.
+    public static boolean filterShowOnlyCQ = false;//Show only CQ-type messages
+    public static boolean filterDxOnly = false;//Show only stations outside my own continent
+    public static boolean filterNeededOnly = false;//Show only not-yet-QSL'd stations
+    public static boolean filterByContinent = false;//Show only stations from filterContinent
+    public static String filterContinent = "EU";//Target continent for filterByContinent (NA/SA/EU/AF/AS/OC/AN)
+
+    // The operator's own continent abbreviation, derived once from the callsign
+    // (CallsignDatabase.getContinent). Used by the DX filter. Null until resolved.
+    public static String myContinent = null;
+
+    // The operator's own DXCC, derived once from the callsign alongside myContinent
+    // (CallsignDatabase.getMessagesLocation). Used by the directional-CQ matcher to
+    // match country/region tokens (e.g. "CQ JA"). Null until resolved → fail-open.
+    public static String myDxcc = null;
+
+    // Directional CQ awareness (Settings → Decode Filters). Both opt-in, default off.
+    //   - respectDirectionalCQ: suppress AUTO-replies to directional CQs (CQ DX/EU/JA…)
+    //     not aimed at my station. Does not affect manual taps or stations calling me.
+    //   - filterDirectionalCQ: hide those same CQs from the decode list.
+    public static boolean respectDirectionalCQ = false;
+    public static boolean filterDirectionalCQ = false;
+
+    // Needed-DX alerts (Settings → Needed-DX Alerts). Opt-in, default off. When enabled,
+    // a station calling CQ that is a NEW unworked entity/state triggers a sound + vibrate
+    // notification (DxAlertNotifier). Categories are independent.
+    //   - alertNewDxcc:  alert on a new (unworked) DXCC entity   (uses Ft8Message.fromDxcc)
+    //   - alertNewState: alert on a new (unworked) US state       (uses Ft8Message.fromNewState)
+    public static boolean alertNewDxcc = false;
+    public static boolean alertNewState = false;
+
+    // Geographic continent-directed CQ tokens — matched against myContinent.
+    private static final java.util.Set<String> CONTINENT_CODES =
+            new java.util.HashSet<>(java.util.Arrays.asList("NA", "SA", "EU", "AF", "AS", "OC", "AN"));
+    // Non-geographic activity calls — always answerable. Easily extended.
+    private static final java.util.Set<String> ACTIVITY_TOKENS =
+            new java.util.HashSet<>(java.util.Arrays.asList(
+                    "DX", "POTA", "SOTA", "WWFF", "IOTA", "TEST", "FD", "QRP", "WW"));
+
+    /**
+     * The directional token after CQ/DE/QRZ in a decoded callsignTo (e.g. "DX" from
+     * "CQ DX"), or null for a plain CQ / non-CQ message.
+     */
+    public static String getDirectionalCQToken(String callsignTo) {
+        if (callsignTo == null) return null;
+        String[] p = callsignTo.trim().toUpperCase().split("\\s+");
+        if (p.length < 2) return null;
+        if (!(p[0].equals("CQ") || p[0].equals("DE") || p[0].equals("QRZ"))) return null;
+        return p[1];
+    }
+
+    /**
+     * Whether a (possibly directional) CQ is answerable by my station. Continent-code
+     * tokens are matched against {@link #myContinent}; country/region prefixes against
+     * {@link #myDxcc} via the callsign database. Fail-open: plain CQ, "CQ DX",
+     * 3-digit zone CQs, known activity calls, and anything we can't positively resolve
+     * to a different DXCC/continent are all treated as answerable.
+     *
+     * @param callsignTo the decoded message's callsignTo field
+     * @return true if answerable (or not a CQ at all)
+     */
+    public static synchronized boolean directionalCQIsForMe(String callsignTo) {
+        String token = getDirectionalCQToken(callsignTo);
+        if (token == null) return true;                       // plain CQ / not a CQ
+        if (token.matches("[0-9]{3}")) return true;           // zone-directed CQ nnn
+        if (ACTIVITY_TOKENS.contains(token)) return true;     // DX / POTA / TEST / ...
+        if (CONTINENT_CODES.contains(token)) {                // continent-directed
+            return myContinent == null || token.equalsIgnoreCase(myContinent);
+        }
+        // country/region prefix (e.g. JA) — match by DXCC
+        if (callsignDatabase == null || myDxcc == null) return true;
+        CallsignInfo info = callsignDatabase.getCallInfo(token);
+        if (info == null || info.DXCC == null) return true;   // unresolved → fail-open
+        return info.DXCC.equalsIgnoreCase(myDxcc);
+    }
 
 
     public static final ArrayList<String> followCallsign = new ArrayList<>();//Followed callsigns
@@ -269,8 +520,21 @@ public class GeneralVariables {
         return myMaidenheadGrid;
     }
 
+    // ===== FT8 DXpedition "Hound" mode =====
+    // When true, the TX engine runs the Hound QSO variant (call Fox high at
+    // 1000-4000 Hz, auto-QSY down to where Fox calls us, reply R+rpt, log on
+    // RR73) instead of the standard auto-sequencer. Mutually exclusive with the
+    // Hunt auto-answer-CQ mode. houndFoxCall is the Fox's base callsign.
+    public static boolean houndMode = false;
+    public static String houndFoxCall = "";
+
     public static float getBaseFrequency() {
         return baseFrequency;
+    }
+
+    /** The descriptor for the current {@link #operatingMode} (FT8/FT4). */
+    public static ModeProfile currentMode() {
+        return ModeProfile.fromId(operatingMode);
     }
 
     public static void setBaseFrequency(float baseFrequency) {
@@ -348,6 +612,14 @@ public class GeneralVariables {
     public static boolean checkQSLGrid(String grid) {
         if (grid == null || grid.length() < 4) return false;
         return QSL_Grid_list.contains(grid.substring(0, 4).toUpperCase());
+    }
+
+    /**
+     * Check if a POTA park reference (e.g. "K-1234") has been previously hunted (any band).
+     */
+    public static boolean checkQSLPark(String ref) {
+        if (ref == null || ref.isEmpty()) return false;
+        return QSL_Pota_list.contains(ref.toUpperCase());
     }
 
     /**
@@ -622,6 +894,73 @@ public class GeneralVariables {
      */
     public static boolean getItuZoneById(int itu) {
         return ituMap.containsKey(itu);
+    }
+
+    /**
+     * Add an already-contacted US state to the set.
+     *
+     * @param state USPS state code (e.g. "ND")
+     */
+    public static void addState(String state) {
+        if (state == null || state.isEmpty()) return;
+        workedStates.add(state.toUpperCase());
+    }
+
+    /**
+     * Check if this US state has already been contacted.
+     *
+     * @param state USPS state code
+     * @return whether it is in the worked set
+     */
+    public static boolean getStateWorked(String state) {
+        return state != null && workedStates.contains(state.toUpperCase());
+    }
+
+    /**
+     * Resolve a 4-character Maidenhead field to a US state code, or null if it is not a
+     * US grid (the bundled table is US-only, so non-US grids return null naturally).
+     *
+     * <p>Backed by the same {@code assets/us_grid_states.json} the Compose UI reads via
+     * {@code UsStateLookup}; loaded once on first use. Used both for live-decode "new
+     * state" detection (CallsignDatabase) and worked-state import (DatabaseOpr).
+     *
+     * @param grid the station's Maidenhead grid (4+ chars); shorter/empty returns null
+     * @return USPS state code, or null
+     */
+    public static String stateForGrid(String grid) {
+        if (grid == null || grid.length() < 4) return null;
+        Map<String, String> m = gridStateMap;
+        if (m == null) {
+            m = loadGridStateMap();
+            gridStateMap = m;
+        }
+        return m.get(grid.substring(0, 4).toUpperCase());
+    }
+
+    private static synchronized Map<String, String> loadGridStateMap() {
+        if (gridStateMap != null) return gridStateMap;
+        Map<String, String> out = new HashMap<>();
+        Context ctx = getMainContext();
+        if (ctx != null) {
+            try {
+                java.io.InputStream is = ctx.getAssets().open("us_grid_states.json");
+                java.io.BufferedReader reader = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(is));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+                reader.close();
+                org.json.JSONObject obj = new org.json.JSONObject(sb.toString());
+                Iterator<String> keys = obj.keys();
+                while (keys.hasNext()) {
+                    String k = keys.next();
+                    out.put(k.toUpperCase(), obj.getString(k));
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "loadGridStateMap: failed to load us_grid_states.json", e);
+            }
+        }
+        return out;
     }
 
     //used to trigger new grid

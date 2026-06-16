@@ -461,6 +461,14 @@ public class MainActivity extends AppCompatActivity {
             mainViewModel.operationBand = OperationBand.getInstance(getBaseContext());
         }
 
+        // Callsign database must be ready before getQslDxccToMap() — that
+        // method's background thread needs it to resolve DXCC prefixes. If it
+        // runs first, the null-check early-return leaves zoneMapReady false
+        // permanently and DXCC/zone "new" flags never compute. (#251 review)
+        if (GeneralVariables.callsignDatabase == null) {
+            GeneralVariables.callsignDatabase = CallsignDatabase.getInstance(getApplicationContext(), null, 1);
+        }
+
         mainViewModel.databaseOpr.getQslDxccToMap();
 
         //get all configuration parameters
@@ -499,10 +507,6 @@ public class MainActivity extends AppCompatActivity {
         new DatabaseOpr.GetCallsignMapGrid(mainViewModel.databaseOpr.getDb()).execute();
 
         mainViewModel.getFollowCallsignsFromDataBase();
-        //open the callsign location database; currently using in-memory database.
-        if (GeneralVariables.callsignDatabase == null) {
-            GeneralVariables.callsignDatabase = CallsignDatabase.getInstance(getBaseContext(), null, 1);
-        }
     }
 
 

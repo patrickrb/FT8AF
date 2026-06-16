@@ -147,6 +147,7 @@ public class GridOsmMapView {
         line.getOutlinePaint().setStrokeWidth(6);
         //mOutlinePaint = getStrokePaint(0xffFF1E27, 3);
 
+        if (line.getActualPoints().size() < 2) return;
         GeoPoint eastNorthPoint = new GeoPoint(line.getActualPoints().get(0).getLatitude()
                 , line.getActualPoints().get(0).getLongitude());
         GeoPoint westSouthPoint = new GeoPoint(line.getActualPoints().get(1).getLatitude()

@@ -70,6 +70,8 @@ public class Ft8Message {
     public String fromWhere = null;//used for displaying address/location
     public String toWhere = null;//used for displaying address/location
 
+    public String continent = null;//sender's continent abbrev (NA/SA/EU/AF/AS/OC/AN); used by decode filters
+
     public boolean isQSL_Callsign = false;//whether this callsign has been previously contacted
 
     public static MessageHashMap hashList = new MessageHashMap();
@@ -81,6 +83,11 @@ public class Ft8Message {
     public boolean toDxcc = false;
     public boolean toItu = false;
     public boolean toCq = false;
+
+    // US state of the sender, derived from maidenGrid via GeneralVariables.stateForGrid
+    // (null when not a US grid). fromNewState = that state is not yet in the worked set.
+    public String fromState = null;
+    public boolean fromNewState = false;
 
     public LatLng fromLatLng = null;
     public LatLng toLatLng = null;
@@ -243,13 +250,16 @@ public class Ft8Message {
         }
 
         if (i3 == 0 && (n3 == 1)) {//this is DXpedition
-
+            // Fox combo: "<acked> RR73; <invited> <foxHash> <report>". The report
+            // is already signed, so format its magnitude after the sign char —
+            // otherwise a negative report renders a double minus ("--18"). A zero
+            // report formats as "+0" (>= 0), matching WSJT-X, not "-0".
             return String.format("%s RR73; %s %s %s%d"
                     ,callsignTo
                     ,dx_call_to2
                     ,hashList.getCallsign(new long[]{callFromHash10})
-                    ,report > 0 ? "+" : "-"
-                    ,report
+                    ,report >= 0 ? "+" : "-"
+                    ,Math.abs(report)
             );
         }
 
@@ -316,26 +326,43 @@ public class Ft8Message {
     }
 
     /**
+     * The slot (cycle) index since the epoch for this message's mode.
+     *
+     * <p>FT8 keeps its legacy 15s math and FT4 its 7.5s; FT2 uses its own 3.75s
+     * slot from {@link ModeProfile}, <em>not</em> FT4's 7.5s. Reusing FT4's
+     * period for FT2 collapsed two adjacent 3.75s slots into a single parity, so
+     * the QSO auto-sequencer ({@link com.bg7yoz.ft8cn.ft8transmit.FT8TransmitSignal})
+     * saw the other station's reply as being in our own slot and skipped it —
+     * stalling after a report instead of advancing to RR73 (issue #205). The
+     * small {@code +slot/20} nudge mirrors the legacy FT8 (+750ms) / FT4 (+370ms)
+     * early-skew correction.
+     *
+     * @return slot index (monotonic, mod into 2 or 4 for the sequence helpers)
+     */
+    private long slotIndex() {
+        if (signalFormat == FT8Common.FT8_MODE) {
+            return (utcTime + 750) / 1000 / 15;
+        } else if (signalFormat == FT8Common.FT2_MODE) {
+            int slot = ModeProfile.FT2.slotMillis; // 3750ms
+            return (utcTime + slot / 20) / slot;
+        } else {
+            return (utcTime + 370) / 100 / 75;
+        }
+    }
+
+    /**
      * Show which time sequence the current message belongs to.
      *
      * @return String Result is the modulo of the time cycle.
      */
     @SuppressLint("DefaultLocale")
     public int getSequence() {
-        if (signalFormat == FT8Common.FT8_MODE) {
-            return (int) ((((utcTime + 750) / 1000) / 15) % 2);
-        } else {
-            return (int) (((utcTime + 370) / 100) / 75) % 2;
-        }
+        return (int) (slotIndex() % 2);
     }
 
     @SuppressLint("DefaultLocale")
     public int getSequence4() {
-        if (signalFormat == FT8Common.FT8_MODE) {
-            return (int) ((((utcTime + 750) / 1000) / 15) % 4);
-        } else {
-            return (int) (((utcTime + 370) / 100) / 75) % 4;
-        }
+        return (int) (slotIndex() % 4);
     }
 
     /**
@@ -465,6 +492,69 @@ t71     Telemetry data, up to 18 hex digits
         } else {
             return (s.equals("CQ") || s.equals("DE") || s.equals("QRZ"));
         }
+    }
+
+    /**
+     * Decide whether a callsign field could be a real callsign.
+     *
+     * <p>A real callsign field uses only the {@code [A-Z0-9/]} alphabet,
+     * optionally wrapped in {@code <...>} (a hashed / non-standard call), or is
+     * the bare {@code <...>} placeholder shown before a hash resolves. Anything
+     * else — stray angle brackets, embedded spaces, dots — is the junk a
+     * CRC-collision false decode renders into the sender field (e.g. {@code .<. >}).
+     *
+     * @param callsign the raw sender field (may be null, may be {@code <...>}-wrapped)
+     * @return true if it could be a real callsign or the unresolved-hash placeholder
+     */
+    public static boolean isPlausibleCallsign(String callsign) {
+        if (callsign == null) {
+            return false;
+        }
+        String s = callsign.trim();
+        if (s.isEmpty()) {
+            return false;
+        }
+        if (s.equals("<...>")) {//unresolved hashed-call placeholder
+            return true;
+        }
+        //Strip a single matching <...> wrapper around a hashed / non-standard call.
+        if (s.startsWith("<") && s.endsWith(">") && s.length() > 2) {
+            s = s.substring(1, s.length() - 1);
+        }
+        //No leftover angle brackets, spaces, or dots — just the call alphabet.
+        //Manual scan keeps this off the regex compiler on the decode hot-path.
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            boolean inAlphabet = (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9')
+                    || c == '/';
+            if (!inAlphabet) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Detect a junk/false decode by its sender callsign.
+     *
+     * <p>FT8 guards each 77-bit frame with only a 14-bit CRC, so roughly one
+     * noise event in 16k slips through as a "valid" decode. When that garbage
+     * lands in a callsign-bearing frame, the corrupt sender field renders as
+     * junk like {@code .<. >}. A structured decode is junk when its sender isn't
+     * a {@link #isPlausibleCallsign plausible callsign}. Free text
+     * ({@code i3=0,n3=0}) and telemetry ({@code i3=0,n3=5}) legitimately carry
+     * non-callsign text in that field, so they are never treated as junk here.
+     *
+     * @return true if this decode should be dropped as garbage
+     */
+    public boolean isJunkDecode() {
+        boolean freeText = (i3 == 0 && n3 == 0);
+        boolean telemetry = (i3 == 0 && n3 == 5);
+        if (freeText || telemetry) {
+            return false;
+        }
+        return !isPlausibleCallsign(callsignFrom);
     }
 
     /**

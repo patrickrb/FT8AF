@@ -25,7 +25,16 @@ public class FT8Package {
     private static final String A5 = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ/";
 
     static {
-        System.loadLibrary("ft8cn");
+        try {
+            System.loadLibrary("ft8cn");
+        } catch (UnsatisfiedLinkError e) {
+            // Best-effort load: JVM unit tests don't have libft8cn.so on
+            // java.library.path. The native methods themselves will throw if
+            // actually invoked without the library; the pure-Java helpers on
+            // this class (e.g. getStdCall) stay available either way. Mirrors
+            // the same guard in GenerateFT8.
+            Log.w(TAG, "ft8cn native library not loaded: " + e.getMessage());
+        }
     }
 
 
@@ -226,14 +235,18 @@ public class FT8Package {
         // check if it is a signal report: +dd / -dd / R+dd / R-dd
         // signal report range: -30 to 99 dB
         // signal report regex: [R]?[+-][0-9]{1,2}
-        String s = grid4;
-        if (grid4.charAt(0) == 'R') {
-            s = grid4.substring(1);
-            int irpt = 35 + Integer.parseInt(s);
-            return (MAXGRID4 + irpt) | 0x8000; // R1 = 1
-        } else {
-            int irpt = 35 + Integer.parseInt(grid4);
-            return (MAXGRID4 + irpt); // R1 = 0
+        try {
+            String s = grid4;
+            if (grid4.charAt(0) == 'R') {
+                s = grid4.substring(1);
+                int irpt = 35 + Integer.parseInt(s);
+                return (MAXGRID4 + irpt) | 0x8000; // R1 = 1
+            } else {
+                int irpt = 35 + Integer.parseInt(grid4);
+                return (MAXGRID4 + irpt); // R1 = 0
+            }
+        } catch (NumberFormatException e) {
+            return MAXGRID4 + 1;
         }
 
     }
