@@ -17,9 +17,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -126,8 +128,11 @@ fun FT8USApp(mainViewModel: MainViewModel) {
         }
     }
 
-    // QSO panel expand/collapse state
-    var qsoPanelExpanded by rememberSaveable { mutableStateOf(false) }
+    // QSO panel expand/collapse state. Exposed as an explicit State object so
+    // the movableContentOf lambda (created once in remember) can read .value
+    // and subscribe to changes without stale captures.
+    val qsoPanelExpandedState = rememberSaveable { mutableStateOf(false) }
+    var qsoPanelExpanded by qsoPanelExpandedState
 
     // Hunt / auto-answer-CQ mode. Mirrors GeneralVariables.autoFollowCQ (also
     // editable in Settings, which provides the persisted default at startup).
@@ -216,16 +221,26 @@ fun FT8USApp(mainViewModel: MainViewModel) {
         mainViewModel.qsoSheetMinimized.postValue(false)
     }
 
-    // Single definition of the panel, placed either docked in the column or
-    // floated over the content (see qsoPanelOverlaysContent).
-    val qsoPanel: @Composable (Modifier) -> Unit = { panelModifier ->
-        ActiveQsoPanel(
-            mainViewModel = mainViewModel,
-            expanded = qsoPanelExpanded,
-            onCollapse = { qsoPanelExpanded = false },
-            onReopenSheet = reopenQsoSheet,
-            modifier = panelModifier,
-        )
+    // Wrap reopenQsoSheet in rememberUpdatedState so the movableContentOf
+    // lambda (cached in remember) always invokes the latest version.
+    val currentReopenQsoSheetState = rememberUpdatedState(reopenQsoSheet)
+
+    // movableContentOf preserves the panel's internal Compose state (remember,
+    // observeAsState observers, synthTxLog, etc.) when it moves between the
+    // docked position (non-waterfall tabs) and the floating overlay position
+    // (waterfall tab). Without this, switching to/from the Waterfall tab
+    // destroys and recreates the composable at a new tree position, losing all
+    // RX/TX messages in the mini log. (#250 follow-up)
+    val qsoPanel = remember {
+        movableContentOf { panelModifier: Modifier ->
+            ActiveQsoPanel(
+                mainViewModel = mainViewModel,
+                expanded = qsoPanelExpandedState.value,
+                onCollapse = { qsoPanelExpandedState.value = false },
+                onReopenSheet = { currentReopenQsoSheetState.value() },
+                modifier = panelModifier,
+            )
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize().background(BgApp)) {
