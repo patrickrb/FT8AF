@@ -305,6 +305,20 @@ object FT8USIcons {
     }
 
     @Composable
+    fun Minus(
+        modifier: Modifier = Modifier,
+        color: Color = Color.Unspecified,
+        size: Dp = 22.dp,
+        strokeWidth: Float = 1.6f,
+    ) {
+        val tint = if (color == Color.Unspecified) androidx.compose.material3.MaterialTheme.colorScheme.onSurface else color
+        Canvas(modifier = modifier.then(Modifier.sizeOf(size))) {
+            val s = this.size.width / 24f
+            drawLine(tint, Offset(5f * s, 12f * s), Offset(19f * s, 12f * s), strokeWidth * s, StrokeCap.Round)
+        }
+    }
+
+    @Composable
     fun Info(
         modifier: Modifier = Modifier,
         color: Color = Color.Unspecified,

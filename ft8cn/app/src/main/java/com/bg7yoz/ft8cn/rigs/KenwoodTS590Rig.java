@@ -28,21 +28,24 @@ public class KenwoodTS590Rig extends BaseRig {
     private boolean alcMaxAlert = false;
     private boolean swrAlert = false;
 
+
+    @Override
+    public void onDisconnecting() {
+        if (readFreqTimer != null) {
+            readFreqTimer.cancel();
+            readFreqTimer.purge();
+            readFreqTimer = null;
+        }
+    }
     private TimerTask readTask() {
         return new TimerTask() {
             @Override
             public void run() {
                 try {
-                    if (!isConnected()) {
-                        readFreqTimer.cancel();
-                        readFreqTimer.purge();
-                        readFreqTimer = null;
-                        return;
-                    }
-                    if (isPttOn()) {
-                        readMeters();//read METER
-                    } else {
-                        readFreqFromRig();//read frequency
+                    switch (ReadTaskAction.decide(isConnected(), isPttOn())) {
+                        case SKIP:        return;
+                        case READ_METERS: readMeters(); break;
+                        case READ_FREQ:   readFreqFromRig(); break;
                     }
 
                 } catch (Exception e) {

@@ -166,7 +166,7 @@
     <string name="decode_empty_forme_title">لا نداءات لك</string>
     <string name="decode_empty_forme_body">لا توجد محطات تنادي نداءك الآن.</string>
     <string name="decode_empty_default_title">لا إشارات مفكوكة</string>
-    <string name="decode_empty_default_body">في انتظار ظهور إشارات FT8...</string>
+    <string name="decode_empty_default_body">في انتظار ظهور إشارات %1$s...</string>
     <string name="decode_label_calling">→ ينادي</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ إليك</string>
@@ -540,4 +540,11 @@
     <string name="settings_language_desc">لغة عرض التطبيق</string>
     <string name="settings_language_system">افتراضي النظام</string>
 
+    <!-- Untranslated — added for parity; translate when localization pass runs -->
+    <string name="settings_show_volume_slider">Show Volume Slider</string>
+    <string name="settings_show_volume_slider_desc">Display TX volume slider on main screen</string>
+    <string name="settings_hunt_cq">Hunt + CQ</string>
+    <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
+    <string name="tx_volume_decrease">Decrease TX volume</string>
+    <string name="tx_volume_increase">Increase TX volume</string>
 </resources>

@@ -287,4 +287,33 @@ public class FT8TransmitSignalTest {
         assertThat(FT8TransmitSignal.isHuntListeningIdle(false, 6, null)).isFalse();
         assertThat(FT8TransmitSignal.isHuntListeningIdle(false, 1, station("K1ABC"))).isFalse();
     }
+
+    // ---- shouldResetTargetOnSlotToggle --------------------------------------
+    // When the operator toggles TX1 <-> TX2 while mid-QSO, the target callsign
+    // must reset to CQ — switching slots abandons the contact. When already at
+    // CQ baseline (target is "CQ", null, or empty) there is nothing to abandon,
+    // so no reset is needed and we avoid the side-effects of userResetToCQ
+    // (clearing the caller queue, setting pendingUserCQ, etc.).
+    //
+    // The decision is based solely on the target callsign, not functionOrder,
+    // because resetToCQ() does not reliably post mutableFunctionOrder — callers
+    // reading the LiveData can see a stale order while the target is already CQ.
+
+    @Test
+    public void slotToggle_realTarget_resetsTarget() {
+        assertThat(FT8TransmitSignal.shouldResetTargetOnSlotToggle("K1ABC")).isTrue();
+        assertThat(FT8TransmitSignal.shouldResetTargetOnSlotToggle("W3XYZ")).isTrue();
+        assertThat(FT8TransmitSignal.shouldResetTargetOnSlotToggle("VE3ABC")).isTrue();
+        assertThat(FT8TransmitSignal.shouldResetTargetOnSlotToggle("JA1XX")).isTrue();
+    }
+
+    @Test
+    public void slotToggle_cqBaseline_noReset() {
+        assertThat(FT8TransmitSignal.shouldResetTargetOnSlotToggle("CQ")).isFalse();
+        assertThat(FT8TransmitSignal.shouldResetTargetOnSlotToggle("cq")).isFalse();
+        assertThat(FT8TransmitSignal.shouldResetTargetOnSlotToggle("CQ ")).isFalse();
+        assertThat(FT8TransmitSignal.shouldResetTargetOnSlotToggle(null)).isFalse();
+        assertThat(FT8TransmitSignal.shouldResetTargetOnSlotToggle("")).isFalse();
+        assertThat(FT8TransmitSignal.shouldResetTargetOnSlotToggle("  ")).isFalse();
+    }
 }

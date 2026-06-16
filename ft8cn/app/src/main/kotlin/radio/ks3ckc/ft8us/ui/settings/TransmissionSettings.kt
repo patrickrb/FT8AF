@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,6 +24,9 @@ import com.bg7yoz.ft8cn.MainViewModel
 import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.ft8transmit.MeterProtectionController
 import radio.ks3ckc.ft8us.theme.*
+import radio.ks3ckc.ft8us.ui.components.FT8USIconButton
+import radio.ks3ckc.ft8us.ui.components.FT8USIcons
+import radio.ks3ckc.ft8us.ui.components.IntSlider
 import radio.ks3ckc.ft8us.ui.components.GlassCard
 import radio.ks3ckc.ft8us.ui.components.SettingsRow
 
@@ -51,6 +52,7 @@ fun TransmissionSettings(
 
     // Auto-sequence state
     var autoFollowCQ by remember { mutableStateOf(GeneralVariables.autoFollowCQ) }
+    var huntCallsCQ by remember { mutableStateOf(GeneralVariables.huntCallsCQ) }
     var autoCallFollow by remember { mutableStateOf(GeneralVariables.autoCallFollow) }
     var earlyDecode by remember { mutableStateOf(GeneralVariables.earlyDecode) }
     var autoCQAfterQSO by remember { mutableStateOf(GeneralVariables.autoCQAfterQSO) }
@@ -197,10 +199,23 @@ fun TransmissionSettings(
                                 style = TextStyle(fontSize = 12.sp, color = TextMuted),
                                 modifier = Modifier.width(32.dp),
                             )
-                            Slider(
-                                value = alcTargetLow.toFloat(),
+                            FT8USIconButton(
+                                onClick = {
+                                    val clamped = (alcTargetLow - 5).coerceIn(10, minOf(200, alcTargetHigh - 10))
+                                    alcTargetLow = clamped
+                                    GeneralVariables.alcTargetLow = clamped
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "alcTargetLow", clamped.toString(), null,
+                                    )
+                                },
+                                size = 36.dp,
+                            ) {
+                                FT8USIcons.Minus(color = Accent, size = 16.dp)
+                            }
+                            IntSlider(
+                                value = alcTargetLow,
                                 onValueChange = { v ->
-                                    val clamped = v.toInt().coerceIn(10, alcTargetHigh - 10)
+                                    val clamped = v.coerceIn(10, minOf(200, alcTargetHigh - 10))
                                     alcTargetLow = clamped
                                     GeneralVariables.alcTargetLow = clamped
                                 },
@@ -211,11 +226,22 @@ fun TransmissionSettings(
                                 },
                                 valueRange = 10f..200f,
                                 modifier = Modifier.weight(1f),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = Accent,
-                                    activeTrackColor = Accent,
-                                ),
+                                thumbColor = Accent,
+                                activeTrackColor = Accent,
                             )
+                            FT8USIconButton(
+                                onClick = {
+                                    val clamped = (alcTargetLow + 5).coerceIn(10, minOf(200, alcTargetHigh - 10))
+                                    alcTargetLow = clamped
+                                    GeneralVariables.alcTargetLow = clamped
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "alcTargetLow", clamped.toString(), null,
+                                    )
+                                },
+                                size = 36.dp,
+                            ) {
+                                FT8USIcons.Plus(color = Accent, size = 16.dp)
+                            }
                         }
                         // High slider
                         Row(
@@ -230,10 +256,23 @@ fun TransmissionSettings(
                                 style = TextStyle(fontSize = 12.sp, color = TextMuted),
                                 modifier = Modifier.width(32.dp),
                             )
-                            Slider(
-                                value = alcTargetHigh.toFloat(),
+                            FT8USIconButton(
+                                onClick = {
+                                    val clamped = (alcTargetHigh - 5).coerceIn(alcTargetLow + 10, 250)
+                                    alcTargetHigh = clamped
+                                    GeneralVariables.alcTargetHigh = clamped
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "alcTargetHigh", clamped.toString(), null,
+                                    )
+                                },
+                                size = 36.dp,
+                            ) {
+                                FT8USIcons.Minus(color = Accent, size = 16.dp)
+                            }
+                            IntSlider(
+                                value = alcTargetHigh,
                                 onValueChange = { v ->
-                                    val clamped = v.toInt().coerceIn(alcTargetLow + 10, 250)
+                                    val clamped = v.coerceIn(alcTargetLow + 10, 250)
                                     alcTargetHigh = clamped
                                     GeneralVariables.alcTargetHigh = clamped
                                 },
@@ -244,11 +283,22 @@ fun TransmissionSettings(
                                 },
                                 valueRange = 20f..250f,
                                 modifier = Modifier.weight(1f),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = Accent,
-                                    activeTrackColor = Accent,
-                                ),
+                                thumbColor = Accent,
+                                activeTrackColor = Accent,
                             )
+                            FT8USIconButton(
+                                onClick = {
+                                    val clamped = (alcTargetHigh + 5).coerceIn(alcTargetLow + 10, 250)
+                                    alcTargetHigh = clamped
+                                    GeneralVariables.alcTargetHigh = clamped
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "alcTargetHigh", clamped.toString(), null,
+                                    )
+                                },
+                                size = 36.dp,
+                            ) {
+                                FT8USIcons.Plus(color = Accent, size = 16.dp)
+                            }
                         }
                     }
                     SectionDivider()
@@ -283,11 +333,24 @@ fun TransmissionSettings(
                                 "1.5:1",
                                 style = TextStyle(fontSize = 12.sp, color = TextMuted),
                             )
-                            Slider(
-                                value = swrHaltThreshold.toFloat(),
+                            FT8USIconButton(
+                                onClick = {
+                                    val newVal = (swrHaltThreshold - 5).coerceIn(30, 200)
+                                    swrHaltThreshold = newVal
+                                    GeneralVariables.swrHaltThreshold = newVal
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "swrHaltThreshold", newVal.toString(), null,
+                                    )
+                                },
+                                size = 36.dp,
+                            ) {
+                                FT8USIcons.Minus(color = Accent, size = 16.dp)
+                            }
+                            IntSlider(
+                                value = swrHaltThreshold,
                                 onValueChange = { v ->
-                                    swrHaltThreshold = v.toInt()
-                                    GeneralVariables.swrHaltThreshold = v.toInt()
+                                    swrHaltThreshold = v
+                                    GeneralVariables.swrHaltThreshold = v
                                 },
                                 onValueChangeFinished = {
                                     mainViewModel.databaseOpr.writeConfig(
@@ -296,11 +359,22 @@ fun TransmissionSettings(
                                 },
                                 valueRange = 30f..200f, // ~1.3:1 to ~7.0:1
                                 modifier = Modifier.weight(1f),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = Accent,
-                                    activeTrackColor = Accent,
-                                ),
+                                thumbColor = Accent,
+                                activeTrackColor = Accent,
                             )
+                            FT8USIconButton(
+                                onClick = {
+                                    val newVal = (swrHaltThreshold + 5).coerceIn(30, 200)
+                                    swrHaltThreshold = newVal
+                                    GeneralVariables.swrHaltThreshold = newVal
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "swrHaltThreshold", newVal.toString(), null,
+                                    )
+                                },
+                                size = 36.dp,
+                            ) {
+                                FT8USIcons.Plus(color = Accent, size = 16.dp)
+                            }
                             Text(
                                 "7:1",
                                 style = TextStyle(fontSize = 12.sp, color = TextMuted),
@@ -326,6 +400,19 @@ fun TransmissionSettings(
                             GeneralVariables.autoFollowCQ = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "autoFollowCQ", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_hunt_cq),
+                        description = stringResource(R.string.settings_hunt_cq_desc),
+                        toggle = huntCallsCQ,
+                        onToggleChange = { checked ->
+                            huntCallsCQ = checked
+                            GeneralVariables.huntCallsCQ = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "huntCallsCQ", if (checked) "1" else "0", null,
                             )
                         },
                     )

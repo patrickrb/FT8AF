@@ -142,7 +142,8 @@ int ft8_snr(const waterfall_t* wf, const candidate_t* candidate)
             ++num_average;
         }
     }
-    // return num_average;
+    if (num_average == 0)
+        return -24; // no usable sync symbols; report a deep floor (matches FT4/FT2 guard)
     return (sum_signal - sum_noise) / num_average;
 }
 

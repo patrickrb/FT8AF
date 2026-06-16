@@ -17,8 +17,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.movableContentOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -34,6 +37,7 @@ import com.bg7yoz.ft8cn.MainViewModel
 import com.bg7yoz.ft8cn.ModeProfile
 import com.bg7yoz.ft8cn.R
 import com.bg7yoz.ft8cn.database.OperationBand
+import com.bg7yoz.ft8cn.ft8transmit.FT8TransmitSignal
 import com.bg7yoz.ft8cn.rigs.CatConnectionState
 import com.bg7yoz.ft8cn.rigs.BaseRigOperation
 import radio.ks3ckc.ft8us.theme.BgApp
@@ -69,6 +73,14 @@ import radio.ks3ckc.ft8us.ui.waterfall.WaterfallScreen
  */
 internal fun qsoPanelOverlaysContent(tab: FT8USTab): Boolean = tab == FT8USTab.WATERFALL
 
+/**
+ * Whether the sequencer should be armed for Hunt on app startup. True when the
+ * persisted Hunt setting is "on" and the operator has set a callsign (Hunt
+ * transmits replies, so a callsign is required).
+ */
+internal fun shouldArmHuntOnStartup(huntEnabled: Boolean, callsign: String?): Boolean =
+    huntEnabled && !callsign.isNullOrEmpty()
+
 @Composable
 fun FT8USApp(mainViewModel: MainViewModel) {
     val context = LocalContext.current
@@ -87,6 +99,27 @@ fun FT8USApp(mainViewModel: MainViewModel) {
     // switches VOX <-> CAT/RTS/DTR in Settings (seeds from the current value).
     val controlMode by GeneralVariables.mutableControlMode.observeAsState(GeneralVariables.controlMode)
     val showCatChip = shouldShowCatChip(controlMode, catState)
+
+    // TX Volume state — observe LiveData so hardware buttons, ALC auto-volume,
+    // and the settings slider all update the inline slider bidirectionally.
+    val volumeLive by GeneralVariables.mutableVolumePercent.observeAsState(
+        GeneralVariables.volumePercent,
+    )
+    var txVolume by remember { mutableIntStateOf((GeneralVariables.volumePercent * 100).toInt()) }
+    LaunchedEffect(volumeLive) {
+        txVolume = ((volumeLive ?: GeneralVariables.volumePercent) * 100).toInt()
+    }
+
+    // Inline volume slider visibility — observed so toggling in Settings
+    // immediately shows/hides the slider on the main screen.
+    val showVolumeSliderLive by GeneralVariables.mutableShowTxVolumeSlider.observeAsState(
+        GeneralVariables.showTxVolumeSlider,
+    )
+    var showVolumeSlider by remember { mutableStateOf(GeneralVariables.showTxVolumeSlider) }
+    LaunchedEffect(showVolumeSliderLive) {
+        showVolumeSlider = showVolumeSliderLive ?: GeneralVariables.showTxVolumeSlider
+    }
+
     // Consume the one-shot celebration signal so LiveData doesn't replay it
     // on recomposition / resubscription.
     LaunchedEffect(qsoCompletedAt) {
@@ -95,8 +128,11 @@ fun FT8USApp(mainViewModel: MainViewModel) {
         }
     }
 
-    // QSO panel expand/collapse state
-    var qsoPanelExpanded by rememberSaveable { mutableStateOf(false) }
+    // QSO panel expand/collapse state. Exposed as an explicit State object so
+    // the movableContentOf lambda (created once in remember) can read .value
+    // and subscribe to changes without stale captures.
+    val qsoPanelExpandedState = rememberSaveable { mutableStateOf(false) }
+    var qsoPanelExpanded by qsoPanelExpandedState
 
     // Hunt / auto-answer-CQ mode. Mirrors GeneralVariables.autoFollowCQ (also
     // editable in Settings, which provides the persisted default at startup).
@@ -116,6 +152,25 @@ fun FT8USApp(mainViewModel: MainViewModel) {
     LaunchedEffect(preselectCallsign) {
         if (!preselectCallsign.isNullOrBlank()) {
             activeTab = FT8USTab.DECODE
+        }
+    }
+
+    // Wait for config (callsign, autoFollowCQ, etc.) to finish loading from
+    // the database before arming Hunt. LaunchedEffect(Unit) would race with
+    // the async config load and see an empty callsign. (#231)
+    val configLoaded by mainViewModel.mutableConfigLoaded.observeAsState(false)
+    LaunchedEffect(configLoaded) {
+        if (configLoaded) {
+            // Always sync the UI toggle from the persisted value so the Hunt
+            // chip reflects the correct state even when arming is skipped
+            // (e.g. callsign not yet configured).
+            huntEnabled = GeneralVariables.autoFollowCQ
+            if (shouldArmHuntOnStartup(
+                    GeneralVariables.autoFollowCQ, GeneralVariables.myCallsign)) {
+                mainViewModel.ft8TransmitSignal.armForHunt()
+                mainViewModel.ft8TransmitSignal.setActivated(true)
+                GeneralVariables.resetLaunchSupervision()
+            }
         }
     }
 
@@ -166,16 +221,26 @@ fun FT8USApp(mainViewModel: MainViewModel) {
         mainViewModel.qsoSheetMinimized.postValue(false)
     }
 
-    // Single definition of the panel, placed either docked in the column or
-    // floated over the content (see qsoPanelOverlaysContent).
-    val qsoPanel: @Composable (Modifier) -> Unit = { panelModifier ->
-        ActiveQsoPanel(
-            mainViewModel = mainViewModel,
-            expanded = qsoPanelExpanded,
-            onCollapse = { qsoPanelExpanded = false },
-            onReopenSheet = reopenQsoSheet,
-            modifier = panelModifier,
-        )
+    // Wrap reopenQsoSheet in rememberUpdatedState so the movableContentOf
+    // lambda (cached in remember) always invokes the latest version.
+    val currentReopenQsoSheetState = rememberUpdatedState(reopenQsoSheet)
+
+    // movableContentOf preserves the panel's internal Compose state (remember,
+    // observeAsState observers, synthTxLog, etc.) when it moves between the
+    // docked position (non-waterfall tabs) and the floating overlay position
+    // (waterfall tab). Without this, switching to/from the Waterfall tab
+    // destroys and recreates the composable at a new tree position, losing all
+    // RX/TX messages in the mini log. (#250 follow-up)
+    val qsoPanel = remember {
+        movableContentOf { panelModifier: Modifier ->
+            ActiveQsoPanel(
+                mainViewModel = mainViewModel,
+                expanded = qsoPanelExpandedState.value,
+                onCollapse = { qsoPanelExpandedState.value = false },
+                onReopenSheet = { currentReopenQsoSheetState.value() },
+                modifier = panelModifier,
+            )
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize().background(BgApp)) {
@@ -280,6 +345,17 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                 catState = catState,
                 showCatChip = showCatChip,
                 expanded = qsoPanelExpanded,
+                txVolume = txVolume,
+                showVolumeSlider = showVolumeSlider,
+                onVolumeChange = { newVolume ->
+                    txVolume = newVolume
+                    GeneralVariables.volumePercent = newVolume / 100f
+                    GeneralVariables.mutableVolumePercent.postValue(newVolume / 100f)
+                },
+                onVolumeChangeFinished = {
+                    mainViewModel.databaseOpr.writeConfig("volumeValue", txVolume.toString(), null)
+                    mainViewModel.baseRig?.connector?.setRFVolume(txVolume)
+                },
                 onCallCQ = {
                     if (GeneralVariables.myCallsign.isNullOrEmpty()) {
                         Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
@@ -319,6 +395,11 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                     val newSlot = if (current == 0) 1 else 0
                     mainViewModel.ft8TransmitSignal.sequential = newSlot
                     mainViewModel.ft8TransmitSignal.mutableSequential.postValue(newSlot)
+                    // Switching slots mid-QSO abandons the current contact.
+                    val target = mainViewModel.ft8TransmitSignal.mutableToCallsign.value
+                    if (FT8TransmitSignal.shouldResetTargetOnSlotToggle(target?.callsign)) {
+                        mainViewModel.ft8TransmitSignal.userResetToCQ()
+                    }
                 },
                 onToggleHunt = {
                     val newVal = !huntEnabled

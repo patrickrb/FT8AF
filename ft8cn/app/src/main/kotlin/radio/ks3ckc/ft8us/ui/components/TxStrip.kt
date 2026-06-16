@@ -25,6 +25,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
@@ -54,6 +58,13 @@ internal data class TxStripActionState(
     val cqIsStop: Boolean,
 )
 
+/**
+ * Clamp a volume value after a +/- step to the 0–100 range.
+ * Extracted so it can be unit-tested without Compose.
+ */
+internal fun clampVolume(current: Int, delta: Int): Int =
+    (current + delta).coerceIn(0, 100)
+
 internal fun txStripActionState(isActivated: Boolean, huntEnabled: Boolean) = TxStripActionState(
     huntDisabled = isActivated && !huntEnabled,
     huntActive = huntEnabled,
@@ -74,6 +85,10 @@ fun TxStrip(
     catState: CatConnectionState = CatConnectionState.DISCONNECTED,
     showCatChip: Boolean = false,
     expanded: Boolean = false,
+    txVolume: Int = 80,
+    showVolumeSlider: Boolean = false,
+    onVolumeChange: (Int) -> Unit = {},
+    onVolumeChangeFinished: () -> Unit = {},
     onCallCQ: () -> Unit,
     onStop: () -> Unit,
     onToggleSlot: () -> Unit,
@@ -269,6 +284,84 @@ fun TxStrip(
                 enabled = true,
                 onClick = onToggleSlot,
             ) { color -> FT8USIcons.ArrowUp(size = 18.dp, color = color, strokeWidth = 1.8f) }
+        }
+
+        // ---- Inline TX volume slider (togglable from Settings) ----
+        val volumeDecrease = stringResource(R.string.tx_volume_decrease)
+        val volumeIncrease = stringResource(R.string.tx_volume_increase)
+        if (showVolumeSlider) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                // Minus button
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(BgSurface3)
+                        .semantics { role = Role.Button; contentDescription = volumeDecrease }
+                        .clickable {
+                            onVolumeChange(clampVolume(txVolume, -5))
+                            onVolumeChangeFinished()
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "\u2212", // minus sign
+                        color = TextMuted,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = GeistMonoFamily,
+                    )
+                }
+
+                // Slider
+                IntSlider(
+                    value = txVolume,
+                    onValueChange = { v ->
+                        onVolumeChange(v.coerceIn(0, 100))
+                    },
+                    onValueChangeFinished = onVolumeChangeFinished,
+                    valueRange = 0f..100f,
+                    modifier = Modifier.weight(1f),
+                    thumbColor = Accent,
+                    activeTrackColor = Accent,
+                )
+
+                // Plus button
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(BgSurface3)
+                        .semantics { role = Role.Button; contentDescription = volumeIncrease }
+                        .clickable {
+                            onVolumeChange(clampVolume(txVolume, 5))
+                            onVolumeChangeFinished()
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "+",
+                        color = TextMuted,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = GeistMonoFamily,
+                    )
+                }
+
+                // Percentage label
+                Text(
+                    text = "${txVolume}%",
+                    color = TextPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = GeistMonoFamily,
+                    letterSpacing = 0.02.sp,
+                )
+            }
         }
     }
 }

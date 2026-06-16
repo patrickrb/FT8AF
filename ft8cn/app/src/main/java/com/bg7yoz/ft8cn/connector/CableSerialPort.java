@@ -35,6 +35,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.EnumSet;
 
+import radio.ks3ckc.ft8us.UsbPermissionIntentsKt;
+
 
 public class CableSerialPort {
     private static final String TAG = "CableSerialPort";
@@ -157,25 +159,8 @@ public class CableSerialPort {
                 && !usbManager.hasPermission(driver.getDevice())) {
             usbPermission = UsbPermission.Requested;
 
-            PendingIntent usbPermissionIntent;
-
-            //Starting from Android 12, PendingIntent requires explicit mutability flag.
-            //FLAG_MUTABLE is needed so the system can attach EXTRA_PERMISSION_GRANTED.
-            //Intent must be explicit (set package) to avoid MutableImplicitPendingIntent crash.
-            Intent permIntent = new Intent(INTENT_ACTION_GRANT_USB);
-            permIntent.setPackage(context.getPackageName());
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                usbPermissionIntent = PendingIntent.getBroadcast(context, 0
-                        , permIntent, PendingIntent.FLAG_MUTABLE);
-            } else {
-                usbPermissionIntent = PendingIntent.getBroadcast(context, 0
-                        , permIntent, 0);
-            }
-
-
-            //PendingIntent usbPermissionIntent = PendingIntent.getBroadcast(context, 0
-            //        , new Intent(INTENT_ACTION_GRANT_USB), PendingIntent.FLAG_MUTABLE);
-            // , new Intent(INTENT_ACTION_GRANT_USB), 0);
+            PendingIntent usbPermissionIntent =
+                    UsbPermissionIntentsKt.createUsbPermissionIntent(context, INTENT_ACTION_GRANT_USB);
 
 
             usbManager.requestPermission(driver.getDevice(), usbPermissionIntent);

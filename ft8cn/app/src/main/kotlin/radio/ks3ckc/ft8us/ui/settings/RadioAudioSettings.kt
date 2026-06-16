@@ -14,8 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,6 +45,9 @@ import com.bg7yoz.ft8cn.rigs.BaseRigOperation
 import com.bg7yoz.ft8cn.rigs.InstructionSet
 import com.bg7yoz.ft8cn.ui.AudioDeviceSpinnerAdapter
 import radio.ks3ckc.ft8us.theme.*
+import radio.ks3ckc.ft8us.ui.components.FT8USIconButton
+import radio.ks3ckc.ft8us.ui.components.FT8USIcons
+import radio.ks3ckc.ft8us.ui.components.IntSlider
 import radio.ks3ckc.ft8us.ui.components.GlassCard
 import radio.ks3ckc.ft8us.ui.components.SettingsRow
 import radio.ks3ckc.ft8us.ui.components.Toggle
@@ -370,8 +371,7 @@ fun RadioAudioSettings(
                 // Never let the user hide every band; at least one must remain.
                 if (updated.size >= OperationBand.getAllWaveLengths().size) return@BandToggleDialog
                 excludedBands = updated
-                GeneralVariables.excludedBands.clear()
-                GeneralVariables.excludedBands.addAll(updated)
+                GeneralVariables.excludedBands = java.util.HashSet(updated)
                 mainViewModel.databaseOpr.writeConfig(
                     "excludedBands", GeneralVariables.excludedBandsToCsv(), null,
                 )
@@ -613,6 +613,23 @@ fun RadioAudioSettings(
                         showChevron = true,
                         onClick = { showTxVolume = true },
                     )
+                    SectionDivider()
+                    run {
+                        var showSlider by remember { mutableStateOf(GeneralVariables.showTxVolumeSlider) }
+                        SettingsRow(
+                            label = stringResource(R.string.settings_show_volume_slider),
+                            description = stringResource(R.string.settings_show_volume_slider_desc),
+                            toggle = showSlider,
+                            onToggleChange = { enabled ->
+                                showSlider = enabled
+                                GeneralVariables.showTxVolumeSlider = enabled
+                                GeneralVariables.mutableShowTxVolumeSlider.postValue(enabled)
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "showTxVolumeSlider", if (enabled) "1" else "0", null,
+                                )
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -796,21 +813,49 @@ private fun TxVolumeSliderDialog(
                 fontSize = 48.sp,
             )
 
-            Slider(
-                value = current.toFloat(),
-                onValueChange = { v ->
-                    val clamped = v.toInt().coerceIn(0, 100)
-                    if (clamped != current) {
-                        current = clamped
-                        onChange(clamped)
-                    }
-                },
-                valueRange = 0f..100f,
-                colors = SliderDefaults.colors(
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                FT8USIconButton(
+                    onClick = {
+                        val clamped = (current - 5).coerceIn(0, 100)
+                        if (clamped != current) {
+                            current = clamped
+                            onChange(clamped)
+                        }
+                    },
+                    size = 36.dp,
+                ) {
+                    FT8USIcons.Minus(color = Accent, size = 16.dp)
+                }
+                IntSlider(
+                    value = current,
+                    onValueChange = { v ->
+                        val clamped = v.coerceIn(0, 100)
+                        if (clamped != current) {
+                            current = clamped
+                            onChange(clamped)
+                        }
+                    },
+                    valueRange = 0f..100f,
+                    modifier = Modifier.weight(1f),
                     thumbColor = Accent,
                     activeTrackColor = Accent,
-                ),
-            )
+                )
+                FT8USIconButton(
+                    onClick = {
+                        val clamped = (current + 5).coerceIn(0, 100)
+                        if (clamped != current) {
+                            current = clamped
+                            onChange(clamped)
+                        }
+                    },
+                    size = 36.dp,
+                ) {
+                    FT8USIcons.Plus(color = Accent, size = 16.dp)
+                }
+            }
 
             Text(
                 text = stringResource(R.string.settings_tx_volume_advice),

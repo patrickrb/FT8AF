@@ -67,7 +67,7 @@ public class Ft8MessageTest {
         assertThat(msg.isValid).isFalse();
         assertThat(msg.isQSL_Callsign).isFalse();
         assertThat(msg.isWeakSignal).isFalse();
-        assertThat(msg.snr).isEqualTo(0);
+        assertThat(msg.snr).isEqualTo(Ft8Message.SNR_UNKNOWN);
         assertThat(msg.score).isEqualTo(0);
     }
 
@@ -452,5 +452,72 @@ public class Ft8MessageTest {
         com.bg7yoz.ft8cn.ft8transmit.TransmitCallsign tc = msg.getToCallTransmitCallsign();
         assertThat(tc.snr).isEqualTo(5);
         assertThat(tc.sequential).isEqualTo(0);
+    }
+
+    // ---- SNR_UNKNOWN sentinel tests -----------------------------------------
+
+    @Test
+    public void defaultSnr_isUnknownSentinel() {
+        Ft8Message msg = new Ft8Message(FT8Common.FT8_MODE);
+        assertThat(msg.snr).isEqualTo(Ft8Message.SNR_UNKNOWN);
+        assertThat(msg.hasSnr()).isFalse();
+    }
+
+    @Test
+    public void hasSnr_trueForZero() {
+        // 0 dB is a legitimate SNR value — not the sentinel.
+        Ft8Message msg = new Ft8Message(FT8Common.FT8_MODE);
+        msg.snr = 0;
+        assertThat(msg.hasSnr()).isTrue();
+    }
+
+    @Test
+    public void hasSnr_trueForNegative() {
+        Ft8Message msg = new Ft8Message(FT8Common.FT8_MODE);
+        msg.snr = -24;
+        assertThat(msg.hasSnr()).isTrue();
+    }
+
+    @Test
+    public void hasSnr_falseForSentinel() {
+        Ft8Message msg = new Ft8Message(FT8Common.FT8_MODE);
+        msg.snr = Ft8Message.SNR_UNKNOWN;
+        assertThat(msg.hasSnr()).isFalse();
+    }
+
+    @Test
+    public void getdB_unknownReturnsPlaceholder() {
+        Ft8Message msg = new Ft8Message(FT8Common.FT8_MODE);
+        // snr defaults to SNR_UNKNOWN
+        assertThat(msg.getdB()).isEqualTo("--");
+    }
+
+    @Test
+    public void getdB_knownReturnsNumericString() {
+        Ft8Message msg = new Ft8Message(FT8Common.FT8_MODE);
+        msg.snr = -15;
+        assertThat(msg.getdB()).isEqualTo("-15");
+        msg.snr = 0;
+        assertThat(msg.getdB()).isEqualTo("0");
+    }
+
+    @Test
+    public void getFromCallTransmitCallsign_unknownSnr_fallsBackToZero() {
+        Ft8Message msg = new Ft8Message("CQ", "K1ABC", "FN42");
+        msg.utcTime = 0;
+        // snr is SNR_UNKNOWN by default
+        msg.freq_hz = 1500f;
+        com.bg7yoz.ft8cn.ft8transmit.TransmitCallsign tc = msg.getFromCallTransmitCallsign();
+        assertThat(tc.snr).isEqualTo(0);
+    }
+
+    @Test
+    public void getToCallTransmitCallsign_unknownSnr_fallsBackToZero() {
+        Ft8Message msg = new Ft8Message("K1ABC", "W9XYZ", "FN42");
+        msg.utcTime = 0;
+        // snr is SNR_UNKNOWN by default, report is -100 (no report) -> falls back to SNR
+        msg.freq_hz = 1500f;
+        com.bg7yoz.ft8cn.ft8transmit.TransmitCallsign tc = msg.getToCallTransmitCallsign();
+        assertThat(tc.snr).isEqualTo(0);
     }
 }

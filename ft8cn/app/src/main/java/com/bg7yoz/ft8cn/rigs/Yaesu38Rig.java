@@ -24,21 +24,24 @@ public class Yaesu38Rig extends BaseRig {
 
     private Timer readFreqTimer = new Timer();
 
+
+    @Override
+    public void onDisconnecting() {
+        if (readFreqTimer != null) {
+            readFreqTimer.cancel();
+            readFreqTimer.purge();
+            readFreqTimer = null;
+        }
+    }
     private TimerTask readTask() {
         return new TimerTask() {
             @Override
             public void run() {
                 try {
-                    if (!isConnected()) {
-                        readFreqTimer.cancel();
-                        readFreqTimer.purge();
-                        readFreqTimer = null;
-                        return;
-                    }
-                    if (isPttOn()) {
-                        readMeters();
-                    } else {
-                        readFreqFromRig();
+                    switch (ReadTaskAction.decide(isConnected(), isPttOn())) {
+                        case SKIP:        return;
+                        case READ_METERS: readMeters(); break;
+                        case READ_FREQ:   readFreqFromRig(); break;
                     }
                 } catch (Exception e) {
                     Log.e(TAG, "readFreq error:" + e.getMessage());

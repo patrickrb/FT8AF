@@ -166,7 +166,7 @@
     <string name="decode_empty_forme_title">나를 호출하는 국 없음</string>
     <string name="decode_empty_forme_body">지금 당신의 콜사인을 호출하는 국이 없습니다.</string>
     <string name="decode_empty_default_title">디코드된 신호 없음</string>
-    <string name="decode_empty_default_body">FT8 신호가 나타나기를 기다리는 중...</string>
+    <string name="decode_empty_default_body">%1$s 신호가 나타나기를 기다리는 중...</string>
     <string name="decode_label_calling">→ 호출 중</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ 나에게</string>
@@ -540,4 +540,11 @@
     <string name="settings_language_desc">앱 표시 언어</string>
     <string name="settings_language_system">시스템 기본값</string>
 
+    <!-- Untranslated — added for parity; translate when localization pass runs -->
+    <string name="settings_show_volume_slider">Show Volume Slider</string>
+    <string name="settings_show_volume_slider_desc">Display TX volume slider on main screen</string>
+    <string name="settings_hunt_cq">Hunt + CQ</string>
+    <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
+    <string name="tx_volume_decrease">Decrease TX volume</string>
+    <string name="tx_volume_increase">Increase TX volume</string>
 </resources>

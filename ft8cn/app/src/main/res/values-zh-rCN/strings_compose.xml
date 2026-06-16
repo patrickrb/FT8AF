@@ -124,7 +124,7 @@
     <string name="decode_empty_forme_title">没有呼叫您的电台</string>
     <string name="decode_empty_forme_body">当前没有电台在呼叫您的呼号。</string>
     <string name="decode_empty_default_title">未解码到信号</string>
-    <string name="decode_empty_default_body">正在等待 FT8 信号出现...</string>
+    <string name="decode_empty_default_body">正在等待 %1$s 信号出现...</string>
     <string name="decode_label_calling">→ 正在呼叫</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ 呼叫您</string>
@@ -498,4 +498,11 @@
     <string name="settings_time_suggest_label">近期平均 DT：%1$s</string>
     <string name="settings_time_suggest_none">暂无解码 — 开始接收以获取建议。</string>
     <string name="settings_time_suggest_apply">应用建议的校正</string>
+    <!-- Untranslated — added for parity; translate when localization pass runs -->
+    <string name="settings_show_volume_slider">Show Volume Slider</string>
+    <string name="settings_show_volume_slider_desc">Display TX volume slider on main screen</string>
+    <string name="settings_hunt_cq">Hunt + CQ</string>
+    <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
+    <string name="tx_volume_decrease">Decrease TX volume</string>
+    <string name="tx_volume_increase">Increase TX volume</string>
 </resources>

@@ -63,6 +63,7 @@ import com.bg7yoz.ft8cn.database.ControlMode;
 import com.bg7yoz.ft8cn.database.DatabaseOpr;
 import com.bg7yoz.ft8cn.database.OnAfterQueryFollowCallsigns;
 import com.bg7yoz.ft8cn.database.OperationBand;
+import com.bg7yoz.ft8cn.database.RigNameList;
 import com.bg7yoz.ft8cn.flex.FlexRadio;
 import com.bg7yoz.ft8cn.flex.RadioTcpClient;
 import com.bg7yoz.ft8cn.ft8listener.FT8SignalListener;
@@ -114,6 +115,7 @@ import com.bg7yoz.ft8cn.wave.HamRecorder;
 import com.bg7yoz.ft8cn.wave.OnGetVoiceDataDone;
 import com.bg7yoz.ft8cn.x6100.X6100Radio;
 
+import radio.ks3ckc.ft8us.UsbPermissionIntentsKt;
 import radio.ks3ckc.ft8us.pskreporter.PskReporterSender;
 
 import java.io.File;
@@ -128,6 +130,7 @@ import java.util.concurrent.Executors;
 
 public class MainViewModel extends ViewModel {
     String TAG = "ft8cn MainViewModel";
+    public final MutableLiveData<Boolean> mutableConfigLoaded = new MutableLiveData<>(false);
     public boolean configIsLoaded = false;
 
     /** Write debug line to the app's external files debug.log */
@@ -934,11 +937,34 @@ public class MainViewModel extends ViewModel {
         // or Auto-CQ after QSO is enabled. (Must come after setActivated(true),
         // which clears the flag on its deactivation path.)
         ft8TransmitSignal.beginSingleQso();
+        // When the tapped message is directed at us (someone answering our CQ),
+        // auto-derive the function order so we reply with RPT (order 2) instead
+        // of grid (order 1). For messages not directed at us (we're initiating),
+        // start at order 1 as before.
+        int order = callStationOrder(message.getCallsignTo());
         ft8TransmitSignal.setTransmit(
                 message.getFromCallTransmitCallsign(),
-                1,
+                order,
                 message.extraInfo);
         ft8TransmitSignal.transmitNow();
+    }
+
+    /**
+     * Determine the starting function order when the user taps a decoded message
+     * to call a station. If the message is directed at us (someone answering our
+     * CQ), auto-derive so we reply with the correct next step (RPT). Otherwise
+     * start at order 1 (grid, initiating a new QSO).
+     *
+     * <p>Package-visible for testing.
+     *
+     * @param callsignTo message's "to" callsign (empty/CQ for broadcast messages)
+     * @return function order: -1 for auto-derive, 1 for initiate
+     */
+    static int callStationOrder(String callsignTo) {
+        if (callsignTo != null && GeneralVariables.checkIsMyCallsign(callsignTo)) {
+            return -1; // auto-derive: setTransmit will compute the correct next step
+        }
+        return 1; // initiating: start with grid
     }
 
     // ===== FT8 DXpedition Hound mode =====
@@ -1329,6 +1355,9 @@ public class MainViewModel extends ViewModel {
      */
     private void connectRig() {
 
+        if (baseRig != null) {
+            baseRig.onDisconnecting();
+        }
         baseRig = null;
         //determine the rig type: ICOM, YAESU 2, YAESU 3
         switch (GeneralVariables.instructionSet) {
@@ -1414,6 +1443,21 @@ public class MainViewModel extends ViewModel {
             case InstructionSet.KENWOOD_TS440:
                 baseRig = new KenwoodTS440Rig();//KENWOOD TS-440S (TS-570 CAT, USB mode)
                 break;
+        }
+
+        // Store the rig name for PSKReporter software string.
+        // Use the user-selected model name from RigNameList (same source as the
+        // Settings rig picker) rather than the Java class name, which can
+        // differ (e.g. YaesuDX10Rig for FT-710).
+        try {
+            android.content.Context ctx = GeneralVariables.getMainContext();
+            if (ctx != null) {
+                RigNameList rigList = RigNameList.getInstance(ctx);
+                GeneralVariables.myRigName =
+                        rigList.getRigNameByIndex(GeneralVariables.modelNo).modelName;
+            }
+        } catch (Exception e) {
+            GeneralVariables.myRigName = "";
         }
 
         if ((GeneralVariables.instructionSet == InstructionSet.FLEX_NETWORK)
@@ -1633,6 +1677,8 @@ public class MainViewModel extends ViewModel {
         // the rig indefinitely. Tear it down here too.
         stopCatLivenessWatchdog();
         PskReporterSender.INSTANCE.stop();
+        getQTHThreadPool.shutdown();
+        sendWaveDataThreadPool.shutdown();
     }
 
     private static final String ACTION_USB_AUDIO_PERMISSION =
@@ -1655,14 +1701,8 @@ public class MainViewModel extends ViewModel {
         }
 
         Log.d(TAG, "Requesting USB permission for audio device: " + device.getProductName());
-        PendingIntent permissionIntent;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissionIntent = PendingIntent.getBroadcast(context, 0,
-                    new Intent(ACTION_USB_AUDIO_PERMISSION), PendingIntent.FLAG_MUTABLE);
-        } else {
-            permissionIntent = PendingIntent.getBroadcast(context, 0,
-                    new Intent(ACTION_USB_AUDIO_PERMISSION), PendingIntent.FLAG_IMMUTABLE);
-        }
+        PendingIntent permissionIntent = UsbPermissionIntentsKt.createUsbPermissionIntent(
+                context, ACTION_USB_AUDIO_PERMISSION);
 
         BroadcastReceiver permReceiver = new BroadcastReceiver() {
             @Override

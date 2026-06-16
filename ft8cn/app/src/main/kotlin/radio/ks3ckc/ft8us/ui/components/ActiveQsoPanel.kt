@@ -89,12 +89,19 @@ internal fun buildQsoLog(
 
     val entries = mutableListOf<QsoLogEntry>()
     messageList?.forEach { msg ->
-        val from = msg.callsignFrom ?: ""
+        // getCallsignFrom() handles null and strips angle brackets from
+        // hashed callsigns (e.g. "<CALL>" → "CALL") so they match displayCallsign. (#255)
+        val from = msg.getCallsignFrom()
         // Only the target station's traffic appears in this panel. Own-callsign
         // loopback (from == us) is filtered upstream (OwnTxEchoFilter) and there
         // is deliberately no decoded-list TX branch, so anything not from the
         // target is skipped here — TX rows come solely from synthTx below.
         if (!from.equals(displayCallsign, ignoreCase = true)) return@forEach
+
+        // Skip CQ/DE/QRZ messages — the target is calling for contacts, not
+        // working someone else, so they are neither RX nor BUSY. (#254)
+        // Guard: checkIsCQ() calls callsignTo.trim() which NPEs on null.
+        if (msg.callsignTo != null && msg.checkIsCQ()) return@forEach
 
         val to = msg.callsignTo ?: ""
         val toIsMe = to.equals(myCallsign, ignoreCase = true) ||
@@ -106,7 +113,7 @@ internal fun buildQsoLog(
                 direction = if (toIsMe) QsoLogEntry.Direction.RX else QsoLogEntry.Direction.BUSY,
                 utcTime = msg.utcTime,
                 messageText = msg.getMessageText(),
-                snr = msg.snr,
+                snr = if (msg.hasSnr()) msg.snr else null,
             )
         )
     }
@@ -204,9 +211,40 @@ fun ActiveQsoPanel(
     // catch up. We log one row per transmission (the rising edge of isTransmitting) rather
     // than de-duplicating by text, so repeated messages — e.g. several unanswered RR73s —
     // each get their own row. State resets per target. See decideTxLog for the rule.
-    val synthTxLog = remember(displayCallsign) { mutableStateListOf<QsoLogEntry>() }
-    var wasTransmitting by remember(displayCallsign) { mutableStateOf(false) }
-    var pendingTxLog by remember(displayCallsign) { mutableStateOf(false) }
+    //
+    // NOTE: no key parameter on remember — keying on displayCallsign caused the TX log
+    // to be lost on tab switches when LiveData observers briefly emit null. Instead we
+    // track the target manually and clear only on genuine target changes. (#250)
+    val synthTxLog = remember { mutableStateListOf<QsoLogEntry>() }
+    var wasTransmitting by remember { mutableStateOf(false) }
+    var pendingTxLog by remember { mutableStateOf(false) }
+    var synthTxTarget by remember { mutableStateOf<String?>(null) }
+
+    // Clear TX state when the target genuinely changes to a different station.
+    // Also handles the same-callsign-new-QSO edge case: when a QSO ends
+    // (displayCallsign → null for > 500ms) and the same station is worked
+    // again, the old TX rows must not carry over. A short delay distinguishes
+    // real QSO ends from tab-switch flickers (LiveData re-subscription emits
+    // null for 1–2 frames). LaunchedEffect cancels the pending delay when the
+    // key changes, so flickers never clear synthTxTarget. (#250 follow-up)
+    LaunchedEffect(displayCallsign) {
+        if (displayCallsign != null) {
+            if (displayCallsign != synthTxTarget) {
+                synthTxLog.clear()
+                wasTransmitting = false
+                pendingTxLog = false
+            }
+            synthTxTarget = displayCallsign
+        } else if (synthTxTarget != null) {
+            // Target went null (CQ reset). Wait briefly — tab-switch flickers
+            // resolve within a frame (~16ms). If still null after the delay,
+            // it's a real QSO end; clear synthTxTarget so a subsequent QSO
+            // with the same callsign is treated as fresh.
+            kotlinx.coroutines.delay(500)
+            synthTxTarget = null
+        }
+    }
+
     LaunchedEffect(isTransmitting, transmittingMessage, displayCallsign) {
         val msg = transmittingMessage.orEmpty()
         val decision = decideTxLog(

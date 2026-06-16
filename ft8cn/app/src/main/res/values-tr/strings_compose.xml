@@ -155,7 +155,7 @@
     <string name="decode_empty_forme_title">Size çağrı yok</string>
     <string name="decode_empty_forme_body">Şu anda çağrı işaretinizi çağıran istasyon yok.</string>
     <string name="decode_empty_default_title">Çözümlenen sinyal yok</string>
-    <string name="decode_empty_default_body">FT8 sinyallerinin görünmesi bekleniyor...</string>
+    <string name="decode_empty_default_body">%1$s sinyallerinin görünmesi bekleniyor...</string>
     <string name="decode_label_calling">→ ÇAĞIRIYOR</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ SİZE</string>
@@ -529,4 +529,11 @@
     <string name="settings_language_desc">Uygulama görüntüleme dili</string>
     <string name="settings_language_system">Sistem varsayılanı</string>
 
+    <!-- Untranslated — added for parity; translate when localization pass runs -->
+    <string name="settings_show_volume_slider">Show Volume Slider</string>
+    <string name="settings_show_volume_slider_desc">Display TX volume slider on main screen</string>
+    <string name="settings_hunt_cq">Hunt + CQ</string>
+    <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
+    <string name="tx_volume_decrease">Decrease TX volume</string>
+    <string name="tx_volume_increase">Increase TX volume</string>
 </resources>

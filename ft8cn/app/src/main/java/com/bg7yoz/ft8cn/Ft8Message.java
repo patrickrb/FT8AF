@@ -30,12 +30,16 @@ import java.util.ArrayList;
 
 public class Ft8Message {
     private static String TAG = "Ft8Message";
+
+    /** Sentinel value meaning "the decoder did not set an SNR for this candidate". */
+    public static final int SNR_UNKNOWN = Integer.MIN_VALUE;
+
     public int i3 = 0;
     public int n3 = 0;
     public int signalFormat = FT8Common.FT8_MODE;//whether this is an FT8 format message
     public long utcTime;//UTC time
     public boolean isValid;//whether this is valid information
-    public int snr = 0;//signal-to-noise ratio
+    public int snr = SNR_UNKNOWN;//signal-to-noise ratio
     public float time_sec = 0;//time offset (seconds)
     public float freq_hz = 0;//frequency
     public int score = 0;//score
@@ -94,7 +98,10 @@ public class Ft8Message {
 
     public boolean isWeakSignal=false;
 
-
+    /** @return true when the decoder actually set an SNR value for this message. */
+    public boolean hasSnr() {
+        return snr != SNR_UNKNOWN;
+    }
 
 
 
@@ -102,9 +109,9 @@ public class Ft8Message {
     @SuppressLint({"SimpleDateFormat", "DefaultLocale"})
     @Override
     public String toString() {
-        return String.format("%s %d %+4.2f %4.0f  ~  %s Hash : %#06X",
+        return String.format("%s %s %+4.2f %4.0f  ~  %s Hash : %#06X",
                 new SimpleDateFormat("HHmmss").format(utcTime),
-                snr, time_sec, freq_hz, getMessageText(), messageHash);
+                hasSnr() ? String.valueOf(snr) : "--", time_sec, freq_hz, getMessageText(), messageHash);
     }
 
     /**
@@ -309,7 +316,7 @@ public class Ft8Message {
      * @return String For convenient display, the return value is a string.
      */
     public String getdB() {
-        return String.valueOf(snr);
+        return hasSnr() ? String.valueOf(snr) : "--";
     }
 
     /**
@@ -607,13 +614,13 @@ t71     Telemetry data, up to 18 hex digits
     public TransmitCallsign getFromCallTransmitCallsign() {
         return new TransmitCallsign(this.i3, this.n3, this.callsignFrom, freq_hz
                 , this.getSequence()
-                , snr);
+                , hasSnr() ? snr : 0);
     }
 
     //Get the receiver's transmit callsign object. NOTE: the sequence is opposite to the sender's!!!
     public TransmitCallsign getToCallTransmitCallsign() {
         if (report == -100) {//if no signal report in the message, use the sender's SNR instead
-            return new TransmitCallsign(this.i3, this.n3, this.callsignTo, freq_hz, (this.getSequence() + 1) % 2, snr);
+            return new TransmitCallsign(this.i3, this.n3, this.callsignTo, freq_hz, (this.getSequence() + 1) % 2, hasSnr() ? snr : 0);
         } else {
             return new TransmitCallsign(this.i3, this.n3, this.callsignTo, freq_hz, (this.getSequence() + 1) % 2, report);
         }

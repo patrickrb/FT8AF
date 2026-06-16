@@ -83,6 +83,9 @@ public class GeneralVariables {
     public static MutableLiveData<Float> mutableVolumePercent = new MutableLiveData<>();
     public static float volumePercent = 0.8f;//Audio playback volume, as a percentage
 
+    public static boolean showTxVolumeSlider = true;//Show inline TX volume slider on main screen
+    public static MutableLiveData<Boolean> mutableShowTxVolumeSlider = new MutableLiveData<>(true);
+
     public static int flexMaxRfPower = 10;//Flex radio max transmit power
     public static int flexMaxTunePower = 10;//Flex radio max tune power
 
@@ -127,6 +130,10 @@ public class GeneralVariables {
     public static final Map<String, String> dxccMap = new ConcurrentHashMap<>();
     public static final Map<Integer, Integer> cqMap = new ConcurrentHashMap<>();
     public static final Map<Integer, Integer> ituMap = new ConcurrentHashMap<>();
+    // Set to true after getQslDxccToMap() finishes populating the zone maps.
+    // Until then, "new DXCC/zone" flags are suppressed to avoid a race where
+    // everything shows as new because the maps haven't loaded yet.
+    public static volatile boolean zoneMapReady = false;
     // Already-contacted US states (USPS code, e.g. "ND"). Populated at startup from the
     // logbook by DatabaseOpr.getQslDxccToMap(), deriving each QSO's state from its grid.
     public static final java.util.Set<String> workedStates =
@@ -329,6 +336,7 @@ public class GeneralVariables {
 
     public static String myCallsign = "";//My callsign
     public static String myAntenna = "";
+    public static String myRigName = "";  // Set by MainViewModel.connectRig(); used in PSKReporter software string
     public static int myPowerWatts = 0;    // 0 = not set, displays as "--"
     public static String toModifier = "";//Call modifier
     private static float baseFrequency = 1000;//Audio frequency
@@ -378,7 +386,7 @@ public class GeneralVariables {
     public static MutableLiveData<Integer> mutableBandChange = new MutableLiveData<>();//Band index change
     //Band names (e.g. "6m","60m") the user has hidden from the band pickers. Empty = show all.
     //Persisted in config as a comma-separated list under the key "excludedBands".
-    public static java.util.HashSet<String> excludedBands = new java.util.HashSet<>();
+    public static volatile java.util.HashSet<String> excludedBands = new java.util.HashSet<>();
 
     public static boolean isBandExcluded(String waveLength) {
         return excludedBands.contains(waveLength);
@@ -406,7 +414,8 @@ public class GeneralVariables {
     public static String icomPassword = "";
 
 
-    public static boolean autoFollowCQ = true;//Auto-follow CQ
+    public static boolean autoFollowCQ = false;//Auto-follow CQ
+    public static boolean huntCallsCQ = false;//Hunt+CQ hybrid: call CQ when idle, answer CQs when heard
     public static boolean autoCallFollow = true;//Auto-call followed callsigns
     public static boolean autoUpdateGridFromGPS = false;//Use device GPS to keep Maidenhead grid current
     public static ArrayList<String> QSL_Callsign_list = new ArrayList<>();//Successfully QSL'd callsigns

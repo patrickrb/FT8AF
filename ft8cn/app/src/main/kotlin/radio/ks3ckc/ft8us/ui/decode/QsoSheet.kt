@@ -380,7 +380,7 @@ private fun StatCardsRow(message: Ft8Message) {
     ) {
         StatCard(
             label = stringResource(R.string.qso_stat_signal),
-            value = "${message.snr} dB",
+            value = if (message.hasSnr()) "${message.snr} dB" else "-- dB",
             modifier = Modifier.weight(1f),
         )
         StatCard(
@@ -459,7 +459,8 @@ private fun computeCurrentStepIndex(
     isLiveQso: Boolean,
     liveFunctionOrder: Int,
 ): Int {
-    val isFullyComplete = message.isQSL_Callsign && !isLiveQso
+    val isFullyComplete = !isLiveQso && (message.isQSL_Callsign ||
+        GeneralVariables.checkQSLCallsign(message.getCallsignFrom()))
     return when {
         isFullyComplete -> 5
         isLiveQso -> when (liveFunctionOrder) {
@@ -529,6 +530,8 @@ private fun QsoSequenceVisualizer(
     val myCall = GeneralVariables.myCallsign ?: ""
     val myGrid = GeneralVariables.getMyMaidenhead4Grid() ?: ""
 
+    val snrDisplay = if (message.hasSnr()) "${message.snr}" else "--"
+
     val steps = listOf(
         QsoStep(
             label = stringResource(R.string.qso_step_send_call),
@@ -538,12 +541,12 @@ private fun QsoSequenceVisualizer(
         QsoStep(
             label = stringResource(R.string.qso_step_report_sent),
             txRxLabel = "RX",
-            messagePreview = "$myCall $callsign ${message.snr}",
+            messagePreview = "$myCall $callsign $snrDisplay",
         ),
         QsoStep(
             label = stringResource(R.string.qso_step_roger),
             txRxLabel = "TX",
-            messagePreview = "$callsign $myCall R${message.snr}",
+            messagePreview = "$callsign $myCall R$snrDisplay",
         ),
         QsoStep(
             label = stringResource(R.string.qso_step_confirm),

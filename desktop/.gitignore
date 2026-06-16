@@ -1,0 +1,14 @@
+# Rust
+/src-tauri/target/
+
+# Node / frontend
+/node_modules/
+/dist/
+.vite/
+
+# Env
+.env
+.env.local
+
+# logs
+*.log

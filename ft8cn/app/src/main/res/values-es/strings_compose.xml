@@ -124,7 +124,7 @@
     <string name="decode_empty_forme_title">Sin llamadas para ti</string>
     <string name="decode_empty_forme_body">Ninguna estación está llamando a tu indicativo ahora mismo.</string>
     <string name="decode_empty_default_title">Sin señales decodificadas</string>
-    <string name="decode_empty_default_body">Esperando que aparezcan señales FT8...</string>
+    <string name="decode_empty_default_body">Esperando que aparezcan señales %1$s...</string>
     <string name="decode_label_calling">→ LLAMANDO</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ PARA TI</string>
@@ -498,4 +498,11 @@
     <string name="settings_time_suggest_label">DT promedio reciente: %1$s</string>
     <string name="settings_time_suggest_none">Aún no hay decodificaciones — empieza a recibir para obtener una sugerencia.</string>
     <string name="settings_time_suggest_apply">Aplicar corrección sugerida</string>
+    <!-- Untranslated — added for parity; translate when localization pass runs -->
+    <string name="settings_show_volume_slider">Show Volume Slider</string>
+    <string name="settings_show_volume_slider_desc">Display TX volume slider on main screen</string>
+    <string name="settings_hunt_cq">Hunt + CQ</string>
+    <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
+    <string name="tx_volume_decrease">Decrease TX volume</string>
+    <string name="tx_volume_increase">Increase TX volume</string>
 </resources>

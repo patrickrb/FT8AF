@@ -360,11 +360,11 @@ public class ShareLogs {
                 Uri uri = context.getContentResolver().insert(
                         MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
                 if (uri == null) return null;
-                OutputStream os = context.getContentResolver().openOutputStream(uri);
-                FileInputStream is = new FileInputStream(source);
-                copyStream(is, os);
-                is.close();
-                if (os != null) os.close();
+                try (OutputStream os = context.getContentResolver().openOutputStream(uri);
+                     FileInputStream is = new FileInputStream(source)) {
+                    if (os == null) return null;
+                    copyStream(is, os);
+                }
                 return "Download/FT8AF/" + displayName;
             } else {
                 File downloads = new File(Environment.getExternalStoragePublicDirectory(
@@ -374,11 +374,10 @@ public class ShareLogs {
                     downloads.mkdirs();
                 }
                 File out = new File(downloads, displayName);
-                FileInputStream is = new FileInputStream(source);
-                FileOutputStream os = new FileOutputStream(out);
-                copyStream(is, os);
-                is.close();
-                os.close();
+                try (FileInputStream is = new FileInputStream(source);
+                     FileOutputStream os = new FileOutputStream(out)) {
+                    copyStream(is, os);
+                }
                 return "Download/FT8AF/" + displayName;
             }
         } catch (IOException e) {

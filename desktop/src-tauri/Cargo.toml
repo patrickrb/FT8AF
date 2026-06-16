@@ -1,0 +1,45 @@
+[package]
+name = "ft8af"
+version = "0.1.0"
+edition = "2021"
+description = "FT8AF desktop — FT8 transceiver client"
+license = "GPL-3.0-or-later"
+
+[lib]
+name = "ft8af"
+path = "src/lib.rs"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+dirs = "5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "1"
+parking_lot = "0.12"
+once_cell = "1"
+log = "0.4"
+chrono = "0.4"
+# audio I/O + resampling
+cpal = "0.15"
+rubato = "0.15"
+ringbuf = "0.4"
+# FFT for the live waterfall spectrum
+rustfft = "6"
+# serial CAT control
+serialport = "4"
+# HTTP client for FLrig XML-RPC (localhost only — TLS disabled)
+ureq = { version = "2", default-features = false }
+# dynamic loading of the Hamlib shared library (hamlib-4.dll / libhamlib)
+libloading = "0.8"
+# persistence (bundled SQLite — no system dependency)
+rusqlite = { version = "0.32", features = ["bundled"] }
+# async runtime for the UTC scheduler
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"] }
+
+# The C FT8 DSP core (kgoba ft8_lib @ 6f528128 + ft8cn_glue/gfsk.c) is compiled
+# from source in build.rs via the `cc` crate — no prebuilt .so, so this links
+# natively on Windows/macOS/Linux.
+[build-dependencies]
+cc = "1"
+tauri-build = { version = "2", features = [] }

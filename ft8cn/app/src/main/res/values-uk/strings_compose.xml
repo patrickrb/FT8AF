@@ -155,7 +155,7 @@
     <string name="decode_empty_forme_title">Немає викликів для вас</string>
     <string name="decode_empty_forme_body">Зараз жодна станція не викликає ваш позивний.</string>
     <string name="decode_empty_default_title">Сигналів не декодовано</string>
-    <string name="decode_empty_default_body">Очікування появи сигналів FT8...</string>
+    <string name="decode_empty_default_body">Очікування появи сигналів %1$s...</string>
     <string name="decode_label_calling">→ ВИКЛИК</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ ВАМ</string>
@@ -529,4 +529,11 @@
     <string name="settings_language_desc">Мова відображення застосунку</string>
     <string name="settings_language_system">Системна за замовчуванням</string>
 
+    <!-- Untranslated — added for parity; translate when localization pass runs -->
+    <string name="settings_show_volume_slider">Show Volume Slider</string>
+    <string name="settings_show_volume_slider_desc">Display TX volume slider on main screen</string>
+    <string name="settings_hunt_cq">Hunt + CQ</string>
+    <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
+    <string name="tx_volume_decrease">Decrease TX volume</string>
+    <string name="tx_volume_increase">Increase TX volume</string>
 </resources>

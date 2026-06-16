@@ -52,11 +52,22 @@ public class OperationBand {
      * @return
      */
     public Band getBandByIndex(int index){
-        if (index==-1||index>=bandList.size()){
+        if (!isValidBandIndex(index)){
             return new Band(getDefaultBand(),getDefaultWaveLength());
         }else {
             return bandList.get(index);
         }
+    }
+
+    /**
+     * True when {@code index} is a valid position in {@link #bandList}.
+     * Centralises the bounds check so every accessor rejects both negative
+     * indices and indices at/after the end. {@link #getBandFreq(int)} previously
+     * used an off-by-one {@code index > size} guard that let {@code index == size}
+     * through into {@code bandList.get(index)} and threw IndexOutOfBounds.
+     */
+    static boolean isValidBandIndex(int index){
+        return index>=0 && index<bandList.size();
     }
 
     /**
@@ -87,12 +98,7 @@ public class OperationBand {
             bandList.clear();
             InputStream inputStream= assetManager.open("bands.txt");
             String[] st=getLinesFromInputStream(inputStream,"\n");
-            for (int i = 0; i <st.length ; i++) {
-                if (!isBandLine(st[i])){
-                    continue;
-                }
-               bandList.add(new Band(st[i]));
-            }
+            bandList.addAll(parseBandLines(st));
             inputStream.close();
         } catch (IOException e) {
             e.printStackTrace();
@@ -113,12 +119,37 @@ public class OperationBand {
         if (trimmed.isEmpty() || trimmed.startsWith("#")) return false;
         return trimmed.contains(":");
     }
-    public static String getBandInfo(int index){
-        if (index>=bandList.size()){
-            return bandList.get(0).getBandInfo();
-        }else {
-            return bandList.get(index).getBandInfo();
+
+    /**
+     * Parses bands.txt lines into {@link Band} entries, skipping comment/blank
+     * lines (see {@link #isBandLine}) and any line that fails to parse — e.g. a
+     * truncated {@code "20m:"} with no frequency, which would otherwise throw
+     * out of the {@link Band#Band(String)} constructor. A single malformed line
+     * is logged and skipped rather than aborting the whole band-list load and
+     * leaving the app with no bands.
+     */
+    static ArrayList<Band> parseBandLines(String[] lines){
+        ArrayList<Band> out = new ArrayList<>();
+        if (lines == null) return out;
+        for (String line : lines) {
+            if (!isBandLine(line)) continue;
+            try {
+                out.add(new Band(line));
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Skipping malformed band line \""+line+"\"", e);
+            }
         }
+        return out;
+    }
+
+    public static String getBandInfo(int index){
+        if (bandList.isEmpty()){
+            return new Band(getDefaultBand(),getDefaultWaveLength()).getBandInfo();
+        }
+        if (!isValidBandIndex(index)){
+            return bandList.get(0).getBandInfo();
+        }
+        return bandList.get(index).getBandInfo();
     }
 
     /**
@@ -167,8 +198,8 @@ public class OperationBand {
     }
 
     public static long getBandFreq(int index){
-        if (index>bandList.size()){
-            return 14074000;
+        if (!isValidBandIndex(index)){
+            return getDefaultBand();
         }
         return bandList.get(index).band;
     }

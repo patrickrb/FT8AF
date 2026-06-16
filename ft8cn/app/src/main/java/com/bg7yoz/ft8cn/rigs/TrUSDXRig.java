@@ -54,10 +54,7 @@ public class TrUSDXRig extends BaseRig {
             public void run() {
                 try {
                     if (!isConnected()) {
-                        readFreqTimer.cancel();
-                        readFreqTimer.purge();
-                        readFreqTimer = null;
-                        return;
+                        return; // skip this tick; timer stays alive for reconnect
                     }
                     if (isPttOn()) {
                         clearBufferData();
@@ -215,6 +212,11 @@ public class TrUSDXRig extends BaseRig {
 
     @Override
     public void onDisconnecting() {
+        if (readFreqTimer != null) {
+            readFreqTimer.cancel();
+            readFreqTimer.purge();
+            readFreqTimer = null;
+        }
         if (getConnector() != null) {
             clearBufferData();
             getConnector().sendData(KenwoodTK90RigConstant.setTrUSDXStreaming(false));

@@ -216,9 +216,9 @@ fun DecodeRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                SignalBar(snr = message.snr, width = if (compact) 22.dp else 28.dp, height = if (compact) 10.dp else 12.dp)
+                SignalBar(snr = if (message.hasSnr()) message.snr else -30, width = if (compact) 22.dp else 28.dp, height = if (compact) 10.dp else 12.dp)
 
-                MetaText("${message.snr} dB")
+                MetaText(if (message.hasSnr()) "${message.snr} dB" else "-- dB")
                 MetaText("${message.getFreq_hz()} Hz")
 
                 // Distance (computed from grid)
@@ -341,7 +341,11 @@ private fun MetaText(text: String) {
  */
 internal fun resolveQsoStatus(message: Ft8Message): QsoStatus? {
     val isCQ = message.checkIsCQ()
-    val isWorked = message.isQSL_Callsign
+    // Use live lookup instead of the cached field: isQSL_Callsign is set at
+    // decode time, so a QSO completed after the message was decoded would leave
+    // the stale field as false. The live check catches newly-worked callsigns.
+    val isWorked = message.isQSL_Callsign ||
+        GeneralVariables.checkQSLCallsign(message.getCallsignFrom())
     val isToMe = GeneralVariables.checkIsMyCallsign(message.callsignTo ?: "")
     val modifier = message.modifier
     val grid = message.maidenGrid

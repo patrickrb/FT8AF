@@ -111,6 +111,8 @@
     <string name="tx_hunt">Hunt</string>
     <string name="tx_call_cq">Call CQ</string>
     <string name="tx_stop">Stop</string>
+    <string name="tx_volume_decrease">Decrease TX volume</string>
+    <string name="tx_volume_increase">Increase TX volume</string>
 
     <!-- ===== Hound (DXpedition) setup ===== -->
     <string name="hound_title">Work a DXpedition (Hound)</string>
@@ -166,7 +168,7 @@
     <string name="decode_empty_forme_title">No calls for you</string>
     <string name="decode_empty_forme_body">No stations are calling your callsign right now.</string>
     <string name="decode_empty_default_title">No signals decoded</string>
-    <string name="decode_empty_default_body">Waiting for FT8 signals to appear...</string>
+    <string name="decode_empty_default_body">Waiting for %1$s signals to appear...</string>
     <string name="decode_label_calling">→ CALLING</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ TO YOU</string>
@@ -396,6 +398,8 @@
     <string name="settings_audio_output">Audio Output</string>
     <string name="settings_tx_volume">TX Volume</string>
     <string name="settings_tx_volume_desc" formatted="false">Transmit audio level (hardware buttons ±5%)</string>
+    <string name="settings_show_volume_slider">Show Volume Slider</string>
+    <string name="settings_show_volume_slider_desc">Display TX volume slider on main screen</string>
 
     <!-- ===== Settings: transmission ===== -->
     <string name="settings_tx_rx_split">TX/RX Split</string>
@@ -408,6 +412,8 @@
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Hunt (auto-answer CQ)</string>
     <string name="settings_hunt_desc">Proactively call stations calling CQ. Same as the HUNT button on the TX bar. Off = run CQ and work only stations that answer you.</string>
+    <string name="settings_hunt_cq">Hunt + CQ</string>
+    <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
     <string name="settings_auto_call_followed">Auto-call Followed</string>
     <string name="settings_auto_call_followed_desc">Continue calling followed callsigns automatically</string>
     <string name="settings_fast_turnaround">Fast turnaround</string>

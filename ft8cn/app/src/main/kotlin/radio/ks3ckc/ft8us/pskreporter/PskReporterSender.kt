@@ -60,6 +60,8 @@ object PskReporterSender {
     private const val FT_RX_CALLSIGN = 2       // receiverCallsign  (0x8002)
     private const val FT_RX_LOCATOR = 4        // receiverLocator   (0x8004)
     private const val FT_DECODING_SW = 8       // decodingSoftware  (0x8008)
+    private const val FT_RX_ANTENNA = 9        // antennaInformation (0x8009)
+    private const val FT_RX_RIG = 13            // rigInformation     (0x800D)
     // Sender (data) fields — enterprise-specific under 30351, EXCEPT flowStart.
     private const val FT_TX_CALLSIGN = 1       // senderCallsign    (0x8001)
     private const val FT_FREQUENCY = 5         // frequency         (0x8005)
@@ -92,6 +94,16 @@ object PskReporterSender {
 
     @VisibleForTesting
     internal var sequenceNumber = 0
+
+    /**
+     * Build the PSKReporter "decodingSoftware" string, optionally including the
+     * connected rig name. Pure function — testable without Android.
+     */
+    @VisibleForTesting
+    internal fun buildSoftwareString(version: String, rigName: String?): String {
+        val base = "FT8AF $version"
+        return if (!rigName.isNullOrBlank()) "$base ($rigName)" else base
+    }
 
     /** For testing: override the socket send behaviour. */
     @VisibleForTesting
@@ -179,7 +191,7 @@ object PskReporterSender {
         return SpotRecord(
             senderCallsign = cleanCall,
             frequencyHz = freqHz,
-            snr = msg.snr,
+            snr = if (msg.hasSnr()) msg.snr else 0,
             mode = mode,
             senderLocator = msg.maidenGrid?.takeIf { it.length >= 4 },
             flowStartSeconds = msg.utcTime / 1000,
@@ -198,10 +210,13 @@ object PskReporterSender {
         val myCall = GeneralVariables.myCallsign ?: return
         if (myCall.isEmpty()) return
         val myGrid = GeneralVariables.getMyMaidenheadGrid() ?: ""
-        val software = "FT8AF ${GeneralVariables.VERSION}"
+        val rigName = GeneralVariables.myRigName ?: ""
+        val software = buildSoftwareString(
+            GeneralVariables.VERSION, GeneralVariables.myRigName)
+        val antenna = GeneralVariables.myAntenna ?: ""
 
         // Build IPFIX packets, respecting MTU limit
-        val packets = buildPackets(myCall, myGrid, software, spots)
+        val packets = buildPackets(myCall, myGrid, software, spots, antenna, rigName)
         for (pkt in packets) {
             try {
                 sendDatagram(pkt)
@@ -222,6 +237,8 @@ object PskReporterSender {
         rxGrid: String,
         software: String,
         spots: List<SpotRecord>,
+        antenna: String = "",
+        rig: String = "",
     ): List<ByteArray> {
         val packets = mutableListOf<ByteArray>()
         val includeTemplates = needTemplates()
@@ -229,7 +246,7 @@ object PskReporterSender {
         var remaining = spots.toMutableList()
         while (remaining.isNotEmpty()) {
             val templateBytes = if (includeTemplates) encodeTemplates() else ByteArray(0)
-            val receiverBytes = encodeReceiverDataSet(rxCall, rxGrid, software)
+            val receiverBytes = encodeReceiverDataSet(rxCall, rxGrid, software, antenna, rig)
 
             // Header is 16 bytes
             val overhead = 16 + templateBytes.size + receiverBytes.size
@@ -312,10 +329,10 @@ object PskReporterSender {
 
     private fun encodeReceiverTemplate(): ByteArray {
         // Options template set (set ID = 0x0003)
-        // Template ID = 0x50E2, field count = 3, scope field count = 0
+        // Template ID = 0x50E2, field count = 5, scope field count = 0
         // Each field: type(2) + length(2) + enterprise(4)
         val fieldSize = 8 // 2+2+4 per field
-        val fieldCount = 3
+        val fieldCount = 5
         val templateRecordLen = 2 + 2 + 2 + (fieldCount * fieldSize) // templateId + fieldCount + scopeFieldCount + fields
         val setLen = 4 + templateRecordLen // setHeader (id+len) + record
         val padding = (4 - (setLen % 4)) % 4
@@ -342,6 +359,16 @@ object PskReporterSender {
 
         // Field 3: decodingSoftware — variable length string
         buf.putShort((FT_DECODING_SW or 0x8000).toShort())
+        buf.putShort(0xFFFF.toShort())
+        buf.putInt(ENTERPRISE_NUMBER)
+
+        // Field 4: antennaInformation — variable length string
+        buf.putShort((FT_RX_ANTENNA or 0x8000).toShort())
+        buf.putShort(0xFFFF.toShort())
+        buf.putInt(ENTERPRISE_NUMBER)
+
+        // Field 5: rigInformation — variable length string
+        buf.putShort((FT_RX_RIG or 0x8000).toShort())
         buf.putShort(0xFFFF.toShort())
         buf.putInt(ENTERPRISE_NUMBER)
 
@@ -415,11 +442,15 @@ object PskReporterSender {
      * Set ID = [RECEIVER_DATA_SET_ID].
      */
     @VisibleForTesting
-    internal fun encodeReceiverDataSet(call: String, grid: String, software: String): ByteArray {
+    internal fun encodeReceiverDataSet(
+        call: String, grid: String, software: String, antenna: String, rig: String = "",
+    ): ByteArray {
         val callBytes = encodeVarString(call)
         val gridBytes = encodeVarString(grid)
         val swBytes = encodeVarString(software)
-        val bodyLen = callBytes.size + gridBytes.size + swBytes.size
+        val antBytes = encodeVarString(antenna)
+        val rigBytes = encodeVarString(rig)
+        val bodyLen = callBytes.size + gridBytes.size + swBytes.size + antBytes.size + rigBytes.size
         val setLen = 4 + bodyLen
         val padding = (4 - (setLen % 4)) % 4
         val totalLen = setLen + padding
@@ -430,6 +461,8 @@ object PskReporterSender {
         buf.put(callBytes)
         buf.put(gridBytes)
         buf.put(swBytes)
+        buf.put(antBytes)
+        buf.put(rigBytes)
         repeat(padding) { buf.put(0) }
         return buf.array()
     }

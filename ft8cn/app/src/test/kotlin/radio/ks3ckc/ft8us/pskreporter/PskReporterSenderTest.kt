@@ -137,7 +137,7 @@ class PskReporterSenderTest {
     @Test
     fun `encodeReceiverDataSet has correct set ID and alignment`() {
         val data = PskReporterSender.encodeReceiverDataSet(
-            "N0CALL", "EM48", "FT8AF 1.2.3"
+            "N0CALL", "EM48", "FT8AF 1.2.3", "EFHW 40-10m", "IC-7300"
         )
         val buf = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN)
 
@@ -168,6 +168,18 @@ class PskReporterSenderTest {
         val swBytes = ByteArray(11)
         buf.get(swBytes)
         assertThat(String(swBytes)).isEqualTo("FT8AF 1.2.3")
+
+        // Antenna
+        assertThat(buf.get().toInt() and 0xFF).isEqualTo(11)
+        val antBytes = ByteArray(11)
+        buf.get(antBytes)
+        assertThat(String(antBytes)).isEqualTo("EFHW 40-10m")
+
+        // Rig
+        assertThat(buf.get().toInt() and 0xFF).isEqualTo(7) // "IC-7300"
+        val rigBytes = ByteArray(7)
+        buf.get(rigBytes)
+        assertThat(String(rigBytes)).isEqualTo("IC-7300")
     }
 
     // ---------------------------------------------------------------
@@ -189,9 +201,9 @@ class PskReporterSenderTest {
         val rxTemplateId = buf.short.toInt() and 0xFFFF
         assertThat(rxTemplateId).isEqualTo(0x50E2)
 
-        // Field count = 3
+        // Field count = 5
         val rxFieldCount = buf.short.toInt() and 0xFFFF
-        assertThat(rxFieldCount).isEqualTo(3)
+        assertThat(rxFieldCount).isEqualTo(5)
 
         // Scope field count = 0
         val scopeFieldCount = buf.short.toInt() and 0xFFFF
@@ -229,10 +241,10 @@ class PskReporterSenderTest {
         val buf = ByteBuffer.wrap(data).order(ByteOrder.BIG_ENDIAN)
 
         val enterpriseValues = mutableListOf<Int>()
-        // Receiver options template: 3 enterprise fields (8 bytes each).
+        // Receiver options template: 5 enterprise fields (8 bytes each).
         // Skip set header(4) + templateId(2) + fieldCount(2) + scopeFieldCount(2) = 10.
         buf.position(10)
-        repeat(3) {
+        repeat(5) {
             buf.short // type
             buf.short // length
             enterpriseValues.add(buf.int)
@@ -267,8 +279,9 @@ class PskReporterSenderTest {
         buf.position(10)
 
         // receiverCallsign 0x8002 / var, receiverLocator 0x8004 / var,
-        // decodingSoftware 0x8008 / var — all enterprise 30351.
-        val expected = listOf(0x8002 to 0xFFFF, 0x8004 to 0xFFFF, 0x8008 to 0xFFFF)
+        // decodingSoftware 0x8008 / var, antennaInformation 0x8009 / var,
+        // rigInformation 0x800D / var — all enterprise 30351.
+        val expected = listOf(0x8002 to 0xFFFF, 0x8004 to 0xFFFF, 0x8008 to 0xFFFF, 0x8009 to 0xFFFF, 0x800D to 0xFFFF)
         for ((type, len) in expected) {
             assertThat(buf.short.toInt() and 0xFFFF).isEqualTo(type)
             assertThat(buf.short.toInt() and 0xFFFF).isEqualTo(len)
@@ -318,11 +331,13 @@ class PskReporterSenderTest {
         // IDs as WSJT-X PSKReporter.cpp). Pins the layout so a future field-ID drift
         // fails loudly instead of silently producing discarded packets.
         val expected = hex(
-            // --- Receiver options template (set 0x0003, len 0x0024 = 36) ---
-            "0003 0024 50E2 0003 0000" +
-                "8002 FFFF 0000768F" + // receiverCallsign  (id 2, var)
-                "8004 FFFF 0000768F" + // receiverLocator   (id 4, var)
-                "8008 FFFF 0000768F" + // decodingSoftware  (id 8, var)
+            // --- Receiver options template (set 0x0003, len 0x0034 = 52) ---
+            "0003 0034 50E2 0005 0000" +
+                "8002 FFFF 0000768F" + // receiverCallsign    (id 2, var)
+                "8004 FFFF 0000768F" + // receiverLocator     (id 4, var)
+                "8008 FFFF 0000768F" + // decodingSoftware    (id 8, var)
+                "8009 FFFF 0000768F" + // antennaInformation  (id 9, var)
+                "800D FFFF 0000768F" + // rigInformation      (id 13, var)
                 "0000" +               // padding to 4-byte boundary
                 // --- Sender data template (set 0x0002, len 0x003C = 60) ---
                 "0002 003C 50E3 0007" +
@@ -457,6 +472,28 @@ class PskReporterSenderTest {
             val seq = buf.int
             assertThat(seq).isEqualTo(i)
         }
+    }
+
+    // ---------------------------------------------------------------
+    // Software string with rig name
+    // ---------------------------------------------------------------
+
+    @Test
+    fun `buildSoftwareString without rig`() {
+        assertThat(PskReporterSender.buildSoftwareString("1.0.2", ""))
+            .isEqualTo("FT8AF 1.0.2")
+    }
+
+    @Test
+    fun `buildSoftwareString with rig`() {
+        assertThat(PskReporterSender.buildSoftwareString("1.0.2", "Icom"))
+            .isEqualTo("FT8AF 1.0.2 (Icom)")
+    }
+
+    @Test
+    fun `buildSoftwareString null rig`() {
+        assertThat(PskReporterSender.buildSoftwareString("1.0.2", null))
+            .isEqualTo("FT8AF 1.0.2")
     }
 
     /** Decode a hex string (all whitespace ignored) into bytes for golden-vector comparison. */
