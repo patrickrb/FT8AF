@@ -239,6 +239,7 @@ jobs:
           # v*-named candidates we'd actually promote to production.
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             echo "release_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "version_name=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
           elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
@@ -255,6 +256,7 @@ jobs:
             fi
             echo "Latest tag: ${latest:-<none>} -> new tag: $new_tag"
             echo "release_tag=$new_tag" >> "$GITHUB_OUTPUT"
+            echo "version_name=${new_tag#v}" >> "$GITHUB_OUTPUT"
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
           elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/dev" ]]; then
@@ -263,12 +265,19 @@ jobs:
             # and so the Play Console releaseName disambiguates them from
             # main-branch release candidates.
             new_tag="dev-${GITHUB_RUN_NUMBER}"
+            # Derive the base semver from the latest v* tag so the APK version
+            # reads e.g. "1.1.0-dev.42" instead of a bare run number.
+            latest=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+            base_ver="${latest:+${latest#v}}"
+            base_ver="${base_ver:-0.0.0}"
             echo "release_tag=$new_tag" >> "$GITHUB_OUTPUT"
+            echo "version_name=${base_ver}-dev.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
           else
             # PR or other branch push — build only, no release
             echo "release_tag=" >> "$GITHUB_OUTPUT"
+            echo "version_name=" >> "$GITHUB_OUTPUT"
             echo "should_release=false" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
           fi
@@ -343,6 +352,12 @@ jobs:
         run: |
           set -euo pipefail
           args=(assembleRelease)
+          # Inject the version derived from the git tag / branch so the APK's
+          # versionName matches the release without manual bumps in build.gradle.
+          version_name="${{ steps.tag.outputs.version_name }}"
+          if [[ -n "$version_name" ]]; then
+            args+=("-PVERSION_NAME_OVERRIDE=$version_name")
+          fi
           # Sign + produce AAB only on release builds — PR builds stay unsigned
           # because the keystore secret isn't available (and shouldn't be) for
           # fork PRs.
