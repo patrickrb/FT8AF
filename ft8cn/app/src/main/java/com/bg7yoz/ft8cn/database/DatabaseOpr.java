@@ -1567,7 +1567,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 db.execSQL(sql, new Object[]{message.i3, message.n3,
                         com.bg7yoz.ft8cn.ModeProfile.fromId(message.signalFormat).displayName
                         ,UtcTimer.getDatetimeYYYYMMDD_HHMMSS(message.utcTime)
-                        , message.snr, message.time_sec, Math.round(message.freq_hz)
+                        , message.hasSnr() ? message.snr : 0, message.time_sec, Math.round(message.freq_hz)
                         , message.callsignFrom, message.callsignTo, message.extraInfo
                         , message.report, message.band});
 

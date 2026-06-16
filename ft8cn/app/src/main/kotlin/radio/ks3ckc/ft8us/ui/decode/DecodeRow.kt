@@ -216,9 +216,9 @@ fun DecodeRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                SignalBar(snr = message.snr, width = if (compact) 22.dp else 28.dp, height = if (compact) 10.dp else 12.dp)
+                SignalBar(snr = if (message.hasSnr()) message.snr else -30, width = if (compact) 22.dp else 28.dp, height = if (compact) 10.dp else 12.dp)
 
-                MetaText("${message.snr} dB")
+                MetaText(if (message.hasSnr()) "${message.snr} dB" else "-- dB")
                 MetaText("${message.getFreq_hz()} Hz")
 
                 // Distance (computed from grid)

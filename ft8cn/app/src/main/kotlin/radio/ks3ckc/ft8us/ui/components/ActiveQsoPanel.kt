@@ -113,7 +113,7 @@ internal fun buildQsoLog(
                 direction = if (toIsMe) QsoLogEntry.Direction.RX else QsoLogEntry.Direction.BUSY,
                 utcTime = msg.utcTime,
                 messageText = msg.getMessageText(),
-                snr = msg.snr,
+                snr = if (msg.hasSnr()) msg.snr else null,
             )
         )
     }

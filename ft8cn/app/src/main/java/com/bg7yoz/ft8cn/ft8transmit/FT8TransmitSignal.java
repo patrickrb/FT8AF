@@ -964,7 +964,7 @@ public class FT8TransmitSignal {
                         receivedReport = ft8Message.report;
                     }
                 }
-                sendReport = messages.get(i).snr;// save the received signal
+                sendReport = messages.get(i).hasSnr() ? messages.get(i).snr : 0;// save the received signal
 
                 int order = GeneralVariables.checkFunOrder(ft8Message);// check the message sequence number
                 if (order != -1) return order;// successfully parsed the sequence number
@@ -1088,7 +1088,7 @@ public class FT8TransmitSignal {
                     && !GeneralVariables.checkFun5(msg.extraInfo)) {// CQ me, not 73, sender is my watched target
                 // before setting transmit, determine message sequence to avoid starting from the beginning
                 setTransmit(new TransmitCallsign(msg.i3, msg.n3, msg.getCallsignFrom(), msg.freq_hz
-                                , msg.getSequence(), msg.snr)
+                                , msg.getSequence(), msg.hasSnr() ? msg.snr : 0)
                         , GeneralVariables.checkFunOrder(msg) + 1
                         , msg.extraInfo);
                 return true;
@@ -1112,7 +1112,7 @@ public class FT8TransmitSignal {
 
                 // before setting transmit, determine message sequence to avoid starting from the beginning
                 setTransmit(new TransmitCallsign(msg.i3, msg.n3, msg.getCallsignFrom(), msg.freq_hz
-                                , msg.getSequence(), msg.snr)
+                                , msg.getSequence(), msg.hasSnr() ? msg.snr : 0)
                         , GeneralVariables.checkFunOrder(msg) + 1
                         , msg.extraInfo);
                 return true;
@@ -1164,7 +1164,7 @@ public class FT8TransmitSignal {
                         + " (Hunt=" + GeneralVariables.autoFollowCQ + ")");
                 resetTargetReport();
                 setTransmit(new TransmitCallsign(msg.i3, msg.n3, msg.getCallsignFrom(), msg.freq_hz
-                        , msg.getSequence(), msg.snr), 1, msg.extraInfo);
+                        , msg.getSequence(), msg.hasSnr() ? msg.snr : 0), 1, msg.extraInfo);
 
                 return true;
             }
@@ -1515,7 +1515,7 @@ public class FT8TransmitSignal {
                     receivedReport = rpt;
                     receiveTargetReport = rpt;
                 }
-                toCallsign.snr = msg.snr;// Fox's SNR as I hear it -> goes in my R+rpt
+                toCallsign.snr = msg.hasSnr() ? msg.snr : 0;// Fox's SNR as I hear it -> goes in my R+rpt
                 setBaseFrequency(msg.freq_hz);// auto-QSY to where Fox called me
                 functionOrder = 3;// "<fox> <me> R-rpt"
                 generateFun();
@@ -1872,7 +1872,7 @@ public class FT8TransmitSignal {
             for (int i = 0; i < callerQueue.size(); i++) {
                 if (callerQueue.get(i).callsign.equals(callsign)) {
                     QueuedCaller existing = callerQueue.get(i);
-                    existing.snr = msg.snr;
+                    existing.snr = msg.hasSnr() ? msg.snr : 0;
                     existing.queuedTimeMs = System.currentTimeMillis();
                     mutableCallerQueue.postValue(new ArrayList<>(callerQueue));
                     return;
@@ -1881,7 +1881,7 @@ public class FT8TransmitSignal {
             // Add new entry if not at capacity
             if (callerQueue.size() < MAX_QUEUE_SIZE) {
                 callerQueue.add(new QueuedCaller(
-                        callsign, msg.freq_hz, msg.getSequence(), msg.snr,
+                        callsign, msg.freq_hz, msg.getSequence(), msg.hasSnr() ? msg.snr : 0,
                         msg.i3, msg.n3, msg.extraInfo));
                 mutableCallerQueue.postValue(new ArrayList<>(callerQueue));
                 GeneralVariables.fileLog("QSO: enqueue caller " + callsign
