@@ -27,10 +27,7 @@ public class Flex6000Rig extends BaseRig {
             public void run() {
                 try {
                     if (!isConnected()) {
-                        readFreqTimer.cancel();
-                        readFreqTimer.purge();
-                        readFreqTimer = null;
-                        return;
+                        return; // skip this tick; timer stays alive for reconnect
                     }
                     readFreqFromRig();
                 } catch (Exception e) {

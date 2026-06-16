@@ -33,10 +33,7 @@ public class Yaesu2_847Rig extends BaseRig {
             public void run() {
                 try {
                     if (!isConnected()) {
-                        readFreqTimer.cancel();
-                        readFreqTimer.purge();
-                        readFreqTimer = null;
-                        return;
+                        return; // skip this tick; timer stays alive for reconnect
                     }
                     if (!sentConnect) {//send connection header data, five 0x00 bytes, sent only once
                         sendConnectData();
