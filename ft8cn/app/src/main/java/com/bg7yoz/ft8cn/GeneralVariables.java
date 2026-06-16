@@ -83,6 +83,9 @@ public class GeneralVariables {
     public static MutableLiveData<Float> mutableVolumePercent = new MutableLiveData<>();
     public static float volumePercent = 0.8f;//Audio playback volume, as a percentage
 
+    public static boolean showTxVolumeSlider = true;//Show inline TX volume slider on main screen
+    public static MutableLiveData<Boolean> mutableShowTxVolumeSlider = new MutableLiveData<>(true);
+
     public static int flexMaxRfPower = 10;//Flex radio max transmit power
     public static int flexMaxTunePower = 10;//Flex radio max tune power
 

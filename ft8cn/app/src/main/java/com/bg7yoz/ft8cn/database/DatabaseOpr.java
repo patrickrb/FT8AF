@@ -2488,6 +2488,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("volumeValue")) {//Output volume level
                     GeneralVariables.volumePercent = result.equals("") ? 1.0f : Float.parseFloat(result) / 100f;
+                    GeneralVariables.mutableVolumePercent.postValue(GeneralVariables.volumePercent);
+                }
+                if (name.equalsIgnoreCase("showTxVolumeSlider")) {//Inline TX volume slider visibility
+                    GeneralVariables.showTxVolumeSlider = !result.equals("0");
+                    GeneralVariables.mutableShowTxVolumeSlider.postValue(GeneralVariables.showTxVolumeSlider);
                 }
                 if (name.equalsIgnoreCase("excludedCallsigns")) {//Blocklist: callsign prefixes
                     GeneralVariables.addExcludedCallsigns(result);
