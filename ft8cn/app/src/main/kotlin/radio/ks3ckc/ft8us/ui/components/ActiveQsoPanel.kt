@@ -221,16 +221,27 @@ fun ActiveQsoPanel(
     var synthTxTarget by remember { mutableStateOf<String?>(null) }
 
     // Clear TX state when the target genuinely changes to a different station.
-    // Ignore null transitions: when displayCallsign flickers to null during a
-    // tab switch (LiveData observer re-registration), the log must survive.
-    // The panel hides via AnimatedVisibility when hasTarget is false, so stale
-    // entries from the previous QSO are invisible until a new target arrives.
+    // Also handles the same-callsign-new-QSO edge case: when a QSO ends
+    // (displayCallsign → null for > 500ms) and the same station is worked
+    // again, the old TX rows must not carry over. A short delay distinguishes
+    // real QSO ends from tab-switch flickers (LiveData re-subscription emits
+    // null for 1–2 frames). LaunchedEffect cancels the pending delay when the
+    // key changes, so flickers never clear synthTxTarget. (#250 follow-up)
     LaunchedEffect(displayCallsign) {
-        if (displayCallsign != null && displayCallsign != synthTxTarget) {
-            synthTxLog.clear()
-            wasTransmitting = false
-            pendingTxLog = false
+        if (displayCallsign != null) {
+            if (displayCallsign != synthTxTarget) {
+                synthTxLog.clear()
+                wasTransmitting = false
+                pendingTxLog = false
+            }
             synthTxTarget = displayCallsign
+        } else if (synthTxTarget != null) {
+            // Target went null (CQ reset). Wait briefly — tab-switch flickers
+            // resolve within a frame (~16ms). If still null after the delay,
+            // it's a real QSO end; clear synthTxTarget so a subsequent QSO
+            // with the same callsign is treated as fresh.
+            kotlinx.coroutines.delay(500)
+            synthTxTarget = null
         }
     }
 

@@ -1733,7 +1733,11 @@ public class FT8TransmitSignal {
         if (toCallsign == null) {
             //must determine my callsign type to set i3n3 !!!
             int i3 = GenerateFT8.checkI3ByCallsign(GeneralVariables.myCallsign);
-            setTransmit(new TransmitCallsign(i3, 0, "CQ", UtcTimer.getNowSequential())
+            // Use the operator's chosen slot (sequential) instead of
+            // getNowSequential(), which can flip the slot based on the
+            // current time — breaking the method's contract of resetting
+            // to CQ without changing the timing sequence.
+            setTransmit(new TransmitCallsign(i3, 0, "CQ", sequential)
                     , 6, "");
         } else {
             functionOrder = 6;

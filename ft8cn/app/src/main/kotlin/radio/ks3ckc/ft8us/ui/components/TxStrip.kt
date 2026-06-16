@@ -289,6 +289,8 @@ fun TxStrip(
         }
 
         // ---- Inline TX volume slider (togglable from Settings) ----
+        val volumeDecrease = stringResource(R.string.tx_volume_decrease)
+        val volumeIncrease = stringResource(R.string.tx_volume_increase)
         if (showVolumeSlider) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -301,7 +303,7 @@ fun TxStrip(
                         .size(36.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(BgSurface3)
-                        .semantics { role = Role.Button; contentDescription = "Decrease TX volume" }
+                        .semantics { role = Role.Button; contentDescription = volumeDecrease }
                         .clickable {
                             onVolumeChange(clampVolume(txVolume, -5))
                             onVolumeChangeFinished()
@@ -339,7 +341,7 @@ fun TxStrip(
                         .size(36.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(BgSurface3)
-                        .semantics { role = Role.Button; contentDescription = "Increase TX volume" }
+                        .semantics { role = Role.Button; contentDescription = volumeIncrease }
                         .clickable {
                             onVolumeChange(clampVolume(txVolume, 5))
                             onVolumeChangeFinished()

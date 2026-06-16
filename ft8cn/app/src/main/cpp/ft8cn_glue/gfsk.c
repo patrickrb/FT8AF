@@ -50,7 +50,14 @@ void synth_gfsk_offset(const uint8_t *symbols, int n_sym, float f0,
                        float symbol_bt, float symbol_period,
                        int signal_rate, float *signal, int offset)
 {
+    // Guard: reject degenerate inputs that would cause division by zero or
+    // zero-length allocations (e.g. signal_rate == 0 producing n_spsym == 0).
+    if (symbols == NULL || signal == NULL || n_sym <= 0 ||
+        signal_rate <= 0 || symbol_period <= 0)
+        return;
+
     int n_spsym = (int)(0.5f + signal_rate * symbol_period); // samples per symbol
+    if (n_spsym <= 0) return; // would cause division by zero in dphi_peak
     int n_wave  = n_sym * n_spsym;                           // total output samples
     float hmod  = 1.0f;
 
@@ -61,6 +68,12 @@ void synth_gfsk_offset(const uint8_t *symbols, int n_sym, float f0,
     int dphi_len = n_wave + 2 * n_spsym;
     float *dphi = (float *)malloc(dphi_len * sizeof(float));
     float *pulse = (float *)malloc(3 * n_spsym * sizeof(float));
+
+    if (dphi == NULL || pulse == NULL) {
+        free(dphi);  // free(NULL) is safe per C standard
+        free(pulse);
+        return;
+    }
 
     // Initialise every sample to the base-frequency phase increment.
     for (int i = 0; i < dphi_len; ++i)
