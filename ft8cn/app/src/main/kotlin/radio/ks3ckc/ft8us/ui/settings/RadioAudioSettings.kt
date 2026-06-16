@@ -47,6 +47,8 @@ import com.bg7yoz.ft8cn.rigs.BaseRigOperation
 import com.bg7yoz.ft8cn.rigs.InstructionSet
 import com.bg7yoz.ft8cn.ui.AudioDeviceSpinnerAdapter
 import radio.ks3ckc.ft8us.theme.*
+import radio.ks3ckc.ft8us.ui.components.FT8USIconButton
+import radio.ks3ckc.ft8us.ui.components.FT8USIcons
 import radio.ks3ckc.ft8us.ui.components.GlassCard
 import radio.ks3ckc.ft8us.ui.components.SettingsRow
 import radio.ks3ckc.ft8us.ui.components.Toggle
@@ -795,21 +797,51 @@ private fun TxVolumeSliderDialog(
                 fontSize = 48.sp,
             )
 
-            Slider(
-                value = current.toFloat(),
-                onValueChange = { v ->
-                    val clamped = v.toInt().coerceIn(0, 100)
-                    if (clamped != current) {
-                        current = clamped
-                        onChange(clamped)
-                    }
-                },
-                valueRange = 0f..100f,
-                colors = SliderDefaults.colors(
-                    thumbColor = Accent,
-                    activeTrackColor = Accent,
-                ),
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                FT8USIconButton(
+                    onClick = {
+                        val clamped = (current - 5).coerceIn(0, 100)
+                        if (clamped != current) {
+                            current = clamped
+                            onChange(clamped)
+                        }
+                    },
+                    size = 36.dp,
+                ) {
+                    FT8USIcons.Minus(color = Accent, size = 16.dp)
+                }
+                Slider(
+                    value = current.toFloat(),
+                    onValueChange = { v ->
+                        val clamped = v.toInt().coerceIn(0, 100)
+                        if (clamped != current) {
+                            current = clamped
+                            onChange(clamped)
+                        }
+                    },
+                    valueRange = 0f..100f,
+                    modifier = Modifier.weight(1f),
+                    colors = SliderDefaults.colors(
+                        thumbColor = Accent,
+                        activeTrackColor = Accent,
+                    ),
+                )
+                FT8USIconButton(
+                    onClick = {
+                        val clamped = (current + 5).coerceIn(0, 100)
+                        if (clamped != current) {
+                            current = clamped
+                            onChange(clamped)
+                        }
+                    },
+                    size = 36.dp,
+                ) {
+                    FT8USIcons.Plus(color = Accent, size = 16.dp)
+                }
+            }
 
             Text(
                 text = stringResource(R.string.settings_tx_volume_advice),
