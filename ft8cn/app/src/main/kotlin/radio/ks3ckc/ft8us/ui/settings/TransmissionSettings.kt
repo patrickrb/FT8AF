@@ -202,21 +202,21 @@ fun TransmissionSettings(
                             )
                             FT8USIconButton(
                                 onClick = {
-                                    val clamped = (alcTargetLow - 5).coerceIn(10, alcTargetHigh - 10)
+                                    val clamped = (alcTargetLow - 5).coerceIn(10, minOf(200, alcTargetHigh - 10))
                                     alcTargetLow = clamped
                                     GeneralVariables.alcTargetLow = clamped
                                     mainViewModel.databaseOpr.writeConfig(
                                         "alcTargetLow", clamped.toString(), null,
                                     )
                                 },
-                                size = 32.dp,
+                                size = 36.dp,
                             ) {
                                 FT8USIcons.Minus(color = Accent, size = 16.dp)
                             }
                             Slider(
                                 value = alcTargetLow.toFloat(),
                                 onValueChange = { v ->
-                                    val clamped = v.toInt().coerceIn(10, alcTargetHigh - 10)
+                                    val clamped = v.toInt().coerceIn(10, minOf(200, alcTargetHigh - 10))
                                     alcTargetLow = clamped
                                     GeneralVariables.alcTargetLow = clamped
                                 },
@@ -234,14 +234,14 @@ fun TransmissionSettings(
                             )
                             FT8USIconButton(
                                 onClick = {
-                                    val clamped = (alcTargetLow + 5).coerceIn(10, alcTargetHigh - 10)
+                                    val clamped = (alcTargetLow + 5).coerceIn(10, minOf(200, alcTargetHigh - 10))
                                     alcTargetLow = clamped
                                     GeneralVariables.alcTargetLow = clamped
                                     mainViewModel.databaseOpr.writeConfig(
                                         "alcTargetLow", clamped.toString(), null,
                                     )
                                 },
-                                size = 32.dp,
+                                size = 36.dp,
                             ) {
                                 FT8USIcons.Plus(color = Accent, size = 16.dp)
                             }
@@ -268,7 +268,7 @@ fun TransmissionSettings(
                                         "alcTargetHigh", clamped.toString(), null,
                                     )
                                 },
-                                size = 32.dp,
+                                size = 36.dp,
                             ) {
                                 FT8USIcons.Minus(color = Accent, size = 16.dp)
                             }
@@ -300,7 +300,7 @@ fun TransmissionSettings(
                                         "alcTargetHigh", clamped.toString(), null,
                                     )
                                 },
-                                size = 32.dp,
+                                size = 36.dp,
                             ) {
                                 FT8USIcons.Plus(color = Accent, size = 16.dp)
                             }
@@ -347,7 +347,7 @@ fun TransmissionSettings(
                                         "swrHaltThreshold", newVal.toString(), null,
                                     )
                                 },
-                                size = 32.dp,
+                                size = 36.dp,
                             ) {
                                 FT8USIcons.Minus(color = Accent, size = 16.dp)
                             }
@@ -378,7 +378,7 @@ fun TransmissionSettings(
                                         "swrHaltThreshold", newVal.toString(), null,
                                     )
                                 },
-                                size = 32.dp,
+                                size = 36.dp,
                             ) {
                                 FT8USIcons.Plus(color = Accent, size = 16.dp)
                             }

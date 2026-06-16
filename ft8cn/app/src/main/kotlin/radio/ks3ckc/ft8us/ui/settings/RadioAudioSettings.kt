@@ -809,7 +809,7 @@ private fun TxVolumeSliderDialog(
                             onChange(clamped)
                         }
                     },
-                    size = 32.dp,
+                    size = 36.dp,
                 ) {
                     FT8USIcons.Minus(color = Accent, size = 16.dp)
                 }
@@ -837,7 +837,7 @@ private fun TxVolumeSliderDialog(
                             onChange(clamped)
                         }
                     },
-                    size = 32.dp,
+                    size = 36.dp,
                 ) {
                     FT8USIcons.Plus(color = Accent, size = 16.dp)
                 }
