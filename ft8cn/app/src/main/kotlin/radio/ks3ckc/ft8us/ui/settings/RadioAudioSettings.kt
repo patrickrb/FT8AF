@@ -14,8 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -49,6 +47,7 @@ import com.bg7yoz.ft8cn.ui.AudioDeviceSpinnerAdapter
 import radio.ks3ckc.ft8us.theme.*
 import radio.ks3ckc.ft8us.ui.components.FT8USIconButton
 import radio.ks3ckc.ft8us.ui.components.FT8USIcons
+import radio.ks3ckc.ft8us.ui.components.IntSlider
 import radio.ks3ckc.ft8us.ui.components.GlassCard
 import radio.ks3ckc.ft8us.ui.components.SettingsRow
 import radio.ks3ckc.ft8us.ui.components.Toggle
@@ -830,10 +829,10 @@ private fun TxVolumeSliderDialog(
                 ) {
                     FT8USIcons.Minus(color = Accent, size = 16.dp)
                 }
-                Slider(
-                    value = current.toFloat(),
+                IntSlider(
+                    value = current,
                     onValueChange = { v ->
-                        val clamped = v.toInt().coerceIn(0, 100)
+                        val clamped = v.coerceIn(0, 100)
                         if (clamped != current) {
                             current = clamped
                             onChange(clamped)
@@ -841,10 +840,8 @@ private fun TxVolumeSliderDialog(
                     },
                     valueRange = 0f..100f,
                     modifier = Modifier.weight(1f),
-                    colors = SliderDefaults.colors(
-                        thumbColor = Accent,
-                        activeTrackColor = Accent,
-                    ),
+                    thumbColor = Accent,
+                    activeTrackColor = Accent,
                 )
                 FT8USIconButton(
                     onClick = {

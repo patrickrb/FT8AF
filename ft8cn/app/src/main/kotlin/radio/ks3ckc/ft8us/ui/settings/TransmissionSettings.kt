@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,6 +26,7 @@ import com.bg7yoz.ft8cn.ft8transmit.MeterProtectionController
 import radio.ks3ckc.ft8us.theme.*
 import radio.ks3ckc.ft8us.ui.components.FT8USIconButton
 import radio.ks3ckc.ft8us.ui.components.FT8USIcons
+import radio.ks3ckc.ft8us.ui.components.IntSlider
 import radio.ks3ckc.ft8us.ui.components.GlassCard
 import radio.ks3ckc.ft8us.ui.components.SettingsRow
 
@@ -213,10 +212,10 @@ fun TransmissionSettings(
                             ) {
                                 FT8USIcons.Minus(color = Accent, size = 16.dp)
                             }
-                            Slider(
-                                value = alcTargetLow.toFloat(),
+                            IntSlider(
+                                value = alcTargetLow,
                                 onValueChange = { v ->
-                                    val clamped = v.toInt().coerceIn(10, minOf(200, alcTargetHigh - 10))
+                                    val clamped = v.coerceIn(10, minOf(200, alcTargetHigh - 10))
                                     alcTargetLow = clamped
                                     GeneralVariables.alcTargetLow = clamped
                                 },
@@ -227,10 +226,8 @@ fun TransmissionSettings(
                                 },
                                 valueRange = 10f..200f,
                                 modifier = Modifier.weight(1f),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = Accent,
-                                    activeTrackColor = Accent,
-                                ),
+                                thumbColor = Accent,
+                                activeTrackColor = Accent,
                             )
                             FT8USIconButton(
                                 onClick = {
@@ -272,10 +269,10 @@ fun TransmissionSettings(
                             ) {
                                 FT8USIcons.Minus(color = Accent, size = 16.dp)
                             }
-                            Slider(
-                                value = alcTargetHigh.toFloat(),
+                            IntSlider(
+                                value = alcTargetHigh,
                                 onValueChange = { v ->
-                                    val clamped = v.toInt().coerceIn(alcTargetLow + 10, 250)
+                                    val clamped = v.coerceIn(alcTargetLow + 10, 250)
                                     alcTargetHigh = clamped
                                     GeneralVariables.alcTargetHigh = clamped
                                 },
@@ -286,10 +283,8 @@ fun TransmissionSettings(
                                 },
                                 valueRange = 20f..250f,
                                 modifier = Modifier.weight(1f),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = Accent,
-                                    activeTrackColor = Accent,
-                                ),
+                                thumbColor = Accent,
+                                activeTrackColor = Accent,
                             )
                             FT8USIconButton(
                                 onClick = {
@@ -351,11 +346,11 @@ fun TransmissionSettings(
                             ) {
                                 FT8USIcons.Minus(color = Accent, size = 16.dp)
                             }
-                            Slider(
-                                value = swrHaltThreshold.toFloat(),
+                            IntSlider(
+                                value = swrHaltThreshold,
                                 onValueChange = { v ->
-                                    swrHaltThreshold = v.toInt()
-                                    GeneralVariables.swrHaltThreshold = v.toInt()
+                                    swrHaltThreshold = v
+                                    GeneralVariables.swrHaltThreshold = v
                                 },
                                 onValueChangeFinished = {
                                     mainViewModel.databaseOpr.writeConfig(
@@ -364,10 +359,8 @@ fun TransmissionSettings(
                                 },
                                 valueRange = 30f..200f, // ~1.3:1 to ~7.0:1
                                 modifier = Modifier.weight(1f),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = Accent,
-                                    activeTrackColor = Accent,
-                                ),
+                                thumbColor = Accent,
+                                activeTrackColor = Accent,
                             )
                             FT8USIconButton(
                                 onClick = {
