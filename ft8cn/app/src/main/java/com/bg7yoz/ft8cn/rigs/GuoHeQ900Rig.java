@@ -17,6 +17,15 @@ public class GuoHeQ900Rig extends BaseRig {
     private byte[] buffer;
     private int dataCount=-1;
 
+
+    @Override
+    public void onDisconnecting() {
+        if (readFreqTimer != null) {
+            readFreqTimer.cancel();
+            readFreqTimer.purge();
+            readFreqTimer = null;
+        }
+    }
     private TimerTask readTask() {
         return new TimerTask() {
             @Override

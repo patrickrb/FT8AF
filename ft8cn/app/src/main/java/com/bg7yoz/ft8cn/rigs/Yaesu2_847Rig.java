@@ -128,6 +128,11 @@ public class Yaesu2_847Rig extends BaseRig {
 
     @Override
     public void onDisconnecting() {//before disconnecting from rig, send four 0x00 bytes plus 0x80
+        if (readFreqTimer != null) {
+            readFreqTimer.cancel();
+            readFreqTimer.purge();
+            readFreqTimer = null;
+        }
         if (getConnector() != null) {
             getConnector().sendData(Yaesu2RigConstant.sendDisconnectData());
         }

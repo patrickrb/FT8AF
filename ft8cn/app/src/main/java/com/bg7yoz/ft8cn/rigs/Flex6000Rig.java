@@ -21,6 +21,15 @@ public class Flex6000Rig extends BaseRig {
 
     private Timer readFreqTimer = new Timer();
 
+
+    @Override
+    public void onDisconnecting() {
+        if (readFreqTimer != null) {
+            readFreqTimer.cancel();
+            readFreqTimer.purge();
+            readFreqTimer = null;
+        }
+    }
     private TimerTask readTask() {
         return new TimerTask() {
             @Override

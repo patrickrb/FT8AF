@@ -28,6 +28,15 @@ public class XieGu6100Rig extends BaseRig {
     private boolean swrAlert = false;
     private Timer readFreqTimer = new Timer();
 
+
+    @Override
+    public void onDisconnecting() {
+        if (readFreqTimer != null) {
+            readFreqTimer.cancel();
+            readFreqTimer.purge();
+            readFreqTimer = null;
+        }
+    }
     private TimerTask readTask() {
         return new TimerTask() {
             @Override
