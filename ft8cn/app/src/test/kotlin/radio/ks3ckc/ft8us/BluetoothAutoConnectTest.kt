@@ -210,4 +210,78 @@ class BluetoothAutoConnectTest {
         assertThat(masked).isEqualTo("<malformed:17>")
         assertThat(masked).doesNotContain("mac")
     }
+
+    // ---- decideBtConnectorAction: singleton reconnect decision (issue #223 part 2) ----
+
+    @Test
+    fun noExistingConnectorCreatesNew() {
+        assertThat(
+            decideBtConnectorAction(
+                hasExisting = false,
+                sameAddress = false,
+                isConnected = false,
+                isPending = false,
+            ),
+        ).isEqualTo(BtConnectorAction.CREATE_NEW)
+    }
+
+    @Test
+    fun differentAddressReconnects() {
+        assertThat(
+            decideBtConnectorAction(
+                hasExisting = true,
+                sameAddress = false,
+                isConnected = false,
+                isPending = false,
+            ),
+        ).isEqualTo(BtConnectorAction.RECONNECT_NEW_ADDRESS)
+    }
+
+    @Test
+    fun differentAddressReconnectsEvenWhenConnected() {
+        assertThat(
+            decideBtConnectorAction(
+                hasExisting = true,
+                sameAddress = false,
+                isConnected = true,
+                isPending = false,
+            ),
+        ).isEqualTo(BtConnectorAction.RECONNECT_NEW_ADDRESS)
+    }
+
+    @Test
+    fun sameAddressDisconnectedRetries() {
+        assertThat(
+            decideBtConnectorAction(
+                hasExisting = true,
+                sameAddress = true,
+                isConnected = false,
+                isPending = false,
+            ),
+        ).isEqualTo(BtConnectorAction.RETRY)
+    }
+
+    @Test
+    fun sameAddressConnectedIsNoAction() {
+        assertThat(
+            decideBtConnectorAction(
+                hasExisting = true,
+                sameAddress = true,
+                isConnected = true,
+                isPending = false,
+            ),
+        ).isEqualTo(BtConnectorAction.NO_ACTION)
+    }
+
+    @Test
+    fun sameAddressPendingIsNoAction() {
+        assertThat(
+            decideBtConnectorAction(
+                hasExisting = true,
+                sameAddress = true,
+                isConnected = false,
+                isPending = true,
+            ),
+        ).isEqualTo(BtConnectorAction.NO_ACTION)
+    }
 }
