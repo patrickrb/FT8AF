@@ -1355,6 +1355,9 @@ public class MainViewModel extends ViewModel {
      */
     private void connectRig() {
 
+        if (baseRig != null) {
+            baseRig.onDisconnecting();
+        }
         baseRig = null;
         //determine the rig type: ICOM, YAESU 2, YAESU 3
         switch (GeneralVariables.instructionSet) {
