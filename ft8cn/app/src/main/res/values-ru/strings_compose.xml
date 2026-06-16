@@ -124,7 +124,7 @@
     <string name="decode_empty_forme_title">Нет вызовов вам</string>
     <string name="decode_empty_forme_body">Сейчас никто не вызывает ваш позывной.</string>
     <string name="decode_empty_default_title">Нет декодированных сигналов</string>
-    <string name="decode_empty_default_body">Ожидание сигналов %s...</string>
+    <string name="decode_empty_default_body">Ожидание сигналов %1$s...</string>
     <string name="decode_label_calling">→ ВЫЗЫВАЕТ</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ ВАМ</string>

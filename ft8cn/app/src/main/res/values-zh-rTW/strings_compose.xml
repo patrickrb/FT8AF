@@ -124,7 +124,7 @@
     <string name="decode_empty_forme_title">沒有呼叫您的電台</string>
     <string name="decode_empty_forme_body">目前沒有電台正在呼叫您的呼號。</string>
     <string name="decode_empty_default_title">未解碼到訊號</string>
-    <string name="decode_empty_default_body">等待 %s 訊號出現中…</string>
+    <string name="decode_empty_default_body">等待 %1$s 訊號出現中…</string>
     <string name="decode_label_calling">→ 呼叫中</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ 給您</string>

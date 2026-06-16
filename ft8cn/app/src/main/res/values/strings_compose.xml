@@ -166,7 +166,7 @@
     <string name="decode_empty_forme_title">No calls for you</string>
     <string name="decode_empty_forme_body">No stations are calling your callsign right now.</string>
     <string name="decode_empty_default_title">No signals decoded</string>
-    <string name="decode_empty_default_body">Waiting for %s signals to appear...</string>
+    <string name="decode_empty_default_body">Waiting for %1$s signals to appear...</string>
     <string name="decode_label_calling">→ CALLING</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ TO YOU</string>

@@ -166,7 +166,7 @@
     <string name="decode_empty_forme_title">Tidak ada panggilan untuk Anda</string>
     <string name="decode_empty_forme_body">Tidak ada stasiun yang memanggil tanda panggil Anda saat ini.</string>
     <string name="decode_empty_default_title">Tidak ada sinyal didekode</string>
-    <string name="decode_empty_default_body">Menunggu sinyal %s muncul...</string>
+    <string name="decode_empty_default_body">Menunggu sinyal %1$s muncul...</string>
     <string name="decode_label_calling">→ MEMANGGIL</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ UNTUK ANDA</string>

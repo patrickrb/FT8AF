@@ -124,7 +124,7 @@
     <string name="decode_empty_forme_title">Sin llamadas para ti</string>
     <string name="decode_empty_forme_body">Ninguna estación está llamando a tu indicativo ahora mismo.</string>
     <string name="decode_empty_default_title">Sin señales decodificadas</string>
-    <string name="decode_empty_default_body">Esperando que aparezcan señales %s...</string>
+    <string name="decode_empty_default_body">Esperando que aparezcan señales %1$s...</string>
     <string name="decode_label_calling">→ LLAMANDO</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ PARA TI</string>
