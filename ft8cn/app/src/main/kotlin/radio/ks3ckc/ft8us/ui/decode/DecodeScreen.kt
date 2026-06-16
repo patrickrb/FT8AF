@@ -490,7 +490,7 @@ internal fun EmptyState(
         "New DXCC" -> stringResource(R.string.decode_empty_dxcc_title) to stringResource(R.string.decode_empty_dxcc_body)
         "Needed" -> stringResource(R.string.decode_empty_needed_title) to stringResource(R.string.decode_empty_needed_body)
         "For Me" -> stringResource(R.string.decode_empty_forme_title) to stringResource(R.string.decode_empty_forme_body)
-        else -> stringResource(R.string.decode_empty_default_title) to stringResource(R.string.decode_empty_default_body)
+        else -> stringResource(R.string.decode_empty_default_title) to stringResource(R.string.decode_empty_default_body, GeneralVariables.currentMode().displayName)
     }
 
     Column(

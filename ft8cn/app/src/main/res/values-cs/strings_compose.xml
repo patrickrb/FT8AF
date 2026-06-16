@@ -166,7 +166,7 @@
     <string name="decode_empty_forme_title">Žádná volání pro vás</string>
     <string name="decode_empty_forme_body">Právě nikdo nevolá vaši volací značku.</string>
     <string name="decode_empty_default_title">Žádné dekódované signály</string>
-    <string name="decode_empty_default_body">Čekání na signály FT8...</string>
+    <string name="decode_empty_default_body">Čekání na signály %s...</string>
     <string name="decode_label_calling">→ VOLÁ</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ PRO VÁS</string>

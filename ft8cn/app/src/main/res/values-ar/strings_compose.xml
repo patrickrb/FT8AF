@@ -166,7 +166,7 @@
     <string name="decode_empty_forme_title">لا نداءات لك</string>
     <string name="decode_empty_forme_body">لا توجد محطات تنادي نداءك الآن.</string>
     <string name="decode_empty_default_title">لا إشارات مفكوكة</string>
-    <string name="decode_empty_default_body">في انتظار ظهور إشارات FT8...</string>
+    <string name="decode_empty_default_body">في انتظار ظهور إشارات %s...</string>
     <string name="decode_label_calling">→ ينادي</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ إليك</string>

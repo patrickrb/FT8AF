@@ -124,7 +124,7 @@
     <string name="decode_empty_forme_title">没有呼叫您的电台</string>
     <string name="decode_empty_forme_body">当前没有电台在呼叫您的呼号。</string>
     <string name="decode_empty_default_title">未解码到信号</string>
-    <string name="decode_empty_default_body">正在等待 FT8 信号出现...</string>
+    <string name="decode_empty_default_body">正在等待 %s 信号出现...</string>
     <string name="decode_label_calling">→ 正在呼叫</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ 呼叫您</string>
