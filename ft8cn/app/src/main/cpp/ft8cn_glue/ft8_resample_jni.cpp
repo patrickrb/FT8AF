@@ -77,11 +77,6 @@ static int resample_float_to_float(const float* input, int in_len,
             sample += input[j] * w;
             weight_sum += w;
         }
-        if (weight_sum > 1e-10f)
-            output[i] = sample * cutoff / weight_sum * filter_len / cutoff;
-        else
-            output[i] = 0;
-        // Simplified: just normalize by weight sum
         output[i] = (weight_sum > 1e-10f) ? (sample / weight_sum) : 0;
         n_out++;
     }
@@ -145,28 +140,28 @@ Java_com_bg7yoz_ft8cn_wave_FT8Resample_get16Resample16(
 {
     jsize in_total = env->GetArrayLength(inputData);
     jshort* in_raw = env->GetShortArrayElements(inputData, nullptr);
-    if (!in_raw) return nullptr;
+    if (!in_raw) return env->NewShortArray(0);
 
     int in_frames = (channels > 0) ? (in_total / channels) : in_total;
     float* mono = (float*)malloc(in_frames * sizeof(float));
-    if (!mono) { env->ReleaseShortArrayElements(inputData, in_raw, JNI_ABORT); return nullptr; }
+    if (!mono) { env->ReleaseShortArrayElements(inputData, in_raw, JNI_ABORT); return env->NewShortArray(0); }
     mix_to_mono_short(in_raw, in_total, channels > 0 ? channels : 1, mono, in_frames);
     env->ReleaseShortArrayElements(inputData, in_raw, JNI_ABORT);
 
     int out_len = compute_output_length(in_frames, inputRate, outputRate);
-    if (out_len <= 0) { free(mono); return nullptr; }
+    if (out_len <= 0) { free(mono); return env->NewShortArray(0); }
 
     float* out_f = (float*)malloc(out_len * sizeof(float));
-    if (!out_f) { free(mono); return nullptr; }
+    if (!out_f) { free(mono); return env->NewShortArray(0); }
 
     resample_float_to_float(mono, in_frames, inputRate, outputRate, out_f, out_len);
     free(mono);
 
     jshortArray result = env->NewShortArray(out_len);
-    if (!result) { free(out_f); return nullptr; }
+    if (!result) { free(out_f); return env->NewShortArray(0); }
 
     jshort* out_s = env->GetShortArrayElements(result, nullptr);
-    if (!out_s) { free(out_f); return nullptr; }
+    if (!out_s) { free(out_f); return result; }
     for (int i = 0; i < out_len; ++i) {
         float v = out_f[i] * 32767.0f;
         if (v > 32767.0f) v = 32767.0f;
@@ -186,25 +181,25 @@ Java_com_bg7yoz_ft8cn_wave_FT8Resample_get32Resample16(
 {
     jsize in_total = env->GetArrayLength(inputData);
     jshort* in_raw = env->GetShortArrayElements(inputData, nullptr);
-    if (!in_raw) return nullptr;
+    if (!in_raw) return env->NewFloatArray(0);
 
     int in_frames = (channels > 0) ? (in_total / channels) : in_total;
     float* mono = (float*)malloc(in_frames * sizeof(float));
-    if (!mono) { env->ReleaseShortArrayElements(inputData, in_raw, JNI_ABORT); return nullptr; }
+    if (!mono) { env->ReleaseShortArrayElements(inputData, in_raw, JNI_ABORT); return env->NewFloatArray(0); }
     mix_to_mono_short(in_raw, in_total, channels > 0 ? channels : 1, mono, in_frames);
     env->ReleaseShortArrayElements(inputData, in_raw, JNI_ABORT);
 
     int out_len = compute_output_length(in_frames, inputRate, outputRate);
-    if (out_len <= 0) { free(mono); return nullptr; }
+    if (out_len <= 0) { free(mono); return env->NewFloatArray(0); }
 
     float* out_f = (float*)malloc(out_len * sizeof(float));
-    if (!out_f) { free(mono); return nullptr; }
+    if (!out_f) { free(mono); return env->NewFloatArray(0); }
 
     resample_float_to_float(mono, in_frames, inputRate, outputRate, out_f, out_len);
     free(mono);
 
     jfloatArray result = env->NewFloatArray(out_len);
-    if (!result) { free(out_f); return nullptr; }
+    if (!result) { free(out_f); return env->NewFloatArray(0); }
     env->SetFloatArrayRegion(result, 0, out_len, out_f);
     free(out_f);
     return result;
@@ -218,28 +213,28 @@ Java_com_bg7yoz_ft8cn_wave_FT8Resample_get16Resample32(
 {
     jsize in_total = env->GetArrayLength(inputData);
     jfloat* in_raw = env->GetFloatArrayElements(inputData, nullptr);
-    if (!in_raw) return nullptr;
+    if (!in_raw) return env->NewShortArray(0);
 
     int in_frames = (channels > 0) ? (in_total / channels) : in_total;
     float* mono = (float*)malloc(in_frames * sizeof(float));
-    if (!mono) { env->ReleaseFloatArrayElements(inputData, in_raw, JNI_ABORT); return nullptr; }
+    if (!mono) { env->ReleaseFloatArrayElements(inputData, in_raw, JNI_ABORT); return env->NewShortArray(0); }
     mix_to_mono_float(in_raw, in_total, channels > 0 ? channels : 1, mono, in_frames);
     env->ReleaseFloatArrayElements(inputData, in_raw, JNI_ABORT);
 
     int out_len = compute_output_length(in_frames, inputRate, outputRate);
-    if (out_len <= 0) { free(mono); return nullptr; }
+    if (out_len <= 0) { free(mono); return env->NewShortArray(0); }
 
     float* out_f = (float*)malloc(out_len * sizeof(float));
-    if (!out_f) { free(mono); return nullptr; }
+    if (!out_f) { free(mono); return env->NewShortArray(0); }
 
     resample_float_to_float(mono, in_frames, inputRate, outputRate, out_f, out_len);
     free(mono);
 
     jshortArray result = env->NewShortArray(out_len);
-    if (!result) { free(out_f); return nullptr; }
+    if (!result) { free(out_f); return env->NewShortArray(0); }
 
     jshort* out_s = env->GetShortArrayElements(result, nullptr);
-    if (!out_s) { free(out_f); return nullptr; }
+    if (!out_s) { free(out_f); return result; }
     for (int i = 0; i < out_len; ++i) {
         float v = out_f[i] * 32767.0f;
         if (v > 32767.0f) v = 32767.0f;
@@ -259,25 +254,25 @@ Java_com_bg7yoz_ft8cn_wave_FT8Resample_get32Resample32(
 {
     jsize in_total = env->GetArrayLength(inputData);
     jfloat* in_raw = env->GetFloatArrayElements(inputData, nullptr);
-    if (!in_raw) return nullptr;
+    if (!in_raw) return env->NewFloatArray(0);
 
     int in_frames = (channels > 0) ? (in_total / channels) : in_total;
     float* mono = (float*)malloc(in_frames * sizeof(float));
-    if (!mono) { env->ReleaseFloatArrayElements(inputData, in_raw, JNI_ABORT); return nullptr; }
+    if (!mono) { env->ReleaseFloatArrayElements(inputData, in_raw, JNI_ABORT); return env->NewFloatArray(0); }
     mix_to_mono_float(in_raw, in_total, channels > 0 ? channels : 1, mono, in_frames);
     env->ReleaseFloatArrayElements(inputData, in_raw, JNI_ABORT);
 
     int out_len = compute_output_length(in_frames, inputRate, outputRate);
-    if (out_len <= 0) { free(mono); return nullptr; }
+    if (out_len <= 0) { free(mono); return env->NewFloatArray(0); }
 
     float* out_f = (float*)malloc(out_len * sizeof(float));
-    if (!out_f) { free(mono); return nullptr; }
+    if (!out_f) { free(mono); return env->NewFloatArray(0); }
 
     resample_float_to_float(mono, in_frames, inputRate, outputRate, out_f, out_len);
     free(mono);
 
     jfloatArray result = env->NewFloatArray(out_len);
-    if (!result) { free(out_f); return nullptr; }
+    if (!result) { free(out_f); return env->NewFloatArray(0); }
     env->SetFloatArrayRegion(result, 0, out_len, out_f);
     free(out_f);
     return result;
@@ -291,28 +286,28 @@ Java_com_bg7yoz_ft8cn_wave_FT8Resample_get8Resample16(
 {
     jsize in_total = env->GetArrayLength(inputData);
     jshort* in_raw = env->GetShortArrayElements(inputData, nullptr);
-    if (!in_raw) return nullptr;
+    if (!in_raw) return env->NewByteArray(0);
 
     int in_frames = (channels > 0) ? (in_total / channels) : in_total;
     float* mono = (float*)malloc(in_frames * sizeof(float));
-    if (!mono) { env->ReleaseShortArrayElements(inputData, in_raw, JNI_ABORT); return nullptr; }
+    if (!mono) { env->ReleaseShortArrayElements(inputData, in_raw, JNI_ABORT); return env->NewByteArray(0); }
     mix_to_mono_short(in_raw, in_total, channels > 0 ? channels : 1, mono, in_frames);
     env->ReleaseShortArrayElements(inputData, in_raw, JNI_ABORT);
 
     int out_len = compute_output_length(in_frames, inputRate, outputRate);
-    if (out_len <= 0) { free(mono); return nullptr; }
+    if (out_len <= 0) { free(mono); return env->NewByteArray(0); }
 
     float* out_f = (float*)malloc(out_len * sizeof(float));
-    if (!out_f) { free(mono); return nullptr; }
+    if (!out_f) { free(mono); return env->NewByteArray(0); }
 
     resample_float_to_float(mono, in_frames, inputRate, outputRate, out_f, out_len);
     free(mono);
 
     jbyteArray result = env->NewByteArray(out_len);
-    if (!result) { free(out_f); return nullptr; }
+    if (!result) { free(out_f); return env->NewByteArray(0); }
 
     jbyte* out_b = env->GetByteArrayElements(result, nullptr);
-    if (!out_b) { free(out_f); return nullptr; }
+    if (!out_b) { free(out_f); return result; }
     for (int i = 0; i < out_len; ++i) {
         // Convert -1.0..1.0 float to 0..255 unsigned byte (stored as signed jbyte)
         int v = (int)((out_f[i] + 1.0f) * 127.5f);
@@ -333,28 +328,28 @@ Java_com_bg7yoz_ft8cn_wave_FT8Resample_get8Resample32(
 {
     jsize in_total = env->GetArrayLength(inputData);
     jfloat* in_raw = env->GetFloatArrayElements(inputData, nullptr);
-    if (!in_raw) return nullptr;
+    if (!in_raw) return env->NewByteArray(0);
 
     int in_frames = (channels > 0) ? (in_total / channels) : in_total;
     float* mono = (float*)malloc(in_frames * sizeof(float));
-    if (!mono) { env->ReleaseFloatArrayElements(inputData, in_raw, JNI_ABORT); return nullptr; }
+    if (!mono) { env->ReleaseFloatArrayElements(inputData, in_raw, JNI_ABORT); return env->NewByteArray(0); }
     mix_to_mono_float(in_raw, in_total, channels > 0 ? channels : 1, mono, in_frames);
     env->ReleaseFloatArrayElements(inputData, in_raw, JNI_ABORT);
 
     int out_len = compute_output_length(in_frames, inputRate, outputRate);
-    if (out_len <= 0) { free(mono); return nullptr; }
+    if (out_len <= 0) { free(mono); return env->NewByteArray(0); }
 
     float* out_f = (float*)malloc(out_len * sizeof(float));
-    if (!out_f) { free(mono); return nullptr; }
+    if (!out_f) { free(mono); return env->NewByteArray(0); }
 
     resample_float_to_float(mono, in_frames, inputRate, outputRate, out_f, out_len);
     free(mono);
 
     jbyteArray result = env->NewByteArray(out_len);
-    if (!result) { free(out_f); return nullptr; }
+    if (!result) { free(out_f); return env->NewByteArray(0); }
 
     jbyte* out_b = env->GetByteArrayElements(result, nullptr);
-    if (!out_b) { free(out_f); return nullptr; }
+    if (!out_b) { free(out_f); return result; }
     for (int i = 0; i < out_len; ++i) {
         int v = (int)((out_f[i] + 1.0f) * 127.5f);
         if (v > 255) v = 255;

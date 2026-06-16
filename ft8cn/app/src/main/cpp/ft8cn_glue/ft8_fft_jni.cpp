@@ -70,17 +70,21 @@ static void compute_fft_magnitudes(const float* input, int n, int* output, bool 
     if (denoise) {
         // Simple denoising: compute a local average noise floor using a sliding
         // window, then subtract it. Window size is ~5% of the bin count, minimum 8.
+        // Uses a prefix-sum for O(1) per-bin window average instead of O(win).
         int win = n_bins / 20;
         if (win < 8) win = 8;
         if (win > n_bins) win = n_bins;
 
-        float* noise_floor = (float*)malloc(n_bins * sizeof(float));
-        if (noise_floor) {
-            // Running sum for the window
-            float sum = 0;
-            for (int i = 0; i < win && i < n_bins; ++i)
-                sum += mag[i];
+        // Prefix sum: prefix[i] = sum of mag[0..i-1], prefix[0] = 0
+        float* prefix = (float*)malloc((n_bins + 1) * sizeof(float));
+        if (prefix) {
+            prefix[0] = 0;
+            for (int i = 0; i < n_bins; ++i)
+                prefix[i + 1] = prefix[i] + mag[i];
 
+            // Subtract noise floor in-place using prefix sums
+            // We need the original mag values for the prefix sum, so compute
+            // denoised values into a separate pass.
             for (int i = 0; i < n_bins; ++i) {
                 int left = i - win / 2;
                 int right = left + win;
@@ -88,17 +92,8 @@ static void compute_fft_magnitudes(const float* input, int n, int* output, bool 
                 if (right > n_bins) { right = n_bins; left = right - win; }
                 if (left < 0) left = 0;
 
-                // Recompute average for this window position
-                float avg = 0;
-                for (int j = left; j < right; ++j)
-                    avg += mag[j];
-                avg /= (right - left);
-                noise_floor[i] = avg;
-            }
-
-            // Subtract noise floor
-            for (int i = 0; i < n_bins; ++i) {
-                mag[i] -= noise_floor[i];
+                float avg = (prefix[right] - prefix[left]) / (right - left);
+                mag[i] -= avg;
                 if (mag[i] < 0) mag[i] = 0;
             }
 
@@ -108,7 +103,7 @@ static void compute_fft_magnitudes(const float* input, int n, int* output, bool 
                 if (mag[i] > max_mag) max_mag = mag[i];
             }
 
-            free(noise_floor);
+            free(prefix);
         }
     }
 
