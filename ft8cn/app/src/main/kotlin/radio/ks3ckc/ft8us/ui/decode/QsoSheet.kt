@@ -459,8 +459,8 @@ private fun computeCurrentStepIndex(
     isLiveQso: Boolean,
     liveFunctionOrder: Int,
 ): Int {
-    val isFullyComplete = (message.isQSL_Callsign ||
-        GeneralVariables.checkQSLCallsign(message.getCallsignFrom())) && !isLiveQso
+    val isFullyComplete = !isLiveQso && (message.isQSL_Callsign ||
+        GeneralVariables.checkQSLCallsign(message.getCallsignFrom()))
     return when {
         isFullyComplete -> 5
         isLiveQso -> when (liveFunctionOrder) {
