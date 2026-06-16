@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -96,6 +97,27 @@ fun FT8USApp(mainViewModel: MainViewModel) {
     // switches VOX <-> CAT/RTS/DTR in Settings (seeds from the current value).
     val controlMode by GeneralVariables.mutableControlMode.observeAsState(GeneralVariables.controlMode)
     val showCatChip = shouldShowCatChip(controlMode, catState)
+
+    // TX Volume state — observe LiveData so hardware buttons, ALC auto-volume,
+    // and the settings slider all update the inline slider bidirectionally.
+    val volumeLive by GeneralVariables.mutableVolumePercent.observeAsState(
+        GeneralVariables.volumePercent,
+    )
+    var txVolume by remember { mutableIntStateOf((GeneralVariables.volumePercent * 100).toInt()) }
+    LaunchedEffect(volumeLive) {
+        txVolume = ((volumeLive ?: GeneralVariables.volumePercent) * 100).toInt()
+    }
+
+    // Inline volume slider visibility — observed so toggling in Settings
+    // immediately shows/hides the slider on the main screen.
+    val showVolumeSliderLive by GeneralVariables.mutableShowTxVolumeSlider.observeAsState(
+        GeneralVariables.showTxVolumeSlider,
+    )
+    var showVolumeSlider by remember { mutableStateOf(GeneralVariables.showTxVolumeSlider) }
+    LaunchedEffect(showVolumeSliderLive) {
+        showVolumeSlider = showVolumeSliderLive ?: GeneralVariables.showTxVolumeSlider
+    }
+
     // Consume the one-shot celebration signal so LiveData doesn't replay it
     // on recomposition / resubscription.
     LaunchedEffect(qsoCompletedAt) {
@@ -308,6 +330,15 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                 catState = catState,
                 showCatChip = showCatChip,
                 expanded = qsoPanelExpanded,
+                txVolume = txVolume,
+                showVolumeSlider = showVolumeSlider,
+                onVolumeChange = { newVolume ->
+                    txVolume = newVolume
+                    GeneralVariables.volumePercent = newVolume / 100f
+                    GeneralVariables.mutableVolumePercent.postValue(newVolume / 100f)
+                    mainViewModel.databaseOpr.writeConfig("volumeValue", newVolume.toString(), null)
+                    mainViewModel.baseRig?.connector?.setRFVolume(newVolume)
+                },
                 onCallCQ = {
                     if (GeneralVariables.myCallsign.isNullOrEmpty()) {
                         Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()

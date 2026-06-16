@@ -612,6 +612,26 @@ fun RadioAudioSettings(
                         showChevron = true,
                         onClick = { showTxVolume = true },
                     )
+                    SectionDivider()
+                    run {
+                        var showSlider by remember { mutableStateOf(GeneralVariables.showTxVolumeSlider) }
+                        SettingsRow(
+                            label = stringResource(R.string.settings_show_volume_slider),
+                            description = stringResource(R.string.settings_show_volume_slider_desc),
+                        ) {
+                            Toggle(
+                                checked = showSlider,
+                                onCheckedChange = { enabled ->
+                                    showSlider = enabled
+                                    GeneralVariables.showTxVolumeSlider = enabled
+                                    GeneralVariables.mutableShowTxVolumeSlider.postValue(enabled)
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "showTxVolumeSlider", if (enabled) "1" else "0", null,
+                                    )
+                                },
+                            )
+                        }
+                    }
                 }
             }
         }
