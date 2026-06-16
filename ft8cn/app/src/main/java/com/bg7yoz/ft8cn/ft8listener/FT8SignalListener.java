@@ -251,7 +251,7 @@ public class FT8SignalListener {
 
                     if (ft8Message.isValid) {
                         if (!ft8Message.hasSnr()) {
-                            Log.w(TAG, "SNR not set by decoder for candidate " + idx
+                            Log.d(TAG, "SNR not set by decoder for candidate " + idx
                                     + " (" + ft8Message.callsignFrom + ")");
                         }
                         Ft8Message msg = new Ft8Message(ft8Message);// using msg here because some hashed callsigns will replace <...>
