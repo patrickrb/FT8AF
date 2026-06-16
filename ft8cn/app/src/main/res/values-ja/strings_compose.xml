@@ -124,7 +124,7 @@
     <string name="decode_empty_forme_title">自分宛てのコールなし</string>
     <string name="decode_empty_forme_body">現在あなたのコールサインを呼んでいる局はありません。</string>
     <string name="decode_empty_default_title">デコードされた信号なし</string>
-    <string name="decode_empty_default_body">FT8 信号が表示されるのを待機中...</string>
+    <string name="decode_empty_default_body">%1$s 信号が表示されるのを待機中...</string>
     <string name="decode_label_calling">→ 呼出中</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ 自分宛て</string>

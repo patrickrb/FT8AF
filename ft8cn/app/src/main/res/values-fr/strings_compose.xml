@@ -124,7 +124,7 @@
     <string name="decode_empty_forme_title">Aucun appel pour vous</string>
     <string name="decode_empty_forme_body">Aucune station n\'appelle votre indicatif pour le moment.</string>
     <string name="decode_empty_default_title">Aucun signal décodé</string>
-    <string name="decode_empty_default_body">En attente de signaux FT8...</string>
+    <string name="decode_empty_default_body">En attente de signaux %1$s...</string>
     <string name="decode_label_calling">→ APPEL</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ POUR VOUS</string>

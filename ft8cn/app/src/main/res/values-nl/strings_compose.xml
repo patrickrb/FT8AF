@@ -166,7 +166,7 @@
     <string name="decode_empty_forme_title">Geen roepen voor jou</string>
     <string name="decode_empty_forme_body">Geen station roept op dit moment jouw roepnaam.</string>
     <string name="decode_empty_default_title">Geen signalen gedecodeerd</string>
-    <string name="decode_empty_default_body">Wachten tot FT8-signalen verschijnen...</string>
+    <string name="decode_empty_default_body">Wachten tot %1$s-signalen verschijnen...</string>
     <string name="decode_label_calling">→ ROEPT</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ VOOR JOU</string>

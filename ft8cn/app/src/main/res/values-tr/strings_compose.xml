@@ -155,7 +155,7 @@
     <string name="decode_empty_forme_title">Size çağrı yok</string>
     <string name="decode_empty_forme_body">Şu anda çağrı işaretinizi çağıran istasyon yok.</string>
     <string name="decode_empty_default_title">Çözümlenen sinyal yok</string>
-    <string name="decode_empty_default_body">FT8 sinyallerinin görünmesi bekleniyor...</string>
+    <string name="decode_empty_default_body">%1$s sinyallerinin görünmesi bekleniyor...</string>
     <string name="decode_label_calling">→ ÇAĞIRIYOR</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ SİZE</string>

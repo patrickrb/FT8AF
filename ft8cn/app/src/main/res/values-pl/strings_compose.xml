@@ -155,7 +155,7 @@
     <string name="decode_empty_forme_title">Brak wywołań dla Ciebie</string>
     <string name="decode_empty_forme_body">Żadna stacja nie wywołuje teraz Twojego znaku.</string>
     <string name="decode_empty_default_title">Brak zdekodowanych sygnałów</string>
-    <string name="decode_empty_default_body">Oczekiwanie na sygnały FT8...</string>
+    <string name="decode_empty_default_body">Oczekiwanie na sygnały %1$s...</string>
     <string name="decode_label_calling">→ WYWOŁUJE</string>
     <string name="decode_label_cq">CQ</string>
     <string name="decode_label_to_you">↓ DO CIEBIE</string>
