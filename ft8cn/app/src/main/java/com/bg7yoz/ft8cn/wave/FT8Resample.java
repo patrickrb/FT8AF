@@ -8,7 +8,7 @@ package com.bg7yoz.ft8cn.wave;
 public class FT8Resample {
 
     static {
-        System.loadLibrary("ft8cn");
+        System.loadLibrary("ft8af");
     }
 
     public static native short[] get16Resample16(short[] inputData, int inputRate

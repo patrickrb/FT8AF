@@ -39,7 +39,7 @@ public class SpectrumView extends ConstraintLayout {
     private int frequencyLineTimeOut = 0;//Frequency line display duration
 
     static {
-        System.loadLibrary("ft8cn");
+        System.loadLibrary("ft8af");
     }
 
 

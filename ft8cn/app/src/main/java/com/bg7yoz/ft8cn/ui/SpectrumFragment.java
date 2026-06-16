@@ -38,7 +38,7 @@ public class SpectrumFragment extends Fragment {
 
 
     static {
-        System.loadLibrary("ft8cn");
+        System.loadLibrary("ft8af");
     }
 
 

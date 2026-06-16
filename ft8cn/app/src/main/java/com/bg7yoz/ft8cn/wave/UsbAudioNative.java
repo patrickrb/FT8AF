@@ -27,10 +27,10 @@ public final class UsbAudioNative {
     static {
         boolean loaded;
         try {
-            System.loadLibrary("ft8af_usb");
+            System.loadLibrary("ft8af");
             loaded = true;
         } catch (UnsatisfiedLinkError e) {
-            Log.w(TAG, "Failed to load libft8af_usb: " + e.getMessage());
+            Log.w(TAG, "Failed to load libft8af: " + e.getMessage());
             loaded = false;
         }
         LIBRARY_LOADED = loaded;

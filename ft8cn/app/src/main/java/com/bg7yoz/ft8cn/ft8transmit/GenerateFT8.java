@@ -35,18 +35,13 @@ public class GenerateFT8 {
 
     static {
         try {
-            System.loadLibrary("ft8cn");
-            // ft4_encode's JNI entry point lives in ft8af_usb (it bridges to the
-            // prebuilt libft8cn.so's ft4_encode C symbol — see cpp/ft4_encode_jni.cpp).
-            // Load it here so GenerateFT8.ft4Encode() resolves regardless of whether
-            // the USB-audio path has been exercised yet.
-            System.loadLibrary("ft8af_usb");
+            System.loadLibrary("ft8af");
         } catch (UnsatisfiedLinkError e) {
             // Best-effort load: JVM unit tests don't have the native libs on
             // java.library.path. The native methods themselves will throw if
             // actually invoked without the library; the pure-Java helpers on
             // this class stay available either way.
-            Log.w(TAG, "ft8cn native library not loaded: " + e.getMessage());
+            Log.w(TAG, "ft8af native library not loaded: " + e.getMessage());
         }
     }
 

@@ -46,14 +46,10 @@ public class FT8SignalListener {
 
     static {
         try {
-            System.loadLibrary("ft8cn");
-            // The FT2 decoder JNI entry points (InitDecoderFt2 etc.) live in ft8af_usb (our
-            // from-source ft8_lib build), not the prebuilt ft8cn. Load it so they resolve when
-            // the user operates in FT2 mode. Idempotent if GenerateFT8 already loaded it.
-            System.loadLibrary("ft8af_usb");
+            System.loadLibrary("ft8af");
         } catch (UnsatisfiedLinkError e) {
-            // Best-effort load (mirrors GenerateFT8): JVM unit tests don't have the native
-            // libs on java.library.path. The native decode methods throw if actually invoked
+            // Best-effort load: JVM unit tests don't have the native libs on
+            // java.library.path. The native decode methods throw if actually invoked
             // without the library; class init must not crash.
             Log.w(TAG, "native library not loaded: " + e.getMessage());
         }
