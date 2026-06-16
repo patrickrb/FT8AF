@@ -137,7 +137,6 @@ android {
         main {
             java.srcDirs = ['src/main/java']
             kotlin.srcDirs = ['src/main/kotlin']
-            jniLibs.srcDirs = ['libs']
         }
         test {
             java.srcDirs = ['src/test/java']

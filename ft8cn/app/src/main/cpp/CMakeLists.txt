@@ -1,9 +1,12 @@
-# FT8AF native USB audio module.
+# FT8AF native module.
 #
-# Builds libft8af_usb.so containing our libusb-backed USB Audio Class
-# capture path, with libusb 1.0.27 statically linked in. The shared
-# library is packaged alongside the upstream-prebuilt libft8cn.so
-# (which we don't compile here — see jniLibs.srcDirs = ['libs']).
+# Builds a single libft8af.so containing:
+#   - All FT8/FT4/FT2 DSP (encode, decode, FFT, resample, hash, GFSK)
+#   - USB Audio Class capture (libusb-backed)
+#
+# The prebuilt libft8cn.so is no longer used — all native functionality is
+# now built from the in-tree kgoba ft8_lib (pinned at 6f528128) and the
+# ft8cn_glue JNI wrappers.
 #
 # Why libusb: Android's UsbRequest API silently fails to drive
 # isochronous transfers on some kernels (notably automotive Android
@@ -56,35 +59,16 @@ target_compile_options(usb1.0 PRIVATE
 )
 
 # ---------------------------------------------------------------------------
-# Prebuilt libft8cn.so (imported)
+# ft8af_dsp — from-source FT8/FT4/FT2 DSP (static)
 # ---------------------------------------------------------------------------
-# The FT8/FT4 DSP lives in the upstream prebuilt libft8cn.so packaged under
-# app/libs/<abi>/. We don't compile it, but we link ft8af_usb against it so the
-# FT4 encode JNI shim (ft4_encode_jni.cpp) can call the prebuilt's `ft4_encode`.
-
-add_library(ft8cn_prebuilt SHARED IMPORTED)
-set_target_properties(ft8cn_prebuilt PROPERTIES
-        IMPORTED_LOCATION
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../../libs/${ANDROID_ABI}/libft8cn.so
-)
-
-# ---------------------------------------------------------------------------
-# ft8af_dsp — from-source FT2 decoder (static)
-# ---------------------------------------------------------------------------
-# The prebuilt libft8cn.so decodes FT8/FT4 only. FT2 (FT4 at double baud) is decoded
-# with the in-tree kgoba ft8_lib (pinned at 6f528128 — see ft8_lib/FT8_LIB_PIN.txt, the
-# same commit the prebuilt was built from), with FT2 added to the protocol switch.
-#
-# Only the decode slice is compiled (no encode.c — FT2 TX reuses the prebuilt's ft4_encode
-# via ft4_encode_jni.cpp). Built with -fvisibility=hidden so these symbols (ft8_find_sync,
-# monitor_init, ldpc/crc tables, ...) stay INTERNAL to libft8af_usb.so and never clash with
-# or interpose the identically-named symbols the prebuilt libft8cn.so exports. The JNI
-# entry points in ft2_decode_jni.cpp keep default visibility (JNIEXPORT) and are compiled
-# into the shared lib directly so they aren't garbage-collected from a static archive.
+# The full kgoba ft8_lib (pinned at 6f528128) including encode.c. All DSP
+# symbols are linked into the single libft8af.so shared library; no prebuilt
+# dependency remains.
 
 set(FT8LIB_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/ft8_lib)
 
 add_library(ft8af_dsp STATIC
+        ${FT8LIB_ROOT}/ft8/encode.c
         ${FT8LIB_ROOT}/ft8/decode.c
         ${FT8LIB_ROOT}/ft8/ldpc.c
         ${FT8LIB_ROOT}/ft8/crc.c
@@ -101,29 +85,39 @@ add_library(ft8af_dsp STATIC
 target_include_directories(ft8af_dsp PUBLIC ${FT8LIB_ROOT})
 
 target_compile_options(ft8af_dsp PRIVATE
-        -fvisibility=hidden
         -Wno-unused-function
 )
 
 # ---------------------------------------------------------------------------
-# libft8af_usb.so — our JNI bridge
+# libft8af.so — unified JNI bridge (replaces both libft8cn.so and libft8af_usb.so)
 # ---------------------------------------------------------------------------
 
-add_library(ft8af_usb SHARED
+add_library(ft8af SHARED
+        # USB audio
         usb_audio.cpp
         usb_audio_capture.cpp
-        ft4_encode_jni.cpp
+        # GFSK synthesis
+        ft8cn_glue/gfsk.c
+        # JNI wrappers — encode/pack/GFSK
+        ft8cn_glue/ft8_encode_jni.cpp
+        # JNI wrappers — callsign hash
+        ft8cn_glue/ft8_hash_jni.cpp
+        # JNI wrappers — FFT display
+        ft8cn_glue/ft8_fft_jni.cpp
+        # JNI wrappers — audio resampler
+        ft8cn_glue/ft8_resample_jni.cpp
+        # JNI wrappers — FT8 decoder (replaces prebuilt)
+        ft8cn_glue/ft8_decode_jni.cpp
+        # JNI wrappers — FT2/FT4 decoder (from-source, was in ft8af_usb)
         ft8cn_glue/ft2_decode_jni.cpp
 )
 
-# ft2_decode_jni.cpp includes "ft8/..", "common/.." headers from ft8_lib.
-target_include_directories(ft8af_usb PRIVATE ${FT8LIB_ROOT})
+target_include_directories(ft8af PRIVATE ${FT8LIB_ROOT})
 
 find_library(log-lib log)
 
-target_link_libraries(ft8af_usb
+target_link_libraries(ft8af
         usb1.0
         ft8af_dsp
-        ft8cn_prebuilt
         ${log-lib}
 )

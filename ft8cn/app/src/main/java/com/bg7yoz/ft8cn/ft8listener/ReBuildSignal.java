@@ -13,11 +13,9 @@ public class ReBuildSignal {
     private static String TAG = "ReBuildSignal";
     static {
         try {
-            System.loadLibrary("ft8cn");
-            // doSubtractSignalFt2 lives in ft8af_usb (the from-source FT2 decoder), not ft8cn.
-            System.loadLibrary("ft8af_usb");
+            System.loadLibrary("ft8af");
         } catch (UnsatisfiedLinkError e) {
-            // Best-effort load (mirrors GenerateFT8); native methods throw if invoked without
+            // Best-effort load; native methods throw if invoked without
             // the library, but class init must not crash (e.g. JVM unit tests).
             Log.w(TAG, "native library not loaded: " + e.getMessage());
         }
