@@ -27,6 +27,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
@@ -86,6 +90,7 @@ fun TxStrip(
     txVolume: Int = 80,
     showVolumeSlider: Boolean = false,
     onVolumeChange: (Int) -> Unit = {},
+    onVolumeChangeFinished: () -> Unit = {},
     onCallCQ: () -> Unit,
     onStop: () -> Unit,
     onToggleSlot: () -> Unit,
@@ -293,10 +298,14 @@ fun TxStrip(
                 // Minus button
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(36.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(BgSurface3)
-                        .clickable { onVolumeChange(clampVolume(txVolume, -5)) },
+                        .semantics { role = Role.Button; contentDescription = "Decrease TX volume" }
+                        .clickable {
+                            onVolumeChange(clampVolume(txVolume, -5))
+                            onVolumeChangeFinished()
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -315,6 +324,7 @@ fun TxStrip(
                         val clamped = v.toInt().coerceIn(0, 100)
                         onVolumeChange(clamped)
                     },
+                    onValueChangeFinished = onVolumeChangeFinished,
                     valueRange = 0f..100f,
                     modifier = Modifier.weight(1f),
                     colors = SliderDefaults.colors(
@@ -326,10 +336,14 @@ fun TxStrip(
                 // Plus button
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(36.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(BgSurface3)
-                        .clickable { onVolumeChange(clampVolume(txVolume, 5)) },
+                        .semantics { role = Role.Button; contentDescription = "Increase TX volume" }
+                        .clickable {
+                            onVolumeChange(clampVolume(txVolume, 5))
+                            onVolumeChangeFinished()
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(

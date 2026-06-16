@@ -336,8 +336,10 @@ fun FT8USApp(mainViewModel: MainViewModel) {
                     txVolume = newVolume
                     GeneralVariables.volumePercent = newVolume / 100f
                     GeneralVariables.mutableVolumePercent.postValue(newVolume / 100f)
-                    mainViewModel.databaseOpr.writeConfig("volumeValue", newVolume.toString(), null)
-                    mainViewModel.baseRig?.connector?.setRFVolume(newVolume)
+                },
+                onVolumeChangeFinished = {
+                    mainViewModel.databaseOpr.writeConfig("volumeValue", txVolume.toString(), null)
+                    mainViewModel.baseRig?.connector?.setRFVolume(txVolume)
                 },
                 onCallCQ = {
                     if (GeneralVariables.myCallsign.isNullOrEmpty()) {
