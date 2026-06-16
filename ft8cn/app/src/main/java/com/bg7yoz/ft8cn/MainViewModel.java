@@ -115,6 +115,7 @@ import com.bg7yoz.ft8cn.wave.HamRecorder;
 import com.bg7yoz.ft8cn.wave.OnGetVoiceDataDone;
 import com.bg7yoz.ft8cn.x6100.X6100Radio;
 
+import radio.ks3ckc.ft8us.UsbPermissionIntentsKt;
 import radio.ks3ckc.ft8us.pskreporter.PskReporterSender;
 
 import java.io.File;
@@ -1697,14 +1698,8 @@ public class MainViewModel extends ViewModel {
         }
 
         Log.d(TAG, "Requesting USB permission for audio device: " + device.getProductName());
-        PendingIntent permissionIntent;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissionIntent = PendingIntent.getBroadcast(context, 0,
-                    new Intent(ACTION_USB_AUDIO_PERMISSION), PendingIntent.FLAG_MUTABLE);
-        } else {
-            permissionIntent = PendingIntent.getBroadcast(context, 0,
-                    new Intent(ACTION_USB_AUDIO_PERMISSION), PendingIntent.FLAG_IMMUTABLE);
-        }
+        PendingIntent permissionIntent = UsbPermissionIntentsKt.createUsbPermissionIntent(
+                context, ACTION_USB_AUDIO_PERMISSION);
 
         BroadcastReceiver permReceiver = new BroadcastReceiver() {
             @Override

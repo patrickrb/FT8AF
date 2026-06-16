@@ -53,6 +53,8 @@ import com.bg7yoz.ft8cn.timer.UtcTimer;
 
 import java.io.IOException;
 
+import radio.ks3ckc.ft8us.UsbPermissionIntentsKt;
+
 /**
  * A simple {@link Fragment} subclass.
  * create an instance of this fragment.
@@ -1176,14 +1178,8 @@ public class ConfigFragment extends Fragment {
         }
 
         Log.d(TAG, "Requesting USB permission for audio device: " + device.getProductName());
-        PendingIntent permissionIntent;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissionIntent = PendingIntent.getBroadcast(requireContext(), 0,
-                    new Intent(ACTION_USB_AUDIO_PERMISSION), PendingIntent.FLAG_MUTABLE);
-        } else {
-            permissionIntent = PendingIntent.getBroadcast(requireContext(), 0,
-                    new Intent(ACTION_USB_AUDIO_PERMISSION), PendingIntent.FLAG_IMMUTABLE);
-        }
+        PendingIntent permissionIntent = UsbPermissionIntentsKt.createUsbPermissionIntent(
+                requireContext(), ACTION_USB_AUDIO_PERMISSION);
 
         BroadcastReceiver permReceiver = new BroadcastReceiver() {
             @Override
