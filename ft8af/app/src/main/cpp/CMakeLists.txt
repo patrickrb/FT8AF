@@ -116,6 +116,8 @@ target_include_directories(ft8af PRIVATE ${FT8LIB_ROOT})
 
 find_library(log-lib log)
 
+target_link_options(ft8af PRIVATE "-Wl,-z,max-page-size=16384")
+
 target_link_libraries(ft8af
         usb1.0
         ft8af_dsp
