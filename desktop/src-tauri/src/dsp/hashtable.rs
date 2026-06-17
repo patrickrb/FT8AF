@@ -1,5 +1,5 @@
 //! Per-decoder callsign hash table, ported from the `decoder_state` hashtable in
-//! `ft8cn_glue/ft8_decoder.cpp`. FT8 messages can carry 10/12/22-bit *hashes* of
+//! `ft8af_glue/ft8_decoder.cpp`. FT8 messages can carry 10/12/22-bit *hashes* of
 //! compound/nonstandard callsigns instead of the full call; ft8_lib resolves them
 //! through the `ftx_callsign_hash_interface_t` save/lookup callbacks, which need
 //! somewhere to stash calls seen earlier in the same slot.
