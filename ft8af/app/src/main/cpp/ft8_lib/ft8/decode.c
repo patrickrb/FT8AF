@@ -102,49 +102,34 @@ int ft8_snr(const waterfall_t* wf, const candidate_t* candidate)
         return (sum_signal - sum_noise) / num_average - FT4_SNR_CAL_DB;
     }
 
-    // Compute average score over sync symbols (m+k = 0-7, 36-43, 72-79)
+    // Compute average SNR over the three Costas sync groups (symbols 0-6, 36-42, 72-78).
+    // Only sync symbols are used: the expected tone is known from kFT8_Costas_pattern,
+    // giving an unbiased signal estimate.  Data symbols are skipped because picking the
+    // loudest of 8 tones inflates the "signal" when S/N is low.
     for (int block = 0; block < FT8_NN; ++block)
     {
-        int block_abs = candidate->time_offset + block; // relative to the captured signal
-        // Check for time boundaries
+        int block_abs = candidate->time_offset + block;
         if (block_abs < 0)
             continue;
         if (block_abs >= wf->num_blocks)
             break;
 
-        // Get the pointer to symbol 'block' of the candidate
-        const uint8_t* p8 = mag_base + (block_abs * wf->block_stride);
-
         int k = block % FT8_SYNC_OFFSET;
-        int sm = -1;
-        if (k < 7)
-        {
-            // Check only the neighbors of the expected symbol frequency- and time-wise
-            sm = kFT8_Costas_pattern[k]; // Index of the expected bin
-        }
-        else
-        {
-            int max;
-            for (int m = 0; m < 8; ++m)
-            {
-                if ((sm == -1) || (p8[m] > max))
-                {
-                    sm = m;
-                    max = p8[m];
-                }
-            }
-        }
+        if (k >= FT8_LENGTH_SYNC)
+            continue; // skip data symbols
 
-        if (sm != -1)
-        {
-            sum_signal += p8[sm];
-            sum_noise += (3 + (int)p8[0] + (int)p8[1] + (int)p8[2] + (int)p8[3] + (int)p8[4] + (int)p8[5] + (int)p8[6] + (int)p8[7] - (int)p8[sm]) / 7;
-            ++num_average;
-        }
+        const uint8_t* p8 = mag_base + (block_abs * wf->block_stride);
+        int sm = kFT8_Costas_pattern[k];
+
+        sum_signal += p8[sm];
+        sum_noise += (3 + (int)p8[0] + (int)p8[1] + (int)p8[2] + (int)p8[3] + (int)p8[4] + (int)p8[5] + (int)p8[6] + (int)p8[7] - (int)p8[sm]) / 7;
+        ++num_average;
     }
     if (num_average == 0)
-        return -24; // no usable sync symbols; report a deep floor (matches FT4/FT2 guard)
-    return (sum_signal - sum_noise) / num_average;
+        return -24;
+    // Waterfall magnitudes are in 0.5 dB steps (see monitor_process); halve the
+    // per-symbol difference to return real dB.
+    return (sum_signal - sum_noise) / (2 * num_average);
 }
 
 static int ft8_sync_score(const waterfall_t* wf, const candidate_t* candidate)
