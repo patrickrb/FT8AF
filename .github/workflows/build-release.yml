@@ -52,12 +52,12 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('ft8cn/**/*.gradle*', 'ft8cn/gradle/wrapper/gradle-wrapper.properties') }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('ft8af/**/*.gradle*', 'ft8af/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: |
             gradle-${{ runner.os }}-
 
       - name: Grant execute permission for gradlew
-        run: chmod +x ft8cn/gradlew
+        run: chmod +x ft8af/gradlew
 
       - name: Pre-install NDK (retry around flaky SDK downloads)
         run: |
@@ -81,11 +81,11 @@ jobs:
           exit 1
 
       - name: Run unit tests
-        working-directory: ft8cn
+        working-directory: ft8af
         run: ./gradlew testDebugUnitTest --stacktrace
 
       - name: Generate coverage report
-        working-directory: ft8cn
+        working-directory: ft8af
         run: ./gradlew jacocoTestReport --stacktrace
 
       - name: Upload coverage to Codecov
@@ -94,7 +94,7 @@ jobs:
         uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ft8cn/app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
+          files: ft8af/app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
 
       - name: Upload test reports on failure
         if: steps.codecov.outcome == 'failure'
@@ -102,9 +102,9 @@ jobs:
         with:
           name: unit-test-reports
           path: |
-            ft8cn/app/build/reports/tests/
-            ft8cn/app/build/test-results/
-            ft8cn/app/build/reports/jacoco/
+            ft8af/app/build/reports/tests/
+            ft8af/app/build/test-results/
+            ft8af/app/build/reports/jacoco/
 
   instrumented:
     name: Instrumented tests (emulator)
@@ -132,12 +132,12 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('ft8cn/**/*.gradle*', 'ft8cn/gradle/wrapper/gradle-wrapper.properties') }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('ft8af/**/*.gradle*', 'ft8af/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: |
             gradle-${{ runner.os }}-
 
       - name: Grant execute permission for gradlew
-        run: chmod +x ft8cn/gradlew
+        run: chmod +x ft8af/gradlew
 
       # Hardware acceleration (KVM) is required for a usable x86_64 emulator on
       # the GitHub-hosted Ubuntu runners; without it the AVD falls back to slow
@@ -155,7 +155,7 @@ jobs:
       # 429 is retried cheaply instead of wasting a full emulator boot; the
       # emulator step then runs against already-cached dependencies.
       - name: Assemble instrumented test APKs
-        working-directory: ft8cn
+        working-directory: ft8af
         run: |
           set -euo pipefail
           for attempt in 1 2 3; do
@@ -178,7 +178,7 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: Nexus 6
-          working-directory: ft8cn
+          working-directory: ft8af
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           # Stream test progress into the job log. By default
@@ -206,8 +206,8 @@ jobs:
         with:
           name: instrumented-test-reports
           path: |
-            ft8cn/app/build/reports/androidTests/
-            ft8cn/app/build/outputs/androidTest-results/
+            ft8af/app/build/reports/androidTests/
+            ft8af/app/build/outputs/androidTest-results/
 
   build:
     name: Build APK
@@ -294,12 +294,12 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('ft8cn/**/*.gradle*', 'ft8cn/gradle/wrapper/gradle-wrapper.properties') }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('ft8af/**/*.gradle*', 'ft8af/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: |
             gradle-${{ runner.os }}-
 
       - name: Grant execute permission for gradlew
-        run: chmod +x ft8cn/gradlew
+        run: chmod +x ft8af/gradlew
 
       - name: Pre-install NDK (retry around flaky SDK downloads)
         run: |
@@ -344,7 +344,7 @@ jobs:
           echo "RELEASE_STORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
 
       - name: Build APK & AAB
-        working-directory: ft8cn
+        working-directory: ft8af
         env:
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
@@ -374,7 +374,7 @@ jobs:
         if: steps.tag.outputs.should_release == 'true'
         run: |
           set -euo pipefail
-          cd ft8cn/app/build/outputs/apk/release
+          cd ft8af/app/build/outputs/apk/release
           # Signed builds emit app-release.apk; unsigned emit app-release-unsigned.apk.
           # Keep the fallback so the rename works either way.
           if [[ -f app-release.apk ]]; then
@@ -386,27 +386,27 @@ jobs:
             ls -la >&2
             exit 1
           fi
-          mv "$src" "FT8CN-${{ steps.tag.outputs.release_tag }}.apk"
+          mv "$src" "FT8AF-${{ steps.tag.outputs.release_tag }}.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ft8cn-release
-          path: ft8cn/app/build/outputs/apk/release/*.apk
+          name: ft8af-release
+          path: ft8af/app/build/outputs/apk/release/*.apk
 
       - name: Upload AAB artifact
         if: steps.tag.outputs.should_release == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: ft8cn-release-aab
-          path: ft8cn/app/build/outputs/bundle/release/*.aab
+          name: ft8af-release-aab
+          path: ft8af/app/build/outputs/bundle/release/*.aab
 
       - name: Create GitHub Release
         if: steps.tag.outputs.should_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
-          files: ft8cn/app/build/outputs/apk/release/FT8CN-*.apk
+          files: ft8af/app/build/outputs/apk/release/FT8AF-*.apk
           generate_release_notes: true
           # dev-* releases are flagged as prerelease so they sort under the
           # latest v* and don't get picked up by downstream tooling that
@@ -426,7 +426,7 @@ jobs:
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: radio.ks3ckc.ft8af
-          releaseFiles: ft8cn/app/build/outputs/bundle/release/app-release.aab
+          releaseFiles: ft8af/app/build/outputs/bundle/release/app-release.aab
           track: internal
           status: completed
           releaseName: ${{ steps.tag.outputs.release_tag }}

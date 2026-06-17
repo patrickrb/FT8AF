@@ -21,7 +21,13 @@ impl MonoResampler {
         let inner = if in_rate == out_rate {
             None
         } else {
-            FftFixedIn::<f32>::new(in_rate as usize, out_rate as usize, CHUNK_IN, SUB_CHUNKS, 1).ok()
+            match FftFixedIn::<f32>::new(in_rate as usize, out_rate as usize, CHUNK_IN, SUB_CHUNKS, 1) {
+                Ok(r) => Some(r),
+                Err(e) => {
+                    log::error!("failed to create resampler ({in_rate} -> {out_rate}): {e}");
+                    None
+                }
+            }
         };
         MonoResampler {
             inner,
@@ -34,7 +40,14 @@ impl MonoResampler {
     /// Push mono input samples (at `in_rate`); returns any 12 kHz output produced.
     pub fn process(&mut self, input: &[f32]) -> Vec<f32> {
         if self.inner.is_none() {
-            return input.to_vec(); // identity (rates equal or resampler unavailable)
+            // Rates match — legitimate identity pass-through.
+            if self.in_rate == self.out_rate {
+                return input.to_vec();
+            }
+            // Rates differ but the resampler failed to initialise — returning
+            // un-resampled samples would feed wrong-rate data into downstream
+            // DSP and produce incorrect decoding/timing.  Fail closed.
+            return Vec::new();
         }
         self.pending.extend_from_slice(input);
         let resampler = self.inner.as_mut().unwrap();
@@ -72,7 +85,10 @@ pub fn resample_buffer(input: &[f32], in_rate: u32, out_rate: u32) -> Vec<f32> {
         1,
     ) {
         Ok(r) => r,
-        Err(_) => return input.to_vec(),
+        Err(e) => {
+            log::error!("resample_buffer: failed to create resampler ({in_rate} -> {out_rate}): {e}");
+            return Vec::new();
+        }
     };
     let mut out = Vec::with_capacity(input.len() * out_rate as usize / in_rate as usize + CHUNK_IN);
     let mut pos = 0;

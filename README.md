@@ -43,7 +43,7 @@ Run FT8 natively on your Android phone or tablet, drive your radio over USB CAT,
 Grab the latest APK from the [Releases](https://github.com/patrickrb/FT8AF/releases) page, or build it yourself:
 
 ```bash
-cd ft8cn
+cd ft8af
 ./gradlew installDebug
 ```
 

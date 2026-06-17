@@ -1,5 +1,5 @@
 //! Safe FT8 decoder wrapper replicating the `decoder_state` lifecycle from
-//! `ft8cn_glue/ft8_decoder.cpp`:
+//! `ft8af_glue/ft8_decoder.cpp`:
 //!   new -> feed_slot -> find_sync -> decode_all -> (drop frees the monitor).
 //!
 //! Owns the C `monitor_t` (freed in `Drop`), a candidate array (cap 140), and a

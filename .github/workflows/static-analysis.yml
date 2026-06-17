@@ -42,31 +42,31 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('ft8cn/**/*.gradle*', 'ft8cn/gradle/wrapper/gradle-wrapper.properties') }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('ft8af/**/*.gradle*', 'ft8af/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: |
             gradle-${{ runner.os }}-
 
       - name: Grant execute permission for gradlew
-        run: chmod +x ft8cn/gradlew
+        run: chmod +x ft8af/gradlew
 
       # --- WARN-ONLY during rollout: remove continue-on-error to make blocking ---
 
       - name: Android lint (debug)
         id: lint
         continue-on-error: true
-        working-directory: ft8cn
+        working-directory: ft8af
         run: ./gradlew lintDebug --stacktrace
 
       - name: detekt
         id: detekt
         continue-on-error: true
-        working-directory: ft8cn
+        working-directory: ft8af
         run: ./gradlew detekt --stacktrace
 
       - name: ktlint
         id: ktlint
         continue-on-error: true
-        working-directory: ft8cn
+        working-directory: ft8af
         run: ./gradlew ktlintCheck --stacktrace
 
       - name: Upload analysis reports
@@ -75,8 +75,8 @@ jobs:
         with:
           name: static-analysis-reports
           path: |
-            ft8cn/app/build/reports/lint-results-debug.html
-            ft8cn/app/build/reports/lint-results-debug.xml
-            ft8cn/app/build/reports/detekt/
-            ft8cn/app/build/reports/ktlint/
+            ft8af/app/build/reports/lint-results-debug.html
+            ft8af/app/build/reports/lint-results-debug.xml
+            ft8af/app/build/reports/detekt/
+            ft8af/app/build/reports/ktlint/
           if-no-files-found: ignore
