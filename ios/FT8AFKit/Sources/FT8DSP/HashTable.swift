@@ -26,9 +26,12 @@ final class HashTable {
         if bytes.isEmpty || bytes[0] == UInt8(ascii: "<") { return }
         let h10 = (n22 >> 12) & 0x3FF
         var idx = (Int(h10) * 23) % HashTable.size
+        var probes = 0
         while entries[idx].used {
             if entries[idx].hash == n22 { return } // already stored
             idx = (idx + 1) % HashTable.size
+            probes += 1
+            if probes >= HashTable.size { return } // table full: drop, never spin
         }
         let n = min(bytes.count, 11)
         var cs = [UInt8](repeating: 0, count: 12)
@@ -51,19 +54,28 @@ final class HashTable {
 }
 
 // The C hash interface is plain function pointers with no user-data arg, so the
-// callbacks route through a global pointer to the table active for the current
-// decode pass. Decode passes must not overlap across threads — the engine
-// serializes decode on a single worker (desktop hashtable.rs uses a thread_local
-// for the same role; we don't decode concurrently). `installActiveHashTable` /
-// `clearActiveHashTable` bracket a pass (RAII-style via `defer` in decodeAll).
-private var activeHashTable: HashTable?
+// callbacks route through the table active for the current decode pass. That
+// table is stored **thread-local** (matching desktop hashtable.rs's thread_local)
+// so concurrent decoders on different threads — or a re-entrant decode — never
+// share or clobber each other's active table. The @convention(c) callbacks can't
+// capture context, so they read it back off the current thread.
+// `installActiveHashTable` / `clearActiveHashTable` bracket a pass (RAII-style
+// via `defer` in decodeAll).
+private let activeHashTableThreadKey = "radio.ks3ckc.ft8af.activeHashTable"
 
-func installActiveHashTable(_ table: HashTable) { activeHashTable = table }
-func clearActiveHashTable() { activeHashTable = nil }
+func installActiveHashTable(_ table: HashTable) {
+    Thread.current.threadDictionary[activeHashTableThreadKey] = table
+}
+func clearActiveHashTable() {
+    Thread.current.threadDictionary.removeObject(forKey: activeHashTableThreadKey)
+}
+private func activeHashTable() -> HashTable? {
+    Thread.current.threadDictionary[activeHashTableThreadKey] as? HashTable
+}
 
 /// C callback: store a callsign by its 22-bit hash.
 let saveHashCallback: @convention(c) (UnsafePointer<CChar>?, UInt32) -> Void = { callsign, n22 in
-    guard let table = activeHashTable, let callsign = callsign else { return }
+    guard let table = activeHashTable(), let callsign = callsign else { return }
     table.save(String(cString: callsign), n22)
 }
 
@@ -78,7 +90,7 @@ let lookupHashCallback: @convention(c) (ftx_callsign_hash_type_e, UInt32, Unsafe
     case FTX_CALLSIGN_HASH_12_BITS: shift = 10
     default: shift = 0
     }
-    if let table = activeHashTable, let call = table.lookup(shift: shift, hash: hash) {
+    if let table = activeHashTable(), let call = table.lookup(shift: shift, hash: hash) {
         let bytes = Array(call.utf8)
         let n = min(bytes.count, 11)
         for i in 0..<n { out[i] = CChar(bitPattern: bytes[i]) }

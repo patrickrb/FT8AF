@@ -64,6 +64,10 @@ public final class FT8Decoder {
         let block = Int(mon.block_size)
         if block == 0 { return }
         monitor_reset(&mon)
+        // Reset the callsign cache per slot: hashes resolve only against calls
+        // seen "earlier in the same slot", and a never-cleared table would grow
+        // unbounded across slots on a long-lived decoder.
+        hashtable.clear()
         samples.withUnsafeBufferPointer { buf in
             guard let base = buf.baseAddress else { return }
             var pos = 0

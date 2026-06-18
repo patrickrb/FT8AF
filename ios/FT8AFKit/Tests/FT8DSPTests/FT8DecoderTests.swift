@@ -67,6 +67,19 @@ final class FT8DecoderTests: XCTestCase {
         XCTAssertTrue(dec.decodeAll().isEmpty)
     }
 
+    /// A long-lived decoder must stay correct across repeated feedSlot calls
+    /// (feedSlot clears the per-slot callsign cache; no stale-state corruption).
+    func testDecoderReusableAcrossSlots() {
+        guard let s = slot(for: "CQ K1ABC FN42", baseFreqHz: 1200) else { return XCTFail("encode") }
+        let dec = FT8Decoder()
+        dec.feedSlot(s); dec.findSync()
+        let first = Set(dec.decodeAll().map { $0.rawText })
+        dec.feedSlot(s); dec.findSync()
+        let second = Set(dec.decodeAll().map { $0.rawText })
+        XCTAssertEqual(first, second)
+        XCTAssertTrue(first.contains("CQ K1ABC FN42"))
+    }
+
     /// feedSlot populates the waterfall so a heatmap can be built (Phase 2 UI).
     func testWaterfallHeatmapPopulatedAfterFeed() {
         guard let s = slot(for: "CQ K1ABC FN42", baseFreqHz: 1500) else { return XCTFail("encode") }
@@ -97,6 +110,17 @@ final class HashTableTests: XCTestCase {
         let t = HashTable()
         t.save("<W9XYZ>", FT8Hash.n22("W9XYZ"))
         XCTAssertNil(t.lookup(shift: 0, hash: FT8Hash.n22("W9XYZ") & 0x3F_FFFF))
+    }
+
+    /// Saving past capacity must terminate (bounded linear probe), never hang,
+    /// and the table must still answer a hash stored before it filled.
+    func testSaveIsBoundedWhenTableFull() {
+        let t = HashTable()
+        for i in 0..<(HashTable.size + 10) {
+            t.save("C\(i)", (UInt32(i) << 12) & 0x3F_FFFF)
+        }
+        // Reaching here means every save() returned (no infinite loop).
+        XCTAssertNotNil(t.lookup(shift: 0, hash: 0)) // "C0" (n22 == 0) stored first
     }
 
     func testClearEmptiesTable() {
