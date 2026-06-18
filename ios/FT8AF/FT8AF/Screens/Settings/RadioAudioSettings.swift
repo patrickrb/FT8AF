@@ -1,5 +1,7 @@
 import SwiftUI
 
+private let allBands = ["160M","80M","40M","30M","20M","17M","15M","12M","10M","6M"]
+
 struct RadioAudioSettings: View {
     @Environment(AppState.self) private var appState
 
@@ -30,6 +32,26 @@ struct RadioAudioSettings: View {
                     Text("Built-in Microphone")
                         .font(.system(size: 14))
                         .foregroundStyle(textMuted)
+                }
+
+                // Spectrum width
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Spectrum Width")
+                            .foregroundStyle(textPrimary)
+                        Text("Decode bandwidth")
+                            .font(.system(size: 11))
+                            .foregroundStyle(textFaint)
+                    }
+                    Spacer()
+                    Picker("", selection: $settings.spectrumWidthHz) {
+                        ForEach([2500, 3000, 4000, 5000], id: \.self) { hz in
+                            Text("\(hz) Hz").tag(hz)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(accent)
+                    .frame(width: 110)
                 }
             } header: {
                 Text("Audio")
@@ -89,6 +111,46 @@ struct RadioAudioSettings: View {
                     .foregroundStyle(textMuted)
             }
             .listRowBackground(bgSurface)
+
+            // Enabled Bands
+            Section {
+                ForEach(allBands, id: \.self) { band in
+                    Toggle(isOn: Binding(
+                        get: { settings.enabledBands.contains(band) },
+                        set: { enabled in
+                            if enabled {
+                                if !settings.enabledBands.contains(band) {
+                                    settings.enabledBands.append(band)
+                                }
+                            } else {
+                                settings.enabledBands.removeAll { $0 == band }
+                            }
+                            SettingsPersistence.save(settings)
+                        }
+                    )) {
+                        HStack(spacing: 8) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(bandColor(for: band))
+                                .frame(width: 3, height: 18)
+                            Text(band)
+                                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                .foregroundStyle(textPrimary)
+                            Spacer()
+                            Text(bandFrequency(band))
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundStyle(textFaint)
+                        }
+                    }
+                    .tint(accent)
+                }
+            } header: {
+                Text("Enabled Bands (\(settings.enabledBands.count) of \(allBands.count))")
+                    .foregroundStyle(textMuted)
+            } footer: {
+                Text("Disabled bands are excluded from band cycling and hunt mode.")
+                    .foregroundStyle(textFaint)
+            }
+            .listRowBackground(bgSurface)
         }
         .scrollContentBackground(.hidden)
         .background(bgApp)
@@ -96,6 +158,7 @@ struct RadioAudioSettings: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .onChange(of: settings.rigModel) { _, _ in SettingsPersistence.save(appState.settings) }
+        .onChange(of: settings.spectrumWidthHz) { _, _ in SettingsPersistence.save(appState.settings) }
     }
 
     private var statusColor: Color {
@@ -109,5 +172,21 @@ struct RadioAudioSettings: View {
     private func formatFreq(_ hz: UInt64) -> String {
         let mhz = Double(hz) / 1_000_000
         return String(format: "%.3f MHz", mhz)
+    }
+
+    private func bandFrequency(_ band: String) -> String {
+        switch band {
+        case "160M": return "1.840"
+        case "80M":  return "3.573"
+        case "40M":  return "7.074"
+        case "30M":  return "10.136"
+        case "20M":  return "14.074"
+        case "17M":  return "18.100"
+        case "15M":  return "21.074"
+        case "12M":  return "24.915"
+        case "10M":  return "28.074"
+        case "6M":   return "50.313"
+        default:     return ""
+        }
     }
 }

@@ -6,6 +6,7 @@ struct QsoSheet: View {
     var onCall: (DecodeMessage) -> Void = { _ in }
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         VStack(spacing: 0) {
@@ -15,10 +16,29 @@ struct QsoSheet: View {
                     .font(.system(size: 28, weight: .bold, design: .monospaced))
                     .foregroundStyle(textPrimary)
 
-                if !message.grid.isEmpty {
-                    Text(message.grid)
-                        .font(.system(size: 14, weight: .medium, design: .monospaced))
-                        .foregroundStyle(textMuted)
+                HStack(spacing: 8) {
+                    if !message.grid.isEmpty {
+                        Text(message.grid)
+                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .foregroundStyle(textMuted)
+                    }
+
+                    Button {
+                        if let url = URL(string: "https://www.qrz.com/db/\(message.callFrom)") {
+                            openURL(url)
+                        }
+                    } label: {
+                        Text("QRZ")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(signal)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(signal.opacity(0.14))
+                            )
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.top, 20)

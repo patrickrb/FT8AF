@@ -183,6 +183,17 @@ final class SettingsState {
     var pttDelayMs: Int = 0
     var txDelayMs: Int = 0
     var lateStartToleranceMs: Int = 2360
+    // Auto-sequence
+    var huntCallsCQ: Bool = false
+    var autoCallFollow: Bool = false
+    var earlyDecode: Bool = false
+    var autoCQAfterQSO: Bool = false
+    // TX safety
+    var txWatchdogMin: Int = 0          // 0 = off
+    var stopAfterAttempts: Int = 0      // 0 = off
+    // Radio
+    var spectrumWidthHz: Int = 3000
+    var enabledBands: [String] = ["160M","80M","40M","30M","20M","17M","15M","12M","10M","6M"]
 }
 
 // MARK: - Rig
@@ -261,6 +272,14 @@ enum SettingsPersistence {
         d.set(s.pttDelayMs, forKey: key("pttDelayMs"))
         d.set(s.txDelayMs, forKey: key("txDelayMs"))
         d.set(s.lateStartToleranceMs, forKey: key("lateStartToleranceMs"))
+        d.set(s.huntCallsCQ, forKey: key("huntCallsCQ"))
+        d.set(s.autoCallFollow, forKey: key("autoCallFollow"))
+        d.set(s.earlyDecode, forKey: key("earlyDecode"))
+        d.set(s.autoCQAfterQSO, forKey: key("autoCQAfterQSO"))
+        d.set(s.txWatchdogMin, forKey: key("txWatchdogMin"))
+        d.set(s.stopAfterAttempts, forKey: key("stopAfterAttempts"))
+        d.set(s.spectrumWidthHz, forKey: key("spectrumWidthHz"))
+        d.set(s.enabledBands, forKey: key("enabledBands"))
     }
 
     @MainActor static func load(into s: SettingsState) {
@@ -298,6 +317,30 @@ enum SettingsPersistence {
         }
         if d.object(forKey: key("lateStartToleranceMs")) != nil {
             s.lateStartToleranceMs = d.integer(forKey: key("lateStartToleranceMs"))
+        }
+        if d.object(forKey: key("huntCallsCQ")) != nil {
+            s.huntCallsCQ = d.bool(forKey: key("huntCallsCQ"))
+        }
+        if d.object(forKey: key("autoCallFollow")) != nil {
+            s.autoCallFollow = d.bool(forKey: key("autoCallFollow"))
+        }
+        if d.object(forKey: key("earlyDecode")) != nil {
+            s.earlyDecode = d.bool(forKey: key("earlyDecode"))
+        }
+        if d.object(forKey: key("autoCQAfterQSO")) != nil {
+            s.autoCQAfterQSO = d.bool(forKey: key("autoCQAfterQSO"))
+        }
+        if d.object(forKey: key("txWatchdogMin")) != nil {
+            s.txWatchdogMin = d.integer(forKey: key("txWatchdogMin"))
+        }
+        if d.object(forKey: key("stopAfterAttempts")) != nil {
+            s.stopAfterAttempts = d.integer(forKey: key("stopAfterAttempts"))
+        }
+        if d.object(forKey: key("spectrumWidthHz")) != nil {
+            s.spectrumWidthHz = d.integer(forKey: key("spectrumWidthHz"))
+        }
+        if let bands = d.stringArray(forKey: key("enabledBands")) {
+            s.enabledBands = bands
         }
     }
 

@@ -38,6 +38,17 @@ struct DecodeScreen: View {
                 .buttonStyle(.plain)
                 .padding(.trailing, 8)
 
+                // Clear all
+                Button {
+                    appState.decode.messages.removeAll()
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(textMuted)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 8)
+
                 Text("\(decode.messages.count) msgs")
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundStyle(textMuted)
