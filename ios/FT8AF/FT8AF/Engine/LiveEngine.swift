@@ -13,6 +13,8 @@ final class LiveEngine {
     private let audio = AudioCaptureService()
     private var engineTask: Task<Void, Never>?
     private var rxOffsetMs: Int64 = 0
+    /// Weakly held so `stop()` can clear the LIVE indicator it set in `start()`.
+    private weak var appState: AppState?
 
     /// Start audio capture and kick off decode + waterfall loops.
     func start(appState: AppState) async {
@@ -28,10 +30,31 @@ final class LiveEngine {
         }
 
         isRunning = true
+        self.appState = appState
         appState.waterfall.isLive = true
 
         let accumulator = audio.accumulator
         let rxOffset = rxOffsetMs
+
+        // Build the MainActor state-mutation closures here, on the main actor, so
+        // the background loops never reference `AppState` directly. The closures
+        // are `@Sendable @MainActor`: they may be handed to the detached task, but
+        // their captured `AppState` is only ever touched back on the main actor.
+        let applyDecodes: @Sendable @MainActor ([DecodeMessage]) -> Void = { messages in
+            appState.decode.messages.insert(contentsOf: messages, at: 0)
+            // Trim to keep a reasonable history.
+            if appState.decode.messages.count > 200 {
+                appState.decode.messages.removeLast(appState.decode.messages.count - 200)
+            }
+        }
+        let applyWaterfall: @Sendable @MainActor ([UInt8], [Float]) -> Void = { row, spectrum in
+            appState.waterfall.rows.append(row)
+            // Keep at most 120 rows for the scrolling waterfall.
+            if appState.waterfall.rows.count > 120 {
+                appState.waterfall.rows.removeFirst(appState.waterfall.rows.count - 120)
+            }
+            appState.waterfall.spectrum = spectrum
+        }
 
         engineTask = Task.detached { [weak self] in
             await withTaskGroup(of: Void.self) { group in
@@ -39,15 +62,15 @@ final class LiveEngine {
                 group.addTask {
                     await self?.runDecodeLoop(
                         accumulator: accumulator,
-                        appState: appState,
-                        initialRxOffset: rxOffset
+                        initialRxOffset: rxOffset,
+                        applyDecodes: applyDecodes
                     )
                 }
                 // Waterfall pipeline
                 group.addTask {
                     await self?.runWaterfallLoop(
                         accumulator: accumulator,
-                        appState: appState
+                        applyWaterfall: applyWaterfall
                     )
                 }
             }
@@ -60,6 +83,8 @@ final class LiveEngine {
         engineTask = nil
         audio.stop()
         isRunning = false
+        appState?.waterfall.isLive = false
+        appState = nil
     }
 
     // MARK: - Decode loop
@@ -67,8 +92,8 @@ final class LiveEngine {
     /// Polls for slot boundaries and runs the FT8 decoder at each transition.
     private nonisolated func runDecodeLoop(
         accumulator: SlotAccumulator,
-        appState: AppState,
-        initialRxOffset: Int64
+        initialRxOffset: Int64,
+        applyDecodes: @escaping @Sendable @MainActor ([DecodeMessage]) -> Void
     ) async {
         var rxOffsetMs = initialRxOffset
         var lastSlotID: Int64 = SlotClock.rxSlotID(
@@ -119,15 +144,7 @@ final class LiveEngine {
             }
 
             if !uiMessages.isEmpty {
-                await MainActor.run {
-                    appState.decode.messages.insert(contentsOf: uiMessages, at: 0)
-                    // Trim to keep a reasonable history.
-                    if appState.decode.messages.count > 200 {
-                        appState.decode.messages.removeLast(
-                            appState.decode.messages.count - 200
-                        )
-                    }
-                }
+                await MainActor.run { applyDecodes(uiMessages) }
             }
         }
     }
@@ -138,7 +155,7 @@ final class LiveEngine {
     /// spectrum state.
     private nonisolated func runWaterfallLoop(
         accumulator: SlotAccumulator,
-        appState: AppState
+        applyWaterfall: @escaping @Sendable @MainActor ([UInt8], [Float]) -> Void
     ) async {
         let sampleRate = Int(FT8.sampleRate)
         let needed = WaterfallRowBuilder.samplesNeeded()
@@ -166,16 +183,7 @@ final class LiveEngine {
             let scale = maxPower > 0 ? 1.0 / maxPower : 1.0
             let spectrum = power.map { min($0 * scale, 1.0) }
 
-            await MainActor.run {
-                appState.waterfall.rows.append(row.bins)
-                // Keep at most 120 rows for the scrolling waterfall.
-                if appState.waterfall.rows.count > 120 {
-                    appState.waterfall.rows.removeFirst(
-                        appState.waterfall.rows.count - 120
-                    )
-                }
-                appState.waterfall.spectrum = spectrum
-            }
+            await MainActor.run { applyWaterfall(row.bins, spectrum) }
         }
     }
 

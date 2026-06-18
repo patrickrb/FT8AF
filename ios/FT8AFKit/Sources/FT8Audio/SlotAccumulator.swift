@@ -11,7 +11,7 @@ import Foundation
 /// desktop uses a VecDeque for the same reason; a plain Array with `removeFirst`
 /// would shift ~16 s of samples on every push once full). Thread-safe: the RT
 /// tap `push`es while the engine thread `takeSlot`s / `peekRecent`s.
-public final class SlotAccumulator {
+public final class SlotAccumulator: @unchecked Sendable {
     private let lock = NSLock()
     private let cap: Int
     private var storage: [Float] // length == cap
@@ -26,14 +26,22 @@ public final class SlotAccumulator {
 
     /// Append freshly captured 12 kHz samples, evicting the oldest beyond `cap`.
     public func push(_ samples: [Float]) {
+        samples.withUnsafeBufferPointer { push($0) }
+    }
+
+    /// Pointer overload of `push` — lets the real-time audio tap hand samples
+    /// over directly from the converter's channel data without first copying
+    /// into a freshly allocated `[Float]` on every callback.
+    public func push(_ samples: UnsafeBufferPointer<Float>) {
         let m = samples.count
         if m == 0 { return }
+        guard let src = samples.baseAddress else { return }
         lock.lock(); defer { lock.unlock() }
 
         if m >= cap {
             // Only the most recent `cap` samples can be retained.
             let start = m - cap
-            for i in 0..<cap { storage[i] = samples[start + i] }
+            for i in 0..<cap { storage[i] = src[start + i] }
             head = 0
             filled = cap
             return
@@ -44,7 +52,7 @@ public final class SlotAccumulator {
         var write = head + filled
         if write >= cap { write -= cap }
         for i in 0..<m {
-            storage[write] = samples[i]
+            storage[write] = src[i]
             write += 1
             if write == cap { write = 0 }
         }

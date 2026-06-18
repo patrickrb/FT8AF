@@ -38,21 +38,20 @@ enum FFTProcessor {
         var realp = [Float](repeating: 0, count: halfN)
         var imagp = [Float](repeating: 0, count: halfN)
 
+        samples.withUnsafeBufferPointer { samplesPtr in
         for seg in 0..<segments {
             let offset = seg * step
             guard offset + fftSize <= samples.count else { break }
 
-            // Apply Hann window.
+            // Window this segment in place — offset directly into `samples` via
+            // the base pointer (no per-segment `Array` allocation, no redundant
+            // window pass over the buffer start).
             vDSP_vmul(
-                samples, 1,      // vDSP_vmul takes UnsafePointer but Array bridging handles offset
+                samplesPtr.baseAddress! + offset, 1,
                 window, 1,
                 &windowed, 1,
                 vDSP_Length(fftSize)
             )
-            // Re-apply with correct offset — vDSP_vmul above operates on
-            // the start of `samples`; we actually need to window the segment.
-            let segSlice = Array(samples[offset..<(offset + fftSize)])
-            vDSP_vmul(segSlice, 1, window, 1, &windowed, 1, vDSP_Length(fftSize))
 
             // Pack into split-complex form for the real FFT.
             windowed.withUnsafeBufferPointer { src in
@@ -76,6 +75,7 @@ enum FFTProcessor {
                 }
             }
         }
+        } // samples.withUnsafeBufferPointer
 
         return summedPower
     }

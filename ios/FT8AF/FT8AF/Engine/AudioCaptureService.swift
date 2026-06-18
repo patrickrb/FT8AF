@@ -13,6 +13,12 @@ final class AudioCaptureService: @unchecked Sendable {
     private var _isRunning = false
     private let lock = NSLock()
 
+    /// Output buffer reused across tap callbacks so the real-time audio thread
+    /// doesn't heap-allocate a fresh `AVAudioPCMBuffer` on every chunk. Touched
+    /// only on the tap thread (the tap is serialized); grown if a larger input
+    /// chunk ever arrives.
+    private var reusableOutBuffer: AVAudioPCMBuffer?
+
     var isRunning: Bool {
         lock.lock(); defer { lock.unlock() }
         return _isRunning
@@ -50,7 +56,9 @@ final class AudioCaptureService: @unchecked Sendable {
         guard let conv = AVAudioConverter(from: hwFormat, to: targetFormat) else {
             throw AudioCaptureError.converterCreationFailed
         }
+        lock.lock()
         converter = conv
+        lock.unlock()
 
         // Install tap at the hardware format; we downsample in the callback.
         let bufferSize = AVAudioFrameCount(hwFormat.sampleRate * 0.1) // ~100 ms chunks
@@ -77,9 +85,9 @@ final class AudioCaptureService: @unchecked Sendable {
     func stop() {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
-        converter = nil
 
         lock.lock()
+        converter = nil
         _isRunning = false
         lock.unlock()
 
@@ -93,15 +101,26 @@ final class AudioCaptureService: @unchecked Sendable {
     // MARK: - Private
 
     private func handleAudioBuffer(_ buffer: AVAudioPCMBuffer) {
-        guard let conv = converter else { return }
+        // Copy the converter to a local strong reference under the lock — `stop()`
+        // may clear it from the main thread while this runs on the audio thread.
+        lock.lock()
+        let conv = converter
+        lock.unlock()
+        guard let conv else { return }
 
-        // Allocate output buffer for the downsampled result.
+        // Reuse the output buffer across callbacks; only (re)allocate when none
+        // exists yet or the input chunk grew beyond the current capacity.
         let ratio = Double(FT8.sampleRate) / buffer.format.sampleRate
         let outFrames = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1
-        guard let outBuffer = AVAudioPCMBuffer(
-            pcmFormat: conv.outputFormat,
-            frameCapacity: outFrames
-        ) else { return }
+        if reusableOutBuffer == nil || reusableOutBuffer!.frameCapacity < outFrames {
+            guard let buf = AVAudioPCMBuffer(
+                pcmFormat: conv.outputFormat,
+                frameCapacity: outFrames
+            ) else { return }
+            reusableOutBuffer = buf
+        }
+        guard let outBuffer = reusableOutBuffer else { return }
+        outBuffer.frameLength = 0
 
         var error: NSError?
         var consumed = false
@@ -119,11 +138,12 @@ final class AudioCaptureService: @unchecked Sendable {
         guard let channelData = outBuffer.floatChannelData,
               outBuffer.frameLength > 0 else { return }
 
-        let samples = Array(UnsafeBufferPointer(
+        // Hand samples straight to the accumulator without an intermediate
+        // `[Float]` allocation on the real-time thread.
+        accumulator.push(UnsafeBufferPointer(
             start: channelData[0],
             count: Int(outBuffer.frameLength)
         ))
-        accumulator.push(samples)
     }
 
     @objc private func handleInterruption(_ notification: Notification) {

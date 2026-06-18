@@ -70,6 +70,28 @@ final class SlotAccumulatorTests: XCTestCase {
         XCTAssertEqual(slot.last, 1999)
     }
 
+    /// The `UnsafeBufferPointer` overload must produce the same buffer state as
+    /// the `[Float]` overload (which now delegates to it).
+    func testPointerPushMatchesArrayPush() {
+        let viaArray = SlotAccumulator()
+        let viaPointer = SlotAccumulator()
+        let data = (0..<1500).map { Float($0) }
+
+        viaArray.push(data)
+        data.withUnsafeBufferPointer { viaPointer.push($0) }
+
+        XCTAssertEqual(viaArray.count, viaPointer.count)
+        XCTAssertEqual(viaArray.peekRecent(1500), viaPointer.peekRecent(1500))
+    }
+
+    /// An empty pointer (and a null base address) must be a no-op, not a crash.
+    func testPointerPushEmptyIsNoOp() {
+        let acc = SlotAccumulator()
+        let empty = [Float]()
+        empty.withUnsafeBufferPointer { acc.push($0) }
+        XCTAssertTrue(acc.isEmpty)
+    }
+
     func testClear() {
         let acc = SlotAccumulator()
         acc.push([Float](repeating: 1, count: 100))
