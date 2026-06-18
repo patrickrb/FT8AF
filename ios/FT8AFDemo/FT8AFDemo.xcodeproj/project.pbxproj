@@ -1,0 +1,386 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1B2C2A4371EC9AD357C5E63D /* RoundTripViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCA2D506472095697CDABFB6 /* RoundTripViewModel.swift */; };
+		22E1DC74A7166C03C58E2546 /* WaterfallCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7DAD7E4842BE1DCF4E9D424 /* WaterfallCanvas.swift */; };
+		2861E869AA9465EF9705C612 /* QsoSimView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 326BE233AA2DE5A105268C51 /* QsoSimView.swift */; };
+		35B91E4DE19345D0D147E61D /* FT8Engine in Frameworks */ = {isa = PBXBuildFile; productRef = 787E0CA07F88E40CF1BE8F79 /* FT8Engine */; };
+		53E77E768808C436674E4DEE /* FT8AFDemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C88A4F74CDF3D3F76C86F29 /* FT8AFDemoApp.swift */; };
+		7857D5600A191D96D303F9E8 /* FT8DSP in Frameworks */ = {isa = PBXBuildFile; productRef = 253195C0BE6076BD2155E786 /* FT8DSP */; };
+		8D44232B4FAD69B6FD21538C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1BD31E6CF949EDFB1A6EA3D5 /* Assets.xcassets */; };
+		C8847799F27A3BCA8451E183 /* RoundTripView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AEF4630DA972AE6A6832084 /* RoundTripView.swift */; };
+		DA95A9D063D202F95B9C4C50 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A90CEDB9DACC96961313CCAA /* ContentView.swift */; };
+		E7547973A44191E9C8234A9A /* FT8Audio in Frameworks */ = {isa = PBXBuildFile; productRef = 2D3A28346FD46F855149D570 /* FT8Audio */; };
+		E8D78CCC4C8AD2B29FF85180 /* SlotClockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFAE4708FB5DF128DEB01129 /* SlotClockView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1BD31E6CF949EDFB1A6EA3D5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		326BE233AA2DE5A105268C51 /* QsoSimView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QsoSimView.swift; sourceTree = "<group>"; };
+		3AEF4630DA972AE6A6832084 /* RoundTripView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoundTripView.swift; sourceTree = "<group>"; };
+		8C88A4F74CDF3D3F76C86F29 /* FT8AFDemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FT8AFDemoApp.swift; sourceTree = "<group>"; };
+		A7DAD7E4842BE1DCF4E9D424 /* WaterfallCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterfallCanvas.swift; sourceTree = "<group>"; };
+		A90CEDB9DACC96961313CCAA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		AFAE4708FB5DF128DEB01129 /* SlotClockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlotClockView.swift; sourceTree = "<group>"; };
+		C522161F14B2298B8BBD6C9E /* FT8AFDemo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FT8AFDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DEF33EB79A2DE07EDE7DCC4B /* FT8AFKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FT8AFKit; path = ../FT8AFKit; sourceTree = SOURCE_ROOT; };
+		FCA2D506472095697CDABFB6 /* RoundTripViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoundTripViewModel.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		2D1CFCAE0BA23DC21DE8C9E2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7857D5600A191D96D303F9E8 /* FT8DSP in Frameworks */,
+				E7547973A44191E9C8234A9A /* FT8Audio in Frameworks */,
+				35B91E4DE19345D0D147E61D /* FT8Engine in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		6F477863D2AE9D79738158FA /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				DEF33EB79A2DE07EDE7DCC4B /* FT8AFKit */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		DED10D440AA2C064D01DD500 = {
+			isa = PBXGroup;
+			children = (
+				E717ED7E73A2591E1C323460 /* FT8AFDemo */,
+				6F477863D2AE9D79738158FA /* Packages */,
+				F8B1671597E1CD460E614A83 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E717ED7E73A2591E1C323460 /* FT8AFDemo */ = {
+			isa = PBXGroup;
+			children = (
+				1BD31E6CF949EDFB1A6EA3D5 /* Assets.xcassets */,
+				A90CEDB9DACC96961313CCAA /* ContentView.swift */,
+				8C88A4F74CDF3D3F76C86F29 /* FT8AFDemoApp.swift */,
+				326BE233AA2DE5A105268C51 /* QsoSimView.swift */,
+				3AEF4630DA972AE6A6832084 /* RoundTripView.swift */,
+				FCA2D506472095697CDABFB6 /* RoundTripViewModel.swift */,
+				AFAE4708FB5DF128DEB01129 /* SlotClockView.swift */,
+				A7DAD7E4842BE1DCF4E9D424 /* WaterfallCanvas.swift */,
+			);
+			path = FT8AFDemo;
+			sourceTree = "<group>";
+		};
+		F8B1671597E1CD460E614A83 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C522161F14B2298B8BBD6C9E /* FT8AFDemo.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		6F193F8FCAEDFC739E303AAA /* FT8AFDemo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F0D7EB4D8E80DA1C784EF507 /* Build configuration list for PBXNativeTarget "FT8AFDemo" */;
+			buildPhases = (
+				E9C4F7C54536D70BB9097228 /* Sources */,
+				3872217FC07CE343DB29E478 /* Resources */,
+				2D1CFCAE0BA23DC21DE8C9E2 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FT8AFDemo;
+			packageProductDependencies = (
+				253195C0BE6076BD2155E786 /* FT8DSP */,
+				2D3A28346FD46F855149D570 /* FT8Audio */,
+				787E0CA07F88E40CF1BE8F79 /* FT8Engine */,
+			);
+			productName = FT8AFDemo;
+			productReference = C522161F14B2298B8BBD6C9E /* FT8AFDemo.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		36E0211EB41F2062AFB3708B /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 4BEC2539EE3937718E668123 /* Build configuration list for PBXProject "FT8AFDemo" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = DED10D440AA2C064D01DD500;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				CD53659727434A0CB9C508B3 /* XCLocalSwiftPackageReference "../FT8AFKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = F8B1671597E1CD460E614A83 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				6F193F8FCAEDFC739E303AAA /* FT8AFDemo */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		3872217FC07CE343DB29E478 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8D44232B4FAD69B6FD21538C /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E9C4F7C54536D70BB9097228 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DA95A9D063D202F95B9C4C50 /* ContentView.swift in Sources */,
+				53E77E768808C436674E4DEE /* FT8AFDemoApp.swift in Sources */,
+				2861E869AA9465EF9705C612 /* QsoSimView.swift in Sources */,
+				C8847799F27A3BCA8451E183 /* RoundTripView.swift in Sources */,
+				1B2C2A4371EC9AD357C5E63D /* RoundTripViewModel.swift in Sources */,
+				E8D78CCC4C8AD2B29FF85180 /* SlotClockView.swift in Sources */,
+				22E1DC74A7166C03C58E2546 /* WaterfallCanvas.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		0E110F6CAC76379945212F90 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = radio.ks3ckc.ft8afdemo;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		5CBFEA95E6626CA964E79A17 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = radio.ks3ckc.ft8afdemo;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		8F256DB00D185ED1DA3ACC9D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		B84787B8ECC5F0F1C62EF888 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4BEC2539EE3937718E668123 /* Build configuration list for PBXProject "FT8AFDemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B84787B8ECC5F0F1C62EF888 /* Debug */,
+				8F256DB00D185ED1DA3ACC9D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F0D7EB4D8E80DA1C784EF507 /* Build configuration list for PBXNativeTarget "FT8AFDemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5CBFEA95E6626CA964E79A17 /* Debug */,
+				0E110F6CAC76379945212F90 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		CD53659727434A0CB9C508B3 /* XCLocalSwiftPackageReference "../FT8AFKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../FT8AFKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		253195C0BE6076BD2155E786 /* FT8DSP */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FT8DSP;
+		};
+		2D3A28346FD46F855149D570 /* FT8Audio */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FT8Audio;
+		};
+		787E0CA07F88E40CF1BE8F79 /* FT8Engine */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FT8Engine;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 36E0211EB41F2062AFB3708B /* Project object */;
+}

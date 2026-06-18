@@ -1,0 +1,189 @@
+import FT8Engine
+import Foundation
+import Observation
+
+// MARK: - Root state
+
+@Observable @MainActor
+final class AppState {
+    let decode = DecodeState()
+    let waterfall = WaterfallState()
+    let logbook = LogbookState()
+    let settings = SettingsState()
+    let rig = RigState()
+    let tx = TxState()
+}
+
+// MARK: - Decode
+
+enum DecodeFilter: String, CaseIterable {
+    case all = "All"
+    case cq = "CQ Calls"
+    case cqPota = "CQ POTA"
+    case newDxcc = "New DXCC"
+    case needed = "Needed"
+    case forMe = "For Me"
+}
+
+@Observable @MainActor
+final class DecodeState {
+    var messages: [DecodeMessage] = DecodeMessage.mock
+    var activeFilter: DecodeFilter = .all
+    var selectedMessage: DecodeMessage?
+}
+
+/// UI-level decoded message with display-oriented fields. Phase 2+ will map
+/// `FT8DSP.DecodedMessage` into this shape; for now it carries mock data only.
+struct DecodeMessage: Identifiable, Equatable {
+    let id = UUID()
+    var utcTime: String
+    var callFrom: String
+    var callTo: String
+    var snr: Int
+    var freqHz: Float
+    var grid: String
+    var extra: String
+    var slotIndex: Int
+
+    static let mock: [DecodeMessage] = [
+        DecodeMessage(utcTime: "12:30:00", callFrom: "W1AW", callTo: "CQ", snr: -5, freqHz: 1120, grid: "FN31", extra: "FN31", slotIndex: 0),
+        DecodeMessage(utcTime: "12:30:00", callFrom: "KD2OGR", callTo: "CQ POTA", snr: -12, freqHz: 890, grid: "FN20", extra: "K-1234", slotIndex: 0),
+        DecodeMessage(utcTime: "12:30:00", callFrom: "JA1ABC", callTo: "CQ", snr: 3, freqHz: 1450, grid: "PM95", extra: "PM95", slotIndex: 0),
+        DecodeMessage(utcTime: "12:29:45", callFrom: "DL4RCK", callTo: "W1AW", snr: -8, freqHz: 1120, grid: "JO31", extra: "+03", slotIndex: 1),
+        DecodeMessage(utcTime: "12:29:45", callFrom: "VK3BDX", callTo: "CQ", snr: -18, freqHz: 2100, grid: "QF22", extra: "QF22", slotIndex: 1),
+        DecodeMessage(utcTime: "12:29:45", callFrom: "EA4FKR", callTo: "CQ", snr: -2, freqHz: 530, grid: "IN80", extra: "IN80", slotIndex: 1),
+        DecodeMessage(utcTime: "12:29:30", callFrom: "K5ABC", callTo: "JA1ABC", snr: 5, freqHz: 1450, grid: "EM12", extra: "R-08", slotIndex: 2),
+        DecodeMessage(utcTime: "12:29:30", callFrom: "OH2BFO", callTo: "CQ", snr: -15, freqHz: 1780, grid: "KP20", extra: "KP20", slotIndex: 2),
+        DecodeMessage(utcTime: "12:29:30", callFrom: "ZL1BYZ", callTo: "CQ", snr: -22, freqHz: 680, grid: "RF72", extra: "RF72", slotIndex: 2),
+        DecodeMessage(utcTime: "12:29:15", callFrom: "PY2SEX", callTo: "W1AW", snr: -10, freqHz: 1120, grid: "GG87", extra: "RR73", slotIndex: 3),
+        DecodeMessage(utcTime: "12:29:15", callFrom: "UA3ABC", callTo: "CQ", snr: 1, freqHz: 950, grid: "KO85", extra: "KO85", slotIndex: 3),
+        DecodeMessage(utcTime: "12:29:15", callFrom: "VE3XYZ", callTo: "CQ", snr: -7, freqHz: 1300, grid: "FN03", extra: "FN03", slotIndex: 3),
+    ]
+}
+
+// MARK: - Waterfall
+
+@Observable @MainActor
+final class WaterfallState {
+    var rows: [[UInt8]] = []
+    var txFreqHz: Float = 1500
+    var isLive: Bool = false
+}
+
+// MARK: - Logbook
+
+@Observable @MainActor
+final class LogbookState {
+    var records: [QsoRecord] = QsoRecord.mockRecords
+    var totalCount: Int { records.count }
+    var bandStats: [String: Int] {
+        var stats: [String: Int] = [:]
+        for r in records {
+            stats[r.band, default: 0] += 1
+        }
+        return stats
+    }
+}
+
+extension QsoRecord {
+    static let mockRecords: [QsoRecord] = [
+        QsoRecord(id: 1, call: "W1AW", gridsquare: "FN31", mode: "FT8", rstSent: "-05", rstRcvd: "-08",
+                  qsoDate: "20260618", timeOn: "123000", qsoDateOff: "20260618", timeOff: "123115",
+                  band: "20M", freq: "14.074", stationCallsign: "KD2OGR", myGridsquare: "FN20", comment: ""),
+        QsoRecord(id: 2, call: "JA1ABC", gridsquare: "PM95", mode: "FT8", rstSent: "+03", rstRcvd: "-12",
+                  qsoDate: "20260618", timeOn: "122800", qsoDateOff: "20260618", timeOff: "122930",
+                  band: "15M", freq: "21.074", stationCallsign: "KD2OGR", myGridsquare: "FN20", comment: ""),
+        QsoRecord(id: 3, call: "DL4RCK", gridsquare: "JO31", mode: "FT8", rstSent: "-10", rstRcvd: "-03",
+                  qsoDate: "20260617", timeOn: "180000", qsoDateOff: "20260617", timeOff: "180130",
+                  band: "40M", freq: "7.074", stationCallsign: "KD2OGR", myGridsquare: "FN20", comment: ""),
+        QsoRecord(id: 4, call: "VK3BDX", gridsquare: "QF22", mode: "FT8", rstSent: "-18", rstRcvd: "-15",
+                  qsoDate: "20260617", timeOn: "090000", qsoDateOff: "20260617", timeOff: "090130",
+                  band: "20M", freq: "14.074", stationCallsign: "KD2OGR", myGridsquare: "FN20", comment: "Long path"),
+        QsoRecord(id: 5, call: "PY2SEX", gridsquare: "GG87", mode: "FT8", rstSent: "-02", rstRcvd: "+05",
+                  qsoDate: "20260616", timeOn: "220000", qsoDateOff: "20260616", timeOff: "220130",
+                  band: "10M", freq: "28.074", stationCallsign: "KD2OGR", myGridsquare: "FN20", comment: ""),
+        QsoRecord(id: 6, call: "OH2BFO", gridsquare: "KP20", mode: "FT8", rstSent: "-15", rstRcvd: "-10",
+                  qsoDate: "20260615", timeOn: "140000", qsoDateOff: "20260615", timeOff: "140200",
+                  band: "30M", freq: "10.136", stationCallsign: "KD2OGR", myGridsquare: "FN20", comment: ""),
+        QsoRecord(id: 7, call: "EA4FKR", gridsquare: "IN80", mode: "FT8", rstSent: "-05", rstRcvd: "+01",
+                  qsoDate: "20260614", timeOn: "160000", qsoDateOff: "20260614", timeOff: "160200",
+                  band: "17M", freq: "18.100", stationCallsign: "KD2OGR", myGridsquare: "FN20", comment: ""),
+    ]
+}
+
+// MARK: - Settings
+
+enum RigModel: String, CaseIterable, Identifiable {
+    case none = "None"
+    case ic705 = "IC-705"
+    case ic7300 = "IC-7300"
+    case ft991a = "FT-991A"
+    case ft710 = "FT-710"
+    case ft450d = "FT-450D"
+    case ts590s = "TS-590S"
+    case k3 = "K3/K3S"
+    case kx3 = "KX3"
+    case flex6000 = "Flex 6000"
+    case x6100 = "X6100"
+
+    var id: String { rawValue }
+}
+
+enum PttMode: String, CaseIterable, Identifiable {
+    case vox = "VOX"
+    case cat = "CAT"
+    case rts = "RTS"
+    case dtr = "DTR"
+
+    var id: String { rawValue }
+}
+
+@Observable @MainActor
+final class SettingsState {
+    var myCall: String = ""
+    var myGrid: String = ""
+    var band: String = "20M"
+    var rigModel: RigModel = .none
+    var pttMode: PttMode = .vox
+    var txPowerWatts: Int = 5
+    var txVolume: Int = 80
+    var showOnlyCQ: Bool = false
+    var dxOnly: Bool = false
+    var autoLog: Bool = true
+}
+
+// MARK: - Rig
+
+enum ConnectionStatus: String {
+    case disconnected = "Disconnected"
+    case connecting = "Connecting"
+    case connected = "Connected"
+}
+
+@Observable @MainActor
+final class RigState {
+    var connectionStatus: ConnectionStatus = .disconnected
+    var currentFreqHz: UInt64 = 14_074_000
+}
+
+// MARK: - TX
+
+/// App-local TX progress used by the Phase-1 UI. Named distinctly from
+/// `FT8Engine.TxStage` (imported above) to avoid shadowing the engine type
+/// when QSO wiring lands in a later phase.
+enum TxUIStage: String {
+    case idle
+    case cqSent
+    case reportSent
+    case rrSent
+    case complete
+}
+
+@Observable @MainActor
+final class TxState {
+    var stage: TxUIStage = .idle
+    var isActivated: Bool = false
+    var huntEnabled: Bool = false
+    var slotParity: Int = 0
+    var isTransmitting: Bool = false
+}

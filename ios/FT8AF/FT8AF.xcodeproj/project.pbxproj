@@ -1,0 +1,541 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		035DDD710715AAC0100E0871 /* Colors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FD3B4836E62F9DC32FAB0DE /* Colors.swift */; };
+		208767EE6D89D470D7C88E77 /* WaterfallScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E4787AD687D89D858D3C075 /* WaterfallScreen.swift */; };
+		26F661F120C34995BFF73F2D /* FT8DSP in Frameworks */ = {isa = PBXBuildFile; productRef = 93510ED81B9D113E387D0D45 /* FT8DSP */; };
+		303BF422AF4C5F94DF696E5D /* FT8Rig in Frameworks */ = {isa = PBXBuildFile; productRef = 4E7B6368450390C0D64A5715 /* FT8Rig */; };
+		33736A682F52CCBB13E8168A /* LogbookScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76108617D9AEDEE84BAD1054 /* LogbookScreen.swift */; };
+		3BA2BC0EFAF62534D39C3A4A /* DecodeFilterSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A88688AC6AFBEDC8AC3EF844 /* DecodeFilterSettings.swift */; };
+		49DFEC8ED0237764EA3EE3BF /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF21F5D95598018B8A46ED8D /* AppState.swift */; };
+		4C0C9DCC39ED6528F0D4CDFF /* RadioAudioSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89642B9763C7FA33CFF0EE57 /* RadioAudioSettings.swift */; };
+		595BBF17D95723947D5BFFC4 /* PotaScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B35E490F93FDCACEC4FBF66F /* PotaScreen.swift */; };
+		5C76E98A4BD4854709C3D0E9 /* AppTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A53063BBF11F97C62BC0AFC9 /* AppTabView.swift */; };
+		608EF9D6EAE6CDA82E9E86C4 /* QsoSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0290AFE608DC2FC9E1A83E16 /* QsoSheet.swift */; };
+		637BC14B19B728028FD01F07 /* FrequencyRuler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C81C53609B2CDC9FB3B71116 /* FrequencyRuler.swift */; };
+		65A688B883398E75D00BCD7E /* LogbookStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DB096C5FC7481CA1B7B49B /* LogbookStats.swift */; };
+		666D9271E9FE64C20C29CF47 /* FT8Audio in Frameworks */ = {isa = PBXBuildFile; productRef = 8A825C5161C267D978D895B8 /* FT8Audio */; };
+		72300AB5D2B37428777C824D /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BCE0C13DF4842EC394EFADF /* MapScreen.swift */; };
+		7F9F3D670DE6755252D023A3 /* TransmissionSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B08B1AA6951B99CEFAA521F /* TransmissionSettings.swift */; };
+		7FC3449767DCA16F70133366 /* DecodeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C79C0E0096ADDC018120C361 /* DecodeScreen.swift */; };
+		80F7FFDDEE3AEE3E706C4A2B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 076A186C88F9B5A2FFAAB073 /* Assets.xcassets */; };
+		8EA75A450404FB948C0A6CDC /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504C9AD4C6667267DFCABEF9 /* SettingsScreen.swift */; };
+		A5C16922F13DEDBDF69DFCF6 /* FT8AFTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A41EFDE500F865A3B393171D /* FT8AFTab.swift */; };
+		AA7457556E40D0C0B8F75958 /* FilterChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5306EE5215AE14F95F3329F8 /* FilterChip.swift */; };
+		AAA8FD89DE336CC404CC41E4 /* FT8Engine in Frameworks */ = {isa = PBXBuildFile; productRef = A5E95C3FF3D4A30E2177E137 /* FT8Engine */; };
+		B8FD5A2DF3B2A89740B3CB73 /* WorldMapCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BDDB723455CB7AE2BB68EF0 /* WorldMapCanvas.swift */; };
+		CE1ECA0C5BB350A1EDDA7018 /* SlotTimerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800081E79EC795EBDE2E077E /* SlotTimerBar.swift */; };
+		D36ECEB73B847787DE373072 /* SpectrumStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = C96D9C69CFC1480E6A5B64B5 /* SpectrumStrip.swift */; };
+		DA94D12D7FDE6D10D116E770 /* TxStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64B1202A7633AE8CBBFCF2C3 /* TxStrip.swift */; };
+		EC59A75E444DC6AB44913CB7 /* FT8AFApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1E760AEB31EF3855951728 /* FT8AFApp.swift */; };
+		F3CB49EBF218C3BB9FAE02D6 /* DecodeRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11DF7123A737FE9F5236677F /* DecodeRow.swift */; };
+		FEB99CFFD070BA6B893ADC83 /* WaterfallCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = B681B14FC4FED15C628471DF /* WaterfallCanvas.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0290AFE608DC2FC9E1A83E16 /* QsoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QsoSheet.swift; sourceTree = "<group>"; };
+		076A186C88F9B5A2FFAAB073 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		0FD3B4836E62F9DC32FAB0DE /* Colors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Colors.swift; sourceTree = "<group>"; };
+		11DF7123A737FE9F5236677F /* DecodeRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecodeRow.swift; sourceTree = "<group>"; };
+		1E4787AD687D89D858D3C075 /* WaterfallScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterfallScreen.swift; sourceTree = "<group>"; };
+		4B08B1AA6951B99CEFAA521F /* TransmissionSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransmissionSettings.swift; sourceTree = "<group>"; };
+		504C9AD4C6667267DFCABEF9 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
+		5306EE5215AE14F95F3329F8 /* FilterChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterChip.swift; sourceTree = "<group>"; };
+		64B1202A7633AE8CBBFCF2C3 /* TxStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TxStrip.swift; sourceTree = "<group>"; };
+		654EF0B6A0E279E65F355821 /* FT8AF.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FT8AF.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6F1E760AEB31EF3855951728 /* FT8AFApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FT8AFApp.swift; sourceTree = "<group>"; };
+		76108617D9AEDEE84BAD1054 /* LogbookScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogbookScreen.swift; sourceTree = "<group>"; };
+		800081E79EC795EBDE2E077E /* SlotTimerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlotTimerBar.swift; sourceTree = "<group>"; };
+		82A0D66684F5C2F323454D9B /* FT8AFKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FT8AFKit; path = ../FT8AFKit; sourceTree = SOURCE_ROOT; };
+		89642B9763C7FA33CFF0EE57 /* RadioAudioSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadioAudioSettings.swift; sourceTree = "<group>"; };
+		8BDDB723455CB7AE2BB68EF0 /* WorldMapCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldMapCanvas.swift; sourceTree = "<group>"; };
+		91DB096C5FC7481CA1B7B49B /* LogbookStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogbookStats.swift; sourceTree = "<group>"; };
+		9BCE0C13DF4842EC394EFADF /* MapScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapScreen.swift; sourceTree = "<group>"; };
+		A41EFDE500F865A3B393171D /* FT8AFTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FT8AFTab.swift; sourceTree = "<group>"; };
+		A53063BBF11F97C62BC0AFC9 /* AppTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTabView.swift; sourceTree = "<group>"; };
+		A88688AC6AFBEDC8AC3EF844 /* DecodeFilterSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecodeFilterSettings.swift; sourceTree = "<group>"; };
+		B35E490F93FDCACEC4FBF66F /* PotaScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PotaScreen.swift; sourceTree = "<group>"; };
+		B681B14FC4FED15C628471DF /* WaterfallCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterfallCanvas.swift; sourceTree = "<group>"; };
+		BF21F5D95598018B8A46ED8D /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		C79C0E0096ADDC018120C361 /* DecodeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecodeScreen.swift; sourceTree = "<group>"; };
+		C81C53609B2CDC9FB3B71116 /* FrequencyRuler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrequencyRuler.swift; sourceTree = "<group>"; };
+		C96D9C69CFC1480E6A5B64B5 /* SpectrumStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectrumStrip.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		3371CB108C645120B1311F94 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				26F661F120C34995BFF73F2D /* FT8DSP in Frameworks */,
+				666D9271E9FE64C20C29CF47 /* FT8Audio in Frameworks */,
+				AAA8FD89DE336CC404CC41E4 /* FT8Engine in Frameworks */,
+				303BF422AF4C5F94DF696E5D /* FT8Rig in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		14E1746CE387ABA11CDC3F5E /* Map */ = {
+			isa = PBXGroup;
+			children = (
+				9BCE0C13DF4842EC394EFADF /* MapScreen.swift */,
+				8BDDB723455CB7AE2BB68EF0 /* WorldMapCanvas.swift */,
+			);
+			path = Map;
+			sourceTree = "<group>";
+		};
+		1F327B9757517C23BFA52C86 /* Navigation */ = {
+			isa = PBXGroup;
+			children = (
+				A53063BBF11F97C62BC0AFC9 /* AppTabView.swift */,
+				A41EFDE500F865A3B393171D /* FT8AFTab.swift */,
+			);
+			path = Navigation;
+			sourceTree = "<group>";
+		};
+		233187321B70BBF49A9D862B /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				82A0D66684F5C2F323454D9B /* FT8AFKit */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		3BF125CF2819463DD0E2F81B /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				A88688AC6AFBEDC8AC3EF844 /* DecodeFilterSettings.swift */,
+				89642B9763C7FA33CFF0EE57 /* RadioAudioSettings.swift */,
+				504C9AD4C6667267DFCABEF9 /* SettingsScreen.swift */,
+				4B08B1AA6951B99CEFAA521F /* TransmissionSettings.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		48CD82AC79D5ACE80B4E114C /* Decode */ = {
+			isa = PBXGroup;
+			children = (
+				11DF7123A737FE9F5236677F /* DecodeRow.swift */,
+				C79C0E0096ADDC018120C361 /* DecodeScreen.swift */,
+				0290AFE608DC2FC9E1A83E16 /* QsoSheet.swift */,
+			);
+			path = Decode;
+			sourceTree = "<group>";
+		};
+		6A561A5BA077FBCEC8F291AB /* Waterfall */ = {
+			isa = PBXGroup;
+			children = (
+				C81C53609B2CDC9FB3B71116 /* FrequencyRuler.swift */,
+				C96D9C69CFC1480E6A5B64B5 /* SpectrumStrip.swift */,
+				B681B14FC4FED15C628471DF /* WaterfallCanvas.swift */,
+				1E4787AD687D89D858D3C075 /* WaterfallScreen.swift */,
+			);
+			path = Waterfall;
+			sourceTree = "<group>";
+		};
+		7ADDAD46CE02777DA8CFC26A = {
+			isa = PBXGroup;
+			children = (
+				975A228795DCD722F01F06F6 /* FT8AF */,
+				233187321B70BBF49A9D862B /* Packages */,
+				D3689D7765BE6F880B857542 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		7DCF29540DF6FBE5F4ECD5FC /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				5306EE5215AE14F95F3329F8 /* FilterChip.swift */,
+				800081E79EC795EBDE2E077E /* SlotTimerBar.swift */,
+				64B1202A7633AE8CBBFCF2C3 /* TxStrip.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		7F57A25B1504D3F64E790FAC /* Screens */ = {
+			isa = PBXGroup;
+			children = (
+				48CD82AC79D5ACE80B4E114C /* Decode */,
+				9B85E3FDCB60E378E9DF2E12 /* Logbook */,
+				14E1746CE387ABA11CDC3F5E /* Map */,
+				948E7F983E403C535796BAB0 /* POTA */,
+				3BF125CF2819463DD0E2F81B /* Settings */,
+				6A561A5BA077FBCEC8F291AB /* Waterfall */,
+			);
+			path = Screens;
+			sourceTree = "<group>";
+		};
+		948E7F983E403C535796BAB0 /* POTA */ = {
+			isa = PBXGroup;
+			children = (
+				B35E490F93FDCACEC4FBF66F /* PotaScreen.swift */,
+			);
+			path = POTA;
+			sourceTree = "<group>";
+		};
+		975A228795DCD722F01F06F6 /* FT8AF */ = {
+			isa = PBXGroup;
+			children = (
+				BF21F5D95598018B8A46ED8D /* AppState.swift */,
+				076A186C88F9B5A2FFAAB073 /* Assets.xcassets */,
+				6F1E760AEB31EF3855951728 /* FT8AFApp.swift */,
+				7DCF29540DF6FBE5F4ECD5FC /* Components */,
+				1F327B9757517C23BFA52C86 /* Navigation */,
+				7F57A25B1504D3F64E790FAC /* Screens */,
+				C97F65A2DD30ABA1707C85D3 /* Theme */,
+			);
+			path = FT8AF;
+			sourceTree = "<group>";
+		};
+		9B85E3FDCB60E378E9DF2E12 /* Logbook */ = {
+			isa = PBXGroup;
+			children = (
+				76108617D9AEDEE84BAD1054 /* LogbookScreen.swift */,
+				91DB096C5FC7481CA1B7B49B /* LogbookStats.swift */,
+			);
+			path = Logbook;
+			sourceTree = "<group>";
+		};
+		C97F65A2DD30ABA1707C85D3 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				0FD3B4836E62F9DC32FAB0DE /* Colors.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		D3689D7765BE6F880B857542 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				654EF0B6A0E279E65F355821 /* FT8AF.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B9605E495383A032BC1DF832 /* FT8AF */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5650222F2CAD932AA253AC9A /* Build configuration list for PBXNativeTarget "FT8AF" */;
+			buildPhases = (
+				59FFA201BB7BA779F5173CD5 /* Sources */,
+				CCBC8812B22B4288549A4D42 /* Resources */,
+				3371CB108C645120B1311F94 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FT8AF;
+			packageProductDependencies = (
+				93510ED81B9D113E387D0D45 /* FT8DSP */,
+				8A825C5161C267D978D895B8 /* FT8Audio */,
+				A5E95C3FF3D4A30E2177E137 /* FT8Engine */,
+				4E7B6368450390C0D64A5715 /* FT8Rig */,
+			);
+			productName = FT8AF;
+			productReference = 654EF0B6A0E279E65F355821 /* FT8AF.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		765E5D7980EA2125D03F7F74 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = C554E2B15926C57C42EF3BD2 /* Build configuration list for PBXProject "FT8AF" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 7ADDAD46CE02777DA8CFC26A;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				6EBAF921ECA57CA851F92F26 /* XCLocalSwiftPackageReference "../FT8AFKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = D3689D7765BE6F880B857542 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B9605E495383A032BC1DF832 /* FT8AF */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		CCBC8812B22B4288549A4D42 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				80F7FFDDEE3AEE3E706C4A2B /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		59FFA201BB7BA779F5173CD5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				49DFEC8ED0237764EA3EE3BF /* AppState.swift in Sources */,
+				5C76E98A4BD4854709C3D0E9 /* AppTabView.swift in Sources */,
+				035DDD710715AAC0100E0871 /* Colors.swift in Sources */,
+				3BA2BC0EFAF62534D39C3A4A /* DecodeFilterSettings.swift in Sources */,
+				F3CB49EBF218C3BB9FAE02D6 /* DecodeRow.swift in Sources */,
+				7FC3449767DCA16F70133366 /* DecodeScreen.swift in Sources */,
+				EC59A75E444DC6AB44913CB7 /* FT8AFApp.swift in Sources */,
+				A5C16922F13DEDBDF69DFCF6 /* FT8AFTab.swift in Sources */,
+				AA7457556E40D0C0B8F75958 /* FilterChip.swift in Sources */,
+				637BC14B19B728028FD01F07 /* FrequencyRuler.swift in Sources */,
+				33736A682F52CCBB13E8168A /* LogbookScreen.swift in Sources */,
+				65A688B883398E75D00BCD7E /* LogbookStats.swift in Sources */,
+				72300AB5D2B37428777C824D /* MapScreen.swift in Sources */,
+				595BBF17D95723947D5BFFC4 /* PotaScreen.swift in Sources */,
+				608EF9D6EAE6CDA82E9E86C4 /* QsoSheet.swift in Sources */,
+				4C0C9DCC39ED6528F0D4CDFF /* RadioAudioSettings.swift in Sources */,
+				8EA75A450404FB948C0A6CDC /* SettingsScreen.swift in Sources */,
+				CE1ECA0C5BB350A1EDDA7018 /* SlotTimerBar.swift in Sources */,
+				D36ECEB73B847787DE373072 /* SpectrumStrip.swift in Sources */,
+				7F9F3D670DE6755252D023A3 /* TransmissionSettings.swift in Sources */,
+				DA94D12D7FDE6D10D116E770 /* TxStrip.swift in Sources */,
+				FEB99CFFD070BA6B893ADC83 /* WaterfallCanvas.swift in Sources */,
+				208767EE6D89D470D7C88E77 /* WaterfallScreen.swift in Sources */,
+				B8FD5A2DF3B2A89740B3CB73 /* WorldMapCanvas.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		114B2295BA5908B5A5B022F2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = radio.ks3ckc.ft8af;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1C711ADDAFD3114BA9D7391A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		B8017F482621D5FE508648E3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = radio.ks3ckc.ft8af;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C9A16BFA5CB997D011C9145F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		5650222F2CAD932AA253AC9A /* Build configuration list for PBXNativeTarget "FT8AF" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				114B2295BA5908B5A5B022F2 /* Debug */,
+				B8017F482621D5FE508648E3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C554E2B15926C57C42EF3BD2 /* Build configuration list for PBXProject "FT8AF" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C9A16BFA5CB997D011C9145F /* Debug */,
+				1C711ADDAFD3114BA9D7391A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		6EBAF921ECA57CA851F92F26 /* XCLocalSwiftPackageReference "../FT8AFKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../FT8AFKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4E7B6368450390C0D64A5715 /* FT8Rig */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FT8Rig;
+		};
+		8A825C5161C267D978D895B8 /* FT8Audio */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FT8Audio;
+		};
+		93510ED81B9D113E387D0D45 /* FT8DSP */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FT8DSP;
+		};
+		A5E95C3FF3D4A30E2177E137 /* FT8Engine */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FT8Engine;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 765E5D7980EA2125D03F7F74 /* Project object */;
+}
