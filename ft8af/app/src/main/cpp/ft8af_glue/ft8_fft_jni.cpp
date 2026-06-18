@@ -23,6 +23,9 @@
 extern "C" {
 #include "fft/kiss_fftr.h"
 }
+// fft_display.h guards its own C linkage (extern "C"), so include it outside the
+// kissfft block rather than nesting it under this one.
+#include "fft_display.h"
 
 // ---------------------------------------------------------------------------
 // Core FFT computation: time-domain samples → magnitude array.
@@ -53,68 +56,19 @@ static void compute_fft_magnitudes(const float* input, int n, int* output, bool 
 
     kiss_fftr(cfg, input, freq);
 
-    // Compute magnitude for each bin and find the maximum for normalization.
+    // Compute the linear magnitude for each bin.
     float* mag = (float*)malloc(n_bins * sizeof(float));
     if (!mag) {
         free(freq);
         kiss_fftr_free(cfg);
         return;
     }
-
-    float max_mag = 1e-10f;
-    for (int i = 0; i < n_bins; ++i) {
+    for (int i = 0; i < n_bins; ++i)
         mag[i] = sqrtf(freq[i].r * freq[i].r + freq[i].i * freq[i].i);
-        if (mag[i] > max_mag) max_mag = mag[i];
-    }
 
-    if (denoise) {
-        // Simple denoising: compute a local average noise floor using a sliding
-        // window, then subtract it. Window size is ~5% of the bin count, minimum 8.
-        // Uses a prefix-sum for O(1) per-bin window average instead of O(win).
-        int win = n_bins / 20;
-        if (win < 8) win = 8;
-        if (win > n_bins) win = n_bins;
-
-        // Prefix sum: prefix[i] = sum of mag[0..i-1], prefix[0] = 0
-        float* prefix = (float*)malloc((n_bins + 1) * sizeof(float));
-        if (prefix) {
-            prefix[0] = 0;
-            for (int i = 0; i < n_bins; ++i)
-                prefix[i + 1] = prefix[i] + mag[i];
-
-            // Subtract noise floor in-place using prefix sums
-            // We need the original mag values for the prefix sum, so compute
-            // denoised values into a separate pass.
-            for (int i = 0; i < n_bins; ++i) {
-                int left = i - win / 2;
-                int right = left + win;
-                if (left < 0) { left = 0; right = win; }
-                if (right > n_bins) { right = n_bins; left = right - win; }
-                if (left < 0) left = 0;
-
-                float avg = (prefix[right] - prefix[left]) / (right - left);
-                mag[i] -= avg;
-                if (mag[i] < 0) mag[i] = 0;
-            }
-
-            // Recompute max after denoising
-            max_mag = 1e-10f;
-            for (int i = 0; i < n_bins; ++i) {
-                if (mag[i] > max_mag) max_mag = mag[i];
-            }
-
-            free(prefix);
-        }
-    }
-
-    // Scale magnitudes to 0..255 for display
-    float scale = 255.0f / max_mag;
-    for (int i = 0; i < n_bins; ++i) {
-        int val = (int)(mag[i] * scale);
-        if (val > 255) val = 255;
-        if (val < 0) val = 0;
-        output[i] = val;
-    }
+    // Map to 0..255 on a logarithmic (dB), noise-floor-referenced scale. Linear
+    // scaling here made the waterfall blank; see fft_display.c.
+    ft8af_magnitudes_to_display(mag, n_bins, output, denoise ? 1 : 0);
 
     free(mag);
     free(freq);

@@ -104,6 +104,7 @@ add_library(ft8af SHARED
         ft8af_glue/ft8_hash_jni.cpp
         # JNI wrappers — FFT display
         ft8af_glue/ft8_fft_jni.cpp
+        ft8af_glue/fft_display.c
         # JNI wrappers — audio resampler
         ft8af_glue/ft8_resample_jni.cpp
         # JNI wrappers — FT8 decoder (replaces prebuilt)

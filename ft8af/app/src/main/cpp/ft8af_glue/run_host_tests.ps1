@@ -77,4 +77,27 @@ if ($Regen) {
 }
 
 & $out
-exit $LASTEXITCODE
+$goldenExit = $LASTEXITCODE
+
+# ---------------------------------------------------------------------------
+# dev-625 regression tests: ft8_snr() FT8 calibration + the waterfall display
+# magnitude mapping (fft_display.c). Links the decoder + the extracted display
+# helper; separate executable (own main()).
+# ---------------------------------------------------------------------------
+$dev625Srcs = @(
+    "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
+    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\unpack.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+$dev625Srcs += (Join-Path $here "fft_display.c")
+
+$src625 = Join-Path $here "test_dev625_fixes.c"
+$out625 = Join-Path $env:TEMP "ft8_dev625_test.exe"
+
+& $Clang @common $src625 @dev625Srcs -o $out625
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (dev625)." }
+
+& $out625
+$dev625Exit = $LASTEXITCODE
+
+if ($goldenExit -ne 0) { exit $goldenExit }
+exit $dev625Exit
