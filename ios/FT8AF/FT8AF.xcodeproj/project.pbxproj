@@ -34,6 +34,7 @@
 		8DA0D562E25925F56B638B00 /* GridDistance.swift in Sources */ = {isa = PBXBuildFile; fileRef = E429D8A3556534F05374F12A /* GridDistance.swift */; };
 		8EA75A450404FB948C0A6CDC /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504C9AD4C6667267DFCABEF9 /* SettingsScreen.swift */; };
 		9F4A1DE79693EF68A7B1A4D2 /* LogbookAwards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CCA018AEEE169EDCA338FD /* LogbookAwards.swift */; };
+		A037B00B861024FA2CA4919F /* QsoPathMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD0187218903BBFF71931246 /* QsoPathMap.swift */; };
 		A5C16922F13DEDBDF69DFCF6 /* FT8AFTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A41EFDE500F865A3B393171D /* FT8AFTab.swift */; };
 		AA7457556E40D0C0B8F75958 /* FilterChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5306EE5215AE14F95F3329F8 /* FilterChip.swift */; };
 		AAA8FD89DE336CC404CC41E4 /* FT8Engine in Frameworks */ = {isa = PBXBuildFile; productRef = A5E95C3FF3D4A30E2177E137 /* FT8Engine */; };
@@ -54,6 +55,7 @@
 		EEA0D2F1B9A7E0345F68E909 /* ExportLogSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16235B470705C04E596C8A5B /* ExportLogSheet.swift */; };
 		F3CB49EBF218C3BB9FAE02D6 /* DecodeRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11DF7123A737FE9F5236677F /* DecodeRow.swift */; };
 		F4E60463DA065CDAE7B84EF3 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E706B1D26B550FE4D798B68 /* Accelerate.framework */; };
+		F917448B524020C565485D03 /* SplashScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3A872FCC168F7F5523C8D69 /* SplashScreen.swift */; };
 		FEB99CFFD070BA6B893ADC83 /* WaterfallCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = B681B14FC4FED15C628471DF /* WaterfallCanvas.swift */; };
 /* End PBXBuildFile section */
 
@@ -87,12 +89,14 @@
 		91DB096C5FC7481CA1B7B49B /* LogbookStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogbookStats.swift; sourceTree = "<group>"; };
 		93DFF1DC42A9F8F8066F97F7 /* LogbookCharts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogbookCharts.swift; sourceTree = "<group>"; };
 		9BCE0C13DF4842EC394EFADF /* MapScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapScreen.swift; sourceTree = "<group>"; };
+		A3A872FCC168F7F5523C8D69 /* SplashScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashScreen.swift; sourceTree = "<group>"; };
 		A41EFDE500F865A3B393171D /* FT8AFTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FT8AFTab.swift; sourceTree = "<group>"; };
 		A53063BBF11F97C62BC0AFC9 /* AppTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTabView.swift; sourceTree = "<group>"; };
 		A88688AC6AFBEDC8AC3EF844 /* DecodeFilterSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecodeFilterSettings.swift; sourceTree = "<group>"; };
 		AC8DAEDCAE1AD9DE02EB1480 /* QsoCelebration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QsoCelebration.swift; sourceTree = "<group>"; };
 		B35E490F93FDCACEC4FBF66F /* PotaScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PotaScreen.swift; sourceTree = "<group>"; };
 		B681B14FC4FED15C628471DF /* WaterfallCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterfallCanvas.swift; sourceTree = "<group>"; };
+		BD0187218903BBFF71931246 /* QsoPathMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QsoPathMap.swift; sourceTree = "<group>"; };
 		BF21F5D95598018B8A46ED8D /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		C42FB097015693FF14B27553 /* AudioCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureService.swift; sourceTree = "<group>"; };
 		C79C0E0096ADDC018120C361 /* DecodeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecodeScreen.swift; sourceTree = "<group>"; };
@@ -217,6 +221,7 @@
 				5306EE5215AE14F95F3329F8 /* FilterChip.swift */,
 				F3C698656C5709343F4AEEF0 /* FrequencyPickerSheet.swift */,
 				AC8DAEDCAE1AD9DE02EB1480 /* QsoCelebration.swift */,
+				BD0187218903BBFF71931246 /* QsoPathMap.swift */,
 				800081E79EC795EBDE2E077E /* SlotTimerBar.swift */,
 				8493B7CF97F9744DED622F15 /* ToastOverlay.swift */,
 				DF04207CDB5BE8A1CCDD5F5B /* TransmitGlow.swift */,
@@ -228,6 +233,7 @@
 		7F57A25B1504D3F64E790FAC /* Screens */ = {
 			isa = PBXGroup;
 			children = (
+				A3A872FCC168F7F5523C8D69 /* SplashScreen.swift */,
 				48CD82AC79D5ACE80B4E114C /* Decode */,
 				9B85E3FDCB60E378E9DF2E12 /* Logbook */,
 				14E1746CE387ABA11CDC3F5E /* Map */,
@@ -406,11 +412,13 @@
 				595BBF17D95723947D5BFFC4 /* PotaScreen.swift in Sources */,
 				4D87F21162B4DCEC806D8785 /* QsoCelebration.swift in Sources */,
 				E375A4D50C25F5437C2C9F7F /* QsoLogStore.swift in Sources */,
+				A037B00B861024FA2CA4919F /* QsoPathMap.swift in Sources */,
 				608EF9D6EAE6CDA82E9E86C4 /* QsoSheet.swift in Sources */,
 				4C0C9DCC39ED6528F0D4CDFF /* RadioAudioSettings.swift in Sources */,
 				8EA75A450404FB948C0A6CDC /* SettingsScreen.swift in Sources */,
 				CE1ECA0C5BB350A1EDDA7018 /* SlotTimerBar.swift in Sources */,
 				D36ECEB73B847787DE373072 /* SpectrumStrip.swift in Sources */,
+				F917448B524020C565485D03 /* SplashScreen.swift in Sources */,
 				ED838E6889186A96DB5E68A3 /* ToastOverlay.swift in Sources */,
 				7F9F3D670DE6755252D023A3 /* TransmissionSettings.swift in Sources */,
 				5E2B3105FFFE6C84D86ACD85 /* TransmitGlow.swift in Sources */,

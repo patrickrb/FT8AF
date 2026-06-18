@@ -71,6 +71,13 @@ struct QsoSheet: View {
                 .padding(.bottom, 16)
             }
 
+            // QSO path mini-map
+            if !appState.settings.myGrid.isEmpty && !message.grid.isEmpty {
+                QsoPathMap(myGrid: appState.settings.myGrid, theirGrid: message.grid)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+            }
+
             // Extra info
             if !message.extra.isEmpty && message.extra != message.grid {
                 HStack {

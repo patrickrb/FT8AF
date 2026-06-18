@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// TX control bar shown at the bottom of Decode/Waterfall screens.
 struct TxStrip: View {
@@ -245,7 +246,10 @@ private struct ActionButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            action()
+            haptic()
+        } label: {
             Group {
                 switch style {
                 case .primary:
@@ -277,5 +281,10 @@ private struct ActionButton: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    private func haptic() {
+        let gen = UIImpactFeedbackGenerator(style: style == .primary ? .medium : .light)
+        gen.impactOccurred()
     }
 }

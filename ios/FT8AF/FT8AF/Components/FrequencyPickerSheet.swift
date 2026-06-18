@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Bottom sheet listing all HF amateur bands with their FT8 dial frequencies.
 struct FrequencyPickerSheet: View {
@@ -24,6 +25,7 @@ struct FrequencyPickerSheet: View {
             List {
                 ForEach(bands, id: \.band) { item in
                     Button {
+                        UISelectionFeedbackGenerator().selectionChanged()
                         appState.settings.band = item.band
                         SettingsPersistence.save(appState.settings)
                         dismiss()

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Confetti burst animation triggered on QSO completion.
 struct QsoCelebration: View {
@@ -21,6 +22,7 @@ struct QsoCelebration: View {
                 }
             }
             .onAppear {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
                 spawnParticles(in: geo.size)
                 // Fade out after 1.5 seconds
                 withAnimation(.easeOut(duration: 0.5).delay(1.5)) {
