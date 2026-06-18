@@ -34,6 +34,10 @@ srcs=(
 )
 
 tmp="$(mktemp -d)"
+# Clean up the temp build dir on exit. We deliberately do NOT exec the test
+# binaries below (which would replace the shell and skip this trap); set -e
+# still propagates a failing test's exit status as the script's exit status.
+trap 'rm -rf "$tmp"' EXIT
 out="$tmp/ft8_golden_test"
 
 # -D_GNU_SOURCE: expose POSIX stpcpy + M_PI from glibc (harmless on macOS).
@@ -45,7 +49,8 @@ out="$tmp/ft8_golden_test"
 
 # --emit (golden re-gen) only applies to the golden-vector binary.
 if [ "${1:-}" = "--emit" ]; then
-    exec "$out" "$@"
+    "$out" "$@"
+    exit "$?"
 fi
 
 "$out"
@@ -70,4 +75,5 @@ out625="$tmp/ft8_dev625_test"
     -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
     -I "$ft8" "${dev625_srcs[@]}" -lm -o "$out625"
 
-exec "$out625"
+# Not exec'd, so the EXIT trap cleans up $tmp. set -e propagates a failure.
+"$out625"

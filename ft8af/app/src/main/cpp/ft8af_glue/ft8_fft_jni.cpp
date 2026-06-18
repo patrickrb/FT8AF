@@ -22,8 +22,10 @@
 
 extern "C" {
 #include "fft/kiss_fftr.h"
-#include "fft_display.h"
 }
+// fft_display.h guards its own C linkage (extern "C"), so include it outside the
+// kissfft block rather than nesting it under this one.
+#include "fft_display.h"
 
 // ---------------------------------------------------------------------------
 // Core FFT computation: time-domain samples → magnitude array.
