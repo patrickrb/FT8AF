@@ -4,12 +4,6 @@ options:
   deploymentTarget:
     iOS: "17.0"
   xcodeVersion: "15.0"
-  # Pin the pbxproj objectVersion so the generated project opens in Xcode 15
-  # (the version pinned above, and what CI's macos-14 runner ships). Recent
-  # XcodeGen defaults to objectVersion 77, an Xcode 16-only format that
-  # Xcode 15.4 refuses with "future Xcode project file format (77)". 56 is
-  # readable by Xcode 15 and still opens fine in 16.
-  objectVersion: 56
   generateEmptyDirectories: true
 
 packages:
