@@ -36,7 +36,7 @@ final class QsoEngineTests: XCTestCase {
         XCTAssertEqual(e.txMessage, "K1ABC K0XYZ R-08")
         XCTAssertEqual(e.status().reportRcvd, -12)
 
-        // DX sends RR73 -> we send 73 and log.
+        // DX sends RR73 -> we log AND queue the courtesy 73 to transmit.
         let out2 = e.processRx([msg("K0XYZ", "K1ABC", "RR73", "", -8)])
         guard case .completed(let rec)? = out2 else { return XCTFail("expected completed QSO") }
         XCTAssertEqual(rec.call, "K1ABC")
@@ -45,6 +45,12 @@ final class QsoEngineTests: XCTestCase {
         XCTAssertEqual(rec.rstRcvd, "-12")
         XCTAssertEqual(rec.mode, "FT8")
         XCTAssertEqual(rec.stationCallsign, "K0XYZ")
+        // The final 73 is queued (not clobbered by the auto-return)...
+        XCTAssertEqual(e.txMessage, "K1ABC K0XYZ 73")
+        XCTAssertEqual(e.status().stage, .bye73)
+        // ...and once its TX slot has passed, the next slot returns to CQ.
+        XCTAssertNil(e.processRx([]))
+        XCTAssertEqual(e.txMessage, "CQ K0XYZ EN37")
     }
 
     func testInitiatorCqSequenceLogsQso() {
@@ -160,5 +166,42 @@ final class QsoEngineTests: XCTestCase {
         let e = QsoEngine(myCall: "k0xyz", myGrid: "en37mt") // grid truncated to 4 + upper
         e.startCq()
         XCTAssertEqual(e.txMessage, "CQ K0XYZ EN37")
+    }
+
+    func testStopClearsTargetSoStaleStageIsNoOp() {
+        let e = QsoEngine(myCall: "K0XYZ", myGrid: "EN37")
+        e.answer(msg("CQ", "K1ABC", "FN42", "FN42", -5)) // sets target K1ABC
+        e.stop()
+        e.setStage(.report) // target was cleared by stop -> no-op, no stale TX
+        XCTAssertNil(e.txMessage)
+        XCTAssertFalse(e.status().active)
+        XCTAssertNil(e.status().target)
+    }
+
+    func testAnsweredGridNormalizedToFourCharUpper() {
+        let e = QsoEngine(myCall: "K0XYZ", myGrid: "EN37")
+        e.answer(msg("CQ", "K1ABC", "fn42lk", "fn42lk", -5)) // 6-char lowercase locator
+        _ = e.processRx([msg("K0XYZ", "K1ABC", "-12", "", -8)])
+        let out = e.processRx([msg("K0XYZ", "K1ABC", "RR73", "", -8)])
+        guard case .completed(let rec)? = out else { return XCTFail("expected completed QSO") }
+        XCTAssertEqual(rec.gridsquare, "FN42")
+    }
+
+    func testInitiatorCapturedGridNormalized() {
+        let e = QsoEngine(myCall: "K0XYZ", myGrid: "EN37")
+        e.startCq()
+        _ = e.processRx([msg("K0XYZ", "K1ABC", "fn42", "fn42", -10)]) // lowercase grid
+        _ = e.processRx([msg("K0XYZ", "K1ABC", "R-15", "", -10)])
+        let out = e.processRx([msg("K0XYZ", "K1ABC", "73", "", -10)])
+        guard case .completed(let rec)? = out else { return XCTFail("expected completed QSO") }
+        XCTAssertEqual(rec.gridsquare, "FN42")
+    }
+
+    func testFT8TimeFormatsUtc() {
+        XCTAssertEqual(FT8Time.yyyymmdd(fromMs: 0), "19700101")
+        XCTAssertEqual(FT8Time.hhmmss(fromMs: 0), "000000")
+        // 1_700_000_000 s == 2023-11-14T22:13:20Z
+        XCTAssertEqual(FT8Time.yyyymmdd(fromMs: 1_700_000_000_000), "20231114")
+        XCTAssertEqual(FT8Time.hhmmss(fromMs: 1_700_000_000_000), "221320")
     }
 }

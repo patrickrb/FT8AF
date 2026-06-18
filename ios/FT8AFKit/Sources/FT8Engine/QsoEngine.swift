@@ -87,7 +87,7 @@ public final class QsoEngine {
         resetQso()
         active = true
         target = msg.callFrom.uppercased()
-        gridRcvd = msg.grid.isEmpty ? nil : msg.grid
+        gridRcvd = msg.grid.isEmpty ? nil : grid4(msg.grid).uppercased()
         reportSent = clampReport(msg.snr)
         stage = .grid
         startedMs = FT8Time.nowUnixMs()
@@ -129,6 +129,9 @@ public final class QsoEngine {
         active = false
         pendingTx = nil
         stage = .idle
+        // Clear the QSO context too, so a later manual setStage() can't re-activate
+        // and transmit to a stale target/report from the QSO we just stopped.
+        resetQso()
     }
 
     private func resetQso() {
@@ -143,6 +146,13 @@ public final class QsoEngine {
     /// message for the next slot and returns a completion outcome if a QSO ended.
     public func processRx(_ messages: [DecodedMessage]) -> QsoOutcome? {
         if !active || stage == .idle { return nil }
+
+        // The courtesy "73" queued on the previous slot has now had its TX slot;
+        // wrap up (return to CQ / stop) regardless of incoming traffic this slot.
+        if stage == .bye73 {
+            finishQso()
+            return nil
+        }
 
         // Find a message addressed to us, from our target if we have one.
         let mine = messages.first { m in
@@ -162,7 +172,7 @@ public final class QsoEngine {
         case .cq:
             switch content {
             case .grid(let g):
-                gridRcvd = g
+                gridRcvd = grid4(g).uppercased()
                 reportSent = clampReport(msg.snr)
                 sendReport(dx)
             case .report(let n):
@@ -248,7 +258,17 @@ public final class QsoEngine {
             comment: ""
         )
 
-        // Return to CQ or go idle.
+        // If a courtesy "73" is queued (the .rReport path set stage = .bye73),
+        // leave pendingTx/stage so the scheduler transmits it; the next slot's
+        // .bye73 handler in processRx then wraps up. Otherwise finish now.
+        if stage != .bye73 {
+            finishQso()
+        }
+        return .completed(record)
+    }
+
+    /// Return to calling CQ, or stop, per `autoReturnToCq`.
+    private func finishQso() {
         if autoReturnToCq {
             resetQso()
             stage = .cq
@@ -256,7 +276,6 @@ public final class QsoEngine {
         } else {
             stop()
         }
-        return .completed(record)
     }
 }
 

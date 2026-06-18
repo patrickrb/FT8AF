@@ -2,9 +2,11 @@ import Foundation
 
 /// UTC date/time helpers for logging (port of the desktop util:: time functions).
 enum FT8Time {
-    private static var utcCalendar: Calendar = {
+    // `.gmt` is non-optional (iOS 16+/macOS 13+), and `Calendar.component(_:from:)`
+    // returns non-optional Ints — so no force-unwraps anywhere here.
+    private static let utcCalendar: Calendar = {
         var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "UTC")!
+        cal.timeZone = .gmt
         return cal
     }()
 
@@ -12,14 +14,18 @@ enum FT8Time {
 
     static func yyyymmdd(fromMs ms: Int64) -> String {
         let d = Date(timeIntervalSince1970: Double(ms) / 1000.0)
-        let c = utcCalendar.dateComponents([.year, .month, .day], from: d)
-        return String(format: "%04d%02d%02d", c.year!, c.month!, c.day!)
+        let y = utcCalendar.component(.year, from: d)
+        let mo = utcCalendar.component(.month, from: d)
+        let da = utcCalendar.component(.day, from: d)
+        return String(format: "%04d%02d%02d", y, mo, da)
     }
 
     static func hhmmss(fromMs ms: Int64) -> String {
         let d = Date(timeIntervalSince1970: Double(ms) / 1000.0)
-        let c = utcCalendar.dateComponents([.hour, .minute, .second], from: d)
-        return String(format: "%02d%02d%02d", c.hour!, c.minute!, c.second!)
+        let h = utcCalendar.component(.hour, from: d)
+        let mi = utcCalendar.component(.minute, from: d)
+        let s = utcCalendar.component(.second, from: d)
+        return String(format: "%02d%02d%02d", h, mi, s)
     }
 
     static func utcYyyymmdd() -> String { yyyymmdd(fromMs: nowUnixMs()) }
