@@ -12,6 +12,11 @@ final class AppState {
     let settings = SettingsState()
     let rig = RigState()
     let tx = TxState()
+
+    /// The live engine is set once by `FT8AFApp` at startup. Views access it
+    /// through `appState.engine` instead of a separate `@Environment` entry,
+    /// which avoids fatal crashes when the Observable-environment lookup fails.
+    var engine: LiveEngine?
 }
 
 // MARK: - Decode

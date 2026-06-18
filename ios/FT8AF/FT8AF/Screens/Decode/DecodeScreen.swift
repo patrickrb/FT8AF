@@ -2,7 +2,6 @@ import SwiftUI
 
 struct DecodeScreen: View {
     @Environment(AppState.self) private var appState
-    @Environment(LiveEngine.self) private var engine
     @State private var showQsoSheet = false
 
     var body: some View {
@@ -60,17 +59,17 @@ struct DecodeScreen: View {
             Spacer(minLength: 0)
 
             TxStrip(
-                onHunt: { engine.toggleHunt() },
-                onCallCQ: { engine.callCQ() },
-                onStop: { engine.stopTx() },
-                onToggleSlot: { engine.toggleSlotParity() }
+                onHunt: { appState.engine?.toggleHunt() },
+                onCallCQ: { appState.engine?.callCQ() },
+                onStop: { appState.engine?.stopTx() },
+                onToggleSlot: { appState.engine?.toggleSlotParity() }
             )
         }
         .background(bgApp)
         .sheet(isPresented: $showQsoSheet) {
             if let msg = decode.selectedMessage {
                 QsoSheet(message: msg) { message in
-                    engine.answerStation(message)
+                    appState.engine?.answerStation(message)
                 }
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)

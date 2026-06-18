@@ -2,7 +2,6 @@ import SwiftUI
 
 struct WaterfallScreen: View {
     @Environment(AppState.self) private var appState
-    @Environment(LiveEngine.self) private var engine
     @State private var utcString = ""
 
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -40,10 +39,10 @@ struct WaterfallScreen: View {
             .background(bgSurface)
 
             TxStrip(
-                onHunt: { engine.toggleHunt() },
-                onCallCQ: { engine.callCQ() },
-                onStop: { engine.stopTx() },
-                onToggleSlot: { engine.toggleSlotParity() }
+                onHunt: { appState.engine?.toggleHunt() },
+                onCallCQ: { appState.engine?.callCQ() },
+                onStop: { appState.engine?.stopTx() },
+                onToggleSlot: { appState.engine?.toggleSlotParity() }
             )
         }
         .background(bgApp)

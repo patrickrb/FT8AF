@@ -9,8 +9,9 @@ struct FT8AFApp: App {
         WindowGroup {
             AppTabView()
                 .environment(appState)
-                .environment(engine)
                 .task {
+                    // Wire engine into AppState so every view can reach it.
+                    appState.engine = engine
                     // Load persisted QSO log before starting the engine.
                     appState.logbook.records = QsoLogStore.load()
                     await engine.start(appState: appState)
