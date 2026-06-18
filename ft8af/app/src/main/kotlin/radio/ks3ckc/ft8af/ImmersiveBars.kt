@@ -19,9 +19,12 @@ internal object ImmersiveBars {
     /** Bars stay hidden; a swipe reveals them transiently, then they re-hide. */
     const val BEHAVIOR = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 
-    /** Hide the status + navigation bars and arm transient-by-swipe reveal. */
+    /** Arm transient-by-swipe reveal, then hide the status + navigation bars. */
     fun apply(controller: WindowInsetsControllerCompat) {
-        controller.hide(WindowInsetsCompat.Type.systemBars())
+        // Set the behavior before hiding so it's guaranteed to govern this hide
+        // operation — applying it after hide() can be ignored for already-hidden
+        // bars on some implementations.
         controller.systemBarsBehavior = BEHAVIOR
+        controller.hide(WindowInsetsCompat.Type.systemBars())
     }
 }

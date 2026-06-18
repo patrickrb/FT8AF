@@ -89,8 +89,9 @@ fun FT8AFTheme(content: @Composable () -> Unit) {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
             // window.statusBarColor / navigationBarColor are deprecated and no-ops
             // under edge-to-edge on Android 15. The bars are transparent; we only
-            // keep their icon appearance dark (light icons) for when they're
-            // transiently revealed.
+            // force light (white) bar icons here (isAppearanceLight* = false) so
+            // they stay legible against the app's dark background when the bars
+            // are transiently revealed.
             WindowCompat.getInsetsController(window, view).apply {
                 isAppearanceLightStatusBars = false
                 isAppearanceLightNavigationBars = false
