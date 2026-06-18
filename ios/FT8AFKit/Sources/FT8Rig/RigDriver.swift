@@ -1,5 +1,3 @@
-import Foundation
-
 /// Rig families whose CAT command bytes we know how to build.
 public enum RigModel: String, Codable, Equatable {
     case none
@@ -34,10 +32,13 @@ public func rigDriver(for model: RigModel, civAddress: UInt8 = defaultCivAddress
 }
 
 /// Decimal `hz` as a zero-padded, fixed-width ASCII string (Yaesu/Kenwood CAT).
-/// Avoids printf width/`%llu` pitfalls with UInt64.
+/// Avoids printf width/`%llu` pitfalls with UInt64. Traps if `hz` has more than
+/// `width` digits, so an out-of-range frequency fails fast instead of producing a
+/// malformed (wrong-length) CAT frame.
 func zeroPadded(_ hz: UInt64, width: Int) -> String {
     let s = String(hz)
-    return s.count >= width ? s : String(repeating: "0", count: width - s.count) + s
+    precondition(s.count <= width, "frequency \(hz) exceeds \(width) digits")
+    return s.count == width ? s : String(repeating: "0", count: width - s.count) + s
 }
 
 // MARK: Yaesu (ASCII CAT, e.g. FT-991A/FTDX)
@@ -69,13 +70,16 @@ public struct IcomDriver: RigDriver {
     public init(address: UInt8 = defaultCivAddress) { self.address = address }
 
     /// Wrap a CI-V body: FE FE <radio> E0 <body...> FD.
-    func frame(_ body: [UInt8]) -> [UInt8] {
+    private func frame(_ body: [UInt8]) -> [UInt8] {
         [0xFE, 0xFE, address, 0xE0] + body + [0xFD]
     }
 
     /// 10-digit frequency as 5 little-endian BCD bytes (two digits per byte,
-    /// low nibble first). Port of Icom::freq_bcd.
+    /// low nibble first). Port of Icom::freq_bcd. Traps above 10 decimal digits
+    /// (~9.99 GHz) so a value that can't fit fails fast instead of silently
+    /// emitting truncated CI-V bytes.
     static func frequencyBCD(_ hz: UInt64) -> [UInt8] {
+        precondition(hz < 10_000_000_000, "frequency \(hz) exceeds 10 BCD digits")
         var digits = [UInt8](repeating: 0, count: 10)
         var f = hz
         for i in 0..<10 {
