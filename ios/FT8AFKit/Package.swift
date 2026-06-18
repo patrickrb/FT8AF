@@ -22,6 +22,7 @@ let package = Package(
         .library(name: "FT8DSP", targets: ["FT8DSP"]),
         .library(name: "FT8Audio", targets: ["FT8Audio"]),
         .library(name: "FT8Engine", targets: ["FT8Engine"]),
+        .library(name: "FT8Rig", targets: ["FT8Rig"]),
     ],
     targets: [
         // C bridge to ft8_lib. Header-search path points at the ft8_lib root so
@@ -70,6 +71,17 @@ let package = Package(
         .testTarget(
             name: "FT8EngineTests",
             dependencies: ["FT8Engine", "FT8DSP"] // tests build DecodedMessage fixtures
+        ),
+        // CAT command-byte framing for Yaesu/Kenwood/Icom rigs (port of the
+        // per-model Driver impls in desktop rig.rs). Pure bytes -- no transport,
+        // no dependencies -- so it's fully host-testable. The BLE/network
+        // transports that write these bytes are device code added later.
+        .target(
+            name: "FT8Rig"
+        ),
+        .testTarget(
+            name: "FT8RigTests",
+            dependencies: ["FT8Rig"]
         ),
     ]
 )
