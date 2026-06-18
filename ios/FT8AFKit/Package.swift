@@ -1,5 +1,18 @@
 // swift-tools-version: 5.9
+import Foundation
 import PackageDescription
+
+// Resolve the ft8_lib and ft8af_glue C source directories relative to this
+// Package.swift. SPM rejects .headerSearchPath() outside the package root, so
+// we pass absolute -I flags via .unsafeFlags() instead (see ios/README.md).
+// Standardize the URL so the `..` segments are collapsed: the compiler then
+// receives a clean, canonical absolute path (stable module-cache keys and
+// diagnostics) instead of one threaded through `../../`.
+let packageDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+let cppRoot = packageDir
+    .appendingPathComponent("../../ft8af/app/src/main/cpp")
+    .standardized
+    .path
 
 // FT8AFKit — the non-UI core of the native iOS port of FT8AF.
 //
@@ -25,17 +38,21 @@ let package = Package(
         .library(name: "FT8Rig", targets: ["FT8Rig"]),
     ],
     targets: [
-        // C bridge to ft8_lib. Header-search path points at the ft8_lib root so
-        // the library's internal `<ft8/...>`, `<fft/...>`, `<common/...>` angle
-        // includes resolve. Path is relative to this target's source dir
-        // (Sources/CFT8): four levels up reaches the repo root.
+        // C bridge to ft8_lib. The library's internal `<ft8/...>`, `<fft/...>`,
+        // `<common/...>` angle includes resolve via absolute -I flags pointing
+        // at the ft8_lib / ft8af_glue roots (cppRoot, computed from #filePath
+        // above) — SPM rejects .headerSearchPath() that escapes the package root.
         .target(
             name: "CFT8",
             cSettings: [
-                .headerSearchPath("../../../../ft8af/app/src/main/cpp/ft8_lib"),
-                .headerSearchPath("../../../../ft8af/app/src/main/cpp/ft8af_glue"),
                 // ft8_lib is third-party C; silence its warnings, keep our own clean.
-                .unsafeFlags(["-w"]),
+                // -I flags replace .headerSearchPath() because SPM rejects search
+                // paths that escape the package root (see ios/README.md).
+                .unsafeFlags([
+                    "-w",
+                    "-I", cppRoot + "/ft8_lib",
+                    "-I", cppRoot + "/ft8af_glue",
+                ]),
             ]
         ),
         // Safe Swift wrappers over CFT8 (mirror desktop dsp/{encode,decoder,hashtable}.rs).
