@@ -22,6 +22,7 @@
 		65A688B883398E75D00BCD7E /* LogbookStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DB096C5FC7481CA1B7B49B /* LogbookStats.swift */; };
 		666D9271E9FE64C20C29CF47 /* FT8Audio in Frameworks */ = {isa = PBXBuildFile; productRef = 8A825C5161C267D978D895B8 /* FT8Audio */; };
 		72300AB5D2B37428777C824D /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BCE0C13DF4842EC394EFADF /* MapScreen.swift */; };
+		771EC057824C1F3698C6DC9B /* FFTProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F287F167508A8E4114F44116 /* FFTProcessor.swift */; };
 		7F9F3D670DE6755252D023A3 /* TransmissionSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B08B1AA6951B99CEFAA521F /* TransmissionSettings.swift */; };
 		7FC3449767DCA16F70133366 /* DecodeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C79C0E0096ADDC018120C361 /* DecodeScreen.swift */; };
 		80F7FFDDEE3AEE3E706C4A2B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 076A186C88F9B5A2FFAAB073 /* Assets.xcassets */; };
@@ -29,12 +30,15 @@
 		A5C16922F13DEDBDF69DFCF6 /* FT8AFTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A41EFDE500F865A3B393171D /* FT8AFTab.swift */; };
 		AA7457556E40D0C0B8F75958 /* FilterChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5306EE5215AE14F95F3329F8 /* FilterChip.swift */; };
 		AAA8FD89DE336CC404CC41E4 /* FT8Engine in Frameworks */ = {isa = PBXBuildFile; productRef = A5E95C3FF3D4A30E2177E137 /* FT8Engine */; };
+		AB5310FE1F9048626DC6406B /* LiveEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E09812700CD93E6187CC4BC /* LiveEngine.swift */; };
 		B8FD5A2DF3B2A89740B3CB73 /* WorldMapCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BDDB723455CB7AE2BB68EF0 /* WorldMapCanvas.swift */; };
 		CE1ECA0C5BB350A1EDDA7018 /* SlotTimerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800081E79EC795EBDE2E077E /* SlotTimerBar.swift */; };
 		D36ECEB73B847787DE373072 /* SpectrumStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = C96D9C69CFC1480E6A5B64B5 /* SpectrumStrip.swift */; };
 		DA94D12D7FDE6D10D116E770 /* TxStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64B1202A7633AE8CBBFCF2C3 /* TxStrip.swift */; };
+		EA1C91B3E65DB77ED5703FD9 /* AudioCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C42FB097015693FF14B27553 /* AudioCaptureService.swift */; };
 		EC59A75E444DC6AB44913CB7 /* FT8AFApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1E760AEB31EF3855951728 /* FT8AFApp.swift */; };
 		F3CB49EBF218C3BB9FAE02D6 /* DecodeRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11DF7123A737FE9F5236677F /* DecodeRow.swift */; };
+		F4E60463DA065CDAE7B84EF3 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E706B1D26B550FE4D798B68 /* Accelerate.framework */; };
 		FEB99CFFD070BA6B893ADC83 /* WaterfallCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = B681B14FC4FED15C628471DF /* WaterfallCanvas.swift */; };
 /* End PBXBuildFile section */
 
@@ -44,7 +48,9 @@
 		0FD3B4836E62F9DC32FAB0DE /* Colors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Colors.swift; sourceTree = "<group>"; };
 		11DF7123A737FE9F5236677F /* DecodeRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecodeRow.swift; sourceTree = "<group>"; };
 		1E4787AD687D89D858D3C075 /* WaterfallScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterfallScreen.swift; sourceTree = "<group>"; };
+		1E706B1D26B550FE4D798B68 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
 		4B08B1AA6951B99CEFAA521F /* TransmissionSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransmissionSettings.swift; sourceTree = "<group>"; };
+		4E09812700CD93E6187CC4BC /* LiveEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEngine.swift; sourceTree = "<group>"; };
 		504C9AD4C6667267DFCABEF9 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		5306EE5215AE14F95F3329F8 /* FilterChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterChip.swift; sourceTree = "<group>"; };
 		64B1202A7633AE8CBBFCF2C3 /* TxStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TxStrip.swift; sourceTree = "<group>"; };
@@ -63,9 +69,11 @@
 		B35E490F93FDCACEC4FBF66F /* PotaScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PotaScreen.swift; sourceTree = "<group>"; };
 		B681B14FC4FED15C628471DF /* WaterfallCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterfallCanvas.swift; sourceTree = "<group>"; };
 		BF21F5D95598018B8A46ED8D /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		C42FB097015693FF14B27553 /* AudioCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureService.swift; sourceTree = "<group>"; };
 		C79C0E0096ADDC018120C361 /* DecodeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecodeScreen.swift; sourceTree = "<group>"; };
 		C81C53609B2CDC9FB3B71116 /* FrequencyRuler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrequencyRuler.swift; sourceTree = "<group>"; };
 		C96D9C69CFC1480E6A5B64B5 /* SpectrumStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectrumStrip.swift; sourceTree = "<group>"; };
+		F287F167508A8E4114F44116 /* FFTProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFTProcessor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -77,6 +85,7 @@
 				666D9271E9FE64C20C29CF47 /* FT8Audio in Frameworks */,
 				AAA8FD89DE336CC404CC41E4 /* FT8Engine in Frameworks */,
 				303BF422AF4C5F94DF696E5D /* FT8Rig in Frameworks */,
+				F4E60463DA065CDAE7B84EF3 /* Accelerate.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -130,6 +139,14 @@
 			path = Decode;
 			sourceTree = "<group>";
 		};
+		619D5D4BD9524DA75C5309CA /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				1E706B1D26B550FE4D798B68 /* Accelerate.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		6A561A5BA077FBCEC8F291AB /* Waterfall */ = {
 			isa = PBXGroup;
 			children = (
@@ -146,6 +163,7 @@
 			children = (
 				975A228795DCD722F01F06F6 /* FT8AF */,
 				233187321B70BBF49A9D862B /* Packages */,
+				619D5D4BD9524DA75C5309CA /* Frameworks */,
 				D3689D7765BE6F880B857542 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -188,6 +206,7 @@
 				076A186C88F9B5A2FFAAB073 /* Assets.xcassets */,
 				6F1E760AEB31EF3855951728 /* FT8AFApp.swift */,
 				7DCF29540DF6FBE5F4ECD5FC /* Components */,
+				B571E3EEC914286395700259 /* Engine */,
 				1F327B9757517C23BFA52C86 /* Navigation */,
 				7F57A25B1504D3F64E790FAC /* Screens */,
 				C97F65A2DD30ABA1707C85D3 /* Theme */,
@@ -202,6 +221,16 @@
 				91DB096C5FC7481CA1B7B49B /* LogbookStats.swift */,
 			);
 			path = Logbook;
+			sourceTree = "<group>";
+		};
+		B571E3EEC914286395700259 /* Engine */ = {
+			isa = PBXGroup;
+			children = (
+				C42FB097015693FF14B27553 /* AudioCaptureService.swift */,
+				F287F167508A8E4114F44116 /* FFTProcessor.swift */,
+				4E09812700CD93E6187CC4BC /* LiveEngine.swift */,
+			);
+			path = Engine;
 			sourceTree = "<group>";
 		};
 		C97F65A2DD30ABA1707C85D3 /* Theme */ = {
@@ -297,14 +326,17 @@
 			files = (
 				49DFEC8ED0237764EA3EE3BF /* AppState.swift in Sources */,
 				5C76E98A4BD4854709C3D0E9 /* AppTabView.swift in Sources */,
+				EA1C91B3E65DB77ED5703FD9 /* AudioCaptureService.swift in Sources */,
 				035DDD710715AAC0100E0871 /* Colors.swift in Sources */,
 				3BA2BC0EFAF62534D39C3A4A /* DecodeFilterSettings.swift in Sources */,
 				F3CB49EBF218C3BB9FAE02D6 /* DecodeRow.swift in Sources */,
 				7FC3449767DCA16F70133366 /* DecodeScreen.swift in Sources */,
+				771EC057824C1F3698C6DC9B /* FFTProcessor.swift in Sources */,
 				EC59A75E444DC6AB44913CB7 /* FT8AFApp.swift in Sources */,
 				A5C16922F13DEDBDF69DFCF6 /* FT8AFTab.swift in Sources */,
 				AA7457556E40D0C0B8F75958 /* FilterChip.swift in Sources */,
 				637BC14B19B728028FD01F07 /* FrequencyRuler.swift in Sources */,
+				AB5310FE1F9048626DC6406B /* LiveEngine.swift in Sources */,
 				33736A682F52CCBB13E8168A /* LogbookScreen.swift in Sources */,
 				65A688B883398E75D00BCD7E /* LogbookStats.swift in Sources */,
 				72300AB5D2B37428777C824D /* MapScreen.swift in Sources */,
@@ -331,6 +363,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "FT8AF needs microphone access to capture radio audio for FT8 decoding";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -409,6 +442,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "FT8AF needs microphone access to capture radio audio for FT8 decoding";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

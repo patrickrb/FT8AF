@@ -27,7 +27,7 @@ enum DecodeFilter: String, CaseIterable {
 
 @Observable @MainActor
 final class DecodeState {
-    var messages: [DecodeMessage] = DecodeMessage.mock
+    var messages: [DecodeMessage] = []
     var activeFilter: DecodeFilter = .all
     var selectedMessage: DecodeMessage?
 }
@@ -66,6 +66,7 @@ struct DecodeMessage: Identifiable, Equatable {
 @Observable @MainActor
 final class WaterfallState {
     var rows: [[UInt8]] = []
+    var spectrum: [Float] = []
     var txFreqHz: Float = 1500
     var isLive: Bool = false
 }

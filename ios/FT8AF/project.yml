@@ -26,6 +26,7 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         SWIFT_VERSION: "5.9"
         PRODUCT_BUNDLE_IDENTIFIER: radio.ks3ckc.ft8af
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "FT8AF needs microphone access to capture radio audio for FT8 decoding"
     dependencies:
       - package: FT8AFKit
         product: FT8DSP
@@ -35,3 +36,4 @@ targets:
         product: FT8Engine
       - package: FT8AFKit
         product: FT8Rig
+      - sdk: Accelerate.framework
