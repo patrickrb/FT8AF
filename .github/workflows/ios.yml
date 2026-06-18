@@ -60,8 +60,12 @@ jobs:
     name: swift test + simulator build
     needs: detect
     if: ${{ needs.detect.outputs.run == 'true' }}
-    # macos-14 ships Xcode 15 (project.yml pins xcodeVersion 15.0 / iOS 17).
-    runs-on: macos-14
+    # macos-15 ships Xcode 16. Current XcodeGen (2.45.x) always writes the
+    # pbxproj in the Xcode 16 object format (objectVersion 77), which Xcode 15
+    # refuses to open ("future Xcode project file format (77)"), so the
+    # simulator build needs Xcode 16 to read the generated project. The app's
+    # iOS 17 deployment target still builds fine under the newer toolchain.
+    runs-on: macos-15
 
     steps:
       - name: Checkout repository
