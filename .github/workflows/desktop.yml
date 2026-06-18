@@ -167,9 +167,11 @@ jobs:
           workspaces: desktop/src-tauri
 
       # Tauri v2 Linux system dependencies (webkit2gtk-4.1 + GTK + packaging),
-      # plus libudev-dev for the serialport crate's libudev-sys build (CAT rig
-      # control) — without it the Linux build fails resolving the `libudev`
-      # pkg-config package.
+      # plus the native libs our crates link against on Linux:
+      #   - libudev-dev:    serialport's libudev-sys (CAT rig control)
+      #   - libasound2-dev: alsa-sys (audio capture/playback)
+      # Without these the Linux build fails resolving the `libudev` / `alsa`
+      # pkg-config packages.
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -180,6 +182,7 @@ jobs:
             librsvg2-dev \
             libappindicator3-dev \
             libudev-dev \
+            libasound2-dev \
             patchelf \
             file \
             build-essential \
