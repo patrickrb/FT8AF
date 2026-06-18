@@ -126,6 +126,17 @@ final class AdifTests: XCTestCase {
         XCTAssertTrue(Adif.parse("FT8AF ADIF Export<eoh>\n").isEmpty)
     }
 
+    func testParseDropsRecordsWithoutCall() {
+        // First record has only QSL/unknown fields (no CALL) -> dropped; second is kept.
+        let parsed = Adif.parse("<eoh>\n<qsl_rcvd:1>N <foo:3>bar <eor>\n<call:5>K1ABC <eor>\n")
+        XCTAssertEqual(parsed.map { $0.call }, ["K1ABC"])
+    }
+
+    func testParseDropsEmptyCallRecord() {
+        // An explicit but empty <call:0> is not a valid QSO either.
+        XCTAssertTrue(Adif.parse("<eoh>\n<call:0> <mode:3>FT8 <eor>").isEmpty)
+    }
+
     func testParseSkipsMalformedOverLongField() {
         // Claims 99 bytes but only a few follow -> field skipped, record still parses call.
         let parsed = Adif.parse("<eoh>\n<call:5>K1ABC <comment:99>oops <eor>")

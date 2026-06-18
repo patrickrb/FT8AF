@@ -75,7 +75,7 @@ public enum Adif {
                 continue
             }
             if lower == "eor" {
-                if !current.isEmpty { records.append(build(current)) }
+                appendIfValid(current, to: &records)
                 current = [:]
                 continue
             }
@@ -89,8 +89,16 @@ public enum Adif {
             current[name] = String(decoding: bytes[i..<(i + len)], as: UTF8.self)
             i += len
         }
-        if !current.isEmpty { records.append(build(current)) } // trailing record w/o <eor>
+        appendIfValid(current, to: &records) // trailing record w/o <eor>
         return records
+    }
+
+    /// Append a parsed record only if it has a non-empty CALL. A record with just
+    /// ignored fields (QSL flags, unknown tags) is not a valid QSO and is dropped
+    /// so downstream persistence/UI never sees an empty-call log entry.
+    private static func appendIfValid(_ fields: [String: String], to records: inout [QsoRecord]) {
+        guard let call = fields["call"], !call.isEmpty else { return }
+        records.append(build(fields))
     }
 
     private static func nextIndex(of byte: UInt8, in bytes: [UInt8], from: Int) -> Int? {
