@@ -21,16 +21,22 @@ import java.io.File
  */
 class R8KeepRulesTest {
 
-    private val proguardRules: String by lazy { File("proguard-rules.pro").readText() }
-    private val buildGradle: String by lazy { File("build.gradle").readText() }
+    // Strip comments at load time so a directive/rule that's been commented out
+    // — whole-line OR trailing-inline — can't satisfy a .contains() assertion.
+    // proguard-rules.pro uses '#' comments; build.gradle uses '//'.
+    private val proguardRules: String by lazy { stripComments("proguard-rules.pro", "#") }
+    private val buildGradle: String by lazy { stripComments("build.gradle", "//") }
+
+    private fun stripComments(fileName: String, marker: String): String =
+        File(fileName).readLines()
+            .joinToString("\n") { line ->
+                val i = line.indexOf(marker)
+                if (i >= 0) line.substring(0, i) else line
+            }
 
     @Test
     fun releaseBuildEnablesR8() {
-        // Strip comments so a commented-out directive can't satisfy the assertion.
-        val active = buildGradle.lineSequence()
-            .filterNot { it.trimStart().startsWith("//") }
-            .joinToString("\n")
-        assertThat(active).contains("minifyEnabled true")
+        assertThat(buildGradle).contains("minifyEnabled true")
     }
 
     @Test
