@@ -48,7 +48,7 @@ final class WaterfallRowBuilderTests: XCTestCase {
         // black point = floor + 4 = -56 dB; span 26 dB -> full bright at -30 dB.
         XCTAssertEqual(row.bins[0], 0, "noise floor renders dark")
         XCTAssertEqual(row.bins[10], 255, "strong signal saturates")
-        XCTAssertEqual(Int(row.bins[20]), 127, accuracy: 4, "-43 dB ~ mid brightness")
+        XCTAssertLessThanOrEqual(abs(Int(row.bins[20]) - 127), 4, "-43 dB ~ mid brightness")
         XCTAssertEqual(row.hzPerCol, 12_000.0 / 2_048.0, accuracy: 1e-4)
     }
 
