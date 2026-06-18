@@ -1,5 +1,12 @@
 // swift-tools-version: 5.9
+import Foundation
 import PackageDescription
+
+// Resolve the ft8_lib and ft8af_glue C source directories relative to this
+// Package.swift. SPM rejects .headerSearchPath() outside the package root, so
+// we pass absolute -I flags via .unsafeFlags() instead (see ios/README.md).
+let packageDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().path
+let cppRoot = packageDir + "/../../ft8af/app/src/main/cpp"
 
 // FT8AFKit — the non-UI core of the native iOS port of FT8AF.
 //
@@ -32,10 +39,14 @@ let package = Package(
         .target(
             name: "CFT8",
             cSettings: [
-                .headerSearchPath("../../../../ft8af/app/src/main/cpp/ft8_lib"),
-                .headerSearchPath("../../../../ft8af/app/src/main/cpp/ft8af_glue"),
                 // ft8_lib is third-party C; silence its warnings, keep our own clean.
-                .unsafeFlags(["-w"]),
+                // -I flags replace .headerSearchPath() because SPM rejects search
+                // paths that escape the package root (see ios/README.md).
+                .unsafeFlags([
+                    "-w",
+                    "-I", cppRoot + "/ft8_lib",
+                    "-I", cppRoot + "/ft8af_glue",
+                ]),
             ]
         ),
         // Safe Swift wrappers over CFT8 (mirror desktop dsp/{encode,decoder,hashtable}.rs).
