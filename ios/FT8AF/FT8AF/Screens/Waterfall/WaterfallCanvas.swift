@@ -1,63 +1,26 @@
 import SwiftUI
 
-/// Static mock waterfall heatmap. Phase 2 replaces this with a live MTKView.
+/// Live scrolling waterfall heatmap, driven by `appState.waterfall.rows`.
+/// Each row is a `[UInt8]` of brightness values (0...255) produced by
+/// `WaterfallRowBuilder`. Renders newest rows at the bottom.
 struct WaterfallCanvas: View {
-    // Deterministic mock data. WaterfallScreen ticks its UTC clock every second,
-    // which re-creates this view; using `UInt8.random`/`Int.random` here would
-    // regenerate different bins each tick and make the "static" mock flicker.
-    // A hash-based pseudo-noise keeps the textured look while staying stable.
-    private let mockData: (bins: [UInt8], rows: Int, cols: Int) = WaterfallCanvas.makeMockData()
-
-    private static func makeMockData() -> (bins: [UInt8], rows: Int, cols: Int) {
-        let rows = 80
-        let cols = 120
-        var bins = [UInt8](repeating: 0, count: rows * cols)
-        // Simulate a few FT8 signals as bright horizontal bands
-        let signals: [(col: Int, width: Int, intensity: UInt8)] = [
-            (15, 3, 200), (35, 2, 150), (52, 3, 220),
-            (70, 2, 130), (88, 4, 180), (105, 2, 160),
-        ]
-        for r in 0..<rows {
-            for c in 0..<cols {
-                // Background noise (deterministic, 5...35)
-                let noise = UInt8(5 + pseudoNoise(r, c) % 31)
-                var value = noise
-                // Add signal traces
-                for sig in signals {
-                    if c >= sig.col && c < sig.col + sig.width {
-                        let variation = Int(pseudoNoise(r, c + 7919) % 41) - 20
-                        let signalVal = Int(sig.intensity) + variation
-                        value = UInt8(max(Int(value), min(255, signalVal)))
-                    }
-                }
-                bins[r * cols + c] = value
-            }
-        }
-        return (bins, rows, cols)
-    }
-
-    /// Stable 0..<2^31 pseudo-random hash of two integer coordinates.
-    private static func pseudoNoise(_ a: Int, _ b: Int) -> Int {
-        var h = UInt32(truncatingIfNeeded: (a &* 73856093) ^ (b &* 19349663))
-        h ^= h >> 13
-        h = h &* 0x5bd1_e995
-        h ^= h >> 15
-        return Int(h & 0x7fff_ffff)
-    }
+    @Environment(AppState.self) private var appState
 
     var body: some View {
         Canvas { context, size in
-            let rows = mockData.rows
-            let cols = mockData.cols
-            let bins = mockData.bins
-            guard rows > 0, cols > 0 else { return }
+            let rows = appState.waterfall.rows
+            guard !rows.isEmpty else { return }
+            let numRows = rows.count
+            let numCols = rows[0].count
+            guard numCols > 0 else { return }
 
-            let cellW = size.width / CGFloat(cols)
-            let cellH = size.height / CGFloat(rows)
+            let cellW = size.width / CGFloat(numCols)
+            let cellH = size.height / CGFloat(numRows)
 
-            for r in 0..<rows {
-                for c in 0..<cols {
-                    let value = bins[r * cols + c]
+            for r in 0..<numRows {
+                let row = rows[r]
+                for c in 0..<min(numCols, row.count) {
+                    let value = row[c]
                     let color = waterfallColor(value)
                     let rect = CGRect(
                         x: CGFloat(c) * cellW,
@@ -69,6 +32,7 @@ struct WaterfallCanvas: View {
                 }
             }
         }
+        .background(bgApp)
         .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
