@@ -21,6 +21,7 @@ let package = Package(
     products: [
         .library(name: "FT8DSP", targets: ["FT8DSP"]),
         .library(name: "FT8Audio", targets: ["FT8Audio"]),
+        .library(name: "FT8Engine", targets: ["FT8Engine"]),
     ],
     targets: [
         // C bridge to ft8_lib. Header-search path points at the ft8_lib root so
@@ -57,6 +58,18 @@ let package = Package(
         .testTarget(
             name: "FT8AudioTests",
             dependencies: ["FT8Audio", "FT8DSP"] // tests import FT8DSP for FT8.* constants
+        ),
+        // QSO auto-sequencer state machine + the QsoRecord it emits (port of
+        // desktop qso.rs). Pure logic over DecodedMessage (FT8DSP); no I/O, so the
+        // whole thing is host-testable. The live FT8Engine actor (audio + rig +
+        // cycle loop) is added here later as device code.
+        .target(
+            name: "FT8Engine",
+            dependencies: ["FT8DSP"]
+        ),
+        .testTarget(
+            name: "FT8EngineTests",
+            dependencies: ["FT8Engine", "FT8DSP"] // tests build DecodedMessage fixtures
         ),
     ]
 )
