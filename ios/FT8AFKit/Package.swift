@@ -20,6 +20,7 @@ let package = Package(
     ],
     products: [
         .library(name: "FT8DSP", targets: ["FT8DSP"]),
+        .library(name: "FT8Audio", targets: ["FT8Audio"]),
     ],
     targets: [
         // C bridge to ft8_lib. Header-search path points at the ft8_lib root so
@@ -43,6 +44,19 @@ let package = Package(
         .testTarget(
             name: "FT8DSPTests",
             dependencies: ["FT8DSP", "CFT8"]
+        ),
+        // Platform-neutral audio/engine core: rolling slot buffer + UTC slot
+        // timing + DT calibration (mirror desktop audio/slot.rs + the slot-timing
+        // and calibrate_dt logic in engine.rs). No AVFoundation here, so it builds
+        // and tests on the macOS host; the AVAudioEngine graph + resampler live in
+        // a later, device-only target.
+        .target(
+            name: "FT8Audio",
+            dependencies: ["FT8DSP"]
+        ),
+        .testTarget(
+            name: "FT8AudioTests",
+            dependencies: ["FT8Audio", "FT8DSP"] // tests import FT8DSP for FT8.* constants
         ),
     ]
 )
