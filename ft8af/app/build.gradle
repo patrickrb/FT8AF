@@ -93,10 +93,13 @@ android {
             if (project.hasProperty('RELEASE_STORE_FILE')) {
                 signingConfig signingConfigs.release
             }
-            // TODO: enable R8 once we have a proguard-rules.pro that keeps the JNI entry
-            // points in FT8SignalListener/FT8Package/etc and the reflection-driven
-            // SQLite mappers. Shipping with minify off until that work is done.
-            minifyEnabled false
+            // R8 shrink + obfuscate. proguard-rules.pro keeps the JNI surface the
+            // native libft8af.so reaches by name (Ft8Message fields, the
+            // UsbAudioNative callback) plus the reflection-driven USB serial driver
+            // discovery and the AWS Cognito SDK. minifyEnabled also makes AGP emit
+            // mapping.txt, which CI uploads to Play Console for deobfuscated crashes.
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             buildConfigField("String", "apkBuildTime", "\"${currentTime}\"")
 

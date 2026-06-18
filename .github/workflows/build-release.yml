@@ -401,6 +401,15 @@ jobs:
           name: ft8af-release-aab
           path: ft8af/app/build/outputs/bundle/release/*.aab
 
+      # R8 mapping for the bundle. Kept as an artifact so a given release's
+      # deobfuscation file is recoverable independently of Play Console.
+      - name: Upload R8 mapping artifact
+        if: steps.tag.outputs.should_release == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ft8af-release-mapping
+          path: ft8af/app/build/outputs/mapping/release/mapping.txt
+
       - name: Create GitHub Release
         if: steps.tag.outputs.should_release == 'true'
         uses: softprops/action-gh-release@v2
@@ -427,6 +436,9 @@ jobs:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: radio.ks3ckc.ft8af
           releaseFiles: ft8af/app/build/outputs/bundle/release/app-release.aab
+          # R8 deobfuscation mapping — clears the Play Console "no deobfuscation
+          # file" warning and makes crash/ANR stack traces readable.
+          mappingFile: ft8af/app/build/outputs/mapping/release/mapping.txt
           track: internal
           status: completed
           releaseName: ${{ steps.tag.outputs.release_tag }}
