@@ -6,7 +6,6 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
@@ -88,8 +87,11 @@ fun FT8AFTheme(content: @Composable () -> Unit) {
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
-            window.statusBarColor = BgApp.toArgb()
-            window.navigationBarColor = BgApp.toArgb()
+            // window.statusBarColor / navigationBarColor are deprecated and no-ops
+            // under edge-to-edge on Android 15. The bars are transparent; we only
+            // force light (white) bar icons here (isAppearanceLight* = false) so
+            // they stay legible against the app's dark background when the bars
+            // are transiently revealed.
             WindowCompat.getInsetsController(window, view).apply {
                 isAppearanceLightStatusBars = false
                 isAppearanceLightNavigationBars = false
