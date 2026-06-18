@@ -2,7 +2,7 @@ import SwiftUI
 import FT8Audio
 
 struct SlotClockView: View {
-    @State private var nowMs: Int64 = currentUtcMs()
+    @State private var nowMs: Int64 = Self.currentUtcMs()
     private let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
 
     var body: some View {

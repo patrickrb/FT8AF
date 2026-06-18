@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import FT8DSP
 
 @MainActor

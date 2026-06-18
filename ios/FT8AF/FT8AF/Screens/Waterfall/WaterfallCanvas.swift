@@ -2,8 +2,13 @@ import SwiftUI
 
 /// Static mock waterfall heatmap. Phase 2 replaces this with a live MTKView.
 struct WaterfallCanvas: View {
-    // Generate static mock data once
-    private let mockData: (bins: [UInt8], rows: Int, cols: Int) = {
+    // Deterministic mock data. WaterfallScreen ticks its UTC clock every second,
+    // which re-creates this view; using `UInt8.random`/`Int.random` here would
+    // regenerate different bins each tick and make the "static" mock flicker.
+    // A hash-based pseudo-noise keeps the textured look while staying stable.
+    private let mockData: (bins: [UInt8], rows: Int, cols: Int) = WaterfallCanvas.makeMockData()
+
+    private static func makeMockData() -> (bins: [UInt8], rows: Int, cols: Int) {
         let rows = 80
         let cols = 120
         var bins = [UInt8](repeating: 0, count: rows * cols)
@@ -14,13 +19,13 @@ struct WaterfallCanvas: View {
         ]
         for r in 0..<rows {
             for c in 0..<cols {
-                // Background noise
-                let noise = UInt8.random(in: 5...35)
+                // Background noise (deterministic, 5...35)
+                let noise = UInt8(5 + pseudoNoise(r, c) % 31)
                 var value = noise
                 // Add signal traces
                 for sig in signals {
                     if c >= sig.col && c < sig.col + sig.width {
-                        let variation = Int.random(in: -20...20)
+                        let variation = Int(pseudoNoise(r, c + 7919) % 41) - 20
                         let signalVal = Int(sig.intensity) + variation
                         value = UInt8(max(Int(value), min(255, signalVal)))
                     }
@@ -29,7 +34,16 @@ struct WaterfallCanvas: View {
             }
         }
         return (bins, rows, cols)
-    }()
+    }
+
+    /// Stable 0..<2^31 pseudo-random hash of two integer coordinates.
+    private static func pseudoNoise(_ a: Int, _ b: Int) -> Int {
+        var h = UInt32(truncatingIfNeeded: (a &* 73856093) ^ (b &* 19349663))
+        h ^= h >> 13
+        h = h &* 0x5bd1_e995
+        h ^= h >> 15
+        return Int(h & 0x7fff_ffff)
+    }
 
     var body: some View {
         Canvas { context, size in

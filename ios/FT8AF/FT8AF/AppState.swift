@@ -1,4 +1,3 @@
-import FT8DSP
 import FT8Engine
 import Foundation
 import Observation
@@ -33,7 +32,8 @@ final class DecodeState {
     var selectedMessage: DecodeMessage?
 }
 
-/// UI-level decoded message (wraps FT8DSP.DecodedMessage with extra display fields).
+/// UI-level decoded message with display-oriented fields. Phase 2+ will map
+/// `FT8DSP.DecodedMessage` into this shape; for now it carries mock data only.
 struct DecodeMessage: Identifiable, Equatable {
     let id = UUID()
     var utcTime: String
@@ -168,7 +168,10 @@ final class RigState {
 
 // MARK: - TX
 
-enum TxStage: String {
+/// App-local TX progress used by the Phase-1 UI. Named distinctly from
+/// `FT8Engine.TxStage` (imported above) to avoid shadowing the engine type
+/// when QSO wiring lands in a later phase.
+enum TxUIStage: String {
     case idle
     case cqSent
     case reportSent
@@ -178,7 +181,7 @@ enum TxStage: String {
 
 @Observable @MainActor
 final class TxState {
-    var stage: TxStage = .idle
+    var stage: TxUIStage = .idle
     var isActivated: Bool = false
     var huntEnabled: Bool = false
     var slotParity: Int = 0
