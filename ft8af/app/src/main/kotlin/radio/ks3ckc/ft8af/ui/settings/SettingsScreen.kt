@@ -74,6 +74,25 @@ private enum class SettingsCategory {
 }
 
 /**
+ * Resolves the rig name shown on the operator card.
+ *
+ * When disconnected, returns [notConnectedLabel]. When connected, returns the
+ * trimmed [modelName] (the user-selected model from RigNameList), falling back
+ * to "--" when it is blank. We deliberately avoid `baseRig.javaClass.simpleName`:
+ * release builds run R8 with the `rigs` package obfuscated, so the class name
+ * collapses to a single letter (e.g. "c") and is useless for display.
+ */
+internal fun resolveRigDisplayName(
+    connected: Boolean,
+    modelName: String,
+    notConnectedLabel: String,
+): String {
+    if (!connected) return notConnectedLabel
+    val trimmed = modelName.trim()
+    return trimmed.ifEmpty { "--" }
+}
+
+/**
  * Settings screen host. Shows a short category list (landing) and drills down
  * into a focused detail screen per category. Drill-down is driven by internal
  * state (no NavHost) since Settings is hosted as a plain tab swap in FT8AFApp.
@@ -155,11 +174,14 @@ private fun SettingsLanding(
     val callsign = callsignState
     val grid = gridLive.orEmpty()
     val rigConnected = mainViewModel.isRigConnected()
-    val rigName = if (rigConnected) {
-        mainViewModel.baseRig?.javaClass?.simpleName ?: "--"
-    } else {
-        stringResource(R.string.common_not_connected)
-    }
+    val rigName = resolveRigDisplayName(
+        connected = rigConnected,
+        // User-selected model name from RigNameList (set in MainViewModel.connectRig).
+        // NOT baseRig.javaClass.simpleName: R8 obfuscates the rigs package in release
+        // builds, so the class name collapses to a single letter like "c".
+        modelName = GeneralVariables.myRigName.orEmpty(),
+        notConnectedLabel = stringResource(R.string.common_not_connected),
+    )
     val antennaDisplay = antennaState.ifEmpty { "--" }
     val powerDisplay = if (powerWattsState > 0) "${powerWattsState}W" else "--"
 
