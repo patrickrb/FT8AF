@@ -224,17 +224,24 @@ jobs:
     # Always-run aggregator: the single required status check for desktop.
     # Reports success when every build leg passed OR the build was path-skipped,
     # so branch protection never gets stuck "pending" on an unrelated change.
-    needs: build
+    # Depends on `detect` and `version` too: a failure in either skips `build`,
+    # and a skip alone would otherwise be read as "nothing to do" and pass the
+    # gate — so their results are checked directly.
+    needs: [detect, version, build]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Verify desktop build succeeded or was skipped
+      - name: Verify desktop jobs succeeded or were skipped
         env:
+          DETECT_RESULT: ${{ needs.detect.result }}
+          VERSION_RESULT: ${{ needs.version.result }}
           BUILD_RESULT: ${{ needs.build.result }}
         run: |
           set -euo pipefail
-          if [[ "$BUILD_RESULT" == "failure" || "$BUILD_RESULT" == "cancelled" ]]; then
-            echo "::error::Desktop build did not pass (result: $BUILD_RESULT)"
-            exit 1
-          fi
-          echo "Desktop gate OK (build=$BUILD_RESULT)."
+          for r in "$DETECT_RESULT" "$VERSION_RESULT" "$BUILD_RESULT"; do
+            if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then
+              echo "::error::A desktop job did not pass (detect=$DETECT_RESULT version=$VERSION_RESULT build=$BUILD_RESULT)"
+              exit 1
+            fi
+          done
+          echo "Desktop gate OK (detect=$DETECT_RESULT version=$VERSION_RESULT build=$BUILD_RESULT)."

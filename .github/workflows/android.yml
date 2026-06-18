@@ -574,20 +574,24 @@ jobs:
     # actually failed/cancelled. `instrumented` and `static-analysis` are
     # deliberately excluded — instrumented is flaky (issue #60) and static
     # analysis is warn-only during rollout — so neither can block a merge.
-    needs: [test, build]
+    # `detect` is included: a `detect` failure skips `test`/`build`, and a skip
+    # alone would otherwise be read as "nothing to do" and pass the gate — so
+    # its result is checked directly.
+    needs: [detect, test, build]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Verify required Android jobs succeeded or were skipped
         env:
+          DETECT_RESULT: ${{ needs.detect.result }}
           TEST_RESULT: ${{ needs.test.result }}
           BUILD_RESULT: ${{ needs.build.result }}
         run: |
           set -euo pipefail
-          for r in "$TEST_RESULT" "$BUILD_RESULT"; do
+          for r in "$DETECT_RESULT" "$TEST_RESULT" "$BUILD_RESULT"; do
             if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then
-              echo "::error::A required Android job did not pass (result: $r)"
+              echo "::error::A required Android job did not pass (detect=$DETECT_RESULT test=$TEST_RESULT build=$BUILD_RESULT)"
               exit 1
             fi
           done
-          echo "Android gate OK (test=$TEST_RESULT build=$BUILD_RESULT)."
+          echo "Android gate OK (detect=$DETECT_RESULT test=$TEST_RESULT build=$BUILD_RESULT)."

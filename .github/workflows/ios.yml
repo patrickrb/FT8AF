@@ -104,18 +104,23 @@ jobs:
     name: ios-gate
     # Always-run aggregator: the single required status check for iOS. Reports
     # success when `verify` passed OR was path-skipped, so branch protection
-    # never gets stuck "pending" on an unrelated change.
-    needs: verify
+    # never gets stuck "pending" on an unrelated change. Depends on `detect`
+    # too: a `detect` failure skips `verify`, and a skip alone would otherwise
+    # be read as "nothing to do" and pass the gate — so its result is checked.
+    needs: [detect, verify]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Verify iOS job succeeded or was skipped
+      - name: Verify iOS jobs succeeded or were skipped
         env:
+          DETECT_RESULT: ${{ needs.detect.result }}
           VERIFY_RESULT: ${{ needs.verify.result }}
         run: |
           set -euo pipefail
-          if [[ "$VERIFY_RESULT" == "failure" || "$VERIFY_RESULT" == "cancelled" ]]; then
-            echo "::error::iOS verify did not pass (result: $VERIFY_RESULT)"
-            exit 1
-          fi
-          echo "iOS gate OK (verify=$VERIFY_RESULT)."
+          for r in "$DETECT_RESULT" "$VERIFY_RESULT"; do
+            if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then
+              echo "::error::An iOS job did not pass (detect=$DETECT_RESULT verify=$VERIFY_RESULT)"
+              exit 1
+            fi
+          done
+          echo "iOS gate OK (detect=$DETECT_RESULT verify=$VERIFY_RESULT)."

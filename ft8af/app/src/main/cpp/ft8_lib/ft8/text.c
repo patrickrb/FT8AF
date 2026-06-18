@@ -90,7 +90,7 @@ bool equals(const char* string1, const char* string2)
 // Text message formatting:
 //   - replaces lowercase letters with uppercase
 //   - merges consecutive spaces into single space
-void fmtmsg(char* msg_out, const char* msg_in)
+void ft8_fmtmsg(char* msg_out, const char* msg_in)
 {
     char c;
     char last_out = 0;
