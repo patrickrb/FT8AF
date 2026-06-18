@@ -1,7 +1,10 @@
+import FT8Engine
 import SwiftUI
 
 struct SettingsScreen: View {
     @Environment(AppState.self) private var appState
+    @State private var showShareSheet = false
+    @State private var adifString = ""
 
     var body: some View {
         @Bindable var settings = appState.settings
@@ -100,7 +103,10 @@ struct SettingsScreen: View {
                     }
                     .tint(accent)
 
-                    Button { } label: {
+                    Button {
+                        adifString = Adif.export(appState.logbook.records)
+                        showShareSheet = true
+                    } label: {
                         HStack {
                             Text("Export ADIF")
                                 .foregroundStyle(textPrimary)
@@ -131,7 +137,7 @@ struct SettingsScreen: View {
                         Text("Version")
                             .foregroundStyle(textPrimary)
                         Spacer()
-                        Text("1.0.0 (Phase 1)")
+                        Text("1.0.0")
                             .font(.system(size: 14, design: .monospaced))
                             .foregroundStyle(textFaint)
                     }
@@ -146,6 +152,20 @@ struct SettingsScreen: View {
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .sheet(isPresented: $showShareSheet) {
+                ShareSheet(items: [adifString])
+            }
         }
     }
+}
+
+/// Minimal UIKit share sheet wrapper for ADIF export.
+private struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

@@ -75,7 +75,7 @@ final class WaterfallState {
 
 @Observable @MainActor
 final class LogbookState {
-    var records: [QsoRecord] = QsoRecord.mockRecords
+    var records: [QsoRecord] = []
     var totalCount: Int { records.count }
     var bandStats: [String: Int] {
         var stats: [String: Int] = [:]

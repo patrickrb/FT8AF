@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// TX control bar shown at the bottom of Decode/Waterfall screens.
-/// Phase 1: static display with non-functional buttons (wired in Phase 4).
 struct TxStrip: View {
     @Environment(AppState.self) private var appState
+    @Environment(LiveEngine.self) private var engine
 
     var body: some View {
         let tx = appState.tx
@@ -38,7 +38,7 @@ struct TxStrip: View {
                     isActive: tx.huntEnabled,
                     activeColor: signal,
                     style: .secondary
-                ) { }
+                ) { engine.toggleHunt() }
 
                 // CQ / STOP button
                 ActionButton(
@@ -47,7 +47,13 @@ struct TxStrip: View {
                     isActive: true,
                     activeColor: tx.isActivated ? statusBad : accent,
                     style: .primary
-                ) { }
+                ) {
+                    if tx.isActivated {
+                        engine.stopTx()
+                    } else {
+                        engine.callCQ()
+                    }
+                }
 
                 // TX slot toggle
                 ActionButton(
@@ -56,7 +62,7 @@ struct TxStrip: View {
                     isActive: false,
                     activeColor: textMuted,
                     style: .secondary
-                ) { }
+                ) { engine.toggleSlotParity() }
             }
         }
         .padding(.horizontal, 16)

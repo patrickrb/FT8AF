@@ -4,6 +4,7 @@ import SwiftUI
 struct QsoSheet: View {
     let message: DecodeMessage
     @Environment(\.dismiss) private var dismiss
+    @Environment(LiveEngine.self) private var engine
 
     var body: some View {
         VStack(spacing: 0) {
@@ -47,8 +48,9 @@ struct QsoSheet: View {
 
             Spacer()
 
-            // Call button (stub for Phase 4)
+            // Call button — starts answering this station's CQ
             Button {
+                engine.answerStation(message)
                 dismiss()
             } label: {
                 HStack(spacing: 8) {

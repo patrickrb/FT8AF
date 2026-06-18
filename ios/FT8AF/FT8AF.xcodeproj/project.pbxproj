@@ -31,10 +31,12 @@
 		AA7457556E40D0C0B8F75958 /* FilterChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5306EE5215AE14F95F3329F8 /* FilterChip.swift */; };
 		AAA8FD89DE336CC404CC41E4 /* FT8Engine in Frameworks */ = {isa = PBXBuildFile; productRef = A5E95C3FF3D4A30E2177E137 /* FT8Engine */; };
 		AB5310FE1F9048626DC6406B /* LiveEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E09812700CD93E6187CC4BC /* LiveEngine.swift */; };
+		AC1D4BEDBCC1DBA945DB04D5 /* TxPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29B5962B70F4510D76A5BC0A /* TxPlayerService.swift */; };
 		B8FD5A2DF3B2A89740B3CB73 /* WorldMapCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BDDB723455CB7AE2BB68EF0 /* WorldMapCanvas.swift */; };
 		CE1ECA0C5BB350A1EDDA7018 /* SlotTimerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800081E79EC795EBDE2E077E /* SlotTimerBar.swift */; };
 		D36ECEB73B847787DE373072 /* SpectrumStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = C96D9C69CFC1480E6A5B64B5 /* SpectrumStrip.swift */; };
 		DA94D12D7FDE6D10D116E770 /* TxStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64B1202A7633AE8CBBFCF2C3 /* TxStrip.swift */; };
+		E375A4D50C25F5437C2C9F7F /* QsoLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B9E40312EA203F05764FA56 /* QsoLogStore.swift */; };
 		EA1C91B3E65DB77ED5703FD9 /* AudioCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C42FB097015693FF14B27553 /* AudioCaptureService.swift */; };
 		EC59A75E444DC6AB44913CB7 /* FT8AFApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1E760AEB31EF3855951728 /* FT8AFApp.swift */; };
 		F3CB49EBF218C3BB9FAE02D6 /* DecodeRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11DF7123A737FE9F5236677F /* DecodeRow.swift */; };
@@ -49,12 +51,14 @@
 		11DF7123A737FE9F5236677F /* DecodeRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecodeRow.swift; sourceTree = "<group>"; };
 		1E4787AD687D89D858D3C075 /* WaterfallScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterfallScreen.swift; sourceTree = "<group>"; };
 		1E706B1D26B550FE4D798B68 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
+		29B5962B70F4510D76A5BC0A /* TxPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TxPlayerService.swift; sourceTree = "<group>"; };
 		4B08B1AA6951B99CEFAA521F /* TransmissionSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransmissionSettings.swift; sourceTree = "<group>"; };
 		4E09812700CD93E6187CC4BC /* LiveEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEngine.swift; sourceTree = "<group>"; };
 		504C9AD4C6667267DFCABEF9 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		5306EE5215AE14F95F3329F8 /* FilterChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterChip.swift; sourceTree = "<group>"; };
 		64B1202A7633AE8CBBFCF2C3 /* TxStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TxStrip.swift; sourceTree = "<group>"; };
 		654EF0B6A0E279E65F355821 /* FT8AF.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FT8AF.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6B9E40312EA203F05764FA56 /* QsoLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QsoLogStore.swift; sourceTree = "<group>"; };
 		6F1E760AEB31EF3855951728 /* FT8AFApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FT8AFApp.swift; sourceTree = "<group>"; };
 		76108617D9AEDEE84BAD1054 /* LogbookScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogbookScreen.swift; sourceTree = "<group>"; };
 		800081E79EC795EBDE2E077E /* SlotTimerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlotTimerBar.swift; sourceTree = "<group>"; };
@@ -229,6 +233,8 @@
 				C42FB097015693FF14B27553 /* AudioCaptureService.swift */,
 				F287F167508A8E4114F44116 /* FFTProcessor.swift */,
 				4E09812700CD93E6187CC4BC /* LiveEngine.swift */,
+				6B9E40312EA203F05764FA56 /* QsoLogStore.swift */,
+				29B5962B70F4510D76A5BC0A /* TxPlayerService.swift */,
 			);
 			path = Engine;
 			sourceTree = "<group>";
@@ -341,12 +347,14 @@
 				65A688B883398E75D00BCD7E /* LogbookStats.swift in Sources */,
 				72300AB5D2B37428777C824D /* MapScreen.swift in Sources */,
 				595BBF17D95723947D5BFFC4 /* PotaScreen.swift in Sources */,
+				E375A4D50C25F5437C2C9F7F /* QsoLogStore.swift in Sources */,
 				608EF9D6EAE6CDA82E9E86C4 /* QsoSheet.swift in Sources */,
 				4C0C9DCC39ED6528F0D4CDFF /* RadioAudioSettings.swift in Sources */,
 				8EA75A450404FB948C0A6CDC /* SettingsScreen.swift in Sources */,
 				CE1ECA0C5BB350A1EDDA7018 /* SlotTimerBar.swift in Sources */,
 				D36ECEB73B847787DE373072 /* SpectrumStrip.swift in Sources */,
 				7F9F3D670DE6755252D023A3 /* TransmissionSettings.swift in Sources */,
+				AC1D4BEDBCC1DBA945DB04D5 /* TxPlayerService.swift in Sources */,
 				DA94D12D7FDE6D10D116E770 /* TxStrip.swift in Sources */,
 				FEB99CFFD070BA6B893ADC83 /* WaterfallCanvas.swift in Sources */,
 				208767EE6D89D470D7C88E77 /* WaterfallScreen.swift in Sources */,

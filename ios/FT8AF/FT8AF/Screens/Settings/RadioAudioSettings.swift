@@ -34,9 +34,6 @@ struct RadioAudioSettings: View {
             } header: {
                 Text("Audio")
                     .foregroundStyle(textMuted)
-            } footer: {
-                Text("Phase 2 will add audio input device selection with AVAudioEngine")
-                    .foregroundStyle(textFaint)
             }
             .listRowBackground(bgSurface)
 
@@ -61,9 +58,6 @@ struct RadioAudioSettings: View {
             } header: {
                 Text("Bluetooth")
                     .foregroundStyle(textMuted)
-            } footer: {
-                Text("Phase 3 will add CoreBluetooth BLE SPP rig control")
-                    .foregroundStyle(textFaint)
             }
             .listRowBackground(bgSurface)
 

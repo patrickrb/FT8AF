@@ -8,7 +8,11 @@ import FT8DSP
 final class AudioCaptureService: @unchecked Sendable {
     let accumulator = SlotAccumulator()
 
-    private let engine = AVAudioEngine()
+    /// The underlying `AVAudioEngine`. Exposed so `TxPlayerService` can attach
+    /// its player node to the same engine for audio output.
+    let audioEngine = AVAudioEngine()
+
+    private var engine: AVAudioEngine { audioEngine }
     private var converter: AVAudioConverter?
     private var _isRunning = false
     private let lock = NSLock()
