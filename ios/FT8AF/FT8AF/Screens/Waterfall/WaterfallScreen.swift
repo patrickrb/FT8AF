@@ -38,12 +38,6 @@ struct WaterfallScreen: View {
             .frame(height: 34)
             .background(bgSurface)
 
-            TxStrip(
-                onHunt: { appState.engine?.toggleHunt() },
-                onCallCQ: { appState.engine?.callCQ() },
-                onStop: { appState.engine?.stopTx() },
-                onToggleSlot: { appState.engine?.toggleSlotParity() }
-            )
         }
         .background(bgApp)
         .onReceive(timer) { _ in

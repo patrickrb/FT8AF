@@ -4,6 +4,11 @@ struct AppTabView: View {
     @State private var selectedTab: FT8AFTab = .decode
     @Environment(AppState.self) private var appState
 
+    /// Whether the current tab shows the TX control strip.
+    private var showsTxStrip: Bool {
+        selectedTab == .decode || selectedTab == .waterfall
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
             // Screen content
@@ -19,8 +24,16 @@ struct AppTabView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Custom tab bar
+            // Bottom chrome: TxStrip (on decode/waterfall tabs) + SlotTimer + TabBar
             VStack(spacing: 0) {
+                if showsTxStrip {
+                    TxStrip(
+                        onHunt: { appState.engine?.toggleHunt() },
+                        onCallCQ: { appState.engine?.callCQ() },
+                        onStop: { appState.engine?.stopTx() },
+                        onToggleSlot: { appState.engine?.toggleSlotParity() }
+                    )
+                }
                 SlotTimerBar()
                 TabBarView(selectedTab: $selectedTab)
             }

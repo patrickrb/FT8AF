@@ -57,13 +57,6 @@ struct DecodeScreen: View {
             }
 
             Spacer(minLength: 0)
-
-            TxStrip(
-                onHunt: { appState.engine?.toggleHunt() },
-                onCallCQ: { appState.engine?.callCQ() },
-                onStop: { appState.engine?.stopTx() },
-                onToggleSlot: { appState.engine?.toggleSlotParity() }
-            )
         }
         .background(bgApp)
         .sheet(isPresented: $showQsoSheet) {
