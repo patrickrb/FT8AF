@@ -56,7 +56,7 @@ let package = Package(
         ),
         .testTarget(
             name: "FT8AudioTests",
-            dependencies: ["FT8Audio"]
+            dependencies: ["FT8Audio", "FT8DSP"] // tests import FT8DSP for FT8.* constants
         ),
     ]
 )

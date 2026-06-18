@@ -46,6 +46,30 @@ final class SlotAccumulatorTests: XCTestCase {
         XCTAssertEqual(recent.last, 499)
     }
 
+    func testPeekRecentNegativeOrZeroReturnsEmpty() {
+        let acc = SlotAccumulator()
+        acc.push((0..<500).map { Float($0) })
+        XCTAssertEqual(acc.peekRecent(-10).count, 0, "negative n must not crash")
+        XCTAssertEqual(acc.peekRecent(0).count, 0)
+    }
+
+    /// Pushing across the ring boundary keeps samples in chronological order and
+    /// evicts only the overrun (exercises the circular-buffer wrap).
+    func testRingWrapPreservesOrderAndEvictsOldest() {
+        let acc = SlotAccumulator()
+        let cap = FT8.slotSamples + Int(FT8.sampleRate)
+        acc.push([Float](repeating: -1, count: cap - 10)) // nearly full of sentinels
+        acc.push((0..<2000).map { Float($0) })            // forces eviction + wrap
+        XCTAssertEqual(acc.count, cap)
+        let recent = acc.peekRecent(2000)
+        XCTAssertEqual(recent.count, 2000)
+        XCTAssertEqual(recent.first, 0)    // newest run came back in order...
+        XCTAssertEqual(recent.last, 1999)  // ...across the wrap boundary
+        // The full slot's newest tail matches too.
+        let slot = acc.takeSlot()
+        XCTAssertEqual(slot.last, 1999)
+    }
+
     func testClear() {
         let acc = SlotAccumulator()
         acc.push([Float](repeating: 1, count: 100))
