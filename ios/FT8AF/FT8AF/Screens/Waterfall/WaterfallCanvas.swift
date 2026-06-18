@@ -3,6 +3,8 @@ import SwiftUI
 /// Live scrolling waterfall heatmap, driven by `appState.waterfall.rows`.
 /// Each row is a `[UInt8]` of brightness values (0...255) produced by
 /// `WaterfallRowBuilder`. Renders newest rows at the bottom.
+/// When message marking is enabled, decoded callsign labels are drawn at
+/// their frequency positions.
 struct WaterfallCanvas: View {
     @Environment(AppState.self) private var appState
 
@@ -31,9 +33,64 @@ struct WaterfallCanvas: View {
                     context.fill(Path(rect), with: .color(color))
                 }
             }
+
+            // Draw message frequency labels when enabled
+            if appState.waterfall.messageMarking {
+                drawMessageLabels(context: context, size: size, numCols: numCols)
+            }
+
+            // Draw TX frequency marker
+            let txFreq = appState.waterfall.txFreqHz
+            let maxFreq: Float = 3000 // FT8 audio bandwidth
+            let txX = CGFloat(txFreq / maxFreq) * size.width
+            let txPath = Path { p in
+                p.move(to: CGPoint(x: txX, y: 0))
+                p.addLine(to: CGPoint(x: txX, y: size.height))
+            }
+            context.stroke(txPath, with: .color(accent.opacity(0.5)),
+                           style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
         }
         .background(bgApp)
         .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    private func drawMessageLabels(context: GraphicsContext, size: CGSize, numCols: Int) {
+        let messages = appState.decode.messages
+        guard !messages.isEmpty else { return }
+
+        let maxFreq: Float = 3000
+        // Only show unique callsigns at unique frequencies (latest per callsign)
+        var seen = Set<String>()
+        let uniqueMessages = messages.prefix(20).filter { msg in
+            let key = msg.callFrom.uppercased()
+            if seen.contains(key) { return false }
+            seen.insert(key)
+            return true
+        }
+
+        for msg in uniqueMessages {
+            let x = CGFloat(msg.freqHz / maxFreq) * size.width
+            guard x > 0, x < size.width else { continue }
+
+            let label = context.resolve(Text(msg.callFrom)
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundStyle(labelColor(msg)))
+            context.draw(label, at: CGPoint(x: x, y: 8), anchor: .top)
+
+            // Frequency tick mark
+            let tick = Path { p in
+                p.move(to: CGPoint(x: x, y: 18))
+                p.addLine(to: CGPoint(x: x, y: 24))
+            }
+            context.stroke(tick, with: .color(labelColor(msg).opacity(0.5)), lineWidth: 1)
+        }
+    }
+
+    private func labelColor(_ msg: DecodeMessage) -> Color {
+        if msg.callTo == "CQ" || msg.callTo.hasPrefix("CQ ") { return accent }
+        let myCall = appState.settings.myCall.uppercased()
+        if !myCall.isEmpty && msg.callTo.uppercased() == myCall { return target }
+        return signal
     }
 
     private func waterfallColor(_ value: UInt8) -> Color {

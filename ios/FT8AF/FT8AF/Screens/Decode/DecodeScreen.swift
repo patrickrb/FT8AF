@@ -133,15 +133,38 @@ struct DecodeScreen: View {
     }
 
     private var filteredMessages: [DecodeMessage] {
-        let msgs = appState.decode.messages
+        let blocked = Set(appState.settings.blockedCallsigns)
+        let msgs = blocked.isEmpty ? appState.decode.messages :
+            appState.decode.messages.filter { !blocked.contains($0.callFrom.uppercased()) }
+
         switch appState.decode.activeFilter {
         case .all:     return msgs
         case .cq:      return msgs.filter { $0.callTo == "CQ" || $0.callTo.hasPrefix("CQ ") }
-        case .cqPota:  return msgs.filter { $0.extra.contains("K-") || $0.callTo == "CQ POTA" }
-        case .newDxcc: return msgs
-        case .needed:  return msgs
+        case .cqPota:  return msgs.filter {
+            $0.extra.contains("K-") || $0.extra.contains("VE-") || $0.extra.contains("DL-") ||
+            $0.callTo == "CQ POTA" || $0.callTo.hasPrefix("CQ POTA")
+        }
+        case .newDxcc:
+            // Show only callsign prefixes not yet in logbook
+            let workedPrefixes = Set(appState.logbook.records.map { dxccPrefix($0.call) })
+            return msgs.filter { !workedPrefixes.contains(dxccPrefix($0.callFrom)) }
+        case .needed:
+            // Show CQ stations not yet worked
+            return msgs.filter {
+                ($0.callTo == "CQ" || $0.callTo.hasPrefix("CQ ")) &&
+                !workedCallSet.contains($0.callFrom.uppercased())
+            }
         case .forMe:   return msgs.filter { $0.callTo.uppercased() == appState.settings.myCall.uppercased() }
         }
+    }
+
+    private func dxccPrefix(_ call: String) -> String {
+        var prefix = ""
+        for ch in call.uppercased() {
+            if ch.isNumber { prefix.append(ch); break }
+            prefix.append(ch)
+        }
+        return prefix
     }
 
     /// Group filtered messages by slotIndex for time dividers.

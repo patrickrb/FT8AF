@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		035DDD710715AAC0100E0871 /* Colors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FD3B4836E62F9DC32FAB0DE /* Colors.swift */; };
+		072D76FFDC706DE3E537A3C2 /* BlockedCallsignsSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8FFDE0644205A9AE050BC0 /* BlockedCallsignsSettings.swift */; };
 		0FD449B6C15FD3407D8E3BC0 /* LogbookCharts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DFF1DC42A9F8F8066F97F7 /* LogbookCharts.swift */; };
 		208767EE6D89D470D7C88E77 /* WaterfallScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E4787AD687D89D858D3C075 /* WaterfallScreen.swift */; };
 		26F661F120C34995BFF73F2D /* FT8DSP in Frameworks */ = {isa = PBXBuildFile; productRef = 93510ED81B9D113E387D0D45 /* FT8DSP */; };
@@ -32,11 +33,13 @@
 		80F7FFDDEE3AEE3E706C4A2B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 076A186C88F9B5A2FFAAB073 /* Assets.xcassets */; };
 		8DA0D562E25925F56B638B00 /* GridDistance.swift in Sources */ = {isa = PBXBuildFile; fileRef = E429D8A3556534F05374F12A /* GridDistance.swift */; };
 		8EA75A450404FB948C0A6CDC /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504C9AD4C6667267DFCABEF9 /* SettingsScreen.swift */; };
+		9F4A1DE79693EF68A7B1A4D2 /* LogbookAwards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CCA018AEEE169EDCA338FD /* LogbookAwards.swift */; };
 		A5C16922F13DEDBDF69DFCF6 /* FT8AFTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A41EFDE500F865A3B393171D /* FT8AFTab.swift */; };
 		AA7457556E40D0C0B8F75958 /* FilterChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5306EE5215AE14F95F3329F8 /* FilterChip.swift */; };
 		AAA8FD89DE336CC404CC41E4 /* FT8Engine in Frameworks */ = {isa = PBXBuildFile; productRef = A5E95C3FF3D4A30E2177E137 /* FT8Engine */; };
 		AB5310FE1F9048626DC6406B /* LiveEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E09812700CD93E6187CC4BC /* LiveEngine.swift */; };
 		AC1D4BEDBCC1DBA945DB04D5 /* TxPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29B5962B70F4510D76A5BC0A /* TxPlayerService.swift */; };
+		B28BBB197398A82CDE05B480 /* AboutScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CFCB3285583184390D9E9BF /* AboutScreen.swift */; };
 		B8FD5A2DF3B2A89740B3CB73 /* WorldMapCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BDDB723455CB7AE2BB68EF0 /* WorldMapCanvas.swift */; };
 		BCEB9305C3EA84C758FAFBA7 /* AzimuthalMapCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB943F6B81F9D36BA85504A3 /* AzimuthalMapCanvas.swift */; };
 		CE1ECA0C5BB350A1EDDA7018 /* SlotTimerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800081E79EC795EBDE2E077E /* SlotTimerBar.swift */; };
@@ -46,6 +49,8 @@
 		E375A4D50C25F5437C2C9F7F /* QsoLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B9E40312EA203F05764FA56 /* QsoLogStore.swift */; };
 		EA1C91B3E65DB77ED5703FD9 /* AudioCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C42FB097015693FF14B27553 /* AudioCaptureService.swift */; };
 		EC59A75E444DC6AB44913CB7 /* FT8AFApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1E760AEB31EF3855951728 /* FT8AFApp.swift */; };
+		ED838E6889186A96DB5E68A3 /* ToastOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8493B7CF97F9744DED622F15 /* ToastOverlay.swift */; };
+		EEA0D2F1B9A7E0345F68E909 /* ExportLogSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16235B470705C04E596C8A5B /* ExportLogSheet.swift */; };
 		F3CB49EBF218C3BB9FAE02D6 /* DecodeRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11DF7123A737FE9F5236677F /* DecodeRow.swift */; };
 		F4E60463DA065CDAE7B84EF3 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E706B1D26B550FE4D798B68 /* Accelerate.framework */; };
 		FEB99CFFD070BA6B893ADC83 /* WaterfallCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = B681B14FC4FED15C628471DF /* WaterfallCanvas.swift */; };
@@ -57,9 +62,13 @@
 		076A186C88F9B5A2FFAAB073 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0FD3B4836E62F9DC32FAB0DE /* Colors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Colors.swift; sourceTree = "<group>"; };
 		11DF7123A737FE9F5236677F /* DecodeRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecodeRow.swift; sourceTree = "<group>"; };
+		16235B470705C04E596C8A5B /* ExportLogSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportLogSheet.swift; sourceTree = "<group>"; };
 		1E4787AD687D89D858D3C075 /* WaterfallScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterfallScreen.swift; sourceTree = "<group>"; };
 		1E706B1D26B550FE4D798B68 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
 		29B5962B70F4510D76A5BC0A /* TxPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TxPlayerService.swift; sourceTree = "<group>"; };
+		2CFCB3285583184390D9E9BF /* AboutScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutScreen.swift; sourceTree = "<group>"; };
+		33CCA018AEEE169EDCA338FD /* LogbookAwards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogbookAwards.swift; sourceTree = "<group>"; };
+		4A8FFDE0644205A9AE050BC0 /* BlockedCallsignsSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockedCallsignsSettings.swift; sourceTree = "<group>"; };
 		4B08B1AA6951B99CEFAA521F /* TransmissionSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransmissionSettings.swift; sourceTree = "<group>"; };
 		4E09812700CD93E6187CC4BC /* LiveEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEngine.swift; sourceTree = "<group>"; };
 		504C9AD4C6667267DFCABEF9 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
@@ -71,6 +80,7 @@
 		76108617D9AEDEE84BAD1054 /* LogbookScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogbookScreen.swift; sourceTree = "<group>"; };
 		800081E79EC795EBDE2E077E /* SlotTimerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlotTimerBar.swift; sourceTree = "<group>"; };
 		82A0D66684F5C2F323454D9B /* FT8AFKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FT8AFKit; path = ../FT8AFKit; sourceTree = SOURCE_ROOT; };
+		8493B7CF97F9744DED622F15 /* ToastOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastOverlay.swift; sourceTree = "<group>"; };
 		89642B9763C7FA33CFF0EE57 /* RadioAudioSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadioAudioSettings.swift; sourceTree = "<group>"; };
 		8BDDB723455CB7AE2BB68EF0 /* WorldMapCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldMapCanvas.swift; sourceTree = "<group>"; };
 		91DB096C5FC7481CA1B7B49B /* LogbookStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogbookStats.swift; sourceTree = "<group>"; };
@@ -148,6 +158,8 @@
 		3BF125CF2819463DD0E2F81B /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				2CFCB3285583184390D9E9BF /* AboutScreen.swift */,
+				4A8FFDE0644205A9AE050BC0 /* BlockedCallsignsSettings.swift */,
 				A88688AC6AFBEDC8AC3EF844 /* DecodeFilterSettings.swift */,
 				89642B9763C7FA33CFF0EE57 /* RadioAudioSettings.swift */,
 				504C9AD4C6667267DFCABEF9 /* SettingsScreen.swift */,
@@ -203,6 +215,7 @@
 				F3C698656C5709343F4AEEF0 /* FrequencyPickerSheet.swift */,
 				AC8DAEDCAE1AD9DE02EB1480 /* QsoCelebration.swift */,
 				800081E79EC795EBDE2E077E /* SlotTimerBar.swift */,
+				8493B7CF97F9744DED622F15 /* ToastOverlay.swift */,
 				DF04207CDB5BE8A1CCDD5F5B /* TransmitGlow.swift */,
 				64B1202A7633AE8CBBFCF2C3 /* TxStrip.swift */,
 			);
@@ -249,6 +262,8 @@
 		9B85E3FDCB60E378E9DF2E12 /* Logbook */ = {
 			isa = PBXGroup;
 			children = (
+				16235B470705C04E596C8A5B /* ExportLogSheet.swift */,
+				33CCA018AEEE169EDCA338FD /* LogbookAwards.swift */,
 				93DFF1DC42A9F8F8066F97F7 /* LogbookCharts.swift */,
 				76108617D9AEDEE84BAD1054 /* LogbookScreen.swift */,
 				91DB096C5FC7481CA1B7B49B /* LogbookStats.swift */,
@@ -359,15 +374,18 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B28BBB197398A82CDE05B480 /* AboutScreen.swift in Sources */,
 				DFA95C747B2F0763C677F2EC /* ActiveQsoPanel.swift in Sources */,
 				49DFEC8ED0237764EA3EE3BF /* AppState.swift in Sources */,
 				5C76E98A4BD4854709C3D0E9 /* AppTabView.swift in Sources */,
 				EA1C91B3E65DB77ED5703FD9 /* AudioCaptureService.swift in Sources */,
 				BCEB9305C3EA84C758FAFBA7 /* AzimuthalMapCanvas.swift in Sources */,
+				072D76FFDC706DE3E537A3C2 /* BlockedCallsignsSettings.swift in Sources */,
 				035DDD710715AAC0100E0871 /* Colors.swift in Sources */,
 				3BA2BC0EFAF62534D39C3A4A /* DecodeFilterSettings.swift in Sources */,
 				F3CB49EBF218C3BB9FAE02D6 /* DecodeRow.swift in Sources */,
 				7FC3449767DCA16F70133366 /* DecodeScreen.swift in Sources */,
+				EEA0D2F1B9A7E0345F68E909 /* ExportLogSheet.swift in Sources */,
 				771EC057824C1F3698C6DC9B /* FFTProcessor.swift in Sources */,
 				EC59A75E444DC6AB44913CB7 /* FT8AFApp.swift in Sources */,
 				A5C16922F13DEDBDF69DFCF6 /* FT8AFTab.swift in Sources */,
@@ -376,6 +394,7 @@
 				637BC14B19B728028FD01F07 /* FrequencyRuler.swift in Sources */,
 				8DA0D562E25925F56B638B00 /* GridDistance.swift in Sources */,
 				AB5310FE1F9048626DC6406B /* LiveEngine.swift in Sources */,
+				9F4A1DE79693EF68A7B1A4D2 /* LogbookAwards.swift in Sources */,
 				0FD449B6C15FD3407D8E3BC0 /* LogbookCharts.swift in Sources */,
 				33736A682F52CCBB13E8168A /* LogbookScreen.swift in Sources */,
 				65A688B883398E75D00BCD7E /* LogbookStats.swift in Sources */,
@@ -388,6 +407,7 @@
 				8EA75A450404FB948C0A6CDC /* SettingsScreen.swift in Sources */,
 				CE1ECA0C5BB350A1EDDA7018 /* SlotTimerBar.swift in Sources */,
 				D36ECEB73B847787DE373072 /* SpectrumStrip.swift in Sources */,
+				ED838E6889186A96DB5E68A3 /* ToastOverlay.swift in Sources */,
 				7F9F3D670DE6755252D023A3 /* TransmissionSettings.swift in Sources */,
 				5E2B3105FFFE6C84D86ACD85 /* TransmitGlow.swift in Sources */,
 				AC1D4BEDBCC1DBA945DB04D5 /* TxPlayerService.swift in Sources */,

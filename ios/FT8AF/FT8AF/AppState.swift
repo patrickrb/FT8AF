@@ -13,6 +13,7 @@ final class AppState {
     let rig = RigState()
     let tx = TxState()
     let pota = PotaState()
+    let toast = ToastState()
 
     /// The live engine is set once by `FT8AFApp` at startup. Views access it
     /// through `appState.engine` instead of a separate `@Environment` entry,
@@ -178,6 +179,7 @@ final class SettingsState {
     var showOnlyCQ: Bool = false
     var dxOnly: Bool = false
     var autoLog: Bool = true
+    var blockedCallsigns: [String] = []
 }
 
 // MARK: - Rig
@@ -252,6 +254,7 @@ enum SettingsPersistence {
         d.set(s.showOnlyCQ, forKey: key("showOnlyCQ"))
         d.set(s.dxOnly, forKey: key("dxOnly"))
         d.set(s.autoLog, forKey: key("autoLog"))
+        d.set(s.blockedCallsigns, forKey: key("blockedCallsigns"))
     }
 
     @MainActor static func load(into s: SettingsState) {
@@ -277,6 +280,9 @@ enum SettingsPersistence {
         }
         if d.object(forKey: key("autoLog")) != nil {
             s.autoLog = d.bool(forKey: key("autoLog"))
+        }
+        if let blocked = d.stringArray(forKey: key("blockedCallsigns")) {
+            s.blockedCallsigns = blocked
         }
     }
 

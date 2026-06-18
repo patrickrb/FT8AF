@@ -4,6 +4,7 @@ import SwiftUI
 enum LogbookTab: String, CaseIterable {
     case recent = "Recent"
     case stats = "Stats"
+    case awards = "Awards"
 }
 
 struct LogbookScreen: View {
@@ -61,6 +62,11 @@ struct LogbookScreen: View {
                     LogbookChartsView(records: logbook.records)
                         .padding(.bottom, 100)
                 }
+            case .awards:
+                ScrollView {
+                    LogbookAwardsView(records: logbook.records)
+                        .padding(.bottom, 100)
+                }
             }
         }
         .background(bgApp)
@@ -72,9 +78,9 @@ struct LogbookScreen: View {
             .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showExportSheet) {
-            if let url = exportAdifFile() {
-                ShareSheet(items: [url])
-            }
+            ExportLogSheet(records: appState.logbook.records)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -158,13 +164,6 @@ struct LogbookScreen: View {
         }
     }
 
-    private func exportAdifFile() -> URL? {
-        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("ft8af_log.adi")
-        let content = Adif.export(appState.logbook.records)
-        try? content.data(using: .utf8)?.write(to: tmp, options: .atomic)
-        return tmp
-    }
-
     private var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "book.closed")
@@ -225,22 +224,29 @@ private struct LogbookRow: View {
 
             Spacer()
 
-            // Band pill
-            Text(record.band)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(bandColor(for: record.band))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(bandColor(for: record.band).opacity(0.14))
-                )
-                .padding(.trailing, 10)
+            // Band pill + freq
+            VStack(spacing: 2) {
+                Text(record.band)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(bandColor(for: record.band))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(bandColor(for: record.band).opacity(0.14))
+                    )
+                if !record.freq.isEmpty {
+                    Text(record.freq)
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .foregroundStyle(textDim)
+                }
+            }
+            .padding(.trailing, 10)
 
             // SNR
             Text(record.rstRcvd)
                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundStyle(textMuted)
+                .foregroundStyle(snrColor)
                 .frame(width: 30, alignment: .trailing)
                 .padding(.trailing, 10)
 
@@ -262,6 +268,15 @@ private struct LogbookRow: View {
                 .fill(borderSubtle)
                 .frame(height: 1)
         }
+    }
+
+    private var snrColor: Color {
+        guard let val = Int(record.rstRcvd.trimmingCharacters(in: CharacterSet(charactersIn: "+-").inverted))
+              ?? Int(record.rstRcvd) else { return textMuted }
+        if val >= 0 { return statusConfirmed }
+        if val >= -10 { return signal }
+        if val >= -18 { return textMuted }
+        return statusBad
     }
 
     private func formatDate(_ yyyymmdd: String) -> String {
@@ -321,6 +336,14 @@ private struct QsoEditSheet: View {
                             .font(.system(.body, design: .monospaced))
                             .foregroundStyle(textMuted)
                     }
+                    HStack {
+                        Text("Freq")
+                            .foregroundStyle(textPrimary)
+                        Spacer()
+                        Text(record.freq.isEmpty ? "—" : "\(record.freq) MHz")
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(textMuted)
+                    }
                 } header: {
                     Text("Frequency").foregroundStyle(textMuted)
                 }
@@ -368,18 +391,6 @@ private struct QsoEditSheet: View {
                 .autocorrectionDisabled()
         }
     }
-}
-
-// MARK: - Share Sheet
-
-private struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 // Conformance for sheet(item:)

@@ -42,6 +42,7 @@ struct AppTabView: View {
                         onVolumeChange: { newVol in
                             appState.settings.txVolume = newVol
                             SettingsPersistence.save(appState.settings)
+                            appState.toast.show("Volume: \(newVol)%", icon: "speaker.wave.2")
                         }
                     )
                 }
@@ -58,6 +59,13 @@ struct AppTabView: View {
             if showCelebration {
                 QsoCelebration {
                     showCelebration = false
+                }
+            }
+
+            // Toast overlay
+            if let msg = appState.toast.currentMessage {
+                ToastOverlay(message: msg, icon: appState.toast.currentIcon) {
+                    appState.toast.dismiss()
                 }
             }
         }
