@@ -18,6 +18,7 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.activity.compose.setContent
@@ -30,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import android.os.Handler
 import android.os.Looper
 import androidx.lifecycle.Observer
@@ -79,15 +81,17 @@ class ComposeMainActivity : AppCompatActivity() {
         val permissions = buildPermissionsList()
         checkPermission(permissions)
 
-        // Fullscreen and keep screen on
-        @Suppress("DEPRECATION")
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_FULLSCREEN,
-            WindowManager.LayoutParams.FLAG_FULLSCREEN,
-        )
+        // Edge-to-edge is mandatory on Android 15 (targetSdk 35) and the old
+        // FLAG_FULLSCREEN / window.statusBarColor APIs are deprecated. Opt into
+        // edge-to-edge, then preserve the app's original full-screen look by
+        // hiding the system bars immersively (transient reveal on swipe) instead
+        // of the deprecated fullscreen flag. Keep the screen on as before.
+        enableEdgeToEdge()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         super.onCreate(savedInstanceState)
+
+        ImmersiveBars.apply(WindowCompat.getInsetsController(window, window.decorView))
 
         GeneralVariables.getInstance().setMainContext(applicationContext)
         mainViewModel = MainViewModel.getInstance(this)
