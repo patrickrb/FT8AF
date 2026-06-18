@@ -1,8 +1,14 @@
 import FT8Engine
 import SwiftUI
 
+enum LogbookTab: String, CaseIterable {
+    case recent = "Recent"
+    case stats = "Stats"
+}
+
 struct LogbookScreen: View {
     @Environment(AppState.self) private var appState
+    @State private var selectedTab: LogbookTab = .recent
     @State private var searchText = ""
     @State private var editingRecord: QsoRecord?
     @State private var showExportSheet = false
@@ -37,72 +43,24 @@ struct LogbookScreen: View {
             .padding(.top, 12)
             .padding(.bottom, 8)
 
-            // Search bar
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 13))
-                    .foregroundStyle(textFaint)
-                TextField("Search callsign, band, date...", text: $searchText)
-                    .font(.system(size: 14, design: .monospaced))
-                    .foregroundStyle(textPrimary)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                if !searchText.isEmpty {
-                    Button {
-                        searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 13))
-                            .foregroundStyle(textFaint)
-                    }
-                    .buttonStyle(.plain)
+            // Sub-tab picker
+            Picker("", selection: $selectedTab) {
+                ForEach(LogbookTab.allCases, id: \.self) { tab in
+                    Text(tab.rawValue).tag(tab)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(bgSurface)
-            )
+            .pickerStyle(.segmented)
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
 
-            ScrollView {
-                VStack(spacing: 12) {
-                    // Stats cards (only when not searching)
-                    if searchText.isEmpty {
-                        LogbookStats(totalQsos: logbook.totalCount, bandStats: logbook.bandStats)
-                            .padding(.horizontal, 16)
-                    }
-
-                    // QSO records list
-                    if filteredRecords.isEmpty {
-                        if searchText.isEmpty {
-                            emptyState
-                        } else {
-                            noResultsState
-                        }
-                    } else {
-                        LazyVStack(spacing: 0) {
-                            ForEach(filteredRecords, id: \.id) { record in
-                                LogbookRow(record: record)
-                                    .onTapGesture {
-                                        editingRecord = record
-                                    }
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                        Button(role: .destructive) {
-                                            if let id = record.id {
-                                                QsoLogStore.delete(id: id, from: appState)
-                                            }
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
-                                        }
-                                    }
-                            }
-                        }
-                    }
+            switch selectedTab {
+            case .recent:
+                recentTab(logbook: logbook)
+            case .stats:
+                ScrollView {
+                    LogbookChartsView(records: logbook.records)
+                        .padding(.bottom, 100)
                 }
-                .padding(.bottom, 100)
             }
         }
         .background(bgApp)
@@ -117,6 +75,75 @@ struct LogbookScreen: View {
             if let url = exportAdifFile() {
                 ShareSheet(items: [url])
             }
+        }
+    }
+
+    @ViewBuilder
+    private func recentTab(logbook: LogbookState) -> some View {
+        // Search bar
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 13))
+                .foregroundStyle(textFaint)
+            TextField("Search callsign, band, date...", text: $searchText)
+                .font(.system(size: 14, design: .monospaced))
+                .foregroundStyle(textPrimary)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(textFaint)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(bgSurface)
+        )
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+
+        ScrollView {
+            VStack(spacing: 12) {
+                if searchText.isEmpty {
+                    LogbookStats(totalQsos: logbook.totalCount, bandStats: logbook.bandStats)
+                        .padding(.horizontal, 16)
+                }
+
+                if filteredRecords.isEmpty {
+                    if searchText.isEmpty {
+                        emptyState
+                    } else {
+                        noResultsState
+                    }
+                } else {
+                    LazyVStack(spacing: 0) {
+                        ForEach(filteredRecords, id: \.id) { record in
+                            LogbookRow(record: record)
+                                .onTapGesture {
+                                    editingRecord = record
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        if let id = record.id {
+                                            QsoLogStore.delete(id: id, from: appState)
+                                        }
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                        }
+                    }
+                }
+            }
+            .padding(.bottom, 100)
         }
     }
 

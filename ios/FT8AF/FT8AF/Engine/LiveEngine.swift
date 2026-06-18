@@ -72,6 +72,7 @@ final class LiveEngine {
                 appState.waterfall.rows.removeFirst(appState.waterfall.rows.count - 120)
             }
             appState.waterfall.spectrum = spectrum
+            appState.waterfall.updateCount += 1
         }
 
         engineTask = Task.detached { [weak self] in
@@ -110,6 +111,7 @@ final class LiveEngine {
     /// Begin calling CQ.
     func callCQ() {
         syncSettingsToQso()
+        appState?.tx.conversationLog.removeAll()
         qsoEngine?.startCq()
         syncQsoStatusToUI()
     }
@@ -124,6 +126,7 @@ final class LiveEngine {
     /// Answer a station from a decoded message (user tapped "Call" in QsoSheet).
     func answerStation(_ msg: DecodeMessage) {
         syncSettingsToQso()
+        appState?.tx.conversationLog.removeAll()
         let decoded = FT8DSP.DecodedMessage(
             callTo: msg.callTo,
             callFrom: msg.callFrom,
@@ -231,8 +234,41 @@ final class LiveEngine {
         // Sync latest settings into the engine before processing.
         syncSettingsToQso()
 
+        // Log incoming RX messages addressed to us for the conversation panel.
+        let myCall = appState.settings.myCall.uppercased()
+        if !myCall.isEmpty {
+            for msg in decoded where msg.callTo.uppercased() == myCall {
+                let utcTime = Self.utcTimeString(from: Int64(Date().timeIntervalSince1970 * 1000))
+                appState.tx.conversationLog.append(
+                    QsoLogEntry(direction: .rx, message: msg.rawText.isEmpty ? "\(msg.callTo) \(msg.callFrom) \(msg.extra)" : msg.rawText,
+                                snr: msg.snr, utcTime: utcTime)
+                )
+            }
+        }
+
+        // Capture pre-RX target to detect new QSO answers.
+        let previousTarget = qso.status().target
+
         // Feed decodes to the QSO sequencer.
         let outcome = qso.processRx(decoded)
+
+        // Auto-open QSO sheet when our CQ gets answered (target goes from nil to non-nil).
+        let newTarget = qso.status().target
+        if previousTarget == nil, let dx = newTarget {
+            // Find the decoded message from this station to use as autoOpenMessage.
+            if let answerMsg = decoded.first(where: { $0.callFrom.uppercased() == dx.uppercased() }) {
+                appState.tx.autoOpenMessage = DecodeMessage(
+                    utcTime: Self.utcTimeString(from: Int64(Date().timeIntervalSince1970 * 1000)),
+                    callFrom: answerMsg.callFrom,
+                    callTo: answerMsg.callTo,
+                    snr: answerMsg.snr,
+                    freqHz: answerMsg.freqHz,
+                    grid: answerMsg.grid,
+                    extra: answerMsg.extra,
+                    slotIndex: Int(SlotClock.parity(slotID: slotID))
+                )
+            }
+        }
 
         // Handle QSO completion.
         if case .completed(var record) = outcome {
@@ -262,6 +298,12 @@ final class LiveEngine {
     private func scheduleTx(message: String, freqHz: Float) {
         guard let appState else { return }
         guard let samples = FT8Encoder.generateFT8(message, baseFreqHz: freqHz) else { return }
+
+        // Log the TX message to conversation panel.
+        let utcTime = Self.utcTimeString(from: Int64(Date().timeIntervalSince1970 * 1000))
+        appState.tx.conversationLog.append(
+            QsoLogEntry(direction: .tx, message: message, snr: nil, utcTime: utcTime)
+        )
 
         appState.tx.isTransmitting = true
         txPlayer.play(samples) { [weak self] in

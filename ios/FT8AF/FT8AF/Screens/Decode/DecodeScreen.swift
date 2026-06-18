@@ -114,6 +114,22 @@ struct DecodeScreen: View {
                 .presentationDragIndicator(.visible)
             }
         }
+        // Auto-open QSO sheet when our CQ is answered.
+        .onChange(of: appState.tx.autoOpenMessage?.id) { _, newId in
+            if let msg = appState.tx.autoOpenMessage, newId != nil {
+                appState.decode.selectedMessage = msg
+                showQsoSheet = true
+                appState.tx.autoOpenMessage = nil
+            }
+        }
+        // Auto-close QSO sheet after completion (5 second delay).
+        .onChange(of: appState.tx.qsoCompletedAt) { _, newVal in
+            if newVal != nil && showQsoSheet {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                    showQsoSheet = false
+                }
+            }
+        }
     }
 
     private var filteredMessages: [DecodeMessage] {

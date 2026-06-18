@@ -12,6 +12,7 @@ final class AppState {
     let settings = SettingsState()
     let rig = RigState()
     let tx = TxState()
+    let pota = PotaState()
 
     /// The live engine is set once by `FT8AFApp` at startup. Views access it
     /// through `appState.engine` instead of a separate `@Environment` entry,
@@ -76,6 +77,25 @@ final class WaterfallState {
     var spectrum: [Float] = []
     var txFreqHz: Float = 1500
     var isLive: Bool = false
+    var noiseReduction: Bool = false
+    var messageMarking: Bool = true
+    var updateCount: Int = 0
+}
+
+// MARK: - QSO Conversation Log
+
+enum QsoLogDirection: String {
+    case tx = "TX"
+    case rx = "RX"
+    case busy = "BUSY"
+}
+
+struct QsoLogEntry: Identifiable {
+    let id = UUID()
+    let direction: QsoLogDirection
+    let message: String
+    let snr: Int?
+    let utcTime: String
 }
 
 // MARK: - Logbook
@@ -198,6 +218,21 @@ final class TxState {
     var targetCall: String = ""
     var txMessage: String = ""
     var qsoCompletedAt: Date?
+    var conversationLog: [QsoLogEntry] = []
+    /// Set by the engine when our CQ is answered, to auto-open QsoSheet.
+    var autoOpenMessage: DecodeMessage?
+}
+
+// MARK: - POTA
+
+@Observable @MainActor
+final class PotaState {
+    var parkInput: String = ""
+    var parkRefs: [String] = []
+    var notes: String = ""
+    var isActivating: Bool = false
+    var activationQsoCount: Int = 0
+    var activationStartTime: Date?
 }
 
 // MARK: - Settings Persistence

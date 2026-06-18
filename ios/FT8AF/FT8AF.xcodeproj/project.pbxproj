@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		035DDD710715AAC0100E0871 /* Colors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FD3B4836E62F9DC32FAB0DE /* Colors.swift */; };
+		0FD449B6C15FD3407D8E3BC0 /* LogbookCharts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DFF1DC42A9F8F8066F97F7 /* LogbookCharts.swift */; };
 		208767EE6D89D470D7C88E77 /* WaterfallScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E4787AD687D89D858D3C075 /* WaterfallScreen.swift */; };
 		26F661F120C34995BFF73F2D /* FT8DSP in Frameworks */ = {isa = PBXBuildFile; productRef = 93510ED81B9D113E387D0D45 /* FT8DSP */; };
 		303BF422AF4C5F94DF696E5D /* FT8Rig in Frameworks */ = {isa = PBXBuildFile; productRef = 4E7B6368450390C0D64A5715 /* FT8Rig */; };
@@ -37,6 +38,7 @@
 		AB5310FE1F9048626DC6406B /* LiveEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E09812700CD93E6187CC4BC /* LiveEngine.swift */; };
 		AC1D4BEDBCC1DBA945DB04D5 /* TxPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29B5962B70F4510D76A5BC0A /* TxPlayerService.swift */; };
 		B8FD5A2DF3B2A89740B3CB73 /* WorldMapCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BDDB723455CB7AE2BB68EF0 /* WorldMapCanvas.swift */; };
+		BCEB9305C3EA84C758FAFBA7 /* AzimuthalMapCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB943F6B81F9D36BA85504A3 /* AzimuthalMapCanvas.swift */; };
 		CE1ECA0C5BB350A1EDDA7018 /* SlotTimerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800081E79EC795EBDE2E077E /* SlotTimerBar.swift */; };
 		D36ECEB73B847787DE373072 /* SpectrumStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = C96D9C69CFC1480E6A5B64B5 /* SpectrumStrip.swift */; };
 		DA94D12D7FDE6D10D116E770 /* TxStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64B1202A7633AE8CBBFCF2C3 /* TxStrip.swift */; };
@@ -72,6 +74,7 @@
 		89642B9763C7FA33CFF0EE57 /* RadioAudioSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadioAudioSettings.swift; sourceTree = "<group>"; };
 		8BDDB723455CB7AE2BB68EF0 /* WorldMapCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldMapCanvas.swift; sourceTree = "<group>"; };
 		91DB096C5FC7481CA1B7B49B /* LogbookStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogbookStats.swift; sourceTree = "<group>"; };
+		93DFF1DC42A9F8F8066F97F7 /* LogbookCharts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogbookCharts.swift; sourceTree = "<group>"; };
 		9BCE0C13DF4842EC394EFADF /* MapScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapScreen.swift; sourceTree = "<group>"; };
 		A41EFDE500F865A3B393171D /* FT8AFTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FT8AFTab.swift; sourceTree = "<group>"; };
 		A53063BBF11F97C62BC0AFC9 /* AppTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTabView.swift; sourceTree = "<group>"; };
@@ -84,6 +87,7 @@
 		C79C0E0096ADDC018120C361 /* DecodeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecodeScreen.swift; sourceTree = "<group>"; };
 		C81C53609B2CDC9FB3B71116 /* FrequencyRuler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrequencyRuler.swift; sourceTree = "<group>"; };
 		C96D9C69CFC1480E6A5B64B5 /* SpectrumStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectrumStrip.swift; sourceTree = "<group>"; };
+		CB943F6B81F9D36BA85504A3 /* AzimuthalMapCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AzimuthalMapCanvas.swift; sourceTree = "<group>"; };
 		DF04207CDB5BE8A1CCDD5F5B /* TransmitGlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransmitGlow.swift; sourceTree = "<group>"; };
 		E429D8A3556534F05374F12A /* GridDistance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridDistance.swift; sourceTree = "<group>"; };
 		F287F167508A8E4114F44116 /* FFTProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFTProcessor.swift; sourceTree = "<group>"; };
@@ -109,6 +113,7 @@
 		14E1746CE387ABA11CDC3F5E /* Map */ = {
 			isa = PBXGroup;
 			children = (
+				CB943F6B81F9D36BA85504A3 /* AzimuthalMapCanvas.swift */,
 				9BCE0C13DF4842EC394EFADF /* MapScreen.swift */,
 				8BDDB723455CB7AE2BB68EF0 /* WorldMapCanvas.swift */,
 			);
@@ -244,6 +249,7 @@
 		9B85E3FDCB60E378E9DF2E12 /* Logbook */ = {
 			isa = PBXGroup;
 			children = (
+				93DFF1DC42A9F8F8066F97F7 /* LogbookCharts.swift */,
 				76108617D9AEDEE84BAD1054 /* LogbookScreen.swift */,
 				91DB096C5FC7481CA1B7B49B /* LogbookStats.swift */,
 			);
@@ -357,6 +363,7 @@
 				49DFEC8ED0237764EA3EE3BF /* AppState.swift in Sources */,
 				5C76E98A4BD4854709C3D0E9 /* AppTabView.swift in Sources */,
 				EA1C91B3E65DB77ED5703FD9 /* AudioCaptureService.swift in Sources */,
+				BCEB9305C3EA84C758FAFBA7 /* AzimuthalMapCanvas.swift in Sources */,
 				035DDD710715AAC0100E0871 /* Colors.swift in Sources */,
 				3BA2BC0EFAF62534D39C3A4A /* DecodeFilterSettings.swift in Sources */,
 				F3CB49EBF218C3BB9FAE02D6 /* DecodeRow.swift in Sources */,
@@ -369,6 +376,7 @@
 				637BC14B19B728028FD01F07 /* FrequencyRuler.swift in Sources */,
 				8DA0D562E25925F56B638B00 /* GridDistance.swift in Sources */,
 				AB5310FE1F9048626DC6406B /* LiveEngine.swift in Sources */,
+				0FD449B6C15FD3407D8E3BC0 /* LogbookCharts.swift in Sources */,
 				33736A682F52CCBB13E8168A /* LogbookScreen.swift in Sources */,
 				65A688B883398E75D00BCD7E /* LogbookStats.swift in Sources */,
 				72300AB5D2B37428777C824D /* MapScreen.swift in Sources */,

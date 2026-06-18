@@ -51,8 +51,28 @@ struct ActiveQsoPanel: View {
                 .buttonStyle(.plain)
             }
 
-            // TX message
-            if !tx.txMessage.isEmpty {
+            // Conversation log
+            if !tx.conversationLog.isEmpty {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 2) {
+                            ForEach(tx.conversationLog) { entry in
+                                ConversationRow(entry: entry)
+                                    .id(entry.id)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 100)
+                    .onChange(of: tx.conversationLog.count) { _, _ in
+                        if let last = tx.conversationLog.last {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                proxy.scrollTo(last.id, anchor: .bottom)
+                            }
+                        }
+                    }
+                }
+            } else if !tx.txMessage.isEmpty {
+                // Fallback: show current TX message if no log entries yet
                 Text(tx.txMessage)
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundStyle(textMuted)
@@ -130,6 +150,61 @@ struct ActiveQsoPanel: View {
         case .reportSent: return "REPORT"
         case .rrSent:     return "RR73"
         case .complete:   return "DONE"
+        }
+    }
+}
+
+// MARK: - Conversation Row
+
+private struct ConversationRow: View {
+    let entry: QsoLogEntry
+
+    var body: some View {
+        HStack(spacing: 6) {
+            // Direction badge
+            Text(entry.direction.rawValue)
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundStyle(directionColor)
+                .frame(width: 28)
+                .padding(.vertical, 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(directionColor.opacity(0.14))
+                )
+
+            // Message
+            Text(entry.message)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(textPrimary)
+                .lineLimit(1)
+
+            Spacer()
+
+            // SNR (for RX)
+            if let snr = entry.snr {
+                Text(snr >= 0 ? "+\(snr)" : "\(snr)")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(textFaint)
+            }
+
+            // Time
+            Text(String(entry.utcTime.prefix(5)))
+                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .foregroundStyle(textDim)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(bgSurface3.opacity(0.5))
+        )
+    }
+
+    private var directionColor: Color {
+        switch entry.direction {
+        case .tx:   return accent
+        case .rx:   return signal
+        case .busy: return textFaint
         }
     }
 }

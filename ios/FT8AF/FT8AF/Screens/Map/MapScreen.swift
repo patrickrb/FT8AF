@@ -1,5 +1,10 @@
 import SwiftUI
 
+enum MapProjection: String, CaseIterable {
+    case equirectangular = "Standard"
+    case azimuthal = "Azimuthal"
+}
+
 struct MapScreen: View {
     @Environment(AppState.self) private var appState
     @State private var scale: CGFloat = 1.0
@@ -7,6 +12,7 @@ struct MapScreen: View {
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
     @State private var selectedMarker: MapMarker?
+    @State private var projection: MapProjection = .equirectangular
 
     var body: some View {
         VStack(spacing: 0) {
@@ -15,7 +21,33 @@ struct MapScreen: View {
                 Text("Map")
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(textPrimary)
+
                 Spacer()
+
+                // Projection toggle
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        projection = projection == .equirectangular ? .azimuthal : .equirectangular
+                        resetView()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: projection == .equirectangular ? "map" : "globe")
+                            .font(.system(size: 11, weight: .medium))
+                        Text(projection.rawValue)
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    }
+                    .foregroundStyle(textMuted)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(bgSurface3)
+                    )
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 8)
+
                 Text("\(markers.count) stations")
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundStyle(textMuted)
@@ -24,13 +56,23 @@ struct MapScreen: View {
             .padding(.top, 12)
             .padding(.bottom, 8)
 
-            // Map canvas with gestures
-            ZStack {
-                WorldMapCanvas(
-                    markers: markers,
-                    selectedMarker: $selectedMarker,
-                    operatorGrid: appState.settings.myGrid
-                )
+            // Map canvas with gestures + zoom controls
+            ZStack(alignment: .topTrailing) {
+                Group {
+                    if projection == .equirectangular {
+                        WorldMapCanvas(
+                            markers: markers,
+                            selectedMarker: $selectedMarker,
+                            operatorGrid: appState.settings.myGrid
+                        )
+                    } else {
+                        AzimuthalMapCanvas(
+                            markers: markers,
+                            selectedMarker: $selectedMarker,
+                            operatorGrid: appState.settings.myGrid
+                        )
+                    }
+                }
                 .scaleEffect(scale)
                 .offset(offset)
                 .gesture(
@@ -39,7 +81,7 @@ struct MapScreen: View {
                             scale = lastScale * value.magnification
                         }
                         .onEnded { _ in
-                            lastScale = max(1.0, min(scale, 5.0))
+                            lastScale = max(1.0, min(scale, 8.0))
                             scale = lastScale
                         }
                 )
@@ -56,6 +98,32 @@ struct MapScreen: View {
                         }
                 )
 
+                // Zoom controls
+                VStack(spacing: 4) {
+                    ZoomButton(icon: "plus") {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            lastScale = min(lastScale * 2, 8.0)
+                            scale = lastScale
+                        }
+                    }
+                    .disabled(lastScale >= 8.0)
+
+                    ZoomButton(icon: "minus") {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            lastScale = max(lastScale / 2, 1.0)
+                            scale = lastScale
+                        }
+                    }
+                    .disabled(lastScale <= 1.0)
+
+                    ZoomButton(icon: "1.circle") {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            resetView()
+                        }
+                    }
+                }
+                .padding(8)
+
                 // Selected marker popup
                 if let marker = selectedMarker {
                     markerPopup(marker)
@@ -63,6 +131,13 @@ struct MapScreen: View {
             }
         }
         .background(bgApp)
+    }
+
+    private func resetView() {
+        scale = 1.0
+        lastScale = 1.0
+        offset = .zero
+        lastOffset = .zero
     }
 
     @ViewBuilder
@@ -83,6 +158,11 @@ struct MapScreen: View {
                 }
                 if let dist = markerDistance(marker) {
                     Text(dist)
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(textFaint)
+                }
+                if let brg = markerBearing(marker) {
+                    Text(brg)
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundStyle(textFaint)
                 }
@@ -109,6 +189,13 @@ struct MapScreen: View {
         guard !myGrid.isEmpty, let myPos = gridToLatLon(myGrid) else { return nil }
         let dist = haversineDistance(from: myPos, to: (marker.lat, marker.lon))
         return formatDistance(dist)
+    }
+
+    private func markerBearing(_ marker: MapMarker) -> String? {
+        let myGrid = appState.settings.myGrid
+        guard !myGrid.isEmpty, let myPos = gridToLatLon(myGrid) else { return nil }
+        let brg = bearing(from: myPos, to: (marker.lat, marker.lon))
+        return formatBearing(brg)
     }
 
     private var markers: [MapMarker] {
@@ -141,6 +228,33 @@ struct MapScreen: View {
     }
 }
 
+// MARK: - Zoom Button
+
+private struct ZoomButton: View {
+    let icon: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(textPrimary)
+                .frame(width: 32, height: 32)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(bgSurface2.opacity(0.9))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .strokeBorder(borderSubtle, lineWidth: 1)
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Types
+
 enum MarkerStatus {
     case cq, worked, forMe, standard
 }
@@ -163,9 +277,9 @@ struct MapMarker: Identifiable, Equatable {
 func gridToLatLon(_ grid: String) -> (Double, Double)? {
     let chars = Array(grid.uppercased().utf8)
     guard chars.count >= 4,
-          chars[0] >= 65, chars[0] <= 82, // A-R
+          chars[0] >= 65, chars[0] <= 82,
           chars[1] >= 65, chars[1] <= 82,
-          chars[2] >= 48, chars[2] <= 57, // 0-9
+          chars[2] >= 48, chars[2] <= 57,
           chars[3] >= 48, chars[3] <= 57 else { return nil }
     let lon = Double(chars[0] - 65) * 20 + Double(chars[2] - 48) * 2 + 1 - 180
     let lat = Double(chars[1] - 65) * 10 + Double(chars[3] - 48) * 1 + 0.5 - 90

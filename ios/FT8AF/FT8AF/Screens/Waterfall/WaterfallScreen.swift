@@ -29,8 +29,24 @@ struct WaterfallScreen: View {
                 Spacer()
 
                 HStack(spacing: 12) {
-                    InfoChip(label: "NR", isOn: false)
-                    InfoChip(label: "MSG", isOn: true)
+                    Button {
+                        appState.waterfall.noiseReduction.toggle()
+                    } label: {
+                        InfoChip(label: "NR", isOn: appState.waterfall.noiseReduction)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        appState.waterfall.messageMarking.toggle()
+                    } label: {
+                        InfoChip(label: "MSG", isOn: appState.waterfall.messageMarking)
+                    }
+                    .buttonStyle(.plain)
+
+                    Text("\(appState.waterfall.updateCount)")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(textDim)
+
                     LiveIndicator(isLive: appState.waterfall.isLive)
                 }
             }
