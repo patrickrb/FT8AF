@@ -4,7 +4,7 @@ plugins {
     // uncompressed native libraries inside the APK/AAB from 8.5.1 onward
     // (earlier versions zip-align them to 4 KB), which made Google Play flag
     // the bundle even though the .so ELF segments are already 16 KB-aligned
-    // via the linker's -Wl,-z,max-page-size=16384 flag (see app cpp/CMakeLists.txt).
+    // via the linker's -Wl,-z,max-page-size=16384 flag (see app/src/main/cpp/CMakeLists.txt).
     id 'com.android.application' version '8.7.3' apply false
     id 'com.android.library' version '8.7.3' apply false
     id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
