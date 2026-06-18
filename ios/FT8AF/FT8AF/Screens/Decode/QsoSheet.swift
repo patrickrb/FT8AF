@@ -3,8 +3,8 @@ import SwiftUI
 /// Bottom sheet showing station detail when a decode row is tapped.
 struct QsoSheet: View {
     let message: DecodeMessage
+    var onCall: (DecodeMessage) -> Void = { _ in }
     @Environment(\.dismiss) private var dismiss
-    @Environment(LiveEngine.self) private var engine
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,7 +50,7 @@ struct QsoSheet: View {
 
             // Call button — starts answering this station's CQ
             Button {
-                engine.answerStation(message)
+                onCall(message)
                 dismiss()
             } label: {
                 HStack(spacing: 8) {

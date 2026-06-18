@@ -3,7 +3,11 @@ import SwiftUI
 /// TX control bar shown at the bottom of Decode/Waterfall screens.
 struct TxStrip: View {
     @Environment(AppState.self) private var appState
-    @Environment(LiveEngine.self) private var engine
+
+    var onHunt: () -> Void = {}
+    var onCallCQ: () -> Void = {}
+    var onStop: () -> Void = {}
+    var onToggleSlot: () -> Void = {}
 
     var body: some View {
         let tx = appState.tx
@@ -38,7 +42,7 @@ struct TxStrip: View {
                     isActive: tx.huntEnabled,
                     activeColor: signal,
                     style: .secondary
-                ) { engine.toggleHunt() }
+                ) { onHunt() }
 
                 // CQ / STOP button
                 ActionButton(
@@ -49,9 +53,9 @@ struct TxStrip: View {
                     style: .primary
                 ) {
                     if tx.isActivated {
-                        engine.stopTx()
+                        onStop()
                     } else {
-                        engine.callCQ()
+                        onCallCQ()
                     }
                 }
 
@@ -62,7 +66,7 @@ struct TxStrip: View {
                     isActive: false,
                     activeColor: textMuted,
                     style: .secondary
-                ) { engine.toggleSlotParity() }
+                ) { onToggleSlot() }
             }
         }
         .padding(.horizontal, 16)
