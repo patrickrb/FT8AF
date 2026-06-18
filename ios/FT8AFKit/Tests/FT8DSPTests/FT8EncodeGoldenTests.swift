@@ -56,6 +56,24 @@ final class FT8EncodeGoldenTests: XCTestCase {
         XCTAssertTrue(sig.allSatisfy { abs($0) <= 1.0001 }, "amplitude within [-1, 1]")
     }
 
+    /// synthGFSK honors a non-zero offset: it writes the waveform into
+    /// signal[offset...] and leaves the leading region untouched (the offset
+    /// code path the engine uses to place a frame later in a buffer).
+    func testSynthGFSKWritesAtOffsetLeavingPrefixUntouched() {
+        let tones = FT8Encoder.encodeTones(Golden.payload[0])
+        let nSpsym = Int(0.5 + Double(FT8.sampleRate) * Double(FT8.symbolPeriod))
+        let nWave = tones.count * nSpsym
+        let offset = 1000
+        var signal = [Float](repeating: 0, count: offset + nWave)
+        FT8Encoder.synthGFSK(tones: tones, f0: 1000, sampleRate: FT8.sampleRate,
+                             into: &signal, offset: offset)
+        XCTAssertTrue(signal[0..<offset].allSatisfy { $0 == 0 },
+                      "samples before offset must stay silent")
+        XCTAssertTrue(signal[offset..<(offset + nWave)].contains { $0 != 0 },
+                      "waveform region must be non-silent")
+        XCTAssertTrue(signal.allSatisfy { abs($0) <= 1.0001 }, "amplitude within [-1, 1]")
+    }
+
     // Note: this ft8_lib's pack77 always returns 0 — it falls back to free-text
     // packing (packtext77) for anything not a structured message — so
     // FT8Encoder.pack77 never returns nil here. The Optional is kept for safety

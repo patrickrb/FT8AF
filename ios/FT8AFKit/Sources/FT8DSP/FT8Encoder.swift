@@ -55,6 +55,12 @@ public enum FT8Encoder {
                                  into signal: inout [Float], offset: Int) {
         let nSpsym = Int(0.5 + Double(sampleRate) * Double(FT8.symbolPeriod))
         let nWave = tones.count * nSpsym
+        // A negative offset would still satisfy the upper-bound check below yet
+        // make the C write before signal[0] (OOB); and offset is handed to C as
+        // an `int`, so it must fit Int32. The desktop encode.rs sidesteps both by
+        // typing offset as usize — Swift needs the guards explicit.
+        precondition(offset >= 0, "synthGFSK: offset must be non-negative, got \(offset)")
+        precondition(offset <= Int(Int32.max), "synthGFSK: offset \(offset) exceeds C int range")
         precondition(offset + nWave <= signal.count,
                      "synthGFSK: signal buffer too short (need \(nWave) from offset \(offset), have \(signal.count))")
         tones.withUnsafeBufferPointer { tp in
