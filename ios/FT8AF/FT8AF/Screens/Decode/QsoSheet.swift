@@ -66,6 +66,36 @@ struct QsoSheet: View {
                 .padding(.bottom, 16)
             }
 
+            // TX message banner
+            if appState.tx.isActivated && !appState.tx.txMessage.isEmpty {
+                HStack(spacing: 8) {
+                    Text(appState.tx.isTransmitting ? "TX NOW" : "TX NEXT")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(appState.tx.isTransmitting ? bgApp : accent)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(appState.tx.isTransmitting ? accent : accentSoft)
+                        )
+
+                    Text(appState.tx.txMessage)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(textPrimary)
+                        .lineLimit(1)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(appState.tx.isTransmitting ? accent.opacity(0.08) : bgSurface3.opacity(0.5))
+                )
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
+            }
+
             Spacer()
 
             // Call button

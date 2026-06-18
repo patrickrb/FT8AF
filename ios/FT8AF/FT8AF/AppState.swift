@@ -180,6 +180,9 @@ final class SettingsState {
     var dxOnly: Bool = false
     var autoLog: Bool = true
     var blockedCallsigns: [String] = []
+    var pttDelayMs: Int = 0
+    var txDelayMs: Int = 0
+    var lateStartToleranceMs: Int = 2360
 }
 
 // MARK: - Rig
@@ -255,6 +258,9 @@ enum SettingsPersistence {
         d.set(s.dxOnly, forKey: key("dxOnly"))
         d.set(s.autoLog, forKey: key("autoLog"))
         d.set(s.blockedCallsigns, forKey: key("blockedCallsigns"))
+        d.set(s.pttDelayMs, forKey: key("pttDelayMs"))
+        d.set(s.txDelayMs, forKey: key("txDelayMs"))
+        d.set(s.lateStartToleranceMs, forKey: key("lateStartToleranceMs"))
     }
 
     @MainActor static func load(into s: SettingsState) {
@@ -283,6 +289,15 @@ enum SettingsPersistence {
         }
         if let blocked = d.stringArray(forKey: key("blockedCallsigns")) {
             s.blockedCallsigns = blocked
+        }
+        if d.object(forKey: key("pttDelayMs")) != nil {
+            s.pttDelayMs = d.integer(forKey: key("pttDelayMs"))
+        }
+        if d.object(forKey: key("txDelayMs")) != nil {
+            s.txDelayMs = d.integer(forKey: key("txDelayMs"))
+        }
+        if d.object(forKey: key("lateStartToleranceMs")) != nil {
+            s.lateStartToleranceMs = d.integer(forKey: key("lateStartToleranceMs"))
         }
     }
 

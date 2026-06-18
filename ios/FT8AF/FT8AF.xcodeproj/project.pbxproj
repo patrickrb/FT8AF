@@ -47,6 +47,7 @@
 		DA94D12D7FDE6D10D116E770 /* TxStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64B1202A7633AE8CBBFCF2C3 /* TxStrip.swift */; };
 		DFA95C747B2F0763C677F2EC /* ActiveQsoPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0244EBDFC2ADDAE77418FF53 /* ActiveQsoPanel.swift */; };
 		E375A4D50C25F5437C2C9F7F /* QsoLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B9E40312EA203F05764FA56 /* QsoLogStore.swift */; };
+		E40A957715737F9BEC800FA5 /* AdvancedSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE47CF6272CAE2614E6A2383 /* AdvancedSettings.swift */; };
 		EA1C91B3E65DB77ED5703FD9 /* AudioCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C42FB097015693FF14B27553 /* AudioCaptureService.swift */; };
 		EC59A75E444DC6AB44913CB7 /* FT8AFApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1E760AEB31EF3855951728 /* FT8AFApp.swift */; };
 		ED838E6889186A96DB5E68A3 /* ToastOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8493B7CF97F9744DED622F15 /* ToastOverlay.swift */; };
@@ -98,6 +99,7 @@
 		C81C53609B2CDC9FB3B71116 /* FrequencyRuler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrequencyRuler.swift; sourceTree = "<group>"; };
 		C96D9C69CFC1480E6A5B64B5 /* SpectrumStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectrumStrip.swift; sourceTree = "<group>"; };
 		CB943F6B81F9D36BA85504A3 /* AzimuthalMapCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AzimuthalMapCanvas.swift; sourceTree = "<group>"; };
+		DE47CF6272CAE2614E6A2383 /* AdvancedSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettings.swift; sourceTree = "<group>"; };
 		DF04207CDB5BE8A1CCDD5F5B /* TransmitGlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransmitGlow.swift; sourceTree = "<group>"; };
 		E429D8A3556534F05374F12A /* GridDistance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridDistance.swift; sourceTree = "<group>"; };
 		F287F167508A8E4114F44116 /* FFTProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFTProcessor.swift; sourceTree = "<group>"; };
@@ -159,6 +161,7 @@
 			isa = PBXGroup;
 			children = (
 				2CFCB3285583184390D9E9BF /* AboutScreen.swift */,
+				DE47CF6272CAE2614E6A2383 /* AdvancedSettings.swift */,
 				4A8FFDE0644205A9AE050BC0 /* BlockedCallsignsSettings.swift */,
 				A88688AC6AFBEDC8AC3EF844 /* DecodeFilterSettings.swift */,
 				89642B9763C7FA33CFF0EE57 /* RadioAudioSettings.swift */,
@@ -376,6 +379,7 @@
 			files = (
 				B28BBB197398A82CDE05B480 /* AboutScreen.swift in Sources */,
 				DFA95C747B2F0763C677F2EC /* ActiveQsoPanel.swift in Sources */,
+				E40A957715737F9BEC800FA5 /* AdvancedSettings.swift in Sources */,
 				49DFEC8ED0237764EA3EE3BF /* AppState.swift in Sources */,
 				5C76E98A4BD4854709C3D0E9 /* AppTabView.swift in Sources */,
 				EA1C91B3E65DB77ED5703FD9 /* AudioCaptureService.swift in Sources */,

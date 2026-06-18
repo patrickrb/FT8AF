@@ -57,10 +57,11 @@ struct DecodeRow: View {
                         .foregroundStyle(textPrimary)
                 }
 
-                if !compact, !message.grid.isEmpty || !message.extra.isEmpty {
-                    Text(message.grid.isEmpty ? message.extra : message.grid)
+                if !compact {
+                    Text(fullMessageText)
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundStyle(textFaint)
+                        .lineLimit(1)
                 }
             }
 
@@ -117,5 +118,17 @@ struct DecodeRow: View {
 
     private var freqText: String {
         String(format: "%.0f", message.freqHz)
+    }
+
+    private var fullMessageText: String {
+        var parts: [String] = []
+        parts.append(message.callTo)
+        parts.append(message.callFrom)
+        if !message.extra.isEmpty {
+            parts.append(message.extra)
+        } else if !message.grid.isEmpty {
+            parts.append(message.grid)
+        }
+        return parts.joined(separator: " ")
     }
 }

@@ -1,6 +1,7 @@
 import SwiftUI
 
 /// Pill-shaped toggle chip for decode filter bar.
+/// Selected state uses amber/accent border and fill. Unselected uses subtle border.
 struct FilterChip: View {
     let label: String
     let isSelected: Bool
@@ -19,7 +20,7 @@ struct FilterChip: View {
                 )
                 .overlay(
                     Capsule()
-                        .strokeBorder(isSelected ? accent : borderSubtle, lineWidth: 1)
+                        .strokeBorder(isSelected ? borderAmber : borderSubtle, lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)

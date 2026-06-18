@@ -1,5 +1,6 @@
 import FT8Engine
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum LogbookTab: String, CaseIterable {
     case recent = "Recent"
@@ -13,6 +14,7 @@ struct LogbookScreen: View {
     @State private var searchText = ""
     @State private var editingRecord: QsoRecord?
     @State private var showExportSheet = false
+    @State private var showImportPicker = false
 
     var body: some View {
         let logbook = appState.logbook
@@ -24,6 +26,17 @@ struct LogbookScreen: View {
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(textPrimary)
                 Spacer()
+
+                // Import button
+                Button {
+                    showImportPicker = true
+                } label: {
+                    Image(systemName: "square.and.arrow.down")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(textMuted)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 4)
 
                 // Export button
                 Button {
@@ -81,6 +94,13 @@ struct LogbookScreen: View {
             ExportLogSheet(records: appState.logbook.records)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+        }
+        .fileImporter(
+            isPresented: $showImportPicker,
+            allowedContentTypes: [.plainText, UTType(filenameExtension: "adi") ?? .plainText, UTType(filenameExtension: "adif") ?? .plainText],
+            allowsMultipleSelection: false
+        ) { result in
+            importAdif(result: result)
         }
     }
 
@@ -178,6 +198,41 @@ struct LogbookScreen: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 60)
+    }
+
+    private func importAdif(result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            guard url.startAccessingSecurityScopedResource() else { return }
+            defer { url.stopAccessingSecurityScopedResource() }
+            do {
+                let data = try Data(contentsOf: url)
+                guard let text = String(data: data, encoding: .utf8) else { return }
+                let imported = Adif.parse(text)
+                guard !imported.isEmpty else {
+                    appState.toast.show("No valid QSOs found in file", icon: "exclamationmark.triangle")
+                    return
+                }
+                // Assign IDs and merge (skip duplicates by call+date+time)
+                let existing = Set(appState.logbook.records.map { "\($0.call)|\($0.qsoDate)|\($0.timeOn)" })
+                let nextId = (appState.logbook.records.map(\.id).compactMap { $0 }.max() ?? 0) + 1
+                var added = 0
+                for (i, var record) in imported.enumerated() {
+                    let key = "\(record.call)|\(record.qsoDate)|\(record.timeOn)"
+                    if existing.contains(key) { continue }
+                    record.id = nextId + Int64(i)
+                    appState.logbook.records.insert(record, at: 0)
+                    added += 1
+                }
+                QsoLogStore.save(appState.logbook.records)
+                appState.toast.show("Imported \(added) QSOs", icon: "checkmark.circle")
+            } catch {
+                appState.toast.show("Import failed", icon: "xmark.circle")
+            }
+        case .failure:
+            appState.toast.show("Could not open file", icon: "xmark.circle")
+        }
     }
 
     private var noResultsState: some View {

@@ -127,6 +127,26 @@ struct SettingsScreen: View {
                 }
                 .listRowBackground(bgSurface)
 
+                // Advanced section
+                Section {
+                    NavigationLink {
+                        AdvancedSettings()
+                    } label: {
+                        HStack {
+                            Image(systemName: "gearshape.2")
+                                .font(.system(size: 14))
+                                .foregroundStyle(accent)
+                                .frame(width: 24)
+                            Text("Advanced")
+                                .foregroundStyle(textPrimary)
+                        }
+                    }
+                } header: {
+                    Text("Advanced")
+                        .foregroundStyle(textMuted)
+                }
+                .listRowBackground(bgSurface)
+
                 // About section
                 Section {
                     NavigationLink {

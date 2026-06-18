@@ -26,6 +26,17 @@ struct WaterfallScreen: View {
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .foregroundStyle(textPrimary)
 
+                // TX frequency display
+                Text("TX \(Int(appState.waterfall.txFreqHz)) Hz")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(accent)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(accentSoft)
+                    )
+
                 Spacer()
 
                 HStack(spacing: 12) {
