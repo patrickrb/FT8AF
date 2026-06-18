@@ -2,6 +2,8 @@ import SwiftUI
 
 struct AppTabView: View {
     @State private var selectedTab: FT8AFTab = .decode
+    @State private var showFrequencyPicker = false
+    @State private var showCelebration = false
     @Environment(AppState.self) private var appState
 
     /// Whether the current tab shows the TX control strip.
@@ -24,22 +26,57 @@ struct AppTabView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Bottom chrome: TxStrip (on decode/waterfall tabs) + SlotTimer + TabBar
+            // Bottom chrome: ActiveQsoPanel + TxStrip + SlotTimer + TabBar
             VStack(spacing: 0) {
+                if showsTxStrip && appState.tx.isActivated {
+                    ActiveQsoPanel()
+                }
+
                 if showsTxStrip {
                     TxStrip(
                         onHunt: { appState.engine?.toggleHunt() },
                         onCallCQ: { appState.engine?.callCQ() },
                         onStop: { appState.engine?.stopTx() },
-                        onToggleSlot: { appState.engine?.toggleSlotParity() }
+                        onToggleSlot: { appState.engine?.toggleSlotParity() },
+                        onOpenFrequencyPicker: { showFrequencyPicker = true },
+                        onVolumeChange: { newVol in
+                            appState.settings.txVolume = newVol
+                            SettingsPersistence.save(appState.settings)
+                        }
                     )
                 }
                 SlotTimerBar()
                 TabBarView(selectedTab: $selectedTab)
             }
+
+            // TX glow overlay
+            if appState.tx.isTransmitting {
+                TransmitGlow()
+            }
+
+            // QSO celebration overlay
+            if showCelebration {
+                QsoCelebration {
+                    showCelebration = false
+                }
+            }
         }
         .background(bgApp)
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $showFrequencyPicker) {
+            FrequencyPickerSheet()
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .onChange(of: appState.tx.qsoCompletedAt) { _, newVal in
+            if newVal != nil {
+                showCelebration = true
+                // Clear the trigger so it can fire again next QSO.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    appState.tx.qsoCompletedAt = nil
+                }
+            }
+        }
     }
 }
 

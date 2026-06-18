@@ -91,5 +91,9 @@ struct TransmissionSettings: View {
         .navigationTitle("Transmission")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .onChange(of: settings.txPowerWatts) { _, _ in SettingsPersistence.save(appState.settings) }
+        .onChange(of: settings.pttMode) { _, _ in SettingsPersistence.save(appState.settings) }
+        .onChange(of: settings.txVolume) { _, _ in SettingsPersistence.save(appState.settings) }
+        .onChange(of: settings.band) { _, _ in SettingsPersistence.save(appState.settings) }
     }
 }

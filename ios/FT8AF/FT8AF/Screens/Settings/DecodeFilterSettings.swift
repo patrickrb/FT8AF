@@ -75,6 +75,8 @@ struct DecodeFilterSettings: View {
         .navigationTitle("Decode Filters")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .onChange(of: settings.showOnlyCQ) { _, _ in SettingsPersistence.save(appState.settings) }
+        .onChange(of: settings.dxOnly) { _, _ in SettingsPersistence.save(appState.settings) }
     }
 
     private func highlightRow(_ title: String, description: String, color: Color) -> some View {

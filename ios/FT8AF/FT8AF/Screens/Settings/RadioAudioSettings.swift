@@ -95,6 +95,7 @@ struct RadioAudioSettings: View {
         .navigationTitle("Radio & Audio")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .onChange(of: settings.rigModel) { _, _ in SettingsPersistence.save(appState.settings) }
     }
 
     private var statusColor: Color {

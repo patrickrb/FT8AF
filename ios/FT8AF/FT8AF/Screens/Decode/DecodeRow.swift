@@ -2,38 +2,41 @@ import SwiftUI
 
 struct DecodeRow: View {
     let message: DecodeMessage
+    var myCall: String = ""
+    var workedCalls: Set<String> = []
+    var compact: Bool = false
 
     var body: some View {
         HStack(spacing: 0) {
             // UTC time
             Text(shortTime)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .font(.system(size: compact ? 10 : 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(textFaint)
-                .frame(width: 38, alignment: .leading)
+                .frame(width: compact ? 34 : 38, alignment: .leading)
 
             // SNR badge
             Text(snrText)
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .font(.system(size: compact ? 10 : 11, weight: .semibold, design: .monospaced))
                 .foregroundStyle(snrColor)
-                .frame(width: 32, alignment: .trailing)
-                .padding(.trailing, 8)
+                .frame(width: compact ? 28 : 32, alignment: .trailing)
+                .padding(.trailing, compact ? 6 : 8)
 
             // Frequency
             Text(freqText)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .font(.system(size: compact ? 10 : 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(textFaint)
-                .frame(width: 40, alignment: .trailing)
-                .padding(.trailing, 10)
+                .frame(width: compact ? 36 : 40, alignment: .trailing)
+                .padding(.trailing, compact ? 8 : 10)
 
             // Callsigns + extra
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: compact ? 1 : 2) {
                 HStack(spacing: 4) {
                     // CQ / callTo pill
                     if message.callTo == "CQ" || message.callTo.hasPrefix("CQ ") {
                         Text("CQ")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .font(.system(size: compact ? 9 : 10, weight: .bold, design: .monospaced))
                             .foregroundStyle(bgApp)
-                            .padding(.horizontal, 5)
+                            .padding(.horizontal, compact ? 4 : 5)
                             .padding(.vertical, 1)
                             .background(
                                 RoundedRectangle(cornerRadius: 3)
@@ -41,20 +44,20 @@ struct DecodeRow: View {
                             )
                     } else {
                         Text(message.callTo)
-                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .font(.system(size: compact ? 11 : 12, weight: .medium, design: .monospaced))
                             .foregroundStyle(signal)
                     }
 
                     Image(systemName: "arrow.left")
-                        .font(.system(size: 8))
+                        .font(.system(size: compact ? 7 : 8))
                         .foregroundStyle(textDim)
 
                     Text(message.callFrom)
-                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                        .font(.system(size: compact ? 12 : 13, weight: .bold, design: .monospaced))
                         .foregroundStyle(textPrimary)
                 }
 
-                if !message.grid.isEmpty || !message.extra.isEmpty {
+                if !compact, !message.grid.isEmpty || !message.extra.isEmpty {
                     Text(message.grid.isEmpty ? message.extra : message.grid)
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundStyle(textFaint)
@@ -65,12 +68,12 @@ struct DecodeRow: View {
 
             // Chevron
             Image(systemName: "chevron.right")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: compact ? 9 : 10, weight: .semibold))
                 .foregroundStyle(textDim)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(bgApp)
+        .padding(.vertical, compact ? 5 : 8)
+        .background(rowBackground)
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(borderSubtle)
@@ -78,8 +81,26 @@ struct DecodeRow: View {
         }
     }
 
+    private var rowBackground: Color {
+        if isForMe { return target.opacity(0.10) }
+        if isCQ { return accent.opacity(0.06) }
+        if isWorked { return signal.opacity(0.06) }
+        return bgApp
+    }
+
+    private var isCQ: Bool {
+        message.callTo == "CQ" || message.callTo.hasPrefix("CQ ")
+    }
+
+    private var isForMe: Bool {
+        !myCall.isEmpty && message.callTo.uppercased() == myCall.uppercased()
+    }
+
+    private var isWorked: Bool {
+        workedCalls.contains(message.callFrom.uppercased())
+    }
+
     private var shortTime: String {
-        // "12:30:00" -> "12:30"
         String(message.utcTime.prefix(5))
     }
 

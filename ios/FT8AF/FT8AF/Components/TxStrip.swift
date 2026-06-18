@@ -8,13 +8,15 @@ struct TxStrip: View {
     var onCallCQ: () -> Void = {}
     var onStop: () -> Void = {}
     var onToggleSlot: () -> Void = {}
+    var onOpenFrequencyPicker: () -> Void = {}
+    var onVolumeChange: (Int) -> Void = { _ in }
 
     var body: some View {
         let tx = appState.tx
         let settings = appState.settings
 
         VStack(spacing: 10) {
-            // Info row: status + frequency/mode chips
+            // Info row: status + frequency/mode chips + expand chevron
             HStack {
                 // Left: pulse dot + status label
                 HStack(spacing: 6) {
@@ -26,11 +28,89 @@ struct TxStrip: View {
 
                 Spacer()
 
+                // CAT status chip
+                CatChip(status: appState.rig.connectionStatus)
+
                 // Right: mode + frequency chips
                 HStack(spacing: 6) {
                     TxChip(label: "FT8", color: accent)
-                    TxChip(label: settings.band, color: textPrimary)
+
+                    // Tappable frequency/band chip
+                    Button { onOpenFrequencyPicker() } label: {
+                        TxChip(label: settings.band, color: textPrimary)
+                    }
+                    .buttonStyle(.plain)
                 }
+
+                // Expand/collapse chevron
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        appState.tx.expanded.toggle()
+                    }
+                } label: {
+                    Image(systemName: tx.expanded ? "chevron.down" : "chevron.up")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(textMuted)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(bgSurface3)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Expanded section: volume slider
+            if tx.expanded {
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        Text("VOL")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(textFaint)
+
+                        // Step down
+                        Button {
+                            let newVol = max(0, settings.txVolume - 5)
+                            onVolumeChange(newVol)
+                        } label: {
+                            Image(systemName: "minus")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(textMuted)
+                                .frame(width: 24, height: 24)
+                                .background(Circle().fill(bgSurface3))
+                        }
+                        .buttonStyle(.plain)
+
+                        Slider(
+                            value: Binding(
+                                get: { Double(settings.txVolume) },
+                                set: { onVolumeChange(Int($0)) }
+                            ),
+                            in: 0...100,
+                            step: 1
+                        )
+                        .tint(accent)
+
+                        // Step up
+                        Button {
+                            let newVol = min(100, settings.txVolume + 5)
+                            onVolumeChange(newVol)
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(textMuted)
+                                .frame(width: 24, height: 24)
+                                .background(Circle().fill(bgSurface3))
+                        }
+                        .buttonStyle(.plain)
+
+                        Text("\(settings.txVolume)%")
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(textMuted)
+                            .frame(width: 36, alignment: .trailing)
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             // Action row: HUNT - CQ/STOP - TX slot
@@ -81,6 +161,36 @@ struct TxStrip: View {
 }
 
 // MARK: - Subviews
+
+private struct CatChip: View {
+    let status: ConnectionStatus
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(dotColor)
+                .frame(width: 6, height: 6)
+            Text("CAT")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(textMuted)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(bgSurface3)
+        )
+        .padding(.trailing, 6)
+    }
+
+    private var dotColor: Color {
+        switch status {
+        case .disconnected: return statusBad
+        case .connecting:   return statusWarn
+        case .connected:    return statusConfirmed
+        }
+    }
+}
 
 private struct PulseDot: View {
     let color: Color

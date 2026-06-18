@@ -36,4 +36,20 @@ enum QsoLogStore {
             // Best-effort: log persistence failure is non-fatal.
         }
     }
+
+    /// Delete a QSO record by ID and persist.
+    @MainActor
+    static func delete(id: Int64, from appState: AppState) {
+        appState.logbook.records.removeAll { $0.id == id }
+        save(appState.logbook.records)
+    }
+
+    /// Update a QSO record in-place and persist.
+    @MainActor
+    static func update(_ record: QsoRecord, in appState: AppState) {
+        if let idx = appState.logbook.records.firstIndex(where: { $0.id == record.id }) {
+            appState.logbook.records[idx] = record
+            save(appState.logbook.records)
+        }
+    }
 }

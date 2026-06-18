@@ -241,6 +241,8 @@ final class LiveEngine {
             record.id = nextId
             appState.logbook.records.insert(record, at: 0)
             QsoLogStore.save(appState.logbook.records)
+            // Trigger QSO celebration animation.
+            appState.tx.qsoCompletedAt = Date()
         }
 
         // Sync QSO status back to UI.
@@ -325,6 +327,8 @@ final class LiveEngine {
         let status = qso.status()
         appState.tx.isActivated = status.active
         appState.tx.stage = mapStage(status.stage)
+        appState.tx.targetCall = status.target ?? ""
+        appState.tx.txMessage = status.txMessage ?? ""
     }
 
     private func mapStage(_ stage: TxStage) -> TxUIStage {

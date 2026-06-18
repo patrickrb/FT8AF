@@ -15,8 +15,11 @@
 		3BA2BC0EFAF62534D39C3A4A /* DecodeFilterSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A88688AC6AFBEDC8AC3EF844 /* DecodeFilterSettings.swift */; };
 		49DFEC8ED0237764EA3EE3BF /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF21F5D95598018B8A46ED8D /* AppState.swift */; };
 		4C0C9DCC39ED6528F0D4CDFF /* RadioAudioSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89642B9763C7FA33CFF0EE57 /* RadioAudioSettings.swift */; };
+		4D87F21162B4DCEC806D8785 /* QsoCelebration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8DAEDCAE1AD9DE02EB1480 /* QsoCelebration.swift */; };
+		51B44F6A9F0A05A7B3CB71FC /* FrequencyPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C698656C5709343F4AEEF0 /* FrequencyPickerSheet.swift */; };
 		595BBF17D95723947D5BFFC4 /* PotaScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B35E490F93FDCACEC4FBF66F /* PotaScreen.swift */; };
 		5C76E98A4BD4854709C3D0E9 /* AppTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A53063BBF11F97C62BC0AFC9 /* AppTabView.swift */; };
+		5E2B3105FFFE6C84D86ACD85 /* TransmitGlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF04207CDB5BE8A1CCDD5F5B /* TransmitGlow.swift */; };
 		608EF9D6EAE6CDA82E9E86C4 /* QsoSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0290AFE608DC2FC9E1A83E16 /* QsoSheet.swift */; };
 		637BC14B19B728028FD01F07 /* FrequencyRuler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C81C53609B2CDC9FB3B71116 /* FrequencyRuler.swift */; };
 		65A688B883398E75D00BCD7E /* LogbookStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DB096C5FC7481CA1B7B49B /* LogbookStats.swift */; };
@@ -26,6 +29,7 @@
 		7F9F3D670DE6755252D023A3 /* TransmissionSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B08B1AA6951B99CEFAA521F /* TransmissionSettings.swift */; };
 		7FC3449767DCA16F70133366 /* DecodeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C79C0E0096ADDC018120C361 /* DecodeScreen.swift */; };
 		80F7FFDDEE3AEE3E706C4A2B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 076A186C88F9B5A2FFAAB073 /* Assets.xcassets */; };
+		8DA0D562E25925F56B638B00 /* GridDistance.swift in Sources */ = {isa = PBXBuildFile; fileRef = E429D8A3556534F05374F12A /* GridDistance.swift */; };
 		8EA75A450404FB948C0A6CDC /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504C9AD4C6667267DFCABEF9 /* SettingsScreen.swift */; };
 		A5C16922F13DEDBDF69DFCF6 /* FT8AFTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = A41EFDE500F865A3B393171D /* FT8AFTab.swift */; };
 		AA7457556E40D0C0B8F75958 /* FilterChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5306EE5215AE14F95F3329F8 /* FilterChip.swift */; };
@@ -36,6 +40,7 @@
 		CE1ECA0C5BB350A1EDDA7018 /* SlotTimerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 800081E79EC795EBDE2E077E /* SlotTimerBar.swift */; };
 		D36ECEB73B847787DE373072 /* SpectrumStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = C96D9C69CFC1480E6A5B64B5 /* SpectrumStrip.swift */; };
 		DA94D12D7FDE6D10D116E770 /* TxStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64B1202A7633AE8CBBFCF2C3 /* TxStrip.swift */; };
+		DFA95C747B2F0763C677F2EC /* ActiveQsoPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0244EBDFC2ADDAE77418FF53 /* ActiveQsoPanel.swift */; };
 		E375A4D50C25F5437C2C9F7F /* QsoLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B9E40312EA203F05764FA56 /* QsoLogStore.swift */; };
 		EA1C91B3E65DB77ED5703FD9 /* AudioCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C42FB097015693FF14B27553 /* AudioCaptureService.swift */; };
 		EC59A75E444DC6AB44913CB7 /* FT8AFApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1E760AEB31EF3855951728 /* FT8AFApp.swift */; };
@@ -45,6 +50,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0244EBDFC2ADDAE77418FF53 /* ActiveQsoPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveQsoPanel.swift; sourceTree = "<group>"; };
 		0290AFE608DC2FC9E1A83E16 /* QsoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QsoSheet.swift; sourceTree = "<group>"; };
 		076A186C88F9B5A2FFAAB073 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0FD3B4836E62F9DC32FAB0DE /* Colors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Colors.swift; sourceTree = "<group>"; };
@@ -70,6 +76,7 @@
 		A41EFDE500F865A3B393171D /* FT8AFTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FT8AFTab.swift; sourceTree = "<group>"; };
 		A53063BBF11F97C62BC0AFC9 /* AppTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTabView.swift; sourceTree = "<group>"; };
 		A88688AC6AFBEDC8AC3EF844 /* DecodeFilterSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecodeFilterSettings.swift; sourceTree = "<group>"; };
+		AC8DAEDCAE1AD9DE02EB1480 /* QsoCelebration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QsoCelebration.swift; sourceTree = "<group>"; };
 		B35E490F93FDCACEC4FBF66F /* PotaScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PotaScreen.swift; sourceTree = "<group>"; };
 		B681B14FC4FED15C628471DF /* WaterfallCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterfallCanvas.swift; sourceTree = "<group>"; };
 		BF21F5D95598018B8A46ED8D /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
@@ -77,7 +84,10 @@
 		C79C0E0096ADDC018120C361 /* DecodeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecodeScreen.swift; sourceTree = "<group>"; };
 		C81C53609B2CDC9FB3B71116 /* FrequencyRuler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrequencyRuler.swift; sourceTree = "<group>"; };
 		C96D9C69CFC1480E6A5B64B5 /* SpectrumStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectrumStrip.swift; sourceTree = "<group>"; };
+		DF04207CDB5BE8A1CCDD5F5B /* TransmitGlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransmitGlow.swift; sourceTree = "<group>"; };
+		E429D8A3556534F05374F12A /* GridDistance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridDistance.swift; sourceTree = "<group>"; };
 		F287F167508A8E4114F44116 /* FFTProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFTProcessor.swift; sourceTree = "<group>"; };
+		F3C698656C5709343F4AEEF0 /* FrequencyPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrequencyPickerSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -103,6 +113,14 @@
 				8BDDB723455CB7AE2BB68EF0 /* WorldMapCanvas.swift */,
 			);
 			path = Map;
+			sourceTree = "<group>";
+		};
+		15375E21B18F3DEE1FACE292 /* Util */ = {
+			isa = PBXGroup;
+			children = (
+				E429D8A3556534F05374F12A /* GridDistance.swift */,
+			);
+			path = Util;
 			sourceTree = "<group>";
 		};
 		1F327B9757517C23BFA52C86 /* Navigation */ = {
@@ -175,8 +193,12 @@
 		7DCF29540DF6FBE5F4ECD5FC /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				0244EBDFC2ADDAE77418FF53 /* ActiveQsoPanel.swift */,
 				5306EE5215AE14F95F3329F8 /* FilterChip.swift */,
+				F3C698656C5709343F4AEEF0 /* FrequencyPickerSheet.swift */,
+				AC8DAEDCAE1AD9DE02EB1480 /* QsoCelebration.swift */,
 				800081E79EC795EBDE2E077E /* SlotTimerBar.swift */,
+				DF04207CDB5BE8A1CCDD5F5B /* TransmitGlow.swift */,
 				64B1202A7633AE8CBBFCF2C3 /* TxStrip.swift */,
 			);
 			path = Components;
@@ -214,6 +236,7 @@
 				1F327B9757517C23BFA52C86 /* Navigation */,
 				7F57A25B1504D3F64E790FAC /* Screens */,
 				C97F65A2DD30ABA1707C85D3 /* Theme */,
+				15375E21B18F3DEE1FACE292 /* Util */,
 			);
 			path = FT8AF;
 			sourceTree = "<group>";
@@ -330,6 +353,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DFA95C747B2F0763C677F2EC /* ActiveQsoPanel.swift in Sources */,
 				49DFEC8ED0237764EA3EE3BF /* AppState.swift in Sources */,
 				5C76E98A4BD4854709C3D0E9 /* AppTabView.swift in Sources */,
 				EA1C91B3E65DB77ED5703FD9 /* AudioCaptureService.swift in Sources */,
@@ -341,12 +365,15 @@
 				EC59A75E444DC6AB44913CB7 /* FT8AFApp.swift in Sources */,
 				A5C16922F13DEDBDF69DFCF6 /* FT8AFTab.swift in Sources */,
 				AA7457556E40D0C0B8F75958 /* FilterChip.swift in Sources */,
+				51B44F6A9F0A05A7B3CB71FC /* FrequencyPickerSheet.swift in Sources */,
 				637BC14B19B728028FD01F07 /* FrequencyRuler.swift in Sources */,
+				8DA0D562E25925F56B638B00 /* GridDistance.swift in Sources */,
 				AB5310FE1F9048626DC6406B /* LiveEngine.swift in Sources */,
 				33736A682F52CCBB13E8168A /* LogbookScreen.swift in Sources */,
 				65A688B883398E75D00BCD7E /* LogbookStats.swift in Sources */,
 				72300AB5D2B37428777C824D /* MapScreen.swift in Sources */,
 				595BBF17D95723947D5BFFC4 /* PotaScreen.swift in Sources */,
+				4D87F21162B4DCEC806D8785 /* QsoCelebration.swift in Sources */,
 				E375A4D50C25F5437C2C9F7F /* QsoLogStore.swift in Sources */,
 				608EF9D6EAE6CDA82E9E86C4 /* QsoSheet.swift in Sources */,
 				4C0C9DCC39ED6528F0D4CDFF /* RadioAudioSettings.swift in Sources */,
@@ -354,6 +381,7 @@
 				CE1ECA0C5BB350A1EDDA7018 /* SlotTimerBar.swift in Sources */,
 				D36ECEB73B847787DE373072 /* SpectrumStrip.swift in Sources */,
 				7F9F3D670DE6755252D023A3 /* TransmissionSettings.swift in Sources */,
+				5E2B3105FFFE6C84D86ACD85 /* TransmitGlow.swift in Sources */,
 				AC1D4BEDBCC1DBA945DB04D5 /* TxPlayerService.swift in Sources */,
 				DA94D12D7FDE6D10D116E770 /* TxStrip.swift in Sources */,
 				FEB99CFFD070BA6B893ADC83 /* WaterfallCanvas.swift in Sources */,

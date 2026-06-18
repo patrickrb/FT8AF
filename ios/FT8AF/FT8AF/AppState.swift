@@ -35,6 +35,8 @@ final class DecodeState {
     var messages: [DecodeMessage] = []
     var activeFilter: DecodeFilter = .all
     var selectedMessage: DecodeMessage?
+    var compactMode: Bool = false
+    var autoClear: Bool = false
 }
 
 /// UI-level decoded message with display-oriented fields. Phase 2+ will map
@@ -192,4 +194,56 @@ final class TxState {
     var huntEnabled: Bool = false
     var slotParity: Int = 0
     var isTransmitting: Bool = false
+    var expanded: Bool = false
+    var targetCall: String = ""
+    var txMessage: String = ""
+    var qsoCompletedAt: Date?
+}
+
+// MARK: - Settings Persistence
+
+enum SettingsPersistence {
+    private static let prefix = "ft8af_"
+
+    @MainActor static func save(_ s: SettingsState) {
+        let d = UserDefaults.standard
+        d.set(s.myCall, forKey: key("myCall"))
+        d.set(s.myGrid, forKey: key("myGrid"))
+        d.set(s.band, forKey: key("band"))
+        d.set(s.rigModel.rawValue, forKey: key("rigModel"))
+        d.set(s.pttMode.rawValue, forKey: key("pttMode"))
+        d.set(s.txPowerWatts, forKey: key("txPowerWatts"))
+        d.set(s.txVolume, forKey: key("txVolume"))
+        d.set(s.showOnlyCQ, forKey: key("showOnlyCQ"))
+        d.set(s.dxOnly, forKey: key("dxOnly"))
+        d.set(s.autoLog, forKey: key("autoLog"))
+    }
+
+    @MainActor static func load(into s: SettingsState) {
+        let d = UserDefaults.standard
+        if let v = d.string(forKey: key("myCall")) { s.myCall = v }
+        if let v = d.string(forKey: key("myGrid")) { s.myGrid = v }
+        if let v = d.string(forKey: key("band")) { s.band = v }
+        if let v = d.string(forKey: key("rigModel")),
+           let m = RigModel(rawValue: v) { s.rigModel = m }
+        if let v = d.string(forKey: key("pttMode")),
+           let m = PttMode(rawValue: v) { s.pttMode = m }
+        if d.object(forKey: key("txPowerWatts")) != nil {
+            s.txPowerWatts = d.integer(forKey: key("txPowerWatts"))
+        }
+        if d.object(forKey: key("txVolume")) != nil {
+            s.txVolume = d.integer(forKey: key("txVolume"))
+        }
+        if d.object(forKey: key("showOnlyCQ")) != nil {
+            s.showOnlyCQ = d.bool(forKey: key("showOnlyCQ"))
+        }
+        if d.object(forKey: key("dxOnly")) != nil {
+            s.dxOnly = d.bool(forKey: key("dxOnly"))
+        }
+        if d.object(forKey: key("autoLog")) != nil {
+            s.autoLog = d.bool(forKey: key("autoLog"))
+        }
+    }
+
+    private static func key(_ name: String) -> String { prefix + name }
 }

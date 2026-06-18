@@ -4,6 +4,7 @@ import SwiftUI
 struct QsoSheet: View {
     let message: DecodeMessage
     var onCall: (DecodeMessage) -> Void = { _ in }
+    @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -24,12 +25,31 @@ struct QsoSheet: View {
             .padding(.bottom, 16)
 
             // Stats row
-            HStack(spacing: 24) {
+            HStack(spacing: 12) {
                 StatBadge(label: "SNR", value: message.snr >= 0 ? "+\(message.snr)" : "\(message.snr)")
                 StatBadge(label: "Freq", value: String(format: "%.0f Hz", message.freqHz))
                 StatBadge(label: "UTC", value: message.utcTime)
+
+                // Distance & Azimuth (if grids available)
+                if let dist = distanceInfo {
+                    StatBadge(label: "Dist", value: dist.distance)
+                    StatBadge(label: "Azim", value: dist.bearing)
+                }
             }
-            .padding(.bottom, 20)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+
+            // QSO Sequence Visualizer
+            if appState.tx.isActivated {
+                VStack(spacing: 6) {
+                    Text("QSO PROGRESS")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(textFaint)
+                    QsoStageDots(currentStage: appState.tx.stage)
+                        .padding(.horizontal, 24)
+                }
+                .padding(.bottom, 16)
+            }
 
             // Extra info
             if !message.extra.isEmpty && message.extra != message.grid {
@@ -48,7 +68,7 @@ struct QsoSheet: View {
 
             Spacer()
 
-            // Call button — starts answering this station's CQ
+            // Call button
             Button {
                 onCall(message)
                 dismiss()
@@ -74,6 +94,17 @@ struct QsoSheet: View {
         .frame(maxWidth: .infinity)
         .background(bgSurface2)
     }
+
+    private var distanceInfo: (distance: String, bearing: String)? {
+        let myGrid = appState.settings.myGrid
+        guard !myGrid.isEmpty, !message.grid.isEmpty,
+              let myPos = gridToLatLon(myGrid),
+              let theirPos = gridToLatLon(message.grid) else { return nil }
+
+        let dist = haversineDistance(from: myPos, to: theirPos)
+        let brg = bearing(from: myPos, to: theirPos)
+        return (formatDistance(dist), formatBearing(brg))
+    }
 }
 
 private struct StatBadge: View {
@@ -87,10 +118,13 @@ private struct StatBadge: View {
                 .foregroundStyle(textFaint)
                 .textCase(.uppercase)
             Text(value)
-                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
                 .foregroundStyle(textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
-        .padding(.horizontal, 12)
+        .frame(minWidth: 48)
+        .padding(.horizontal, 8)
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 8)

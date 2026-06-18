@@ -153,9 +153,21 @@ struct SettingsScreen: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .sheet(isPresented: $showShareSheet) {
-                ShareSheet(items: [adifString])
+                if let url = adifFileURL {
+                    ShareSheet(items: [url])
+                }
             }
+            .onChange(of: appState.settings.myCall) { _, _ in SettingsPersistence.save(appState.settings) }
+            .onChange(of: appState.settings.myGrid) { _, _ in SettingsPersistence.save(appState.settings) }
+            .onChange(of: appState.settings.autoLog) { _, _ in SettingsPersistence.save(appState.settings) }
         }
+    }
+
+    private var adifFileURL: URL? {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("ft8af_log.adi")
+        let content = Adif.export(appState.logbook.records)
+        try? content.data(using: .utf8)?.write(to: tmp, options: .atomic)
+        return tmp
     }
 }
 

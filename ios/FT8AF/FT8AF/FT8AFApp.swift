@@ -12,7 +12,8 @@ struct FT8AFApp: App {
                 .task {
                     // Wire engine into AppState so every view can reach it.
                     appState.engine = engine
-                    // Load persisted QSO log before starting the engine.
+                    // Load persisted settings and QSO log before starting the engine.
+                    SettingsPersistence.load(into: appState.settings)
                     appState.logbook.records = QsoLogStore.load()
                     await engine.start(appState: appState)
                 }
