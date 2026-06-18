@@ -14,6 +14,13 @@
 // FT8's reported range. Empirical; see the note in ft8_snr(). Tune here if FT4 reads high/low.
 #define FT4_SNR_CAL_DB 20
 
+// Bandwidth calibration for FT8. ft8_snr() measures the signal-to-noise ratio in a single
+// FFT bin, but WSJT-X reports SNR referenced to a 2500 Hz noise bandwidth. FT8 tones are
+// spaced 6.25 Hz apart, so the correction is 10*log10(2500/6.25) = 26 dB. Without this the
+// per-bin ratio reads ~26 dB hot (a station WSJT-X calls -10 was reported here as +16).
+// Empirical/standard; re-tune against on-air reciprocity if FT8 reads consistently high/low.
+#define FT8_SNR_CAL_DB 26
+
 /// Compute log likelihood log(p(1) / p(0)) of 174 message bits for later use in soft-decision LDPC decoding
 /// @param[in] wf Waterfall data collected during message slot
 /// @param[in] cand Candidate to extract the message from
@@ -127,9 +134,10 @@ int ft8_snr(const waterfall_t* wf, const candidate_t* candidate)
     }
     if (num_average == 0)
         return -24;
-    // Waterfall magnitudes are in 0.5 dB steps (see monitor_process); halve the
-    // per-symbol difference to return real dB.
-    return (sum_signal - sum_noise) / (2 * num_average);
+    // Waterfall magnitudes are in 0.5 dB steps (see monitor_process); halve the per-symbol
+    // difference to return real per-bin dB, then subtract FT8_SNR_CAL_DB to reference the
+    // result to WSJT-X's 2500 Hz noise bandwidth.
+    return (sum_signal - sum_noise) / (2 * num_average) - FT8_SNR_CAL_DB;
 }
 
 static int ft8_sync_score(const waterfall_t* wf, const candidate_t* candidate)
