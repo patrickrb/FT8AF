@@ -1,0 +1,121 @@
+name: iOS CI
+
+# iOS pipeline for the ios/ port. Runs the FT8AFKit host test suites
+# (FT8DSP/FT8Audio/FT8Engine/FT8Rig — the encode/decode/golden gate compiled
+# under Apple clang) and an unsigned iOS-Simulator build of the FT8AF app to
+# prove it compiles. No release artifact: a distributable .ipa needs an Apple
+# Developer cert + provisioning profile, which aren't wired up yet.
+#
+# PATH-FILTERED: only runs when ios/** or the shared native C core
+# (ft8af/app/src/main/cpp/**) changes, or this workflow file. Pushes to main
+# always verify. The always-run `ios-gate` job is the required status check.
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+concurrency:
+  group: ios-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    name: Detect iOS changes
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Filter paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            ios:
+              - 'ft8af/app/src/main/cpp/**'
+              - 'ios/**'
+              - '.github/workflows/ios.yml'
+
+      - name: Decide whether to run
+        id: decide
+        env:
+          CHANGED: ${{ steps.filter.outputs.ios }}
+        run: |
+          set -euo pipefail
+          # main pushes always verify; otherwise only when iOS-relevant files
+          # (or the shared C core) changed.
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$CHANGED" == "true" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  verify:
+    name: swift test + simulator build
+    needs: detect
+    if: ${{ needs.detect.outputs.run == 'true' }}
+    # macos-14 ships Xcode 15 (project.yml pins xcodeVersion 15.0 / iOS 17).
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # FT8AFKit declares a macOS platform so its pure-logic suites run on the
+      # host with no simulator. This is the real DSP gate: green here means the
+      # shared C core (#included in place from ../../ft8af/app/src/main/cpp) is
+      # bit-identical under Apple clang. Surfaces the ios/README.md
+      # header-search-path / non-modular-include caveats if any regress.
+      - name: Run FT8AFKit tests
+        working-directory: ios/FT8AFKit
+        run: swift test
+
+      # The app's .xcodeproj is generated from project.yml via XcodeGen and no
+      # shared scheme is committed, so regenerate it to get a buildable scheme.
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios/FT8AF
+        run: xcodegen generate
+
+      # Unsigned simulator build — proves the SwiftUI app + FT8AFKit link and
+      # compile. CODE_SIGNING_ALLOWED=NO so no certs/provisioning are needed.
+      - name: Build app for iOS Simulator (unsigned)
+        working-directory: ios/FT8AF
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project FT8AF.xcodeproj \
+            -scheme FT8AF \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+  ios-gate:
+    name: ios-gate
+    # Always-run aggregator: the single required status check for iOS. Reports
+    # success when `verify` passed OR was path-skipped, so branch protection
+    # never gets stuck "pending" on an unrelated change.
+    needs: verify
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify iOS job succeeded or was skipped
+        env:
+          VERIFY_RESULT: ${{ needs.verify.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$VERIFY_RESULT" == "failure" || "$VERIFY_RESULT" == "cancelled" ]]; then
+            echo "::error::iOS verify did not pass (result: $VERIFY_RESULT)"
+            exit 1
+          fi
+          echo "iOS gate OK (verify=$VERIFY_RESULT)."
