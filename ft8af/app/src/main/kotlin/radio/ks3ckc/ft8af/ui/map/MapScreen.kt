@@ -720,33 +720,26 @@ private fun AzimuthalMapCanvas(
             val ddy = sy - cy
             if (sqrt(ddx * ddx + ddy * ddy) > r) continue
 
-            val half = 2.5f
-            drawRect(
-                color = PskSpot.copy(alpha = 0.7f),
-                topLeft = Offset(sx - half, sy - half),
-                size = Size(half * 2, half * 2),
-            )
-            drawRect(
-                color = BgApp,
-                topLeft = Offset(sx - half, sy - half),
-                size = Size(half * 2, half * 2),
-                style = Stroke(width = 0.8f),
-            )
-            val paint = android.graphics.Paint().apply {
-                color = android.graphics.Color.argb(160, 248, 113, 113)
-                textSize = 14f
-                isAntiAlias = true
-                typeface = android.graphics.Typeface.create(
-                    android.graphics.Typeface.MONOSPACE,
-                    android.graphics.Typeface.NORMAL,
+            drawMarkerShape(MarkerShape.SQUARE_PSK, sx, sy, 2.5f, PskSpot.copy(alpha = 0.7f))
+
+            // Receiver callsign — only when zoomed in (declutter; PSK spots aren't selectable).
+            if (scale >= LABEL_ZOOM_THRESHOLD) {
+                val paint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.argb(160, 248, 113, 113)
+                    textSize = 14f
+                    isAntiAlias = true
+                    typeface = android.graphics.Typeface.create(
+                        android.graphics.Typeface.MONOSPACE,
+                        android.graphics.Typeface.NORMAL,
+                    )
+                }
+                drawContext.canvas.nativeCanvas.drawText(
+                    spot.receiverCallsign,
+                    sx + 5f,
+                    sy + paint.textSize / 3f,
+                    paint,
                 )
             }
-            drawContext.canvas.nativeCanvas.drawText(
-                spot.receiverCallsign,
-                sx + 5f,
-                sy + paint.textSize / 3f,
-                paint,
-            )
         }
 
         // Station markers
@@ -761,7 +754,14 @@ private fun AzimuthalMapCanvas(
             if (sqrt(ddx * ddx + ddy * ddy) > r) continue
 
             val isSelected = station.callsign == selectedCallsign
-            val markerR = if (isSelected) 5f else 3.5f
+            val style = markerStyleFor(
+                isCQ = station.isCQ,
+                isToMe = station.isToMe,
+                isWorked = station.isWorked,
+                snr = station.snr,
+                isSelected = isSelected,
+                currentZoom = scale,
+            )
             val glowR = if (isSelected) 12f else 8f
 
             // Pulse rings: 2 expanding rings per station, staggered by 0.5 phase. Phase derived from
@@ -774,7 +774,7 @@ private fun AzimuthalMapCanvas(
                 val ringAlpha = (1f - phase) * 0.35f * baseAmp
                 if (ringAlpha > 0f) {
                     drawCircle(
-                        color = station.color.copy(alpha = ringAlpha),
+                        color = style.fill.copy(alpha = ringAlpha),
                         radius = ringR,
                         center = Offset(sx, sy),
                         style = Stroke(width = 1f),
@@ -785,7 +785,7 @@ private fun AzimuthalMapCanvas(
             // Bearing line for selected station (originates at the operator's screen pos)
             if (isSelected) {
                 drawLine(
-                    color = station.color.copy(alpha = 0.4f),
+                    color = style.fill.copy(alpha = 0.4f),
                     start = Offset(opX, opY),
                     end = Offset(sx, sy),
                     strokeWidth = 1.5f,
@@ -795,45 +795,37 @@ private fun AzimuthalMapCanvas(
 
             // Glow
             drawCircle(
-                color = station.color.copy(alpha = if (isSelected) 0.25f else 0.15f),
+                color = style.fill.copy(alpha = if (isSelected) 0.25f else 0.15f),
                 radius = glowR,
                 center = Offset(sx, sy),
             )
 
-            // Marker dot
-            drawCircle(
-                color = station.color,
-                radius = markerR,
-                center = Offset(sx, sy),
-            )
-            drawCircle(
-                color = BgApp,
-                radius = markerR,
-                center = Offset(sx, sy),
-                style = Stroke(width = 1.2f),
-            )
+            // Marker shape (per type: triangle CQ / diamond to-me / donut worked / dot)
+            drawMarkerShape(style.shape, sx, sy, style.radiusPx, style.fill)
 
-            // Callsign label
-            val textColor = if (isSelected) {
-                android.graphics.Color.WHITE
-            } else {
-                android.graphics.Color.argb(180, 138, 150, 177) // TextMuted
-            }
-            val paint = android.graphics.Paint().apply {
-                color = textColor
-                textSize = if (isSelected) 24f else 20f
-                isAntiAlias = true
-                typeface = android.graphics.Typeface.create(
-                    android.graphics.Typeface.MONOSPACE,
-                    android.graphics.Typeface.NORMAL,
+            // Callsign label — only when zoomed in or selected (declutter)
+            if (style.showLabel) {
+                val textColor = if (isSelected) {
+                    android.graphics.Color.WHITE
+                } else {
+                    android.graphics.Color.argb(180, 138, 150, 177) // TextMuted
+                }
+                val paint = android.graphics.Paint().apply {
+                    color = textColor
+                    textSize = if (isSelected) 24f else 20f
+                    isAntiAlias = true
+                    typeface = android.graphics.Typeface.create(
+                        android.graphics.Typeface.MONOSPACE,
+                        android.graphics.Typeface.NORMAL,
+                    )
+                }
+                drawContext.canvas.nativeCanvas.drawText(
+                    station.callsign,
+                    sx + glowR + 4f,
+                    sy + paint.textSize / 3f,
+                    paint,
                 )
             }
-            drawContext.canvas.nativeCanvas.drawText(
-                station.callsign,
-                sx + glowR + 4f,
-                sy + paint.textSize / 3f,
-                paint,
-            )
         }
     }
 }
@@ -904,33 +896,26 @@ private fun StandardMapCanvas(
             val sx = pos.x
             val sy = pos.y
 
-            val half = 2.5f
-            drawRect(
-                color = PskSpot.copy(alpha = 0.7f),
-                topLeft = Offset(sx - half, sy - half),
-                size = Size(half * 2, half * 2),
-            )
-            drawRect(
-                color = BgApp,
-                topLeft = Offset(sx - half, sy - half),
-                size = Size(half * 2, half * 2),
-                style = Stroke(width = 0.8f),
-            )
-            val paint = android.graphics.Paint().apply {
-                color = android.graphics.Color.argb(160, 248, 113, 113)
-                textSize = 14f
-                isAntiAlias = true
-                typeface = android.graphics.Typeface.create(
-                    android.graphics.Typeface.MONOSPACE,
-                    android.graphics.Typeface.NORMAL,
+            drawMarkerShape(MarkerShape.SQUARE_PSK, sx, sy, 2.5f, PskSpot.copy(alpha = 0.7f))
+
+            // Receiver callsign — only when zoomed in (declutter; PSK spots aren't selectable).
+            if (scale >= LABEL_ZOOM_THRESHOLD) {
+                val paint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.argb(160, 248, 113, 113)
+                    textSize = 14f
+                    isAntiAlias = true
+                    typeface = android.graphics.Typeface.create(
+                        android.graphics.Typeface.MONOSPACE,
+                        android.graphics.Typeface.NORMAL,
+                    )
+                }
+                drawContext.canvas.nativeCanvas.drawText(
+                    spot.receiverCallsign,
+                    sx + 5f,
+                    sy + paint.textSize / 3f,
+                    paint,
                 )
             }
-            drawContext.canvas.nativeCanvas.drawText(
-                spot.receiverCallsign,
-                sx + 5f,
-                sy + paint.textSize / 3f,
-                paint,
-            )
         }
 
         // Station markers
@@ -940,7 +925,14 @@ private fun StandardMapCanvas(
             val sy = pos.y
 
             val isSelected = station.callsign == selectedCallsign
-            val markerR = if (isSelected) 5f else 3.5f
+            val style = markerStyleFor(
+                isCQ = station.isCQ,
+                isToMe = station.isToMe,
+                isWorked = station.isWorked,
+                snr = station.snr,
+                isSelected = isSelected,
+                currentZoom = scale,
+            )
             val glowR = if (isSelected) 12f else 8f
 
             // Pulse rings (same pattern as azimuthal: shared transition + per-station phase offset)
@@ -952,7 +944,7 @@ private fun StandardMapCanvas(
                 val ringAlpha = (1f - phase) * 0.35f * baseAmp
                 if (ringAlpha > 0f) {
                     drawCircle(
-                        color = station.color.copy(alpha = ringAlpha),
+                        color = style.fill.copy(alpha = ringAlpha),
                         radius = ringR,
                         center = Offset(sx, sy),
                         style = Stroke(width = 1f),
@@ -963,7 +955,7 @@ private fun StandardMapCanvas(
             // Bearing line for selected station (straight rhumb-style on flat map)
             if (isSelected) {
                 drawLine(
-                    color = station.color.copy(alpha = 0.4f),
+                    color = style.fill.copy(alpha = 0.4f),
                     start = Offset(opX, opY),
                     end = Offset(sx, sy),
                     strokeWidth = 1.5f,
@@ -973,45 +965,82 @@ private fun StandardMapCanvas(
 
             // Glow
             drawCircle(
-                color = station.color.copy(alpha = if (isSelected) 0.25f else 0.15f),
+                color = style.fill.copy(alpha = if (isSelected) 0.25f else 0.15f),
                 radius = glowR,
                 center = Offset(sx, sy),
             )
 
-            // Marker dot
-            drawCircle(
-                color = station.color,
-                radius = markerR,
-                center = Offset(sx, sy),
-            )
-            drawCircle(
-                color = BgApp,
-                radius = markerR,
-                center = Offset(sx, sy),
-                style = Stroke(width = 1.2f),
-            )
+            // Marker shape (per type: triangle CQ / diamond to-me / donut worked / dot)
+            drawMarkerShape(style.shape, sx, sy, style.radiusPx, style.fill)
 
-            // Callsign label
-            val textColor = if (isSelected) {
-                android.graphics.Color.WHITE
-            } else {
-                android.graphics.Color.argb(180, 138, 150, 177)
-            }
-            val paint = android.graphics.Paint().apply {
-                color = textColor
-                textSize = if (isSelected) 22f else 18f
-                isAntiAlias = true
-                typeface = android.graphics.Typeface.create(
-                    android.graphics.Typeface.MONOSPACE,
-                    android.graphics.Typeface.NORMAL,
+            // Callsign label — only when zoomed in or selected (declutter)
+            if (style.showLabel) {
+                val textColor = if (isSelected) {
+                    android.graphics.Color.WHITE
+                } else {
+                    android.graphics.Color.argb(180, 138, 150, 177)
+                }
+                val paint = android.graphics.Paint().apply {
+                    color = textColor
+                    textSize = if (isSelected) 22f else 18f
+                    isAntiAlias = true
+                    typeface = android.graphics.Typeface.create(
+                        android.graphics.Typeface.MONOSPACE,
+                        android.graphics.Typeface.NORMAL,
+                    )
+                }
+                drawContext.canvas.nativeCanvas.drawText(
+                    station.callsign,
+                    sx + glowR + 4f,
+                    sy + paint.textSize / 3f,
+                    paint,
                 )
             }
-            drawContext.canvas.nativeCanvas.drawText(
-                station.callsign,
-                sx + glowR + 4f,
-                sy + paint.textSize / 3f,
-                paint,
-            )
+        }
+    }
+}
+
+// Draw a station/spot marker glyph. The shape encodes the station's state (set by
+// markerStyleFor); colour + size come from the MarkerStyle. Each shape gets a BgApp
+// outline so it reads against land/ocean alike.
+private fun DrawScope.drawMarkerShape(shape: MarkerShape, cx: Float, cy: Float, r: Float, fill: Color) {
+    when (shape) {
+        MarkerShape.DOT_DEFAULT -> {
+            drawCircle(fill, r, Offset(cx, cy))
+            drawCircle(BgApp, r, Offset(cx, cy), style = Stroke(width = 1.2f))
+        }
+        MarkerShape.SQUARE_PSK -> {
+            drawRect(fill, topLeft = Offset(cx - r, cy - r), size = Size(r * 2, r * 2))
+            drawRect(BgApp, topLeft = Offset(cx - r, cy - r), size = Size(r * 2, r * 2), style = Stroke(width = 0.8f))
+        }
+        MarkerShape.CHECK_WORKED -> {
+            // Donut: filled disc with the centre punched back to the canvas background
+            // (BgSurface, what both canvases fill) so the hole reads as a cutout, not a
+            // dark dot. The outer ring keeps the standard BgApp marker outline.
+            drawCircle(fill, r, Offset(cx, cy))
+            drawCircle(BgSurface, r * 0.45f, Offset(cx, cy))
+            drawCircle(BgApp, r, Offset(cx, cy), style = Stroke(width = 1.2f))
+        }
+        MarkerShape.TRIANGLE_CQ -> {
+            val p = Path().apply {
+                moveTo(cx, cy - r * 1.3f)
+                lineTo(cx - r * 1.2f, cy + r * 0.9f)
+                lineTo(cx + r * 1.2f, cy + r * 0.9f)
+                close()
+            }
+            drawPath(p, fill)
+            drawPath(p, BgApp, style = Stroke(width = 1.2f))
+        }
+        MarkerShape.DIAMOND_TO_ME -> {
+            val p = Path().apply {
+                moveTo(cx, cy - r * 1.35f)
+                lineTo(cx + r * 1.35f, cy)
+                lineTo(cx, cy + r * 1.35f)
+                lineTo(cx - r * 1.35f, cy)
+                close()
+            }
+            drawPath(p, fill)
+            drawPath(p, BgApp, style = Stroke(width = 1.2f))
         }
     }
 }
