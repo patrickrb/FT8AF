@@ -15,10 +15,12 @@ internal enum class FitMode { COVER, FIT }
  * Maps the pure [equirectProject] output (normalized [-1,1] on each axis) onto a
  * concrete canvas, edge-to-edge, with a user pinch-zoom and pan offset.
  *
- * The world's intrinsic aspect is 2:1 (360° lon by 180° lat), so x gets twice
- * the pixels-per-normalized-unit that y does. [baseUniform] is the pixels per
- * normalized **y** half-unit; the world is therefore `4*baseUniform` wide by
- * `2*baseUniform` tall at zoom 1 (before [userScale]).
+ * The world's intrinsic aspect is 2:1 (360° lon by 180° lat). [baseUniform] is
+ * the world's full height in pixels at zoom 1, so the world is `2*baseUniform`
+ * wide by `baseUniform` tall (before [userScale]) — i.e. x is scaled to twice as
+ * many pixels per normalized unit as y, which preserves the 2:1 aspect. COVER
+ * picks `max(canvasW/2, canvasH)` so the world is at least as large as the canvas
+ * on both axes (no dead bands).
  *
  * Previously the canvas was locked to a 2:1 box via `.aspectRatio(2f)` and the
  * projection assumed the unzoomed map exactly filled it (`pan max = size*(scale-1)/2`).
