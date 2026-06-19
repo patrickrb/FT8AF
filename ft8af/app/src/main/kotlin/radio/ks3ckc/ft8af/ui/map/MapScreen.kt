@@ -927,7 +927,8 @@ private fun AzimuthalMapCanvas(
 
             drawMarkerShape(MarkerShape.SQUARE_PSK, sx, sy, 2.5f, PskSpot.copy(alpha = 0.7f))
 
-            // Receiver callsign — only when zoomed in (declutter; PSK spots aren't selectable).
+            // Spot callsign (receiver or sender, per the direction filter) — only when
+            // zoomed in (declutter; PSK spots aren't selectable).
             if (scale >= LABEL_ZOOM_THRESHOLD) {
                 val paint = android.graphics.Paint().apply {
                     color = android.graphics.Color.argb(160, 248, 113, 113)
@@ -1112,7 +1113,8 @@ private fun StandardMapCanvas(
 
             drawMarkerShape(MarkerShape.SQUARE_PSK, sx, sy, 2.5f, PskSpot.copy(alpha = 0.7f))
 
-            // Receiver callsign — only when zoomed in (declutter; PSK spots aren't selectable).
+            // Spot callsign (receiver or sender, per the direction filter) — only when
+            // zoomed in (declutter; PSK spots aren't selectable).
             if (scale >= LABEL_ZOOM_THRESHOLD) {
                 val paint = android.graphics.Paint().apply {
                     color = android.graphics.Color.argb(160, 248, 113, 113)
@@ -1214,6 +1216,10 @@ private fun StandardMapCanvas(
     }
 }
 
+// Cached so the dashed connection line doesn't allocate a PathEffect (and its
+// backing float array) every frame it's drawn.
+private val ConnectionDashEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))
+
 // Draw an operator -> station connection line. Solid + thicker for the active TX
 // target; dashed + thinner for stations calling us.
 private fun DrawScope.drawConnectionLine(
@@ -1236,7 +1242,7 @@ private fun DrawScope.drawConnectionLine(
             start = Offset(x0, y0),
             end = Offset(x1, y1),
             strokeWidth = 1.6f,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f)),
+            pathEffect = ConnectionDashEffect,
         )
     }
 }
