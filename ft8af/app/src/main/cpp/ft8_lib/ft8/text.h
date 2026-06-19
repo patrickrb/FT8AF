@@ -35,7 +35,10 @@ bool equals(const char* string1, const char* string2);
 // Text message formatting:
 //   - replaces lowercase letters with uppercase
 //   - merges consecutive spaces into single space
-void fmtmsg(char* msg_out, const char* msg_in);
+// Named ft8_fmtmsg (not the upstream `fmtmsg`) to avoid colliding with the
+// POSIX `fmtmsg(long, ...)` declared in <fmtmsg.h>, which is visible when this
+// header is compiled under the macOS/Apple SDK (e.g. FT8AFKit `swift test`).
+void ft8_fmtmsg(char* msg_out, const char* msg_in);
 
 /// Extract and copy a space-delimited token from a string.
 /// When the last token has been extracted, the return value points to the terminating zero character.

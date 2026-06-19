@@ -1,4 +1,16 @@
-name: Build & Release APK
+name: Android CI & Release
+
+# Android pipeline for the ft8af/ app: unit tests + coverage, instrumented
+# emulator tests, static analysis (lint/detekt/ktlint), and the signed
+# APK/AAB build + GitHub Release + Play internal publish.
+#
+# PATH-FILTERED: on pull requests and dev pushes this whole pipeline only runs
+# when Android-relevant files change (ft8af/** — which includes the shared
+# native C core at ft8af/app/src/main/cpp/ — or this workflow file). Pushes to
+# main and v* tags always build (a full per-version release snapshot,
+# regardless of what changed). The always-run `android-gate` job is the single
+# required status check so branch protection never gets stuck "pending" when the
+# build jobs are path-skipped.
 
 on:
   push:
@@ -31,9 +43,44 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  detect:
+    name: Detect Android changes
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Filter paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            android:
+              - 'ft8af/**'
+              - '.github/workflows/android.yml'
+
+      - name: Decide whether to run
+        id: decide
+        env:
+          CHANGED: ${{ steps.filter.outputs.android }}
+        run: |
+          set -euo pipefail
+          # main pushes and v* tags always build the full release; otherwise
+          # build only when Android-relevant files changed.
+          if [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == refs/tags/v* ) ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$CHANGED" == "true" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   test:
     name: Unit tests & coverage
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: detect
+    if: ${{ needs.detect.outputs.run == 'true' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
     runs-on: ubuntu-latest
 
     steps:
@@ -110,10 +157,12 @@ jobs:
     name: Instrumented tests (emulator)
     # Exercises the androidTest suite (AppSmokeTest launches the real
     # ComposeMainActivity) on an emulator. Same trigger as the unit-test job:
-    # every PR plus pushes to main. This job is intentionally NOT a dependency
-    # of `build` and is left out of branch protection's required checks while it
-    # stabilises (issue #60) — a flaky emulator must never block a release.
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    # every Android-affected PR plus pushes to main. This job is intentionally
+    # NOT part of android-gate and is left out of branch protection's required
+    # checks while it stabilises (issue #60) — a flaky emulator must never block
+    # a release.
+    needs: detect
+    if: ${{ needs.detect.outputs.run == 'true' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
     runs-on: ubuntu-latest
 
     steps:
@@ -209,12 +258,85 @@ jobs:
             ft8af/app/build/reports/androidTests/
             ft8af/app/build/outputs/androidTest-results/
 
+  static-analysis:
+    name: lint / detekt / ktlint
+    # Issue #63: Android lint, detekt, and ktlint on PRs.
+    #
+    # ROLLOUT IS PHASED — every analysis step below is currently WARN-ONLY
+    # (`continue-on-error: true`). CI runs the tool and uploads its report, but a
+    # violation does NOT fail the check. To FLIP A TOOL TO BLOCKING: delete its
+    # `continue-on-error: true` line. Do them one at a time.
+    #
+    # Notes on what already gates new code even in warn-only mode:
+    #   - detekt runs against config/detekt/baseline.xml, so it only reports NEW
+    #     correctness findings; the baseline holds the existing ones.
+    #   - ktlint has no baseline yet — the existing codebase isn't formatted, so
+    #     it will report many violations until a formatting pass lands.
+    needs: detect
+    if: ${{ needs.detect.outputs.run == 'true' && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('ft8af/**/*.gradle*', 'ft8af/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ft8af/gradlew
+
+      # --- WARN-ONLY during rollout: remove continue-on-error to make blocking ---
+
+      - name: Android lint (debug)
+        id: lint
+        continue-on-error: true
+        working-directory: ft8af
+        run: ./gradlew lintDebug --stacktrace
+
+      - name: detekt
+        id: detekt
+        continue-on-error: true
+        working-directory: ft8af
+        run: ./gradlew detekt --stacktrace
+
+      - name: ktlint
+        id: ktlint
+        continue-on-error: true
+        working-directory: ft8af
+        run: ./gradlew ktlintCheck --stacktrace
+
+      - name: Upload analysis reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: static-analysis-reports
+          path: |
+            ft8af/app/build/reports/lint-results-debug.html
+            ft8af/app/build/reports/lint-results-debug.xml
+            ft8af/app/build/reports/detekt/
+            ft8af/app/build/reports/ktlint/
+          if-no-files-found: ignore
+
   build:
     name: Build APK
-    needs: test
-    # Run when tests pass (PR/main push), or when tests were skipped (push to main/dev/tags).
-    # Block only on actual test failure or cancellation.
-    if: ${{ always() && needs.test.result != 'failure' && needs.test.result != 'cancelled' }}
+    needs: [detect, test]
+    # Run when Android is in scope (detect.run) AND tests passed (PR/main push) or
+    # were skipped (push to dev/tags). Block only on actual test failure/cancel.
+    if: ${{ always() && needs.detect.outputs.run == 'true' && needs.test.result != 'failure' && needs.test.result != 'cancelled' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -442,3 +564,34 @@ jobs:
           track: internal
           status: completed
           releaseName: ${{ steps.tag.outputs.release_tag }}
+
+  android-gate:
+    name: android-gate
+    # Always-run aggregator: the single required status check for Android.
+    # Because the build jobs above are path-skipped on unrelated changes, this
+    # job (which always runs) reports the overall Android result so branch
+    # protection never gets stuck "pending". It fails only if a REQUIRED job
+    # actually failed/cancelled. `instrumented` and `static-analysis` are
+    # deliberately excluded — instrumented is flaky (issue #60) and static
+    # analysis is warn-only during rollout — so neither can block a merge.
+    # `detect` is included: a `detect` failure skips `test`/`build`, and a skip
+    # alone would otherwise be read as "nothing to do" and pass the gate — so
+    # its result is checked directly.
+    needs: [detect, test, build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify required Android jobs succeeded or were skipped
+        env:
+          DETECT_RESULT: ${{ needs.detect.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          set -euo pipefail
+          for r in "$DETECT_RESULT" "$TEST_RESULT" "$BUILD_RESULT"; do
+            if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then
+              echo "::error::A required Android job did not pass (detect=$DETECT_RESULT test=$TEST_RESULT build=$BUILD_RESULT)"
+              exit 1
+            fi
+          done
+          echo "Android gate OK (detect=$DETECT_RESULT test=$TEST_RESULT build=$BUILD_RESULT)."

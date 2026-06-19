@@ -1,0 +1,266 @@
+name: Desktop CI & Release
+
+# Desktop pipeline for the desktop/ Tauri port (Rust + Vite/React). On PRs and
+# non-release pushes it does a compile check (`tauri build --no-bundle`) across
+# Windows + macOS + Linux. On main pushes and desktop-v* tags it builds native
+# bundles on all three OSes and publishes them to a per-platform GitHub Release.
+#
+# Release scheme is namespaced so it sits separately from the Android v* / dev-N
+# releases on the Releases page:
+#   desktop-v* tag  -> production desktop release
+#   push to main    -> auto-bumped desktop-v* release
+#   push to dev     -> desktop-dev-<run_number> PRERELEASE
+#
+# PATH-FILTERED: PRs and dev pushes only build when desktop/** or the shared
+# native C core (ft8af/app/src/main/cpp/**) changes, or this workflow file.
+# main pushes and desktop-v* tags always build. The always-run `desktop-gate`
+# job is the required status check.
+
+on:
+  push:
+    branches: [main, dev]
+    tags:
+      - 'desktop-v*'
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: >-
+    ${{
+      (github.event_name == 'push'
+        && (github.ref == 'refs/heads/main'
+          || github.ref == 'refs/heads/dev'
+          || startsWith(github.ref, 'refs/tags/desktop-v')))
+      && 'desktop-release'
+      || format('desktop-{0}', github.run_id)
+    }}
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    name: Detect desktop changes
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Filter paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            desktop:
+              - 'ft8af/app/src/main/cpp/**'
+              - 'desktop/**'
+              - '.github/workflows/desktop.yml'
+
+      - name: Decide whether to run
+        id: decide
+        env:
+          CHANGED: ${{ steps.filter.outputs.desktop }}
+        run: |
+          set -euo pipefail
+          # main pushes and desktop-v* tags always build the full release;
+          # otherwise build only when desktop-relevant files changed.
+          if [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == refs/tags/desktop-v* ) ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$CHANGED" == "true" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  version:
+    name: Determine desktop release tag
+    needs: detect
+    if: ${{ needs.detect.outputs.run == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.tag.outputs.release_tag }}
+      version_name: ${{ steps.tag.outputs.version_name }}
+      should_release: ${{ steps.tag.outputs.should_release }}
+      is_prerelease: ${{ steps.tag.outputs.is_prerelease }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --tags --force
+
+      - name: Determine release tag
+        id: tag
+        run: |
+          set -euo pipefail
+          # Mirrors the Android lane logic but in the desktop-v* / desktop-dev-N
+          # namespace so desktop releases sort separately from the app's.
+          if [[ "${GITHUB_REF}" == refs/tags/desktop-v* ]]; then
+            echo "release_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "version_name=${GITHUB_REF_NAME#desktop-v}" >> "$GITHUB_OUTPUT"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            # Auto-bump the last component from the latest desktop-v* tag.
+            latest=$(git tag --list 'desktop-v*' --sort=-v:refname | head -n1)
+            if [[ -z "$latest" ]]; then
+              new_tag="desktop-v0.1.0"
+            else
+              version="${latest#desktop-v}"
+              IFS='.' read -ra parts <<< "$version"
+              last_idx=$((${#parts[@]} - 1))
+              parts[$last_idx]=$((parts[$last_idx] + 1))
+              new_tag="desktop-v$(IFS=.; echo "${parts[*]}")"
+            fi
+            echo "Latest tag: ${latest:-<none>} -> new tag: $new_tag"
+            echo "release_tag=$new_tag" >> "$GITHUB_OUTPUT"
+            echo "version_name=${new_tag#desktop-v}" >> "$GITHUB_OUTPUT"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/dev" ]]; then
+            new_tag="desktop-dev-${GITHUB_RUN_NUMBER}"
+            latest=$(git tag --list 'desktop-v*' --sort=-v:refname | head -n1)
+            base_ver="${latest:+${latest#desktop-v}}"
+            base_ver="${base_ver:-0.1.0}"
+            echo "release_tag=$new_tag" >> "$GITHUB_OUTPUT"
+            echo "version_name=${base_ver}-dev.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            # PR or other branch push — compile-check only, no release.
+            echo "release_tag=" >> "$GITHUB_OUTPUT"
+            echo "version_name=" >> "$GITHUB_OUTPUT"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build (${{ matrix.os }})
+    needs: [detect, version]
+    if: ${{ needs.detect.outputs.run == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      # Tauri v2 Linux system dependencies (webkit2gtk-4.1 + GTK + packaging),
+      # plus the native libs our crates link against on Linux:
+      #   - libudev-dev:    serialport's libudev-sys (CAT rig control)
+      #   - libasound2-dev: alsa-sys (audio capture/playback)
+      # Without these the Linux build fails resolving the `libudev` / `alsa`
+      # pkg-config packages.
+      #
+      # ubuntu-latest is Ubuntu 24.04, which dropped libappindicator3-dev in
+      # favour of the Ayatana fork — use libayatana-appindicator3-dev (Tauri's
+      # current documented prerequisite).
+      #
+      # DEBIAN_FRONTEND=noninteractive + DPkg::Lock::Timeout guard against the two
+      # ways this step hangs forever on hosted runners: a debconf prompt that -y
+      # doesn't suppress, and apt blocking on the dpkg lock held by a background
+      # apt-daily job (instead, wait up to 10 min then fail loudly).
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update -o DPkg::Lock::Timeout=600
+          sudo apt-get install -y --no-install-recommends \
+            -o DPkg::Lock::Timeout=600 \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libayatana-appindicator3-dev \
+            libudev-dev \
+            libasound2-dev \
+            patchelf \
+            file \
+            build-essential \
+            curl \
+            wget
+
+      # build.rs compiles the C core with clang-cl on the windows-msvc target
+      # (MSVC's cl.exe rejects ft8_lib's C99 VLAs). LLVM/clang-cl is preinstalled
+      # on the GitHub windows runners; this just confirms it's resolvable.
+      - name: Verify clang-cl (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: clang-cl --version || echo "::warning::clang-cl not on PATH; build.rs falls back to C:\\Program Files\\LLVM\\bin"
+
+      - name: Install frontend dependencies
+        working-directory: desktop
+        run: npm ci
+
+      # --- Non-release: compile check only (no bundles), fastest path. ---
+      - name: Compile check (no bundle)
+        if: ${{ needs.version.outputs.should_release != 'true' }}
+        working-directory: desktop
+        run: npm run tauri build -- --no-bundle
+
+      # --- Release: build native bundles and upload to the per-platform release.
+      # tauri.conf.json has bundle.active=false (keeps local dev builds bundle-
+      # free), so enable bundling for the release build via an inline --config
+      # merge. Each OS produces its native targets (dmg/app, msi/nsis,
+      # deb/appimage) from the base config's targets:"all". All matrix legs share
+      # one tagName; tauri-action creates the release once and attaches to it. ---
+      - name: Build & publish release bundles
+        if: ${{ needs.version.outputs.should_release == 'true' }}
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop
+          tagName: ${{ needs.version.outputs.release_tag }}
+          releaseName: ${{ needs.version.outputs.release_tag }}
+          releaseBody: 'FT8AF desktop build ${{ needs.version.outputs.version_name }}.'
+          prerelease: ${{ needs.version.outputs.is_prerelease == 'true' }}
+          args: --config '{"bundle":{"active":true}}'
+
+  desktop-gate:
+    name: desktop-gate
+    # Always-run aggregator: the single required status check for desktop.
+    # Reports success when every build leg passed OR the build was path-skipped,
+    # so branch protection never gets stuck "pending" on an unrelated change.
+    # Depends on `detect` and `version` too: a failure in either skips `build`,
+    # and a skip alone would otherwise be read as "nothing to do" and pass the
+    # gate — so their results are checked directly.
+    needs: [detect, version, build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify desktop jobs succeeded or were skipped
+        env:
+          DETECT_RESULT: ${{ needs.detect.result }}
+          VERSION_RESULT: ${{ needs.version.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          set -euo pipefail
+          for r in "$DETECT_RESULT" "$VERSION_RESULT" "$BUILD_RESULT"; do
+            if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then
+              echo "::error::A desktop job did not pass (detect=$DETECT_RESULT version=$VERSION_RESULT build=$BUILD_RESULT)"
+              exit 1
+            fi
+          done
+          echo "Desktop gate OK (detect=$DETECT_RESULT version=$VERSION_RESULT build=$BUILD_RESULT)."
