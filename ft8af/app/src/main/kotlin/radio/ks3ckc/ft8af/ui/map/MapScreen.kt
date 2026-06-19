@@ -11,10 +11,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,6 +34,7 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -89,17 +92,17 @@ private data class StationMarker(
     val message: Ft8Message,
 ) : StationLine
 
-// PSK Reporter overlay (issue #33) — a receiver that has decoded the operator's signal.
+// PSK Reporter overlay (issue #33) — the other station in a reception report
+// (a receiver that heard us, or a sender we heard, per the direction filter).
 private data class PskSpotMarker(
-    val receiverCallsign: String,
+    val callsign: String,
     val grid: String,
     val lat: Double,
     val lon: Double,
     val snr: Int,
-    val frequencyHz: Long,
-)
+    override val frequencyHz: Long,
+) : HasFrequencyHz
 
-private const val PSK_OVERLAY_SECONDS_BACK = 3600
 private const val PSK_POLL_INTERVAL_MS = 5L * 60L * 1000L
 
 internal data class ProjectedPoint(
@@ -113,6 +116,19 @@ internal enum class MapViewMode { STANDARD, AZIMUTHAL }
 private const val MAP_MIN_ZOOM = 1f
 private const val MAP_MAX_ZOOM = 8f
 private const val MAP_ZOOM_STEP = 2f
+
+// Persists the PSK filter across config changes / process death. band == "" means all.
+private val PskFilterSaver = listSaver<PskFilter, Any>(
+    save = { listOf(it.timeWindowSec, it.band?.name ?: "", it.mode.name, it.direction.name) },
+    restore = {
+        PskFilter(
+            timeWindowSec = it[0] as Int,
+            band = (it[1] as String).takeIf { s -> s.isNotEmpty() }?.let { s -> Band.valueOf(s) },
+            mode = PskMode.valueOf(it[2] as String),
+            direction = PskDirection.valueOf(it[3] as String),
+        )
+    },
+)
 
 // ---------------------------------------------------------------------------
 // Great-circle distance (km) — used by both projections
@@ -190,6 +206,10 @@ fun MapScreen(mainViewModel: MainViewModel) {
     // succeeded or was a benign cooldown skip. Surfaced in the status row so an empty
     // overlay caused by a failure is distinguishable from "genuinely no spots".
     var pskError by remember { mutableStateOf<String?>(null) }
+    // PSK overlay filters (band / mode / time window / direction); survives config
+    // changes via PskFilterSaver. Changing it re-runs the fetch (force-once below).
+    var pskFilter by rememberSaveable(stateSaver = PskFilterSaver) { mutableStateOf(PskFilter()) }
+    var filterSheetOpen by rememberSaveable { mutableStateOf(false) }
 
     // Zoom + pan (issue #51). Scale is clamped to [1, MAX_ZOOM]; pan is clamped so the
     // scaled map can't be dragged entirely off-screen. Both reset whenever the projection
@@ -207,7 +227,7 @@ fun MapScreen(mainViewModel: MainViewModel) {
     // PSK Reporter polling — fires immediately on enter and every 5 min while enabled.
     // Re-reads myCallsign each cycle so a mid-session change is picked up on the next tick.
     // Structured concurrency cancels the loop when MapScreen leaves composition.
-    LaunchedEffect(pskOverlayEnabled) {
+    LaunchedEffect(pskOverlayEnabled, pskFilter) {
         if (!pskOverlayEnabled) {
             pskSpots = emptyList()
             pskError = null
@@ -220,22 +240,31 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 pskSpots = emptyList()
                 pskError = null
             } else {
-                // force=true only on the first fetch after the overlay is (re)entered so a
-                // recent prior-visit fetch within the 5-min cooldown doesn't leave the
-                // overlay blank; the 429/503 back-off is still honoured.
-                val spots = PskReporterClient.fetchSpotsForMe(call, PSK_OVERLAY_SECONDS_BACK, force = firstFetch)
+                // force=true on the first fetch after the overlay is (re)entered OR the
+                // filter changes (this effect re-keys on pskFilter), so a deliberate filter
+                // change isn't swallowed by the 5-min cooldown; the 429/503 back-off still holds.
+                val modeOverride = if (pskFilter.mode == PskMode.CURRENT) null else pskFilter.mode.label
+                val spots = PskReporterClient.fetchSpotsForMe(
+                    call,
+                    pskFilter.timeWindowSec,
+                    force = firstFetch,
+                    mode = modeOverride,
+                    byReceiver = pskFilter.direction == PskDirection.WHO_I_HEARD,
+                )
                 firstFetch = false
                 if (spots != null) {
-                    pskSpots = spots.map {
+                    val markers = spots.map {
                         PskSpotMarker(
-                            receiverCallsign = it.receiverCallsign,
-                            grid = it.receiverGrid,
-                            lat = it.receiverLat,
-                            lon = it.receiverLon,
+                            callsign = it.callsign,
+                            grid = it.grid,
+                            lat = it.lat,
+                            lon = it.lon,
                             snr = it.snr,
                             frequencyHz = it.frequencyHz,
                         )
                     }
+                    // Band is filtered client-side (the API returns all bands).
+                    pskSpots = applyPskBandFilter(markers, pskFilter.band)
                     pskError = null
                 } else {
                     // null = transport/HTTP error, rate-limit back-off, or cooldown skip.
@@ -437,17 +466,22 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 .padding(12.dp),
         )
 
-        // Top-right: PSK overlay toggle + STD/AZ view toggle (floating).
+        // Top-right: filter button (when overlay on) + PSK overlay toggle + STD/AZ toggle.
         Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (pskOverlayEnabled) {
+                FilterPill(active = filterSheetOpen, onClick = { filterSheetOpen = !filterSheetOpen })
+                Spacer(modifier = Modifier.width(6.dp))
+            }
             PskOverlayToggle(
                 enabled = pskOverlayEnabled,
                 onToggle = { newVal ->
                     pskOverlayEnabled = newVal
+                    if (!newVal) filterSheetOpen = false
                     GeneralVariables.pskOverlayEnabled = newVal
                     mainViewModel.databaseOpr.writeConfig(
                         "pskOverlayEnabled",
@@ -463,8 +497,19 @@ fun MapScreen(mainViewModel: MainViewModel) {
             )
         }
 
-        // Bottom: selected station info card (floating sheet).
-        if (selectedStation != null) {
+        // Bottom: the PSK filter sheet takes the bottom slot when open; otherwise the
+        // selected-station card. (Mutually exclusive so they don't stack.)
+        if (pskOverlayEnabled && filterSheetOpen) {
+            PskFilterSheet(
+                filter = pskFilter,
+                onFilterChange = { pskFilter = it },
+                onClose = { filterSheetOpen = false },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(12.dp)
+                    .fillMaxWidth(),
+            )
+        } else if (selectedStation != null) {
             SelectedStationCard(
                 station = selectedStation,
                 opLat = opLat,
@@ -476,6 +521,142 @@ fun MapScreen(mainViewModel: MainViewModel) {
                     .fillMaxWidth(),
             )
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// PSK filter button + sheet
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun FilterPill(active: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (active) Accent else BgSurface3)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = stringResource(R.string.map_filter),
+            color = if (active) BgApp else TextMuted,
+            fontFamily = GeistMonoFamily,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun PskFilterSheet(
+    filter: PskFilter,
+    onFilterChange: (PskFilter) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    GlassCard(modifier = modifier) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.map_filter_title),
+                    color = TextPrimary,
+                    fontFamily = GeistMonoFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable(onClick = onClose)
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.map_filter_done),
+                        color = Accent,
+                        fontFamily = GeistMonoFamily,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            FilterRow(stringResource(R.string.map_filter_time)) {
+                for (sec in PSK_TIME_PRESETS) {
+                    FilterChip(pskTimeLabel(sec), filter.timeWindowSec == sec) {
+                        onFilterChange(filter.copy(timeWindowSec = sec))
+                    }
+                }
+            }
+            FilterRow(stringResource(R.string.map_filter_band)) {
+                FilterChip(stringResource(R.string.map_filter_all), filter.band == null) {
+                    onFilterChange(filter.copy(band = null))
+                }
+                for (b in Band.entries) {
+                    FilterChip(b.label, filter.band == b) { onFilterChange(filter.copy(band = b)) }
+                }
+            }
+            FilterRow(stringResource(R.string.map_filter_mode)) {
+                for (m in PskMode.entries) {
+                    FilterChip(m.label, filter.mode == m) { onFilterChange(filter.copy(mode = m)) }
+                }
+            }
+            FilterRow(stringResource(R.string.map_filter_direction)) {
+                for (d in PskDirection.entries) {
+                    FilterChip(d.label, filter.direction == d) { onFilterChange(filter.copy(direction = d)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterRow(label: String, content: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = TextDim,
+            fontFamily = GeistMonoFamily,
+            fontSize = 10.sp,
+            modifier = Modifier.width(64.dp),
+        )
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            content = content,
+        )
+    }
+}
+
+@Composable
+private fun FilterChip(label: String, active: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (active) Accent else BgSurface3)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 9.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = if (active) BgApp else TextMuted,
+            fontFamily = GeistMonoFamily,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 
@@ -758,7 +939,7 @@ private fun AzimuthalMapCanvas(
                     )
                 }
                 drawContext.canvas.nativeCanvas.drawText(
-                    spot.receiverCallsign,
+                    spot.callsign,
                     sx + 5f,
                     sy + paint.textSize / 3f,
                     paint,
@@ -943,7 +1124,7 @@ private fun StandardMapCanvas(
                     )
                 }
                 drawContext.canvas.nativeCanvas.drawText(
-                    spot.receiverCallsign,
+                    spot.callsign,
                     sx + 5f,
                     sy + paint.textSize / 3f,
                     paint,

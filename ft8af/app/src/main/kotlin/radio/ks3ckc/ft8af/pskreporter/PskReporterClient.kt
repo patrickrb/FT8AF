@@ -32,12 +32,16 @@ import java.util.Locale
  * Returns null on transport/parse failure or while in cooldown — caller keeps
  * any stale list; empty list means a successful fetch returned zero spots.
  */
+/**
+ * One reception report, reduced to the station we plot. [callsign]/[grid]/[lat]/[lon]
+ * describe the *other* station: the receiver that heard us (when querying by
+ * senderCallsign) or the sender we heard (when querying by receiverCallsign).
+ */
 data class PskReporterSpot(
-    val senderCallsign: String,
-    val receiverCallsign: String,
-    val receiverGrid: String,
-    val receiverLat: Double,
-    val receiverLon: Double,
+    val callsign: String,
+    val grid: String,
+    val lat: Double,
+    val lon: Double,
     val frequencyHz: Long,
     val snr: Int,
     val mode: String,
@@ -79,8 +83,18 @@ object PskReporterClient {
      * an empty overlay just because a prior visit's fetch was recent. The 429/503
      * rate-limit back-off is always honoured, so a forced call never hammers a
      * server that has asked us to wait.
+     *
+     * [mode] overrides the queried mode (null = the rig's current mode). [byReceiver]
+     * flips the query from "who heard me" (senderCallsign=[call], plot the receiver)
+     * to "who I heard" (receiverCallsign=[call], plot the sender).
      */
-    suspend fun fetchSpotsForMe(call: String, secondsBack: Int, force: Boolean = false): List<PskReporterSpot>? = withContext(Dispatchers.IO) {
+    suspend fun fetchSpotsForMe(
+        call: String,
+        secondsBack: Int,
+        force: Boolean = false,
+        mode: String? = null,
+        byReceiver: Boolean = false,
+    ): List<PskReporterSpot>? = withContext(Dispatchers.IO) {
         val now = clock()
         if (now < rateLimitedUntilEpochMs) {
             log("skipped (rate-limit back-off ${(rateLimitedUntilEpochMs - now) / 1000}s remaining)")
@@ -98,15 +112,19 @@ object PskReporterClient {
         lastFetchEpochMs = now
 
         val callUpper = call.uppercase()
-        val url = "$baseUrl?senderCallsign=${urlEncode(callUpper)}" +
+        // byReceiver=false: reports where we transmitted (who heard us) -> plot the receiver.
+        // byReceiver=true:  reports where we received (who we heard)     -> plot the sender.
+        val callParam = if (byReceiver) "receiverCallsign" else "senderCallsign"
+        val modeName = mode ?: GeneralVariables.currentMode().displayName
+        val url = "$baseUrl?$callParam=${urlEncode(callUpper)}" +
             "&flowStartSeconds=-$secondsBack" +
             "&rronly=1" +
-            "&mode=${GeneralVariables.currentMode().displayName}" +
+            "&mode=${urlEncode(modeName)}" +
             "&appcontact=${urlEncode(APP_CONTACT)}"
-        log("fetch start call=$callUpper secondsBack=$secondsBack")
+        log("fetch start call=$callUpper secondsBack=$secondsBack mode=$modeName byReceiver=$byReceiver")
 
         val body = fetch(url) ?: return@withContext null
-        val spots = parseSpots(body)
+        val spots = parseSpots(body, plotSender = byReceiver)
         lastError = null
         log("fetch ok N=${spots.size}")
         spots
@@ -143,7 +161,7 @@ object PskReporterClient {
         }
     }
 
-    private fun parseSpots(xml: String): List<PskReporterSpot> {
+    private fun parseSpots(xml: String, plotSender: Boolean): List<PskReporterSpot> {
         val out = mutableListOf<PskReporterSpot>()
         var skippedNoGrid = 0
         var skippedBadGrid = 0
@@ -157,7 +175,11 @@ object PskReporterClient {
                 if (event == XmlPullParser.START_TAG && parser.name == "receptionReport") {
                     val sender = parser.getAttributeValue(null, "senderCallsign") ?: ""
                     val receiver = parser.getAttributeValue(null, "receiverCallsign") ?: ""
-                    val grid = parser.getAttributeValue(null, "receiverLocator") ?: ""
+                    // The station we plot + its locator: the sender when we queried as the
+                    // receiver (who we heard), otherwise the receiver (who heard us).
+                    val otherCall = if (plotSender) sender else receiver
+                    val grid = (if (plotSender) parser.getAttributeValue(null, "senderLocator")
+                                else parser.getAttributeValue(null, "receiverLocator")) ?: ""
                     val freqStr = parser.getAttributeValue(null, "frequency")
                     val snrStr = parser.getAttributeValue(null, "sNR")
                     val flowStr = parser.getAttributeValue(null, "flowStartSeconds")
@@ -179,11 +201,10 @@ object PskReporterClient {
                         } else {
                             out.add(
                                 PskReporterSpot(
-                                    senderCallsign = sender,
-                                    receiverCallsign = receiver,
-                                    receiverGrid = grid,
-                                    receiverLat = latLng.latitude,
-                                    receiverLon = latLng.longitude,
+                                    callsign = otherCall,
+                                    grid = grid,
+                                    lat = latLng.latitude,
+                                    lon = latLng.longitude,
                                     frequencyHz = freq,
                                     snr = snr,
                                     mode = mode,
