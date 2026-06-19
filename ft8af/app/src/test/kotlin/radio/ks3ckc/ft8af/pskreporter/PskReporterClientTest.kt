@@ -47,7 +47,7 @@ class PskReporterClientTest {
         // empty receiverLocator (skippedNoGrid path), and VK2YY has a
         // non-numeric frequency (skippedBadGrid path).
         assertThat(spots!!).hasSize(2)
-        assertThat(spots.map { it.receiverCallsign })
+        assertThat(spots.map { it.callsign })
             .containsExactly("VE3XY", "DL1AA")
     }
 
@@ -56,11 +56,11 @@ class PskReporterClientTest {
         server.enqueue(MockResponse().setBody(fixture("pskreporter/reception-report.xml")))
 
         val spots = PskReporterClient.fetchSpotsForMe("W1AW", secondsBack = 900)!!
-        val ve3xy = spots.first { it.receiverCallsign == "VE3XY" }
+        val ve3xy = spots.first { it.callsign == "VE3XY" }
 
         // FN03ab decodes to roughly 43.08N / -79.94W (Niagara peninsula).
-        assertThat(ve3xy.receiverLat).isWithin(0.5).of(43.08)
-        assertThat(ve3xy.receiverLon).isWithin(0.5).of(-79.94)
+        assertThat(ve3xy.lat).isWithin(0.5).of(43.08)
+        assertThat(ve3xy.lon).isWithin(0.5).of(-79.94)
         // Plus the metadata we passed through verbatim.
         assertThat(ve3xy.frequencyHz).isEqualTo(14076234L)
         assertThat(ve3xy.snr).isEqualTo(-8)
@@ -194,6 +194,31 @@ class PskReporterClientTest {
 
         val req = server.takeRequest()
         assertThat(req.path).contains("senderCallsign=W1AW")
+    }
+
+    @Test
+    fun fetchSpots_modeParamOverridesQueriedMode() = runBlocking<Unit> {
+        server.enqueue(MockResponse().setBody(fixture("pskreporter/reception-report.xml")))
+
+        PskReporterClient.fetchSpotsForMe("W1AW", 900, mode = "FT4")
+
+        val req = server.takeRequest()
+        assertThat(req.path).contains("mode=FT4")
+    }
+
+    @Test
+    fun fetchSpots_byReceiverQueriesReceiverCallsignAndPlotsSender() = runBlocking<Unit> {
+        server.enqueue(MockResponse().setBody(fixture("pskreporter/reception-report.xml")))
+
+        val spots = PskReporterClient.fetchSpotsForMe("W1AW", 900, byReceiver = true)!!
+
+        val req = server.takeRequest()
+        assertThat(req.path).contains("receiverCallsign=W1AW")
+        // Every report's sender is W1AW @ FN31; with byReceiver we plot the sender, so the
+        // only dropped report is VK2YY (non-numeric frequency).
+        assertThat(spots).hasSize(3)
+        assertThat(spots.map { it.callsign }.toSet()).containsExactly("W1AW")
+        assertThat(spots.map { it.grid }.toSet()).containsExactly("FN31")
     }
 
     private fun fixture(path: String): String =

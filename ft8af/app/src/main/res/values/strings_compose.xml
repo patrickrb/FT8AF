@@ -323,6 +323,14 @@
     <string name="map_mode_standard">STD</string>
     <string name="map_mode_azimuthal">AZ</string>
     <string name="map_overlay_psk">PSK</string>
+    <string name="map_filter">Filter</string>
+    <string name="map_filter_title">PSK filters</string>
+    <string name="map_filter_done">Done</string>
+    <string name="map_filter_time">Time</string>
+    <string name="map_filter_band">Band</string>
+    <string name="map_filter_mode">Mode</string>
+    <string name="map_filter_direction">Direction</string>
+    <string name="map_filter_all">All</string>
     <string name="map_info_distance">Distance</string>
     <string name="map_info_bearing">Bearing</string>
     <string name="map_info_snr">SNR</string>
