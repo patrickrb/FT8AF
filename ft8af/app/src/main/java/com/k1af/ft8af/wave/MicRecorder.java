@@ -14,6 +14,7 @@ import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
+import android.os.Build;
 import android.util.Log;
 
 import com.k1af.ft8af.GeneralVariables;
@@ -87,8 +88,10 @@ public class MicRecorder {
         bufferSize = safeBufferSize(
                 AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat));
 
+        int audioSource = chooseAudioSource(Build.VERSION.SDK_INT, isUnprocessedSupported());
+        String srcName = audioSourceName(audioSource);
         try {
-            audioRecord = new AudioRecord(MediaRecorder.AudioSource.DEFAULT, sampleRateInHz
+            audioRecord = new AudioRecord(audioSource, sampleRateInHz
                     , channelConfig, audioFormat, bufferSize);//create AudioRecorder object
         } catch (Exception e) {
             GeneralVariables.fileLog(
@@ -104,10 +107,11 @@ public class MicRecorder {
                     GeneralVariables.audioInputDeviceId, AudioManager.GET_DEVICES_INPUTS);
             boolean ok = audioRecord.setPreferredDevice(deviceInfo); // null resets to default
             GeneralVariables.fileLog(String.format(
-                    "MicRecorder: AudioRecord(DEFAULT) preferredDevice id=%d ok=%b deviceFound=%b",
-                    GeneralVariables.audioInputDeviceId, ok, deviceInfo != null));
+                    "MicRecorder: AudioRecord(%s) preferredDevice id=%d ok=%b deviceFound=%b",
+                    srcName, GeneralVariables.audioInputDeviceId, ok, deviceInfo != null));
         } else {
-            GeneralVariables.fileLog("MicRecorder: AudioRecord(DEFAULT) using system default mic");
+            GeneralVariables.fileLog(
+                    "MicRecorder: AudioRecord(" + srcName + ") using system default mic");
         }
     }
 
@@ -400,8 +404,11 @@ public class MicRecorder {
         if (!useUsbAudio) {
             bufferSize = safeBufferSize(
                     AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat));
+            int audioSource = chooseAudioSource(Build.VERSION.SDK_INT, isUnprocessedSupported());
+            GeneralVariables.fileLog(
+                    "MicRecorder: reinit AudioRecord(" + audioSourceName(audioSource) + ")");
             try {
-                audioRecord = new AudioRecord(MediaRecorder.AudioSource.DEFAULT, sampleRateInHz,
+                audioRecord = new AudioRecord(audioSource, sampleRateInHz,
                         channelConfig, audioFormat, bufferSize);
             } catch (Exception e) {
                 GeneralVariables.fileLog(
@@ -423,6 +430,51 @@ public class MicRecorder {
         if (wasRunning) {
             start();
         }
+    }
+
+    /**
+     * Choose the least-processed recording source available. FT8 (like all
+     * digital modes) needs raw audio: the OEM voice DSP behind
+     * {@code AudioSource.DEFAULT}/{@code MIC} runs automatic gain control, noise
+     * suppression, and multi-mic noise cancellation. That noise canceller uses
+     * the phone's *second built-in mic* to subtract what it thinks is background
+     * noise, mangling a weak line-in FT8 tone — the parasitic "internal mic"
+     * artifact reported in issue #298.
+     *
+     * <p>{@code UNPROCESSED} (API 24+, only when the device advertises support)
+     * guarantees no processing. {@code VOICE_RECOGNITION} is the floor: it
+     * disables AGC/NS on most devices and is available back to API 3, so it's
+     * safe for our minSdk 23 and for devices lacking UNPROCESSED support.
+     *
+     * <p>Package-visible for testing.
+     */
+    static int chooseAudioSource(int sdkInt, boolean unprocessedSupported) {
+        if (sdkInt >= Build.VERSION_CODES.N && unprocessedSupported) {
+            return MediaRecorder.AudioSource.UNPROCESSED;
+        }
+        return MediaRecorder.AudioSource.VOICE_RECOGNITION;
+    }
+
+    /**
+     * Whether the device advertises support for the UNPROCESSED audio source.
+     * Returns false on any error or when the property is unknown/unsupported.
+     */
+    private static boolean isUnprocessedSupported() {
+        Context context = GeneralVariables.getMainContext();
+        if (context == null) return false;
+        AudioManager audioManager =
+                (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        if (audioManager == null) return false;
+        String supported = audioManager.getProperty(
+                AudioManager.PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED);
+        return "true".equalsIgnoreCase(supported);
+    }
+
+    /** Human-readable name for an AudioSource constant, for debug logging. */
+    private static String audioSourceName(int source) {
+        if (source == MediaRecorder.AudioSource.UNPROCESSED) return "UNPROCESSED";
+        if (source == MediaRecorder.AudioSource.VOICE_RECOGNITION) return "VOICE_RECOGNITION";
+        return String.valueOf(source);
     }
 
     /**
