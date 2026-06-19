@@ -551,8 +551,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Publishing to Play is a best-effort DEPLOY side-effect, not a build
+      # signal — by this point the signed APK/AAB is already built and the
+      # GitHub Release is published. The Play Internal upload can still fail on
+      # external Play Console track state outside CI's control (e.g. "You cannot
+      # rollout this release because it does not allow any existing users to
+      # upgrade to the newly added APKs", or an expired edit when two releases
+      # race). Those must NOT turn the build job red and block android-gate /
+      # the dev→main PR. So continue-on-error here (mirroring the Codecov upload
+      # above) and surface a warning in the next step instead. A genuinely
+      # broken build fails earlier, in "Build APK & AAB".
       - name: Publish AAB to Play Internal track
+        id: play_publish
         if: steps.tag.outputs.should_release == 'true'
+        continue-on-error: true
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
@@ -564,6 +576,13 @@ jobs:
           track: internal
           status: completed
           releaseName: ${{ steps.tag.outputs.release_tag }}
+
+      # Make a swallowed publish failure visible (annotation on the run) without
+      # failing the job — the artifact + GitHub Release already succeeded.
+      - name: Warn if Play publish failed
+        if: steps.tag.outputs.should_release == 'true' && steps.play_publish.outcome == 'failure'
+        run: |
+          echo "::warning::Play Internal publish failed for ${{ steps.tag.outputs.release_tag }} (non-blocking). The signed AAB built and the GitHub Release was created; only the Play upload did not complete. Check the 'Publish AAB to Play Internal track' step log — common causes are an upgrade-path rejection or an expired Play edit."
 
   android-gate:
     name: android-gate
