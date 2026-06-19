@@ -77,17 +77,17 @@ import kotlin.math.sqrt
 // ---------------------------------------------------------------------------
 
 private data class StationMarker(
-    val callsign: String,
+    override val callsign: String,
     val grid: String,
-    val lat: Double,
-    val lon: Double,
+    override val lat: Double,
+    override val lon: Double,
     val snr: Int,
     val isCQ: Boolean,
     val isWorked: Boolean,
-    val isToMe: Boolean,
+    override val isToMe: Boolean,
     val color: Color,
     val message: Ft8Message,
-)
+) : StationLine
 
 // PSK Reporter overlay (issue #33) — a receiver that has decoded the operator's signal.
 private data class PskSpotMarker(
@@ -177,6 +177,10 @@ fun MapScreen(mainViewModel: MainViewModel) {
     val myGrid by GeneralVariables.mutableMyMaidenheadGrid.observeAsState(
         GeneralVariables.getMyMaidenheadGrid() ?: ""
     )
+    // Active TX target — the station we're calling — drives the solid connection
+    // line. "CQ"/blank/null means we're calling CQ or idle (no target line).
+    val txTarget by mainViewModel.ft8TransmitSignal.mutableToCallsign.observeAsState()
+    val txTargetCall = txTarget?.callsign?.takeIf { it.isNotBlank() && it != "CQ" }
 
     var selectedCallsign by remember { mutableStateOf<String?>(null) }
     var viewMode by rememberSaveable { mutableStateOf(MapViewMode.STANDARD) }
@@ -298,6 +302,11 @@ fun MapScreen(mainViewModel: MainViewModel) {
 
     val selectedStation = stations.find { it.callsign == selectedCallsign }
 
+    // Connection lines: solid to the TX target, dashed from anyone calling us.
+    val connectionLines = remember(stations, txTargetCall) {
+        buildConnectionLines(stations, txTargetCall)
+    }
+
     // Canvas size for pan clamping — the map now fills this Box edge-to-edge.
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
 
@@ -361,6 +370,7 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 opLon = opLon,
                 stations = stations,
                 pskSpots = pskSpots,
+                connectionLines = connectionLines,
                 selectedCallsign = selectedCallsign,
                 onStationSelected = { selectedCallsign = it },
                 scale = mapScale,
@@ -373,6 +383,7 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 opLon = opLon,
                 stations = stations,
                 pskSpots = pskSpots,
+                connectionLines = connectionLines,
                 selectedCallsign = selectedCallsign,
                 onStationSelected = { selectedCallsign = it },
                 scale = mapScale,
@@ -651,6 +662,7 @@ private fun AzimuthalMapCanvas(
     opLon: Double,
     stations: List<StationMarker>,
     pskSpots: List<PskSpotMarker>,
+    connectionLines: List<ConnectionLine>,
     selectedCallsign: String?,
     onStationSelected: (String?) -> Unit,
     scale: Float,
@@ -701,6 +713,18 @@ private fun AzimuthalMapCanvas(
         // Compass bearings stay anchored to the disc — they're a fixed UI reference,
         // not a map feature, so they don't pan or scale.
         drawCompassBearings(cx, cy, r)
+
+        // Connection lines (operator -> TX target / stations calling us). Drawn under
+        // the operator marker + station markers. Skip any whose endpoint is off-disc.
+        for (line in connectionLines) {
+            val proj = azProject(opLat, opLon, line.toLat, line.toLon)
+            val ex = cx + proj.x * r * scale + panX
+            val ey = cy + proj.y * r * scale + panY
+            val ddx = ex - cx
+            val ddy = ey - cy
+            if (sqrt(ddx * ddx + ddy * ddy) > r) continue
+            drawConnectionLine(opX, opY, ex, ey, line.style, line.color)
+        }
 
         // Operator center marker
         drawCircle(
@@ -840,6 +864,7 @@ private fun StandardMapCanvas(
     opLon: Double,
     stations: List<StationMarker>,
     pskSpots: List<PskSpotMarker>,
+    connectionLines: List<ConnectionLine>,
     selectedCallsign: String?,
     onStationSelected: (String?) -> Unit,
     scale: Float,
@@ -889,6 +914,14 @@ private fun StandardMapCanvas(
             radius = 4f,
             center = Offset(opX, opY),
         )
+
+        // Connection lines (operator -> TX target / stations calling us). Drawn under
+        // the station markers; both endpoints project through the viewport so they
+        // pan/zoom with the map.
+        for (line in connectionLines) {
+            val end = vp.projectLatLon(line.toLat, line.toLon)
+            drawConnectionLine(opX, opY, end.x, end.y, line.style, line.color)
+        }
 
         // PSK Reporter spots — drawn before stations so decoded markers layer on top.
         for (spot in pskSpots) {
@@ -997,6 +1030,33 @@ private fun StandardMapCanvas(
                 )
             }
         }
+    }
+}
+
+// Draw an operator -> station connection line. Solid + thicker for the active TX
+// target; dashed + thinner for stations calling us.
+private fun DrawScope.drawConnectionLine(
+    x0: Float,
+    y0: Float,
+    x1: Float,
+    y1: Float,
+    style: LineStyle,
+    color: Color,
+) {
+    when (style) {
+        LineStyle.SOLID_TX -> drawLine(
+            color = color.copy(alpha = 0.85f),
+            start = Offset(x0, y0),
+            end = Offset(x1, y1),
+            strokeWidth = 2.2f,
+        )
+        LineStyle.DASHED_CALLING_ME -> drawLine(
+            color = color.copy(alpha = 0.7f),
+            start = Offset(x0, y0),
+            end = Offset(x1, y1),
+            strokeWidth = 1.6f,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f)),
+        )
     }
 }
 
