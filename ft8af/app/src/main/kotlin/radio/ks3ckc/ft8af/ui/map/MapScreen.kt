@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -48,9 +47,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.k1af.ft8af.Ft8Message
@@ -64,7 +65,6 @@ import kotlinx.coroutines.withContext
 import radio.ks3ckc.ft8af.pskreporter.PskReporterClient
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.GlassCard
-import radio.ks3ckc.ft8af.ui.components.TopBar
 import kotlin.math.PI
 import kotlin.math.acos
 import kotlin.math.atan2
@@ -298,159 +298,161 @@ fun MapScreen(mainViewModel: MainViewModel) {
 
     val selectedStation = stations.find { it.callsign == selectedCallsign }
 
-    Column(
+    // Canvas size for pan clamping — the map now fills this Box edge-to-edge.
+    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+
+    // Clamp a candidate pan so the map can't be dragged into empty space. STANDARD
+    // routes through EquirectViewport (which allows horizontal pan even at zoom 1×,
+    // since the 2:1 world overflows a tall canvas); AZIMUTHAL only pans when zoomed.
+    fun clampPan(px: Float, py: Float, scale: Float): Offset {
+        val w = canvasSize.width.toFloat()
+        val hgt = canvasSize.height.toFloat()
+        if (w <= 0f || hgt <= 0f) return Offset(px, py)
+        return when (viewMode) {
+            MapViewMode.STANDARD -> EquirectViewport(w, hgt, scale).clampPan(px, py)
+            MapViewMode.AZIMUTHAL -> if (scale > 1f) {
+                val mx = w * (scale - 1f) / 2f
+                val my = hgt * (scale - 1f) / 2f
+                Offset(px.coerceIn(-mx, mx), py.coerceIn(-my, my))
+            } else {
+                Offset.Zero
+            }
+        }
+    }
+
+    // Full-bleed map with floating control overlays — pinch to zoom, drag to pan,
+    // double-tap to toggle 2× zoom in/out.
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BgApp),
-    ) {
-        TopBar(
-            title = stringResource(R.string.map_title),
-            subtitle = {
-                Text(
-                    text = if (myGrid.isNullOrEmpty()) stringResource(R.string.map_no_grid_set) else myGrid,
-                    color = Signal,
-                    fontFamily = GeistMonoFamily,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            },
-            actions = {
-                PskOverlayToggle(
-                    enabled = pskOverlayEnabled,
-                    onToggle = { newVal ->
-                        pskOverlayEnabled = newVal
-                        GeneralVariables.pskOverlayEnabled = newVal
-                        mainViewModel.databaseOpr.writeConfig(
-                            "pskOverlayEnabled",
-                            if (newVal) "1" else "0",
-                            null,
-                        )
+            .background(BgApp)
+            .onSizeChanged { canvasSize = it }
+            .pointerInput(viewMode) {
+                detectTransformGestures { _, panDelta, zoom, _ ->
+                    val newScale = (mapScale * zoom).coerceIn(MAP_MIN_ZOOM, MAP_MAX_ZOOM)
+                    val clamped = clampPan(mapPanX + panDelta.x, mapPanY + panDelta.y, newScale)
+                    mapPanX = clamped.x
+                    mapPanY = clamped.y
+                    mapScale = newScale
+                }
+            }
+            .pointerInput(viewMode) {
+                detectTapGestures(
+                    onDoubleTap = { tap ->
+                        // Toggle between 1× and ZOOM_STEP×, zooming around the tap point so
+                        // the tapped feature stays under the finger.
+                        val target = if (mapScale < MAP_ZOOM_STEP * 0.95f) MAP_ZOOM_STEP else 1f
+                        val cx = size.width / 2f
+                        val cy = size.height / 2f
+                        val factor = target / mapScale
+                        val newPanX = (1f - factor) * (tap.x - cx) + factor * mapPanX
+                        val newPanY = (1f - factor) * (tap.y - cy) + factor * mapPanY
+                        val clamped = clampPan(newPanX, newPanY, target)
+                        mapPanX = clamped.x
+                        mapPanY = clamped.y
+                        mapScale = target
                     },
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                MapViewToggle(
-                    mode = viewMode,
-                    onModeChange = { viewMode = it },
-                )
             },
-        )
-
-        // Map canvas — pinch to zoom, drag to pan, double-tap to toggle 2× zoom in/out.
-        // The STD/AZ mode toggle moved to the TopBar pill since drag now means pan.
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp)
-                .pointerInput(viewMode) {
-                    detectTransformGestures { _, panDelta, zoom, _ ->
-                        val newScale = (mapScale * zoom).coerceIn(MAP_MIN_ZOOM, MAP_MAX_ZOOM)
-                        // Pan only meaningful when zoomed in; clamp so the scaled map can't
-                        // be dragged completely off the canvas.
-                        if (newScale > 1f) {
-                            val maxPanX = size.width.toFloat() * (newScale - 1f) / 2f
-                            val maxPanY = size.height.toFloat() * (newScale - 1f) / 2f
-                            mapPanX = (mapPanX + panDelta.x).coerceIn(-maxPanX, maxPanX)
-                            mapPanY = (mapPanY + panDelta.y).coerceIn(-maxPanY, maxPanY)
-                        } else {
-                            mapPanX = 0f
-                            mapPanY = 0f
-                        }
-                        mapScale = newScale
-                    }
-                }
-                .pointerInput(viewMode) {
-                    detectTapGestures(
-                        onDoubleTap = { tap ->
-                            // Double-tap toggles between 1× and ZOOM_STEP×, zooming around the
-                            // tap point so the tapped feature stays under the finger.
-                            val target = if (mapScale < MAP_ZOOM_STEP * 0.95f) MAP_ZOOM_STEP else 1f
-                            val cx = size.width / 2f
-                            val cy = size.height / 2f
-                            if (target > 1f) {
-                                val factor = target / mapScale
-                                val newPanX = (1f - factor) * (tap.x - cx) + factor * mapPanX
-                                val newPanY = (1f - factor) * (tap.y - cy) + factor * mapPanY
-                                val maxPanX = size.width.toFloat() * (target - 1f) / 2f
-                                val maxPanY = size.height.toFloat() * (target - 1f) / 2f
-                                mapPanX = newPanX.coerceIn(-maxPanX, maxPanX)
-                                mapPanY = newPanY.coerceIn(-maxPanY, maxPanY)
-                            } else {
-                                mapPanX = 0f
-                                mapPanY = 0f
-                            }
-                            mapScale = target
-                        },
-                    )
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            when (viewMode) {
-                MapViewMode.STANDARD -> StandardMapCanvas(
-                    opLat = opLat,
-                    opLon = opLon,
-                    stations = stations,
-                    pskSpots = pskSpots,
-                    selectedCallsign = selectedCallsign,
-                    onStationSelected = { selectedCallsign = it },
-                    scale = mapScale,
-                    panX = mapPanX,
-                    panY = mapPanY,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(2f),
-                )
-                MapViewMode.AZIMUTHAL -> AzimuthalMapCanvas(
-                    opLat = opLat,
-                    opLon = opLon,
-                    stations = stations,
-                    pskSpots = pskSpots,
-                    selectedCallsign = selectedCallsign,
-                    onStationSelected = { selectedCallsign = it },
-                    scale = mapScale,
-                    panX = mapPanX,
-                    panY = mapPanY,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f),
-                )
-            }
-
-            ZoomControls(
+    ) {
+        when (viewMode) {
+            MapViewMode.STANDARD -> StandardMapCanvas(
+                opLat = opLat,
+                opLon = opLon,
+                stations = stations,
+                pskSpots = pskSpots,
+                selectedCallsign = selectedCallsign,
+                onStationSelected = { selectedCallsign = it },
                 scale = mapScale,
-                onZoomIn = {
-                    val newScale = (mapScale * MAP_ZOOM_STEP).coerceAtMost(MAP_MAX_ZOOM)
-                    if (newScale != mapScale) {
-                        val factor = newScale / mapScale
-                        mapPanX *= factor
-                        mapPanY *= factor
-                        mapScale = newScale
-                    }
-                },
-                onZoomOut = {
-                    val newScale = (mapScale / MAP_ZOOM_STEP).coerceAtLeast(MAP_MIN_ZOOM)
-                    if (newScale <= 1f) {
-                        mapPanX = 0f
-                        mapPanY = 0f
-                    } else {
-                        val factor = newScale / mapScale
-                        mapPanX *= factor
-                        mapPanY *= factor
-                    }
-                    mapScale = newScale
-                },
-                onReset = {
-                    mapScale = 1f
-                    mapPanX = 0f
-                    mapPanY = 0f
-                },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp),
+                panX = mapPanX,
+                panY = mapPanY,
+                modifier = Modifier.fillMaxSize(),
+            )
+            MapViewMode.AZIMUTHAL -> AzimuthalMapCanvas(
+                opLat = opLat,
+                opLon = opLon,
+                stations = stations,
+                pskSpots = pskSpots,
+                selectedCallsign = selectedCallsign,
+                onStationSelected = { selectedCallsign = it },
+                scale = mapScale,
+                panX = mapPanX,
+                panY = mapPanY,
+                modifier = Modifier.fillMaxSize(),
             )
         }
 
-        // Selected station info card
+        // Right edge: zoom controls.
+        ZoomControls(
+            scale = mapScale,
+            onZoomIn = {
+                val newScale = (mapScale * MAP_ZOOM_STEP).coerceAtMost(MAP_MAX_ZOOM)
+                if (newScale != mapScale) {
+                    val factor = newScale / mapScale
+                    val clamped = clampPan(mapPanX * factor, mapPanY * factor, newScale)
+                    mapPanX = clamped.x
+                    mapPanY = clamped.y
+                    mapScale = newScale
+                }
+            },
+            onZoomOut = {
+                val newScale = (mapScale / MAP_ZOOM_STEP).coerceAtLeast(MAP_MIN_ZOOM)
+                val factor = newScale / mapScale
+                val clamped = clampPan(mapPanX * factor, mapPanY * factor, newScale)
+                mapPanX = clamped.x
+                mapPanY = clamped.y
+                mapScale = newScale
+            },
+            onReset = {
+                mapScale = 1f
+                mapPanX = 0f
+                mapPanY = 0f
+            },
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(8.dp),
+        )
+
+        // Top-left: grid + station/heard counts + projection (floating chip).
+        MapInfoChip(
+            myGrid = myGrid,
+            stationCount = stations.size,
+            pskOverlayEnabled = pskOverlayEnabled,
+            pskSpotCount = pskSpots.size,
+            pskError = pskError,
+            viewMode = viewMode,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(12.dp),
+        )
+
+        // Top-right: PSK overlay toggle + STD/AZ view toggle (floating).
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PskOverlayToggle(
+                enabled = pskOverlayEnabled,
+                onToggle = { newVal ->
+                    pskOverlayEnabled = newVal
+                    GeneralVariables.pskOverlayEnabled = newVal
+                    mainViewModel.databaseOpr.writeConfig(
+                        "pskOverlayEnabled",
+                        if (newVal) "1" else "0",
+                        null,
+                    )
+                },
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            MapViewToggle(
+                mode = viewMode,
+                onModeChange = { viewMode = it },
+            )
+        }
+
+        // Bottom: selected station info card (floating sheet).
         if (selectedStation != null) {
             SelectedStationCard(
                 station = selectedStation,
@@ -458,40 +460,59 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 opLon = opLon,
                 onDismiss = { selectedCallsign = null },
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                    .align(Alignment.BottomCenter)
+                    .padding(12.dp)
+                    .fillMaxWidth(),
             )
         }
+    }
+}
 
-        // Station count
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(BgSurface)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+// ---------------------------------------------------------------------------
+// Floating info chip (grid + counts + projection)
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun MapInfoChip(
+    myGrid: String?,
+    stationCount: Int,
+    pskOverlayEnabled: Boolean,
+    pskSpotCount: Int,
+    pskError: String?,
+    viewMode: MapViewMode,
+    modifier: Modifier = Modifier,
+) {
+    GlassCard(modifier = modifier) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
+            Text(
+                text = if (myGrid.isNullOrEmpty()) stringResource(R.string.map_no_grid_set) else myGrid,
+                color = Signal,
+                fontFamily = GeistMonoFamily,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            )
             Text(
                 text = if (pskOverlayEnabled) {
-                    stringResource(R.string.map_station_count_with_heard, stations.size, pskSpots.size)
+                    stringResource(R.string.map_station_count_with_heard, stationCount, pskSpotCount)
                 } else {
-                    stringResource(R.string.map_station_count, stations.size)
+                    stringResource(R.string.map_station_count, stationCount)
                 },
                 color = TextMuted,
                 fontSize = 10.5.sp,
             )
-            val overlayError = pskError
-            if (pskOverlayEnabled && overlayError != null) {
-                Spacer(modifier = Modifier.width(8.dp))
+            if (pskOverlayEnabled && pskError != null) {
                 Text(
-                    text = stringResource(R.string.map_psk_error, overlayError),
+                    text = stringResource(R.string.map_psk_error, pskError),
                     color = StatusNew,
                     fontSize = 10.5.sp,
                 )
             }
-            Spacer(modifier = Modifier.weight(1f))
             Text(
-                text = if (viewMode == MapViewMode.STANDARD) stringResource(R.string.map_projection_equirectangular) else stringResource(R.string.map_projection_azimuthal),
+                text = if (viewMode == MapViewMode.STANDARD) {
+                    stringResource(R.string.map_projection_equirectangular)
+                } else {
+                    stringResource(R.string.map_projection_azimuthal)
+                },
                 color = TextDim,
                 fontSize = 9.sp,
             )
@@ -850,25 +871,22 @@ private fun StandardMapCanvas(
         value = withContext(Dispatchers.IO) { WorldOutlines.load(context) }
     }
 
-    Canvas(modifier = modifier.clip(RoundedCornerShape(6.dp))) {
-        val w = size.width
-        val h = size.height
-        val halfW = w / 2f
-        val halfH = h / 2f
+    Canvas(modifier = modifier) {
+        val vp = EquirectViewport(size.width, size.height, scale, panX, panY)
 
         // Background panel
         drawRect(color = BgSurface, size = size)
 
         // Land — Natural Earth 110m vector outlines (drawn once polygons are loaded)
-        landRings?.let { rings -> drawWorldLand(rings, w, h, scale, panX, panY) }
+        landRings?.let { rings -> drawWorldLand(rings, vp) }
 
         // Lat/lon grid (over land so it stays visible across continents)
-        drawEquirectGrid(w, h, scale, panX, panY)
+        drawEquirectGrid(vp)
 
         // Operator marker (at projected lat/lon, scaled + panned with map)
-        val opProj = equirectProject(opLat, opLon)
-        val opX = halfW + opProj.x * halfW * scale + panX
-        val opY = halfH + opProj.y * halfH * scale + panY
+        val opPos = vp.projectLatLon(opLat, opLon)
+        val opX = opPos.x
+        val opY = opPos.y
         drawCircle(
             color = Accent.copy(alpha = 0.25f),
             radius = 8f,
@@ -882,9 +900,9 @@ private fun StandardMapCanvas(
 
         // PSK Reporter spots — drawn before stations so decoded markers layer on top.
         for (spot in pskSpots) {
-            val proj = equirectProject(spot.lat, spot.lon)
-            val sx = halfW + proj.x * halfW * scale + panX
-            val sy = halfH + proj.y * halfH * scale + panY
+            val pos = vp.projectLatLon(spot.lat, spot.lon)
+            val sx = pos.x
+            val sy = pos.y
 
             val half = 2.5f
             drawRect(
@@ -917,9 +935,9 @@ private fun StandardMapCanvas(
 
         // Station markers
         for ((index, station) in stations.withIndex()) {
-            val proj = equirectProject(station.lat, station.lon)
-            val sx = halfW + proj.x * halfW * scale + panX
-            val sy = halfH + proj.y * halfH * scale + panY
+            val pos = vp.projectLatLon(station.lat, station.lon)
+            val sx = pos.x
+            val sy = pos.y
 
             val isSelected = station.callsign == selectedCallsign
             val markerR = if (isSelected) 5f else 3.5f
@@ -998,22 +1016,27 @@ private fun StandardMapCanvas(
     }
 }
 
-private fun DrawScope.drawEquirectGrid(w: Float, h: Float, scale: Float, panX: Float, panY: Float) {
+// Inline projection scalars from the viewport. Equivalent to vp.projectLatLon but
+// without allocating an Offset per vertex — these helpers run every animation
+// frame over thousands of land vertices, so the land/grid paths use raw floats.
+private fun DrawScope.drawEquirectGrid(vp: EquirectViewport) {
     val gridColor = Color(0x1894A3B8)
     val axisColor = Color(0x30FFAF5E) // equator + prime meridian — accent tint
     val dashEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 6f))
-    val halfW = w / 2f
-    val halfH = h / 2f
+    val cx = vp.canvasW / 2f
+    val cy = vp.canvasH / 2f
+    val sxUnit = vp.worldPxW / 2f
+    val syUnit = vp.worldPxH / 2f
 
     // Meridians (vertical lines) every 30° lon, from -180 to 180
     var lon = -180
     while (lon <= 180) {
         val isPrime = lon == 0
-        val x = halfW + (lon.toFloat() / 180f) * halfW * scale + panX
+        val x = cx + (lon.toFloat() / 180f) * sxUnit + vp.panX
         drawLine(
             color = if (isPrime) axisColor else gridColor,
             start = Offset(x, 0f),
-            end = Offset(x, h),
+            end = Offset(x, size.height),
             strokeWidth = if (isPrime) 1f else 0.5f,
             pathEffect = dashEffect,
         )
@@ -1024,11 +1047,11 @@ private fun DrawScope.drawEquirectGrid(w: Float, h: Float, scale: Float, panX: F
     var lat = -90
     while (lat <= 90) {
         val isEquator = lat == 0
-        val y = halfH + (-lat.toFloat() / 90f) * halfH * scale + panY
+        val y = cy + (-lat.toFloat() / 90f) * syUnit + vp.panY
         drawLine(
             color = if (isEquator) axisColor else gridColor,
             start = Offset(0f, y),
-            end = Offset(w, y),
+            end = Offset(size.width, y),
             strokeWidth = if (isEquator) 1f else 0.5f,
             pathEffect = dashEffect,
         )
@@ -1036,20 +1059,15 @@ private fun DrawScope.drawEquirectGrid(w: Float, h: Float, scale: Float, panX: F
     }
 }
 
-private fun DrawScope.drawWorldLand(
-    rings: List<FloatArray>,
-    w: Float,
-    h: Float,
-    scale: Float,
-    panX: Float,
-    panY: Float,
-) {
+private fun DrawScope.drawWorldLand(rings: List<FloatArray>, vp: EquirectViewport) {
     // rings are flat float arrays of [lon, lat, lon, lat, ...] in geographic degrees.
     // Project via equirectangular and apply scale + pan around the canvas centre.
-    val halfW = w / 2f
-    val halfH = h / 2f
-    fun px(lon: Float) = halfW + (lon / 180f) * halfW * scale + panX
-    fun py(lat: Float) = halfH + (-lat / 90f) * halfH * scale + panY
+    val cx = vp.canvasW / 2f
+    val cy = vp.canvasH / 2f
+    val sxUnit = vp.worldPxW / 2f
+    val syUnit = vp.worldPxH / 2f
+    fun px(lon: Float) = cx + (lon / 180f) * sxUnit + vp.panX
+    fun py(lat: Float) = cy + (-lat / 90f) * syUnit + vp.panY
 
     val path = Path()
     for (ring in rings) {
