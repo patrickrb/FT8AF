@@ -180,7 +180,7 @@ fun MapScreen(mainViewModel: MainViewModel) {
     // Active TX target — the station we're calling — drives the solid connection
     // line. "CQ"/blank/null means we're calling CQ or idle (no target line).
     val txTarget by mainViewModel.ft8TransmitSignal.mutableToCallsign.observeAsState()
-    val txTargetCall = txTarget?.callsign?.takeIf { it.isNotBlank() && it != "CQ" }
+    val txTargetCall = txTarget?.callsign?.trim()?.takeIf { it.isNotEmpty() && !it.equals("CQ", ignoreCase = true) }
 
     var selectedCallsign by remember { mutableStateOf<String?>(null) }
     var viewMode by rememberSaveable { mutableStateOf(MapViewMode.STANDARD) }
@@ -1033,6 +1033,10 @@ private fun StandardMapCanvas(
     }
 }
 
+// Cached so the dashed connection line doesn't allocate a PathEffect (and its
+// backing float array) every frame it's drawn.
+private val ConnectionDashEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))
+
 // Draw an operator -> station connection line. Solid + thicker for the active TX
 // target; dashed + thinner for stations calling us.
 private fun DrawScope.drawConnectionLine(
@@ -1055,7 +1059,7 @@ private fun DrawScope.drawConnectionLine(
             start = Offset(x0, y0),
             end = Offset(x1, y1),
             strokeWidth = 1.6f,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f)),
+            pathEffect = ConnectionDashEffect,
         )
     }
 }

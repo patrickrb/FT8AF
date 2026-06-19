@@ -46,7 +46,9 @@ internal fun buildConnectionLines(
     stations: List<StationLine>,
     txTargetCallsign: String?,
 ): List<ConnectionLine> {
-    val target = txTargetCallsign?.takeIf { it.isNotBlank() }
+    // Defensive normalization: trim and treat the CQ placeholder (any case) as "no
+    // target" even if a caller passes an un-normalized value.
+    val target = txTargetCallsign?.trim()?.takeIf { it.isNotEmpty() && !it.equals("CQ", ignoreCase = true) }
     val out = ArrayList<ConnectionLine>()
 
     if (target != null) {

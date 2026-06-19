@@ -76,6 +76,23 @@ class ConnectionLinesTest {
     }
 
     @Test
+    fun cqPlaceholderTarget_treatedAsNoTarget() {
+        // "CQ" in any case / with surrounding whitespace is the idle/CQ marker, not a target.
+        for (cq in listOf("CQ", "cq", " CQ ", " cq ")) {
+            val lines = buildConnectionLines(listOf(TestStation("A", isToMe = true)), cq)
+            assertThat(lines).hasSize(1)
+            assertThat(lines[0].style).isEqualTo(LineStyle.DASHED_CALLING_ME)
+        }
+    }
+
+    @Test
+    fun targetWithSurroundingWhitespace_stillMatches() {
+        val lines = buildConnectionLines(listOf(TestStation("K1ABC")), " K1ABC ")
+        assertThat(lines).hasSize(1)
+        assertThat(lines[0].style).isEqualTo(LineStyle.SOLID_TX)
+    }
+
+    @Test
     fun empty_whenNoTargetNoToMe() {
         val lines = buildConnectionLines(listOf(TestStation("A"), TestStation("B")), null)
         assertThat(lines).isEmpty()
