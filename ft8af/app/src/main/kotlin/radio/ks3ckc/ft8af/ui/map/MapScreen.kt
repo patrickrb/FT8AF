@@ -1014,9 +1014,11 @@ private fun DrawScope.drawMarkerShape(shape: MarkerShape, cx: Float, cy: Float, 
             drawRect(BgApp, topLeft = Offset(cx - r, cy - r), size = Size(r * 2, r * 2), style = Stroke(width = 0.8f))
         }
         MarkerShape.CHECK_WORKED -> {
-            // Donut: filled disc with the centre punched out — distinct from a plain dot.
+            // Donut: filled disc with the centre punched back to the canvas background
+            // (BgSurface, what both canvases fill) so the hole reads as a cutout, not a
+            // dark dot. The outer ring keeps the standard BgApp marker outline.
             drawCircle(fill, r, Offset(cx, cy))
-            drawCircle(BgApp, r * 0.45f, Offset(cx, cy))
+            drawCircle(BgSurface, r * 0.45f, Offset(cx, cy))
             drawCircle(BgApp, r, Offset(cx, cy), style = Stroke(width = 1.2f))
         }
         MarkerShape.TRIANGLE_CQ -> {
