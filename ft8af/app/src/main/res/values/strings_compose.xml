@@ -471,6 +471,10 @@
     <string name="settings_alert_new_dxcc_desc">Sound + vibrate + notify when an unworked DXCC entity calls CQ</string>
     <string name="settings_alert_new_state">New US State</string>
     <string name="settings_alert_new_state_desc">Sound + vibrate + notify when a station from an unworked US state calls CQ (state from grid)</string>
+    <string name="rx_service_channel_name">Background receiving</string>
+    <string name="rx_service_channel_desc">Keeps FT8 decoding running while the app is in the background or the screen is off</string>
+    <string name="rx_service_title">FT8AF is receiving</string>
+    <string name="rx_service_text">Decoding in the background</string>
 
     <!-- ===== Settings: logging &amp; awards ===== -->
     <string name="settings_save_swl_decodes">Save SWL Decodes</string>

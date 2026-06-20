@@ -38,6 +38,8 @@ import androidx.lifecycle.Observer
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
+import com.k1af.ft8af.service.RxForegroundService
+import com.k1af.ft8af.service.RxServiceController
 import com.k1af.ft8af.bluetooth.BluetoothStateBroadcastReceive
 import com.k1af.ft8af.connector.CableSerialPort
 import com.k1af.ft8af.connector.ConnectMode
@@ -96,6 +98,10 @@ class ComposeMainActivity : AppCompatActivity() {
         GeneralVariables.getInstance().setMainContext(applicationContext)
         mainViewModel = MainViewModel.getInstance(this)
         ToastMessage.getInstance()
+
+        // Keep RX alive in the background (no-op until RECORD_AUDIO is granted; the
+        // permission-result callback re-invokes this once the user grants it).
+        startRxServiceIfPermitted()
 
         // Forward every TX-volume change to the native USB-direct write loop so a
         // slider move (or hardware-button / ALC auto-volume change) attenuates the
@@ -256,6 +262,21 @@ class ComposeMainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Start the foreground RX service so decode keeps running when backgrounded / screen-off.
+     * Gated on RECORD_AUDIO: starting a microphone-typed foreground service without it throws
+     * on Android 14, so this is a no-op until the permission is granted (re-invoked from
+     * onRequestPermissionsResult once the user grants it). RX is always-on, so rxActive=true.
+     */
+    private fun startRxServiceIfPermitted() {
+        val micGranted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.RECORD_AUDIO,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (RxServiceController.shouldRunService(true, micGranted)) {
+            RxForegroundService.start(this)
+        }
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -263,6 +284,13 @@ class ComposeMainActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         // Proceed regardless; same behavior as original.
+
+        // RECORD_AUDIO just granted (first launch): start the background RX service now so
+        // it begins in this session instead of only after the next app launch.
+        val micIdx = permissions.indexOf(Manifest.permission.RECORD_AUDIO)
+        if (micIdx >= 0 && grantResults.getOrNull(micIdx) == PackageManager.PERMISSION_GRANTED) {
+            startRxServiceIfPermitted()
+        }
 
         // GPS grid auto-update: the toggle in Settings (and the cold-start path)
         // requests ACCESS_FINE_LOCATION *asynchronously* and then immediately calls
@@ -653,6 +681,7 @@ class ComposeMainActivity : AppCompatActivity() {
         mainViewModel.ft8SignalListener.stopListen()
         mainViewModel.hamRecorder?.stopRecord()
         mainViewModel.utcTimer?.delete()
+        RxForegroundService.stop(this)
         System.exit(0)
     }
 }
