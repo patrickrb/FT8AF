@@ -45,6 +45,8 @@ fun DecodeFilterSettings(
     var filterDirectionalCQ by remember { mutableStateOf(GeneralVariables.filterDirectionalCQ) }
     var alertNewDxcc by remember { mutableStateOf(GeneralVariables.alertNewDxcc) }
     var alertNewState by remember { mutableStateOf(GeneralVariables.alertNewState) }
+    var alertOnCqReply by remember { mutableStateOf(GeneralVariables.alertOnCqReply) }
+    var alertOnQsoComplete by remember { mutableStateOf(GeneralVariables.alertOnQsoComplete) }
 
     // Continent codes (stored on the message) and their display names, parallel lists.
     val continentCodes = listOf("NA", "SA", "EU", "AF", "AS", "OC", "AN")
@@ -379,6 +381,32 @@ fun DecodeFilterSettings(
                             GeneralVariables.alertNewState = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "alertNewState", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_alert_cq_reply),
+                        description = stringResource(R.string.settings_alert_cq_reply_desc),
+                        toggle = alertOnCqReply,
+                        onToggleChange = { checked ->
+                            alertOnCqReply = checked
+                            GeneralVariables.alertOnCqReply = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "alertOnCqReply", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_alert_qso_complete),
+                        description = stringResource(R.string.settings_alert_qso_complete_desc),
+                        toggle = alertOnQsoComplete,
+                        onToggleChange = { checked ->
+                            alertOnQsoComplete = checked
+                            GeneralVariables.alertOnQsoComplete = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "alertOnQsoComplete", if (checked) "1" else "0", null,
                             )
                         },
                     )
