@@ -2,7 +2,7 @@
 
 A cross-platform (Windows / macOS / Linux) desktop port of the FT8AF Android app,
 built with **Tauri** (Rust backend + React/TypeScript frontend). It reuses the
-exact pure-C FT8 DSP core from the Android app (`ft8cn/app/src/main/cpp`,
+exact pure-C FT8 DSP core from the Android app (`ft8af/app/src/main/cpp`,
 kgoba `ft8_lib` @ `6f528128`) — compiled from source, no JNI.
 
 MVP scope: receive/decode FT8, transmit + auto-QSO sequencing, logbook with ADIF

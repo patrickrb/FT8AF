@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108">
+  <defs>
+    <!-- Background: deep-navy radial gradient -->
+    <radialGradient id="bg-grad" cx="54" cy="45" r="68" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1A2238"/>
+      <stop offset="0.55" stop-color="#0A1020"/>
+      <stop offset="1" stop-color="#04070E"/>
+    </radialGradient>
+    <!-- Background: amber center halo -->
+    <radialGradient id="halo-grad" cx="54" cy="57" r="38" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFAF5E" stop-opacity="0.2"/>
+      <stop offset="0.7" stop-color="#FFAF5E" stop-opacity="0.039"/>
+      <stop offset="1" stop-color="#FFAF5E" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Foreground: center disc linear gradient -->
+    <linearGradient id="disc-grad" x1="54" y1="50" x2="54" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD7A0"/>
+      <stop offset="0.5" stop-color="#FFAF5E"/>
+      <stop offset="1" stop-color="#FF8A2C"/>
+    </linearGradient>
+    <!-- Circular adaptive-icon mask -->
+    <clipPath id="circle-mask">
+      <circle cx="54" cy="54" r="50"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#circle-mask)">
+    <!-- ===== BACKGROUND LAYER ===== -->
+    <rect x="0" y="0" width="108" height="108" fill="url(#bg-grad)"/>
+    <circle cx="54" cy="57" r="38" fill="url(#halo-grad)"/>
+
+    <!-- ===== FOREGROUND LAYER ===== -->
+    <!-- Range rings -->
+    <circle cx="54" cy="57" r="30" fill="none" stroke="#A0B6DC" stroke-opacity="0.2" stroke-width="0.6"/>
+    <circle cx="54" cy="57" r="21" fill="none" stroke="#A0B6DC" stroke-opacity="0.2" stroke-width="0.6"/>
+
+    <!-- Signal arcs (top half, outer to inner) -->
+    <path d="M22,57 A32,32 0 0,1 86,57" fill="none" stroke="#FFAF5E" stroke-opacity="0.333" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M30,57 A24,24 0 0,1 78,57" fill="none" stroke="#FFAF5E" stroke-opacity="0.6" stroke-width="2.8" stroke-linecap="round"/>
+    <path d="M38,57 A16,16 0 0,1 70,57" fill="none" stroke="#FFC880" stroke-width="3.2" stroke-linecap="round"/>
+
+    <!-- Center disc -->
+    <circle cx="54" cy="57" r="7" fill="url(#disc-grad)"/>
+    <!-- Disc rim -->
+    <circle cx="54" cy="57" r="7" fill="none" stroke="#FFE6BE" stroke-opacity="0.6" stroke-width="0.4"/>
+    <!-- Specular highlight -->
+    <ellipse cx="52" cy="54.5" rx="2.4" ry="1.6" fill="#FFF5DC" fill-opacity="0.627"/>
+
+    <!-- Signal sparks -->
+    <circle cx="22" cy="57" r="0.6" fill="#FFD7A0" fill-opacity="0.502"/>
+    <circle cx="86" cy="57" r="0.6" fill="#FFD7A0" fill-opacity="0.502"/>
+    <circle cx="30" cy="57" r="0.6" fill="#FFD7A0" fill-opacity="0.502"/>
+    <circle cx="78" cy="57" r="0.6" fill="#FFD7A0" fill-opacity="0.502"/>
+  </g>
+</svg>

@@ -1,0 +1,21 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Theme.Ft8AF" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- Primary brand color — dark navy matching the Compose splash so the
+             system-drawn window never flashes a different accent. -->
+        <item name="colorPrimary">@color/splash_window_bg</item>
+        <item name="colorPrimaryVariant">@color/splash_window_bg</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <!-- Secondary brand color. -->
+        <item name="colorSecondary">@color/teal_200</item>
+        <item name="colorSecondaryVariant">@color/teal_700</item>
+        <item name="colorOnSecondary">@color/black</item>
+        <!-- android:statusBarColor is deprecated and ignored under edge-to-edge
+             on Android 15; the system bars are transparent and hidden immersively
+             (see ImmersiveBars). windowBackground still covers the brief system
+             pre-splash with the same deep navy as the Compose splash backdrop. -->
+        <item name="android:windowBackground">@color/splash_window_bg</item>
+        <!-- Customize your theme here. -->
+
+    </style>
+</resources>

@@ -1,4 +1,4 @@
-//! M1 acceptance gate: a Rust port of ft8cn_glue/test_roundtrip.c.
+//! M1 acceptance gate: a Rust port of ft8af_glue/test_roundtrip.c.
 //!
 //! Proves the C ft8_lib core links and is self-consistent through the Rust FFI:
 //! pack a known message -> encode to tones -> synthesize the GFSK waveform ->

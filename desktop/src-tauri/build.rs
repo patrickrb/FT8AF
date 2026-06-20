@@ -1,18 +1,18 @@
 // Compile the pure-C FT8 DSP core (kgoba ft8_lib pinned at 6f528128) plus the
 // FT8CN GFSK glue into a static `ft8core` lib that the Rust FFI layer links.
 //
-// We reference the C sources in place inside the Android tree (../../ft8cn/...)
+// We reference the C sources in place inside the Android tree (../../ft8af/...)
 // rather than duplicating them, so the desktop port tracks the same DSP as the
-// app. This mirrors the standalone build recipe proven by ft8cn_glue/test_roundtrip.c.
+// app. This mirrors the standalone build recipe proven by ft8af_glue/test_roundtrip.c.
 
 use std::path::PathBuf;
 
 fn main() {
     let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     // src-tauri -> desktop -> NEXT-FT8CN
-    let cpp = manifest.join("../../ft8cn/app/src/main/cpp");
+    let cpp = manifest.join("../../ft8af/app/src/main/cpp");
     let ft8 = cpp.join("ft8_lib");
-    let glue = cpp.join("ft8cn_glue");
+    let glue = cpp.join("ft8af_glue");
 
     let mut build = cc::Build::new();
     build.include(&ft8).include(&glue);

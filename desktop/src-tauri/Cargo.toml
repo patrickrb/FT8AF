@@ -37,7 +37,7 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 # async runtime for the UTC scheduler
 tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"] }
 
-# The C FT8 DSP core (kgoba ft8_lib @ 6f528128 + ft8cn_glue/gfsk.c) is compiled
+# The C FT8 DSP core (kgoba ft8_lib @ 6f528128 + ft8af_glue/gfsk.c) is compiled
 # from source in build.rs via the `cc` crate — no prebuilt .so, so this links
 # natively on Windows/macOS/Linux.
 [build-dependencies]
