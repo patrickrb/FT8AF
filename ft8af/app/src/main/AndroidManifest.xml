@@ -24,6 +24,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Android Auto templated Car App is optional hardware. -->
+    <uses-feature
+        android:name="android.hardware.type.automotive"
+        android:required="false" />
+
     <application
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -80,6 +85,25 @@
         <service
             android:name=".bluetooth.BluetoothSerialService"
             android:exported="false" />
+
+        <!-- Android Auto (Car App Library). DHU/dev only: an FT8 decoder fits no
+             Play-distributable Car App category, so this is declared IOT and won't pass
+             production review. Surfaces the live decode list on a connected head unit. -->
+        <service
+            android:name="com.k1af.ft8af.car.Ft8CarAppService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.IOT" />
+            </intent-filter>
+        </service>
+
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1" />
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
 
         <!-- Persists the user's per-app language choice (AppCompatDelegate
              .setApplicationLocales) on Android 12 and below. On Android 13+

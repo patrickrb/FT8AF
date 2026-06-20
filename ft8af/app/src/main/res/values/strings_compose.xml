@@ -471,6 +471,7 @@
     <string name="settings_alert_new_dxcc_desc">Sound + vibrate + notify when an unworked DXCC entity calls CQ</string>
     <string name="settings_alert_new_state">New US State</string>
     <string name="settings_alert_new_state_desc">Sound + vibrate + notify when a station from an unworked US state calls CQ (state from grid)</string>
+    <string name="car_empty_decodes">Listening… no decodes yet</string>
 
     <!-- ===== Settings: logging &amp; awards ===== -->
     <string name="settings_save_swl_decodes">Save SWL Decodes</string>

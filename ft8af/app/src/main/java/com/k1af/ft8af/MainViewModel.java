@@ -411,6 +411,16 @@ public class MainViewModel extends ViewModel {
     }
 
     /**
+     * Owner-less accessor to the already-created singleton, for components that have no
+     * {@link ViewModelStoreOwner} (e.g. the Android Auto {@code CarAppService}, which runs in
+     * its own service lifecycle). Returns null if the Activity hasn't created the instance
+     * yet; never creates one. Read-only consumers must null-check.
+     */
+    public static MainViewModel peekInstance() {
+        return viewModel;
+    }
+
+    /**
      * The value afterDecode() must post to mutableIsDecoding (the spectrum-display
      * "decoding" marker) once a decode pass finishes. beforeListen() turns the marker
      * on at the start of every cycle, so every pass must turn it back off when done —

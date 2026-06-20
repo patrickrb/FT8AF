@@ -166,6 +166,9 @@ dependencies {
     implementation 'androidx.navigation:navigation-ui:2.5.3'
     implementation 'com.google.android.gms:play-services-maps:18.1.0'
 
+    // Android Auto templated Car App (DHU/dev only — see Ft8CarAppService).
+    implementation 'androidx.car.app:app:1.4.0'
+
     implementation 'com.google.guava:guava:31.1-android'//Used for HashTable (multi-key HashMap)
 
     implementation files('src/libs/MPAndroidChartv_3.1.0.jar')
