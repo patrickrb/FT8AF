@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import radio.ks3ckc.ft8af.pota.model.PotaLocation
 import radio.ks3ckc.ft8af.pota.model.PotaPark
 import radio.ks3ckc.ft8af.pota.model.PotaSpot
 import java.io.File
@@ -108,12 +109,78 @@ object PotaClient {
                 reference = ref,
                 name = o.optString("name", ""),
                 locationDesc = o.optString("locationDesc", ""),
+                latitude = o.optDouble("latitude", 0.0),
+                longitude = o.optDouble("longitude", 0.0),
+                grid = o.optString("grid", ""),
+                activations = o.optInt("activations", 0),
+                qsos = o.optInt("qsos", 0),
             )
         } catch (e: Exception) {
             log("park parse error: ${e.javaClass.simpleName}: ${e.message ?: "?"}")
             null
         }
     }
+
+    /** Fetch all POTA location codes (e.g. US-PA, VE-ON) with their center coordinates. */
+    suspend fun getLocations(): List<PotaLocation>? = withContext(Dispatchers.IO) {
+        val body = httpGet("$BASE_URL/locations") ?: return@withContext null
+        try {
+            val arr = JSONArray(body)
+            val out = ArrayList<PotaLocation>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val lat = o.optDouble("latitude", Double.NaN)
+                val lng = o.optDouble("longitude", Double.NaN)
+                if (lat.isNaN() || lng.isNaN()) continue
+                out.add(
+                    PotaLocation(
+                        locationDesc = o.optString("locationDesc", ""),
+                        locationName = o.optString("locationName", ""),
+                        latitude = lat,
+                        longitude = lng,
+                    ),
+                )
+            }
+            log("locations ok N=${out.size}")
+            out
+        } catch (e: Exception) {
+            log("locations parse error: ${e.javaClass.simpleName}: ${e.message ?: "?"}")
+            null
+        }
+    }
+
+    /** Fetch all parks within a POTA location code (e.g. US-PA). */
+    suspend fun getParksForLocation(locationCode: String): List<PotaPark>? =
+        withContext(Dispatchers.IO) {
+            val code = locationCode.trim().uppercase()
+            if (code.isEmpty()) return@withContext null
+            val body = httpGet("$BASE_URL/location/parks/${urlEncode(code)}")
+                ?: return@withContext null
+            try {
+                val arr = JSONArray(body)
+                val out = ArrayList<PotaPark>(arr.length())
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    out.add(
+                        PotaPark(
+                            reference = o.optString("reference", ""),
+                            name = o.optString("name", ""),
+                            locationDesc = o.optString("locationDesc", ""),
+                            latitude = o.optDouble("latitude", 0.0),
+                            longitude = o.optDouble("longitude", 0.0),
+                            grid = o.optString("grid", ""),
+                            activations = o.optInt("activations", 0),
+                            qsos = o.optInt("qsos", 0),
+                        ),
+                    )
+                }
+                log("parks for $code ok N=${out.size}")
+                out
+            } catch (e: Exception) {
+                log("parks parse error ($code): ${e.javaClass.simpleName}: ${e.message ?: "?"}")
+                null
+            }
+        }
 
     /**
      * Upload one ADIF document to the authenticated endpoint. [idToken] is a

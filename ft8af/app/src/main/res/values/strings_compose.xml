@@ -300,6 +300,15 @@
     <string name="pota_max_parks_reached">Maximum of 10 parks reached</string>
     <string name="pota_spotted_n_parks">Spotted at %1$d parks</string>
     <string name="pota_parks_more">+%1$d more</string>
+    <string name="pota_search_parks">Search parks</string>
+    <string name="pota_search_parks_hint">Filter by name or reference</string>
+    <string name="pota_recent_parks">RECENT PARKS</string>
+    <string name="pota_nearby_parks">NEARBY PARKS</string>
+    <string name="pota_no_recent_parks">No recent activations</string>
+    <string name="pota_no_nearby_parks">No parks found nearby</string>
+    <string name="pota_loading_nearby">Loading nearby parks…</string>
+    <string name="pota_loading_recent">Loading recent parks…</string>
+    <string name="pota_location_unavailable">Location unavailable — enable GPS</string>
 
     <!-- ===== Debug log / Map / Waterfall ===== -->
     <string name="debug_title">Debug</string>

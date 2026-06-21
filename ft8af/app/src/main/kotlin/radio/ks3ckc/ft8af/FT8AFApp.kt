@@ -43,6 +43,9 @@ import com.k1af.ft8af.rigs.BaseRigOperation
 import radio.ks3ckc.ft8af.theme.BgApp
 import radio.ks3ckc.ft8af.ui.components.ActiveQsoPanel
 import radio.ks3ckc.ft8af.ui.components.shouldShowCatChip
+import radio.ks3ckc.ft8af.ui.components.CqOptionsSheet
+import radio.ks3ckc.ft8af.ui.components.canEnableFieldDay
+import radio.ks3ckc.ft8af.ui.components.shouldPersistSection
 import radio.ks3ckc.ft8af.ui.components.FT8AFTab
 import radio.ks3ckc.ft8af.ui.components.FrequencyPickerSheet
 import radio.ks3ckc.ft8af.ui.components.HoundSetupSheet
@@ -142,6 +145,16 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     // collects the Fox call + call frequency before starting.
     var dxEnabled by remember { mutableStateOf(GeneralVariables.houndMode) }
     var showHoundSetup by remember { mutableStateOf(false) }
+
+    // CQ Options sheet state — long-press the CQ button to open.
+    var showCqOptions by remember { mutableStateOf(false) }
+    var cqModifier by remember { mutableStateOf(GeneralVariables.toModifier ?: "") }
+    var isFreeTextMode by remember { mutableStateOf(false) }
+    var freeTextMessage by remember { mutableStateOf("") }
+    var fieldDayEnabled by remember { mutableStateOf(GeneralVariables.fieldDayMode) }
+    var fieldDayClass by remember { mutableStateOf(GeneralVariables.fieldDayClass ?: "A") }
+    var fieldDayNumTx by remember { mutableIntStateOf(GeneralVariables.fieldDayNumTx.coerceIn(1, 16)) }
+    var fieldDaySection by remember { mutableStateOf(GeneralVariables.fieldDaySection ?: "") }
 
     // Frequency picker sheet state
     var showFrequencyPicker by rememberSaveable { mutableStateOf(false) }
@@ -347,6 +360,9 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 expanded = qsoPanelExpanded,
                 txVolume = txVolume,
                 showVolumeSlider = showVolumeSlider,
+                cqModifier = cqModifier,
+                isFreeTextMode = isFreeTextMode,
+                fieldDayEnabled = fieldDayEnabled,
                 onVolumeChange = { newVolume ->
                     txVolume = newVolume
                     GeneralVariables.volumePercent = newVolume / 100f
@@ -360,6 +376,13 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                     if (GeneralVariables.myCallsign.isNullOrEmpty()) {
                         Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
                     } else {
+                        // Apply current CQ mode before activating
+                        if (isFreeTextMode && freeTextMessage.isNotBlank()) {
+                            mainViewModel.ft8TransmitSignal.setFreeText(freeTextMessage)
+                            mainViewModel.ft8TransmitSignal.setTransmitFreeText(true)
+                        } else {
+                            mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
+                        }
                         mainViewModel.ft8TransmitSignal.userResetToCQ()
                         mainViewModel.ft8TransmitSignal.setActivated(true)
                         GeneralVariables.resetLaunchSupervision()
@@ -381,7 +404,20 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                             mainViewModel.databaseOpr.writeConfig("autoFollowCQ", "0", null)
                         }
                     }
+                    // Clear free text and Field Day mode on stop
+                    isFreeTextMode = false
+                    freeTextMessage = ""
+                    mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
+                    if (fieldDayEnabled) {
+                        fieldDayEnabled = false
+                        GeneralVariables.fieldDayMode = false
+                        mainViewModel.databaseOpr.writeConfig("fieldDayMode", "0", null)
+                        cqModifier = ""
+                        GeneralVariables.toModifier = ""
+                        mainViewModel.databaseOpr.writeConfig("toModifier", "", null)
+                    }
                 },
+                onLongPressCQ = { showCqOptions = true },
                 onToggleDx = {
                     if (dxEnabled || GeneralVariables.houndMode) {
                         mainViewModel.stopHoundMode()
@@ -497,6 +533,110 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                     dxEnabled = true
                     huntEnabled = false
                     showHoundSetup = false
+                }
+            },
+        )
+
+        // CQ Options — modifier presets, free text, and Field Day configuration.
+        CqOptionsSheet(
+            visible = showCqOptions,
+            currentModifier = cqModifier,
+            isFreeTextMode = isFreeTextMode,
+            freeText = freeTextMessage,
+            fieldDayEnabled = fieldDayEnabled,
+            fieldDayClass = fieldDayClass,
+            fieldDayNumTx = fieldDayNumTx,
+            fieldDaySection = fieldDaySection,
+            onDismiss = { showCqOptions = false },
+            onSelectPreset = { preset ->
+                cqModifier = preset
+                isFreeTextMode = false
+                freeTextMessage = ""
+                fieldDayEnabled = false
+                GeneralVariables.toModifier = preset
+                GeneralVariables.fieldDayMode = false
+                mainViewModel.databaseOpr.writeConfig("toModifier", preset, null)
+                mainViewModel.databaseOpr.writeConfig("fieldDayMode", "0", null)
+            },
+            onCustomModifier = { mod ->
+                cqModifier = mod
+                isFreeTextMode = false
+                freeTextMessage = ""
+                fieldDayEnabled = false
+                GeneralVariables.toModifier = mod
+                GeneralVariables.fieldDayMode = false
+                mainViewModel.databaseOpr.writeConfig("toModifier", mod, null)
+                mainViewModel.databaseOpr.writeConfig("fieldDayMode", "0", null)
+            },
+            onFreeTextChange = { text ->
+                freeTextMessage = text
+                isFreeTextMode = text.isNotBlank()
+                if (text.isNotBlank()) {
+                    fieldDayEnabled = false
+                    cqModifier = ""
+                    GeneralVariables.fieldDayMode = false
+                    GeneralVariables.toModifier = ""
+                }
+            },
+            onFieldDayToggle = { enabled ->
+                if (enabled && !canEnableFieldDay(fieldDaySection)) {
+                    // Refuse to enable FD without a valid section — otherwise the
+                    // packer would silently transmit "AB" (section index 0).
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.cq_fd_section_required),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                } else {
+                    fieldDayEnabled = enabled
+                    GeneralVariables.fieldDayMode = enabled
+                    mainViewModel.databaseOpr.writeConfig("fieldDayMode", if (enabled) "1" else "0", null)
+                    if (enabled) {
+                        isFreeTextMode = false
+                        freeTextMessage = ""
+                        cqModifier = "FD"
+                        GeneralVariables.toModifier = "FD"
+                        mainViewModel.databaseOpr.writeConfig("toModifier", "FD", null)
+                    } else {
+                        cqModifier = ""
+                        GeneralVariables.toModifier = ""
+                        mainViewModel.databaseOpr.writeConfig("toModifier", "", null)
+                    }
+                }
+            },
+            onFieldDayClassChange = { cls ->
+                fieldDayClass = cls
+                GeneralVariables.fieldDayClass = cls
+                mainViewModel.databaseOpr.writeConfig("fieldDayClass", cls, null)
+            },
+            onFieldDayNumTxChange = { num ->
+                val clamped = num.coerceIn(1, 16)
+                fieldDayNumTx = clamped
+                GeneralVariables.fieldDayNumTx = clamped
+                mainViewModel.databaseOpr.writeConfig("fieldDayNumTx", clamped.toString(), null)
+            },
+            onFieldDaySectionChange = { section ->
+                fieldDaySection = section
+                GeneralVariables.fieldDaySection = section
+                // Only persist a recognized section (or an explicit clear while FD
+                // is off) so a blank/unknown value can't restore as "AB" later.
+                if (shouldPersistSection(section, fieldDayEnabled)) {
+                    mainViewModel.databaseOpr.writeConfig("fieldDaySection", section, null)
+                }
+            },
+            onCallCQ = {
+                if (GeneralVariables.myCallsign.isNullOrEmpty()) {
+                    Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
+                } else {
+                    if (isFreeTextMode && freeTextMessage.isNotBlank()) {
+                        mainViewModel.ft8TransmitSignal.setFreeText(freeTextMessage)
+                        mainViewModel.ft8TransmitSignal.setTransmitFreeText(true)
+                    } else {
+                        mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
+                    }
+                    mainViewModel.ft8TransmitSignal.userResetToCQ()
+                    mainViewModel.ft8TransmitSignal.setActivated(true)
+                    GeneralVariables.resetLaunchSupervision()
                 }
             },
         )

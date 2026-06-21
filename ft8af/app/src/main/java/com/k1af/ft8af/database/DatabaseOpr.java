@@ -2334,6 +2334,27 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("toModifier")) {
                     GeneralVariables.toModifier = result;
                 }
+                if (name.equalsIgnoreCase("fieldDayMode")) {
+                    GeneralVariables.fieldDayMode = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("fieldDayClass")) {
+                    if (result != null && result.length() > 0) {
+                        GeneralVariables.fieldDayClass = result;
+                    }
+                }
+                if (name.equalsIgnoreCase("fieldDayNumTx")) {
+                    try {
+                        int v = result.equals("") ? 1 : Integer.parseInt(result);
+                        GeneralVariables.fieldDayNumTx = Math.max(1, Math.min(16, v));
+                    } catch (NumberFormatException e) {
+                        GeneralVariables.fieldDayNumTx = 1;
+                    }
+                }
+                if (name.equalsIgnoreCase("fieldDaySection")) {
+                    if (result != null) {
+                        GeneralVariables.fieldDaySection = result;
+                    }
+                }
                 if (name.equalsIgnoreCase("antenna")) {
                     GeneralVariables.myAntenna = result;
                 }

@@ -5,9 +5,11 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,6 +74,7 @@ internal fun txStripActionState(isActivated: Boolean, huntEnabled: Boolean) = Tx
     cqIsStop = isActivated,
 )
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TxStrip(
     isTransmitting: Boolean,
@@ -87,10 +90,14 @@ fun TxStrip(
     expanded: Boolean = false,
     txVolume: Int = 80,
     showVolumeSlider: Boolean = false,
+    cqModifier: String = "",
+    isFreeTextMode: Boolean = false,
+    fieldDayEnabled: Boolean = false,
     onVolumeChange: (Int) -> Unit = {},
     onVolumeChangeFinished: () -> Unit = {},
     onCallCQ: () -> Unit,
     onStop: () -> Unit,
+    onLongPressCQ: () -> Unit = {},
     onToggleSlot: () -> Unit,
     onToggleHunt: () -> Unit,
     onCycleMode: () -> Unit,
@@ -254,10 +261,19 @@ fun TxStrip(
 
             // CQ / STOP — the primary action. Filled amber to call CQ, red to stop.
             // Locked off while HUNT is armed (and no QSO yet).
+            // Long-press opens CQ options (modifier, free text, Field Day).
             val cqIsStop = actions.cqIsStop
+            val cqSubtitle = when {
+                cqIsStop -> null
+                isFreeTextMode -> "FREE"
+                fieldDayEnabled -> "FD"
+                cqModifier.isNotEmpty() -> cqModifier
+                else -> null
+            }
             PrimaryActionButton(
                 modifier = Modifier.weight(1.7f),
                 label = if (cqIsStop) stringResource(R.string.tx_stop) else stringResource(R.string.tx_call_cq),
+                subtitle = cqSubtitle,
                 background = when {
                     cqIsStop -> StatusBad
                     actions.cqDisabled -> Accent.copy(alpha = 0.35f)
@@ -266,6 +282,7 @@ fun TxStrip(
                 contentColor = if (cqIsStop) Color.White else BgApp,
                 enabled = !actions.cqDisabled,
                 onClick = { if (cqIsStop) onStop() else onCallCQ() },
+                onLongClick = if (!cqIsStop) onLongPressCQ else null,
             ) { color ->
                 if (cqIsStop) {
                     FT8AFIcons.Close(size = 18.dp, color = color, strokeWidth = 2f)
@@ -438,6 +455,7 @@ private fun StackedActionButton(
 }
 
 /** The large primary button with the icon beside the label (CQ / STOP). */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PrimaryActionButton(
     label: String,
@@ -446,6 +464,8 @@ private fun PrimaryActionButton(
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    onLongClick: (() -> Unit)? = null,
     icon: @Composable (Color) -> Unit,
 ) {
     Row(
@@ -453,22 +473,54 @@ private fun PrimaryActionButton(
             .height(54.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(background)
-            .clickable(enabled = enabled) { onClick() }
+            .combinedClickable(
+                enabled = enabled,
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
             .padding(horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         icon(contentColor)
-        Text(
-            text = label,
-            color = contentColor,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            fontFamily = GeistMonoFamily,
-            letterSpacing = 0.04.sp,
-            maxLines = 1,
-            softWrap = false,
-        )
+        if (subtitle != null) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = label,
+                    color = contentColor,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = GeistMonoFamily,
+                    letterSpacing = 0.04.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+                Text(
+                    text = subtitle,
+                    color = contentColor.copy(alpha = 0.6f),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = GeistMonoFamily,
+                    letterSpacing = 0.02.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+        } else {
+            Text(
+                text = label,
+                color = contentColor,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = GeistMonoFamily,
+                letterSpacing = 0.04.sp,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
+        if (onLongClick != null) {
+            FT8AFIcons.ChevronDown(size = 10.dp, color = contentColor.copy(alpha = 0.5f), strokeWidth = 2f)
+        }
     }
 }
 
