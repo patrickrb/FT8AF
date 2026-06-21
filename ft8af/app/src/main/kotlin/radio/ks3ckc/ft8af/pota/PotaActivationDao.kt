@@ -75,14 +75,9 @@ internal object PotaActivationDao {
         cursor.use { c ->
             while (c.moveToNext()) rawRefs.add(c.getString(0) ?: "")
         }
-        val seen = LinkedHashSet<String>()
-        for (raw in rawRefs) {
-            for (part in raw.split(",")) {
-                val ref = part.trim()
-                if (ref.isNotEmpty()) seen.add(ref)
-            }
-        }
-        return seen.toList()
+        // Reuse the shared, unit-tested splitter/deduplicator so the parsing
+        // rules stay consistent with the rest of the park-ref handling.
+        return deduplicateRefs(rawRefs)
     }
 
     fun history(limit: Int = 50): List<PotaActivation> {

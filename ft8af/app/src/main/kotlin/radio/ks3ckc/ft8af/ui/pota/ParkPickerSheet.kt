@@ -148,7 +148,7 @@ private fun ParkPickerContent(
         Spacer(Modifier.height(6.dp))
 
         if (recentLoading) {
-            LoadingRow()
+            LoadingRow(stringResource(R.string.pota_loading_recent))
         } else {
             val filteredRecent = filterParks(recentParks, filter)
             if (filteredRecent.isEmpty()) {
@@ -173,7 +173,7 @@ private fun ParkPickerContent(
         Spacer(Modifier.height(6.dp))
 
         if (nearbyLoading) {
-            LoadingRow()
+            LoadingRow(stringResource(R.string.pota_loading_nearby))
         } else if (!locationAvailable) {
             EmptyRow(stringResource(R.string.pota_location_unavailable))
         } else {
@@ -210,7 +210,7 @@ private fun SectionHeader(text: String) {
 }
 
 @Composable
-private fun LoadingRow() {
+private fun LoadingRow(message: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -225,7 +225,7 @@ private fun LoadingRow() {
         )
         Spacer(Modifier.width(8.dp))
         Text(
-            stringResource(R.string.pota_loading_nearby),
+            message,
             color = TextMuted,
             fontSize = 12.sp,
         )

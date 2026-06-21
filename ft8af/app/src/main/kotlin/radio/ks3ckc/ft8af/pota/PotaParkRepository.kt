@@ -8,23 +8,32 @@ import kotlinx.coroutines.withContext
 import radio.ks3ckc.ft8af.pota.model.PotaLocation
 import radio.ks3ckc.ft8af.pota.model.PotaPark
 import radio.ks3ckc.ft8af.pota.model.PotaParkWithDistance
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Provides park discovery for the park picker: recent activations and nearby parks.
  * Caches API responses in memory with a 30-minute TTL to avoid hammering pota.app.
+ *
+ * The caches are read and written from `Dispatchers.IO` and can be touched
+ * concurrently by multiple coroutines (e.g. overlapping sheet opens), so they use
+ * thread-safe containers (`ConcurrentHashMap` / `@Volatile`). A benign race may
+ * still trigger a duplicate API fetch, but never a corrupted map or crash.
  */
 object PotaParkRepository {
 
     private const val CACHE_TTL_MS = 30 * 60 * 1_000L
     private const val NEARBY_LIMIT = 50
 
+    @Volatile
     private var cachedLocations: List<PotaLocation>? = null
+
+    @Volatile
     private var locationsTimestamp = 0L
 
-    private val parkCache = HashMap<String, List<PotaPark>>()
-    private val parkCacheTimestamp = HashMap<String, Long>()
+    private val parkCache = ConcurrentHashMap<String, List<PotaPark>>()
+    private val parkCacheTimestamp = ConcurrentHashMap<String, Long>()
 
-    private val lookupCache = HashMap<String, PotaPark>()
+    private val lookupCache = ConcurrentHashMap<String, PotaPark>()
 
     /**
      * Return the [NEARBY_LIMIT] closest parks to [userLat]/[userLng], sorted by

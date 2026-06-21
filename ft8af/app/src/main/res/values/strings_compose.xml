@@ -307,6 +307,7 @@
     <string name="pota_no_recent_parks">No recent activations</string>
     <string name="pota_no_nearby_parks">No parks found nearby</string>
     <string name="pota_loading_nearby">Loading nearby parks…</string>
+    <string name="pota_loading_recent">Loading recent parks…</string>
     <string name="pota_location_unavailable">Location unavailable — enable GPS</string>
 
     <!-- ===== Debug log / Map / Waterfall ===== -->

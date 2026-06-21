@@ -564,6 +564,7 @@
     <string name="cq_fd_transmitters">Transmitters</string>
     <string name="cq_fd_section">Section</string>
     <string name="cq_fd_section_hint">e.g. EMA, WI, SDG</string>
+    <string name="cq_fd_section_required">Enter a valid ARRL/RAC section before enabling Field Day</string>
 
     <string name="alram_switch">Alarm switch</string>
     <string name="swr_switch_on" translatable="false">SWR On</string>

@@ -40,8 +40,10 @@ class CqOptionsLogicTest {
     }
 
     @Test
-    fun isValidModifier_threeDigits_valid() {
-        assertThat(isValidModifier("599")).isTrue()
+    fun isValidModifier_threeDigits_invalid() {
+        // The custom-modifier field is letters-only (sanitizeModifier strips
+        // digits), so a 3-digit modifier can never be produced by the UI.
+        assertThat(isValidModifier("599")).isFalse()
     }
 
     @Test
@@ -166,5 +168,44 @@ class CqOptionsLogicTest {
     fun cqPresets_containsExpectedEntries() {
         assertThat(CQ_PRESETS).containsExactly("", "DX", "NA", "EU", "SA", "AS", "OC", "AF")
             .inOrder()
+    }
+
+    // ---- canEnableFieldDay ----
+
+    @Test
+    fun canEnableFieldDay_knownSection_true() {
+        assertThat(canEnableFieldDay("EMA")).isTrue()
+    }
+
+    @Test
+    fun canEnableFieldDay_unknownSection_false() {
+        assertThat(canEnableFieldDay("ZZ")).isFalse()
+    }
+
+    @Test
+    fun canEnableFieldDay_blank_false() {
+        assertThat(canEnableFieldDay("")).isFalse()
+    }
+
+    // ---- shouldPersistSection ----
+
+    @Test
+    fun shouldPersistSection_knownSection_true() {
+        assertThat(shouldPersistSection("WI", fieldDayEnabled = true)).isTrue()
+    }
+
+    @Test
+    fun shouldPersistSection_unknownSection_false() {
+        assertThat(shouldPersistSection("ZZ", fieldDayEnabled = false)).isFalse()
+    }
+
+    @Test
+    fun shouldPersistSection_clearWhileDisabled_true() {
+        assertThat(shouldPersistSection("", fieldDayEnabled = false)).isTrue()
+    }
+
+    @Test
+    fun shouldPersistSection_clearWhileEnabled_false() {
+        assertThat(shouldPersistSection("", fieldDayEnabled = true)).isFalse()
     }
 }

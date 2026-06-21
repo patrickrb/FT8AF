@@ -44,6 +44,8 @@ import radio.ks3ckc.ft8af.theme.BgApp
 import radio.ks3ckc.ft8af.ui.components.ActiveQsoPanel
 import radio.ks3ckc.ft8af.ui.components.shouldShowCatChip
 import radio.ks3ckc.ft8af.ui.components.CqOptionsSheet
+import radio.ks3ckc.ft8af.ui.components.canEnableFieldDay
+import radio.ks3ckc.ft8af.ui.components.shouldPersistSection
 import radio.ks3ckc.ft8af.ui.components.FT8AFTab
 import radio.ks3ckc.ft8af.ui.components.FrequencyPickerSheet
 import radio.ks3ckc.ft8af.ui.components.HoundSetupSheet
@@ -577,19 +579,29 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 }
             },
             onFieldDayToggle = { enabled ->
-                fieldDayEnabled = enabled
-                GeneralVariables.fieldDayMode = enabled
-                mainViewModel.databaseOpr.writeConfig("fieldDayMode", if (enabled) "1" else "0", null)
-                if (enabled) {
-                    isFreeTextMode = false
-                    freeTextMessage = ""
-                    cqModifier = "FD"
-                    GeneralVariables.toModifier = "FD"
-                    mainViewModel.databaseOpr.writeConfig("toModifier", "FD", null)
+                if (enabled && !canEnableFieldDay(fieldDaySection)) {
+                    // Refuse to enable FD without a valid section — otherwise the
+                    // packer would silently transmit "AB" (section index 0).
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.cq_fd_section_required),
+                        Toast.LENGTH_SHORT,
+                    ).show()
                 } else {
-                    cqModifier = ""
-                    GeneralVariables.toModifier = ""
-                    mainViewModel.databaseOpr.writeConfig("toModifier", "", null)
+                    fieldDayEnabled = enabled
+                    GeneralVariables.fieldDayMode = enabled
+                    mainViewModel.databaseOpr.writeConfig("fieldDayMode", if (enabled) "1" else "0", null)
+                    if (enabled) {
+                        isFreeTextMode = false
+                        freeTextMessage = ""
+                        cqModifier = "FD"
+                        GeneralVariables.toModifier = "FD"
+                        mainViewModel.databaseOpr.writeConfig("toModifier", "FD", null)
+                    } else {
+                        cqModifier = ""
+                        GeneralVariables.toModifier = ""
+                        mainViewModel.databaseOpr.writeConfig("toModifier", "", null)
+                    }
                 }
             },
             onFieldDayClassChange = { cls ->
@@ -606,7 +618,11 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             onFieldDaySectionChange = { section ->
                 fieldDaySection = section
                 GeneralVariables.fieldDaySection = section
-                mainViewModel.databaseOpr.writeConfig("fieldDaySection", section, null)
+                // Only persist a recognized section (or an explicit clear while FD
+                // is off) so a blank/unknown value can't restore as "AB" later.
+                if (shouldPersistSection(section, fieldDayEnabled)) {
+                    mainViewModel.databaseOpr.writeConfig("fieldDaySection", section, null)
+                }
             },
             onCallCQ = {
                 if (GeneralVariables.myCallsign.isNullOrEmpty()) {

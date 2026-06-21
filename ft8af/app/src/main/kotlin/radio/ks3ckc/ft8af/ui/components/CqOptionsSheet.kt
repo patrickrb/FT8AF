@@ -33,6 +33,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.k1af.ft8af.R
+import com.k1af.ft8af.ft8signal.FT8Package
 import radio.ks3ckc.ft8af.theme.*
 
 // ---- Pure logic (extracted for unit testing) ----
@@ -42,8 +43,27 @@ internal val CQ_PRESETS = listOf("", "DX", "NA", "EU", "SA", "AS", "OC", "AF")
 internal fun presetLabel(modifier: String): String =
     if (modifier.isEmpty()) "CQ" else "CQ $modifier"
 
+// Letters-only (1–4) to match the custom-modifier sanitizer, which strips digits.
+// pack_c28 also supports a 3-digit form, but the UI can never produce one, so
+// validating digits here would only accept input the app can't generate.
 internal fun isValidModifier(text: String): Boolean =
-    text.isEmpty() || text.matches(Regex("[A-Z]{1,4}|[0-9]{3}"))
+    text.isEmpty() || text.matches(Regex("[A-Z]{1,4}"))
+
+/**
+ * Field Day must encode a real ARRL/RAC section; an unknown or blank section is
+ * packed as index 0 ("AB") by [FT8Package.generatePack77_fd], silently sending
+ * the wrong exchange. Only allow enabling FD when the section is recognized.
+ */
+internal fun canEnableFieldDay(section: String): Boolean =
+    FT8Package.sectionIndex(section) >= 0
+
+/**
+ * Persist a Field Day section only when the packer recognizes it, or when the
+ * user explicitly clears it while FD is off. This stops a half-typed/unknown
+ * value from being restored as "AB" on the next launch.
+ */
+internal fun shouldPersistSection(section: String, fieldDayEnabled: Boolean): Boolean =
+    FT8Package.sectionIndex(section) >= 0 || (section.isEmpty() && !fieldDayEnabled)
 
 internal fun isValidFreeText(text: String): Boolean {
     val allowed = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ+-./?".toSet()
