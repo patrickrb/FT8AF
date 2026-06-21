@@ -2553,6 +2553,12 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("alertNewState")) {//Needed-DX alert: new US state
                     GeneralVariables.alertNewState = result.equals("1");
                 }
+                if (name.equalsIgnoreCase("alertOnCqReply")) {//Alert when someone replies to my CQ
+                    GeneralVariables.alertOnCqReply = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("alertOnQsoComplete")) {//Alert when a QSO completes
+                    GeneralVariables.alertOnQsoComplete = result.equals("1");
+                }
                 if (name.equalsIgnoreCase("flexMaxRfPower")) {//Flex max RF power
                     GeneralVariables.flexMaxRfPower = result.equals("") ? 10 : Integer.parseInt(result);
                 }

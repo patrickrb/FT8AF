@@ -722,6 +722,9 @@ public class MainViewModel extends ViewModel {
             public void doAfterTransmit(QSLRecord qslRecord) {
                 databaseOpr.addQSL_Callsign(qslRecord);//two operations: record callsign and QSL
 
+                // QSO-complete alert (opt-in). Fires once per logged contact.
+                dxAlertNotifier.notifyQsoComplete(qslRecord);
+
                 // record to third-party service; may take some time
                 new Thread(new Runnable() {
                     @Override
