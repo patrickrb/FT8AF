@@ -477,6 +477,10 @@
     <string name="settings_alert_qso_complete_desc">Sound + vibrate + notify when a QSO is logged</string>
     <string name="alert_cq_reply_title">Calling you: %1$s</string>
     <string name="alert_qso_complete_title">QSO complete</string>
+    <string name="rx_service_channel_name">Background receiving</string>
+    <string name="rx_service_channel_desc">Keeps FT8 decoding running while the app is in the background or the screen is off</string>
+    <string name="rx_service_title">FT8AF is receiving</string>
+    <string name="rx_service_text">Decoding in the background</string>
 
     <!-- ===== Settings: logging &amp; awards ===== -->
     <string name="settings_save_swl_decodes">Save SWL Decodes</string>
