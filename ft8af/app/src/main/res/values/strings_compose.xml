@@ -284,6 +284,7 @@
     <string name="pota_upload_success">Uploaded %1$d park log(s) to POTA</string>
     <string name="pota_upload_failed">Upload failed: %1$s</string>
     <string name="pota_upload_server_error">POTA couldn\'t process the upload. Check that the park reference is valid and your callsign is registered with POTA, then try again.</string>
+    <string name="pota_upload_busy">POTA\'s servers are temporarily unavailable. We retried a few times without luck — please try again in a few minutes.</string>
     <string name="pota_upload_network_error">Couldn\'t reach POTA. Check your internet connection and try again.</string>
     <string name="pota_login_title">Sign in to POTA</string>
     <string name="pota_login_desc">Use your pota.app account email and password.</string>

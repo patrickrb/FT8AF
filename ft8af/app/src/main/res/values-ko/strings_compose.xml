@@ -282,6 +282,7 @@
     <string name="pota_upload_success">공원 로그 %1$d개를 POTA에 업로드함</string>
     <string name="pota_upload_failed">업로드 실패: %1$s</string>
     <string name="pota_upload_server_error">POTA가 업로드를 처리하지 못했습니다. 공원 참조가 유효하고 콜사인이 POTA에 등록되어 있는지 확인한 후 다시 시도하세요.</string>
+    <string name="pota_upload_busy">POTA 서버를 일시적으로 사용할 수 없습니다. 여러 번 다시 시도했지만 실패했습니다 — 몇 분 후에 다시 시도하세요.</string>
     <string name="pota_upload_network_error">POTA에 연결할 수 없습니다. 인터넷 연결을 확인하고 다시 시도하세요.</string>
     <string name="pota_login_title">POTA에 로그인</string>
     <string name="pota_login_desc">pota.app 계정 이메일과 비밀번호를 사용하세요.</string>

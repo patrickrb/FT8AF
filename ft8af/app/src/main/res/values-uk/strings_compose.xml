@@ -271,6 +271,7 @@
     <string name="pota_upload_success">Вивантажено журналів парків: %1$d у POTA</string>
     <string name="pota_upload_failed">Не вдалося вивантажити: %1$s</string>
     <string name="pota_upload_server_error">POTA не зміг обробити вивантаження. Перевірте, що посилання на парк дійсне, а ваш позивний зареєстровано в POTA, потім повторіть.</string>
+    <string name="pota_upload_busy">Сервери POTA тимчасово недоступні. Ми кілька разів повторили спробу безуспішно — повторіть, будь ласка, за кілька хвилин.</string>
     <string name="pota_upload_network_error">Не вдалося зв’язатися з POTA. Перевірте інтернет-з’єднання та повторіть.</string>
     <string name="pota_login_title">Увійти в POTA</string>
     <string name="pota_login_desc">Використайте email і пароль вашого облікового запису pota.app.</string>

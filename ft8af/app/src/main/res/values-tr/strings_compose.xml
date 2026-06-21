@@ -271,6 +271,7 @@
     <string name="pota_upload_success">%1$d park günlüğü POTA\'ya yüklendi</string>
     <string name="pota_upload_failed">Yükleme başarısız: %1$s</string>
     <string name="pota_upload_server_error">POTA yüklemeyi işleyemedi. Park referansının geçerli ve çağrı işaretinizin POTA\'ya kayıtlı olduğundan emin olup yeniden deneyin.</string>
+    <string name="pota_upload_busy">POTA sunucuları geçici olarak kullanılamıyor. Birkaç kez denedik ama başaramadık — lütfen birkaç dakika sonra tekrar deneyin.</string>
     <string name="pota_upload_network_error">POTA\'ya ulaşılamadı. İnternet bağlantınızı kontrol edip yeniden deneyin.</string>
     <string name="pota_login_title">POTA\'ya giriş yap</string>
     <string name="pota_login_desc">pota.app hesabınızın e-posta ve parolasını kullanın.</string>

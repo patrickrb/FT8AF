@@ -282,6 +282,7 @@
     <string name="pota_upload_success">Mengunggah %1$d log taman ke POTA</string>
     <string name="pota_upload_failed">Unggah gagal: %1$s</string>
     <string name="pota_upload_server_error">POTA tidak dapat memproses unggahan. Pastikan referensi taman valid dan tanda panggil Anda terdaftar di POTA, lalu coba lagi.</string>
+    <string name="pota_upload_busy">Server POTA sedang tidak tersedia sementara. Kami sudah mencoba beberapa kali tanpa hasil — silakan coba lagi dalam beberapa menit.</string>
     <string name="pota_upload_network_error">Tidak dapat menjangkau POTA. Periksa koneksi internet Anda dan coba lagi.</string>
     <string name="pota_login_title">Masuk ke POTA</string>
     <string name="pota_login_desc">Gunakan email dan kata sandi akun pota.app Anda.</string>
