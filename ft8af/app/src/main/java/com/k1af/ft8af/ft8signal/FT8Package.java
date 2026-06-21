@@ -385,27 +385,24 @@ public class FT8Package {
     }
 
     /**
-     * Canonical 84-entry ARRL/RAC section table for Field Day messages,
-     * matching the order used by WSJT-X (packjt.f90).
+     * 86-entry ARRL/RAC section table for Field Day messages,
+     * matching the exact order used by WSJT-X (packjt77.f90 csec array).
      */
     public static final String[] ARRL_SECTIONS = {
-        "CT","EMA","ME","NH","RI","VT","WMA",
-        "ENY","NLI","NNJ","NNY","SNJ","WNY",
-        "DE","EPA","MDC","WPA",
-        "AL","GA","KY","NC","NFL","SC","SFL","WCF","TN","VA","PR","VI",
-        "AR","LA","MS","NM","NTX","OK","STX","WTX",
-        "EB","LAX","ORG","SB","SCV","SDG","SF","SJV","SV",
-        "AZ","EWA","ID","MT","NV","OR","UT","WWA","WY","AK",
-        "MI","OH","WV",
-        "IL","IN","WI",
-        "CO","IA","KS","MN","MO","NE","ND","SD",
-        "HI","PAC",
-        "AB","BC","GH","MAR","MB","NL","NT","ONE","ONN","ONS","PE","QC","SK","TER"
+        "AB","AK","AL","AR","AZ","BC","CO","CT","DE","EB",
+        "EMA","ENY","EPA","EWA","GA","GH","IA","ID","IL","IN",
+        "KS","KY","LA","LAX","NS","MB","MDC","ME","MI","MN",
+        "MO","MS","MT","NC","ND","NE","NFL","NH","NL","NLI",
+        "NM","NNJ","NNY","TER","NTX","NV","OH","OK","ONE","ONN",
+        "ONS","OR","ORG","PAC","PR","QC","RI","SB","SC","SCV",
+        "SD","SDG","SF","SFL","SJV","SK","SNJ","STX","SV","TN",
+        "UT","VA","VI","VT","WCF","WI","WMA","WNY","WPA","WTX",
+        "WV","WWA","WY","DX","PE","NB"
     };
 
     /**
      * Look up the 0-based index of an ARRL/RAC section code.
-     * @return 0-83 on match, -1 if unknown
+     * @return 0-85 on match, -1 if unknown
      */
     public static int sectionIndex(String section) {
         for (int i = 0; i < ARRL_SECTIONS.length; i++) {

@@ -22,22 +22,22 @@ public class FT8PackageFieldDayTest {
 
     @Test
     public void sectionIndex_firstSection_returnZero() {
-        assertThat(FT8Package.sectionIndex("CT")).isEqualTo(0);
+        assertThat(FT8Package.sectionIndex("AB")).isEqualTo(0);
     }
 
     @Test
-    public void sectionIndex_lastSection_returns83() {
-        assertThat(FT8Package.sectionIndex("TER")).isEqualTo(83);
+    public void sectionIndex_lastSection_returns85() {
+        assertThat(FT8Package.sectionIndex("NB")).isEqualTo(85);
     }
 
     @Test
     public void sectionIndex_middleSection_WI() {
-        assertThat(FT8Package.sectionIndex("WI")).isEqualTo(63);
+        assertThat(FT8Package.sectionIndex("WI")).isEqualTo(75);
     }
 
     @Test
     public void sectionIndex_EMA() {
-        assertThat(FT8Package.sectionIndex("EMA")).isEqualTo(1);
+        assertThat(FT8Package.sectionIndex("EMA")).isEqualTo(10);
     }
 
     @Test
@@ -51,8 +51,8 @@ public class FT8PackageFieldDayTest {
     }
 
     @Test
-    public void sectionTable_has84Entries() {
-        assertThat(FT8Package.ARRL_SECTIONS).hasLength(84);
+    public void sectionTable_has86Entries() {
+        assertThat(FT8Package.ARRL_SECTIONS).hasLength(86);
     }
 
     @Test
@@ -165,7 +165,7 @@ public class FT8PackageFieldDayTest {
         Ft8Message msg = buildFdMessage("W1AW", "K1ABC", 0, 1, "A", "CT", 3);
         byte[] packed = FT8Package.generatePack77_fd(msg);
         int s7 = (packed[8] >> 1) & 0x7F;
-        assertThat(s7).isEqualTo(0); // CT is index 0
+        assertThat(s7).isEqualTo(7); // CT is index 7
     }
 
     @Test
@@ -173,7 +173,7 @@ public class FT8PackageFieldDayTest {
         Ft8Message msg = buildFdMessage("W1AW", "K1ABC", 0, 1, "A", "TER", 3);
         byte[] packed = FT8Package.generatePack77_fd(msg);
         int s7 = (packed[8] >> 1) & 0x7F;
-        assertThat(s7).isEqualTo(83); // TER is index 83
+        assertThat(s7).isEqualTo(43); // TER is index 43
     }
 
     @Test
@@ -181,7 +181,7 @@ public class FT8PackageFieldDayTest {
         Ft8Message msg = buildFdMessage("W1AW", "K1ABC", 0, 1, "A", "WI", 3);
         byte[] packed = FT8Package.generatePack77_fd(msg);
         int s7 = (packed[8] >> 1) & 0x7F;
-        assertThat(s7).isEqualTo(63); // WI is index 63
+        assertThat(s7).isEqualTo(75); // WI is index 75
     }
 
     @Test
