@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,6 +51,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -188,9 +190,18 @@ private fun ActivateTab() {
     val contacts by PotaSessionManager.activationQsos.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val parkRefs = remember { mutableStateListOf("") }
+    val parkRefs = rememberSaveable(
+        saver = listSaver(
+            save = { it.toList() },
+            restore = { mutableStateListOf(*it.toTypedArray()) },
+        ),
+    ) { mutableStateListOf("") }
     var notes by rememberSaveable { mutableStateOf("") }
     var refreshKey by remember { mutableIntStateOf(0) }
+
+    // Park picker sheet state
+    var showPicker by remember { mutableStateOf(false) }
+    var pickerTargetIndex by remember { mutableIntStateOf(-1) }
 
     // Refresh the activation's QSO counter periodically while one is running so
     // the on-screen tally reflects QSOs added by the TX/RX path.
@@ -221,6 +232,19 @@ private fun ActivateTab() {
                             label = { Text(stringResource(R.string.pota_park_reference_label)) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+                            trailingIcon = {
+                                IconButton(onClick = {
+                                    pickerTargetIndex = index
+                                    showPicker = true
+                                }) {
+                                    Icon(
+                                        Icons.Filled.Search,
+                                        contentDescription = stringResource(R.string.pota_search_parks),
+                                        tint = TextMuted,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            },
                             colors = textFieldColors(),
                             modifier = Modifier.weight(1f),
                         )
@@ -352,6 +376,16 @@ private fun ActivateTab() {
             }
         }
     }
+
+    ParkPickerSheet(
+        visible = showPicker,
+        onDismiss = { showPicker = false },
+        onParkSelected = { ref ->
+            if (pickerTargetIndex in parkRefs.indices) {
+                parkRefs[pickerTargetIndex] = ref
+            }
+        },
+    )
 }
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)

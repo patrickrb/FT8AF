@@ -1,0 +1,154 @@
+package radio.ks3ckc.ft8af.pota
+
+import android.content.Context
+import com.google.android.gms.maps.model.LatLng
+import com.k1af.ft8af.maidenhead.MaidenheadGrid
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import radio.ks3ckc.ft8af.pota.model.PotaLocation
+import radio.ks3ckc.ft8af.pota.model.PotaPark
+import radio.ks3ckc.ft8af.pota.model.PotaParkWithDistance
+
+/**
+ * Provides park discovery for the park picker: recent activations and nearby parks.
+ * Caches API responses in memory with a 30-minute TTL to avoid hammering pota.app.
+ */
+object PotaParkRepository {
+
+    private const val CACHE_TTL_MS = 30 * 60 * 1_000L
+    private const val NEARBY_LIMIT = 50
+
+    private var cachedLocations: List<PotaLocation>? = null
+    private var locationsTimestamp = 0L
+
+    private val parkCache = HashMap<String, List<PotaPark>>()
+    private val parkCacheTimestamp = HashMap<String, Long>()
+
+    private val lookupCache = HashMap<String, PotaPark>()
+
+    /**
+     * Return the [NEARBY_LIMIT] closest parks to [userLat]/[userLng], sorted by
+     * distance ascending. Fetches the 3 closest POTA location codes and their parks
+     * from the API (cached).
+     */
+    suspend fun nearbyParks(userLat: Double, userLng: Double): List<PotaParkWithDistance> =
+        withContext(Dispatchers.IO) {
+            val locations = getLocations() ?: return@withContext emptyList()
+            val closest = findNearestLocationCodes(userLat, userLng, locations, 3)
+            val allParks = mutableListOf<PotaPark>()
+            for (code in closest) {
+                val parks = getParksForLocation(code) ?: continue
+                allParks.addAll(parks)
+            }
+            sortParksByDistance(allParks, userLat, userLng, NEARBY_LIMIT)
+        }
+
+    /**
+     * Return park details for recent park references from activation history.
+     * Names are resolved via the park lookup endpoint (cached).
+     */
+    suspend fun recentParksWithDetails(): List<PotaPark> = withContext(Dispatchers.IO) {
+        val refs = PotaActivationDao.recentParkRefs()
+        refs.mapNotNull { ref -> lookupParkCached(ref) }
+    }
+
+    /** Fetch a park by reference with in-memory caching. */
+    private suspend fun lookupParkCached(reference: String): PotaPark? {
+        lookupCache[reference]?.let { return it }
+        val park = PotaClient.lookupPark(reference) ?: return null
+        lookupCache[reference] = park
+        return park
+    }
+
+    private suspend fun getLocations(): List<PotaLocation>? {
+        val now = System.currentTimeMillis()
+        if (cachedLocations != null && now - locationsTimestamp < CACHE_TTL_MS) {
+            return cachedLocations
+        }
+        val result = PotaClient.getLocations() ?: return cachedLocations
+        cachedLocations = result
+        locationsTimestamp = now
+        return result
+    }
+
+    private suspend fun getParksForLocation(code: String): List<PotaPark>? {
+        val now = System.currentTimeMillis()
+        val cached = parkCache[code]
+        val ts = parkCacheTimestamp[code] ?: 0L
+        if (cached != null && now - ts < CACHE_TTL_MS) return cached
+        val result = PotaClient.getParksForLocation(code) ?: return cached
+        parkCache[code] = result
+        parkCacheTimestamp[code] = now
+        return result
+    }
+
+    /**
+     * Get a [LatLng] from the device GPS, falling back to the user's configured
+     * Maidenhead grid. Returns null only if both are unavailable.
+     */
+    fun getUserLocation(context: Context): LatLng? {
+        return MaidenheadGrid.getLocalLocation(context)
+            ?: com.k1af.ft8af.GeneralVariables.getMyMaidenhead4Grid()
+                ?.let { MaidenheadGrid.gridToLatLng(it) }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Pure helper functions — extracted for unit testing
+// ---------------------------------------------------------------------------
+
+/**
+ * Pick the [count] POTA location codes whose center is nearest to ([userLat], [userLng]).
+ * Returns the `locationDesc` field (the location code like "US-PA") for each.
+ */
+internal fun findNearestLocationCodes(
+    userLat: Double,
+    userLng: Double,
+    locations: List<PotaLocation>,
+    count: Int,
+): List<String> {
+    val userPos = LatLng(userLat, userLng)
+    return locations
+        .map { it to MaidenheadGrid.getDist(userPos, LatLng(it.latitude, it.longitude)) }
+        .sortedBy { it.second }
+        .take(count)
+        .map { it.first.locationDesc }
+}
+
+/**
+ * Compute the distance from ([userLat], [userLng]) to each park, sort ascending,
+ * and return the closest [limit] results.
+ */
+internal fun sortParksByDistance(
+    parks: List<PotaPark>,
+    userLat: Double,
+    userLng: Double,
+    limit: Int,
+): List<PotaParkWithDistance> {
+    val userPos = LatLng(userLat, userLng)
+    return parks
+        .filter { it.latitude != 0.0 || it.longitude != 0.0 }
+        .map { park ->
+            PotaParkWithDistance(
+                park = park,
+                distanceKm = MaidenheadGrid.getDist(userPos, LatLng(park.latitude, park.longitude)),
+            )
+        }
+        .sortedBy { it.distanceKm }
+        .take(limit)
+}
+
+/**
+ * Split comma-separated park reference strings and deduplicate, preserving
+ * first-seen (most-recent) order.
+ */
+internal fun deduplicateRefs(rawRefs: List<String>): List<String> {
+    val seen = LinkedHashSet<String>()
+    for (raw in rawRefs) {
+        for (part in raw.split(",")) {
+            val ref = part.trim()
+            if (ref.isNotEmpty()) seen.add(ref)
+        }
+    }
+    return seen.toList()
+}

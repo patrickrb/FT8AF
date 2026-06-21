@@ -61,6 +61,30 @@ internal object PotaActivationDao {
         return cursor.use { c -> if (c.moveToFirst()) c.toActivation() else null }
     }
 
+    /**
+     * Return distinct park references from past activations, most recent first.
+     * Comma-separated refs within a single activation are split and individually
+     * deduplicated while preserving most-recent-first order.
+     */
+    fun recentParkRefs(limit: Int = 20): List<String> {
+        val cursor = db().rawQuery(
+            "SELECT park_ref FROM pota_activation ORDER BY started_at DESC LIMIT ?",
+            arrayOf(limit.toString()),
+        )
+        val rawRefs = mutableListOf<String>()
+        cursor.use { c ->
+            while (c.moveToNext()) rawRefs.add(c.getString(0) ?: "")
+        }
+        val seen = LinkedHashSet<String>()
+        for (raw in rawRefs) {
+            for (part in raw.split(",")) {
+                val ref = part.trim()
+                if (ref.isNotEmpty()) seen.add(ref)
+            }
+        }
+        return seen.toList()
+    }
+
     fun history(limit: Int = 50): List<PotaActivation> {
         val cursor = db().rawQuery(
             "SELECT * FROM pota_activation ORDER BY started_at DESC LIMIT ?",
