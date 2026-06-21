@@ -110,7 +110,7 @@ class CqOptionsLogicTest {
 
     @Test
     fun sanitizeModifier_stripsSpecialChars() {
-        assertThat(sanitizeModifier("P@O#T$A")).isEqualTo("POTA")
+        assertThat(sanitizeModifier("P@O#T\$A")).isEqualTo("POTA")
     }
 
     @Test
