@@ -162,7 +162,7 @@ public class GenerateFT8 {
         // override logic below — they use their own dedicated packer.
         boolean isFieldDay = (msg.i3 == 0 && (msg.n3 == 3 || msg.n3 == 4));
 
-        if (msg.i3 != 0 && !isFieldDay) {// currently only supports i3=1, i3=2, i3=4, i3=0 && n3=0
+        if (msg.i3 != 0 && !isFieldDay) {// supports i3=1, i3=2, i3=4, i3=0&&n3=0, i3=0&&n3=3/4 (FD)
             if (!checkIsStandardCallsign(msg.callsignFrom)
                     && (!checkIsReport(msg.extraInfo) || msg.checkIsCQ())) {
                 msg.i3 = 4;

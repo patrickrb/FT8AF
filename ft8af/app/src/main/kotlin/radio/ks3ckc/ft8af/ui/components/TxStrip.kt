@@ -506,7 +506,6 @@ private fun PrimaryActionButton(
                     softWrap = false,
                 )
             }
-            FT8AFIcons.ChevronDown(size = 10.dp, color = contentColor.copy(alpha = 0.5f), strokeWidth = 2f)
         } else {
             Text(
                 text = label,
@@ -518,6 +517,9 @@ private fun PrimaryActionButton(
                 maxLines = 1,
                 softWrap = false,
             )
+        }
+        if (onLongClick != null) {
+            FT8AFIcons.ChevronDown(size = 10.dp, color = contentColor.copy(alpha = 0.5f), strokeWidth = 2f)
         }
     }
 }

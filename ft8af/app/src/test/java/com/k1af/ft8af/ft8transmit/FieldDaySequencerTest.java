@@ -89,12 +89,12 @@ public class FieldDaySequencerTest {
     @Test
     public void buildFieldDayMessage_picksUpChangedSettings() {
         GeneralVariables.fieldDayClass = "B";
-        GeneralVariables.fieldDayNumTx = 17;
+        GeneralVariables.fieldDayNumTx = 16;
         GeneralVariables.fieldDaySection = "EMA";
 
         Ft8Message msg = FT8TransmitSignal.buildFieldDayMessage("N0CALL", 0);
         assertThat(msg.arrl_class).isEqualTo("B");
-        assertThat(msg.eu_serial).isEqualTo(17);
+        assertThat(msg.eu_serial).isEqualTo(16);
         assertThat(msg.arrl_rac).isEqualTo("EMA");
     }
 }

@@ -119,8 +119,8 @@ class CqOptionsLogicTest {
     }
 
     @Test
-    fun sanitizeModifier_preservesDigits() {
-        assertThat(sanitizeModifier("599")).isEqualTo("599")
+    fun sanitizeModifier_stripsDigits() {
+        assertThat(sanitizeModifier("599")).isEqualTo("")
     }
 
     @Test

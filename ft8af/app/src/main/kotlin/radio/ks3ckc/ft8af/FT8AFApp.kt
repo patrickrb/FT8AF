@@ -151,7 +151,7 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     var freeTextMessage by remember { mutableStateOf("") }
     var fieldDayEnabled by remember { mutableStateOf(GeneralVariables.fieldDayMode) }
     var fieldDayClass by remember { mutableStateOf(GeneralVariables.fieldDayClass ?: "A") }
-    var fieldDayNumTx by remember { mutableIntStateOf(GeneralVariables.fieldDayNumTx.coerceIn(1, 32)) }
+    var fieldDayNumTx by remember { mutableIntStateOf(GeneralVariables.fieldDayNumTx.coerceIn(1, 16)) }
     var fieldDaySection by remember { mutableStateOf(GeneralVariables.fieldDaySection ?: "") }
 
     // Frequency picker sheet state
@@ -402,9 +402,18 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                             mainViewModel.databaseOpr.writeConfig("autoFollowCQ", "0", null)
                         }
                     }
-                    // Clear free text mode on stop
+                    // Clear free text and Field Day mode on stop
                     isFreeTextMode = false
+                    freeTextMessage = ""
                     mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
+                    if (fieldDayEnabled) {
+                        fieldDayEnabled = false
+                        GeneralVariables.fieldDayMode = false
+                        mainViewModel.databaseOpr.writeConfig("fieldDayMode", "0", null)
+                        cqModifier = ""
+                        GeneralVariables.toModifier = ""
+                        mainViewModel.databaseOpr.writeConfig("toModifier", "", null)
+                    }
                 },
                 onLongPressCQ = { showCqOptions = true },
                 onToggleDx = {
@@ -577,6 +586,10 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                     cqModifier = "FD"
                     GeneralVariables.toModifier = "FD"
                     mainViewModel.databaseOpr.writeConfig("toModifier", "FD", null)
+                } else {
+                    cqModifier = ""
+                    GeneralVariables.toModifier = ""
+                    mainViewModel.databaseOpr.writeConfig("toModifier", "", null)
                 }
             },
             onFieldDayClassChange = { cls ->
@@ -585,9 +598,10 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 mainViewModel.databaseOpr.writeConfig("fieldDayClass", cls, null)
             },
             onFieldDayNumTxChange = { num ->
-                fieldDayNumTx = num
-                GeneralVariables.fieldDayNumTx = num
-                mainViewModel.databaseOpr.writeConfig("fieldDayNumTx", num.toString(), null)
+                val clamped = num.coerceIn(1, 16)
+                fieldDayNumTx = clamped
+                GeneralVariables.fieldDayNumTx = clamped
+                mainViewModel.databaseOpr.writeConfig("fieldDayNumTx", clamped.toString(), null)
             },
             onFieldDaySectionChange = { section ->
                 fieldDaySection = section

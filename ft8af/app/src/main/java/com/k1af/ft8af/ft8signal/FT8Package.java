@@ -424,7 +424,7 @@ public class FT8Package {
      *
      * @param msg the Ft8Message with FD fields populated:
      *            callsignTo, callsignFrom, r_flag (0 or 1),
-     *            eu_serial (transmitter count 1-32), arrl_class ("A"-"F"),
+     *            eu_serial (transmitter count 1-16), arrl_class ("A"-"F"),
      *            arrl_rac (section code), n3 (3 or 4)
      * @return 10-byte packed payload (77 bits, padded to byte boundary)
      */
@@ -436,8 +436,8 @@ public class FT8Package {
             toCall = toCall + " " + msg.modifier;
         }
 
-        long n28a = pack_c28(toCall) & 0x0FFFFFFFFL;
-        long n28b = pack_c28(fromCall) & 0x0FFFFFFFFL;
+        long n28a = pack_c28(toCall) & 0x0fffffffL;
+        long n28b = pack_c28(fromCall) & 0x0fffffffL;
         int R1 = msg.r_flag & 1;
         int n4 = ((msg.eu_serial - 1) & 0x0F);  // 1-16 → 0-15 (clamp to 4 bits)
         int k3 = 0;

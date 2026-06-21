@@ -30,7 +30,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.k1af.ft8af.R
@@ -52,7 +51,7 @@ internal fun isValidFreeText(text: String): Boolean {
 }
 
 internal fun sanitizeModifier(input: String): String =
-    input.uppercase().filter { it.isLetterOrDigit() }.take(4)
+    input.uppercase().filter { it.isLetter() }.take(4)
 
 internal fun sanitizeFreeText(input: String): String {
     val allowed = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ+-./?".toSet()
@@ -282,14 +281,14 @@ fun CqOptionsSheet(
                             .size(36.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(BgSurface3)
-                            .clickable(enabled = fieldDayNumTx < 32) {
-                                onFieldDayNumTxChange((fieldDayNumTx + 1).coerceAtMost(32))
+                            .clickable(enabled = fieldDayNumTx < 16) {
+                                onFieldDayNumTxChange((fieldDayNumTx + 1).coerceAtMost(16))
                             },
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             text = "+",
-                            color = if (fieldDayNumTx < 32) TextMuted else TextFaint,
+                            color = if (fieldDayNumTx < 16) TextMuted else TextFaint,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = GeistMonoFamily,

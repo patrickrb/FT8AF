@@ -343,7 +343,7 @@ public class GeneralVariables {
     // Field Day mode settings (persisted via writeConfig)
     public static boolean fieldDayMode = false;
     public static String fieldDayClass = "A";     // A through F
-    public static int fieldDayNumTx = 1;          // 1-32
+    public static int fieldDayNumTx = 1;          // 1-16
     public static String fieldDaySection = "";    // ARRL/RAC section code
     private static float baseFrequency = 1000;//Audio frequency
 
