@@ -16,12 +16,4 @@ public final class RxServiceController {
         return rxActive && micGranted;
     }
 
-    /**
-     * Whether to start the service with the {@code microphone} foreground-service type. The
-     * type is enforced from Android 11 (R, API 30); below that a plain foreground service
-     * already keeps mic capture alive, and passing a type can be rejected.
-     */
-    public static boolean usesMicrophoneType(int sdkInt) {
-        return sdkInt >= 30; // Build.VERSION_CODES.R
-    }
 }

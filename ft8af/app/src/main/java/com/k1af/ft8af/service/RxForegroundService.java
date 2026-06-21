@@ -62,9 +62,8 @@ public class RxForegroundService extends Service {
         Notification notification = buildNotification();
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                int type = RxServiceController.usesMicrophoneType(Build.VERSION.SDK_INT)
-                        ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE : 0;
-                startForeground(NOTIF_ID, notification, type);
+                startForeground(NOTIF_ID, notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
             } else {
                 startForeground(NOTIF_ID, notification);
             }
@@ -76,7 +75,7 @@ public class RxForegroundService extends Service {
             return START_NOT_STICKY;
         }
         acquireWakeLock();
-        return START_STICKY;
+        return START_NOT_STICKY;
     }
 
     @Override

@@ -14,12 +14,4 @@ public class RxServiceControllerTest {
         assertThat(RxServiceController.shouldRunService(false, true)).isFalse();
         assertThat(RxServiceController.shouldRunService(false, false)).isFalse();
     }
-
-    @Test
-    public void microphoneType_onlyFromApi30() {
-        assertThat(RxServiceController.usesMicrophoneType(23)).isFalse(); // M
-        assertThat(RxServiceController.usesMicrophoneType(29)).isFalse(); // Q
-        assertThat(RxServiceController.usesMicrophoneType(30)).isTrue();  // R
-        assertThat(RxServiceController.usesMicrophoneType(34)).isTrue();  // U
-    }
 }
