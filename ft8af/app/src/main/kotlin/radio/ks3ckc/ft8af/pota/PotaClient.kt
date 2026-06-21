@@ -2,6 +2,7 @@ package radio.ks3ckc.ft8af.pota
 
 import android.util.Log
 import com.k1af.ft8af.GeneralVariables
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -37,7 +38,7 @@ class PotaUploadException(val httpCode: Int, val body: String) :
  */
 private val RETRYABLE_UPLOAD_CODES = setOf(502, 503, 504)
 
-/** Initial attempt plus this many retries before giving up. */
+/** Total upload attempts (the initial try plus retries) before giving up. */
 private const val MAX_UPLOAD_ATTEMPTS = 3
 
 /**
@@ -207,6 +208,10 @@ object PotaClient {
             val resp = conn.inputStream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() } ?: ""
             log("uploadAdif ok $filename (${payload.size}B) -> ${resp.take(120)}")
             Result.success(resp)
+        } catch (e: CancellationException) {
+            // Don't let coroutine cancellation (e.g. the user navigated away) be
+            // swallowed into a failed Result and surfaced as an upload-error toast.
+            throw e
         } catch (e: Exception) {
             log("uploadAdif $filename failed: ${e.javaClass.simpleName}: ${e.message ?: "?"}")
             Result.failure(e)

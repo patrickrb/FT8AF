@@ -1,6 +1,7 @@
 package radio.ks3ckc.ft8af.pota
 
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.CancellationException
 import org.junit.Test
 import java.io.IOException
 import java.net.SocketTimeoutException
@@ -41,6 +42,14 @@ class UploadRetryTest {
     fun `non-network non-http failures are not retryable`() {
         assertThat(isRetryableUploadFailure(null)).isFalse()
         assertThat(isRetryableUploadFailure(IllegalStateException("no database"))).isFalse()
+    }
+
+    @Test
+    fun `coroutine cancellation is not retryable`() {
+        // uploadAdifOnce re-throws CancellationException rather than returning it
+        // as a failure, but guard the policy too: a cancelled upload must never be
+        // retried even if a cancellation ever reached the loop.
+        assertThat(isRetryableUploadFailure(CancellationException("navigated away"))).isFalse()
     }
 
     @Test
