@@ -339,6 +339,12 @@ public class GeneralVariables {
     public static String myRigName = "";  // Set by MainViewModel.connectRig(); used in PSKReporter software string
     public static int myPowerWatts = 0;    // 0 = not set, displays as "--"
     public static String toModifier = "";//Call modifier
+
+    // Field Day mode settings (persisted via writeConfig)
+    public static boolean fieldDayMode = false;
+    public static String fieldDayClass = "A";     // A through F
+    public static int fieldDayNumTx = 1;          // 1-32
+    public static String fieldDaySection = "";    // ARRL/RAC section code
     private static float baseFrequency = 1000;//Audio frequency
 
     public static boolean simpleCallItemMode = false;//Compact message mode

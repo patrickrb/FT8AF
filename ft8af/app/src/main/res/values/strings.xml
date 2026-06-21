@@ -551,6 +551,20 @@
     <string name="qrz_api_key">API KEY</string>
     <string name="config_enable_qrz">Enable QRZ sync</string>
     <string name="qrz_help">qrz_en.txt</string>
+    <!-- CQ Options Sheet -->
+    <string name="cq_message_title">CQ MESSAGE</string>
+    <string name="cq_custom_modifier_hint">POTA, SOTA, TEST</string>
+    <string name="cq_or_divider">or</string>
+    <string name="cq_free_text_title">FREE TEXT</string>
+    <string name="cq_free_text_hint">13 characters max</string>
+    <string name="cq_call_cq">Call CQ</string>
+    <string name="cq_send_free_text">Send Free Text</string>
+    <string name="cq_field_day_title">FIELD DAY</string>
+    <string name="cq_fd_class">Class</string>
+    <string name="cq_fd_transmitters">Transmitters</string>
+    <string name="cq_fd_section">Section</string>
+    <string name="cq_fd_section_hint">e.g. EMA, WI, SDG</string>
+
     <string name="alram_switch">Alarm switch</string>
     <string name="swr_switch_on" translatable="false">SWR On</string>
     <string name="swr_switch_off" translatable="false">SWR Off</string>

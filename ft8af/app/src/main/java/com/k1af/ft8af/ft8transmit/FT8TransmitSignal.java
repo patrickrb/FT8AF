@@ -346,6 +346,24 @@ public class FT8TransmitSignal {
     }
 
     /**
+     * Build an Ft8Message for a Field Day exchange (i3=0, n3=3 or 4).
+     *
+     * @param toCall  the remote station's callsign
+     * @param rFlag   0 for initial exchange, 1 for R+exchange (acknowledging receipt)
+     * @return fully populated FD message ready for packing
+     */
+    static Ft8Message buildFieldDayMessage(String toCall, int rFlag) {
+        Ft8Message fdMsg = new Ft8Message(0, rFlag == 0 ? 3 : 4,
+                toCall, GeneralVariables.myCallsign, "");
+        fdMsg.r_flag = rFlag;
+        fdMsg.eu_serial = GeneralVariables.fieldDayNumTx;
+        fdMsg.arrl_class = GeneralVariables.fieldDayClass;
+        fdMsg.arrl_rac = GeneralVariables.fieldDaySection;
+        fdMsg.utcTime = UtcTimer.getSystemTime();
+        return fdMsg;
+    }
+
+    /**
      * Generate the corresponding message based on the message number.
      *
      * @param order message number
@@ -353,33 +371,48 @@ public class FT8TransmitSignal {
      */
     public Ft8Message getFunctionCommand(int order) {
         switch (order) {
-            // transmit mode 1: BG7YOY BG7YOZ OL50
+            // transmit mode 1: BG7YOY BG7YOZ OL50  (or FD exchange)
             case 1:
                 resetTargetReport();// reset the signal report record for the other party to -100
+                if (GeneralVariables.fieldDayMode) {
+                    return buildFieldDayMessage(toCallsign.callsign, 0);
+                }
                 return new Ft8Message(1, 0, toCallsign.callsign, GeneralVariables.myCallsign
                         , GeneralVariables.getMyMaidenhead4Grid());
-            // transmit mode 2: BG7YOY BG7YOZ -10
+            // transmit mode 2: BG7YOY BG7YOZ -10  (or FD exchange)
             case 2:
+                if (GeneralVariables.fieldDayMode) {
+                    return buildFieldDayMessage(toCallsign.callsign, 0);
+                }
                 sentTargetReport = toCallsign.snr;
 
                 return new Ft8Message(1, 0, toCallsign.callsign
                         , GeneralVariables.myCallsign, toCallsign.getSnr());
-            // transmit mode 3: BG7YOY BG7YOZ R-10
+            // transmit mode 3: BG7YOY BG7YOZ R-10  (or FD R+exchange)
             case 3:
+                if (GeneralVariables.fieldDayMode) {
+                    return buildFieldDayMessage(toCallsign.callsign, 1);
+                }
                 sentTargetReport = toCallsign.snr;
                 return new Ft8Message(1, 0, toCallsign.callsign
                         , GeneralVariables.myCallsign, "R" + toCallsign.getSnr());
-            // transmit mode 4: BG7YOY BG7YOZ RRR
+            // transmit mode 4: BG7YOY BG7YOZ RRR — unchanged for FD (standard)
             case 4:
                 return new Ft8Message(1, 0, toCallsign.callsign
                         , GeneralVariables.myCallsign, "RR73");
-            // transmit mode 5: BG7YOY BG7YOZ 73
+            // transmit mode 5: BG7YOY BG7YOZ 73 — unchanged for FD (standard)
             case 5:
                 return new Ft8Message(1, 0, toCallsign.callsign
                         , GeneralVariables.myCallsign, "73");
-            // transmit mode 6: CQ BG7YOZ OL50
+            // transmit mode 6: CQ BG7YOZ OL50  (or CQ FD)
             case 6:
                 resetTargetReport();// reset sent and received signal report records to -100
+                if (GeneralVariables.fieldDayMode) {
+                    Ft8Message fdCq = new Ft8Message(1, 0, "CQ", GeneralVariables.myCallsign
+                            , GeneralVariables.getMyMaidenhead4Grid());
+                    fdCq.modifier = "FD";
+                    return fdCq;
+                }
                 Ft8Message msg = new Ft8Message(1, 0, "CQ", GeneralVariables.myCallsign
                         , GeneralVariables.getMyMaidenhead4Grid());
                 msg.modifier = GeneralVariables.toModifier;
