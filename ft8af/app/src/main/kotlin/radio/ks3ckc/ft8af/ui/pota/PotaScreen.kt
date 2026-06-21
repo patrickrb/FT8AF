@@ -204,10 +204,12 @@ private fun ActivateTab() {
     var pickerTargetIndex by remember { mutableIntStateOf(-1) }
 
     // Refresh the activation's QSO counter periodically while one is running so
-    // the on-screen tally reflects QSOs added by the TX/RX path.
+    // the on-screen tally reflects QSOs added by the TX/RX path. The first
+    // refresh is immediate (no delay) so QSOs logged while on another tab are
+    // visible as soon as the user switches back to the POTA tab.
     LaunchedEffect(activation?.id, refreshKey) {
         if (activation != null) {
-            kotlinx.coroutines.delay(3000)
+            if (refreshKey > 0) kotlinx.coroutines.delay(3000)
             PotaSessionManager.refreshCounter()
             refreshKey++
         }
