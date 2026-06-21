@@ -471,6 +471,12 @@
     <string name="settings_alert_new_dxcc_desc">Sound + vibrate + notify when an unworked DXCC entity calls CQ</string>
     <string name="settings_alert_new_state">New US State</string>
     <string name="settings_alert_new_state_desc">Sound + vibrate + notify when a station from an unworked US state calls CQ (state from grid)</string>
+    <string name="settings_alert_cq_reply">CQ reply</string>
+    <string name="settings_alert_cq_reply_desc">Sound + vibrate + notify when a station calls you (any message addressed to your callsign)</string>
+    <string name="settings_alert_qso_complete">QSO complete</string>
+    <string name="settings_alert_qso_complete_desc">Sound + vibrate + notify when a QSO is logged</string>
+    <string name="alert_cq_reply_title">Calling you: %1$s</string>
+    <string name="alert_qso_complete_title">QSO complete</string>
 
     <!-- ===== Settings: logging &amp; awards ===== -->
     <string name="settings_save_swl_decodes">Save SWL Decodes</string>

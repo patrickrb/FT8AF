@@ -464,6 +464,13 @@ public class GeneralVariables {
     public static boolean alertNewDxcc = false;
     public static boolean alertNewState = false;
 
+    // QSO & CQ alerts (Settings → Needed-DX Alerts). Opt-in, default off.
+    //   - alertOnCqReply:     notify when any decoded message is addressed to my callsign
+    //                         (someone calling me). Own-TX echoes are already filtered out.
+    //   - alertOnQsoComplete: notify when a QSO is logged (DxAlertNotifier.notifyQsoComplete).
+    public static boolean alertOnCqReply = false;
+    public static boolean alertOnQsoComplete = false;
+
     // Geographic continent-directed CQ tokens — matched against myContinent.
     private static final java.util.Set<String> CONTINENT_CODES =
             new java.util.HashSet<>(java.util.Arrays.asList("NA", "SA", "EU", "AF", "AS", "OC", "AN"));
