@@ -250,8 +250,9 @@ public class MicRecorder {
                 long sinceLast = now - lastReinitMs;
                 GeneralVariables.fileLog(String.format(
                         "startUsbCapture: capture STOPPED (sawData=%b "
-                                + "consecFailures=%d sinceLastReinit=%dms)",
-                        usbAudioSawData, consecutiveUsbFailures, sinceLast));
+                                + "consecFailures=%d sinceLastReinit=%s)",
+                        usbAudioSawData, consecutiveUsbFailures,
+                        formatSinceReinit(now, lastReinitMs)));
 
                 if (consecutiveUsbFailures >= MAX_CONSECUTIVE_USB_FAILURES
                         && !usbAudioSawData) {
@@ -489,5 +490,21 @@ public class MicRecorder {
             return FALLBACK_BUFFER_SIZE;
         }
         return rawSize;
+    }
+
+    /**
+     * Renders the "time since last reinit" token for the capture-STOPPED log.
+     * {@code lastReinitMs == 0} means no reinit has happened yet this session,
+     * so the raw {@code now - 0} would print the wall-clock epoch
+     * (~1.78e12 ms ≈ 56,000 years) and make the log line useless. Show a
+     * sentinel in that case instead of a nonsensical duration.
+     *
+     * <p>Package-visible for testing.
+     */
+    static String formatSinceReinit(long now, long lastReinitMs) {
+        if (lastReinitMs == 0) {
+            return "n/a (no reinit yet)";
+        }
+        return (now - lastReinitMs) + "ms";
     }
 }
