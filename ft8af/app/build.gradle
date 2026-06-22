@@ -34,12 +34,21 @@ android {
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         // CI builds derive versionCode from GITHUB_RUN_NUMBER + offset, so each
         // run gets a unique, monotonically increasing value Play Console will
-        // accept. Offset clears the manual-upload history (current max in
-        // internal track is 4). Local builds without the env var keep the
-        // static fallback so debug/release builds run unchanged from a dev
-        // machine.
+        // accept. Local builds without the env var keep the static fallback so
+        // debug/release builds run unchanged from a dev machine.
+        //
+        // GITHUB_RUN_NUMBER is PER-WORKFLOW-FILE, so it resets when the workflow
+        // is renamed/split. The original build-release.yml reached run ~680
+        // (versionCode ~780 on the Play internal track) before CI was split into
+        // per-project workflows; the replacement android.yml started its own
+        // counter back near 1, so the old +100 offset produced a versionCode
+        // BELOW 780 and Play rejected the rollout ("does not allow any existing
+        // users to upgrade to the newly added APKs"). The +1000 offset clears
+        // that historical max with margin. If the workflow is ever split/renamed
+        // again (resetting the counter), bump this offset past the last
+        // published versionCode once more.
         def ciRunNumber = System.getenv("GITHUB_RUN_NUMBER")
-        versionCode ciRunNumber ? (ciRunNumber.toInteger() + 100) : 5
+        versionCode ciRunNumber ? (ciRunNumber.toInteger() + 1000) : 5
         // CI passes -PVERSION_NAME_OVERRIDE derived from the git tag (v1.1.0 ->
         // "1.1.0", dev-42 -> "1.1.0-dev.42"). Local builds use the fallback.
         def ciVersionName = project.findProperty('VERSION_NAME_OVERRIDE')
