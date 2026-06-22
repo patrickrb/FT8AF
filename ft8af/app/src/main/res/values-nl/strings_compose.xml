@@ -282,6 +282,7 @@
     <string name="pota_upload_success">%1$d parklog(s) geüpload naar POTA</string>
     <string name="pota_upload_failed">Upload mislukt: %1$s</string>
     <string name="pota_upload_server_error">POTA kon de upload niet verwerken. Controleer of de parkreferentie geldig is en je roepnaam bij POTA is geregistreerd, en probeer het opnieuw.</string>
+    <string name="pota_upload_busy">De servers van POTA zijn tijdelijk niet beschikbaar. We hebben het een paar keer opnieuw geprobeerd zonder succes — probeer het over een paar minuten opnieuw.</string>
     <string name="pota_upload_network_error">Kan POTA niet bereiken. Controleer je internetverbinding en probeer het opnieuw.</string>
     <string name="pota_login_title">Inloggen bij POTA</string>
     <string name="pota_login_desc">Gebruik het e-mailadres en wachtwoord van je pota.app-account.</string>

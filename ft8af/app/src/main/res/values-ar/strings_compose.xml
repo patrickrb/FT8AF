@@ -282,6 +282,7 @@
     <string name="pota_upload_success">تم رفع %1$d سجل حديقة إلى POTA</string>
     <string name="pota_upload_failed">فشل الرفع: %1$s</string>
     <string name="pota_upload_server_error">تعذّر على POTA معالجة الرفع. تحقق من صلاحية مرجع الحديقة وأن نداءك مسجَّل لدى POTA، ثم أعد المحاولة.</string>
+    <string name="pota_upload_busy">خوادم POTA غير متاحة مؤقتًا. حاولنا عدة مرات دون جدوى — يرجى المحاولة مرة أخرى بعد بضع دقائق.</string>
     <string name="pota_upload_network_error">تعذّر الوصول إلى POTA. تحقق من اتصالك بالإنترنت وأعد المحاولة.</string>
     <string name="pota_login_title">تسجيل الدخول إلى POTA</string>
     <string name="pota_login_desc">استخدم بريد وكلمة مرور حساب pota.app الخاص بك.</string>

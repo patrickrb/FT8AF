@@ -282,6 +282,7 @@
     <string name="pota_upload_success">Nahráno %1$d deníků parků do POTA</string>
     <string name="pota_upload_failed">Nahrání selhalo: %1$s</string>
     <string name="pota_upload_server_error">POTA nemohlo zpracovat nahrání. Zkontrolujte, že reference parku je platná a vaše volací značka je registrována v POTA, a zkuste to znovu.</string>
+    <string name="pota_upload_busy">Servery POTA jsou dočasně nedostupné. Několikrát jsme to zkusili bez úspěchu — zkuste to prosím znovu za pár minut.</string>
     <string name="pota_upload_network_error">Nepodařilo se spojit s POTA. Zkontrolujte připojení k internetu a zkuste to znovu.</string>
     <string name="pota_login_title">Přihlásit se do POTA</string>
     <string name="pota_login_desc">Použijte e-mail a heslo svého účtu pota.app.</string>

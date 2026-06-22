@@ -271,6 +271,7 @@
     <string name="pota_upload_success">Wysłano %1$d dziennik(ów) parków do POTA</string>
     <string name="pota_upload_failed">Wysyłanie nieudane: %1$s</string>
     <string name="pota_upload_server_error">POTA nie mogło przetworzyć przesyłki. Sprawdź, czy identyfikator parku jest poprawny i czy Twój znak jest zarejestrowany w POTA, a następnie spróbuj ponownie.</string>
+    <string name="pota_upload_busy">Serwery POTA są tymczasowo niedostępne. Spróbowaliśmy kilka razy bez powodzenia — spróbuj ponownie za kilka minut.</string>
     <string name="pota_upload_network_error">Nie udało się połączyć z POTA. Sprawdź połączenie z internetem i spróbuj ponownie.</string>
     <string name="pota_login_title">Zaloguj się do POTA</string>
     <string name="pota_login_desc">Użyj e-maila i hasła swojego konta pota.app.</string>

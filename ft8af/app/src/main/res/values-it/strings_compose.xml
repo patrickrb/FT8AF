@@ -271,6 +271,7 @@
     <string name="pota_upload_success">Caricati %1$d log di parco su POTA</string>
     <string name="pota_upload_failed">Caricamento fallito: %1$s</string>
     <string name="pota_upload_server_error">POTA non è riuscito a elaborare il caricamento. Verifica che il riferimento parco sia valido e che il tuo nominativo sia registrato su POTA, poi riprova.</string>
+    <string name="pota_upload_busy">I server di POTA non sono temporaneamente disponibili. Abbiamo riprovato alcune volte senza successo — riprova tra qualche minuto.</string>
     <string name="pota_upload_network_error">Impossibile raggiungere POTA. Controlla la connessione internet e riprova.</string>
     <string name="pota_login_title">Accedi a POTA</string>
     <string name="pota_login_desc">Usa email e password del tuo account pota.app.</string>

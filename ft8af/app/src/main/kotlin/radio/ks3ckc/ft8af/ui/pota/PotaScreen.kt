@@ -691,15 +691,22 @@ private suspend fun uploadActivation(
 }
 
 /** How an upload failed, mapped to a user-facing message in [startUpload]. */
-internal enum class UploadFailureKind { SERVER, NETWORK, OTHER }
+internal enum class UploadFailureKind { BUSY, SERVER, NETWORK, OTHER }
 
 /**
- * Classify an upload failure so the UI can explain it. A 5xx is POTA's backend
- * rejecting the log (almost always a bad park ref or a callsign not registered to
- * the account); an [java.io.IOException] is a connectivity problem; anything else
- * falls back to the raw message.
+ * Classify an upload failure so the UI can explain it.
+ *
+ *  - [BUSY]: a gateway status (502/503/504) — POTA's backend was transiently down.
+ *    [PotaClient.uploadAdif] already retried with backoff, so by the time this
+ *    surfaces it's still flapping; tell the user to try again shortly, *not* to
+ *    go check their park ref.
+ *  - [SERVER]: any other 5xx — POTA accepted the request but rejected the log,
+ *    almost always a bad park ref or a callsign not registered to the account.
+ *  - [NETWORK]: an [java.io.IOException] — a connectivity problem on our side.
+ *  - [OTHER]: anything else, surfaced with its raw message.
  */
 internal fun classifyUploadFailure(error: Throwable?): UploadFailureKind = when {
+    error is PotaUploadException && error.httpCode in setOf(502, 503, 504) -> UploadFailureKind.BUSY
     error is PotaUploadException && error.httpCode in 500..599 -> UploadFailureKind.SERVER
     error is java.io.IOException -> UploadFailureKind.NETWORK
     else -> UploadFailureKind.OTHER
@@ -907,6 +914,7 @@ private fun ActivationDetailScreen(
                     loginPending = true
                 } else {
                     val msg = when (classifyUploadFailure(e)) {
+                        UploadFailureKind.BUSY -> context.getString(R.string.pota_upload_busy)
                         UploadFailureKind.SERVER -> context.getString(R.string.pota_upload_server_error)
                         UploadFailureKind.NETWORK -> context.getString(R.string.pota_upload_network_error)
                         UploadFailureKind.OTHER -> context.getString(R.string.pota_upload_failed, e.message ?: "?")
