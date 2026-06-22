@@ -293,9 +293,23 @@ Java_com_k1af_ft8af_wave_UsbAudioNative_nativeStart(
     s->inputChannels       = inputChannels > 0 ? inputChannels : 2;
     s->inputBytesPerSample = inputBytesPerSample > 0 ? inputBytesPerSample : 2;
     s->targetRate          = targetSampleRate;
-    s->decimationRatio     = inputSampleRate / targetSampleRate;
-    // Build the anti-aliasing FIR for the actual integer ratio (e.g. 48k/12k = 4).
-    s->decimator.configure(s->decimationRatio > 0 ? s->decimationRatio : 1);
+    // Integer decimation ratio (e.g. 48k/12k = 4), computed defensively so a bad
+    // rate pair can't divide-by-zero or mis-rate the decoder. Warn on the two
+    // degenerate cases the helper folds into a pass-through ratio of 1.
+    const int ratio = decimationRatioFor(inputSampleRate, targetSampleRate);
+    if (targetSampleRate <= 0 || inputSampleRate < targetSampleRate) {
+        LOGE("invalid sample rates input=%d target=%d; disabling decimation "
+             "(ratio=1, audio passed through unchanged)",
+             inputSampleRate, targetSampleRate);
+    } else if (inputSampleRate % targetSampleRate != 0) {
+        LOGE("input rate %d is not an integer multiple of target %d; using floor "
+             "ratio %d (output rate %d != expected %d, decode may suffer)",
+             inputSampleRate, targetSampleRate, ratio,
+             inputSampleRate / ratio, targetSampleRate);
+    }
+    s->decimationRatio     = ratio;
+    // Build the anti-aliasing FIR for the actual integer ratio.
+    s->decimator.configure(ratio);
     s->monoScratch.reserve(inputSampleRate / 100);  // ~10ms of input headroom
 
     jclass cbClass = env->GetObjectClass(callback);

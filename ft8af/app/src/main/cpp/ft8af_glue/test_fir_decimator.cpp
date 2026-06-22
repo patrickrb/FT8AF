@@ -88,6 +88,15 @@ int main() {
     check(gStop < 0.1f, "9 kHz alias tone rejected > 20 dB by FIR");
     check(gStop < (float) gBox, "FIR rejects the alias far better than the box filter");
 
+    // 5. decimationRatioFor: the guarded ratio the capture path uses. Must never
+    //    divide-by-zero or return < 1, and must floor a non-integer multiple.
+    check(decimationRatioFor(48000, 12000) == 4, "48k/12k -> ratio 4");
+    check(decimationRatioFor(48000, 0) == 1, "zero target rate -> pass-through ratio 1");
+    check(decimationRatioFor(48000, -12000) == 1, "negative target rate -> ratio 1");
+    check(decimationRatioFor(8000, 12000) == 1, "input below target -> ratio 1 (no upsample)");
+    check(decimationRatioFor(44100, 12000) == 3, "non-integer multiple floors (44100/12000 -> 3)");
+    check(decimationRatioFor(12000, 12000) == 1, "equal rates -> ratio 1");
+
     if (g_failures) {
         printf("%d FAILURE(S)\n", g_failures);
         return 1;

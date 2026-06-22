@@ -22,20 +22,33 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+// Integer decimation ratio for an input/target sample-rate pair, always >= 1.
+// Guards the division so a zero/negative target (divide-by-zero, UB) or a target
+// above the input rate (ratio < 1) degrades to 1 (pass-through) instead of
+// mis-rating the audio. When inputRate isn't an exact multiple of targetRate the
+// floor is returned; callers should warn since the output rate won't match what
+// the decoder expects.
+inline int decimationRatioFor(int inputRate, int targetRate) {
+    if (targetRate <= 0 || inputRate < targetRate) {
+        return 1;
+    }
+    return inputRate / targetRate;
+}
+
 class FirDecimator {
 public:
     // ratio: input rate / output rate (clamped to >= 1).
-    // tapsPerPhase: half-length per polyphase arm; larger = sharper transition / deeper
-    //   stopband at more cost. 8 with a Blackman window gives ~ -58 dB stopband, plenty for
-    //   FT8's weak-signal needs.
-    explicit FirDecimator(int ratio, int tapsPerPhase = 8) {
-        configure(ratio, tapsPerPhase);
+    // tapsPerRatio: scales the FIR length (full kernel is 2*tapsPerRatio*ratio + 1 taps);
+    //   larger = sharper transition / deeper stopband at more cost. 8 with a Blackman
+    //   window gives ~ -58 dB stopband, plenty for FT8's weak-signal needs.
+    explicit FirDecimator(int ratio, int tapsPerRatio = 8) {
+        configure(ratio, tapsPerRatio);
     }
 
     // Rebuild for a new ratio and clear state. Safe to call before the rate is known.
-    void configure(int ratio, int tapsPerPhase = 8) {
+    void configure(int ratio, int tapsPerRatio = 8) {
         ratio_ = ratio < 1 ? 1 : ratio;
-        buildKernel(tapsPerPhase < 1 ? 1 : tapsPerPhase);
+        buildKernel(tapsPerRatio < 1 ? 1 : tapsPerRatio);
         history_.assign(kernel_.size(), 0.0f);
         pos_ = 0;
         phase_ = 0;
@@ -80,8 +93,8 @@ private:
         return acc;
     }
 
-    void buildKernel(int tapsPerPhase) {
-        const int N = 2 * tapsPerPhase * ratio_ + 1;  // odd -> exact symmetry about center
+    void buildKernel(int tapsPerRatio) {
+        const int N = 2 * tapsPerRatio * ratio_ + 1;  // odd -> exact symmetry about center
         const int M = N - 1;
         // Cutoff just below the output Nyquist (0.5/ratio cycles/sample); 0.45/ratio leaves a
         // small transition band so the passband stays flat to ~0.9 of Nyquist (~5.4 kHz at
