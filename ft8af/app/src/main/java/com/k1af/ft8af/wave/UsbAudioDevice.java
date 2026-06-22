@@ -547,8 +547,9 @@ public class UsbAudioDevice {
                 return true;
             }
             com.k1af.ft8af.GeneralVariables.fileLog(
-                    "UsbAudioDevice: libusb native write FAILED rc=" + rc
-                            + ", falling back to UsbRequest");
+                    "UsbAudioDevice: libusb native write FAILED ("
+                            + describeLibusbWriteError(rc)
+                            + "), trying UsbRequest fallback");
         }
 
         // Fallback: original UsbRequest-based write. Kept so devices that work
@@ -675,6 +676,40 @@ public class UsbAudioDevice {
             connection.close();
             connection = null;
         }
+    }
+
+    /**
+     * Maps a {@link UsbAudioNative#nativeWrite} return code to a readable label
+     * for the debug log. {@code nativeWrite} returns 0 on success or a libusb
+     * {@code libusb_error} code (always negative) on failure; naming the code
+     * makes a dropped TX cycle diagnosable instead of an opaque {@code rc=-4}.
+     * A device-level error ({@code NO_DEVICE}, {@code NOT_FOUND}) means the
+     * UsbRequest fallback below will almost certainly fail too.
+     *
+     * <p>Any value outside the known enum (e.g. an unexpected positive code) is
+     * labelled {@code UNKNOWN} rather than guessed at. Package-visible for
+     * testing.
+     */
+    static String describeLibusbWriteError(int rc) {
+        String name;
+        switch (rc) {
+            case 0:   name = "SUCCESS"; break;
+            case -1:  name = "IO"; break;
+            case -2:  name = "INVALID_PARAM"; break;
+            case -3:  name = "ACCESS"; break;
+            case -4:  name = "NO_DEVICE"; break;
+            case -5:  name = "NOT_FOUND"; break;
+            case -6:  name = "BUSY"; break;
+            case -7:  name = "TIMEOUT"; break;
+            case -8:  name = "OVERFLOW"; break;
+            case -9:  name = "PIPE"; break;
+            case -10: name = "INTERRUPTED"; break;
+            case -11: name = "NO_MEM"; break;
+            case -12: name = "NOT_SUPPORTED"; break;
+            case -99: name = "OTHER"; break;
+            default:  name = "UNKNOWN"; break;
+        }
+        return "rc=" + rc + " " + name;
     }
 
     public boolean hasInput() { return endpointIn != null; }
