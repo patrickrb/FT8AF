@@ -22,11 +22,21 @@ jobs:
       - name: Check PR head branch
         env:
           HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          # Require the promotion PR to come from the dev branch IN THIS repo.
+          # Checking the branch name alone is insufficient: a fork could open a
+          # PR from its own branch literally named "dev" and pass, so also pin
+          # the head repo to the base repo.
+          if [[ "${HEAD_REPO}" != "${BASE_REPO}" ]]; then
+            echo "::error title=PR source must be this repo::PRs to staging must originate from dev in ${BASE_REPO}, not a fork (${HEAD_REPO})."
+            exit 1
+          fi
           if [[ "${HEAD_REF}" != "dev" ]]; then
             echo "::error title=PR source must be dev::PRs to staging are only allowed from the dev branch. Source branch: ${HEAD_REF}"
             echo "Land your changes on dev first (PR from your feature branch into dev), then open dev → staging to cut a dev build."
             exit 1
           fi
-          echo "OK — PR source is dev."
+          echo "OK — PR source is dev in ${BASE_REPO}."

@@ -2,7 +2,8 @@ name: Android CI & Release
 
 # Android pipeline for the ft8af/ app: unit tests + coverage, instrumented
 # emulator tests, static analysis (lint/detekt/ktlint), and the signed
-# APK/AAB build + GitHub Release + Play internal publish.
+# APK/AAB build + GitHub Release + Play publish (internal track on staging,
+# production track on main / android-v* tags — see the Release lifecycle below).
 #
 # Release lifecycle (see docs/release-pipeline.md):
 #   PR to dev/staging/main -> build-only (unsigned), tests
