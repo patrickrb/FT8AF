@@ -99,5 +99,20 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (dev625)." }
 & $out625
 $dev625Exit = $LASTEXITCODE
 
+# ---------------------------------------------------------------------------
+# FIR decimator tests (C++): anti-aliasing downsample that replaced the box
+# filter in usb_audio_capture.cpp. Header-only, no ft8_lib deps; compiled with
+# clang++ (the header is C++). Own main(); exit 0 == all pass.
+# ---------------------------------------------------------------------------
+$clangxx = [System.IO.Path]::ChangeExtension($Clang, $null) + "++.exe"
+if (-not (Test-Path $clangxx)) { $clangxx = $Clang }  # clang can compile C++ via -x
+$firSrc = Join-Path $here "test_fir_decimator.cpp"
+$firOut = Join-Path $env:TEMP "ft8_fir_test.exe"
+& $clangxx -std=c++14 -O2 -x c++ $firSrc -o $firOut
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (fir_decimator)." }
+& $firOut
+$firExit = $LASTEXITCODE
+
 if ($goldenExit -ne 0) { exit $goldenExit }
-exit $dev625Exit
+if ($dev625Exit -ne 0) { exit $dev625Exit }
+exit $firExit

@@ -200,8 +200,9 @@ public class FT8SignalListener {
                         onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, true);
                     }
 
+                    final long deepDecodeBudgetMs = GeneralVariables.currentMode().deepDecodeBudgetMillis();
                     do {
-                        if (timeSec > FT8Common.DEEP_DECODE_TIMEOUT) break;// timeout check: if exceeding a certain time (7 sec), skip signal subtraction
+                        if (timeSec > deepDecodeBudgetMs) break;// stop subtracting once the cycle's deep-decode budget is spent
                         // subtract decoded signals
                         subtractDecode(ft8Decoder, a91List, fromSource);
 

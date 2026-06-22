@@ -77,3 +77,10 @@ out625="$tmp/ft8_dev625_test"
 
 # Not exec'd, so the EXIT trap cleans up $tmp. set -e propagates a failure.
 "$out625"
+
+# FIR decimator tests (C++): anti-aliasing downsample that replaced the box filter
+# in usb_audio_capture.cpp. Header-only, no ft8_lib deps. Compiled as C++.
+CXX="${CXX:-clang++}"
+fir_out="$tmp/ft8_fir_test"
+"$CXX" -std=c++14 -O2 -Wall "$here/test_fir_decimator.cpp" -lm -o "$fir_out"
+"$fir_out"

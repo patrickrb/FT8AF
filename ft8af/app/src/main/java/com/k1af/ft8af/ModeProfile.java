@@ -66,6 +66,20 @@ public enum ModeProfile {
     }
 
     /**
+     * Wall-clock budget for the deep-decode subtract-and-redecode loop, in milliseconds.
+     *
+     * <p>The loop keeps subtracting decoded signals and re-decoding until no new message
+     * appears; this caps how long it may run so it can't spill into the next cycle's decode.
+     * It scales with the slot (0.75x) instead of a flat 7s: the old constant was ~2x FT2's
+     * entire 3.75s slot (never bounding fast modes) yet left FT8 well short of its 15s cycle,
+     * cutting off weak-signal passes WSJT-X would still run. The 2.5s floor keeps the fastest
+     * mode from starving on slow phones.
+     */
+    public int deepDecodeBudgetMillis() {
+        return Math.max(2500, Math.round(slotMillis * 0.75f));
+    }
+
+    /**
      * Resolve a descriptor from a mode id. Unknown ids (e.g. a config value persisted by a
      * future build before this one knows the mode) fall back to FT8 for forward-compat.
      */
