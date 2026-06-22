@@ -101,8 +101,10 @@ class PotaParkPickerLogicTest {
         val narrow = findNearestLocationCodes(39.0, -94.6, locations, 3)
         assertThat(narrow).doesNotContain("US-KS")
 
-        // The fix: a wider candidate net pulls in the user's real region.
-        val wide = findNearestLocationCodes(39.0, -94.6, locations, 5)
+        // The fix: a wider candidate net pulls in the user's real region. Use
+        // the production NEARBY_LOCATION_CANDIDATES value (12) to pin the intent;
+        // with only 5 test rows it returns all of them, US-KS/US-MO included.
+        val wide = findNearestLocationCodes(39.0, -94.6, locations, 12)
         assertThat(wide).contains("US-KS")
         assertThat(wide).contains("US-MO")
     }
