@@ -22,6 +22,8 @@ import com.k1af.ft8af.GeneralVariables;
 import com.k1af.ft8af.MainViewModel;
 import com.k1af.ft8af.R;
 import com.k1af.ft8af.databinding.FragmentSpectrumBinding;
+import com.k1af.ft8af.spectrum.AudioInputLevel;
+import com.k1af.ft8af.spectrum.AudioLevelDisplay;
 import com.k1af.ft8af.timer.UtcTimer;
 
 /**
@@ -169,6 +171,12 @@ public class SpectrumFragment extends Fragment {
         if (buffer.length <= 0) {
             return;
         }
+        // Update the RX input-level meter from the same raw audio the FFT uses, so the operator
+        // can spot a too-quiet or clipping radio (the usual cause of decoding fewer signals than
+        // WSJT-X) and set gain accordingly.
+        AudioInputLevel.Reading level = AudioInputLevel.compute(buffer);
+        binding.audioLevelTextView.setText(AudioLevelDisplay.label(level));
+        binding.audioLevelTextView.setTextColor(AudioLevelDisplay.color(level));
         int[] fft = new int[buffer.length / 2];
         if (mainViewModel.deNoise) {
             getFFTDataFloat(buffer, fft);

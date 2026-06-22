@@ -74,6 +74,23 @@ public class ModeProfileTest {
     }
 
     @Test
+    public void deepDecodeBudget_scalesWithSlotAndHasFloor() {
+        // 0.75x the slot, so the subtract loop uses most of the cycle without spilling into
+        // the next decode. FT8: 0.75 * 15000 = 11250; FT4: 0.75 * 7500 = 5625.
+        assertThat(ModeProfile.FT8.deepDecodeBudgetMillis()).isEqualTo(11_250);
+        assertThat(ModeProfile.FT4.deepDecodeBudgetMillis()).isEqualTo(5_625);
+        // FT2: 0.75 * 3750 = 2812.5 -> below the 2500 floor it would round to 2813, which is
+        // still above the floor, so the computed value wins here.
+        assertThat(ModeProfile.FT2.deepDecodeBudgetMillis()).isEqualTo(2_813);
+        // Every mode's budget must stay under its own slot so deep decode can't overrun the
+        // cycle (the old flat 7000ms was ~2x FT2's 3750ms slot).
+        for (ModeProfile m : ModeProfile.values()) {
+            assertThat(m.deepDecodeBudgetMillis()).isAtLeast(2_500);
+            assertThat(m.deepDecodeBudgetMillis()).isLessThan(m.slotMillis);
+        }
+    }
+
+    @Test
     public void fromId_resolvesKnownIds() {
         assertThat(ModeProfile.fromId(FT8Common.FT8_MODE)).isEqualTo(ModeProfile.FT8);
         assertThat(ModeProfile.fromId(FT8Common.FT4_MODE)).isEqualTo(ModeProfile.FT4);

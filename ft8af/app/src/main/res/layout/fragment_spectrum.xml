@@ -123,6 +123,22 @@
             app:layout_constraintTop_toTopOf="@+id/columnarView"
             tools:text="Baud rate setting" />
 
+        <!-- Receive input-level meter. Text + colour are set in code from AudioInputLevel;
+             centred between the UTC timer (start) and the band readout (end). -->
+        <TextView
+            android:id="@+id/audioLevelTextView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/spectrum_text_back_ground"
+            android:textColor="@color/spectrum_text_color"
+            android:textSize="10sp"
+            tools:ignore="SmallSp"
+            app:layout_constraintBottom_toBottomOf="@+id/timersTextView"
+            app:layout_constraintEnd_toStartOf="@+id/freqBandTextView"
+            app:layout_constraintStart_toEndOf="@+id/timersTextView"
+            app:layout_constraintTop_toTopOf="@+id/timersTextView"
+            tools:text="RX -14 dB" />
+
     </androidx.constraintlayout.widget.ConstraintLayout>
 
 </layout>

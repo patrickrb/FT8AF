@@ -26,6 +26,8 @@
 #include <thread>
 #include <vector>
 
+#include "fir_decimator.h"
+
 #define TAG "ft8af_usb_capture"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN,  TAG, __VA_ARGS__)
@@ -63,10 +65,11 @@ struct CaptureSession {
     std::atomic<bool>             running{false};
     std::atomic<int>              inFlight{0};
 
-    // Sample accumulator for downsampling. We average `decimationRatio`
-    // consecutive input samples per output sample (cheap box-filter
-    // anti-aliasing); the decoder only needs 12kHz so this is plenty.
-    std::vector<float> accumulator;
+    // Anti-aliasing decimator: a windowed-sinc FIR low-pass + integer decimation, replacing
+    // the old box-filter average. Configured with the real ratio in nativeStart. `monoScratch`
+    // holds one transfer's worth of mono samples to hand to it without per-sample churn.
+    FirDecimator        decimator{4};
+    std::vector<float>  monoScratch;
 };
 
 // ----------------------------------------------------------------------------
@@ -153,6 +156,7 @@ void LIBUSB_CALL onTransferComplete(libusb_transfer* xfer) {
         }
     }
 
+    s->monoScratch.clear();
     for (int p = 0; p < xfer->num_iso_packets; ++p) {
         libusb_iso_packet_descriptor& pkt = xfer->iso_packet_desc[p];
         if (pkt.status != LIBUSB_TRANSFER_COMPLETED) continue;
@@ -176,28 +180,20 @@ void LIBUSB_CALL onTransferComplete(libusb_transfer* xfer) {
             } else {
                 sample = (float)l / 32768.0f;
             }
-            s->accumulator.push_back(sample);
+            s->monoScratch.push_back(sample);
         }
     }
 
-    // Drain accumulator into target-rate float blocks.
-    if (s->decimationRatio > 0
-            && (int)s->accumulator.size() >= s->decimationRatio) {
-        int outSamples = (int)s->accumulator.size() / s->decimationRatio;
-        std::vector<float> out(outSamples);
-        for (int i = 0; i < outSamples; ++i) {
-            float sum = 0.0f;
-            int base = i * s->decimationRatio;
-            for (int j = 0; j < s->decimationRatio; ++j) {
-                sum += s->accumulator[base + j];
-            }
-            out[i] = sum / (float)s->decimationRatio;
+    // Anti-alias + decimate to the target rate. The FIR carries state across transfers, so
+    // partial input is fine — it just emits ~frames/ratio output samples per call.
+    if (!s->monoScratch.empty()) {
+        std::vector<float> out;
+        out.reserve(s->monoScratch.size() / s->decimator.ratio() + 1);
+        s->decimator.process(s->monoScratch.data(),
+                             (int)s->monoScratch.size(), out);
+        if (!out.empty()) {
+            emitAudioData(s, out.data(), (int)out.size());
         }
-        int consumed = outSamples * s->decimationRatio;
-        s->accumulator.erase(
-                s->accumulator.begin(),
-                s->accumulator.begin() + consumed);
-        emitAudioData(s, out.data(), outSamples);
     }
 
     // Re-submit this transfer.
@@ -298,7 +294,9 @@ Java_com_k1af_ft8af_wave_UsbAudioNative_nativeStart(
     s->inputBytesPerSample = inputBytesPerSample > 0 ? inputBytesPerSample : 2;
     s->targetRate          = targetSampleRate;
     s->decimationRatio     = inputSampleRate / targetSampleRate;
-    s->accumulator.reserve(inputSampleRate);  // 1s of headroom
+    // Build the anti-aliasing FIR for the actual integer ratio (e.g. 48k/12k = 4).
+    s->decimator.configure(s->decimationRatio > 0 ? s->decimationRatio : 1);
+    s->monoScratch.reserve(inputSampleRate / 100);  // ~10ms of input headroom
 
     jclass cbClass = env->GetObjectClass(callback);
     s->onData    = env->GetMethodID(cbClass, "onAudioData",       "([FI)V");
