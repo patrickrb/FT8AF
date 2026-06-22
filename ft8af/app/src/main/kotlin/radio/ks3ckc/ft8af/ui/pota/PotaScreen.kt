@@ -204,11 +204,16 @@ private fun ActivateTab() {
     var pickerTargetIndex by remember { mutableIntStateOf(-1) }
 
     // Refresh the activation's QSO counter periodically while one is running so
-    // the on-screen tally reflects QSOs added by the TX/RX path.
+    // the on-screen tally reflects QSOs added by the TX/RX path. The first
+    // refresh is immediate (no delay) so QSOs logged while on another tab are
+    // visible as soon as the user switches back to the POTA tab.
     LaunchedEffect(activation?.id, refreshKey) {
         if (activation != null) {
-            kotlinx.coroutines.delay(3000)
-            PotaSessionManager.refreshCounter()
+            if (refreshKey > 0) kotlinx.coroutines.delay(3000)
+            // refreshCounter() does blocking SQLite (reload + QSO list); keep it
+            // off the main dispatcher so the immediate first poll (and every 3s
+            // poll after) can't jank the UI / trigger an ANR.
+            withContext(Dispatchers.IO) { PotaSessionManager.refreshCounter() }
             refreshKey++
         }
     }

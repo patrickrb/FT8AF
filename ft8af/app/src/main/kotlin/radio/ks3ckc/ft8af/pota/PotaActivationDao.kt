@@ -8,6 +8,7 @@ import radio.ks3ckc.ft8af.pota.model.PotaQso
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 /**
  * Thin DAO over the pota_activation SQLite table. Single-threaded callers from the
@@ -98,7 +99,9 @@ internal object PotaActivationDao {
      * activations at the same park don't bleed into each other.
      */
     fun getActivationQsos(activation: PotaActivation): List<PotaQso> {
-        val fmt = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
+        val fmt = SimpleDateFormat("yyyyMMddHHmmss", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("GMT")
+        }
         val startStamp = fmt.format(Date(activation.startedAtMs))
         val endStamp = activation.endedAtMs?.let { fmt.format(Date(it)) } ?: "99991231235959"
         val cursor = db().rawQuery(
