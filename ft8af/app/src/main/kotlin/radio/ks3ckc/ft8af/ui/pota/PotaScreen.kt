@@ -210,7 +210,10 @@ private fun ActivateTab() {
     LaunchedEffect(activation?.id, refreshKey) {
         if (activation != null) {
             if (refreshKey > 0) kotlinx.coroutines.delay(3000)
-            PotaSessionManager.refreshCounter()
+            // refreshCounter() does blocking SQLite (reload + QSO list); keep it
+            // off the main dispatcher so the immediate first poll (and every 3s
+            // poll after) can't jank the UI / trigger an ANR.
+            withContext(Dispatchers.IO) { PotaSessionManager.refreshCounter() }
             refreshKey++
         }
     }
