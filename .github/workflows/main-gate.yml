@@ -1,21 +1,22 @@
 name: Main branch source gate
 
-# Enforces release discipline: PRs targeting main must come from `dev`.
-# Feature branches are expected to land on dev first; only dev → main is
-# allowed as the "promote to production" step, gated by branch protection
+# Enforces release discipline: PRs targeting main must come from `staging`.
+# The promotion path is feature -> dev -> staging -> main; only staging -> main
+# is allowed as the "promote to production" step, gated by branch protection
 # requiring this status check.
 #
 # To enforce it: GitHub → Settings → Branches → Branch protection rule for
 # `main` → Require status checks to pass → add "Main branch source gate /
-# enforce-source-is-dev" to the required list.
+# enforce-source-is-staging" to the required list. (If you previously required
+# the old "enforce-source-is-dev" check, swap it for this one.)
 
 on:
   pull_request:
     branches: [main]
 
 jobs:
-  enforce-source-is-dev:
-    name: enforce-source-is-dev
+  enforce-source-is-staging:
+    name: enforce-source-is-staging
     runs-on: ubuntu-latest
     steps:
       - name: Check PR head branch
@@ -23,9 +24,9 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
         run: |
           set -euo pipefail
-          if [[ "${HEAD_REF}" != "dev" ]]; then
-            echo "::error title=PR source must be dev::PRs to main are only allowed from the dev branch. Source branch: ${HEAD_REF}"
-            echo "Land your changes on dev first (PR from your feature branch into dev), then open dev → main."
+          if [[ "${HEAD_REF}" != "staging" ]]; then
+            echo "::error title=PR source must be staging::PRs to main are only allowed from the staging branch. Source branch: ${HEAD_REF}"
+            echo "Promote through staging first (feature → dev → staging), then open staging → main."
             exit 1
           fi
-          echo "OK — PR source is dev."
+          echo "OK — PR source is staging."

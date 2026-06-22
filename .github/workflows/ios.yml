@@ -7,14 +7,16 @@ name: iOS CI
 # Developer cert + provisioning profile, which aren't wired up yet.
 #
 # PATH-FILTERED: only runs when ios/** or the shared native C core
-# (ft8af/app/src/main/cpp/**) changes, or this workflow file. Pushes to main
-# always verify. The always-run `ios-gate` job is the required status check.
+# (ft8af/app/src/main/cpp/**) changes, or this workflow file. Pushes to
+# staging/main always verify. The always-run `ios-gate` job is the required
+# status check. iOS has no release artifact yet (CI build/test only), so the
+# staging/main split only affects when the verify runs.
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, staging, dev]
   pull_request:
-    branches: [main, dev]
+    branches: [main, staging, dev]
 
 concurrency:
   group: ios-${{ github.event.pull_request.number || github.ref }}
@@ -46,9 +48,9 @@ jobs:
           CHANGED: ${{ steps.filter.outputs.ios }}
         run: |
           set -euo pipefail
-          # main pushes always verify; otherwise only when iOS-relevant files
-          # (or the shared C core) changed.
-          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
+          # staging/main pushes always verify; otherwise only when iOS-relevant
+          # files (or the shared C core) changed.
+          if [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/heads/staging" ) ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif [[ "$CHANGED" == "true" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
