@@ -1,0 +1,56 @@
+name: Branch source gate
+
+# Enforces the release promotion chain:
+#
+#     feature / fork  ->  dev  ->  staging  ->  main
+#
+#   - PRs into `main` may only come from `staging`
+#   - PRs into `staging` may only come from `dev`
+#   - `dev` accepts PRs from anyone / any fork (no gate runs for it)
+#
+# To enforce it, add the check "enforce-pr-source" to the required status
+# checks in the branch protection rules for BOTH `main` and `staging`
+# (GitHub -> Settings -> Branches). `dev` must NOT require it.
+
+on:
+  pull_request:
+    branches: [main, staging]
+
+jobs:
+  enforce-pr-source:
+    name: enforce-pr-source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR source branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          case "${BASE_REF}" in
+            main)    expected=staging ;;
+            staging) expected=dev ;;
+            *)
+              echo "No source restriction configured for base '${BASE_REF}'."
+              exit 0
+              ;;
+          esac
+
+          # Promotion must come from this repo's canonical branch — not a fork
+          # branch that merely shares the name.
+          if [[ "${HEAD_REPO}" != "${BASE_REPO}" ]]; then
+            echo "::error title=PR source must be ${expected}::PRs to ${BASE_REF} must come from this repository's '${expected}' branch, not a fork (${HEAD_REPO})."
+            echo "Promotion flow: feature/fork -> dev -> staging -> main."
+            exit 1
+          fi
+
+          if [[ "${HEAD_REF}" != "${expected}" ]]; then
+            echo "::error title=PR source must be ${expected}::PRs to ${BASE_REF} are only allowed from '${expected}'. Source branch: '${HEAD_REF}'."
+            echo "Promotion flow: feature/fork -> dev -> staging -> main."
+            exit 1
+          fi
+
+          echo "OK - ${BASE_REF} accepts '${expected}' (source: ${HEAD_REF})."
