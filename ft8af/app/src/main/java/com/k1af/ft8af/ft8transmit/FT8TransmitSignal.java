@@ -815,11 +815,29 @@ public class FT8TransmitSignal {
                 "playViaUsbAudio: calling writeAudio playLength=%d rate=%d",
                 playLength, GeneralVariables.audioSampleRate));
         boolean success = usbDev.writeAudio(unscaled, GeneralVariables.audioSampleRate);
-        GeneralVariables.fileLog(
-                "playViaUsbAudio: writeAudio returned " + (success ? "OK" : "FAILED"));
+        GeneralVariables.fileLog(buildWriteAudioResultLog(success));
 
         usbDev.close();
         afterPlayAudio();
+    }
+
+    /**
+     * Builds the debug-log line for a {@code writeAudio} result. A failure here
+     * means the USB write dropped this cycle's audio: the rig was keyed (PTT/CAT
+     * already sent) but no tones went out, so it transmits dead air for the full
+     * 15 s slot. The QSO sequencer is RX-driven and self-corrects next cycle, so
+     * this isn't fatal — but it's invisible to the operator (rig keys normally),
+     * which is exactly why the dropped case is spelled out rather than logged as
+     * a bare "FAILED".
+     *
+     * <p>Package-visible for testing.
+     */
+    static String buildWriteAudioResultLog(boolean success) {
+        if (success) {
+            return "playViaUsbAudio: writeAudio returned OK";
+        }
+        return "playViaUsbAudio: writeAudio returned FAILED — TX DROPPED, "
+                + "no audio sent this cycle (rig keyed but silent)";
     }
 
     /**

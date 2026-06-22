@@ -218,6 +218,12 @@ private fun ActivateTab() {
         }
     }
 
+    // Box host so ParkPickerSheet (a fillMaxSize scrim + sheet) overlays the tab
+    // content. Without it the sheet is a trailing sibling of the fillMaxSize
+    // Activate content in PotaScreen's Column, so it lays out into 0 leftover
+    // height and the picker is invisible (tap does nothing). Mirrors how
+    // FrequencyPickerSheet is hosted as a sibling overlay in FT8AFApp.
+    Box(modifier = Modifier.fillMaxSize()) {
     if (activation == null) {
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -391,6 +397,7 @@ private fun ActivateTab() {
             }
         },
     )
+    }
 }
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)

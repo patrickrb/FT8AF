@@ -45,7 +45,12 @@ public class GeneralVariables {
 
     public static boolean distanceInMiles = true;//Display distances in miles (true) or kilometers (false)
 
-    public static boolean deepDecodeMode = false;//Whether deep decode mode is enabled
+    // Deep decode (subtract-and-redecode + extra LDPC iterations) is on by default so the app
+    // pulls weak signals out from under strong ones the way WSJT-X does at its default depth.
+    // A persisted "deepMode" config row still overrides this; only installs that never touched
+    // the setting pick up the new default. See ModeProfile#deepDecodeBudgetMillis for the loop
+    // time bound.
+    public static boolean deepDecodeMode = true;//Whether deep decode mode is enabled
 
     public static boolean audioOutput32Bit = true;//Audio output type: true=float, false=int16
     public static int audioSampleRate = 12000;//Transmit audio sample rate

@@ -32,6 +32,8 @@ public final class FT8Common {
     // FT2's 3.75s slot is 37.5 tenths — not a whole number, so it has no tenths-of-a-second
     // form. Timing uses FT2_SLOT_TIME_MILLISECOND (3750) directly; see ModeProfile.slotMillis.
     public static final int FT8_TRANSMIT_DELAY=500;//default transmit delay duration in milliseconds
-    public static final long DEEP_DECODE_TIMEOUT=7*1000;//maximum time range for deep decode
+    // Deep-decode subtraction loop time bound now scales with the mode's slot length; see
+    // ModeProfile#deepDecodeBudgetMillis. The old flat 7s constant was ~2x FT2's entire 3.75s
+    // slot (so it never bounded fast modes) while leaving FT8 far short of its 15s cycle.
     public static final int DECODE_MAX_ITERATIONS=1;//number of iterations
 }
