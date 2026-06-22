@@ -83,6 +83,30 @@ class PotaParkPickerLogicTest {
         assertThat(result).containsExactly("US-PA")
     }
 
+    @Test
+    fun `broadening candidate count rescues real region from POTA's bad location centers`() {
+        // POTA's /locations endpoint ships wrong centers for some foreign
+        // regions: ZA-FS, RU-VL and RO-OT all report centers in Kansas. A user
+        // in Kansas (39.0, -94.6) therefore sees those mislocated regions
+        // out-rank their real state, US-KS.
+        val locations = listOf(
+            PotaLocation("ZA-FS", "Free State", 38.9717, -95.2355),   // bad: really South Africa
+            PotaLocation("RU-VL", "Vladimir", 39.0904, -94.5877),     // bad: really Russia
+            PotaLocation("RO-OT", "Olt", 39.768, -94.8509),           // bad: really Romania
+            PotaLocation("US-KS", "Kansas", 38.5266, -96.7265),       // correct
+            PotaLocation("US-MO", "Missouri", 38.4561, -92.2884),     // correct
+        )
+
+        // The old behaviour: only the 3 nearest centers — all mislocated.
+        val narrow = findNearestLocationCodes(39.0, -94.6, locations, 3)
+        assertThat(narrow).doesNotContain("US-KS")
+
+        // The fix: a wider candidate net pulls in the user's real region.
+        val wide = findNearestLocationCodes(39.0, -94.6, locations, 5)
+        assertThat(wide).contains("US-KS")
+        assertThat(wide).contains("US-MO")
+    }
+
     // -----------------------------------------------------------------------
     // sortParksByDistance
     // -----------------------------------------------------------------------
@@ -118,6 +142,31 @@ class PotaParkPickerLogicTest {
         )
         val result = sortParksByDistance(parks, 39.95, -75.17, 50)
         assertThat(result.map { it.park.reference }).containsExactly("K-0002")
+    }
+
+    @Test
+    fun `sortParksByDistance drops parks beyond the max distance cap`() {
+        // A park list mixing genuinely-nearby parks with one from a mislocated
+        // region (its real coordinates put it on another continent). The cap
+        // keeps the far one from masquerading as nearby.
+        val parks = listOf(
+            parkAt("US-0001", "Local Park", 40.06, -74.41),   // NJ — near Philadelphia
+            parkAt("RU-0024", "Far Park", 55.0, 40.0),        // Russia — ~8000 km away
+        )
+        val result = sortParksByDistance(parks, 39.95, -75.17, 50, maxDistanceKm = 1_000.0)
+        assertThat(result.map { it.park.reference }).containsExactly("US-0001")
+    }
+
+    @Test
+    fun `sortParksByDistance keeps all parks when no cap is given`() {
+        val parks = listOf(
+            parkAt("US-0001", "Local Park", 40.06, -74.41),
+            parkAt("RU-0024", "Far Park", 55.0, 40.0),
+        )
+        val result = sortParksByDistance(parks, 39.95, -75.17, 50)
+        assertThat(result.map { it.park.reference })
+            .containsExactly("US-0001", "RU-0024")
+            .inOrder()
     }
 
     @Test

@@ -4,6 +4,9 @@ import android.content.Context
 import com.google.android.gms.maps.model.LatLng
 import com.k1af.ft8af.maidenhead.MaidenheadGrid
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import radio.ks3ckc.ft8af.pota.model.PotaLocation
 import radio.ks3ckc.ft8af.pota.model.PotaPark
@@ -24,6 +27,21 @@ object PotaParkRepository {
     private const val CACHE_TTL_MS = 30 * 60 * 1_000L
     private const val NEARBY_LIMIT = 50
 
+    // POTA's /locations endpoint ships wrong center coordinates for a chunk of
+    // foreign regions (e.g. ZA-FS, RU-VL, RO-OT all report centers in Kansas),
+    // so the nearest-by-center ranking is noisy: a handful of mislocated regions
+    // out-rank the user's real region. We therefore pull parks from a generous
+    // set of candidate regions — enough that the user's true region(s) are always
+    // included despite the bad rows — and rely on the parks' own (correct)
+    // coordinates to produce the final ordering. See the parkpicker logic tests.
+    private const val NEARBY_LOCATION_CANDIDATES = 12
+
+    // Final safety net: even after broadening the candidates, a mislocated
+    // region can still contribute parks. Those parks carry correct coordinates,
+    // so they sort to the bottom — but drop anything implausibly far so a
+    // continent-away park never surfaces under "Nearby" for a sparse area.
+    private const val NEARBY_MAX_DISTANCE_KM = 1_000.0
+
     @Volatile
     private var cachedLocations: List<PotaLocation>? = null
 
@@ -37,19 +55,25 @@ object PotaParkRepository {
 
     /**
      * Return the [NEARBY_LIMIT] closest parks to [userLat]/[userLng], sorted by
-     * distance ascending. Fetches the 3 closest POTA location codes and their parks
-     * from the API (cached).
+     * distance ascending. Fetches parks for the [NEARBY_LOCATION_CANDIDATES]
+     * closest POTA location codes (cached) — a wide net to absorb POTA's
+     * mislocated region centers — then ranks by each park's own coordinates and
+     * drops anything beyond [NEARBY_MAX_DISTANCE_KM].
      */
     suspend fun nearbyParks(userLat: Double, userLng: Double): List<PotaParkWithDistance> =
         withContext(Dispatchers.IO) {
             val locations = getLocations() ?: return@withContext emptyList()
-            val closest = findNearestLocationCodes(userLat, userLng, locations, 3)
-            val allParks = mutableListOf<PotaPark>()
-            for (code in closest) {
-                val parks = getParksForLocation(code) ?: continue
-                allParks.addAll(parks)
+            val closest =
+                findNearestLocationCodes(userLat, userLng, locations, NEARBY_LOCATION_CANDIDATES)
+            // Fetch the candidate park lists concurrently; one slow region
+            // shouldn't serialize the whole sheet open.
+            val allParks = coroutineScope {
+                closest.map { code -> async { getParksForLocation(code) } }
+                    .awaitAll()
+                    .filterNotNull()
+                    .flatten()
             }
-            sortParksByDistance(allParks, userLat, userLng, NEARBY_LIMIT)
+            sortParksByDistance(allParks, userLat, userLng, NEARBY_LIMIT, NEARBY_MAX_DISTANCE_KM)
         }
 
     /**
@@ -126,13 +150,16 @@ internal fun findNearestLocationCodes(
 
 /**
  * Compute the distance from ([userLat], [userLng]) to each park, sort ascending,
- * and return the closest [limit] results.
+ * and return the closest [limit] results. Parks farther than [maxDistanceKm] are
+ * dropped (defaults to no cap) so mislocated-region parks can't masquerade as
+ * nearby.
  */
 internal fun sortParksByDistance(
     parks: List<PotaPark>,
     userLat: Double,
     userLng: Double,
     limit: Int,
+    maxDistanceKm: Double = Double.MAX_VALUE,
 ): List<PotaParkWithDistance> {
     val userPos = LatLng(userLat, userLng)
     return parks
@@ -143,6 +170,7 @@ internal fun sortParksByDistance(
                 distanceKm = MaidenheadGrid.getDist(userPos, LatLng(park.latitude, park.longitude)),
             )
         }
+        .filter { it.distanceKm <= maxDistanceKm }
         .sortedBy { it.distanceKm }
         .take(limit)
 }
