@@ -67,9 +67,12 @@ struct CaptureSession {
 
     // Anti-aliasing decimator: a windowed-sinc FIR low-pass + integer decimation, replacing
     // the old box-filter average. Configured with the real ratio in nativeStart. `monoScratch`
-    // holds one transfer's worth of mono samples to hand to it without per-sample churn.
+    // holds one transfer's worth of mono samples to hand to it; `outScratch` holds the decimated
+    // result. Both are reused across iso callbacks (which fire every ~8ms) so the hot capture
+    // path does no per-transfer heap allocation.
     FirDecimator        decimator{4};
     std::vector<float>  monoScratch;
+    std::vector<float>  outScratch;
 };
 
 // ----------------------------------------------------------------------------
@@ -187,12 +190,13 @@ void LIBUSB_CALL onTransferComplete(libusb_transfer* xfer) {
     // Anti-alias + decimate to the target rate. The FIR carries state across transfers, so
     // partial input is fine — it just emits ~frames/ratio output samples per call.
     if (!s->monoScratch.empty()) {
-        std::vector<float> out;
-        out.reserve(s->monoScratch.size() / s->decimator.ratio() + 1);
+        // Reused buffer: clear() keeps the capacity from prior callbacks, so process()'s
+        // push_backs don't reallocate on the hot path.
+        s->outScratch.clear();
         s->decimator.process(s->monoScratch.data(),
-                             (int)s->monoScratch.size(), out);
-        if (!out.empty()) {
-            emitAudioData(s, out.data(), (int)out.size());
+                             (int)s->monoScratch.size(), s->outScratch);
+        if (!s->outScratch.empty()) {
+            emitAudioData(s, s->outScratch.data(), (int)s->outScratch.size());
         }
     }
 
@@ -311,6 +315,7 @@ Java_com_k1af_ft8af_wave_UsbAudioNative_nativeStart(
     // Build the anti-aliasing FIR for the actual integer ratio.
     s->decimator.configure(ratio);
     s->monoScratch.reserve(inputSampleRate / 100);  // ~10ms of input headroom
+    s->outScratch.reserve(inputSampleRate / 100 / ratio + 1);  // decimated headroom
 
     jclass cbClass = env->GetObjectClass(callback);
     s->onData    = env->GetMethodID(cbClass, "onAudioData",       "([FI)V");
