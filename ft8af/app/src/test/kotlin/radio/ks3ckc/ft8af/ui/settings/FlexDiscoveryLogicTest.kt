@@ -64,23 +64,4 @@ class FlexDiscoveryLogicTest {
         // Reconnecting a live session would tear it down.
         assertThat(autoConnect(rigAlreadyConnected = true)).isFalse()
     }
-
-    // ---- mergeDiscovered ----
-
-    @Test
-    fun mergeDiscovered_includesTheNewRadio_evenWhenFactoryListLagsBehind() {
-        // The factory fires the callback before appending, so existing is empty
-        // when the very first radio arrives — it must still appear.
-        assertThat(mergeDiscovered(emptyList<String>(), "192.168.1.9") { it })
-            .containsExactly("192.168.1.9")
-    }
-
-    @Test
-    fun mergeDiscovered_dedupesByKey() {
-        // A later event that already includes the radio must not duplicate it.
-        assertThat(mergeDiscovered(listOf("192.168.1.9"), "192.168.1.9") { it })
-            .containsExactly("192.168.1.9")
-        assertThat(mergeDiscovered(listOf("192.168.1.9"), "10.0.0.5") { it })
-            .containsExactly("192.168.1.9", "10.0.0.5").inOrder()
-    }
 }

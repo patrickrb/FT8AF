@@ -61,6 +61,7 @@ import com.k1af.ft8af.rigs.InstructionSet
 import com.k1af.ft8af.ui.ToastMessage
 import com.k1af.ft8af.x6100.X6100Radio
 import com.k1af.ft8af.x6100.XieguRadioFactory
+import kotlinx.coroutines.delay
 import radio.ks3ckc.ft8af.theme.*
 
 // ─────────────────────────────────────────────────────────────────────
@@ -266,12 +267,12 @@ fun FlexRadioPickerDialog(
         onDismiss()
     }
 
-    // Start discovery while the dialog is open. Acquiring a MulticastLock is the
-    // load-bearing part: the FlexRadioFactory UDP listener is already running, but
-    // Android's Wi-Fi chip drops incoming broadcast/multicast packets (which is what
-    // Flex discovery is) unless an app holds this lock — without it the discovered
-    // list stays empty and the user is forced to type an IP. Lock is held only while
-    // the picker is open, so it doesn't drain battery the rest of the time.
+    // Hold a MulticastLock while the picker is open. This is the load-bearing
+    // part of discovery: the FlexRadioFactory UDP listener is already running,
+    // but Android's Wi-Fi chip drops incoming broadcast/multicast packets (which
+    // is what Flex discovery is) unless an app holds this lock — without it the
+    // discovered list stays empty and the user is forced to type an IP. Held only
+    // while the picker is open, so it doesn't drain battery the rest of the time.
     DisposableEffect(Unit) {
         val wifi = context.applicationContext
             .getSystemService(android.content.Context.WIFI_SERVICE) as android.net.wifi.WifiManager
@@ -279,45 +280,38 @@ fun FlexRadioPickerDialog(
             setReferenceCounted(true)
             runCatching { acquire() }
         }
-
-        val factory = FlexRadioFactory.getInstance()
-        discoveredRadios.clear()
-        discoveredRadios.addAll(factory.flexRadios)
         GeneralVariables.fileLog(
             "FlexDiscovery: picker open, multicastLock.held=${multicastLock.isHeld}, " +
-                "seeded=${factory.flexRadios.size}, startedEmpty=$startedEmpty",
+                "seeded=${FlexRadioFactory.getInstance().flexRadios.size}, startedEmpty=$startedEmpty",
         )
-
-        val listener = object : FlexRadioFactory.OnFlexRadioEvents {
-            override fun OnFlexRadioAdded(flexRadio: FlexRadio) {
-                GeneralVariables.fileLog(
-                    "FlexDiscovery: radio added model=${flexRadio.model} ip=${flexRadio.ip} " +
-                        "(total=${factory.flexRadios.size})",
-                )
-                // The factory fires this callback BEFORE appending the radio to
-                // flexRadios, so re-reading that list here would miss the new one
-                // (the bug where the picker kept spinning despite a found radio).
-                // Include the radio handed to us; dedupe by address.
-                val merged = mergeDiscovered(factory.flexRadios.toList(), flexRadio) { it.ip ?: "" }
-                discoveredRadios.clear()
-                discoveredRadios.addAll(merged)
-            }
-            override fun OnFlexRadioInvalid(flexRadio: FlexRadio) {
-                discoveredRadios.clear()
-                discoveredRadios.addAll(factory.flexRadios)
-            }
-        }
-        factory.setOnFlexRadioEvents(listener)
         onDispose {
-            factory.setOnFlexRadioEvents(null)
             if (multicastLock.isHeld) runCatching { multicastLock.release() }
         }
     }
 
-    // Auto-connect the moment a single radio is freshly discovered and the user
-    // hasn't started typing — the "just connect to my Flex" path. Heavily gated
-    // (see shouldAutoConnectFlex) so it never fires on a stale cached radio or
-    // while a rig is already connected. One-shot via autoTriggered.
+    // Poll discovery while the dialog is open so radios found *after* opening
+    // (discovery typically takes a few seconds) appear live — no need to close
+    // and reopen the picker. Polling also sidesteps the factory's add callback,
+    // which fires before the radio is appended to its list. Rebuild only when the
+    // discovered set actually changes (FlexPickerLogic) to avoid resetting scroll.
+    LaunchedEffect(Unit) {
+        val factory = FlexRadioFactory.getInstance()
+        while (true) {
+            val latest = factory.flexRadios.toList()
+            val displayedKeys = discoveredRadios.map { FlexPickerLogic.identityKey(it.serial, it.ip) }
+            val latestKeys = latest.map { FlexPickerLogic.identityKey(it.serial, it.ip) }
+            if (FlexPickerLogic.listChanged(displayedKeys, latestKeys)) {
+                discoveredRadios.clear()
+                discoveredRadios.addAll(latest)
+            }
+            delay(1000)
+        }
+    }
+
+    // Auto-connect the moment a single radio is discovered and the user hasn't
+    // started typing — the "just connect to my Flex" path. Heavily gated (see
+    // shouldAutoConnectFlex) so it never fires on a stale cached radio or while a
+    // rig is already connected. One-shot via autoTriggered.
     LaunchedEffect(discoveredRadios.size, ipText) {
         if (shouldAutoConnectFlex(
                 discoveredCount = discoveredRadios.size,

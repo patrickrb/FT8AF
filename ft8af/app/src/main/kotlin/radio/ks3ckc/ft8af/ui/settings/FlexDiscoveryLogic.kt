@@ -16,17 +16,6 @@ package radio.ks3ckc.ft8af.ui.settings
  *  - no rig is already connected ([rigAlreadyConnected]) — reconnecting a live
  *    session would tear it down and can leave it broken.
  */
-/**
- * The radios to show after a discovery event: the factory's current list plus the
- * just-added one, deduped by a stable key (its address). The FlexRadioFactory
- * fires its "added" callback BEFORE appending the radio to its list, so simply
- * re-reading that list drops the new radio — the bug where the picker kept
- * "Searching…" even though a radio had been found. Including [added] explicitly
- * fixes it; dedup guards against a later event that does include it.
- */
-internal fun <T> mergeDiscovered(existing: List<T>, added: T, key: (T) -> String): List<T> =
-    (existing + added).distinctBy(key)
-
 internal fun shouldAutoConnectFlex(
     discoveredCount: Int,
     userTypedIp: Boolean,
