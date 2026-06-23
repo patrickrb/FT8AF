@@ -264,3 +264,9 @@ internal fun visibleMeters(
     available: List<MeterSample>,
     enabled: Set<MeterType>,
 ): List<MeterSample> = available.filter { it.type in enabled }.sortedBy { it.type.ordinal }
+
+/** Max settable TX power; the HUD slider uses a 0..[MAX_TX_POWER_WATTS] W range. */
+const val MAX_TX_POWER_WATTS: Int = 100
+
+/** Clamp a requested TX power to the valid 0..[MAX_TX_POWER_WATTS] W range. */
+internal fun clampTxPowerWatts(watts: Int): Int = watts.coerceIn(0, MAX_TX_POWER_WATTS)

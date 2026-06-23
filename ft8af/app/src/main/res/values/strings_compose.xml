@@ -142,6 +142,7 @@
     <string name="meters_smeter">S</string>
     <string name="meters_voltage">VOLTS</string>
     <string name="meters_temp">TEMP</string>
+    <string name="meters_tx_power">TX POWER</string>
     <string name="meters_live">LIVE</string>
     <string name="meters_last_tx">LAST TX</string>
     <string name="meters_no_data">No meter data yet — read back from the rig during transmit.</string>

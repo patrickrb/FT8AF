@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -120,6 +121,15 @@ fun MetersSheet(
                 FreshnessBadge(freshness)
             }
 
+            // TX power control — only on rigs whose power is settable from the app
+            // (FlexRadio). Shown above the meters so set-power and the live PWR
+            // meter read together. Independent of meter availability: you set
+            // power before keying up.
+            if (rememberRigSupportsTxPower(mainViewModel)) {
+                Spacer(modifier = Modifier.height(16.dp))
+                TxPowerControl(mainViewModel)
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             when {
@@ -151,6 +161,49 @@ private fun HintText(text: String) {
         fontSize = 11.sp,
         fontFamily = GeistMonoFamily,
     )
+}
+
+/**
+ * Adjustable TX-power row (network rigs). The label tracks the slider live; the
+ * new value is pushed to the rig and persisted on release ([setRigTxPowerWatts]),
+ * not on every drag tick, to avoid spamming RFPOWER over the network.
+ */
+@Composable
+private fun TxPowerControl(mainViewModel: MainViewModel) {
+    var watts by remember { mutableIntStateOf(currentTxPowerWatts()) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.meters_tx_power),
+                color = TextMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GeistMonoFamily,
+                letterSpacing = 0.08.sp,
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "$watts W",
+                color = Accent,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = GeistMonoFamily,
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        IntSlider(
+            value = watts,
+            onValueChange = { watts = it },
+            onValueChangeFinished = { setRigTxPowerWatts(mainViewModel, watts) },
+            valueRange = 0f..MAX_TX_POWER_WATTS.toFloat(),
+            thumbColor = Accent,
+            activeTrackColor = Accent,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }
 
 @Composable

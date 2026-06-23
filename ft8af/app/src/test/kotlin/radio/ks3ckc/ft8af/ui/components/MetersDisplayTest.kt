@@ -305,4 +305,16 @@ class MetersDisplayTest {
     fun visibleMeters_emptyWhenRigReportsNothing() {
         assertThat(visibleMeters(emptyList(), setOf(MeterType.SWR, MeterType.ALC))).isEmpty()
     }
+
+    // ---- clampTxPowerWatts ----
+
+    @Test
+    fun txPower_clampsToValidRange() {
+        assertThat(clampTxPowerWatts(25)).isEqualTo(25)
+        assertThat(clampTxPowerWatts(0)).isEqualTo(0)
+        assertThat(clampTxPowerWatts(MAX_TX_POWER_WATTS)).isEqualTo(MAX_TX_POWER_WATTS)
+        // Out of range is pulled back into [0, MAX].
+        assertThat(clampTxPowerWatts(-5)).isEqualTo(0)
+        assertThat(clampTxPowerWatts(250)).isEqualTo(MAX_TX_POWER_WATTS)
+    }
 }

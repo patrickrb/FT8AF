@@ -83,3 +83,30 @@ private fun serialMeterSamples(mainViewModel: MainViewModel): List<MeterSample> 
         alcSampleSerial(alc, GeneralVariables.alcTargetLow, GeneralVariables.alcTargetHigh),
     )
 }
+
+/**
+ * Whether the connected rig supports setting TX power from the app. Currently
+ * FlexRadio (network), whose [FlexConnector.setMaxRfPower] maps cleanly to 0-100 W.
+ * Xiegu uses a different scale (setMaxTXPower / commandSetTxPower) and is left out
+ * for now — see [setRigTxPowerWatts].
+ */
+@Composable
+fun rememberRigSupportsTxPower(mainViewModel: MainViewModel): Boolean {
+    val isFlex by mainViewModel.mutableIsFlexRadio.observeAsState(false)
+    return isFlex && mainViewModel.baseRig?.connector is FlexConnector
+}
+
+/** The currently-set TX power in watts (persisted as flexMaxRfPower, default 10 W). */
+fun currentTxPowerWatts(): Int = GeneralVariables.flexMaxRfPower
+
+/**
+ * Apply a new TX power to the rig and persist it. [FlexConnector.setMaxRfPower]
+ * pushes RFPOWER to the radio and updates GeneralVariables.flexMaxRfPower; we also
+ * write it to config so it survives a restart (the old FlexRadioInfoFragment did
+ * this on its seekbar, but that screen is unreachable from the Compose UI).
+ */
+fun setRigTxPowerWatts(mainViewModel: MainViewModel, watts: Int) {
+    val w = clampTxPowerWatts(watts)
+    (mainViewModel.baseRig?.connector as? FlexConnector)?.setMaxRfPower(w)
+    mainViewModel.databaseOpr.writeConfig("flexMaxRfPower", w.toString(), null)
+}

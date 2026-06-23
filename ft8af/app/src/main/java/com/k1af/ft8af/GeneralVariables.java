@@ -373,7 +373,10 @@ public class GeneralVariables {
     // rigs, e.g. FlexRadio/Xiegu network, report them) default off.
     public static boolean meterShowSwr = true;
     public static boolean meterShowAlc = true;
-    public static boolean meterShowPower = false;
+    // Power defaults on: only the network rigs (Flex/Xiegu) report output watts,
+    // and on those it's the natural companion to the in-HUD TX-power control.
+    // Serial rigs don't report it, so "adapt per rig" hides it there anyway.
+    public static boolean meterShowPower = true;
     public static boolean meterShowSMeter = false;
     public static boolean meterShowVoltage = false;
     public static boolean meterShowTemp = false;
