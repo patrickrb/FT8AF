@@ -79,6 +79,29 @@ internal fun catChipVisuals(state: CatConnectionState): CatChipVisuals = when (s
 internal fun shouldShowCatChip(controlMode: Int, state: CatConnectionState): Boolean =
     controlMode != ControlMode.VOX || state != CatConnectionState.DISCONNECTED
 
+/** What tapping the CAT chip should do, given the current connection state. */
+enum class CatTapAction { RECONNECT_EXISTING, CONNECT_SAVED_FLEX, NEEDS_SETUP }
+
+/**
+ * Decide what a tap on the CAT chip does. If a connector already exists, just
+ * reconnect it (the existing behavior — handy for Bluetooth/Flex retries).
+ * Otherwise, on a cold start, if the saved rig is a network Flex with a
+ * remembered address, connect straight to it — "my settings are set, just
+ * connect" — instead of doing nothing (the old reconnectRig() no-ops with no
+ * connector). With nothing saved to go on, the user needs to set the rig up.
+ *
+ * Pure so the routing is unit-tested without the rig/connect plumbing.
+ */
+internal fun catTapAction(
+    connectorExists: Boolean,
+    isFlexNetwork: Boolean,
+    savedFlexIp: String,
+): CatTapAction = when {
+    connectorExists -> CatTapAction.RECONNECT_EXISTING
+    isFlexNetwork && savedFlexIp.isNotBlank() -> CatTapAction.CONNECT_SAVED_FLEX
+    else -> CatTapAction.NEEDS_SETUP
+}
+
 /**
  * A small CAT (rig control) connection indicator for the TX strip. Tappable to
  * re-trigger the connection — Bluetooth often only connects on the second try,

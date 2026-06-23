@@ -1283,6 +1283,12 @@ public class MainViewModel extends ViewModel {
             }
         }
         GeneralVariables.controlMode = ControlMode.CAT;//network control mode
+        // Remember the address so the CAT chip can reconnect on a cold start
+        // without re-opening the picker.
+        if (flexRadio != null && flexRadio.getIp() != null && !flexRadio.getIp().isEmpty()) {
+            GeneralVariables.flexLastIp = flexRadio.getIp();
+            databaseOpr.writeConfig("flexLastIp", flexRadio.getIp(), null);
+        }
         FlexConnector flexConnector = new FlexConnector(context, flexRadio, GeneralVariables.controlMode);
         flexConnector.setOnWaveDataReceived(new FlexConnector.OnWaveDataReceived() {
             @Override

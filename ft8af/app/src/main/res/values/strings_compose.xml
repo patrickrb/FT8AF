@@ -15,6 +15,7 @@
     <!-- ===== FlexRadio discovery ===== -->
     <string name="flex_searching">Searching for FlexRadio on your network…</string>
     <string name="flex_enter_ip_manually">Enter IP manually</string>
+    <string name="cat_needs_setup">Set up your radio in Settings → Radio &amp; Audio first.</string>
 
     <!-- ===== Common / shared ===== -->
     <string name="action_cancel">Cancel</string>

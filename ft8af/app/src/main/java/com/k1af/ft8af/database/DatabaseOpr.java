@@ -2565,6 +2565,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("flexMaxTunePower")) {//Flex max tune power
                     GeneralVariables.flexMaxTunePower = result.equals("") ? 10 : Integer.parseInt(result);
                 }
+                if (name.equalsIgnoreCase("flexLastIp")) {//Last Flex address, for CAT-chip reconnect
+                    GeneralVariables.flexLastIp = result == null ? "" : result;
+                }
                 if (name.equalsIgnoreCase("saveSWL")) {//Save decoded messages
                     GeneralVariables.saveSWLMessage = result.equals("1");
                 }
