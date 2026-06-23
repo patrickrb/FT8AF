@@ -105,7 +105,6 @@ public class FlexConnector extends BaseRigConnector {
                 mutableMeterList.postValue(meterList);
                 if (!meterDataReceived) {
                     meterDataReceived = true;
-                    GeneralVariables.fileLog("FlexDiscovery: first meter packet received");
                 }
             }
 
