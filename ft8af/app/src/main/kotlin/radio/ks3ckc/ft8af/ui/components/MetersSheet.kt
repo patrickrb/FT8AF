@@ -42,26 +42,42 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.livedata.observeAsState
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
-import com.k1af.ft8af.ft8transmit.MeterProtectionController
 import radio.ks3ckc.ft8af.theme.*
 
 /** Maps a [MeterZone] to its bar/readout color. */
-private fun zoneColor(zone: MeterZone): Color = when (zone) {
-    MeterZone.IDLE -> TextFaint
-    MeterZone.GOOD -> StatusConfirmed
-    MeterZone.CAUTION -> StatusWarn
-    MeterZone.DANGER -> StatusBad
-}
+private fun zoneColor(zone: MeterZone): Color =
+    when (zone) {
+        MeterZone.IDLE -> TextFaint
+        MeterZone.NEUTRAL -> Signal
+        MeterZone.GOOD -> StatusConfirmed
+        MeterZone.CAUTION -> StatusWarn
+        MeterZone.DANGER -> StatusBad
+    }
+
+/** The localized short label for each meter type. */
+@Composable
+private fun meterTypeLabel(type: MeterType): String =
+    stringResource(
+        when (type) {
+            MeterType.SWR -> R.string.meters_swr
+            MeterType.ALC -> R.string.meters_alc
+            MeterType.POWER -> R.string.meters_power
+            MeterType.SMETER -> R.string.meters_smeter
+            MeterType.VOLTAGE -> R.string.meters_voltage
+            MeterType.TEMP -> R.string.meters_temp
+        },
+    )
 
 /**
- * Pull-down meters HUD: ALC and SWR read back from the rig over CAT. These are
- * the two meters every supported CAT rig reports, and only while keyed — so the
- * readout is live during TX and labelled "last TX" otherwise. Opened by a
- * top-edge swipe-down (see [TopEdgeMetersTrigger]) from anywhere in the app.
+ * Pull-down meters HUD. Shows the meters the connected rig reports back —
+ * universally ALC and SWR, plus power / S-meter / voltage / temperature on rigs
+ * that stream them (e.g. FlexRadio/Xiegu network). Which of the available meters
+ * appear is controlled per-meter in settings (SWR + ALC on by default). Meters
+ * are only measured while keyed, so the readout is live during TX and labelled
+ * "last TX" otherwise. Opened by a top-edge swipe-down ([TopEdgeMetersTrigger]).
  */
 @Composable
 fun MetersSheet(
@@ -70,19 +86,26 @@ fun MetersSheet(
     isTransmitting: Boolean,
     onDismiss: () -> Unit,
 ) {
-    val controller = mainViewModel.meterProtectionController
-    val alc by controller.lastAlc.observeAsState(0)
-    val swr by controller.lastSwr.observeAsState(0)
-    val hasData by controller.meterDataReceived.observeAsState(false)
+    val available = rememberRigMeterSamples(mainViewModel)
+    val enabled =
+        enabledMeterTypes(
+            swr = GeneralVariables.meterShowSwr,
+            alc = GeneralVariables.meterShowAlc,
+            power = GeneralVariables.meterShowPower,
+            smeter = GeneralVariables.meterShowSMeter,
+            voltage = GeneralVariables.meterShowVoltage,
+            temp = GeneralVariables.meterShowTemp,
+        )
+    val visibleSamples = visibleMeters(available, enabled)
+    val freshness = meterFreshness(isTransmitting, hasData = available.isNotEmpty())
 
     MetersTopSheet(visible = visible, onDismiss = onDismiss) {
-        val freshness = meterFreshness(isTransmitting, hasData)
-
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(top = 14.dp, bottom = 6.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 14.dp, bottom = 6.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -99,44 +122,45 @@ fun MetersSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (freshness == MeterFreshness.NONE) {
-                Text(
-                    text = stringResource(R.string.meters_no_data),
-                    color = TextMuted,
-                    fontSize = 11.sp,
-                    fontFamily = GeistMonoFamily,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+            when {
+                // The rig hasn't reported any meters (unsupported, or no TX yet).
+                available.isEmpty() -> HintText(stringResource(R.string.meters_no_data))
+                // Rig reports meters but the user has hidden all the available ones.
+                visibleSamples.isEmpty() -> HintText(stringResource(R.string.meters_all_hidden))
+                else ->
+                    visibleSamples.forEachIndexed { index, sample ->
+                        if (index > 0) Spacer(modifier = Modifier.height(14.dp))
+                        MeterRow(
+                            label = meterTypeLabel(sample.type),
+                            valueText = sample.text,
+                            fraction = sample.fraction,
+                            zone = sample.zone,
+                            dim = freshness == MeterFreshness.NONE,
+                        )
+                    }
             }
-
-            MeterRow(
-                label = stringResource(R.string.meters_alc),
-                valueText = "${alcPercent(alc)}%",
-                fraction = meterBarFraction(alc),
-                zone = alcZone(alc, GeneralVariables.alcTargetLow, GeneralVariables.alcTargetHigh),
-                dim = freshness == MeterFreshness.NONE,
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            MeterRow(
-                label = stringResource(R.string.meters_swr),
-                valueText = MeterProtectionController.normalizedSwrToRatio(swr),
-                fraction = meterBarFraction(swr),
-                zone = swrZone(swr, GeneralVariables.swrHaltThreshold),
-                dim = freshness == MeterFreshness.NONE,
-            )
         }
     }
 }
 
 @Composable
+private fun HintText(text: String) {
+    Text(
+        text = text,
+        color = TextMuted,
+        fontSize = 11.sp,
+        fontFamily = GeistMonoFamily,
+    )
+}
+
+@Composable
 private fun FreshnessBadge(freshness: MeterFreshness) {
-    val (text, color) = when (freshness) {
-        MeterFreshness.LIVE -> stringResource(R.string.meters_live) to StatusConfirmed
-        MeterFreshness.LAST_TX -> stringResource(R.string.meters_last_tx) to TextMuted
-        MeterFreshness.NONE -> return
-    }
+    val (text, color) =
+        when (freshness) {
+            MeterFreshness.LIVE -> stringResource(R.string.meters_live) to StatusConfirmed
+            MeterFreshness.LAST_TX -> stringResource(R.string.meters_last_tx) to TextMuted
+            MeterFreshness.NONE -> return
+        }
     Text(
         text = text,
         color = color,
@@ -144,10 +168,11 @@ private fun FreshnessBadge(freshness: MeterFreshness) {
         fontWeight = FontWeight.Bold,
         fontFamily = GeistMonoFamily,
         letterSpacing = 0.10.sp,
-        modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(color.copy(alpha = 0.12f))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .background(color.copy(alpha = 0.12f))
+                .padding(horizontal = 6.dp, vertical = 2.dp),
     )
 }
 
@@ -186,18 +211,20 @@ private fun MeterRow(
         Spacer(modifier = Modifier.height(6.dp))
         // Bar track + fill
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .clip(RoundedCornerShape(99.dp))
-                .background(BgSurface3),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction.coerceIn(0f, 1f))
+            modifier =
+                Modifier
+                    .fillMaxWidth()
                     .height(8.dp)
                     .clip(RoundedCornerShape(99.dp))
-                    .background(barColor),
+                    .background(BgSurface3),
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(barColor),
             )
         }
     }
@@ -238,13 +265,14 @@ private fun MetersTopSheet(
 
     AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xB805080E))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                ) { onDismiss() },
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(Color(0xB805080E))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { onDismiss() },
         )
     }
 
@@ -259,50 +287,53 @@ private fun MetersTopSheet(
             contentAlignment = Alignment.TopCenter,
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .offset { IntOffset(0, animatedOffset.toInt()) }
-                    .onSizeChanged { sheetHeightPx = it.height.toFloat() }
-                    .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
-                    .background(BgSurface2)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) { /* consume click */ },
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .offset { IntOffset(0, animatedOffset.toInt()) }
+                        .onSizeChanged { sheetHeightPx = it.height.toFloat() }
+                        .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
+                        .background(BgSurface2)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { /* consume click */ },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 content()
 
                 // Drag handle at the BOTTOM edge — a drag UP dismisses the sheet.
                 Box(
-                    modifier = Modifier
-                        .padding(top = 4.dp, bottom = 10.dp)
-                        .width(72.dp)
-                        .height(20.dp)
-                        .pointerInput(Unit) {
-                            detectVerticalDragGestures(
-                                onDragEnd = {
-                                    if (dragOffset < -dismissThresholdPx) {
-                                        onDismiss()
-                                    } else {
-                                        dragOffset = 0f
-                                    }
-                                },
-                                onDragCancel = { dragOffset = 0f },
-                                onVerticalDrag = { _, dy ->
-                                    val maxUp = if (sheetHeightPx > 0f) sheetHeightPx else Float.MAX_VALUE
-                                    dragOffset = (dragOffset + dy).coerceIn(-maxUp, 0f)
-                                },
-                            )
-                        },
+                    modifier =
+                        Modifier
+                            .padding(top = 4.dp, bottom = 10.dp)
+                            .width(72.dp)
+                            .height(20.dp)
+                            .pointerInput(Unit) {
+                                detectVerticalDragGestures(
+                                    onDragEnd = {
+                                        if (dragOffset < -dismissThresholdPx) {
+                                            onDismiss()
+                                        } else {
+                                            dragOffset = 0f
+                                        }
+                                    },
+                                    onDragCancel = { dragOffset = 0f },
+                                    onVerticalDrag = { _, dy ->
+                                        val maxUp = if (sheetHeightPx > 0f) sheetHeightPx else Float.MAX_VALUE
+                                        dragOffset = (dragOffset + dy).coerceIn(-maxUp, 0f)
+                                    },
+                                )
+                            },
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(
-                        modifier = Modifier
-                            .width(36.dp)
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(99.dp))
-                            .background(Color(0x6694A3B8)),
+                        modifier =
+                            Modifier
+                                .width(36.dp)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(99.dp))
+                                .background(Color(0x6694A3B8)),
                     )
                 }
             }
@@ -327,19 +358,20 @@ fun TopEdgeMetersTrigger(
     val openThresholdPx = with(density) { 36.dp.toPx() }
     var totalDy by remember { mutableFloatStateOf(0f) }
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(24.dp)
-            .pointerInput(Unit) {
-                detectVerticalDragGestures(
-                    onDragStart = { totalDy = 0f },
-                    onDragEnd = {
-                        if (shouldOpenFromEdgeDrag(totalDy, openThresholdPx)) onOpen()
-                        totalDy = 0f
-                    },
-                    onDragCancel = { totalDy = 0f },
-                    onVerticalDrag = { _, dy -> totalDy += dy },
-                )
-            },
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(24.dp)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragStart = { totalDy = 0f },
+                        onDragEnd = {
+                            if (shouldOpenFromEdgeDrag(totalDy, openThresholdPx)) onOpen()
+                            totalDy = 0f
+                        },
+                        onDragCancel = { totalDy = 0f },
+                        onVerticalDrag = { _, dy -> totalDy += dy },
+                    )
+                },
     )
 }

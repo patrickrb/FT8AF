@@ -366,6 +366,18 @@ public class GeneralVariables {
     public static int alcTargetLow = 60;               // ALC target window low (0-255)
     public static int alcTargetHigh = 100;             // ALC target window high (0-255)
 
+    // Meters HUD: which meters the pull-down HUD shows. The HUD adapts per rig —
+    // only meters the connected rig actually reports are shown — and these flags
+    // gate which of the available ones the user wants. SWR + ALC are the two
+    // universal across CAT rigs and default on; the richer meters (only some
+    // rigs, e.g. FlexRadio/Xiegu network, report them) default off.
+    public static boolean meterShowSwr = true;
+    public static boolean meterShowAlc = true;
+    public static boolean meterShowPower = false;
+    public static boolean meterShowSMeter = false;
+    public static boolean meterShowVoltage = false;
+    public static boolean meterShowTemp = false;
+
     public static MutableLiveData<Float> mutableBaseFrequency = new MutableLiveData<>();
 
     private static int spectrumWidth = 3500;//Spectrum display width in Hz

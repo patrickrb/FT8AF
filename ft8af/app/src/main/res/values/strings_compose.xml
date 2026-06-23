@@ -134,13 +134,31 @@
     <string name="swr_lockout_dismiss">DISMISS</string>
     <string name="swr_lockout_toast">TX blocked — SWR lockout active. Dismiss the lockout banner first.</string>
 
-    <!-- ===== Meters HUD (ALC/SWR pull-down) ===== -->
+    <!-- ===== Meters HUD (pull-down) ===== -->
     <string name="meters_title">METERS</string>
     <string name="meters_alc">ALC</string>
     <string name="meters_swr">SWR</string>
+    <string name="meters_power">PWR</string>
+    <string name="meters_smeter">S</string>
+    <string name="meters_voltage">VOLTS</string>
+    <string name="meters_temp">TEMP</string>
     <string name="meters_live">LIVE</string>
     <string name="meters_last_tx">LAST TX</string>
     <string name="meters_no_data">No meter data yet — read back from the rig during transmit.</string>
+    <string name="meters_all_hidden">All available meters are hidden. Enable them in Settings → Meters.</string>
+
+    <!-- ===== Meters settings ===== -->
+    <string name="settings_cat_meters">Meters</string>
+    <string name="settings_cat_meters_desc">Choose which meters the pull-down HUD shows</string>
+    <string name="settings_meters_universal_section">Standard meters</string>
+    <string name="settings_meters_rig_section">Extended meters (rig dependent)</string>
+    <string name="settings_meter_swr_desc">Antenna SWR during transmit</string>
+    <string name="settings_meter_alc_desc">ALC / drive level during transmit</string>
+    <string name="settings_meter_power_desc">RF output power (rigs that report it)</string>
+    <string name="settings_meter_smeter_desc">Receive signal strength (rigs that report it)</string>
+    <string name="settings_meter_voltage_desc">Supply voltage (rigs that report it)</string>
+    <string name="settings_meter_temp_desc">PA temperature (rigs that report it)</string>
+    <string name="settings_meters_footnote">Only meters your connected rig actually reports are shown. SWR and ALC are available on most CAT rigs; the extended meters need a rig that streams them (e.g. FlexRadio or Xiegu over the network).</string>
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">Calling CQ</string>

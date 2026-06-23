@@ -10,7 +10,6 @@ import org.junit.Test
  * plain JUnit with no Robolectric runner.
  */
 class MetersDisplayTest {
-
     // ---- meterBarFraction ----
 
     @Test
@@ -141,5 +140,169 @@ class MetersDisplayTest {
         assertThat(shouldOpenFromEdgeDrag(totalDy = 10f, thresholdPx = 36f)).isFalse()
         // An upward drag (negative dy) must never open.
         assertThat(shouldOpenFromEdgeDrag(totalDy = -50f, thresholdPx = 36f)).isFalse()
+    }
+
+    // ---- swrSampleFromRatio ----
+
+    @Test
+    fun swrSample_flatMatchIsGood() {
+        val s = swrSampleFromRatio(1.0f)
+        assertThat(s.type).isEqualTo(MeterType.SWR)
+        assertThat(s.zone).isEqualTo(MeterZone.GOOD)
+        assertThat(s.fraction).isEqualTo(0f)
+        assertThat(s.text).isEqualTo("1.0:1")
+    }
+
+    @Test
+    fun swrSample_belowOneClampsToOne() {
+        // A nonsense sub-1.0 ratio is treated as 1.0, not a negative bar.
+        val s = swrSampleFromRatio(0.5f)
+        assertThat(s.fraction).isEqualTo(0f)
+        assertThat(s.text).isEqualTo("1.0:1")
+    }
+
+    @Test
+    fun swrSample_zonesByRatio() {
+        assertThat(swrSampleFromRatio(1.4f).zone).isEqualTo(MeterZone.GOOD)
+        assertThat(swrSampleFromRatio(2.0f).zone).isEqualTo(MeterZone.CAUTION)
+        assertThat(swrSampleFromRatio(3.0f).zone).isEqualTo(MeterZone.DANGER)
+    }
+
+    @Test
+    fun swrSample_barFullAtThreeToOne() {
+        assertThat(swrSampleFromRatio(3.0f).fraction).isEqualTo(1f)
+        assertThat(swrSampleFromRatio(2.0f).fraction).isWithin(0.001f).of(0.5f)
+    }
+
+    @Test
+    fun swrSample_veryHighShowsInfinity() {
+        assertThat(swrSampleFromRatio(12f).text).isEqualTo("∞")
+        assertThat(swrSampleFromRatio(12f).fraction).isEqualTo(1f)
+    }
+
+    // ---- swrRatioFromNormalized (numeric inverse of swrRatioToNormalized) ----
+
+    @Test
+    fun swrRatioFromNormalized_matchesBreakpoints() {
+        // Same breakpoints as MeterProtectionController.normalizedSwrToRatio.
+        assertThat(swrRatioFromNormalized(0)).isEqualTo(1.0f)
+        assertThat(swrRatioFromNormalized(60)).isWithin(0.001f).of(1.5f)
+        assertThat(swrRatioFromNormalized(120)).isWithin(0.001f).of(3.0f)
+        assertThat(swrRatioFromNormalized(200)).isWithin(0.001f).of(7.0f)
+    }
+
+    @Test
+    fun swrSampleFromNormalized_threadsThroughRatio() {
+        // normalized 120 ≈ 3.0:1 → DANGER, full bar.
+        val s = swrSampleFromNormalized(120)
+        assertThat(s.zone).isEqualTo(MeterZone.DANGER)
+        assertThat(s.text).isEqualTo("3.0:1")
+    }
+
+    // ---- alc samples ----
+
+    @Test
+    fun alcSampleSerial_usesTargetWindow() {
+        val s = alcSampleSerial(90, targetLow = 60, targetHigh = 120)
+        assertThat(s.type).isEqualTo(MeterType.ALC)
+        assertThat(s.zone).isEqualTo(MeterZone.GOOD)
+        assertThat(s.text).isEqualTo("35%") // 90/255*100 = 35.3 -> 35
+    }
+
+    @Test
+    fun alcSampleFlexDb_lowIsGoodHighIsDanger() {
+        // Flex ALC: low dB = no compression = good; climbing past 0 = overdrive.
+        assertThat(alcSampleFlexDb(-120f).zone).isEqualTo(MeterZone.GOOD)
+        assertThat(alcSampleFlexDb(5f).zone).isEqualTo(MeterZone.CAUTION)
+        assertThat(alcSampleFlexDb(15f).zone).isEqualTo(MeterZone.DANGER)
+        // -150..20 dB maps onto 0..1; -150 floors the bar.
+        assertThat(alcSampleFlexDb(-150f).fraction).isEqualTo(0f)
+        assertThat(alcSampleFlexDb(20f).fraction).isEqualTo(1f)
+        assertThat(alcSampleFlexDb(-30f).text).isEqualTo("-30 dB")
+    }
+
+    @Test
+    fun alcSampleXiegu_scales0to120() {
+        assertThat(alcSampleXiegu(0f).zone).isEqualTo(MeterZone.GOOD)
+        assertThat(alcSampleXiegu(60f).zone).isEqualTo(MeterZone.CAUTION)
+        assertThat(alcSampleXiegu(100f).zone).isEqualTo(MeterZone.DANGER)
+        assertThat(alcSampleXiegu(60f).fraction).isWithin(0.001f).of(0.5f)
+    }
+
+    // ---- informational meters ----
+
+    @Test
+    fun powerSample_isNeutralAndRelativeToMax() {
+        val s = powerSample(25f, maxWatts = 100f)
+        assertThat(s.type).isEqualTo(MeterType.POWER)
+        assertThat(s.zone).isEqualTo(MeterZone.NEUTRAL)
+        assertThat(s.fraction).isWithin(0.001f).of(0.25f)
+        assertThat(s.text).isEqualTo("25 W")
+    }
+
+    @Test
+    fun powerSample_guardsZeroMax() {
+        assertThat(powerSample(25f, maxWatts = 0f).fraction).isEqualTo(0f)
+    }
+
+    @Test
+    fun sMeterSample_isNeutral() {
+        val s = sMeterSampleDbm(-75f)
+        assertThat(s.zone).isEqualTo(MeterZone.NEUTRAL)
+        assertThat(s.text).isEqualTo("-75 dBm")
+        assertThat(s.fraction).isWithin(0.001f).of((-75f + 120f) / 90f)
+    }
+
+    @Test
+    fun voltSample_greenInBatteryBandRedAtExtremes() {
+        assertThat(voltSample(13.8f).zone).isEqualTo(MeterZone.GOOD)
+        assertThat(voltSample(11.0f).zone).isEqualTo(MeterZone.CAUTION)
+        assertThat(voltSample(9.0f).zone).isEqualTo(MeterZone.DANGER)
+        assertThat(voltSample(13.8f).text).isEqualTo("13.8 V")
+    }
+
+    @Test
+    fun tempSample_zonesByCelsius() {
+        assertThat(tempSample(40f).zone).isEqualTo(MeterZone.GOOD)
+        assertThat(tempSample(60f).zone).isEqualTo(MeterZone.CAUTION)
+        assertThat(tempSample(75f).zone).isEqualTo(MeterZone.DANGER)
+        assertThat(tempSample(50f).text).isEqualTo("50°C")
+    }
+
+    // ---- enabled / visible ----
+
+    @Test
+    fun enabledMeterTypes_defaultsAndOrder() {
+        val set =
+            enabledMeterTypes(
+                swr = true,
+                alc = true,
+                power = false,
+                smeter = false,
+                voltage = false,
+                temp = false,
+            )
+        assertThat(set).containsExactly(MeterType.SWR, MeterType.ALC).inOrder()
+    }
+
+    @Test
+    fun visibleMeters_intersectsAvailableWithEnabledInOrder() {
+        // Rig reports SWR, ALC, POWER (in a scrambled order); user enabled SWR+POWER.
+        val available =
+            listOf(
+                powerSample(10f),
+                swrSampleFromRatio(1.2f),
+                alcSampleFlexDb(-100f),
+            )
+        val enabled = setOf(MeterType.SWR, MeterType.POWER)
+        val visible = visibleMeters(available, enabled)
+        // ALC dropped (not enabled); result in display (ordinal) order: SWR then POWER.
+        assertThat(visible.map { it.type })
+            .containsExactly(MeterType.SWR, MeterType.POWER).inOrder()
+    }
+
+    @Test
+    fun visibleMeters_emptyWhenRigReportsNothing() {
+        assertThat(visibleMeters(emptyList(), setOf(MeterType.SWR, MeterType.ALC))).isEmpty()
     }
 }
