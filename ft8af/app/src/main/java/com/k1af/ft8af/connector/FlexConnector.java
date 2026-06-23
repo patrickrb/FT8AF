@@ -40,6 +40,9 @@ public class FlexConnector extends BaseRigConnector {
     }
     public int maxRfPower;
     public int maxTunePower;
+    // True once at least one meter value packet has arrived, so the HUD can tell
+    // "no meter stream yet" apart from genuine zero readings.
+    public volatile boolean meterDataReceived = false;
 
     private static final String TAG = "FlexConnector";
 
@@ -100,7 +103,10 @@ public class FlexConnector extends BaseRigConnector {
                 meterList.setMeters(vita.payload,flexMeterInfos);
 
                 mutableMeterList.postValue(meterList);
-
+                if (!meterDataReceived) {
+                    meterDataReceived = true;
+                    GeneralVariables.fileLog("FlexDiscovery: first meter packet received");
+                }
             }
 
             @Override
@@ -256,6 +262,17 @@ public class FlexConnector extends BaseRigConnector {
             flexRadio.commandMeterList();//List the meters
             flexRadio.commandSubMeterAll();//Display all meter messages
         }
+    }
+
+    /**
+     * Force a meter (re)subscription regardless of cached meter-info state. The
+     * connect-time subscription is gated on a METER_LIST response arriving; this
+     * unconditional path is what the meters HUD calls when it opens, so meters
+     * stream even if that response was missed. Safe to call repeatedly.
+     */
+    public void requestMeterStream(){
+        flexRadio.commandMeterList();
+        flexRadio.commandSubMeterAll();
     }
 
     @Override

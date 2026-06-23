@@ -1,15 +1,17 @@
 package radio.ks3ckc.ft8af.ui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.MutableLiveData
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.connector.FlexConnector
 import com.k1af.ft8af.connector.X6100Connector
-import com.k1af.ft8af.flex.FlexMeterList
 import com.k1af.ft8af.x6100.X6100Meters
 
 /**
@@ -41,12 +43,28 @@ fun rememberRigMeterSamples(mainViewModel: MainViewModel): List<MeterSample> {
 
 @Composable
 private fun flexMeterSamples(mainViewModel: MainViewModel): List<MeterSample> {
-    // observeAsState / remember are called unconditionally (a dummy LiveData backs
-    // the null-connector case) so composition order stays stable across recompositions.
-    val empty = remember { MutableLiveData<FlexMeterList>() }
     val connector = mainViewModel.baseRig?.connector as? FlexConnector
-    val meters by (connector?.mutableMeterList ?: empty).observeAsState()
-    val m = meters ?: return emptyList()
+
+    // Force a meter (re)subscription when the HUD opens. The connect-time
+    // subscription is gated on a METER_LIST response arriving, which is easily
+    // missed; this guarantees the stream is running while the HUD is shown.
+    LaunchedEffect(connector) { connector?.requestMeterStream() }
+
+    // The Flex posts the SAME FlexMeterList instance on every update, which
+    // observeAsState dedupes (so bars would freeze after the first packet). Poll
+    // the live instance a few times a second instead — the UDP thread keeps
+    // mutating it in place — and use a tick to drive recomposition.
+    var tick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(connector) {
+        while (true) {
+            kotlinx.coroutines.delay(250)
+            tick++
+        }
+    }
+    tick // read so recomposition tracks the poll
+
+    val m = connector?.meterList
+    if (m == null || !connector.meterDataReceived) return emptyList()
     return listOf(
         swrSampleFromRatio(m.swrVal),
         alcSampleFlexDb(m.alcVal),
