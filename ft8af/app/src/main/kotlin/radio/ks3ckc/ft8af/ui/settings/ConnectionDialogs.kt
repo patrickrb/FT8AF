@@ -256,8 +256,12 @@ fun FlexRadioPickerDialog(
     var autoTriggered by remember { mutableStateOf(false) }
     val discoveredRadios = remember { mutableStateListOf<FlexRadio>() }
     val context = LocalContext.current
+    // True only if the picker opened with NO radios cached in the factory singleton.
+    // Gates auto-connect to a freshly discovered radio, never a stale cached one.
+    val startedEmpty = remember { FlexRadioFactory.getInstance().flexRadios.isEmpty() }
 
-    fun connect(radio: FlexRadio) {
+    fun connect(radio: FlexRadio, how: String) {
+        GeneralVariables.fileLog("FlexDiscovery: connect ($how) model=${radio.model} ip=${radio.ip}")
         mainViewModel.connectFlexRadioRig(GeneralVariables.getMainContext(), radio)
         onDismiss()
     }
@@ -279,9 +283,17 @@ fun FlexRadioPickerDialog(
         val factory = FlexRadioFactory.getInstance()
         discoveredRadios.clear()
         discoveredRadios.addAll(factory.flexRadios)
+        GeneralVariables.fileLog(
+            "FlexDiscovery: picker open, multicastLock.held=${multicastLock.isHeld}, " +
+                "seeded=${factory.flexRadios.size}, startedEmpty=$startedEmpty",
+        )
 
         val listener = object : FlexRadioFactory.OnFlexRadioEvents {
             override fun OnFlexRadioAdded(flexRadio: FlexRadio) {
+                GeneralVariables.fileLog(
+                    "FlexDiscovery: radio added model=${flexRadio.model} ip=${flexRadio.ip} " +
+                        "(total=${factory.flexRadios.size})",
+                )
                 discoveredRadios.clear()
                 discoveredRadios.addAll(factory.flexRadios)
             }
@@ -297,10 +309,19 @@ fun FlexRadioPickerDialog(
         }
     }
 
-    // Auto-connect the moment a single radio is found and the user hasn't started
-    // typing — the "just connect to my Flex" path. One-shot via autoTriggered.
+    // Auto-connect the moment a single radio is freshly discovered and the user
+    // hasn't started typing — the "just connect to my Flex" path. Heavily gated
+    // (see shouldAutoConnectFlex) so it never fires on a stale cached radio or
+    // while a rig is already connected. One-shot via autoTriggered.
     LaunchedEffect(discoveredRadios.size, ipText) {
-        if (shouldAutoConnectFlex(discoveredRadios.size, ipText.isNotBlank(), autoTriggered)) {
+        if (shouldAutoConnectFlex(
+                discoveredCount = discoveredRadios.size,
+                userTypedIp = ipText.isNotBlank(),
+                alreadyTriggered = autoTriggered,
+                startedEmpty = startedEmpty,
+                rigAlreadyConnected = mainViewModel.isRigConnected(),
+            )
+        ) {
             autoTriggered = true
             val radio = discoveredRadios.first()
             ToastMessage.show(
@@ -309,7 +330,7 @@ fun FlexRadioPickerDialog(
                     radio.model,
                 ),
             )
-            connect(radio)
+            connect(radio, "auto")
         }
     }
 
@@ -366,7 +387,7 @@ fun FlexRadioPickerDialog(
                                             radio.model,
                                         ),
                                     )
-                                    connect(radio)
+                                    connect(radio, "tap")
                                 }
                                 .padding(horizontal = 24.dp, vertical = 10.dp),
                         ) {
@@ -422,7 +443,7 @@ fun FlexRadioPickerDialog(
                         val flexRadio = FlexRadio()
                         flexRadio.ip = ipText.trim()
                         flexRadio.model = "FlexRadio"
-                        connect(flexRadio)
+                        connect(flexRadio, "manual")
                     }
                 }
             } else {
