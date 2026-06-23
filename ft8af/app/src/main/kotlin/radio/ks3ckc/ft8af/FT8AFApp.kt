@@ -49,6 +49,8 @@ import radio.ks3ckc.ft8af.ui.components.shouldPersistSection
 import radio.ks3ckc.ft8af.ui.components.FT8AFTab
 import radio.ks3ckc.ft8af.ui.components.FrequencyPickerSheet
 import radio.ks3ckc.ft8af.ui.components.HoundSetupSheet
+import radio.ks3ckc.ft8af.ui.components.MetersSheet
+import radio.ks3ckc.ft8af.ui.components.TopEdgeMetersTrigger
 import radio.ks3ckc.ft8af.ui.components.formatMhz
 import radio.ks3ckc.ft8af.ui.components.QsoCelebration
 import radio.ks3ckc.ft8af.ui.components.SlotTimerBar
@@ -158,6 +160,9 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
 
     // Frequency picker sheet state
     var showFrequencyPicker by rememberSaveable { mutableStateOf(false) }
+
+    // Meters HUD (ALC/SWR pull-down) state — opened by a top-edge swipe-down.
+    var showMeters by rememberSaveable { mutableStateOf(false) }
 
     // A tapped Needed-DX notification asks us to jump to the Decode tab (DecodeScreen
     // then scrolls to + highlights the alerted station).
@@ -639,6 +644,23 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                     GeneralVariables.resetLaunchSupervision()
                 }
             },
+        )
+
+        // Top-edge swipe-down opens the meters HUD from anywhere. Disabled while
+        // the HUD is already open so its own drag-to-dismiss isn't fought.
+        TopEdgeMetersTrigger(
+            enabled = !showMeters,
+            onOpen = { showMeters = true },
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
+
+        // Meters HUD (ALC/SWR) — sibling overlay so its scrim and panel sit above
+        // the tab bar and TxStrip, like the other sheets.
+        MetersSheet(
+            visible = showMeters,
+            mainViewModel = mainViewModel,
+            isTransmitting = isTransmitting,
+            onDismiss = { showMeters = false },
         )
     }
 }

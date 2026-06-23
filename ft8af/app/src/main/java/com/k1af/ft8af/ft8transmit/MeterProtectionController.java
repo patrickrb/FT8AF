@@ -44,6 +44,12 @@ public class MeterProtectionController {
     public final MutableLiveData<Boolean> swrLockout = new MutableLiveData<>(false);
     public final MutableLiveData<Integer> lastAlc = new MutableLiveData<>(0);
     public final MutableLiveData<Integer> lastSwr = new MutableLiveData<>(0);
+    // True once the rig has reported at least one valid meter reading. Lets the
+    // meters HUD tell "no data yet / unsupported rig" apart from a legitimate 0
+    // reading (lastAlc/lastSwr start at 0, and 0 is a real value — ALC at no
+    // drive, SWR at 1.0:1). Never reset: once a rig has reported, the last values
+    // remain meaningful as the "last TX" readout.
+    public final MutableLiveData<Boolean> meterDataReceived = new MutableLiveData<>(false);
     // Holds the SWR ratio string (e.g. "3.2:1") that triggered lockout, for the banner.
     public final MutableLiveData<String> lockoutSwrRatio = new MutableLiveData<>("");
 
@@ -72,6 +78,10 @@ public class MeterProtectionController {
         // Publish for optional UI display
         if (normalizedAlc >= 0) lastAlc.postValue(normalizedAlc);
         if (normalizedSwr >= 0) lastSwr.postValue(normalizedSwr);
+        if ((normalizedAlc >= 0 || normalizedSwr >= 0)
+                && !Boolean.TRUE.equals(meterDataReceived.getValue())) {
+            meterDataReceived.postValue(true);
+        }
 
         // Diagnostics: when SWR protection is on, record each SWR reading we actually
         // receive so the debug.log shows whether meter data even reaches here during TX, the
