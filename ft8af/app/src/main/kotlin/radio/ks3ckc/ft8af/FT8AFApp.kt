@@ -50,7 +50,7 @@ import radio.ks3ckc.ft8af.ui.components.FT8AFTab
 import radio.ks3ckc.ft8af.ui.components.FrequencyPickerSheet
 import radio.ks3ckc.ft8af.ui.components.HoundSetupSheet
 import radio.ks3ckc.ft8af.ui.components.MetersSheet
-import radio.ks3ckc.ft8af.ui.components.TopEdgeMetersTrigger
+import radio.ks3ckc.ft8af.ui.components.MetersHandle
 import radio.ks3ckc.ft8af.ui.components.formatMhz
 import radio.ks3ckc.ft8af.ui.components.QsoCelebration
 import radio.ks3ckc.ft8af.ui.components.SlotTimerBar
@@ -646,9 +646,9 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             },
         )
 
-        // Top-edge swipe-down opens the meters HUD from anywhere. Disabled while
-        // the HUD is already open so its own drag-to-dismiss isn't fought.
-        TopEdgeMetersTrigger(
+        // Visible pull-tab at the top center opens the meters HUD from anywhere
+        // (tap or short drag down). Hidden while the HUD is open.
+        MetersHandle(
             enabled = !showMeters,
             onOpen = { showMeters = true },
             modifier = Modifier.align(Alignment.TopCenter),

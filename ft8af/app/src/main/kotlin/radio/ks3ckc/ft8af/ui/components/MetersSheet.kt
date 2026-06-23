@@ -12,9 +12,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -395,26 +397,28 @@ private fun MetersTopSheet(
 }
 
 /**
- * Invisible top-edge strip that opens the meters HUD on a downward swipe. Sized
- * thin so it only claims the very top edge (like the Android status-bar pull),
- * leaving the rest of the screen's gestures untouched. Tracks cumulative drag
- * and commits via [shouldOpenFromEdgeDrag].
+ * A small visible pull-tab centered at the very top of the app that opens the
+ * meters HUD. Replaces the old invisible top-edge swipe, which (a) gave no hint
+ * it existed and (b) fought Android's notification-shade gesture, which owns the
+ * screen's top edge. This tab sits just below the status bar (statusBarsPadding)
+ * so the system doesn't steal the gesture, and opens on either a tap or a short
+ * downward drag — whichever the user reaches for.
  */
 @Composable
-fun TopEdgeMetersTrigger(
+fun MetersHandle(
     enabled: Boolean,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (!enabled) return
     val density = LocalDensity.current
-    val openThresholdPx = with(density) { 36.dp.toPx() }
+    val openThresholdPx = with(density) { 24.dp.toPx() }
     var totalDy by remember { mutableFloatStateOf(0f) }
     Box(
         modifier =
             modifier
-                .fillMaxWidth()
-                .height(24.dp)
+                .statusBarsPadding()
+                // Generous touch target around the small visible tab.
                 .pointerInput(Unit) {
                     detectVerticalDragGestures(
                         onDragStart = { totalDy = 0f },
@@ -425,6 +429,38 @@ fun TopEdgeMetersTrigger(
                         onDragCancel = { totalDy = 0f },
                         onVerticalDrag = { _, dy -> totalDy += dy },
                     )
-                },
-    )
+                }
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) { onOpen() }
+                .padding(horizontal = 28.dp)
+                .padding(top = 2.dp, bottom = 8.dp),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        // The visible tab: a rounded-bottom chip with a grabber + "METERS ▾".
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+                .background(AccentSoft)
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.meters_title),
+                color = Accent,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = GeistMonoFamily,
+                letterSpacing = 0.12.sp,
+            )
+            Text(
+                text = "▾",
+                color = Accent,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
 }
