@@ -1286,6 +1286,16 @@ public class MainViewModel extends ViewModel {
             }
         }
         GeneralVariables.controlMode = ControlMode.CAT;//network control mode
+        // A FlexRadio always uses network (DAX) audio — force NETWORK connect mode
+        // so TX and RX audio route over the network. Otherwise a stale connectMode
+        // (e.g. left as USB_CABLE from a previously-attached USB sound card) sends
+        // TX audio to that USB output instead of the Flex (radio transmits 0 W) and
+        // pulls RX from the phone mic instead of DAX. Also clear any stale USB-audio
+        // output override for the same reason.
+        GeneralVariables.connectMode = ConnectMode.NETWORK;
+        databaseOpr.writeConfig("connectMode", String.valueOf(ConnectMode.NETWORK), null);
+        GeneralVariables.usbAudioOutputVendorId = 0;
+        GeneralVariables.usbAudioOutputProductId = 0;
         // Remember the address so the CAT chip can reconnect on a cold start
         // without re-opening the picker.
         if (flexRadio != null && flexRadio.getIp() != null && !flexRadio.getIp().isEmpty()) {
