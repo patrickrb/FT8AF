@@ -105,6 +105,7 @@ public class FlexConnector extends BaseRigConnector {
                 mutableMeterList.postValue(meterList);
                 if (!meterDataReceived) {
                     meterDataReceived = true;
+                    GeneralVariables.fileLog("FlexMeter: first meter packet received");
                 }
             }
 
@@ -270,6 +271,7 @@ public class FlexConnector extends BaseRigConnector {
      * stream even if that response was missed. Safe to call repeatedly.
      */
     public void requestMeterStream(){
+        GeneralVariables.fileLog("FlexMeter: requestMeterStream (subscribing)");
         flexRadio.commandMeterList();
         flexRadio.commandSubMeterAll();
     }

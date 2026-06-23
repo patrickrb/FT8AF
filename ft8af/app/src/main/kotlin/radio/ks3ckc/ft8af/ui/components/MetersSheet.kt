@@ -103,7 +103,7 @@ fun MetersSheet(
             }
         }
     }
-    val available = rememberRigMeterSamples(mainViewModel, frame)
+    val available = rememberRigMeterSamples(mainViewModel, frame, active = visible)
     val enabled =
         enabledMeterTypes(
             swr = GeneralVariables.meterShowSwr,

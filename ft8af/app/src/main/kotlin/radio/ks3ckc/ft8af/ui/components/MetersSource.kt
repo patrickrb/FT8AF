@@ -27,15 +27,18 @@ import com.k1af.ft8af.x6100.X6100Meters
  * HUD tell "rig reports nothing" (empty) apart from "user hid everything".
  */
 @Composable
-fun rememberRigMeterSamples(mainViewModel: MainViewModel, frame: Long): List<MeterSample> {
+fun rememberRigMeterSamples(mainViewModel: MainViewModel, frame: Long, active: Boolean): List<MeterSample> {
     val isFlex by mainViewModel.mutableIsFlexRadio.observeAsState(false)
     val isXiegu by mainViewModel.mutableIsXieguRadio.observeAsState(false)
     val flexConnector = mainViewModel.baseRig?.connector as? FlexConnector
 
-    // Force a meter (re)subscription while the HUD is up. The connect-time
-    // subscription is gated on a METER_LIST response arriving, which is easily
-    // missed; this guarantees the stream runs whenever meters are on screen.
-    LaunchedEffect(flexConnector, isFlex) { if (isFlex) flexConnector?.requestMeterStream() }
+    // (Re)subscribe to the Flex meter stream each time the HUD opens ([active]).
+    // The connect-time subscription is gated on a METER_LIST response and can be
+    // missed (or race the connection coming up); re-requesting on every open makes
+    // meters reliably start, rather than firing only once at connect.
+    LaunchedEffect(flexConnector, isFlex, active) {
+        if (isFlex && active) flexConnector?.requestMeterStream()
+    }
 
     // [frame] ticks a few times a second (driven by the HUD) so this re-runs and
     // re-reads the rigs' live, in-place-mutated meter values. The readers below are
