@@ -591,7 +591,10 @@ public class MainViewModel extends ViewModel {
 
 
                 getQTHRunnable.messages = messages;
-                getQTHThreadPool.execute(getQTHRunnable);//query location via thread pool
+                //query location via thread pool; guarded so a decode landing during
+                //ViewModel teardown (pool shut down in onCleared()) drops the lookup
+                //instead of crashing with RejectedExecutionException.
+                ExecutorUtils.safeExecute(getQTHThreadPool, getQTHRunnable);
 
                 //this variable also notifies message list changes
                 mutable_Decoded_Counter.postValue(
@@ -685,8 +688,8 @@ public class MainViewModel extends ViewModel {
                         if (baseRig.isConnected()) {
                             sendWaveDataRunnable.baseRig = baseRig;
                             sendWaveDataRunnable.message = msg;
-                            //send network data packets via thread pool
-                            sendWaveDataThreadPool.execute(sendWaveDataRunnable);
+                            //send network data packets via thread pool (guarded against teardown race)
+                            ExecutorUtils.safeExecute(sendWaveDataThreadPool, sendWaveDataRunnable);
                         }
                     }
                 }
@@ -714,7 +717,7 @@ public class MainViewModel extends ViewModel {
                 }
                 sendWaveDataRunnable.baseRig = baseRig;
                 sendWaveDataRunnable.message = msg;
-                sendWaveDataThreadPool.execute(sendWaveDataRunnable);
+                ExecutorUtils.safeExecute(sendWaveDataThreadPool, sendWaveDataRunnable);
             }
 
         }, new OnTransmitSuccess() {//when QSO is successful
