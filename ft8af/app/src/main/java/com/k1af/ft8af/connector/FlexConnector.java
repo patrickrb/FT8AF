@@ -32,6 +32,12 @@ public class FlexConnector extends BaseRigConnector {
     public interface OnWaveDataReceived{
         void OnDataReceived(int bufferLen,float[] buffer);
     }
+    /** Fired when the Flex link is up (TCP connected + GUI client created) or fails,
+     * so MainViewModel can surface the CAT connection state + a success/failure toast. */
+    public interface OnConnectionResult{
+        void onConnected();
+        void onFailed();
+    }
     public int maxRfPower;
     public int maxTunePower;
 
@@ -40,6 +46,11 @@ public class FlexConnector extends BaseRigConnector {
     private FlexRadio flexRadio;
 
     private OnWaveDataReceived onWaveDataReceived;
+    private OnConnectionResult onConnectionResult;
+
+    public void setOnConnectionResult(OnConnectionResult listener){
+        this.onConnectionResult = listener;
+    }
 
 
     public FlexConnector(Context context, FlexRadio flexRadio, int controlMode) {
@@ -209,13 +220,14 @@ public class FlexConnector extends BaseRigConnector {
                 //flexRadio.sendCommand("c1|client gui\n");
                 //playData();
 
-
+                if (onConnectionResult != null) onConnectionResult.onConnected();
             }
 
             @Override
             public void onConnectFail(RadioTcpClient tcpClient) {
                 ToastMessage.show(String.format(GeneralVariables.getStringFromResource
                         (R.string.flex_connect_failed),flexRadio.getModel()));
+                if (onConnectionResult != null) onConnectionResult.onFailed();
             }
         });
 

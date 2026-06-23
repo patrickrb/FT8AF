@@ -294,8 +294,13 @@ fun FlexRadioPickerDialog(
                     "FlexDiscovery: radio added model=${flexRadio.model} ip=${flexRadio.ip} " +
                         "(total=${factory.flexRadios.size})",
                 )
+                // The factory fires this callback BEFORE appending the radio to
+                // flexRadios, so re-reading that list here would miss the new one
+                // (the bug where the picker kept spinning despite a found radio).
+                // Include the radio handed to us; dedupe by address.
+                val merged = mergeDiscovered(factory.flexRadios.toList(), flexRadio) { it.ip ?: "" }
                 discoveredRadios.clear()
-                discoveredRadios.addAll(factory.flexRadios)
+                discoveredRadios.addAll(merged)
             }
             override fun OnFlexRadioInvalid(flexRadio: FlexRadio) {
                 discoveredRadios.clear()

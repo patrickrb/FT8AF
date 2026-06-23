@@ -1289,11 +1289,29 @@ public class MainViewModel extends ViewModel {
             GeneralVariables.flexLastIp = flexRadio.getIp();
             databaseOpr.writeConfig("flexLastIp", flexRadio.getIp(), null);
         }
+        // Reflect the in-progress attempt on the CAT chip immediately; the Flex
+        // connect is async (TCP), so without this the chip looks idle until/unless
+        // the link comes up.
+        setCatConnectionState(CatConnectionState.CONNECTING);
         FlexConnector flexConnector = new FlexConnector(context, flexRadio, GeneralVariables.controlMode);
         flexConnector.setOnWaveDataReceived(new FlexConnector.OnWaveDataReceived() {
             @Override
             public void OnDataReceived(int bufferLen, float[] buffer) {
                 hamRecorder.doOnWaveDataReceived(bufferLen, buffer);
+            }
+        });
+        // Surface success/failure: the Flex path doesn't fire the BaseRig
+        // onConnected() callback, so without this the CAT chip never turns
+        // connected and there's no "connected" confirmation toast.
+        flexConnector.setOnConnectionResult(new FlexConnector.OnConnectionResult() {
+            @Override
+            public void onConnected() {
+                setCatConnectionState(CatConnectionState.CONNECTED);
+                ToastMessage.show(getStringFromResource(R.string.connected_rig));
+            }
+            @Override
+            public void onFailed() {
+                setCatConnectionState(CatConnectionState.ERROR);
             }
         });
         flexConnector.connect();
