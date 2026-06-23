@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +59,7 @@ import com.k1af.ft8af.rigs.InstructionSet
 import com.k1af.ft8af.ui.ToastMessage
 import com.k1af.ft8af.x6100.X6100Radio
 import com.k1af.ft8af.x6100.XieguRadioFactory
+import kotlinx.coroutines.delay
 import radio.ks3ckc.ft8af.theme.*
 
 // ─────────────────────────────────────────────────────────────────────
@@ -251,25 +253,25 @@ fun FlexRadioPickerDialog(
     var ipText by remember { mutableStateOf("") }
     val discoveredRadios = remember { mutableStateListOf<FlexRadio>() }
 
-    // Subscribe to FlexRadioFactory discovery events
-    DisposableEffect(Unit) {
+    // Poll discovery while the dialog is open so radios found *after* opening
+    // (discovery typically takes a few seconds) appear live — no need to close
+    // and reopen the picker. The previous one-shot event listener only fired on
+    // the first add, so a radio that surfaced moments later went unseen until
+    // the dialog was reopened. We rebuild the list only when the discovered set
+    // actually changes (see FlexPickerLogic) to avoid recomposing / resetting
+    // the scroll position every tick.
+    LaunchedEffect(Unit) {
         val factory = FlexRadioFactory.getInstance()
-        // Seed with any already-discovered radios
-        discoveredRadios.clear()
-        discoveredRadios.addAll(factory.flexRadios)
-
-        val listener = object : FlexRadioFactory.OnFlexRadioEvents {
-            override fun OnFlexRadioAdded(flexRadio: FlexRadio) {
+        while (true) {
+            val latest = factory.flexRadios.toList()
+            val displayedKeys = discoveredRadios.map { FlexPickerLogic.identityKey(it.serial, it.ip) }
+            val latestKeys = latest.map { FlexPickerLogic.identityKey(it.serial, it.ip) }
+            if (FlexPickerLogic.listChanged(displayedKeys, latestKeys)) {
                 discoveredRadios.clear()
-                discoveredRadios.addAll(factory.flexRadios)
+                discoveredRadios.addAll(latest)
             }
-            override fun OnFlexRadioInvalid(flexRadio: FlexRadio) {
-                discoveredRadios.clear()
-                discoveredRadios.addAll(factory.flexRadios)
-            }
+            delay(1000)
         }
-        factory.setOnFlexRadioEvents(listener)
-        onDispose { factory.setOnFlexRadioEvents(null) }
     }
 
     Dialog(onDismissRequest = onDismiss) {
