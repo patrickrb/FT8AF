@@ -4,10 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.lifecycle.MutableLiveData
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.connector.FlexConnector
@@ -31,40 +27,33 @@ import com.k1af.ft8af.x6100.X6100Meters
  * HUD tell "rig reports nothing" (empty) apart from "user hid everything".
  */
 @Composable
-fun rememberRigMeterSamples(mainViewModel: MainViewModel): List<MeterSample> {
+fun rememberRigMeterSamples(mainViewModel: MainViewModel, frame: Long): List<MeterSample> {
     val isFlex by mainViewModel.mutableIsFlexRadio.observeAsState(false)
     val isXiegu by mainViewModel.mutableIsXieguRadio.observeAsState(false)
+    val flexConnector = mainViewModel.baseRig?.connector as? FlexConnector
+
+    // Force a meter (re)subscription while the HUD is up. The connect-time
+    // subscription is gated on a METER_LIST response arriving, which is easily
+    // missed; this guarantees the stream runs whenever meters are on screen.
+    LaunchedEffect(flexConnector, isFlex) { if (isFlex) flexConnector?.requestMeterStream() }
+
+    // [frame] ticks a few times a second (driven by the HUD) so this re-runs and
+    // re-reads the rigs' live, in-place-mutated meter values. The readers below are
+    // plain (non-@Composable) so their results actually propagate to the caller —
+    // a poll tick read *inside* a child @Composable only recomposes that child, so
+    // the new values never reached the rendered bars (the "meters don't move" bug).
+    @Suppress("UNUSED_EXPRESSION") frame
     return when {
-        isFlex -> flexMeterSamples(mainViewModel)
-        isXiegu -> xieguMeterSamples(mainViewModel)
-        else -> serialMeterSamples(mainViewModel)
+        isFlex -> flexSamples(flexConnector)
+        isXiegu -> xieguSamples(mainViewModel.baseRig?.connector as? X6100Connector)
+        else -> serialSamples(mainViewModel)
     }
 }
 
-@Composable
-private fun flexMeterSamples(mainViewModel: MainViewModel): List<MeterSample> {
-    val connector = mainViewModel.baseRig?.connector as? FlexConnector
-
-    // Force a meter (re)subscription when the HUD opens. The connect-time
-    // subscription is gated on a METER_LIST response arriving, which is easily
-    // missed; this guarantees the stream is running while the HUD is shown.
-    LaunchedEffect(connector) { connector?.requestMeterStream() }
-
-    // The Flex posts the SAME FlexMeterList instance on every update, which
-    // observeAsState dedupes (so bars would freeze after the first packet). Poll
-    // the live instance a few times a second instead — the UDP thread keeps
-    // mutating it in place — and use a tick to drive recomposition.
-    var tick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(connector) {
-        while (true) {
-            kotlinx.coroutines.delay(250)
-            tick++
-        }
-    }
-    tick // read so recomposition tracks the poll
-
-    val m = connector?.meterList
-    if (m == null || !connector.meterDataReceived) return emptyList()
+/** Live read of the Flex meter values (the UDP thread mutates [FlexConnector.meterList] in place). */
+private fun flexSamples(connector: FlexConnector?): List<MeterSample> {
+    if (connector == null || !connector.meterDataReceived) return emptyList()
+    val m = connector.meterList
     return listOf(
         swrSampleFromRatio(m.swrVal),
         alcSampleFlexDb(m.alcVal),
@@ -74,12 +63,8 @@ private fun flexMeterSamples(mainViewModel: MainViewModel): List<MeterSample> {
     )
 }
 
-@Composable
-private fun xieguMeterSamples(mainViewModel: MainViewModel): List<MeterSample> {
-    val empty = remember { MutableLiveData<X6100Meters>() }
-    val radio = (mainViewModel.baseRig?.connector as? X6100Connector)?.xieguRadio
-    val meters by (radio?.mutableMeters ?: empty).observeAsState()
-    val m = meters ?: return emptyList()
+private fun xieguSamples(connector: X6100Connector?): List<MeterSample> {
+    val m = connector?.xieguRadio?.mutableMeters?.value ?: return emptyList()
     return listOf(
         swrSampleFromRatio(m.swr),
         alcSampleXiegu(m.alc),
@@ -89,13 +74,11 @@ private fun xieguMeterSamples(mainViewModel: MainViewModel): List<MeterSample> {
     )
 }
 
-@Composable
-private fun serialMeterSamples(mainViewModel: MainViewModel): List<MeterSample> {
+private fun serialSamples(mainViewModel: MainViewModel): List<MeterSample> {
     val controller = mainViewModel.meterProtectionController
-    val alc by controller.lastAlc.observeAsState(0)
-    val swr by controller.lastSwr.observeAsState(0)
-    val hasData by controller.meterDataReceived.observeAsState(false)
-    if (!hasData) return emptyList()
+    if (controller.meterDataReceived.value != true) return emptyList()
+    val alc = controller.lastAlc.value ?: 0
+    val swr = controller.lastSwr.value ?: 0
     return listOf(
         swrSampleFromNormalized(swr),
         alcSampleSerial(alc, GeneralVariables.alcTargetLow, GeneralVariables.alcTargetHigh),

@@ -31,9 +31,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -89,7 +91,19 @@ fun MetersSheet(
     isTransmitting: Boolean,
     onDismiss: () -> Unit,
 ) {
-    val available = rememberRigMeterSamples(mainViewModel)
+    // Poll a few times a second while the sheet is open so live rig meters
+    // refresh. Reading [frame] here (the render scope) — and passing it down — is
+    // what makes the bars actually update; polling inside the sampler would only
+    // recompose the sampler, not these bars. Idle (no recomposition) when hidden.
+    val frame by produceState(0L, visible) {
+        if (visible) {
+            while (true) {
+                delay(250)
+                value++
+            }
+        }
+    }
+    val available = rememberRigMeterSamples(mainViewModel, frame)
     val enabled =
         enabledMeterTypes(
             swr = GeneralVariables.meterShowSwr,
