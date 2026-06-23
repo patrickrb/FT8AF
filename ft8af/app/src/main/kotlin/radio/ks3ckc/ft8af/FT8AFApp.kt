@@ -38,10 +38,14 @@ import com.k1af.ft8af.ModeProfile
 import com.k1af.ft8af.R
 import com.k1af.ft8af.database.OperationBand
 import com.k1af.ft8af.ft8transmit.FT8TransmitSignal
+import com.k1af.ft8af.flex.FlexRadio
 import com.k1af.ft8af.rigs.CatConnectionState
+import com.k1af.ft8af.rigs.InstructionSet
 import com.k1af.ft8af.rigs.BaseRigOperation
 import radio.ks3ckc.ft8af.theme.BgApp
 import radio.ks3ckc.ft8af.ui.components.ActiveQsoPanel
+import radio.ks3ckc.ft8af.ui.components.CatTapAction
+import radio.ks3ckc.ft8af.ui.components.catTapAction
 import radio.ks3ckc.ft8af.ui.components.shouldShowCatChip
 import radio.ks3ckc.ft8af.ui.components.CqOptionsSheet
 import radio.ks3ckc.ft8af.ui.components.canEnableFieldDay
@@ -493,7 +497,29 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                         ).show()
                     }
                 },
-                onReconnectCat = { mainViewModel.reconnectRig() },
+                onReconnectCat = {
+                    when (
+                        catTapAction(
+                            connectorExists = mainViewModel.baseRig?.connector != null,
+                            isFlexNetwork = GeneralVariables.instructionSet == InstructionSet.FLEX_NETWORK,
+                            savedFlexIp = GeneralVariables.flexLastIp,
+                        )
+                    ) {
+                        CatTapAction.RECONNECT_EXISTING -> mainViewModel.reconnectRig()
+                        CatTapAction.CONNECT_SAVED_FLEX -> {
+                            val flexRadio = FlexRadio()
+                            flexRadio.ip = GeneralVariables.flexLastIp
+                            flexRadio.model = "FlexRadio"
+                            mainViewModel.connectFlexRadioRig(GeneralVariables.getMainContext(), flexRadio)
+                        }
+                        CatTapAction.NEEDS_SETUP ->
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.cat_needs_setup),
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                    }
+                },
                 onOpenFrequencyPicker = { showFrequencyPicker = true },
                 onToggleExpand = { qsoPanelExpanded = !qsoPanelExpanded },
             )

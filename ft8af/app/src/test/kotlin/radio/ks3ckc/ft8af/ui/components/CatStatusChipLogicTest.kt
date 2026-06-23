@@ -87,4 +87,33 @@ class CatStatusChipLogicTest {
         assertThat(CatConnectionState.afterDisconnect(CatConnectionState.DISCONNECTED))
             .isEqualTo(CatConnectionState.DISCONNECTED)
     }
+
+    // ---- catTapAction (what tapping the CAT chip does) ----
+
+    @Test
+    fun `cat tap reconnects an existing connector`() {
+        // A live connector exists (any rig) — just re-poke it. Flex IP irrelevant.
+        assertThat(catTapAction(connectorExists = true, isFlexNetwork = true, savedFlexIp = "192.168.1.9"))
+            .isEqualTo(CatTapAction.RECONNECT_EXISTING)
+        assertThat(catTapAction(connectorExists = true, isFlexNetwork = false, savedFlexIp = ""))
+            .isEqualTo(CatTapAction.RECONNECT_EXISTING)
+    }
+
+    @Test
+    fun `cat tap cold-connects to a saved Flex when no connector yet`() {
+        // The whole point: settings saved (Flex + remembered IP), no live
+        // connector → connect straight to it instead of no-opping.
+        assertThat(catTapAction(connectorExists = false, isFlexNetwork = true, savedFlexIp = "192.168.1.9"))
+            .isEqualTo(CatTapAction.CONNECT_SAVED_FLEX)
+    }
+
+    @Test
+    fun `cat tap needs setup when nothing to go on`() {
+        // Flex selected but no remembered address.
+        assertThat(catTapAction(connectorExists = false, isFlexNetwork = true, savedFlexIp = ""))
+            .isEqualTo(CatTapAction.NEEDS_SETUP)
+        // Not a Flex-network rig and nothing connected (e.g. cold USB before scan).
+        assertThat(catTapAction(connectorExists = false, isFlexNetwork = false, savedFlexIp = ""))
+            .isEqualTo(CatTapAction.NEEDS_SETUP)
+    }
 }

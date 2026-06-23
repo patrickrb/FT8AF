@@ -93,6 +93,9 @@ public class GeneralVariables {
 
     public static int flexMaxRfPower = 10;//Flex radio max transmit power
     public static int flexMaxTunePower = 10;//Flex radio max tune power
+    // Last FlexRadio address connected to (discovered or typed). Persisted so the
+    // CAT chip can reconnect on a cold start without re-opening the picker.
+    public static String flexLastIp = "";
 
     // Hidden debug mode (unlocked by tapping the version 7 times in About).
     // When true, Settings exposes the Debug screen for log viewing/sharing.
