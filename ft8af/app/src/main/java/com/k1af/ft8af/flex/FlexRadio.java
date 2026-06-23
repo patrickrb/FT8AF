@@ -822,6 +822,23 @@ public class FlexRadio {
         sendCommand(FlexCommand.SLICE_SET_NB, String.format("slice s %d nb=%s", sliceOder, on ? "on" : "off"));
     }
 
+    /**
+     * Build the SmartSDR command that mutes/unmutes a slice's monitor audio
+     * (the radio's speaker/headphone output for that slice). This is the local
+     * RX monitor audio only — the DAX audio stream the app decodes from is a
+     * separate path and is unaffected, so muting here silences the radio
+     * without stopping decoding. Pure so it's unit-testable.
+     */
+    @SuppressLint("DefaultLocale")
+    public static String audioMuteCommand(int sliceOrder, boolean mute) {
+        return String.format("slice s %d audio_mute=%d", sliceOrder, mute ? 1 : 0);
+    }
+
+    @SuppressLint("DefaultLocale")
+    public synchronized void commandSliceSetAudioMute(int sliceOder, boolean mute) {
+        sendCommand(FlexCommand.SLICE_SET_AUDIO_MUTE, audioMuteCommand(sliceOder, mute));
+    }
+
     @SuppressLint("DefaultLocale")
     public synchronized void commandSetDaxAudio(int channel, int sliceOder, boolean txEnable) {
         sendCommand(FlexCommand.DAX_AUDIO, String.format("dax audio set %d slice=%d tx=%s", channel, sliceOder, txEnable ? "1" : "0"));

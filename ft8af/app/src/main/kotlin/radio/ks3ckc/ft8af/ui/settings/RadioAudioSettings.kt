@@ -630,6 +630,24 @@ fun RadioAudioSettings(
                             },
                         )
                     }
+                    SectionDivider()
+                    run {
+                        var muteSpeaker by remember { mutableStateOf(GeneralVariables.flexMuteRadioSpeaker) }
+                        SettingsRow(
+                            label = stringResource(R.string.settings_mute_radio_speaker),
+                            description = stringResource(R.string.settings_mute_radio_speaker_desc),
+                            toggle = muteSpeaker,
+                            onToggleChange = { enabled ->
+                                muteSpeaker = enabled
+                                GeneralVariables.flexMuteRadioSpeaker = enabled
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "flexMuteSpeaker", if (enabled) "1" else "0", null,
+                                )
+                                // Apply immediately if a (Flex) rig is connected; no-op otherwise.
+                                mainViewModel.baseRig?.connector?.setSliceAudioMute(enabled)
+                            },
+                        )
+                    }
                 }
             }
         }

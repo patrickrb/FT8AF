@@ -180,6 +180,10 @@ public class FlexConnector extends BaseRigConnector {
                 flexRadio.commandSliceSetMode(0, FlexRadio.FlexMode.DIGU);//Set operating mode
                 flexRadio.commandSetFilter(0, 0, 3000);//Set filter to 3000 Hz
 
+                //Mute the radio's own monitor audio so the user isn't blasted with FT8
+                //tones; DAX decode is a separate stream and keeps working. Toggleable.
+                flexRadio.commandSliceSetAudioMute(0, GeneralVariables.flexMuteRadioSpeaker);
+
 
                 flexRadio.commandMeterList();//List the meters
                 //flexRadio.commandSubMeterAll();//Subscription command moved to the response handling section
@@ -249,6 +253,11 @@ public class FlexConnector extends BaseRigConnector {
     @Override
     public void sendData(byte[] data) {
         flexRadio.sendData(data);
+    }
+
+    @Override
+    public void setSliceAudioMute(boolean mute) {
+        flexRadio.commandSliceSetAudioMute(0, mute);
     }
 
 

@@ -108,6 +108,10 @@ public class BaseRigConnector {
         //Used for X6100 FT8CNs mode
     }
 
+    public void setSliceAudioMute(boolean mute){
+        //Mute the radio's own monitor audio (Flex network mode only); no-op otherwise.
+    }
+
     //2023-08-16 Submitted by DS1UFX (based on v0.9) to support (tr)uSDX audio over CAT.
     public void receiveWaveData(byte[] data){
         float[] waveFloat=new float[data.length/2];

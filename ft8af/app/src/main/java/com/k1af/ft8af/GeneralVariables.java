@@ -93,6 +93,9 @@ public class GeneralVariables {
 
     public static int flexMaxRfPower = 10;//Flex radio max transmit power
     public static int flexMaxTunePower = 10;//Flex radio max tune power
+    //Mute the Flex's own speaker/monitor audio on connect; DAX decode is unaffected.
+    //Defaults to muted so users aren't blasted with FT8 tones from the radio.
+    public static boolean flexMuteRadioSpeaker = true;
 
     // Hidden debug mode (unlocked by tapping the version 7 times in About).
     // When true, Settings exposes the Debug screen for log viewing/sharing.

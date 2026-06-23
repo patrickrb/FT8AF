@@ -35,6 +35,7 @@ public enum FlexCommand {
     SLICE_SET_MODE,
     SLICE_SET_NR,
     SLICE_SET_NB,
+    SLICE_SET_AUDIO_MUTE,
     SLICE_REMOVE,
     SLICE_GET_ERROR,
     DAX_AUDIO,

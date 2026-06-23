@@ -2515,6 +2515,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.showTxVolumeSlider = !result.equals("0");
                     GeneralVariables.mutableShowTxVolumeSlider.postValue(GeneralVariables.showTxVolumeSlider);
                 }
+                if (name.equalsIgnoreCase("flexMuteSpeaker")) {//Mute Flex radio monitor audio on connect (default on)
+                    GeneralVariables.flexMuteRadioSpeaker = !result.equals("0");
+                }
                 if (name.equalsIgnoreCase("excludedCallsigns")) {//Blocklist: callsign prefixes
                     GeneralVariables.addExcludedCallsigns(result);
                 }
