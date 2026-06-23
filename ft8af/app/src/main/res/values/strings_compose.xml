@@ -12,6 +12,10 @@
 -->
 <resources>
 
+    <!-- ===== FlexRadio discovery ===== -->
+    <string name="flex_searching">Searching for FlexRadio on your network…</string>
+    <string name="flex_enter_ip_manually">Enter IP manually</string>
+
     <!-- ===== Common / shared ===== -->
     <string name="action_cancel">Cancel</string>
     <string name="action_save">Save</string>
