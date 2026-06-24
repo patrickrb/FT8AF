@@ -1277,7 +1277,32 @@ public class MainViewModel extends ViewModel {
      * @param context   context
      * @param flexRadio FlexRadio object
      */
+    // IP of a Flex connect currently in flight (set when a connect starts, cleared
+    // when it succeeds or fails), so two near-simultaneous connect requests to the
+    // same radio don't both run the connect sequence. See the guard below.
+    private volatile String flexConnectInProgressIp = null;
+
     public void connectFlexRadioRig(Context context, FlexRadio flexRadio) {
+        final String requestedIp = (flexRadio != null) ? flexRadio.getIp() : null;
+        // Guard against a DUPLICATE connect to the same Flex. Two UI paths can each
+        // fire a connect — the network picker's auto-connect and the CAT chip / a
+        // manual tap — and a second connect re-runs `client disconnect` + `slice
+        // create`, which spawns a SECOND slice on the radio (duplicate LEVEL/ALC
+        // meters) and tears down the GUI client whose meter subscription is live, so
+        // meters stream briefly then die. If we're already connected to this IP, or a
+        // connect to it is already in flight, make this call a no-op.
+        if (requestedIp != null && !requestedIp.isEmpty()) {
+            if (requestedIp.equals(flexConnectInProgressIp)) {
+                return;
+            }
+            if (baseRig != null && baseRig.getConnector() instanceof FlexConnector
+                    && baseRig.getConnector().isConnected()
+                    && requestedIp.equals(((FlexConnector) baseRig.getConnector()).getFlexIp())) {
+                setCatConnectionState(CatConnectionState.CONNECTED);
+                return;
+            }
+        }
+        flexConnectInProgressIp = requestedIp;
         if (GeneralVariables.connectMode == ConnectMode.NETWORK) {
             if (baseRig != null) {
                 if (baseRig.getConnector() != null) {
@@ -1319,11 +1344,13 @@ public class MainViewModel extends ViewModel {
         flexConnector.setOnConnectionResult(new FlexConnector.OnConnectionResult() {
             @Override
             public void onConnected() {
+                flexConnectInProgressIp = null;
                 setCatConnectionState(CatConnectionState.CONNECTED);
                 ToastMessage.show(getStringFromResource(R.string.connected_rig));
             }
             @Override
             public void onFailed() {
+                flexConnectInProgressIp = null;
                 setCatConnectionState(CatConnectionState.ERROR);
             }
         });
@@ -1562,6 +1589,15 @@ public class MainViewModel extends ViewModel {
      */
     public void reconnectRig() {
         if (baseRig == null || baseRig.getConnector() == null) {
+            return;
+        }
+        // Don't tear down a live or in-progress connection. Repeated CAT-chip taps would
+        // otherwise call connect() again on the Flex, opening a parallel TCP session whose
+        // "client gui" mints a new handle and orphans the slice/streams of the prior
+        // session — leaving the radio "connected" but owning nothing. Only reconnect when
+        // genuinely disconnected.
+        if (catConnectionState == CatConnectionState.CONNECTING
+                || catConnectionState == CatConnectionState.CONNECTED) {
             return;
         }
         setCatConnectionState(CatConnectionState.CONNECTING);

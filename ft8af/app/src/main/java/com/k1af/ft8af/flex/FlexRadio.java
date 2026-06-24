@@ -59,6 +59,10 @@ public class FlexRadio {
     private String callsign;//=FlexRADIO
     private String ip = "";//=192.168.3.86
     private int port = 4992;//=4992//TCP port for controlling the radio
+    // The radio's fixed VITA-49 UDP data port (TCP command port 4992 minus 1). Inbound
+    // DAX-TX audio must go here — the radio streams RX *from* an ephemeral port (~4993)
+    // but listens for our TX audio on this fixed port.
+    public static final int FLEX_VITA_DATA_PORT = 4991;
     private String status;//=Available
     private String inUse_ip;//=192.168.3.5
     private String inUse_host;//=DESKTOP-RR564NK.local
@@ -99,6 +103,15 @@ public class FlexRadio {
     private int daxTxAudioStreamId = 0;
     private long panadapterStreamId = 0;
     private final HashSet<Long> streamIdSet = new HashSet<>();
+
+    // Index of the slice this app owns and transmits on. The radio assigns it when we
+    // create our slice (see createdSliceIndex); 0 is only a fallback. EVERY slice op
+    // (tune, mode, filter, DAX bind, TX claim) must target THIS index — hardcoding 0
+    // meant configuring/keying a slice we don't own when the radio already had a slice,
+    // so the keyed slice had no DAX modulation (0 W TX).
+    private int activeSliceIndex = 0;
+    // Slice index parsed from the most recent "slice create" response; -1 until known.
+    public int createdSliceIndex = -1;
 
     //************************Event handler interfaces*******************************
     private OnReceiveDataListener onReceiveDataListener;//Current data receive event
@@ -385,7 +398,6 @@ public class FlexRadio {
                 //Log.e(TAG, String.format("OnReceiveData: stream id:0x%x,class id:0x%x",vita.streamId,vita.classId) );
                 switch (vita.classId) {
                     case VITA.FLEX_DAX_AUDIO_CLASS_ID://Audio data
-                        //Log.e(TAG, String.format("FLEX_DAX_AUDIO_CLASS_ID stream id:0x%x",vita.streamId ));
                         doReceiveAudio(vita.payload);
                         break;
                     case VITA.FLEX_DAX_IQ_CLASS_ID://IQ data
@@ -465,7 +477,7 @@ public class FlexRadio {
         //streamTxId=0x084000001;
         // class id=0x00 00 1c 2d 53 4c 01 23????
         //One packet every 5ms? Stereo, 256 floats total
-        Log.e(TAG, String.format("sendWaveData: streamid:0x%x,ip:%s,port:%d",streamTxId,ip, port) );
+        Log.d(TAG, String.format("sendWaveData: txStreamId:0x%x,ip:%s,streamPort:%d",daxTxAudioStreamId,ip, flexStreamPort) );
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -494,13 +506,26 @@ public class FlexRadio {
                         //Log.e(TAG, String.format("run: daxTxAudioStreamId:0x%X",daxTxAudioStreamId) );
                         //daxTxAudioStreamId,0x534c0123,
                         vita.streamId=daxTxAudioStreamId;
-                        vita.classId = 0x534c0123;
-                        vita.classId64 = 0x00001c2d534c0123L;
+                        // DAX TX audio must carry the DAX-audio class id (0x534C03E3,
+                        // FlexRadio OUI 0x001C2D) — the SAME class the radio uses for the
+                        // DAX audio stream we already decode on RX (VITA.FLEX_DAX_AUDIO_CLASS_ID).
+                        // The old value 0x534C0123 was not the DAX-audio class, so the radio
+                        // keyed but discarded our audio (ALC stuck at the ~-70 dBFS keyed-noise
+                        // floor, 0 W forward) — which is why DAX TX worked in other apps but
+                        // never this one. Direction (tx vs rx) is set by the stream id, not the class.
+                        vita.classId = VITA.FLEX_DAX_AUDIO_CLASS_ID;
+                        vita.classId64 = 0x00001c2dL << 32 | (VITA.FLEX_DAX_AUDIO_CLASS_ID & 0xffffffffL);
                         byte[] send = vita.audioFloatDataToVita(packetCount,  voice);
                         packetCount++;
                         try {
-                            //Log.e(TAG, String.format("run: send ip:%s, port:%d",ip,4993) );
-                            streamClient.sendData(send, ip, 4993);
+                            // Send TX audio to the radio's VITA-49 data port (4991), NOT the
+                            // source port the radio streams RX *from* (which we observed as 4993
+                            // and which the old code hardcoded). The radio listens for inbound
+                            // DAX-TX audio on its fixed VITA port (TCP command port 4992 minus 1),
+                            // so audio sent to 4993 was never received — the radio keyed but had
+                            // nothing to modulate (0 W). This is the likely reason DAX TX worked
+                            // in other apps but never this one.
+                            streamClient.sendData(send, ip, FLEX_VITA_DATA_PORT);
                         } catch (UnknownHostException e) {
                             throw new RuntimeException(e);
                         }
@@ -665,6 +690,10 @@ public class FlexRadio {
                     this.daxTxAudioStreamId = response.daxTxStreamId;
                     Log.d(TAG, String.format("doReceiveLineEvent: txStreamID:0x%x", daxTxAudioStreamId));
                 }
+                if (response.createdSliceIndex >= 0) {
+                    this.createdSliceIndex = response.createdSliceIndex;
+                    Log.d(TAG, "doReceiveLineEvent: createdSliceIndex=" + createdSliceIndex);
+                }
 
                 break;
         }
@@ -785,6 +814,35 @@ public class FlexRadio {
 
     public synchronized void commandSliceCreate() {
         sendCommand(FlexCommand.SLICE_CREATE_FREQ, "slice create");
+    }
+
+    @SuppressLint("DefaultLocale")
+    public synchronized void commandSliceCreateAtFreq(String freq) {
+        // Create a new slice already tuned to freq. The response (R..|0|<index>)
+        // carries the radio-assigned slice index, captured into createdSliceIndex.
+        sendCommand(FlexCommand.SLICE_CREATE_FREQ, String.format("slice create freq=%s", freq));
+    }
+
+    @SuppressLint("DefaultLocale")
+    public synchronized void commandSliceSetActiveTx(int sliceOder) {
+        // Make this slice the transmit slice so PTT keys the slice we feed DAX audio to.
+        // Without this the radio kept whatever slice already had tx=1 (e.g. a SmartSDR
+        // USB slice) as the transmit slice, so keying produced no DAX-modulated RF.
+        sendCommand(FlexCommand.SLICE_SET_TX_ANT, String.format("slice s %d tx=1", sliceOder));
+    }
+
+    public int getActiveSliceIndex() {
+        return activeSliceIndex;
+    }
+
+    public void setActiveSliceIndex(int index) {
+        this.activeSliceIndex = index;
+    }
+
+    /** Reset slice ownership state so a fresh connection re-discovers/creates its slice. */
+    public void clearSliceState() {
+        activeSliceIndex = 0;
+        createdSliceIndex = -1;
     }
 
     @SuppressLint("DefaultLocale")
@@ -951,6 +1009,24 @@ public class FlexRadio {
         sendCommand(FlexCommand.AUT_TUNE_MAX_POWER, String.format("transmit set tunepower=%d", power));
     }
 
+    @SuppressLint("DefaultLocale")
+    public synchronized void commandDaxTx(boolean on) {
+        // Enable the DAX-TX subsystem itself (the "dax tx" command, distinct from
+        // "dax audio set ... tx=1" which only routes a channel, and from "transmit set
+        // dax=1" which selects DAX as the transmit source). Without this the DAX TX audio
+        // path is not fully opened, so the audio reaches the modulator heavily attenuated.
+        sendCommand(FlexCommand.DAX_AUDIO, String.format("dax tx %d", on ? 1 : 0));
+    }
+
+    @SuppressLint("DefaultLocale")
+    public synchronized void commandSetTransmitDax(boolean on) {
+        // Tell the radio to USE the DAX audio stream as its transmit source. Creating the
+        // dax_tx stream and "dax audio set <ch> slice=<n> tx=1" only route/enable the stream;
+        // WITHOUT "transmit set dax=1" the radio keys but ignores the DAX audio (ALC stays at
+        // the noise floor, 0 W). This is the toggle other DAX apps set and this one never did.
+        sendCommand(FlexCommand.TRANSMIT_POWER, String.format("transmit set dax=%d", on ? 1 : 0));
+    }
+
     public synchronized void commandPTTOnOff(boolean on) {
         if (on) {
             sendCommand(FlexCommand.PTT_ON, "xmit 1");
@@ -1049,6 +1125,7 @@ public class FlexRadio {
         public long daxStreamId = 0;
         public int daxTxStreamId = 0;
         public long panadapterStreamId = 0;
+        public int createdSliceIndex = -1;//slice index from a "slice create" response; -1 if none
         public FlexCommand flexCommand = FlexCommand.UNKNOW;
         public long resultValue = 0;
 
@@ -1090,6 +1167,9 @@ public class FlexRadio {
                                 break;
                             case STREAM_CREATE_DAX_TX:
                                 this.daxTxStreamId = getStreamId(line);
+                                break;
+                            case SLICE_CREATE_FREQ:
+                                this.createdSliceIndex = getSliceIndex(line);
                                 break;
                         }
                         resultValue = Integer.parseInt(content, 16);//Get the command's return value
@@ -1157,7 +1237,13 @@ public class FlexRadio {
             if (lines.length > 2) {
                 if (lines[1].equals("0")) {
                     try {
-                        return Integer.parseInt(lines[2], 16);//stream id, hexadecimal
+                        // Parse as long then narrow to int: a DAX *TX* stream id is
+                        // 0x84000000+, which overflows Integer.parseInt (it rejects
+                        // values past 0x7FFFFFFF) and threw — leaving the TX stream id
+                        // 0, so transmit audio went to stream 0x0 and the radio keyed
+                        // with no modulation (0 W). The (int) cast keeps the correct
+                        // 32 bits. RX/panadapter ids (0x04.., 0x40..) were unaffected.
+                        return (int) Long.parseLong(lines[2], 16);//stream id, hexadecimal
                     } catch (NumberFormatException e) {
                         e.printStackTrace();
                         Log.e(TAG, "getDaxStreamId exception: " + e.getMessage());
@@ -1165,6 +1251,24 @@ public class FlexRadio {
                 }
             }
             return 0;
+        }
+
+        /**
+         * Parse the slice index from a "slice create" response: {@code R<seq>|0|<index>}
+         * where {@code <index>} is the radio-assigned slice number (decimal). Returns -1
+         * when the response is an error or unparseable. Static + package-visible so the
+         * parse can be unit-tested without a radio.
+         */
+        static int getSliceIndex(String line) {
+            String[] parts = line.split("\\|");
+            if (parts.length > 2 && parts[1].equals("0")) {
+                try {
+                    return Integer.parseInt(parts[2].trim());
+                } catch (NumberFormatException e) {
+                    // not a numeric slice index — fall through to -1
+                }
+            }
+            return -1;
         }
 
         /**

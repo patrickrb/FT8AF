@@ -57,7 +57,7 @@ public class FlexNetworkRig extends BaseRig {
     @Override
     public void setUsbModeToRig() {
         if (getConnector() != null) {
-            commandSliceSetMode(0, FlexRadio.FlexMode.DIGU);//set operating mode
+            commandSliceSetMode(sliceIndex(), FlexRadio.FlexMode.DIGU);//set operating mode on OUR slice
         }
     }
 
@@ -65,8 +65,17 @@ public class FlexNetworkRig extends BaseRig {
     @Override
     public void setFreqToRig() {
         if (getConnector() != null) {
-            commandSliceTune(0, String.format("%.3f", getFreq() / 1000000f));
+            commandSliceTune(sliceIndex(), String.format("%.6f", getFreq() / 1000000f));//retune OUR slice
         }
+    }
+
+    /** The slice index the app owns, so band/frequency changes act on our slice rather
+     * than a hardcoded 0 (which could be a slice we don't own — see FlexConnector). */
+    private int sliceIndex() {
+        if (getConnector() instanceof FlexConnector) {
+            return ((FlexConnector) getConnector()).getSliceIndex();
+        }
+        return 0;
     }
 
 

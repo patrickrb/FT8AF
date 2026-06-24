@@ -43,6 +43,10 @@ public class FlexConnector extends BaseRigConnector {
     // True once at least one meter value packet has arrived, so the HUD can tell
     // "no meter stream yet" apart from genuine zero readings.
     public volatile boolean meterDataReceived = false;
+    // True once the slice + DAX streams have been created for this logical connection.
+    // Guards the one-time setup so a TCP reconnect (which re-fires onConnectSuccess)
+    // doesn't spawn duplicate slices/streams. Reset in disconnect().
+    private volatile boolean slicesConfigured = false;
 
     private static final String TAG = "FlexConnector";
 
@@ -105,7 +109,6 @@ public class FlexConnector extends BaseRigConnector {
                 mutableMeterList.postValue(meterList);
                 if (!meterDataReceived) {
                     meterDataReceived = true;
-                    GeneralVariables.fileLog("FlexMeter: first meter packet received");
                 }
             }
 
@@ -139,6 +142,19 @@ public class FlexConnector extends BaseRigConnector {
                 if (response.flexCommand==FlexCommand.STREAM_CREATE_DAX_TX){
                     flexRadio.streamTxId=response.daxTxStreamId;
                 }
+                if (response.flexCommand==FlexCommand.SLICE_CREATE_FREQ){
+                    // The radio assigns the new slice's index in this response; configure
+                    // THAT slice (not a hardcoded 0) for FT8 and claim it as the transmit
+                    // slice. Doing it here — once the index is known — is what makes the
+                    // keyed slice the same slice we feed DAX audio to (real forward power),
+                    // and makes us own a specific slice instead of stomping slice 0.
+                    int slice = response.createdSliceIndex >= 0 ? response.createdSliceIndex : 0;
+                    flexRadio.setActiveSliceIndex(slice);
+                    flexRadio.commandSliceSetMode(slice, FlexRadio.FlexMode.DIGU);
+                    flexRadio.commandSetFilter(slice, 0, 3000);
+                    flexRadio.commandSetDaxAudio(1, slice, true);//bind DAX ch1 audio to our slice
+                    flexRadio.commandSliceSetActiveTx(slice);//make our slice the transmit slice
+                }
 
 //                if (response.flexCommand== FlexCommand.METER_LIST){
 //                    Log.e(TAG, "onResponse: ."+response.rawData.replace("#","\n") );
@@ -165,44 +181,25 @@ public class FlexConnector extends BaseRigConnector {
                 ToastMessage.show(String.format(GeneralVariables.getStringFromResource(R.string.init_flex_operation)
                         ,flexRadio.getModel()));
 
-                flexRadio.commandClientDisconnect();//Disconnect all previous connections
-                flexRadio.commandClientGui();//Create GUI
+                // (full setup moved into the guarded block below — runs once per connection)
 
-                flexRadio.commandSubDaxAll();//Register all DAX streams
-
-
-
-                flexRadio.commandClientSetEnforceNetWorkGui();//Configure network MTU settings
-
-                //flexRadio.commandSliceList();//List slices
-                flexRadio.commandSliceCreate();//Create slice
-
-
-
-
-
-                //todo To prevent stream ports from not being released, change the port?
-                //FlexRadio.streamPort++;
-
-                flexRadio.commandUdpPort();//Set UDP port
-
-
-                flexRadio.commandStreamCreateDaxRx(1);//Create stream data to DAX channel 1
-                flexRadio.commandStreamCreateDaxTx(1);//Create stream data to DAX channel 1
-
-                flexRadio.commandSetDaxAudio(1, 0, true);//Enable DAX
-
-                //TODO Should we set this??? dax tx T or dax tx 1
-                flexRadio.commandSliceTune(0,String.format("%.3f",GeneralVariables.band/1000000f));
-                flexRadio.commandSliceSetMode(0, FlexRadio.FlexMode.DIGU);//Set operating mode
-                flexRadio.commandSetFilter(0, 0, 3000);//Set filter to 3000 Hz
-
-
-                flexRadio.commandMeterList();//List the meters
-                //flexRadio.commandSubMeterAll();//Subscription command moved to the response handling section
-
-                setMaxRfPower(maxRfPower);//set transmit power
-                setMaxTunePower(maxTunePower);//Set tune power
+                if (!slicesConfigured) {
+                    slicesConfigured = true;
+                    flexRadio.commandClientDisconnect();//Disconnect all previous connections
+                    flexRadio.commandClientGui();//Create GUI
+                    flexRadio.commandSubDaxAll();//Register all DAX streams
+                    flexRadio.commandClientSetEnforceNetWorkGui();//Configure network MTU settings
+                    flexRadio.commandUdpPort();//Set UDP port
+                    flexRadio.commandStreamCreateDaxRx(1);//Create stream data to DAX channel 1
+                    flexRadio.commandStreamCreateDaxTx(1);//Create stream data to DAX channel 1
+                    flexRadio.commandSliceCreateAtFreq(
+                            String.format("%.6f", GeneralVariables.band / 1000000f));//Create our slice, tuned
+                    flexRadio.commandMeterList();//List the meters (subscription happens in the response)
+                    setMaxRfPower(maxRfPower);//set transmit power
+                    setMaxTunePower(maxTunePower);//Set tune power
+                    flexRadio.commandDaxTx(true);//enable the DAX-TX subsystem (fully open the audio path)
+                    flexRadio.commandSetTransmitDax(true);//USE the DAX audio stream as the TX source
+                }
 
                 //flexRadio.commandSubMeterById(5);//List a specific meter
 
@@ -271,7 +268,6 @@ public class FlexConnector extends BaseRigConnector {
      * stream even if that response was missed. Safe to call repeatedly.
      */
     public void requestMeterStream(){
-        GeneralVariables.fileLog("FlexMeter: requestMeterStream (subscribing)");
         flexRadio.commandMeterList();
         flexRadio.commandSubMeterAll();
     }
@@ -301,6 +297,10 @@ public class FlexConnector extends BaseRigConnector {
 
     @Override
     public void connect() {
+        // Re-arm the one-time setup for this fresh connection attempt. onConnectSuccess
+        // then runs the full client/gui + slice/stream setup exactly once; if it fires
+        // again for the same attempt it is a no-op (no re-gui, no orphaned slice).
+        slicesConfigured = false;
         super.connect();
         flexRadio.openAudio();
         flexRadio.connect();
@@ -310,9 +310,19 @@ public class FlexConnector extends BaseRigConnector {
     @Override
     public void disconnect() {
         super.disconnect();
+        // Re-arm the one-time slice setup so the next connection creates a fresh slice
+        // and re-discovers its index, rather than reusing stale ownership state.
+        slicesConfigured = false;
+        flexRadio.clearSliceState();
         flexRadio.closeAudio();
         flexRadio.closeStreamPort();
         flexRadio.disConnect();
+    }
+
+    /** The slice index this connector owns and transmits on (see FlexRadio.activeSliceIndex).
+     * Used by FlexNetworkRig so band/frequency changes retune OUR slice, not a hardcoded 0. */
+    public int getSliceIndex() {
+        return flexRadio.getActiveSliceIndex();
     }
 
     public OnWaveDataReceived getOnWaveDataReceived() {
@@ -355,5 +365,11 @@ public class FlexConnector extends BaseRigConnector {
     @Override
     public boolean isConnected() {
         return flexRadio.isConnect();
+    }
+
+    /** IP of the Flex this connector is bound to, so a duplicate connect to the
+     * same radio can be detected and skipped (see MainViewModel.connectFlexRadioRig). */
+    public String getFlexIp() {
+        return flexRadio != null ? flexRadio.getIp() : null;
     }
 }

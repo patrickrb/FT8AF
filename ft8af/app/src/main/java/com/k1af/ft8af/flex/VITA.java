@@ -234,10 +234,21 @@ public class VITA {
         packetType = VitaPacketType.EXT_DATA_WITH_STREAM;
         classIdPresent = true;
         trailerPresent = false;//No trailer
-        tsi = VitaTSI.TSI_OTHER;//
+        // Timestamp-integer type MUST be TSI_UTC (1) to match the DAX-audio packets the
+        // radio itself sends/accepts. We were sending TSI_OTHER (3); the radio rejected
+        // those packets, so it keyed but had no modulation (0 W). Confirmed by logging the
+        // working RX format (tsi=1) vs our TX format (tsi=3) — the only differing field.
+        tsi = VitaTSI.TSI_UTC;
         tsf = VitaTSF.TSF_SAMPLE_COUNT;
         this.packetCount = count;
-        this.packetSize = (data.length / 2) + 7;
+        // VITA packet_size is the TOTAL number of 32-bit words in the packet:
+        // 7 header words + one word per float sample (each float = 4 bytes = 1 word).
+        // The old "(data.length / 2) + 7" under-counted by half, so the declared size
+        // (135 words) didn't match the real datagram (263 words); a strict VITA
+        // receiver (SmartSDR) drops a packet whose declared size disagrees with its
+        // length, which left the keyed radio with no modulation (ALC at the noise
+        // floor, 0 W forward).
+        this.packetSize = data.length + 7;
 
 
         //----HEADER--No.1 word------
