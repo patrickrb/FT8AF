@@ -257,14 +257,7 @@ public class ThirdPartyService {
                 Log.d(TAG, "QRZ connection failed: no response");
                 return false;
             }
-            String qrzResult = null;
-            for (String s : result.split("&")) {
-                String[] split = s.split("=", 2);
-                if (split.length > 1 && "RESULT".equals(split[0])) {
-                    qrzResult = split[1];
-                    break;
-                }
-            }
+            String qrzResult = parseQrzResult(result);
             Log.d(TAG, "QRZ status RESULT=" + qrzResult);
             return "OK".equals(qrzResult);
         }catch (Exception e){
@@ -296,19 +289,29 @@ public class ThirdPartyService {
             Log.d(TAG, "QRZ upload " + (result != null ? "succeeded" : "failed"));
             if (result == null) return false;
             // QRZ encodes status as RESULT=OK|FAIL|REPLACE within an &-separated body
-            String qrzResult = null;
-            for (String s : result.split("&")) {
-                String[] split = s.split("=", 2);
-                if (split.length > 1 && "RESULT".equals(split[0])) {
-                    qrzResult = split[1];
-                    break;
-                }
-            }
+            String qrzResult = parseQrzResult(result);
             return "OK".equals(qrzResult) || "REPLACE".equals(qrzResult);
         }catch (Exception k){
             Log.d(TAG, "QRZ upload error: " + k.getClass().getSimpleName());
             return false;
         }
+    }
+
+    /**
+     * Extracts the {@code RESULT} value from a QRZ logbook API response. QRZ
+     * replies with an {@code &}-separated body of {@code KEY=VALUE} pairs (e.g.
+     * {@code RESULT=OK&COUNT=1...}); this returns the value of the {@code RESULT}
+     * field, or {@code null} if the response is null/empty or has no such field.
+     */
+    static String parseQrzResult(String response) {
+        if (response == null || response.isEmpty()) return null;
+        for (String s : response.split("&")) {
+            String[] split = s.split("=", 2);
+            if (split.length > 1 && "RESULT".equals(split[0])) {
+                return split[1];
+            }
+        }
+        return null;
     }
 
     /**

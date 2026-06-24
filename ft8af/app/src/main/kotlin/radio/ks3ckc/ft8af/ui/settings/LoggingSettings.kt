@@ -63,10 +63,26 @@ fun LoggingSettings(
     var enableCloudlog by remember { mutableStateOf(GeneralVariables.enableCloudlog) }
     var qrzXmlUser by remember { mutableStateOf(GeneralVariables.qrzXmlUsername.orEmpty()) }
     var qrzXmlPass by remember { mutableStateOf(GeneralVariables.qrzXmlPassword.orEmpty()) }
+    var qrzApiKey by remember { mutableStateOf(GeneralVariables.qrzApiKey.orEmpty()) }
     var cloudlogAddress by remember { mutableStateOf(GeneralVariables.cloudlogServerAddress.orEmpty()) }
 
+    var showQrzLogbook by remember { mutableStateOf(false) }
     var showQrzCreds by remember { mutableStateOf(false) }
     var showCloudlog by remember { mutableStateOf(false) }
+
+    // -- QRZ Logbook API Key Dialog (upload credential) --
+    if (showQrzLogbook) {
+        QrzLogbookDialog(
+            initialApiKey = qrzApiKey,
+            onDismiss = { showQrzLogbook = false },
+            onSave = { key ->
+                qrzApiKey = key
+                GeneralVariables.qrzApiKey = key
+                mainViewModel.databaseOpr.writeConfig("qrzApiKey", key, null)
+                showQrzLogbook = false
+            },
+        )
+    }
 
     // -- QRZ Credentials Dialog --
     if (showQrzCreds) {
@@ -159,6 +175,11 @@ fun LoggingSettings(
                     SettingsRow(
                         label = stringResource(R.string.settings_qrz_com),
                         description = stringResource(R.string.settings_qrz_com_desc),
+                        value = if (qrzApiKey.isNotEmpty()) {
+                            stringResource(R.string.common_configured)
+                        } else {
+                            stringResource(R.string.common_not_configured)
+                        },
                         toggle = enableQRZ,
                         onToggleChange = { checked ->
                             enableQRZ = checked
@@ -167,6 +188,8 @@ fun LoggingSettings(
                                 "enableQRZ", if (checked) "1" else "0", null,
                             )
                         },
+                        showChevron = true,
+                        onClick = { showQrzLogbook = true },
                     )
                     SectionDivider()
                     SettingsRow(
@@ -479,6 +502,130 @@ private fun CloudlogSettingsDialog(
                 showStationPicker = false
             },
         )
+    }
+}
+
+/**
+ * Dialog for configuring the QRZ Logbook API key — the credential QRZ QSO uploads
+ * require (distinct from the XML username/password used for avatar lookups). Includes
+ * a Test Connection button that calls [ThirdPartyService.CheckQRZConnection].
+ */
+@Composable
+private fun QrzLogbookDialog(
+    initialApiKey: String,
+    onDismiss: () -> Unit,
+    onSave: (apiKey: String) -> Unit,
+) {
+    var apiKeyInput by remember { mutableStateOf(TextFieldValue(initialApiKey)) }
+    var testResult by remember { mutableStateOf<Boolean?>(null) }
+    var isTesting by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = TextPrimary,
+        unfocusedTextColor = TextPrimary,
+        cursorColor = Accent,
+        focusedBorderColor = Accent,
+        unfocusedBorderColor = BorderStrong,
+        focusedLabelColor = Accent,
+        unfocusedLabelColor = TextMuted,
+    )
+
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(BgSurface2)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.settings_qrz_logbook),
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 18.sp,
+            )
+            Text(
+                text = stringResource(R.string.settings_qrz_logbook_desc),
+                color = TextMuted,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+
+            OutlinedTextField(
+                value = apiKeyInput,
+                onValueChange = { apiKeyInput = it; testResult = null },
+                label = { Text(stringResource(R.string.settings_api_key)) },
+                placeholder = { Text(stringResource(R.string.settings_qrz_api_key_hint), color = TextFaint) },
+                singleLine = true,
+                colors = fieldColors,
+                textStyle = TextStyle(fontSize = 14.sp),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            // Test Connection
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                TextButton(
+                    onClick = {
+                        // Write the typed key so the STATUS test uses the current input.
+                        GeneralVariables.qrzApiKey = apiKeyInput.text.trim()
+                        isTesting = true
+                        testResult = null
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                ThirdPartyService.CheckQRZConnection()
+                            }
+                            testResult = result
+                            isTesting = false
+                        }
+                    },
+                    enabled = !isTesting,
+                ) {
+                    Text(
+                        text = stringResource(R.string.common_test_connection),
+                        color = if (isTesting) TextFaint else Accent,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                if (isTesting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .width(16.dp)
+                            .height(16.dp),
+                        strokeWidth = 2.dp,
+                        color = Accent,
+                    )
+                }
+                if (testResult != null) {
+                    Text(
+                        text = if (testResult == true) stringResource(R.string.common_pass)
+                        else stringResource(R.string.common_fail),
+                        color = if (testResult == true) StatusConfirmed else StatusBad,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.action_cancel), color = TextMuted)
+                }
+                TextButton(
+                    onClick = { onSave(apiKeyInput.text.trim()) },
+                ) {
+                    Text(stringResource(R.string.action_save), color = Accent, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
     }
 }
 
