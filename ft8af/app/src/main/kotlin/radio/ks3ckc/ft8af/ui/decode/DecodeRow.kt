@@ -110,7 +110,7 @@ fun DecodeRow(
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer {
-                alpha = entryAnim.value * (if (isInQsoWithOther) 0.55f else 1f)
+                alpha = entryAnim.value * decodeRowDimAlpha(isInQsoWithOther)
                 translationY = (1f - entryAnim.value) * -12f
             }
             .padding(horizontal = 12.dp, vertical = 3.dp)
@@ -249,12 +249,12 @@ fun DecodeRow(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         radio.ks3ckc.ft8af.ui.components.FT8AFIcons.Globe(
-                            color = TextDim,
+                            color = TextFaint,
                             size = 12.dp,
                         )
                         Text(
                             text = locationText,
-                            color = TextDim,
+                            color = TextFaint,
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.Medium,
                         )
@@ -264,6 +264,15 @@ fun DecodeRow(
         }
     }
 }
+
+/**
+ * Alpha applied to a decode row. Rows for stations mid-QSO with a third party
+ * ("noise" when the operator is scanning for someone to call) are de-emphasized
+ * but kept readable; everything else renders at full opacity. See issue #332 —
+ * the old 0.55 floor stacked on already-muted greys was too dark for some users.
+ */
+internal fun decodeRowDimAlpha(isInQsoWithOther: Boolean): Float =
+    if (isInQsoWithOther) 0.8f else 1f
 
 private fun formatTimeAgo(utcMillis: Long, nowMillis: Long): String {
     val diff = ((nowMillis - utcMillis) / 1000L).coerceAtLeast(0)
