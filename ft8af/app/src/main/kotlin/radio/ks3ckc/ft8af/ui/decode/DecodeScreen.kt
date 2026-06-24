@@ -66,6 +66,14 @@ fun DecodeScreen(
     val filterOptions = listOf("All", "CQ Calls", "CQ POTA", "New DXCC", "Needed", "For Me")
     val selectedFilter by mainViewModel.decodeFilter.observeAsState("All")
 
+    // Couple the "CQ POTA" display filter to Hunt: while it's selected, the auto-call
+    // path (FT8TransmitSignal) restricts itself to POTA CQs and won't call general
+    // stations. decodeFilter is only ever mutated from this screen, so syncing here on
+    // every change — including the reset to "All" — keeps the flag accurate (issue #333).
+    LaunchedEffect(selectedFilter) {
+        GeneralVariables.huntPotaOnly = selectedFilter == "CQ POTA"
+    }
+
     // Keep the POTA spots cache warm while the user is browsing decodes so the
     // CQ POTA filter and the green POTA pill on spotted activators work even
     // without visiting the POTA tab. Ref-counted with the POTA screen.
@@ -452,17 +460,9 @@ internal fun filterMessages(
 
     return when (filter) {
         "CQ Calls" -> base.filter { it.checkIsCQ() }
-        "CQ POTA" -> base.filter {
-            // Match three signals: (1) explicit "POTA" suffix on a CQ, (2) any CQ from a
-            // station currently spotted on pota.app (activators often drop the suffix to
-            // save chars), (3) free-text fragments like "CQ POT" that decoders garble
-            // when the activator's call is long.
-            it.checkIsCQ() && (
-                it.modifier == "POTA" ||
-                    radio.ks3ckc.ft8af.pota.PotaSpotsRepository.parkRefFor(it.callsignFrom) != null ||
-                    (it.callsignTo?.startsWith("CQ POT", ignoreCase = true) == true)
-                )
-        }
+        // Same predicate the Hunt auto-call path uses (PotaCqClassifier), so selecting
+        // this filter and hunting agree on who counts as a POTA station — see issue #333.
+        "CQ POTA" -> base.filter { radio.ks3ckc.ft8af.pota.PotaCqClassifier.isPotaCq(it) }
         "New DXCC" -> base.filter { it.checkIsCQ() && it.fromDxcc }
         "Needed" -> base.filter {
             !it.isQSL_Callsign &&

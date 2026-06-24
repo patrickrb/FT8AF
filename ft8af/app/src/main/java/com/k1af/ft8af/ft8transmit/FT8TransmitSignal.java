@@ -1199,6 +1199,9 @@ public class FT8TransmitSignal {
         for (int i = messages.size() - 1; i >= 0; i--) {
             Ft8Message msg = messages.get(i);
             if (isExcludeMessage(msg)) continue;// check if this is an excluded message
+            // POTA-only Hunt ("CQ POTA" filter): never auto-call a non-POTA CQ (issue #333)
+            if (huntFilterExcludes(GeneralVariables.huntPotaOnly,
+                    radio.ks3ckc.ft8af.pota.PotaCqClassifier.isPotaCq(msg))) continue;
 
             // is CQing, not already worked, not myself, and either Hunt mode is on
             // (auto-answer any CQ) or this is a followed callsign we auto-call
@@ -1619,6 +1622,16 @@ public class FT8TransmitSignal {
     }
 
     /**
+     * Whether the POTA-only Hunt filter excludes this CQ. When the operator has the
+     * "CQ POTA" decode filter active ({@code huntPotaOnly} mirrors it), Hunt must skip
+     * any CQ that isn't a POTA CQ so it never auto-calls a general (non-POTA) station.
+     * Shared by both auto-call scans so they agree on who's eligible. Issue #333.
+     */
+    static boolean huntFilterExcludes(boolean huntPotaOnly, boolean isPotaCq) {
+        return huntPotaOnly && !isPotaCq;
+    }
+
+    /**
      * Check watch list for active CQ messages that are not my current target callsign.
      *
      * @param messages watched message list
@@ -1641,6 +1654,12 @@ public class FT8TransmitSignal {
             }
             // not CQ, ignore
             if (!ft8Message.checkIsCQ()) {
+                continue;
+            }
+            // POTA-only Hunt ("CQ POTA" filter): the give-up fallback must also skip
+            // non-POTA CQs so it never re-targets a general station (issue #333).
+            if (huntFilterExcludes(GeneralVariables.huntPotaOnly,
+                    radio.ks3ckc.ft8af.pota.PotaCqClassifier.isPotaCq(ft8Message))) {
                 continue;
             }
             // With Hunt off but auto-call-follow on, only auto-call *followed* callsigns —
