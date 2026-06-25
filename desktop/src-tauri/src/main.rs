@@ -102,6 +102,11 @@ fn select_rig(state: State<AppState>, config: RigConfig) {
 }
 
 #[tauri::command]
+fn disconnect_rig(state: State<AppState>) {
+    state.engine.send(EngineCommand::DisconnectRig);
+}
+
+#[tauri::command]
 fn refresh_status(state: State<AppState>) {
     state.engine.send(EngineCommand::RefreshStatus);
 }
@@ -238,6 +243,7 @@ fn main() {
             set_input_device,
             set_output_device,
             select_rig,
+            disconnect_rig,
             refresh_status,
             resync_time,
             start_cq,

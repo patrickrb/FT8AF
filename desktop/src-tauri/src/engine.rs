@@ -105,6 +105,9 @@ pub enum EngineCommand {
     SetInputDevice(Option<String>),
     SetOutputDevice(Option<String>),
     SelectRig(RigConfig),
+    /// Drop the live rig connection for this session (CAT/PTT released). Leaves
+    /// the saved rig config intact so Connect — or the next launch — reconnects.
+    DisconnectRig,
     StartCq,
     Answer(AnswerArgs),
     /// Operator manually selects which QSO message to transmit next.
@@ -804,6 +807,23 @@ impl Engine {
                     let _ = self.db.set_config("rig_config", &json);
                 }
                 self.select_rig(cfg);
+            }
+            EngineCommand::DisconnectRig => {
+                // Stop any in-flight TX and drop PTT *before* dropping the rig:
+                // set_ptt() only sends the CAT un-key when the rig is still
+                // connected, so tearing the transport down first could leave the
+                // radio keyed. Also stop CQ/QSO so we don't try to re-key a
+                // disconnected rig on the next slot.
+                self.qso.stop();
+                self.tx_parity = None;
+                self.finalize_tx();
+                self.publish_tx_state();
+                // Now drop the connection (runs the rig's close/cleanup); keep the
+                // saved config so reconnecting is one click away.
+                self.rig = None;
+                self.ptt = false;
+                self.emit(EngineEvent::Info("rig disconnected".into()));
+                self.publish_rig_status();
             }
             EngineCommand::StartCq => {
                 self.tx_parity = None;
