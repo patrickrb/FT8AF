@@ -73,6 +73,8 @@ export default function App() {
   const [status, setStatus] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [txFreq, setTxFreq] = useState(1500);
+  const [txGain, setTxGain] = useState(90); // TX level as a percentage (0–100)
+  const [rigLabel, setRigLabel] = useState(""); // optional display-name override
   const [bands, setBands] = useState<BandInfo[]>([]);
   const [dialHz, setDialHz] = useState<number>(14074000);
 
@@ -102,6 +104,12 @@ export default function App() {
     });
     api.getConfig("base_freq").then((v) => {
       if (v) setTxFreq(parseInt(v, 10));
+    });
+    api.getConfig("tx_gain").then((v) => {
+      if (v) setTxGain(Math.round(parseFloat(v) * 100));
+    });
+    api.getConfig("rig_label").then((v) => {
+      if (v) setRigLabel(v);
     });
     return () => {
       cancelled = true;
@@ -185,6 +193,12 @@ export default function App() {
         rig={rig}
         clock={clock}
         audio={audio}
+        rigLabel={rigLabel}
+        txGain={txGain}
+        onTxGain={(v) => {
+          setTxGain(v);
+          api.setTxGain(v / 100);
+        }}
       />
       <div className="tabs">
         {(["decode", "log", "settings"] as Tab[]).map((t) => (
@@ -208,7 +222,16 @@ export default function App() {
           />
         )}
         {tab === "log" && <LogScreen />}
-        {tab === "settings" && <SettingsScreen onStatus={setStatus} clock={clock} />}
+        {tab === "settings" && (
+          <SettingsScreen
+            onStatus={setStatus}
+            clock={clock}
+            onRigLabel={(v) => {
+              setRigLabel(v);
+              api.setConfig("rig_label", v);
+            }}
+          />
+        )}
       </div>
       <TxBar
         txState={txState}
@@ -232,8 +255,11 @@ function TopBar(props: {
   rig: RigStatusEvent | null;
   clock: ClockSyncEvent | null;
   audio: { db: number; silent: boolean } | null;
+  rigLabel: string;
+  txGain: number;
+  onTxGain: (v: number) => void;
 }) {
-  const { cycle, decoding, onToggleDecode, bands, dialHz, onBand, rig, clock, audio } = props;
+  const { cycle, decoding, onToggleDecode, bands, dialHz, onBand, rig, clock, audio, rigLabel, txGain, onTxGain } = props;
   const utc = cycle ? new Date(cycle.utc_ms).toISOString().substring(11, 19) : "--:--:--";
   const pct = cycle ? (cycle.ms_into_cycle / 15000) * 100 : 0;
   return (
@@ -246,6 +272,21 @@ function TopBar(props: {
       </div>
       <span className="seq">seq {cycle?.sequential ?? "-"}</span>
       <div className="spacer" />
+      <span className="tx-level" title="TX output level (drive) — lower until ALC stops pinning">
+        <span className="muted">TX</span>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={txGain}
+          onChange={(e) => onTxGain(parseInt(e.target.value, 10))}
+          style={{ width: 90 }}
+        />
+        <span className="muted" style={{ fontVariantNumeric: "tabular-nums", minWidth: 34, textAlign: "right" }}>
+          {txGain}%
+        </span>
+      </span>
       <select value={dialHz} onChange={(e) => onBand(parseInt(e.target.value, 10))}>
         {bands.map((b) => (
           <option key={b.name} value={b.dial_hz}>
@@ -254,7 +295,7 @@ function TopBar(props: {
         ))}
       </select>
       <span className="muted">
-        {rig?.connected ? `rig: ${rig.model}` : "no rig"}
+        {rig?.connected ? `rig: ${rigLabel || rig.model}` : "no rig"}
         {rig?.ptt ? " · PTT" : ""}
       </span>
       <AudioBadge decoding={decoding} audio={audio} />
@@ -551,9 +592,14 @@ function LogScreen() {
   );
 }
 
-function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSyncEvent | null }) {
-  const { onStatus, clock } = props;
+function SettingsScreen(props: {
+  onStatus: (s: string) => void;
+  clock: ClockSyncEvent | null;
+  onRigLabel: (v: string) => void;
+}) {
+  const { onStatus, clock, onRigLabel } = props;
   const [call, setCall] = useState("");
+  const [rigLabel, setRigLabel] = useState("");
   const [grid, setGrid] = useState("");
   const [inputs, setInputs] = useState<AudioDevice[]>([]);
   const [outputs, setOutputs] = useState<AudioDevice[]>([]);
@@ -562,8 +608,6 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
   const [baseFreq, setBaseFreq] = useState(1500);
-  // TX output level as a percentage (0–100); backend gain = pct/100.
-  const [txGain, setTxGain] = useState(90);
   const [rigCfg, setRigCfg] = useState<RigConfig>({
     backend: "hamlib",
     model: "none",
@@ -588,9 +632,6 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
     api.getConfig("input_device").then((v) => v && setInput(v));
     api.getConfig("output_device").then((v) => v && setOutput(v));
     api.getConfig("base_freq").then((v) => v && setBaseFreq(parseInt(v, 10)));
-    api.getConfig("tx_gain").then((v) => {
-      if (v) setTxGain(Math.round(parseFloat(v) * 100));
-    });
     api.getConfig("rig_config").then((v) => {
       if (v) {
         try {
@@ -600,6 +641,7 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
         }
       }
     });
+    api.getConfig("rig_label").then((v) => v && setRigLabel(v));
   }, []);
 
   const refreshPorts = () => api.listSerialPorts().then(setPorts);
@@ -727,32 +769,28 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
               }}
             />
           </div>
-          <div className="field">
-            <label>TX level (drive): {txGain}%</label>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={txGain}
-              onChange={(e) => {
-                const v = parseInt(e.target.value, 10);
-                setTxGain(v);
-                api.setTxGain(v / 100);
-              }}
-            />
-            <span className="muted" style={{ display: "block", marginTop: 4 }}>
-              Output drive into the soundcard/USB audio (e.g. QMX). On desktop
-              there's no OS media-volume tie-in, so set the on-air level here —
-              lower it until ALC stops pinning.
-            </span>
-          </div>
         </div>
       </div>
 
       <div className="panel">
         <h3>Rig control</h3>
         <div className="col">
+          <div className="field">
+            <label>Display name (optional)</label>
+            <input
+              value={rigLabel}
+              onChange={(e) => {
+                setRigLabel(e.target.value);
+                onRigLabel(e.target.value);
+              }}
+              placeholder="e.g. Flex 6400"
+            />
+            <span className="muted" style={{ display: "block", marginTop: 4 }}>
+              Shown in the top bar instead of the CAT model. Useful when connecting
+              a radio through an emulator (e.g. a Flex via SmartSDR CAT reports as
+              Kenwood TS-2000). Leave blank to show the detected model.
+            </span>
+          </div>
           <div className="field">
             <label>Backend</label>
             <select
@@ -972,6 +1010,14 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
             }}
           >
             Connect rig
+          </button>
+          <button
+            onClick={() => {
+              api.disconnectRig();
+              onStatus("Rig disconnected");
+            }}
+          >
+            Disconnect
           </button>
         </div>
       </div>
