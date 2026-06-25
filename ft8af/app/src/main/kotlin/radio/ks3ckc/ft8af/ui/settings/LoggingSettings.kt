@@ -521,6 +521,15 @@ private fun QrzLogbookDialog(
     var isTesting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
+    // Test Connection writes the typed key into GeneralVariables.qrzApiKey so the
+    // STATUS call uses it. If the user dismisses without saving, that in-memory key
+    // would otherwise persist and could drive real uploads even though it was never
+    // committed. Restore the persisted value on every dismiss path (back/outside/Cancel).
+    val handleDismiss = {
+        GeneralVariables.qrzApiKey = initialApiKey
+        onDismiss()
+    }
+
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = TextPrimary,
         unfocusedTextColor = TextPrimary,
@@ -531,7 +540,7 @@ private fun QrzLogbookDialog(
         unfocusedLabelColor = TextMuted,
     )
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = handleDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -616,7 +625,7 @@ private fun QrzLogbookDialog(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = onDismiss) {
+                TextButton(onClick = handleDismiss) {
                     Text(stringResource(R.string.action_cancel), color = TextMuted)
                 }
                 TextButton(
