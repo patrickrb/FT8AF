@@ -36,6 +36,14 @@ const TX_LATEST_MS: i64 = TX_SLACK_MS - PTT_DELAY_MS as i64;
 // 13.2 s keeps a comfortable margin above the 12.64 s waveform end.
 const DECODE_AT_MS: i64 = 13_200;
 const DEFAULT_TX_AUDIO_HZ: i32 = 1_500;
+// Default TX output level (0.0–1.0). Slightly below full scale so a fresh
+// install doesn't overdrive the soundcard/ALC before the operator sets it.
+const DEFAULT_TX_GAIN: f32 = 0.9;
+
+/// Clamp a requested TX gain into the valid 0.0–1.0 range (full scale).
+fn clamp_tx_gain(g: f32) -> f32 {
+    g.clamp(0.0, 1.0)
+}
 const WF_FFT_SIZE: usize = 2048; // ~5.86 Hz/bin at 12 kHz
 const WF_AVG: usize = 6; // averaged FFT segments per row (Welch) to smooth the noise floor
 const WF_STEP: usize = WF_FFT_SIZE / 2; // 50% overlap between averaged segments
@@ -61,6 +69,8 @@ pub enum EngineCommand {
     SetStation { call: String, grid: String },
     SetBand(u64),
     SetBaseFreq(i32),
+    /// TX output level, 0.0–1.0 (drive into the soundcard/USB audio path).
+    SetTxGain(f32),
     SetInputDevice(Option<String>),
     SetOutputDevice(Option<String>),
     SelectRig(RigConfig),
@@ -205,6 +215,8 @@ struct Engine {
     decoding: bool,
     dial_hz: u64,
     tx_audio_hz: i32,
+    /// TX output level (0.0–1.0) applied to the waveform before playback.
+    tx_gain: f32,
     /// Slot id (rx-corrected clock) most recently handed to the decode worker.
     /// Guards the once-per-slot early decode trigger in the run loop.
     last_decoded_slot: i64,
@@ -246,6 +258,11 @@ impl Engine {
             .get_config("base_freq")
             .and_then(|s| s.parse().ok())
             .unwrap_or(DEFAULT_TX_AUDIO_HZ);
+        let tx_gain = db
+            .get_config("tx_gain")
+            .and_then(|s| s.parse::<f32>().ok())
+            .map(clamp_tx_gain)
+            .unwrap_or(DEFAULT_TX_GAIN);
         // Restore the last NTP offset so DT is roughly right immediately, before
         // the first fresh sync of this session lands. Treated as already-synced.
         let saved_offset: Option<i64> = db.get_config("clock_offset_ms").and_then(|s| s.parse().ok());
@@ -297,6 +314,7 @@ impl Engine {
             decoding: false,
             dial_hz,
             tx_audio_hz,
+            tx_gain,
             last_decoded_slot: -1,
             rx_offset_ms,
             last_tick_ms: 0,
@@ -511,7 +529,7 @@ impl Engine {
         // the rig, so PTT isn't held through it. On a weak CPU this resample is
         // hundreds of ms; running it after PTT is what produced the long
         // keyed-but-silent gap reported on the Inovato Quadra.
-        let mut prepared = match output::prepare(self.output_device.as_deref(), &signal, 0.9) {
+        let mut prepared = match output::prepare(self.output_device.as_deref(), &signal, self.tx_gain) {
             Ok(p) => p,
             Err(e) => {
                 self.emit(EngineEvent::Error(format!("playback failed: {e}")));
@@ -702,6 +720,10 @@ impl Engine {
                 self.tx_audio_hz = hz.clamp(200, 3000);
                 let _ = self.db.set_config("base_freq", &self.tx_audio_hz.to_string());
             }
+            EngineCommand::SetTxGain(g) => {
+                self.tx_gain = clamp_tx_gain(g);
+                let _ = self.db.set_config("tx_gain", &self.tx_gain.to_string());
+            }
             EngineCommand::SetInputDevice(name) => {
                 self.input_device = name.clone();
                 let _ = self.db.set_config("input_device", name.as_deref().unwrap_or(""));
@@ -814,5 +836,17 @@ impl Engine {
             }
         }
         self.publish_rig_status();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clamp_tx_gain;
+
+    #[test]
+    fn tx_gain_clamps_to_unit_range() {
+        assert_eq!(clamp_tx_gain(0.5), 0.5); // in range, untouched
+        assert_eq!(clamp_tx_gain(1.4), 1.0); // never overdrives past full scale
+        assert_eq!(clamp_tx_gain(-0.2), 0.0); // never negative (phase flip / garbage)
     }
 }

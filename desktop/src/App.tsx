@@ -512,6 +512,8 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
   const [baseFreq, setBaseFreq] = useState(1500);
+  // TX output level as a percentage (0–100); backend gain = pct/100.
+  const [txGain, setTxGain] = useState(90);
   const [rigCfg, setRigCfg] = useState<RigConfig>({
     backend: "hamlib",
     model: "none",
@@ -536,6 +538,9 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
     api.getConfig("input_device").then((v) => v && setInput(v));
     api.getConfig("output_device").then((v) => v && setOutput(v));
     api.getConfig("base_freq").then((v) => v && setBaseFreq(parseInt(v, 10)));
+    api.getConfig("tx_gain").then((v) => {
+      if (v) setTxGain(Math.round(parseFloat(v) * 100));
+    });
     api.getConfig("rig_config").then((v) => {
       if (v) {
         try {
@@ -656,6 +661,26 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
                 api.setBaseFreq(v);
               }}
             />
+          </div>
+          <div className="field">
+            <label>TX level (drive): {txGain}%</label>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={txGain}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                setTxGain(v);
+                api.setTxGain(v / 100);
+              }}
+            />
+            <span className="muted" style={{ display: "block", marginTop: 4 }}>
+              Output drive into the soundcard/USB audio (e.g. QMX). On desktop
+              there's no OS media-volume tie-in, so set the on-air level here —
+              lower it until ALC stops pinning.
+            </span>
           </div>
         </div>
       </div>
