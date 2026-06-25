@@ -221,6 +221,10 @@ struct Engine {
     /// results back into this loop.
     cmd_tx: Sender<EngineCommand>,
     ptt: bool,
+    /// In-flight TX playback, if any. Held on this thread (the cpal stream is
+    /// `!Send`); polled each loop tick so completion drops PTT, and dropped to
+    /// stop audio immediately on Stop TX.
+    tx_playback: Option<output::PreparedTx>,
     // live waterfall FFT
     fft: Arc<dyn Fft<f32>>,
     hann: Vec<f32>,
@@ -301,6 +305,7 @@ impl Engine {
             time_synced: saved_offset.is_some(),
             cmd_tx,
             ptt: false,
+            tx_playback: None,
             fft,
             hann,
             wf_floor_db: -60.0,
@@ -372,6 +377,16 @@ impl Engine {
                 self.handle_decoded(msgs, slot_id);
             }
 
+            // Drop PTT as soon as the TX waveform finishes clocking out (or a
+            // stalled device trips the deadline). Polling here — rather than
+            // blocking inside `transmit` — is what lets Stop TX take effect
+            // mid-transmission instead of at the end of the cycle.
+            if let Some(pb) = self.tx_playback.as_ref() {
+                if pb.is_done() || pb.timed_out() {
+                    self.finalize_tx();
+                }
+            }
+
             // Live scrolling waterfall: one spectrum row per ~100 ms tick.
             if self.decoding {
                 self.emit_waterfall_row();
@@ -431,7 +446,7 @@ impl Engine {
             }
         }
         self.maybe_transmit(slot_id);
-        self.publish_tx_state(false);
+        self.publish_tx_state();
     }
 
     /// Key up this slot's QSO message if we're armed, it's our turn, and the
@@ -461,7 +476,7 @@ impl Engine {
         self.tx_parity = Some(parity);
         self.txed_slot = slot_id;
         if let Some(msg) = self.qso.tx_message().map(|s| s.to_string()) {
-            self.transmit(&msg);
+            self.start_transmit(&msg);
         }
     }
 
@@ -475,7 +490,15 @@ impl Engine {
         self.cur_slot().rem_euclid(2)
     }
 
-    fn transmit(&mut self, message: &str) {
+    /// Begin transmitting `message`, returning immediately. Playback runs off the
+    /// loop (in `tx_playback`) so the engine keeps draining commands — that's what
+    /// makes Stop TX able to interrupt mid-transmission. PTT is dropped later, when
+    /// the run loop sees the playback finish (or on Stop TX).
+    fn start_transmit(&mut self, message: &str) {
+        // Never key a second transmission over a live one.
+        if self.tx_playback.is_some() {
+            return;
+        }
         let signal = match crate::dsp::encode::generate_ft8(message, self.tx_audio_hz as f32, SAMPLE_RATE) {
             Some(s) => s,
             None => {
@@ -484,22 +507,45 @@ impl Engine {
             }
         };
 
+        // Do the slow work — device open + full-buffer resample — BEFORE keying
+        // the rig, so PTT isn't held through it. On a weak CPU this resample is
+        // hundreds of ms; running it after PTT is what produced the long
+        // keyed-but-silent gap reported on the Inovato Quadra.
+        let mut prepared = match output::prepare(self.output_device.as_deref(), &signal, 0.9) {
+            Ok(p) => p,
+            Err(e) => {
+                self.emit(EngineEvent::Error(format!("playback failed: {e}")));
+                return;
+            }
+        };
+
+        // Key up, let the rig's T/R relay settle, then start clocking samples.
         self.set_ptt(true);
-        self.publish_tx_state(true);
         std::thread::sleep(Duration::from_millis(PTT_DELAY_MS));
 
         // Clip leading audio only if we'd overrun the cycle (CLAUDE.md gotcha:
-        // ms_late = max(0, into_cycle - 2360), NOT into_cycle % 15000).
+        // ms_late = max(0, into_cycle - 2360), NOT into_cycle % 15000). Computed
+        // here, right before audio starts, so it reflects the real lateness after
+        // the PTT settle — `maybe_transmit`'s window check keeps this at 0 in
+        // normal operation.
         let into_cycle = self.now().rem_euclid(CYCLE_MS);
         let ms_late = (into_cycle - TX_SLACK_MS).max(0);
-        let skip = (ms_late * SAMPLE_RATE as i64 / 1000) as usize;
-        let clipped = if skip < signal.len() { &signal[skip..] } else { &[] };
-
-        if let Err(e) = output::play_blocking(self.output_device.as_deref(), clipped, 0.9) {
+        if let Err(e) = prepared.start(ms_late) {
             self.emit(EngineEvent::Error(format!("playback failed: {e}")));
+            self.set_ptt(false);
+            return;
         }
+        self.tx_playback = Some(prepared);
+        self.publish_tx_state();
+    }
 
-        self.set_ptt(false);
+    /// Stop the in-flight transmission (if any): dropping the handle halts the
+    /// cpal stream immediately, then PTT goes down. Safe to call when not TXing.
+    fn finalize_tx(&mut self) {
+        if self.tx_playback.take().is_some() {
+            self.set_ptt(false);
+            self.publish_tx_state();
+        }
     }
 
     fn set_ptt(&mut self, on: bool) {
@@ -593,9 +639,11 @@ impl Engine {
         self.emit(EngineEvent::Decoded(ui));
     }
 
-    fn publish_tx_state(&self, transmitting: bool) {
+    fn publish_tx_state(&self) {
         self.emit(EngineEvent::TxState(TxStateEvent {
-            transmitting,
+            // Derived from the live playback handle so the badge can't get stuck:
+            // it's TX exactly while a transmission is clocking out.
+            transmitting: self.tx_playback.is_some(),
             message: self.qso.tx_message().map(|s| s.to_string()),
             status: self.qso.status(),
         }));
@@ -677,7 +725,7 @@ impl Engine {
                 // Start CQ this very slot if we're still inside the window;
                 // otherwise the first transmission lands at the next free slot.
                 self.maybe_transmit(self.cur_slot());
-                self.publish_tx_state(false);
+                self.publish_tx_state();
             }
             EngineCommand::Answer(args) => {
                 let msg = DecodedMessage {
@@ -692,28 +740,30 @@ impl Engine {
                 self.tx_parity = Some(self.cur_parity());
                 self.qso.answer(&msg);
                 self.maybe_transmit(self.cur_slot());
-                self.publish_tx_state(false);
+                self.publish_tx_state();
             }
             EngineCommand::SetStage(stage) => {
                 self.tx_parity = None;
                 self.qso.set_stage(stage);
                 self.maybe_transmit(self.cur_slot());
-                self.publish_tx_state(false);
+                self.publish_tx_state();
             }
             EngineCommand::StopTx => {
                 self.qso.stop();
                 self.tx_parity = None;
-                self.publish_tx_state(false);
+                // Halt audio + drop PTT now, not at the end of the cycle.
+                self.finalize_tx();
+                self.publish_tx_state();
             }
             EngineCommand::FreeText(text) => {
                 self.tx_parity = None;
                 self.qso.set_free_text(&text);
                 self.maybe_transmit(self.cur_slot());
-                self.publish_tx_state(false);
+                self.publish_tx_state();
             }
             EngineCommand::RefreshStatus => {
                 self.publish_rig_status();
-                self.publish_tx_state(self.ptt);
+                self.publish_tx_state();
                 self.publish_clock_sync();
             }
             EngineCommand::SetClockOffset(offset_ms) => {
