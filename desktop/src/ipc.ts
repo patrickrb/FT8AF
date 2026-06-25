@@ -125,7 +125,7 @@ export type EngineEvent =
   | { type: "clock_sync"; data: ClockSyncEvent }
   | { type: "qso_completed"; data: QsoRecord }
   | { type: "waterfall"; data: { bins: number[]; rows: number; cols: number; hz_per_col: number } }
-  | { type: "waterfall_row"; data: { bins: number[]; hz_per_col: number } }
+  | { type: "waterfall_row"; data: { bins: number[]; hz_per_col: number; boundary: boolean } }
   | { type: "info"; data: string }
   | { type: "error"; data: string };
 
