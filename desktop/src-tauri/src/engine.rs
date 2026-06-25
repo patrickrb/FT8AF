@@ -51,6 +51,21 @@ const WF_MAX_HZ: f32 = 3_500.0; // displayed top of the audio band (matches deco
 const WF_SPAN_DB: f32 = 26.0; // dB above the black point that maps to full brightness
 const WF_BLACK_OFFSET_DB: f32 = 4.0; // push the black point above the noise floor so noise stays dark
 
+/// True once per cycle, on the first waterfall row at/after a 15 s boundary on
+/// the rx-corrected clock, advancing `last_slot`. The live waterfall draws audio
+/// on real time while the decoder measures DT on the rx-corrected clock (shifted
+/// by capture latency), so the spectrum reads ahead of the DT; marking the cycle
+/// grid on the corrected clock gives both the same time reference.
+fn wf_boundary_row(corrected_now_ms: i64, last_slot: &mut i64) -> bool {
+    let slot = corrected_now_ms.div_euclid(CYCLE_MS);
+    if slot != *last_slot {
+        *last_slot = slot;
+        true
+    } else {
+        false
+    }
+}
+
 // --- messages crossing the channel boundary --------------------------------
 
 #[derive(Debug, Clone, Deserialize)]
@@ -152,6 +167,10 @@ pub struct WaterfallFrame {
 pub struct WaterfallRow {
     pub bins: Vec<u8>,
     pub hz_per_col: f32,
+    /// True on the first row at/after a 15 s cycle boundary (on the rx-corrected
+    /// clock the decoder measures DT against). The UI draws a grid line there so
+    /// the spectrum lines up with decode DT instead of reading ahead of it.
+    pub boundary: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -241,6 +260,7 @@ struct Engine {
     fft: Arc<dyn Fft<f32>>,
     hann: Vec<f32>,
     wf_floor_db: f32, // smoothed noise-floor estimate for auto color scaling
+    last_wf_slot: i64, // last cycle slot marked on the live waterfall (rx-corrected)
 }
 
 impl Engine {
@@ -327,6 +347,7 @@ impl Engine {
             fft,
             hann,
             wf_floor_db: -60.0,
+            last_wf_slot: -1,
         }
     }
 
@@ -628,7 +649,10 @@ impl Engine {
             let t = ((db - black_point) / WF_SPAN_DB).clamp(0.0, 1.0);
             bins[i] = (t * 255.0) as u8;
         }
-        self.emit(EngineEvent::WaterfallRow(WaterfallRow { bins, hz_per_col: bin_hz }));
+        // Mark this row if it's the first at/after a cycle boundary on the same
+        // rx-corrected clock the decoder uses, so the grid line aligns with DT.
+        let boundary = wf_boundary_row(self.now() - self.rx_offset_ms, &mut self.last_wf_slot);
+        self.emit(EngineEvent::WaterfallRow(WaterfallRow { bins, hz_per_col: bin_hz, boundary }));
     }
 
     fn publish_decodes(&self, decoded: &[DecodedMessage]) {
@@ -841,12 +865,27 @@ impl Engine {
 
 #[cfg(test)]
 mod tests {
-    use super::clamp_tx_gain;
+    use super::{clamp_tx_gain, wf_boundary_row, CYCLE_MS};
 
     #[test]
     fn tx_gain_clamps_to_unit_range() {
         assert_eq!(clamp_tx_gain(0.5), 0.5); // in range, untouched
         assert_eq!(clamp_tx_gain(1.4), 1.0); // never overdrives past full scale
         assert_eq!(clamp_tx_gain(-0.2), 0.0); // never negative (phase flip / garbage)
+    }
+
+    #[test]
+    fn wf_boundary_fires_once_per_cycle() {
+        let mut last = -1;
+        // First call always marks (initial slot differs from the -1 sentinel).
+        assert!(wf_boundary_row(0, &mut last));
+        // Subsequent rows within the same 15 s slot do not re-mark.
+        assert!(!wf_boundary_row(100, &mut last));
+        assert!(!wf_boundary_row(CYCLE_MS - 1, &mut last));
+        // Crossing into the next slot marks exactly once.
+        assert!(wf_boundary_row(CYCLE_MS, &mut last));
+        assert!(!wf_boundary_row(CYCLE_MS + 500, &mut last));
+        // And again at the following boundary.
+        assert!(wf_boundary_row(2 * CYCLE_MS + 10, &mut last));
     }
 }

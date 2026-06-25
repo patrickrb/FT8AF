@@ -33,7 +33,7 @@ function registerWfCanvas(c: HTMLCanvasElement | null) {
   wfCanvas = c;
   if (c) c.height = WF_HEIGHT;
 }
-function drawWaterfallRow(bins: number[]) {
+function drawWaterfallRow(bins: number[], boundary = false) {
   const cv = wfCanvas;
   if (!cv || bins.length === 0) return;
   const cols = bins.length;
@@ -52,6 +52,13 @@ function drawWaterfallRow(bins: number[]) {
     img.data[i * 4 + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
+  // 15 s cycle grid line, on the same rx-corrected clock as decode DT: a faint
+  // overlay so the waterfall's timing reads against the cycle (and the DT)
+  // rather than appearing to run ahead of it.
+  if (boundary) {
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.fillRect(0, 0, cols, 1);
+  }
 }
 
 export default function App() {
@@ -128,7 +135,7 @@ export default function App() {
         setClock(e.data);
         break;
       case "waterfall_row":
-        drawWaterfallRow(e.data.bins);
+        drawWaterfallRow(e.data.bins, e.data.boundary);
         break;
       case "qso_completed":
         setStatus(`QSO logged: ${e.data.call} ${e.data.rst_sent}/${e.data.rst_rcvd}`);
