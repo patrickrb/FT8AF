@@ -97,7 +97,6 @@ import radio.ks3ckc.ft8af.theme.TextPrimary
 private enum class PotaSubTab(@StringRes val labelRes: Int) {
     ACTIVATE(R.string.pota_tab_activate),
     HUNT(R.string.pota_tab_hunt),
-    HISTORY(R.string.pota_tab_history),
 }
 
 @Composable
@@ -135,9 +134,8 @@ fun PotaScreen(mainViewModel: MainViewModel) {
         PotaTabHeader(subTab = subTab, onTabSelected = { subTab = it })
         Spacer(Modifier.height(10.dp))
         when (subTab) {
-            PotaSubTab.ACTIVATE -> ActivateTab()
+            PotaSubTab.ACTIVATE -> ActivateTab(onOpenActivation = { selectedActivation = it })
             PotaSubTab.HUNT -> HuntTab(mainViewModel)
-            PotaSubTab.HISTORY -> HistoryTab(onOpenActivation = { selectedActivation = it })
         }
     }
 }
@@ -185,11 +183,21 @@ private fun PotaTabHeader(subTab: PotaSubTab, onTabSelected: (PotaSubTab) -> Uni
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun ActivateTab() {
+private fun ActivateTab(onOpenActivation: (PotaActivation) -> Unit) {
     val activation by PotaSessionManager.currentActivation.collectAsStateWithLifecycle()
     val contacts by PotaSessionManager.activationQsos.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    // Past activations, surfaced inline below the Start Activation form so the
+    // per-park ADIF export (reached by tapping a row) is one tap from this
+    // landing tab instead of buried in a separate History tab. Reload whenever
+    // an activation starts/ends so a just-finished session appears immediately.
+    var history by remember { mutableStateOf<List<PotaActivation>>(emptyList()) }
+    LaunchedEffect(activation?.id, activation?.endedAtMs) {
+        history = withContext(Dispatchers.IO) { PotaSessionManager.history() }
+    }
+    val recent = remember(history) { historyForDisplay(history) }
     val parkRefs = rememberSaveable(
         saver = listSaver(
             save = { it.toList() },
@@ -225,94 +233,118 @@ private fun ActivateTab() {
     // FrequencyPickerSheet is hosted as a sibling overlay in FT8AFApp.
     Box(modifier = Modifier.fillMaxSize()) {
         if (activation == null) {
-            Column(
+            LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Card {
-                    SectionTitle(stringResource(R.string.pota_start_activation))
-                    Spacer(Modifier.height(8.dp))
-                    parkRefs.forEachIndexed { index, ref ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            OutlinedTextField(
-                                value = ref,
-                                onValueChange = { parkRefs[index] = it.uppercase().take(10) },
-                                label = { Text(stringResource(R.string.pota_park_reference_label)) },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
-                                trailingIcon = {
-                                    IconButton(onClick = {
-                                        pickerTargetIndex = index
-                                        showPicker = true
-                                    }) {
+                item(key = "start-card") {
+                    Card {
+                        SectionTitle(stringResource(R.string.pota_start_activation))
+                        Spacer(Modifier.height(8.dp))
+                        parkRefs.forEachIndexed { index, ref ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                OutlinedTextField(
+                                    value = ref,
+                                    onValueChange = { parkRefs[index] = it.uppercase().take(10) },
+                                    label = { Text(stringResource(R.string.pota_park_reference_label)) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+                                    trailingIcon = {
+                                        IconButton(onClick = {
+                                            pickerTargetIndex = index
+                                            showPicker = true
+                                        }) {
+                                            Icon(
+                                                Icons.Filled.Search,
+                                                contentDescription = stringResource(R.string.pota_search_parks),
+                                                tint = TextMuted,
+                                                modifier = Modifier.size(18.dp),
+                                            )
+                                        }
+                                    },
+                                    colors = textFieldColors(),
+                                    modifier = Modifier.weight(1f),
+                                )
+                                if (parkRefs.size > 1) {
+                                    IconButton(onClick = { parkRefs.removeAt(index) }) {
                                         Icon(
-                                            Icons.Filled.Search,
-                                            contentDescription = stringResource(R.string.pota_search_parks),
+                                            Icons.Filled.Close,
+                                            contentDescription = stringResource(R.string.pota_remove_park),
                                             tint = TextMuted,
                                             modifier = Modifier.size(18.dp),
                                         )
                                     }
-                                },
-                                colors = textFieldColors(),
-                                modifier = Modifier.weight(1f),
-                            )
-                            if (parkRefs.size > 1) {
-                                IconButton(onClick = { parkRefs.removeAt(index) }) {
-                                    Icon(
-                                        Icons.Filled.Close,
-                                        contentDescription = stringResource(R.string.pota_remove_park),
-                                        tint = TextMuted,
-                                        modifier = Modifier.size(18.dp),
-                                    )
                                 }
                             }
+                            if (index < parkRefs.lastIndex) Spacer(Modifier.height(4.dp))
                         }
-                        if (index < parkRefs.lastIndex) Spacer(Modifier.height(4.dp))
-                    }
-                    if (parkRefs.size < 10) {
-                        Spacer(Modifier.height(4.dp))
-                        OutlinedButton(
-                            onClick = { parkRefs.add("") },
+                        if (parkRefs.size < 10) {
+                            Spacer(Modifier.height(4.dp))
+                            OutlinedButton(
+                                onClick = { parkRefs.add("") },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(R.string.pota_add_park), color = TextPrimary, fontSize = 13.sp)
+                            }
+                        } else {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                stringResource(R.string.pota_max_parks_reached),
+                                color = TextMuted,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(start = 4.dp),
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = notes,
+                            onValueChange = { notes = it.take(120) },
+                            label = { Text(stringResource(R.string.pota_notes_optional_label)) },
+                            singleLine = true,
+                            colors = textFieldColors(),
                             modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(stringResource(R.string.pota_add_park), color = TextPrimary, fontSize = 13.sp)
-                        }
-                    } else {
-                        Spacer(Modifier.height(4.dp))
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                val started = PotaSessionManager.start(parkRefs, notes.ifBlank { null })
+                                if (started == null) {
+                                    Toast.makeText(context, context.getString(R.string.pota_enter_park_reference_first), Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, context.getString(R.string.pota_activating, started.parkRefsDisplay), Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BgApp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(stringResource(R.string.pota_start_activation), fontWeight = FontWeight.SemiBold) }
+                    }
+                }
+                item(key = "recent-header") {
+                    Text(
+                        stringResource(R.string.pota_tab_history),
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
+                if (recent.isEmpty()) {
+                    item(key = "recent-empty") {
                         Text(
-                            stringResource(R.string.pota_max_parks_reached),
+                            stringResource(R.string.pota_no_past_activations),
                             color = TextMuted,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             modifier = Modifier.padding(start = 4.dp),
                         )
                     }
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = notes,
-                        onValueChange = { notes = it.take(120) },
-                        label = { Text(stringResource(R.string.pota_notes_optional_label)) },
-                        singleLine = true,
-                        colors = textFieldColors(),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Button(
-                        onClick = {
-                            val started = PotaSessionManager.start(parkRefs, notes.ifBlank { null })
-                            if (started == null) {
-                                Toast.makeText(context, context.getString(R.string.pota_enter_park_reference_first), Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(context, context.getString(R.string.pota_activating, started.parkRefsDisplay), Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BgApp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text(stringResource(R.string.pota_start_activation), fontWeight = FontWeight.SemiBold) }
+                } else {
+                    items(recent, key = { it.id }) { row ->
+                        HistoryRow(row = row, onClick = { onOpenActivation(row) })
+                    }
                 }
             }
         } else {
@@ -635,37 +667,17 @@ private fun SpotRow(spot: PotaSpot, onClick: () -> Unit) {
 }
 
 // ---------------------------------------------------------------------------
-// History tab
+// History
 // ---------------------------------------------------------------------------
 
-@Composable
-private fun HistoryTab(onOpenActivation: (PotaActivation) -> Unit) {
-    var history by remember { mutableStateOf<List<PotaActivation>>(emptyList()) }
-    val activation by PotaSessionManager.currentActivation.collectAsStateWithLifecycle()
-
-    // Reload whenever activation state changes (start/end will appear here).
-    LaunchedEffect(activation?.id, activation?.endedAtMs) {
-        history = PotaSessionManager.history()
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        if (history.isEmpty()) {
-            Text(
-                stringResource(R.string.pota_no_past_activations),
-                color = TextMuted,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(8.dp),
-            )
-        }
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            items(history, key = { it.id }) { row ->
-                HistoryRow(row = row, onClick = { onOpenActivation(row) })
-            }
-        }
-    }
-}
+/**
+ * Past activations to list (newest first) below the Start Activation form.
+ * Drops any still-active row so the in-progress activation is never shown as
+ * "past", and sorts by start time so the ordering is deterministic regardless
+ * of how the DAO returned the rows.
+ */
+internal fun historyForDisplay(all: List<PotaActivation>): List<PotaActivation> =
+    all.filterNot { it.isActive }.sortedByDescending { it.startedAtMs }
 
 /** No usable ID token (never logged in, or the stored refresh token was revoked). */
 private class NotSignedInException : Exception("not signed in")
