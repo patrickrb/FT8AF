@@ -69,6 +69,7 @@ export default function App() {
   const [rig, setRig] = useState<RigStatusEvent | null>(null);
   const [clock, setClock] = useState<ClockSyncEvent | null>(null);
   const [decoding, setDecoding] = useState(false);
+  const [audio, setAudio] = useState<{ db: number; silent: boolean } | null>(null);
   const [status, setStatus] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [txFreq, setTxFreq] = useState(1500);
@@ -137,6 +138,9 @@ export default function App() {
       case "waterfall_row":
         drawWaterfallRow(e.data.bins, e.data.boundary);
         break;
+      case "input_level":
+        setAudio(e.data);
+        break;
       case "qso_completed":
         setStatus(`QSO logged: ${e.data.call} ${e.data.rst_sent}/${e.data.rst_rcvd}`);
         break;
@@ -153,6 +157,7 @@ export default function App() {
     if (decodingRef.current) {
       api.stopDecode();
       setDecoding(false);
+      setAudio(null); // no input meter while stopped
     } else {
       api.startDecode();
       setDecoding(true);
@@ -179,6 +184,7 @@ export default function App() {
         onBand={onBand}
         rig={rig}
         clock={clock}
+        audio={audio}
       />
       <div className="tabs">
         {(["decode", "log", "settings"] as Tab[]).map((t) => (
@@ -225,8 +231,9 @@ function TopBar(props: {
   onBand: (hz: number) => void;
   rig: RigStatusEvent | null;
   clock: ClockSyncEvent | null;
+  audio: { db: number; silent: boolean } | null;
 }) {
-  const { cycle, decoding, onToggleDecode, bands, dialHz, onBand, rig, clock } = props;
+  const { cycle, decoding, onToggleDecode, bands, dialHz, onBand, rig, clock, audio } = props;
   const utc = cycle ? new Date(cycle.utc_ms).toISOString().substring(11, 19) : "--:--:--";
   const pct = cycle ? (cycle.ms_into_cycle / 15000) * 100 : 0;
   return (
@@ -250,10 +257,46 @@ function TopBar(props: {
         {rig?.connected ? `rig: ${rig.model}` : "no rig"}
         {rig?.ptt ? " · PTT" : ""}
       </span>
+      <AudioBadge decoding={decoding} audio={audio} />
       <button className={decoding ? "danger" : "primary"} onClick={onToggleDecode}>
         {decoding ? "Stop" : "Start"} decode
       </button>
     </div>
+  );
+}
+
+// RX input-level indicator. Shows the captured level in dBFS while decoding, and
+// a clear "no audio" warning when the input is silent — the case where the source
+// (e.g. a DAX/soundcard channel) isn't actually routed and the waterfall is blank.
+function AudioBadge({
+  decoding,
+  audio,
+}: {
+  decoding: boolean;
+  audio: { db: number; silent: boolean } | null;
+}) {
+  if (!decoding) return null;
+  if (!audio) {
+    return <span className="muted" title="Waiting for the first input-level reading">audio …</span>;
+  }
+  if (audio.silent) {
+    return (
+      <span
+        style={{ color: "var(--tx)", fontVariantNumeric: "tabular-nums" }}
+        title="No audio is reaching the app. Check that the selected input device is the right one and that its source is routed (e.g. SmartSDR slice → DAX RX channel, soundcard input not muted)."
+      >
+        ⚠ no audio
+      </span>
+    );
+  }
+  return (
+    <span
+      className="muted"
+      style={{ fontVariantNumeric: "tabular-nums" }}
+      title="RX input level (dBFS) of the captured audio"
+    >
+      audio {audio.db.toFixed(0)} dB
+    </span>
   );
 }
 

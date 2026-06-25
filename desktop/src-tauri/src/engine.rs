@@ -50,6 +50,22 @@ const WF_STEP: usize = WF_FFT_SIZE / 2; // 50% overlap between averaged segments
 const WF_MAX_HZ: f32 = 3_500.0; // displayed top of the audio band (matches decoder f_max)
 const WF_SPAN_DB: f32 = 26.0; // dB above the black point that maps to full brightness
 const WF_BLACK_OFFSET_DB: f32 = 4.0; // push the black point above the noise floor so noise stays dark
+// Input RMS at/below this (dBFS) counts as silence — no audio reaching the app.
+// Real RX audio through a soundcard/DAX sits well above this even on a quiet band;
+// a fully-routed-but-silent virtual device floors near -100 dBFS.
+const SILENCE_DBFS: f32 = -75.0;
+
+/// RMS level of a mono buffer in dBFS (0 dB = full scale). Empty or all-zero
+/// input returns a large negative number rather than -inf, so the meter and the
+/// silence test stay finite.
+fn rms_dbfs(samples: &[f32]) -> f32 {
+    if samples.is_empty() {
+        return -120.0;
+    }
+    let sum_sq: f64 = samples.iter().map(|&s| (s as f64) * (s as f64)).sum();
+    let rms = (sum_sq / samples.len() as f64).sqrt();
+    (20.0 * (rms.max(1e-12)).log10()).max(-120.0) as f32
+}
 
 /// True once per cycle, on the first waterfall row at/after a 15 s boundary on
 /// the rx-corrected clock, advancing `last_slot`. The live waterfall draws audio
@@ -184,8 +200,21 @@ pub enum EngineEvent {
     QsoCompleted(QsoRecord),
     Waterfall(WaterfallFrame),
     WaterfallRow(WaterfallRow),
+    /// Periodic RX input level (~1/s while decoding) so the UI can show a meter
+    /// and warn when the captured audio is silent (e.g. the source/DAX channel
+    /// isn't routed) instead of leaving a mysteriously blank waterfall.
+    InputLevel(InputLevelEvent),
     Info(String),
     Error(String),
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InputLevelEvent {
+    /// RMS level of the recent capture in dBFS (≈ -100 for digital silence).
+    pub db: f32,
+    /// True when the level is at/below the silence floor while decoding — the
+    /// "no audio reaching the app" condition.
+    pub silent: bool,
 }
 
 /// Thread-safe handle for sending commands to the engine. Wraps the `Sender` in
@@ -387,6 +416,17 @@ impl Engine {
                     sequential: slot_id.rem_euclid(2),
                     ms_into_cycle: ms_into,
                 }));
+                // RX input level + silence warning, once we're capturing. Surfaces
+                // a dead source (e.g. DAX channel not routed) that otherwise looks
+                // like a broken waterfall.
+                if self.decoding {
+                    let recent = self.accum.peek_recent(SAMPLE_RATE as usize / 2); // ~0.5 s
+                    let db = rms_dbfs(&recent);
+                    self.emit(EngineEvent::InputLevel(InputLevelEvent {
+                        db,
+                        silent: db <= SILENCE_DBFS,
+                    }));
+                }
             }
 
             // Decode runs on a clock shifted later by the capture-latency
@@ -865,7 +905,25 @@ impl Engine {
 
 #[cfg(test)]
 mod tests {
-    use super::{clamp_tx_gain, wf_boundary_row, CYCLE_MS};
+    use super::{clamp_tx_gain, rms_dbfs, wf_boundary_row, CYCLE_MS, SILENCE_DBFS};
+
+    #[test]
+    fn rms_dbfs_flags_silence_and_signal() {
+        // Digital silence floors well below the silence threshold (not -inf).
+        let silence = vec![0.0f32; 6000];
+        let db_silent = rms_dbfs(&silence);
+        assert!(db_silent.is_finite());
+        assert!(db_silent <= SILENCE_DBFS, "silence {db_silent} should be ≤ {SILENCE_DBFS}");
+
+        // Empty buffer is treated as silence, never a panic or -inf.
+        assert!(rms_dbfs(&[]) <= SILENCE_DBFS);
+
+        // A half-scale full-amplitude square wave is ~ -6 dBFS — clearly "audio".
+        let signal = vec![0.5f32; 6000];
+        let db_signal = rms_dbfs(&signal);
+        assert!((db_signal - -6.02).abs() < 0.1, "0.5 RMS should be ~-6 dBFS, got {db_signal}");
+        assert!(db_signal > SILENCE_DBFS);
+    }
 
     #[test]
     fn tx_gain_clamps_to_unit_range() {
