@@ -21,6 +21,7 @@
     <string name="common_none">None</string>
     <string name="common_off">Off</string>
     <string name="common_not_configured">Not configured</string>
+    <string name="common_configured">Configured</string>
     <string name="common_not_connected">Not connected</string>
     <string name="common_pass">Pass</string>
     <string name="common_fail">Fail</string>
@@ -500,7 +501,10 @@
     <string name="settings_pskreporter">PSKReporter</string>
     <string name="settings_pskreporter_desc">Upload decoded spots to pskreporter.info</string>
     <string name="settings_qrz_com">QRZ.com</string>
-    <string name="settings_qrz_com_desc">Auto-upload QSOs to QRZ Logbook</string>
+    <string name="settings_qrz_com_desc">Auto-upload QSOs to QRZ Logbook (requires a Logbook API key)</string>
+    <string name="settings_qrz_logbook">QRZ Logbook</string>
+    <string name="settings_qrz_logbook_desc">Logbook API key from QRZ Logbook → Settings (not your account password).</string>
+    <string name="settings_qrz_api_key_hint">Your QRZ Logbook API key</string>
     <string name="settings_qrz_profile_lookup">QRZ Profile Lookup</string>
     <string name="settings_qrz_profile_lookup_desc">Username + password for QRZ XML API (avatars)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
