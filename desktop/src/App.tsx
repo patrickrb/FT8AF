@@ -106,7 +106,9 @@ export default function App() {
       if (v) setTxFreq(parseInt(v, 10));
     });
     api.getConfig("tx_gain").then((v) => {
-      if (v) setTxGain(Math.round(parseFloat(v) * 100));
+      if (v == null || v === "") return;
+      const pct = Math.round(parseFloat(v) * 100);
+      if (!Number.isNaN(pct)) setTxGain(pct); // keep a persisted 0% (not just falsy-skip)
     });
     api.getConfig("rig_label").then((v) => {
       if (v) setRigLabel(v);
@@ -276,6 +278,7 @@ function TopBar(props: {
         <span className="muted">TX</span>
         <input
           type="range"
+          aria-label="TX output level (drive), percent"
           min={0}
           max={100}
           step={1}
