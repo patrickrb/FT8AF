@@ -552,6 +552,21 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
     });
   }, []);
 
+  const refreshPorts = () => api.listSerialPorts().then(setPorts);
+
+  // Re-enumerate serial ports whenever a port-list backend becomes visible.
+  // Ports were previously read only once at mount, so a rig attached after
+  // launch — or Hamlib selected first, before its serial port was chosen —
+  // showed an empty/stale list. Switching to Hamlib (serial) or Direct serial
+  // now re-scans, so /dev/ttyACM0 (a QMX/QDX) appears without the
+  // select-Direct-then-Hamlib workaround.
+  const showsPortList =
+    rigCfg.backend === "serial" ||
+    (rigCfg.backend === "hamlib" && !rigCfg.hamlib_network);
+  useEffect(() => {
+    if (showsPortList) refreshPorts();
+  }, [showsPortList]);
+
   function saveStation() {
     api.setStation(call, grid);
     onStatus(`Station set: ${call} ${grid}`);
@@ -760,14 +775,19 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
                 <div className="row">
                   <div className="field">
                     <label>Serial port</label>
-                    <select value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
-                      <option value="">(none — e.g. Dummy)</option>
-                      {ports.map((p) => (
-                        <option key={p.name} value={p.name}>
-                          {p.name} ({p.kind})
-                        </option>
-                      ))}
-                    </select>
+                    <div className="row">
+                      <select value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
+                        <option value="">(none — e.g. Dummy)</option>
+                        {ports.map((p) => (
+                          <option key={p.name} value={p.name}>
+                            {p.name} ({p.kind})
+                          </option>
+                        ))}
+                      </select>
+                      <button type="button" title="Re-scan serial ports" onClick={refreshPorts}>
+                        ↻
+                      </button>
+                    </div>
                   </div>
                   <div className="field">
                     <label>Baud</label>
@@ -830,14 +850,19 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
               </div>
               <div className="field">
                 <label>Serial port</label>
-                <select value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
-                  <option value="">— select —</option>
-                  {ports.map((p) => (
-                    <option key={p.name} value={p.name}>
-                      {p.name} ({p.kind})
-                    </option>
-                  ))}
-                </select>
+                <div className="row">
+                  <select value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
+                    <option value="">— select —</option>
+                    {ports.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.name} ({p.kind})
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" title="Re-scan serial ports" onClick={refreshPorts}>
+                    ↻
+                  </button>
+                </div>
               </div>
               <div className="row">
                 <div className="field">
