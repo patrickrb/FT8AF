@@ -1199,8 +1199,11 @@ public class FT8TransmitSignal {
         for (int i = messages.size() - 1; i >= 0; i--) {
             Ft8Message msg = messages.get(i);
             if (isExcludeMessage(msg)) continue;// check if this is an excluded message
-            // POTA-only Hunt ("CQ POTA" filter): never auto-call a non-POTA CQ (issue #333)
-            if (huntFilterExcludes(GeneralVariables.huntPotaOnly,
+            // POTA-only Hunt ("CQ POTA" filter): never auto-call a non-POTA CQ (issue #333).
+            // Guard on the flag first so the spot/map lookup in isPotaCq() only runs when
+            // the filter is active (this scan runs every decode cycle).
+            if (GeneralVariables.huntPotaOnly
+                    && huntFilterExcludes(GeneralVariables.huntPotaOnly,
                     radio.ks3ckc.ft8af.pota.PotaCqClassifier.isPotaCq(msg))) continue;
 
             // is CQing, not already worked, not myself, and either Hunt mode is on
@@ -1658,7 +1661,9 @@ public class FT8TransmitSignal {
             }
             // POTA-only Hunt ("CQ POTA" filter): the give-up fallback must also skip
             // non-POTA CQs so it never re-targets a general station (issue #333).
-            if (huntFilterExcludes(GeneralVariables.huntPotaOnly,
+            // Guard on the flag first so isPotaCq()'s spot/map lookup only runs when active.
+            if (GeneralVariables.huntPotaOnly
+                    && huntFilterExcludes(GeneralVariables.huntPotaOnly,
                     radio.ks3ckc.ft8af.pota.PotaCqClassifier.isPotaCq(ft8Message))) {
                 continue;
             }
