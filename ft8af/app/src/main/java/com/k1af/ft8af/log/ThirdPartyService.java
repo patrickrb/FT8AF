@@ -111,17 +111,11 @@ public class ThirdPartyService {
                     , qslRecord.getMode()));
         }
 
-        if (String.valueOf(qslRecord.getSendReport()) != null) {
-            logStr.append(String.format("<rst_sent:%d>%s "
-                    , String.valueOf(qslRecord.getSendReport()).length()
-                    , String.valueOf(qslRecord.getSendReport())));
-        }
+        String rstSent = AdifFormat.formatReport(qslRecord.getSendReport());
+        logStr.append(String.format("<rst_sent:%d>%s ", rstSent.length(), rstSent));
 
-        if (String.valueOf(qslRecord.getReceivedReport()) != null) {
-            logStr.append(String.format("<rst_rcvd:%d>%s "
-                    , String.valueOf(qslRecord.getReceivedReport()).length()
-                    , String.valueOf(qslRecord.getReceivedReport())));
-        }
+        String rstRcvd = AdifFormat.formatReport(qslRecord.getReceivedReport());
+        logStr.append(String.format("<rst_rcvd:%d>%s ", rstRcvd.length(), rstRcvd));
 
         if (qslRecord.getQso_date() != null) {
             logStr.append(String.format("<qso_date:%d>%s "
