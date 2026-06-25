@@ -27,6 +27,14 @@ const PTT_DELAY_MS: u64 = 100;
 // waveform (plus the PTT lead) land before the next slot boundary. Start later
 // than this and the leading Costas array gets clipped — audible but undecodable.
 const TX_LATEST_MS: i64 = TX_SLACK_MS - PTT_DELAY_MS as i64;
+// Point in the (rx-corrected) cycle at which we hand the slot to the decoder.
+// The FT8 waveform is complete at 12.64 s, so decoding ~0.6 s later returns
+// results around the 15 s boundary even on a slow CPU — early enough that the
+// operator's reply lands in the very next slot instead of skipping a cycle.
+// The rx-offset calibration aligns this clock to the real signal timing, and
+// any positive capture latency only pushes the real trigger later (safer), so
+// 13.2 s keeps a comfortable margin above the 12.64 s waveform end.
+const DECODE_AT_MS: i64 = 13_200;
 const DEFAULT_TX_AUDIO_HZ: i32 = 1_500;
 const WF_FFT_SIZE: usize = 2048; // ~5.86 Hz/bin at 12 kHz
 const WF_AVG: usize = 6; // averaged FFT segments per row (Welch) to smooth the noise floor
@@ -197,7 +205,9 @@ struct Engine {
     decoding: bool,
     dial_hz: u64,
     tx_audio_hz: i32,
-    last_rx_slot_id: i64,
+    /// Slot id (rx-corrected clock) most recently handed to the decode worker.
+    /// Guards the once-per-slot early decode trigger in the run loop.
+    last_decoded_slot: i64,
     /// Audio-capture latency compensation (ms). The RX decode window is sliced
     /// this much later than the UTC cycle boundary so that buffered/late-arriving
     /// input audio lands aligned — drives decoded DT toward 0. Auto-calibrated
@@ -283,7 +293,7 @@ impl Engine {
             decoding: false,
             dial_hz,
             tx_audio_hz,
-            last_rx_slot_id: -1,
+            last_decoded_slot: -1,
             rx_offset_ms,
             last_tick_ms: 0,
             tx_parity: None,
@@ -335,13 +345,23 @@ impl Engine {
                 }));
             }
 
-            // RX window boundary runs on a clock shifted later by the capture-latency
-            // compensation, so the sliced 15 s slot aligns with the audio that has
+            // Decode runs on a clock shifted later by the capture-latency
+            // compensation, so the sliced slot aligns with the audio that has
             // actually arrived in the buffer (UTC display + TX still use real `now`).
-            let rx_slot_id = (now - self.rx_offset_ms).div_euclid(CYCLE_MS);
-            if rx_slot_id != self.last_rx_slot_id {
-                self.last_rx_slot_id = rx_slot_id;
-                self.on_slot_boundary(rx_slot_id);
+            // We fire once per slot as soon as the 12.64 s waveform is captured
+            // (~13.2 s in) rather than at the 15 s boundary, so decodes land a slot
+            // earlier and the operator can reply on the next cycle (not skip one).
+            let corrected = now - self.rx_offset_ms;
+            let rx_slot_id = corrected.div_euclid(CYCLE_MS);
+            let into_rx_cycle = corrected.rem_euclid(CYCLE_MS);
+            if self.decoding && rx_slot_id != self.last_decoded_slot && into_rx_cycle >= DECODE_AT_MS
+            {
+                self.last_decoded_slot = rx_slot_id;
+                // The slot's audio so far = the most recent `into_rx_cycle` of it,
+                // front-aligned (signal at sample 0) with the tail zero-padded.
+                let elapsed = (into_rx_cycle * SAMPLE_RATE as i64 / 1000) as usize;
+                let slot = self.accum.take_slot_from_start(elapsed);
+                let _ = self.slot_tx.send(slot);
             }
 
             // Act on any decodes the worker has finished (off-loop DSP). This is
@@ -388,21 +408,12 @@ impl Engine {
             return;
         }
         self.rx_offset_ms = new_offset;
-        // Re-anchor so the offset change doesn't re-trigger a boundary for this cycle.
-        self.last_rx_slot_id = (self.now() - self.rx_offset_ms).div_euclid(CYCLE_MS);
+        // No re-anchor needed: the decode trigger requires `into_rx_cycle >=
+        // DECODE_AT_MS`, and offset changes land early in the cycle (right after a
+        // decode is delivered), far below that threshold — so a shifted slot id
+        // can't spuriously re-fire the decode this cycle.
         let _ = self.db.set_config("rx_offset_ms", &new_offset.to_string());
         self.publish_clock_sync();
-    }
-
-    fn on_slot_boundary(&mut self, _entering_slot: i64) {
-        // Hand the slot that just ended to the decode worker; decoding happens
-        // off this loop, so the waterfall + clock keep updating. The worker's
-        // results are consumed in the run loop (see handle_decoded), which then
-        // drives QSO sequencing + TX for the slot we're now in.
-        if self.decoding {
-            let slot = self.accum.take_slot();
-            let _ = self.slot_tx.send(slot);
-        }
     }
 
     /// Handle one slot's decodes (from the worker): publish them, advance the QSO
