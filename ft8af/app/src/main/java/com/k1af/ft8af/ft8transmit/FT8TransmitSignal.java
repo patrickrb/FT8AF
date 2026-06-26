@@ -2089,6 +2089,14 @@ public class FT8TransmitSignal {
             return;
         }
         GeneralVariables.resetLaunchSupervision();
+        // transmitNow() (and the status toast) dereference toCallsign, which stays
+        // null until the first setTransmit/resetToCQ. A free-text one-shot can be the
+        // very first TX action of a session (before any CQ or decode tap), so seed a
+        // CQ baseline here to avoid an NPE. The free-text message itself is built
+        // independently of toCallsign, so this only provides the baseline target.
+        if (toCallsign == null) {
+            resetToCQ();
+        }
         transmitNow();// fire this cycle if within the late-start tolerance window
     }
 
