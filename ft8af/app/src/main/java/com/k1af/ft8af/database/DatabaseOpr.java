@@ -2378,6 +2378,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("synFreq")) {
                     GeneralVariables.synFrequency = !(result.equals("") || result.equals("0"));
                 }
+                if (name.equalsIgnoreCase("holdTxFreq")) {
+                    GeneralVariables.holdTxFreq = result.equals("1");
+                }
                 if (name.equalsIgnoreCase("transDelay")) {
                     if (result.matches("^\\d{1,4}$")) {//Regex: 1-4 digit number
                         GeneralVariables.transmitDelay = Integer.parseInt(result);

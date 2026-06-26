@@ -423,6 +423,8 @@
     <!-- ===== Settings: transmission ===== -->
     <string name="settings_tx_rx_split">TX/RX Split</string>
     <string name="settings_tx_rx_split_desc">Transmit on a different frequency than receive</string>
+    <string name="settings_hold_tx_freq">Hold TX freq</string>
+    <string name="settings_hold_tx_freq_desc">Keep your TX offset when answering a station instead of moving it to theirs</string>
     <string name="settings_tx_watchdog">TX Watchdog</string>
     <string name="settings_tx_watchdog_desc">Auto-stop transmit after timeout</string>
     <string name="settings_stop_after">Stop After</string>

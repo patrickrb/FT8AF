@@ -340,4 +340,28 @@ public class FT8TransmitSignalTest {
         // A genuine POTA CQ stays eligible when the filter is active.
         assertThat(FT8TransmitSignal.huntFilterExcludes(true, true)).isFalse();
     }
+
+    // ---- shouldFollowTargetFreq ---------------------------------------------
+    // Same-frequency (TX/RX split) mode moves our TX offset onto the station we
+    // answer. "Hold TX freq" (WSJT-X Hold Tx Freq) must override that and keep us on
+    // our own offset. So we follow the target ONLY when split is on AND hold is off.
+
+    @Test
+    public void followTarget_splitOn_holdOff_follows() {
+        assertThat(FT8TransmitSignal.shouldFollowTargetFreq(
+                /*synFrequency*/ true, /*holdTxFreq*/ false)).isTrue();
+    }
+
+    @Test
+    public void followTarget_splitOn_holdOn_holds() {
+        // The reported request: keep my TX offset even with split on.
+        assertThat(FT8TransmitSignal.shouldFollowTargetFreq(true, true)).isFalse();
+    }
+
+    @Test
+    public void followTarget_splitOff_neverFollows() {
+        // Without split there's nothing to follow, hold flag irrelevant.
+        assertThat(FT8TransmitSignal.shouldFollowTargetFreq(false, false)).isFalse();
+        assertThat(FT8TransmitSignal.shouldFollowTargetFreq(false, true)).isFalse();
+    }
 }

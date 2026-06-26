@@ -325,7 +325,10 @@ public class FT8TransmitSignal {
         if (transmitCallsign.frequency == 0) {
             transmitCallsign.frequency = GeneralVariables.getBaseFrequency();
         }
-        if (GeneralVariables.synFrequency) {// if same-frequency mode, match target callsign frequency
+        // Same-frequency mode moves our TX offset onto the station we answer — unless
+        // "Hold TX freq" is on (WSJT-X "Hold Tx Freq"), in which case we keep calling
+        // on our own offset. Tester reported the auto-move felt inverted.
+        if (shouldFollowTargetFreq(GeneralVariables.synFrequency, GeneralVariables.holdTxFreq)) {
             setBaseFrequency(transmitCallsign.frequency);
         }
 
@@ -343,6 +346,16 @@ public class FT8TransmitSignal {
         GeneralVariables.setBaseFrequency(freq);
         // write to database
         databaseOpr.writeConfig("freq", String.format("%.0f", freq), null);
+    }
+
+    /**
+     * Whether to move our TX offset onto the frequency of the station we're about to
+     * answer. True only in same-frequency (TX/RX split) mode AND when "Hold TX freq"
+     * is off — holding TX freq (WSJT-X "Hold Tx Freq") keeps us calling on our own
+     * offset. Pure decision logic so it can be unit-tested without the Android runtime.
+     */
+    static boolean shouldFollowTargetFreq(boolean synFrequency, boolean holdTxFreq) {
+        return synFrequency && !holdTxFreq;
     }
 
     /**

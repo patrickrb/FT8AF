@@ -40,6 +40,7 @@ fun TransmissionSettings(
     onBack: () -> Unit,
 ) {
     var synFrequency by remember { mutableStateOf(GeneralVariables.synFrequency) }
+    var holdTxFreq by remember { mutableStateOf(GeneralVariables.holdTxFreq) }
     var watchdogMs by remember { mutableIntStateOf(GeneralVariables.launchSupervision) }
     var noReplyLimit by remember { mutableIntStateOf(GeneralVariables.noReplyLimit) }
 
@@ -137,6 +138,19 @@ fun TransmissionSettings(
                             GeneralVariables.synFrequency = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "synFreq", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_hold_tx_freq),
+                        description = stringResource(R.string.settings_hold_tx_freq_desc),
+                        toggle = holdTxFreq,
+                        onToggleChange = { checked ->
+                            holdTxFreq = checked
+                            GeneralVariables.holdTxFreq = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "holdTxFreq", if (checked) "1" else "0", null,
                             )
                         },
                     )
