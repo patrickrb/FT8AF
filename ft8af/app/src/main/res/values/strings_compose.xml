@@ -377,6 +377,13 @@
     <string name="settings_section_advanced">ADVANCED</string>
     <string name="settings_section_about">ABOUT</string>
     <string name="settings_section_language">LANGUAGE</string>
+    <string name="settings_section_appearance">APPEARANCE</string>
+
+    <!-- ===== Settings: appearance / theme ===== -->
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_desc">App color theme</string>
+    <string name="theme_name_dark">Dark</string>
+    <string name="theme_name_light">Light</string>
 
     <!-- ===== Settings: drill-down category labels ===== -->
     <string name="settings_cat_radio_audio">Radio &amp; Audio</string>
