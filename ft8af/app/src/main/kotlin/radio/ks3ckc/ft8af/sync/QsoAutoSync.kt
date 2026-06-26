@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.os.SystemClock
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.database.DatabaseOpr
 import com.k1af.ft8af.log.ThirdPartyService
@@ -83,8 +84,13 @@ class QsoAutoSync(private val appContext: Context) {
     fun register() {
         val manager = cm ?: return
         if (registered) return
+        // Require VALIDATED, not just INTERNET: NET_CAPABILITY_INTERNET fires for
+        // networks that aren't actually usable yet (captive portal, still
+        // validating), which would trigger a sync pass that just fails and churns.
+        // VALIDATED means the system has confirmed real connectivity.
         val request = NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
             .build()
         try {
             manager.registerNetworkCallback(request, callback)
@@ -115,7 +121,11 @@ class QsoAutoSync(private val appContext: Context) {
      * Thread used by the immediate post-QSO path in MainViewModel).
      */
     private fun requestSync(reason: String) {
-        val now = System.currentTimeMillis()
+        // Monotonic clock for the debounce interval: elapsedRealtime() can't jump
+        // backwards/forwards on NTP sync, manual time changes, or timezone shifts,
+        // which would otherwise wedge the gate open or shut. (Only used for the
+        // interval; the gate compares deltas, never wall-clock dates.)
+        val now = SystemClock.elapsedRealtime()
         val anyEnabled = GeneralVariables.enableCloudlog || GeneralVariables.enableQRZ
         if (!gate.shouldRun(now, anyEnabled)) {
             log("skip ($reason): enabled=$anyEnabled")
@@ -124,7 +134,11 @@ class QsoAutoSync(private val appContext: Context) {
         gate.markStarted(now)
         Thread {
             try {
-                val db = DatabaseOpr.getInstance(null, null)?.db
+                // Pass our application Context (and the same db name MainViewModel
+                // uses) so a cold-start trigger that beats MainViewModel's init can't
+                // construct the singleton with a null Context — getWritableDatabase()
+                // would NPE, or a null name would open a throwaway in-memory db.
+                val db = DatabaseOpr.getInstance(appContext, "data.db")?.db
                 if (db == null) {
                     log("skip ($reason): no db")
                     return@Thread
