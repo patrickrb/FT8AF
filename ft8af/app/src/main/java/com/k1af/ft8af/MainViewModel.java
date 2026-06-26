@@ -289,15 +289,20 @@ public class MainViewModel extends ViewModel {
             ToastMessage.show(String.format(getStringFromResource(R.string.current_frequency)
                     , BaseRigOperation.getFrequencyAllInfo(freq)));
             //write frequency changes back to global variables
-            int oldBandIndex = GeneralVariables.bandListIndex;
+            // Compare the meter (wavelength) band, not the band-list index:
+            // OperationBand.getIndexByFreq() appends a new entry for any previously-
+            // unseen frequency, so a small in-band dial move changes the index even
+            // though the band is the same. Wavelength only changes on a real band hop.
+            String oldWaveLength = BaseRigOperation.getMeterFromFreq(GeneralVariables.band);
             GeneralVariables.band = freq;
             GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(freq);
             GeneralVariables.mutableBandChange.postValue(GeneralVariables.bandListIndex);
+            String newWaveLength = BaseRigOperation.getMeterFromFreq(freq);
 
             // The rig reported a band change (e.g. the operator turned the dial) —
             // optionally clear the stale decodes + reset the TX target.
             if (shouldClearOnBandChange(GeneralVariables.clearOnBandModeChange,
-                    oldBandIndex, GeneralVariables.bandListIndex)) {
+                    oldWaveLength, newWaveLength)) {
                 clearDecodesAndTarget();
             }
 
@@ -868,12 +873,15 @@ public class MainViewModel extends ViewModel {
 
     /**
      * Whether a band change should wipe the decode list and reset the TX target.
-     * True only when the auto-clear option is on AND the band actually changed, so a
-     * no-op band re-select (or a small in-band dial report from the rig) doesn't
-     * clear. Pure decision logic, unit-tested without the Android runtime.
+     * True only when the auto-clear option is on AND the meter (wavelength) band
+     * actually changed, so a no-op band re-select or a small in-band dial report from
+     * the rig doesn't clear. Compares wavelength rather than the band-list index
+     * because {@link OperationBand#getIndexByFreq} appends a new entry for any unseen
+     * frequency, so the index can change within a single band. Pure decision logic,
+     * unit-tested without the Android runtime.
      */
-    public static boolean shouldClearOnBandChange(boolean enabled, int oldBandIndex, int newBandIndex) {
-        return enabled && oldBandIndex != newBandIndex;
+    public static boolean shouldClearOnBandChange(boolean enabled, String oldWaveLength, String newWaveLength) {
+        return enabled && !java.util.Objects.equals(oldWaveLength, newWaveLength);
     }
 
     /**

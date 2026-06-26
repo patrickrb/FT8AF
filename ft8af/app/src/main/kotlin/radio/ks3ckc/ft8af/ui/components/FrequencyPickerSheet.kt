@@ -31,6 +31,7 @@ import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import com.k1af.ft8af.database.ControlMode
 import com.k1af.ft8af.database.OperationBand
+import com.k1af.ft8af.rigs.BaseRigOperation
 import radio.ks3ckc.ft8af.theme.*
 
 /**
@@ -41,9 +42,11 @@ import radio.ks3ckc.ft8af.theme.*
  * Shared between the Settings band picker and the TxStrip frequency picker.
  */
 fun selectBandIndex(mainViewModel: MainViewModel, context: Context, index: Int) {
-    val oldBandIndex = GeneralVariables.bandListIndex
+    // Compare the meter (wavelength) band, not the index — see shouldClearOnBandChange.
+    val oldWaveLength = BaseRigOperation.getMeterFromFreq(GeneralVariables.band)
     GeneralVariables.bandListIndex = index
     GeneralVariables.band = OperationBand.getBandFreq(index)
+    val newWaveLength = BaseRigOperation.getMeterFromFreq(GeneralVariables.band)
     mainViewModel.databaseOpr.writeConfig(
         "bandFreq", GeneralVariables.band.toString(), null,
     )
@@ -54,7 +57,7 @@ fun selectBandIndex(mainViewModel: MainViewModel, context: Context, index: Int) 
     // The operator picked a new band — optionally clear the stale decodes + reset
     // the TX target so the decode screen reflects the new band (tester request).
     if (MainViewModel.shouldClearOnBandChange(
-            GeneralVariables.clearOnBandModeChange, oldBandIndex, index,
+            GeneralVariables.clearOnBandModeChange, oldWaveLength, newWaveLength,
         )
     ) {
         mainViewModel.clearDecodesAndTarget()
