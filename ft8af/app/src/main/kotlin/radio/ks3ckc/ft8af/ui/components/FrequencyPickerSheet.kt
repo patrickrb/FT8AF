@@ -41,6 +41,7 @@ import radio.ks3ckc.ft8af.theme.*
  * Shared between the Settings band picker and the TxStrip frequency picker.
  */
 fun selectBandIndex(mainViewModel: MainViewModel, context: Context, index: Int) {
+    val oldBandIndex = GeneralVariables.bandListIndex
     GeneralVariables.bandListIndex = index
     GeneralVariables.band = OperationBand.getBandFreq(index)
     mainViewModel.databaseOpr.writeConfig(
@@ -50,6 +51,14 @@ fun selectBandIndex(mainViewModel: MainViewModel, context: Context, index: Int) 
     // Notify observers (TxStrip pill, Settings band picker) so the UI updates
     // without waiting for a rig onFreqChanged round-trip.
     GeneralVariables.mutableBandChange.postValue(index)
+    // The operator picked a new band — optionally clear the stale decodes + reset
+    // the TX target so the decode screen reflects the new band (tester request).
+    if (MainViewModel.shouldClearOnBandChange(
+            GeneralVariables.clearOnBandModeChange, oldBandIndex, index,
+        )
+    ) {
+        mainViewModel.clearDecodesAndTarget()
+    }
 
     val cm = GeneralVariables.controlMode
     val connected = mainViewModel.isRigConnected()

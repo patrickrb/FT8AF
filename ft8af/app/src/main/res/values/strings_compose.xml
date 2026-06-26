@@ -423,6 +423,8 @@
     <!-- ===== Settings: transmission ===== -->
     <string name="settings_tx_rx_split">TX/RX Split</string>
     <string name="settings_tx_rx_split_desc">Transmit on a different frequency than receive</string>
+    <string name="settings_clear_on_change">Clear decodes on band/mode change</string>
+    <string name="settings_clear_on_change_desc">Wipe the decode list and reset the TX target to CQ when you change band or mode</string>
     <string name="settings_tx_watchdog">TX Watchdog</string>
     <string name="settings_tx_watchdog_desc">Auto-stop transmit after timeout</string>
     <string name="settings_stop_after">Stop After</string>

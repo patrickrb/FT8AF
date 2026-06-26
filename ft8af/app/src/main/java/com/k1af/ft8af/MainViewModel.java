@@ -289,9 +289,17 @@ public class MainViewModel extends ViewModel {
             ToastMessage.show(String.format(getStringFromResource(R.string.current_frequency)
                     , BaseRigOperation.getFrequencyAllInfo(freq)));
             //write frequency changes back to global variables
+            int oldBandIndex = GeneralVariables.bandListIndex;
             GeneralVariables.band = freq;
             GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(freq);
             GeneralVariables.mutableBandChange.postValue(GeneralVariables.bandListIndex);
+
+            // The rig reported a band change (e.g. the operator turned the dial) —
+            // optionally clear the stale decodes + reset the TX target.
+            if (shouldClearOnBandChange(GeneralVariables.clearOnBandModeChange,
+                    oldBandIndex, GeneralVariables.bandListIndex)) {
+                clearDecodesAndTarget();
+            }
 
             databaseOpr.getAllQSLCallsigns();//read out successfully contacted callsigns
 
@@ -859,6 +867,29 @@ public class MainViewModel extends ViewModel {
     }
 
     /**
+     * Whether a band change should wipe the decode list and reset the TX target.
+     * True only when the auto-clear option is on AND the band actually changed, so a
+     * no-op band re-select (or a small in-band dial report from the rig) doesn't
+     * clear. Pure decision logic, unit-tested without the Android runtime.
+     */
+    public static boolean shouldClearOnBandChange(boolean enabled, int oldBandIndex, int newBandIndex) {
+        return enabled && oldBandIndex != newBandIndex;
+    }
+
+    /**
+     * Wipe the now-stale decode list and reset the TX target to CQ after a band or
+     * mode change, so the decode screen and TX target reflect the new band/mode
+     * instead of leftover spots from the old one (tester request). Callers gate this
+     * on {@link GeneralVariables#clearOnBandModeChange} and on an actual change.
+     */
+    public void clearDecodesAndTarget() {
+        clearFt8MessageList();
+        if (ft8TransmitSignal != null && !ft8TransmitSignal.isTransmitting()) {
+            ft8TransmitSignal.resetToCQ();
+        }
+    }
+
+    /**
      * Publish the current decode list to the UI as a fresh snapshot.
      *
      * <p>The Compose decode screen observes {@link #mutableFt8MessageList} with
@@ -1096,6 +1127,12 @@ public class MainViewModel extends ViewModel {
             databaseOpr.getAllQSLCallsigns();
             GeneralVariables.mutableBandChange.postValue(GeneralVariables.bandListIndex);
             setOperationBand();//push the new dial to the rig over CAT (no-op if not connected)
+        }
+
+        // Mode changed (and possibly retuned within the band) — optionally wipe the
+        // now-stale decodes + reset the TX target so the screen reflects the new mode.
+        if (GeneralVariables.clearOnBandModeChange) {
+            clearDecodesAndTarget();
         }
 
         mutableOperatingMode.postValue(normId);
