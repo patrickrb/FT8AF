@@ -340,4 +340,35 @@ public class FT8TransmitSignalTest {
         // A genuine POTA CQ stays eligible when the filter is active.
         assertThat(FT8TransmitSignal.huntFilterExcludes(true, true)).isFalse();
     }
+
+    // ---- shouldStopAfterOneShot ---------------------------------------------
+    // Free text is a one-shot (WSJT-X Tx5): it transmits once and then the
+    // sequencer stops, rather than repeating every cycle like a CQ. The auto-stop
+    // must fire ONLY for a free-text one-shot send, never for a normal CQ run or a
+    // persistent free-text mode.
+
+    @Test
+    public void oneShot_freeTextOneShot_stops() {
+        // The reported request: free text sends once, then stop.
+        assertThat(FT8TransmitSignal.shouldStopAfterOneShot(
+                /*transmitFreeText*/ true, /*freeTextOneShot*/ true)).isTrue();
+    }
+
+    @Test
+    public void oneShot_standardCq_neverStops() {
+        // A normal CQ run (no free text) must keep repeating each cycle.
+        assertThat(FT8TransmitSignal.shouldStopAfterOneShot(false, false)).isFalse();
+    }
+
+    @Test
+    public void oneShot_freeTextWithoutOneShotFlag_neverStops() {
+        // Free text armed but not flagged one-shot (defensive): don't auto-stop.
+        assertThat(FT8TransmitSignal.shouldStopAfterOneShot(true, false)).isFalse();
+    }
+
+    @Test
+    public void oneShot_flagSetButNotFreeText_neverStops() {
+        // The one-shot flag without an active free-text message can't trigger a stop.
+        assertThat(FT8TransmitSignal.shouldStopAfterOneShot(false, true)).isFalse();
+    }
 }
