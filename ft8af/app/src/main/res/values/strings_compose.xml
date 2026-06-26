@@ -114,6 +114,7 @@
     <string name="tx_stop">Stop</string>
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
+    <string name="tx_cq_options">CQ message options (modifier, free text, Field Day)</string>
 
     <!-- ===== Hound (DXpedition) setup ===== -->
     <string name="hound_title">Work a DXpedition (Hound)</string>
