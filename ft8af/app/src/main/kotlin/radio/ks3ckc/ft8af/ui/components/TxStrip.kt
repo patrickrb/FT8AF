@@ -74,6 +74,24 @@ internal fun txStripActionState(isActivated: Boolean, huntEnabled: Boolean) = Tx
     cqIsStop = isActivated,
 )
 
+/**
+ * The small subtitle shown under "Call CQ" that reflects which CQ variant is queued.
+ * Precedence: free-text > Field Day > custom modifier > none. Null while the button is
+ * in its STOP state. Extracted so the precedence can be unit-tested without Compose.
+ */
+internal fun cqStripSubtitle(
+    cqIsStop: Boolean,
+    isFreeTextMode: Boolean,
+    fieldDayEnabled: Boolean,
+    cqModifier: String,
+): String? = when {
+    cqIsStop -> null
+    isFreeTextMode -> "FREE"
+    fieldDayEnabled -> "FD"
+    cqModifier.isNotEmpty() -> cqModifier
+    else -> null
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TxStrip(
@@ -263,13 +281,7 @@ fun TxStrip(
             // Locked off while HUNT is armed (and no QSO yet).
             // Long-press opens CQ options (modifier, free text, Field Day).
             val cqIsStop = actions.cqIsStop
-            val cqSubtitle = when {
-                cqIsStop -> null
-                isFreeTextMode -> "FREE"
-                fieldDayEnabled -> "FD"
-                cqModifier.isNotEmpty() -> cqModifier
-                else -> null
-            }
+            val cqSubtitle = cqStripSubtitle(cqIsStop, isFreeTextMode, fieldDayEnabled, cqModifier)
             PrimaryActionButton(
                 modifier = Modifier.weight(1.7f),
                 label = if (cqIsStop) stringResource(R.string.tx_stop) else stringResource(R.string.tx_call_cq),
@@ -283,6 +295,7 @@ fun TxStrip(
                 enabled = !actions.cqDisabled,
                 onClick = { if (cqIsStop) onStop() else onCallCQ() },
                 onLongClick = if (!cqIsStop) onLongPressCQ else null,
+                optionsContentDescription = stringResource(R.string.tx_cq_options),
             ) { color ->
                 if (cqIsStop) {
                     FT8AFIcons.Close(size = 18.dp, color = color, strokeWidth = 2f)
@@ -466,6 +479,7 @@ private fun PrimaryActionButton(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     onLongClick: (() -> Unit)? = null,
+    optionsContentDescription: String = "",
     icon: @Composable (Color) -> Unit,
 ) {
     Row(
@@ -519,7 +533,24 @@ private fun PrimaryActionButton(
             )
         }
         if (onLongClick != null) {
-            FT8AFIcons.ChevronDown(size = 10.dp, color = contentColor.copy(alpha = 0.5f), strokeWidth = 2f)
+            // A visible, separately-tappable "more options" affordance. A plain tap opens the
+            // CQ options sheet (discoverable), and the whole button still long-presses to the
+            // same sheet as a shortcut. Without this the sheet was effectively hidden — a tester
+            // reported they'd never have found the long-press.
+            Box(
+                modifier = Modifier
+                    .size(width = 30.dp, height = 38.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(contentColor.copy(alpha = 0.16f))
+                    .clickable(enabled = enabled, onClick = onLongClick)
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = optionsContentDescription
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                FT8AFIcons.ChevronDown(size = 16.dp, color = contentColor, strokeWidth = 2.2f)
+            }
         }
     }
 }
