@@ -350,9 +350,9 @@ public class FT8TransmitSignal {
 
     /**
      * Whether to move our TX offset onto the frequency of the station we're about to
-     * answer. True only in same-frequency (TX/RX split) mode AND when "Hold TX freq"
-     * is off — holding TX freq (WSJT-X "Hold Tx Freq") keeps us calling on our own
-     * offset. Pure decision logic so it can be unit-tested without the Android runtime.
+     * answer. True only in TX=RX (synFrequency) mode AND when "Hold TX freq" is off —
+     * holding TX freq (WSJT-X "Hold Tx Freq") keeps us calling on our own offset.
+     * Pure decision logic so it can be unit-tested without the Android runtime.
      */
     static boolean shouldFollowTargetFreq(boolean synFrequency, boolean holdTxFreq) {
         return synFrequency && !holdTxFreq;

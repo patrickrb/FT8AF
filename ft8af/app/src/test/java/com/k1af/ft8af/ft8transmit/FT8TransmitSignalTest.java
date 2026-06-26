@@ -342,9 +342,9 @@ public class FT8TransmitSignalTest {
     }
 
     // ---- shouldFollowTargetFreq ---------------------------------------------
-    // Same-frequency (TX/RX split) mode moves our TX offset onto the station we
-    // answer. "Hold TX freq" (WSJT-X Hold Tx Freq) must override that and keep us on
-    // our own offset. So we follow the target ONLY when split is on AND hold is off.
+    // TX=RX (synFrequency) mode moves our TX offset onto the station we answer.
+    // "Hold TX freq" (WSJT-X Hold Tx Freq) must override that and keep us on our own
+    // offset. So we follow the target ONLY when synFrequency is on AND hold is off.
 
     @Test
     public void followTarget_splitOn_holdOff_follows() {
