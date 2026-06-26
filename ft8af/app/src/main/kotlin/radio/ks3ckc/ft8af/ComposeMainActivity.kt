@@ -38,6 +38,7 @@ import androidx.lifecycle.Observer
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
+import radio.ks3ckc.ft8af.sync.QsoAutoSync
 import com.k1af.ft8af.service.RxForegroundService
 import com.k1af.ft8af.service.RxServiceController
 import com.k1af.ft8af.bluetooth.BluetoothStateBroadcastReceive
@@ -66,6 +67,7 @@ class ComposeMainActivity : AppCompatActivity() {
 
     private var bluetoothReceiver: BluetoothStateBroadcastReceive? = null
     private var usbDetachReceiver: BroadcastReceiver? = null
+    private var qsoAutoSync: QsoAutoSync? = null
     private lateinit var mainViewModel: MainViewModel
     private val showExitConfirm: MutableState<Boolean> = mutableStateOf(false)
 
@@ -154,6 +156,15 @@ class ComposeMainActivity : AppCompatActivity() {
         // UsbDeviceConnection. We tear down those handles here so the next
         // ATTACH event can rebind cleanly.
         registerUsbDetachReceiver()
+
+        // Auto-upload QSOs that failed to reach QRZ/Cloudlog while offline: listen for
+        // connectivity returning and flush the unsynced rows, and flush once on start
+        // (covers a QSO logged offline before the app was last closed). No-op unless a
+        // service is enabled and rows are actually pending.
+        qsoAutoSync = QsoAutoSync(applicationContext).apply {
+            register()
+            syncNow("app-start")
+        }
 
         // Set Compose UI — splash plays once per cold start, then crossfades into the app.
         setContent {
@@ -564,6 +575,7 @@ class ComposeMainActivity : AppCompatActivity() {
     override fun onDestroy() {
         unregisterBluetoothReceiver()
         unregisterUsbDetachReceiver()
+        qsoAutoSync?.unregister()
         super.onDestroy()
     }
 

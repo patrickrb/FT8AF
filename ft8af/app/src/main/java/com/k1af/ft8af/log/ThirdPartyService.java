@@ -339,6 +339,48 @@ public class ThirdPartyService {
     }
 
     /**
+     * The {@code WHERE} clause (with a leading space) selecting QSLTable rows that
+     * still need an upload to at least one enabled service. Returns an empty string
+     * when neither service is enabled (caller should not query in that case). Single
+     * source of truth shared by {@link #syncAllQSOs} and {@link #countUnsyncedQSOs}.
+     */
+    private static String unsyncedFilter(boolean cloudlog, boolean qrz) {
+        if (cloudlog && qrz) {
+            return " where synced_cloudlog = 0 or synced_qrz = 0";
+        } else if (cloudlog) {
+            return " where synced_cloudlog = 0";
+        } else if (qrz) {
+            return " where synced_qrz = 0";
+        }
+        return "";
+    }
+
+    /**
+     * Number of QSLTable rows still awaiting upload to an enabled service. Returns 0
+     * when neither Cloudlog nor QRZ is enabled (nothing to do). Lets the auto-sync
+     * skip spawning upload work when there's nothing pending. Uses the same filter as
+     * {@link #syncAllQSOs} so the count and the actual sync always agree.
+     */
+    public static int countUnsyncedQSOs(SQLiteDatabase db) {
+        boolean cl = GeneralVariables.enableCloudlog;
+        boolean qrz = GeneralVariables.enableQRZ;
+        if (db == null || (!cl && !qrz)) return 0;
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(
+                    "select count(*) from QSLTable" + unsyncedFilter(cl, qrz), null);
+            if (cursor.moveToFirst()) {
+                return cursor.getInt(0);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "countUnsyncedQSOs error: " + e.getClass().getSimpleName());
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+        return 0;
+    }
+
+    /**
      * Re-upload every QSO in QSLTable to whichever third-party services the user has
      * enabled. Services dedupe by callsign+date+time+mode so repeated calls are safe.
      *
@@ -358,15 +400,8 @@ public class ThirdPartyService {
             // Skip rows already accepted by every enabled service. The user can still
             // tell something happened via the dialog's row counts, and a re-press isn't
             // wasted on already-confirmed records.
-            String filter;
-            if (cl && qrz) {
-                filter = " where synced_cloudlog = 0 or synced_qrz = 0";
-            } else if (cl) {
-                filter = " where synced_cloudlog = 0";
-            } else {
-                filter = " where synced_qrz = 0";
-            }
-            cursor = db.rawQuery("select * from QSLTable" + filter + " order by id asc", null);
+            cursor = db.rawQuery(
+                    "select * from QSLTable" + unsyncedFilter(cl, qrz) + " order by id asc", null);
             total = cursor.getCount();
             if (progress != null) progress.onProgress(0, total, 0, 0);
             int idCol = cursor.getColumnIndex("id");
