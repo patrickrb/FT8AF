@@ -8,6 +8,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
@@ -17,7 +18,7 @@ import androidx.core.view.WindowCompat
  * tracks the snapshot read — switching themes rebuilds the scheme live.
  */
 private fun ft8afColorScheme(): ColorScheme {
-    val base = if (activePalette.bgApp.luminanceIsLight()) {
+    val base = if (activePalette.bgApp.isLight()) {
         lightColorScheme()
     } else {
         darkColorScheme()
@@ -61,9 +62,13 @@ private fun ft8afColorScheme(): ColorScheme {
     )
 }
 
-/** True when a color is light enough that dark foreground is appropriate. */
-private fun Color.luminanceIsLight(): Boolean =
-    (0.299f * red + 0.587f * green + 0.114f * blue) > 0.5f
+/**
+ * True when a color is light enough that dark foreground is appropriate. Uses
+ * Compose's [luminance] (WCAG relative luminance, with sRGB gamma decoding)
+ * rather than a raw RGB-weighted average, so near-mid backgrounds classify
+ * correctly.
+ */
+private fun Color.isLight(): Boolean = luminance() > 0.5f
 
 // Additional semantic colors not in Material3 scheme. Getters (not captured
 // vals) so they always reflect the active palette.
@@ -106,7 +111,7 @@ fun FT8AFTheme(content: @Composable () -> Unit) {
     // Dark bar icons (isAppearanceLight* = true) for light themes; light bar
     // icons for dark themes — so the bars stay legible against the app's
     // background when they're transiently revealed under edge-to-edge.
-    val lightBars = activePalette.bgApp.luminanceIsLight()
+    val lightBars = activePalette.bgApp.isLight()
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
