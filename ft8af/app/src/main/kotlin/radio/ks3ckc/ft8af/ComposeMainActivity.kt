@@ -20,7 +20,6 @@ import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.activity.compose.setContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -56,6 +55,8 @@ import com.k1af.ft8af.maidenhead.MaidenheadGrid
 import com.k1af.ft8af.ui.ToastMessage
 import radio.ks3ckc.ft8af.pota.PotaSessionManager
 import radio.ks3ckc.ft8af.theme.FT8AFTheme
+import radio.ks3ckc.ft8af.theme.applyTheme
+import radio.ks3ckc.ft8af.theme.loadTheme
 import radio.ks3ckc.ft8af.ui.components.ExitConfirmDialog
 import java.io.File
 import java.io.IOException
@@ -77,9 +78,11 @@ class ComposeMainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Force night mode so the DayNight theme resolves to dark immediately,
-        // preventing any light-mode surface colors from flashing before Compose loads.
-        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+        // Apply the saved theme synchronously before setContent: swap the live
+        // Compose palette and set the matching night mode so neither the
+        // pre-Compose native window background nor the first Compose frame
+        // flashes the wrong shade. Defaults to dark when nothing is saved.
+        applyTheme(loadTheme(this))
 
         // Build permissions list
         val permissions = buildPermissionsList()
