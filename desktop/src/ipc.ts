@@ -152,6 +152,7 @@ export const api = {
   setInputDevice: (name: string | null) => invoke("set_input_device", { name }),
   setOutputDevice: (name: string | null) => invoke("set_output_device", { name }),
   selectRig: (config: RigConfig) => invoke("select_rig", { config }),
+  disconnectRig: () => invoke("disconnect_rig"),
   refreshStatus: () => invoke("refresh_status"),
   resyncTime: () => invoke("resync_time"),
 

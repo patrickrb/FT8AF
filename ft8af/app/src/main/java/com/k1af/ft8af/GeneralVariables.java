@@ -356,6 +356,8 @@ public class GeneralVariables {
 
     public static boolean clearDecodesEveryCycle = false;//Clear the decode list at the start of each cycle
 
+    public static boolean clearOnBandModeChange = true;//Clear the decode list + reset TX target to CQ when the band or mode changes (default on)
+
     public static boolean swr_switch_on = true;//SWR alarm switch
     public static boolean alc_switch_on = true;//ALC alarm switch
 

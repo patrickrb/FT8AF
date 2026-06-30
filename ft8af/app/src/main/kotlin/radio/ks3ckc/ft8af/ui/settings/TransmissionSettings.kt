@@ -41,6 +41,7 @@ fun TransmissionSettings(
 ) {
     var synFrequency by remember { mutableStateOf(GeneralVariables.synFrequency) }
     var holdTxFreq by remember { mutableStateOf(GeneralVariables.holdTxFreq) }
+    var clearOnBandModeChange by remember { mutableStateOf(GeneralVariables.clearOnBandModeChange) }
     var watchdogMs by remember { mutableIntStateOf(GeneralVariables.launchSupervision) }
     var noReplyLimit by remember { mutableIntStateOf(GeneralVariables.noReplyLimit) }
 
@@ -151,6 +152,19 @@ fun TransmissionSettings(
                             GeneralVariables.holdTxFreq = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "holdTxFreq", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_clear_on_change),
+                        description = stringResource(R.string.settings_clear_on_change_desc),
+                        toggle = clearOnBandModeChange,
+                        onToggleChange = { checked ->
+                            clearOnBandModeChange = checked
+                            GeneralVariables.clearOnBandModeChange = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "clearOnBandModeChange", if (checked) "1" else "0", null,
                             )
                         },
                     )
