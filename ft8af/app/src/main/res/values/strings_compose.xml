@@ -431,6 +431,8 @@
     <!-- ===== Settings: transmission ===== -->
     <string name="settings_tx_rx_split">TX/RX Split</string>
     <string name="settings_tx_rx_split_desc">Transmit on a different frequency than receive</string>
+    <string name="settings_hold_tx_freq">Hold TX freq</string>
+    <string name="settings_hold_tx_freq_desc">Keep your TX offset when answering a station instead of moving it to theirs</string>
     <string name="settings_clear_on_change">Clear decodes on band/mode change</string>
     <string name="settings_clear_on_change_desc">Wipe the decode list and reset the TX target to CQ when you change band or mode</string>
     <string name="settings_tx_watchdog">TX Watchdog</string>

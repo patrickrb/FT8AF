@@ -341,6 +341,30 @@ public class FT8TransmitSignalTest {
         assertThat(FT8TransmitSignal.huntFilterExcludes(true, true)).isFalse();
     }
 
+    // ---- shouldFollowTargetFreq ---------------------------------------------
+    // TX=RX (synFrequency) mode moves our TX offset onto the station we answer.
+    // "Hold TX freq" (WSJT-X Hold Tx Freq) must override that and keep us on our own
+    // offset. So we follow the target ONLY when synFrequency is on AND hold is off.
+
+    @Test
+    public void followTarget_splitOn_holdOff_follows() {
+        assertThat(FT8TransmitSignal.shouldFollowTargetFreq(
+                /*synFrequency*/ true, /*holdTxFreq*/ false)).isTrue();
+    }
+
+    @Test
+    public void followTarget_splitOn_holdOn_holds() {
+        // The reported request: keep my TX offset even with split on.
+        assertThat(FT8TransmitSignal.shouldFollowTargetFreq(true, true)).isFalse();
+    }
+
+    @Test
+    public void followTarget_splitOff_neverFollows() {
+        // Without split there's nothing to follow, hold flag irrelevant.
+        assertThat(FT8TransmitSignal.shouldFollowTargetFreq(false, false)).isFalse();
+        assertThat(FT8TransmitSignal.shouldFollowTargetFreq(false, true)).isFalse();
+    }
+
     // ---- shouldStopAfterOneShot ---------------------------------------------
     // Free text is a one-shot (WSJT-X Tx5): it transmits once and then the
     // sequencer stops, rather than repeating every cycle like a CQ. The auto-stop
