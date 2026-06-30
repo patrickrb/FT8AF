@@ -172,17 +172,31 @@ public class Ft8MessageTest {
     }
 
     @Test
-    public void getMessageText_euVhf_zeroPadsSerial() {
-        // i3=5 EU VHF: "%s %s %s%d%04d %s" .trim(); report 57 + serial 7 -> "570007".
+    public void getMessageText_wwrof_withTuAndRFlagPositiveReport() {
+        // i3=5 is a WWROF contest message: "[TU; ]<to> <from> [R]<+/-><rpt> <grid4>".
         Ft8Message msg = new Ft8Message(FT8Common.FT8_MODE);
         msg.i3 = 5;
-        msg.callsignTo = "<G4ABC>";
-        msg.callsignFrom = "<PA9XYZ>";
+        msg.rtty_tu = 1;
+        msg.callsignTo = "K1ABC";
+        msg.callsignFrom = "W9XYZ";
         msg.r_flag = 1;
-        msg.report = 57;
-        msg.eu_serial = 7;
-        msg.maidenGrid = "JO22DB";
-        assertThat(msg.getMessageText()).isEqualTo("<G4ABC> <PA9XYZ> R 570007 JO22DB");
+        msg.report = 12;
+        msg.maidenGrid = "FN20";
+        assertThat(msg.getMessageText()).isEqualTo("TU; K1ABC W9XYZ R+12 FN20");
+    }
+
+    @Test
+    public void getMessageText_wwrof_negativeReportSingleSign() {
+        // No TU/R prefix; a negative report renders a single leading minus (no '+').
+        Ft8Message msg = new Ft8Message(FT8Common.FT8_MODE);
+        msg.i3 = 5;
+        msg.rtty_tu = 0;
+        msg.callsignTo = "K1ABC";
+        msg.callsignFrom = "W9XYZ";
+        msg.r_flag = 0;
+        msg.report = -7;
+        msg.maidenGrid = "FN20";
+        assertThat(msg.getMessageText()).isEqualTo("K1ABC W9XYZ -7 FN20");
     }
 
     @Test
