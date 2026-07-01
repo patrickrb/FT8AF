@@ -129,6 +129,7 @@ $benchSrcs = @(
     "fft\kiss_fft.c","fft\kiss_fftr.c"
 ) | ForEach-Object { Join-Path $ft8 $_ }
 $benchSrcs += (Join-Path $here "gfsk.c")
+$benchSrcs += (Join-Path $here "ft8_subtract.c")
 
 $srcBench = Join-Path $here "decode_bench.c"
 $outBench = Join-Path $env:TEMP "ft8_decode_bench.exe"
@@ -145,8 +146,31 @@ $wavs = Get-ChildItem (Join-Path $corpus "*.wav") | ForEach-Object { $_.FullName
 & $outBench --assert-floor $floors @wavs
 $benchExit = $LASTEXITCODE
 
+# ---------------------------------------------------------------------------
+# Subtraction unit tests: tone-accurate deep-decode subtraction properties
+# (removal, neighbor preservation, masked co-channel recovery, bounded damage).
+# ---------------------------------------------------------------------------
+$subSrcs = @(
+    "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
+    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\unpack.c",
+    "common\monitor.c",
+    "fft\kiss_fft.c","fft\kiss_fftr.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+$subSrcs += (Join-Path $here "gfsk.c")
+$subSrcs += (Join-Path $here "ft8_subtract.c")
+
+$srcSub = Join-Path $here "test_subtract.c"
+$outSub = Join-Path $env:TEMP "ft8_subtract_test.exe"
+
+& $Clang @common $srcSub @subSrcs -o $outSub
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_subtract)." }
+
+& $outSub
+$subExit = $LASTEXITCODE
+
 if ($goldenExit -ne 0) { exit $goldenExit }
 if ($dev625Exit -ne 0) { exit $dev625Exit }
 if ($firExit -ne 0) { exit $firExit }
 if ($benchSelfExit -ne 0) { exit $benchSelfExit }
-exit $benchExit
+if ($benchExit -ne 0) { exit $benchExit }
+exit $subExit

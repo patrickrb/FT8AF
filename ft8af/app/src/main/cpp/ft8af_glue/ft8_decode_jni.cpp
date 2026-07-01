@@ -27,6 +27,7 @@ int ft8_snr(const waterfall_t* wf, const candidate_t* candidate);
 }
 
 #include "decode_params.h"
+#include "ft8_subtract.h"
 
 // ---------------------------------------------------------------------------
 // 22-bit WSJT-X callsign hash (same as ft2_decode_jni.cpp / test_golden_encode.c).
@@ -495,49 +496,28 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderGetA91(
 }
 
 // ---------------------------------------------------------------------------
-// doSubtractSignal — deep-decode subtraction for FT8. Zero the waterfall
-// magnitude cells the decoded signal occupies (across the 79 8-GFSK symbol
-// blocks) so the next find_sync pass can't re-detect it.
-//
-// FT8 uses 8-GFSK: tones 0..7, tone spacing = 6.25 Hz. The signal bandwidth
-// is ~50 Hz (8 tones * 6.25 Hz). At bin width = 1/symbol_period = 6.25 Hz,
-// that's ~8 bins. kFreqHalfWidth=4 zeros bins [freq-4, freq+4], covering the
-// full 8-tone spread.
+// doSubtractSignal — deep-decode subtraction for FT8: tone-accurate,
+// noise-floor-referenced removal of the decoded signal (ft8_subtract.c) so
+// the next find_sync pass can't re-detect it, while co-channel weaker
+// signals survive. Replaces the earlier ±4-bin waterfall zeroing, which
+// erased a ~56 Hz x 12.6 s swath including anything underneath.
 // ---------------------------------------------------------------------------
 extern "C" JNIEXPORT void JNICALL
 Java_com_k1af_ft8af_ft8listener_ReBuildSignal_doSubtractSignal(
-        JNIEnv*, jclass, jlong handle, jbyteArray /*payload*/, jint /*sample_rate*/,
+        JNIEnv* env, jclass, jlong handle, jbyteArray payload, jint /*sample_rate*/,
         jfloat frequency, jfloat time_sec)
 {
     ft8_decoder_state* d = (ft8_decoder_state*)(intptr_t)handle;
     if (!d || !d->mon_ready)
         return;
-    waterfall_t* wf = &d->mon.wf;
-    if (!wf->mag || wf->num_blocks <= 0)
-        return;
+    if (!payload || env->GetArrayLength(payload) < 10)
+        return; // need the 77-bit payload to re-encode the tone sequence
 
-    int freq_offset = (int)lrintf(frequency * d->mon.symbol_period) - d->mon.min_bin;
-    int time_offset = (int)lrintf(time_sec / d->mon.symbol_period);
+    jbyte a91[FTX_LDPC_K_BYTES] = { 0 };
+    jsize n = env->GetArrayLength(payload);
+    if (n > FTX_LDPC_K_BYTES)
+        n = FTX_LDPC_K_BYTES;
+    env->GetByteArrayRegion(payload, 0, n, a91);
 
-    const int kFreqHalfWidth = 4; // 8-GFSK: tones 0..7, need ±4 bins
-    const int kNumSymbols = FT8_NN; // 79
-
-    for (int blk = time_offset; blk < time_offset + kNumSymbols && blk < wf->num_blocks; ++blk)
-    {
-        if (blk < 0)
-            continue;
-        uint8_t* block_base = wf->mag + (size_t)blk * wf->block_stride;
-        for (int ts = 0; ts < wf->time_osr; ++ts)
-        {
-            for (int fs = 0; fs < wf->freq_osr; ++fs)
-            {
-                uint8_t* row = block_base + (ts * wf->freq_osr + fs) * wf->num_bins;
-                for (int b = freq_offset - kFreqHalfWidth; b <= freq_offset + kFreqHalfWidth; ++b)
-                {
-                    if (b >= 0 && b < wf->num_bins)
-                        row[b] = 0;
-                }
-            }
-        }
-    }
+    ft8_subtract_signal(&d->mon, (const uint8_t*)a91, frequency, time_sec);
 }

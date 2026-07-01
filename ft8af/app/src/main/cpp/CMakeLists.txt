@@ -109,6 +109,8 @@ add_library(ft8af SHARED
         ft8af_glue/ft8_resample_jni.cpp
         # JNI wrappers — FT8 decoder (replaces prebuilt)
         ft8af_glue/ft8_decode_jni.cpp
+        # Deep-decode signal subtraction (shared with host bench + desktop)
+        ft8af_glue/ft8_subtract.c
         # JNI wrappers — FT2/FT4 decoder (from-source, was in ft8af_usb)
         ft8af_glue/ft2_decode_jni.cpp
 )
