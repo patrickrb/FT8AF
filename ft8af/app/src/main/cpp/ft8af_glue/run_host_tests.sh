@@ -67,6 +67,7 @@ dev625_srcs=(
     "$ft8/ft8/message.c"
     "$ft8/ft8/decode.c"
     "$ft8/ft8/ldpc.c"
+    "$ft8/ft8/osd.c"
     "$ft8/ft8/unpack.c"
     "$here/fft_display.c"
 )
@@ -104,6 +105,7 @@ bench_srcs=(
     "$ft8/ft8/message.c"
     "$ft8/ft8/decode.c"
     "$ft8/ft8/ldpc.c"
+    "$ft8/ft8/osd.c"
     "$ft8/ft8/unpack.c"
     "$ft8/common/monitor.c"
     "$ft8/common/wave.c"
@@ -132,6 +134,7 @@ subtract_srcs=(
     "$ft8/ft8/message.c"
     "$ft8/ft8/decode.c"
     "$ft8/ft8/ldpc.c"
+    "$ft8/ft8/osd.c"
     "$ft8/ft8/unpack.c"
     "$ft8/common/monitor.c"
     "$ft8/fft/kiss_fft.c"
@@ -142,3 +145,23 @@ subtract_out="$tmp/ft8_subtract_test"
     -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
     -I "$ft8" "${subtract_srcs[@]}" -lm -o "$subtract_out"
 "$subtract_out"
+
+# OSD unit tests: the ordered-statistics backstop behind belief propagation
+# (generator consistency, BP-failure recovery, pure-noise rejection).
+osd_srcs=(
+    "$here/test_osd.c"
+    "$ft8/ft8/pack.c"
+    "$ft8/ft8/encode.c"
+    "$ft8/ft8/crc.c"
+    "$ft8/ft8/constants.c"
+    "$ft8/ft8/text.c"
+    "$ft8/ft8/message.c"
+    "$ft8/ft8/ldpc.c"
+    "$ft8/ft8/osd.c"
+    "$ft8/ft8/unpack.c"
+)
+osd_out="$tmp/ft8_osd_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${osd_srcs[@]}" -lm -o "$osd_out"
+"$osd_out"

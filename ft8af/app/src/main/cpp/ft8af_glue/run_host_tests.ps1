@@ -86,7 +86,7 @@ $goldenExit = $LASTEXITCODE
 # ---------------------------------------------------------------------------
 $dev625Srcs = @(
     "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
-    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\unpack.c"
+    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\osd.c","ft8\unpack.c"
 ) | ForEach-Object { Join-Path $ft8 $_ }
 $dev625Srcs += (Join-Path $here "fft_display.c")
 
@@ -124,7 +124,7 @@ $firExit = $LASTEXITCODE
 # ---------------------------------------------------------------------------
 $benchSrcs = @(
     "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
-    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\unpack.c",
+    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\osd.c","ft8\unpack.c",
     "common\monitor.c","common\wave.c",
     "fft\kiss_fft.c","fft\kiss_fftr.c"
 ) | ForEach-Object { Join-Path $ft8 $_ }
@@ -152,7 +152,7 @@ $benchExit = $LASTEXITCODE
 # ---------------------------------------------------------------------------
 $subSrcs = @(
     "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
-    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\unpack.c",
+    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\osd.c","ft8\unpack.c",
     "common\monitor.c",
     "fft\kiss_fft.c","fft\kiss_fftr.c"
 ) | ForEach-Object { Join-Path $ft8 $_ }
@@ -168,9 +168,28 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_subtract)." }
 & $outSub
 $subExit = $LASTEXITCODE
 
+# ---------------------------------------------------------------------------
+# OSD unit tests: the ordered-statistics backstop behind belief propagation
+# (generator consistency, BP-failure recovery, pure-noise rejection).
+# ---------------------------------------------------------------------------
+$osdSrcs = @(
+    "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
+    "ft8\text.c","ft8\message.c","ft8\ldpc.c","ft8\osd.c","ft8\unpack.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+
+$srcOsd = Join-Path $here "test_osd.c"
+$outOsd = Join-Path $env:TEMP "ft8_osd_test.exe"
+
+& $Clang @common $srcOsd @osdSrcs -o $outOsd
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_osd)." }
+
+& $outOsd
+$osdExit = $LASTEXITCODE
+
 if ($goldenExit -ne 0) { exit $goldenExit }
 if ($dev625Exit -ne 0) { exit $dev625Exit }
 if ($firExit -ne 0) { exit $firExit }
 if ($benchSelfExit -ne 0) { exit $benchSelfExit }
 if ($benchExit -ne 0) { exit $benchExit }
-exit $subExit
+if ($subExit -ne 0) { exit $subExit }
+exit $osdExit

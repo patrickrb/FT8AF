@@ -37,6 +37,7 @@ fn main() {
         "ft8/encode.c",
         "ft8/decode.c",
         "ft8/ldpc.c",
+        "ft8/osd.c",
         "ft8/message.c",
         "ft8/text.c",
         "ft8/unpack.c",

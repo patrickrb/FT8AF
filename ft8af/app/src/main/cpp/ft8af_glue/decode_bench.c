@@ -23,6 +23,7 @@
 //     --freq-osr N        frequency oversampling    (default: app value)
 //     --ldpc-fast N       LDPC iterations, fast pass (default 20)
 //     --ldpc-deep N       LDPC iterations, deep pass (default 30)
+//     --osd-depth N       OSD flip depth in deep passes, 0 = off (default: app value)
 //     --max-loops N       subtract-and-redecode loop cap (default 16; the app
 //                         caps by wall-clock budget instead)
 //     --zero-subtract     use the legacy ±4-bin zeroing subtraction (A/B only)
@@ -69,6 +70,7 @@ static int g_time_osr = FT8AF_TIME_OSR;
 static int g_freq_osr = FT8AF_FREQ_OSR;
 static int g_ldpc_fast = FT8AF_LDPC_ITERS_FAST;
 static int g_ldpc_deep = FT8AF_LDPC_ITERS_DEEP;
+static int g_osd_depth = FT8AF_OSD_DEPTH_DEEP; // deep passes only (matches the app)
 static int g_window_ms = 13500;
 static int g_max_loops = 16;
 static bool g_deep = true;
@@ -246,8 +248,8 @@ static void subtract_signal_zeroing(monitor_t* mon, const bench_decode_t* dec)
 // (for subtraction); only messages not already in seen are new.
 // Returns the number of NEW messages.
 // ---------------------------------------------------------------------------
-static int run_pass(monitor_t* mon, int ldpc_iters, int min_score, bench_msglist_t* seen,
-                    bench_declist_t* pass_decs)
+static int run_pass(monitor_t* mon, int ldpc_iters, int min_score, int osd_depth,
+                    bench_msglist_t* seen, bench_declist_t* pass_decs)
 {
     static candidate_t candidates[BENCH_MAX_CAND_CAP];
     pass_decs->count = 0;
@@ -260,7 +262,8 @@ static int run_pass(monitor_t* mon, int ldpc_iters, int min_score, bench_msglist
         const candidate_t* cand = &candidates[idx];
         ftx_message_t message;
         decode_status_t status;
-        if (!ft8_decode(&mon->wf, cand, ldpc_iters, &message, &status))
+        if (!ft8_decode_osd(&mon->wf, cand, ldpc_iters, osd_depth,
+                            FT8AF_OSD_LDPC_ERR_GATE, &message, &status))
             continue;
 
         float freq_hz = (mon->min_bin + cand->freq_offset +
@@ -352,12 +355,12 @@ static void decode_buffer(const float* signal, int num_samples,
     static bench_declist_t pass_decs;
     int passes = 0;
 
-    run_pass(&mon, g_ldpc_fast, g_min_score_fast, seen, &pass_decs);
+    run_pass(&mon, g_ldpc_fast, g_min_score_fast, 0, seen, &pass_decs);
     passes++;
 
     if (g_deep)
     {
-        int new_msgs = run_pass(&mon, g_ldpc_deep, g_min_score_deep, seen, &pass_decs);
+        int new_msgs = run_pass(&mon, g_ldpc_deep, g_min_score_deep, g_osd_depth, seen, &pass_decs);
         passes++;
         for (int loop = 0; loop < g_max_loops; ++loop)
         {
@@ -370,7 +373,7 @@ static void decode_buffer(const float* signal, int num_samples,
                                         pass_decs.items[i].freq_hz,
                                         pass_decs.items[i].time_sec);
             }
-            new_msgs = run_pass(&mon, g_ldpc_deep, g_min_score_deep, seen, &pass_decs);
+            new_msgs = run_pass(&mon, g_ldpc_deep, g_min_score_deep, g_osd_depth, seen, &pass_decs);
             passes++;
             if (new_msgs == 0)
                 break;
@@ -561,6 +564,8 @@ int main(int argc, char** argv)
             g_ldpc_fast = atoi(argv[++i]);
         else if (strcmp(a, "--ldpc-deep") == 0 && i + 1 < argc)
             g_ldpc_deep = atoi(argv[++i]);
+        else if (strcmp(a, "--osd-depth") == 0 && i + 1 < argc)
+            g_osd_depth = atoi(argv[++i]);
         else if (strcmp(a, "--max-loops") == 0 && i + 1 < argc)
             g_max_loops = atoi(argv[++i]);
         else if (strcmp(a, "--assert-floor") == 0 && i + 1 < argc)

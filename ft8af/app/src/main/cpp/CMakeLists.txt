@@ -71,6 +71,7 @@ add_library(ft8af_dsp STATIC
         ${FT8LIB_ROOT}/ft8/encode.c
         ${FT8LIB_ROOT}/ft8/decode.c
         ${FT8LIB_ROOT}/ft8/ldpc.c
+        ${FT8LIB_ROOT}/ft8/osd.c
         ${FT8LIB_ROOT}/ft8/crc.c
         ${FT8LIB_ROOT}/ft8/message.c
         ${FT8LIB_ROOT}/ft8/pack.c
