@@ -1,1 +1,5 @@
 6f528128ee3ebf4d08ba2313f6c5d3913eda5608 (2022-06-19)
+
+common/wave.c + common/wave.h vendored 2026-07-01 from the same upstream commit
+(unmodified) for the host-side decode benchmark (ft8af_glue/decode_bench.c);
+they are not compiled into the Android .so.
