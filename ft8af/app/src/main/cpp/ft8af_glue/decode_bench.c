@@ -16,10 +16,11 @@
 //     --fast              disable the deep + subtract passes (app default is deep)
 //     --window-ms N       audio window fed to the decoder (default 13500, the
 //                         app's earlyDecode window; use 15000 for the full slot)
-//     --candidates N      sync candidate cap        (default 140, app value)
-//     --min-score N       sync score threshold      (default 10, app value)
-//     --time-osr N        time oversampling         (default 2, app value)
-//     --freq-osr N        frequency oversampling    (default 2, app value)
+//     --candidates N      sync candidate cap        (default: app value)
+//     --min-score N       sync score threshold, fast pass (default: app value)
+//     --min-score-deep N  sync score threshold, deep passes (default: app value)
+//     --time-osr N        time oversampling         (default: app value)
+//     --freq-osr N        frequency oversampling    (default: app value)
 //     --ldpc-fast N       LDPC iterations, fast pass (default 20)
 //     --ldpc-deep N       LDPC iterations, deep pass (default 30)
 //     --max-loops N       subtract-and-redecode loop cap (default 16; the app
@@ -49,20 +50,23 @@
 #include "common/monitor.h"
 #include "common/wave.h"
 
+#include "decode_params.h"
+
 // From gfsk.c (glue): GFSK synth used by the --self-test signal generator.
 void synth_gfsk_offset(const uint8_t* symbols, int n_sym, float f0,
                        float symbol_bt, float symbol_period,
                        int signal_rate, float* signal, int offset);
 
 // ---------------------------------------------------------------------------
-// Tunables (defaults == the app's values in ft8_decode_jni.cpp / monitor cfg).
+// Tunables (defaults == the app's values, via the shared decode_params.h).
 // ---------------------------------------------------------------------------
-static int g_max_candidates = 140;
-static int g_min_score = 10;
-static int g_time_osr = 2;
-static int g_freq_osr = 2;
-static int g_ldpc_fast = 20;
-static int g_ldpc_deep = 30;
+static int g_max_candidates = FT8AF_MAX_CANDIDATES;
+static int g_min_score_fast = FT8AF_MIN_SCORE_FAST;
+static int g_min_score_deep = FT8AF_MIN_SCORE_DEEP;
+static int g_time_osr = FT8AF_TIME_OSR;
+static int g_freq_osr = FT8AF_FREQ_OSR;
+static int g_ldpc_fast = FT8AF_LDPC_ITERS_FAST;
+static int g_ldpc_deep = FT8AF_LDPC_ITERS_DEEP;
 static int g_window_ms = 13500;
 static int g_max_loops = 16;
 static bool g_deep = true;
@@ -241,13 +245,13 @@ static void subtract_signal_baseline(monitor_t* mon, const bench_decode_t* dec)
 // (for subtraction); only messages not already in seen are new.
 // Returns the number of NEW messages.
 // ---------------------------------------------------------------------------
-static int run_pass(monitor_t* mon, int ldpc_iters, bench_msglist_t* seen,
+static int run_pass(monitor_t* mon, int ldpc_iters, int min_score, bench_msglist_t* seen,
                     bench_declist_t* pass_decs)
 {
     static candidate_t candidates[BENCH_MAX_CAND_CAP];
     pass_decs->count = 0;
 
-    int num_candidates = ft8_find_sync(&mon->wf, g_max_candidates, candidates, g_min_score);
+    int num_candidates = ft8_find_sync(&mon->wf, g_max_candidates, candidates, min_score);
     int new_msgs = 0;
 
     for (int idx = 0; idx < num_candidates; ++idx)
@@ -347,18 +351,18 @@ static void decode_buffer(const float* signal, int num_samples,
     static bench_declist_t pass_decs;
     int passes = 0;
 
-    run_pass(&mon, g_ldpc_fast, seen, &pass_decs);
+    run_pass(&mon, g_ldpc_fast, g_min_score_fast, seen, &pass_decs);
     passes++;
 
     if (g_deep)
     {
-        int new_msgs = run_pass(&mon, g_ldpc_deep, seen, &pass_decs);
+        int new_msgs = run_pass(&mon, g_ldpc_deep, g_min_score_deep, seen, &pass_decs);
         passes++;
         for (int loop = 0; loop < g_max_loops; ++loop)
         {
             for (int i = 0; i < pass_decs.count; ++i)
                 subtract_signal_baseline(&mon, &pass_decs.items[i]);
-            new_msgs = run_pass(&mon, g_ldpc_deep, seen, &pass_decs);
+            new_msgs = run_pass(&mon, g_ldpc_deep, g_min_score_deep, seen, &pass_decs);
             passes++;
             if (new_msgs == 0)
                 break;
@@ -536,7 +540,9 @@ int main(int argc, char** argv)
         else if (strcmp(a, "--candidates") == 0 && i + 1 < argc)
             g_max_candidates = atoi(argv[++i]);
         else if (strcmp(a, "--min-score") == 0 && i + 1 < argc)
-            g_min_score = atoi(argv[++i]);
+            g_min_score_fast = atoi(argv[++i]);
+        else if (strcmp(a, "--min-score-deep") == 0 && i + 1 < argc)
+            g_min_score_deep = atoi(argv[++i]);
         else if (strcmp(a, "--time-osr") == 0 && i + 1 < argc)
             g_time_osr = atoi(argv[++i]);
         else if (strcmp(a, "--freq-osr") == 0 && i + 1 < argc)
