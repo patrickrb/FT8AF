@@ -352,9 +352,19 @@ public class UsbAudioDevice {
                 }
             }
 
-            // Accumulate mono float samples before decimation
-            ArrayList<Float> accumulator = new ArrayList<>(inputSampleRate);
-            float[] outputBuffer = new float[targetRate]; // 1s max
+            // Anti-aliased decimation (same windowed-sinc FIR as the native libusb
+            // path) — the old per-window average was a box filter whose ~12 dB
+            // stopband folded hiss into the FT8 passband whenever this fallback ran.
+            FirDecimator decimator = new FirDecimator(Math.max(1, ratio));
+            if (ratio > 0 && ratio * targetRate != inputSampleRate) {
+                com.k1af.ft8af.GeneralVariables.fileLog(String.format(
+                        "UsbAudio.captureLoop: input %d Hz is not an integer multiple "
+                                + "of target %d Hz (ratio floored to %d) — decode may "
+                                + "suffer from the resulting rate error",
+                        inputSampleRate, targetRate, ratio));
+            }
+            float[] monoBuffer = new float[1];
+            float[] outputBuffer = new float[1];
 
             int iterations = 0;
             while (capturing) {
@@ -382,43 +392,36 @@ public class UsbAudioDevice {
                 int bytesReceived = buf.remaining();
                 int totalSamples = bytesReceived / 2; // 16-bit = 2 bytes
 
-                for (int i = 0; i < totalSamples; i++) {
-                    if (buf.remaining() < 2) break;
-                    short sample = buf.getShort();
-                    // If stereo, skip right channel to get mono
-                    if (inputChannels == 2 && (i % 2) == 1) continue;
-                    accumulator.add(sample / 32768.0f);
+                // int16 -> float mono (average L+R when stereo, matching the
+                // native libusb path — the old code dropped the right channel).
+                int monoSamples = (inputChannels == 2) ? totalSamples / 2 : totalSamples;
+                if (monoBuffer.length < monoSamples) {
+                    monoBuffer = new float[monoSamples];
+                }
+                int monoCount = 0;
+                if (inputChannels == 2) {
+                    while (buf.remaining() >= 4 && monoCount < monoSamples) {
+                        short l = buf.getShort();
+                        short r = buf.getShort();
+                        monoBuffer[monoCount++] = (l + r) * (0.5f / 32768.0f);
+                    }
+                } else {
+                    while (buf.remaining() >= 2 && monoCount < monoSamples) {
+                        monoBuffer[monoCount++] = buf.getShort() / 32768.0f;
+                    }
                 }
 
-                // Decimate and deliver when we have enough
-                if (ratio > 0 && accumulator.size() >= ratio) {
-                    int outputSamples = accumulator.size() / ratio;
-                    if (outputSamples > outputBuffer.length) {
-                        outputBuffer = new float[outputSamples * 2];
+                // FIR-decimate and deliver; the decimator carries state across
+                // packets, so no leftover-sample bookkeeping is needed.
+                if (monoCount > 0) {
+                    int maxOut = monoCount / decimator.ratio() + 1;
+                    if (outputBuffer.length < maxOut) {
+                        outputBuffer = new float[maxOut];
                     }
-
-                    for (int i = 0; i < outputSamples; i++) {
-                        // Average over decimation window for anti-aliasing
-                        float sum = 0;
-                        int base = i * ratio;
-                        for (int j = 0; j < ratio && (base + j) < accumulator.size(); j++) {
-                            sum += accumulator.get(base + j);
-                        }
-                        outputBuffer[i] = sum / ratio;
+                    int outputSamples = decimator.process(monoBuffer, monoCount, outputBuffer);
+                    if (outputSamples > 0) {
+                        callback.onAudioData(outputBuffer, outputSamples);
                     }
-
-                    // Keep leftover samples
-                    int consumed = outputSamples * ratio;
-                    if (consumed < accumulator.size()) {
-                        ArrayList<Float> leftover = new ArrayList<>(
-                                accumulator.subList(consumed, accumulator.size()));
-                        accumulator.clear();
-                        accumulator.addAll(leftover);
-                    } else {
-                        accumulator.clear();
-                    }
-
-                    callback.onAudioData(outputBuffer, outputSamples);
                 }
 
                 // Re-queue the URB

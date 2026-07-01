@@ -37,6 +37,16 @@ public class HamRecorder {
     private final ArrayList<VoiceDataMonitor> voiceDataMonitorList = new ArrayList<>();//listener callback list, data is retrieved in listener callbacks
     private OnVoiceMonitorChanged onVoiceMonitorChanged=null;
 
+    //Watchdog for stalled one-shot monitors (see VoiceDataMonitor.forceCompleteAfterStall):
+    //grace period past the requested duration before a partial buffer is force-delivered.
+    static final long STALL_GRACE_MS = 2000;
+    private final java.util.concurrent.ScheduledExecutorService stallWatchdog =
+            java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "VoiceMonitorStallWatchdog");
+                t.setDaemon(true);
+                return t;
+            });
+
     private boolean isMicRecord=true;
     private MicRecorder micRecorder=new MicRecorder();
 
@@ -178,6 +188,18 @@ public class HamRecorder {
             dataMonitor.voiceDataMonitor = dataMonitor;//used for the monitor to remove itself
             voiceDataMonitorList.add(dataMonitor);
             doDataMonitorChanged();
+            if (afterDoneRemove) {
+                //A one-shot monitor whose buffer never fills (capture stall, USB drop
+                //mid-slot) would otherwise never fire and never unregister — a silently
+                //lost decode cycle. Force-deliver the partial (zero-padded) buffer.
+                stallWatchdog.schedule(() -> {
+                    if (dataMonitor.forceCompleteAfterStall(HamRecorder.this)) {
+                        Log.w(TAG, String.format(
+                                "one-shot voice monitor stalled: delivered %d of %d samples after timeout",
+                                dataMonitor.collectedSamples(), duration * sampleRateInHz / 1000));
+                    }
+                }, duration + STALL_GRACE_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
+            }
             return dataMonitor;
         } else {
             return null;
@@ -196,12 +218,51 @@ public class HamRecorder {
         private final String TAG = "GetVoiceData";
         private final float[] voiceData;//recording data. Size is determined by duration, sampling rate, and bit depth.
         private int dataCount;//counter, current amount of data acquired
+        private final boolean oneShot;//afterDoneRemove: one-shot (decode) vs looping (waterfall)
+        private final OnGetVoiceDataDone doneCallback;
+        //Completion guard for one-shot monitors: exactly one of {buffer filled,
+        //stall watchdog} may fire the done callback. Without it, a capture stall
+        //mid-slot left the monitor registered forever and the cycle silently
+        //produced no decode.
+        private final java.util.concurrent.atomic.AtomicBoolean completed =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
 
         //onHamRecord is the callback triggered when the recorder has data; it fills the voiceData buffer, and when the buffer is full, triggers the OnGetVoiceDataDone callback.
         public OnHamRecord onHamRecord;
         //getVoiceData is the address of this monitor, used to remove this monitor from the recorder's listener list.
         // After constructing GetVoiceData, IMPORTANT!!! this variable must be assigned! Otherwise this monitor cannot be removed.
         public VoiceDataMonitor voiceDataMonitor = null;
+
+        /** Samples collected so far (test/diagnostic visibility). */
+        int collectedSamples() {
+            return dataCount;
+        }
+
+        /**
+         * Stall watchdog path for a one-shot monitor whose buffer never filled
+         * (capture stalled mid-slot). Delivers the buffer as-is — the remainder is
+         * zero-initialized, so the decoder sees partial audio instead of the slot
+         * silently vanishing — and unregisters the monitor. No-op for looping
+         * monitors or when the buffer already completed normally.
+         *
+         * @return true if this call delivered the stalled buffer
+         */
+        boolean forceCompleteAfterStall(HamRecorder recorder) {
+            if (!oneShot) {
+                return false;
+            }
+            if (dataCount >= voiceData.length) {
+                return false; // filled; normal path delivered (or is delivering) it
+            }
+            if (!completed.compareAndSet(false, true)) {
+                return false;
+            }
+            doneCallback.onGetDone(voiceData);
+            if (recorder != null) {
+                recorder.deleteVoiceDataMonitor(voiceDataMonitor);
+            }
+            return true;
+        }
 
         /**
          * Monitor class for retrieving recording data.
@@ -223,6 +284,8 @@ public class HamRecorder {
             //because it is 16-bit sampling, so byte*2
             //voiceData = new byte[duration * HamRecorder.sampleRateInHz * 2 / 1000];
             voiceData = new float[duration * HamRecorder.sampleRateInHz  / 1000];
+            oneShot = afterDoneRemove;
+            doneCallback = onGetVoiceDataDone;
 
             //callback function triggered when recording data is available
             onHamRecord = new OnHamRecord() {
@@ -236,10 +299,16 @@ public class HamRecorder {
                     }
 
                     if (dataCount >= (voiceData.length)) {//when data amount reaches the required amount, trigger callback
-                        onGetVoiceDataDone.onGetDone(voiceData);
                         if (afterDoneRemove) {//if this is a one-shot data acquisition, remove this monitor callback from the recorder's listener list
-                            hamRecorder.deleteVoiceDataMonitor(voiceDataMonitor);
+                            //guard against the stall watchdog racing a late normal fill
+                            if (completed.compareAndSet(false, true)) {
+                                onGetVoiceDataDone.onGetDone(voiceData);
+                                if (hamRecorder != null) {
+                                    hamRecorder.deleteVoiceDataMonitor(voiceDataMonitor);
+                                }
+                            }
                         } else {
+                            onGetVoiceDataDone.onGetDone(voiceData);
                             dataCount = 0;//if looping recording, reset the counter
                             if (remainingSize>0) {//forward remaining data to subsequent events
                                 float[] remainingData = new float[remainingSize];
