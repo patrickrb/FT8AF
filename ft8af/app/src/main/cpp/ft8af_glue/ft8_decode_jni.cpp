@@ -26,6 +26,8 @@ extern "C" {
 int ft8_snr(const waterfall_t* wf, const candidate_t* candidate);
 }
 
+#include "decode_params.h"
+
 // ---------------------------------------------------------------------------
 // 22-bit WSJT-X callsign hash (same as ft2_decode_jni.cpp / test_golden_encode.c).
 // ---------------------------------------------------------------------------
@@ -48,8 +50,7 @@ static uint32_t ft8_compute_n22(const char* call)
     return (uint32_t)(((47055833459ull * n58) >> (64 - 22)) & 0x3FFFFFul);
 }
 
-static const int kMaxCandidates = 140;
-static const int kMinScore = 10;
+static const int kMaxCandidates = FT8AF_MAX_CANDIDATES;
 
 // ---------------------------------------------------------------------------
 // Per-decoder callsign hash table.
@@ -72,6 +73,7 @@ struct ft8_decoder_state
     long utc;
 
     int ldpc_iterations;
+    bool deep; // deep passes lower the sync-score threshold (FT8AF_MIN_SCORE_DEEP)
 
     candidate_t candidates[kMaxCandidates];
     int num_candidates;
@@ -227,7 +229,8 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_InitDecoder(
     d->sample_rate = sampleRate;
     d->num_samples = num_samples;
     d->utc = utcTime;
-    d->ldpc_iterations = 20;
+    d->ldpc_iterations = FT8AF_LDPC_ITERS_FAST;
+    d->deep = false;
 
     ftx_protocol_t proto = isFt8 ? FTX_PROTOCOL_FT8 : FTX_PROTOCOL_FT4;
 
@@ -235,8 +238,8 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_InitDecoder(
     cfg.f_min = 100;
     cfg.f_max = 3500;
     cfg.sample_rate = sampleRate;
-    cfg.time_osr = 2;
-    cfg.freq_osr = 2;
+    cfg.time_osr = FT8AF_TIME_OSR;
+    cfg.freq_osr = FT8AF_FREQ_OSR;
     cfg.protocol = proto;
     monitor_init(&d->mon, &cfg);
     d->mon_ready = true;
@@ -328,7 +331,8 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_setDecodeMode(
     ft8_decoder_state* d = (ft8_decoder_state*)(intptr_t)handle;
     if (!d)
         return;
-    d->ldpc_iterations = isDeep ? 30 : 20;
+    d->deep = isDeep;
+    d->ldpc_iterations = isDeep ? FT8AF_LDPC_ITERS_DEEP : FT8AF_LDPC_ITERS_FAST;
 }
 
 // ---------------------------------------------------------------------------
@@ -342,7 +346,8 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderFt8FindSync(
     ft8_decoder_state* d = (ft8_decoder_state*)(intptr_t)handle;
     if (!d || !d->mon_ready)
         return 0;
-    d->num_candidates = ft8_find_sync(&d->mon.wf, kMaxCandidates, d->candidates, kMinScore);
+    int min_score = d->deep ? FT8AF_MIN_SCORE_DEEP : FT8AF_MIN_SCORE_FAST;
+    d->num_candidates = ft8_find_sync(&d->mon.wf, kMaxCandidates, d->candidates, min_score);
     return d->num_candidates;
 }
 

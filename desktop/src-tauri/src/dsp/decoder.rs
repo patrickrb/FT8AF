@@ -2,15 +2,19 @@
 //! `ft8af_glue/ft8_decoder.cpp`:
 //!   new -> feed_slot -> find_sync -> decode_all -> (drop frees the monitor).
 //!
-//! Owns the C `monitor_t` (freed in `Drop`), a candidate array (cap 140), and a
-//! per-decoder callsign hash table for resolving hashed compound calls.
+//! Owns the C `monitor_t` (freed in `Drop`), a candidate array (capped at
+//! `MAX_CANDIDATES` below), and a per-decoder callsign hash table for
+//! resolving hashed compound calls.
 
 use super::ffi;
 use super::hashtable::{HashGuard, HashTable};
 use std::os::raw::c_char;
 
-const MAX_CANDIDATES: usize = 140;
-const MIN_SCORE: i32 = 10;
+// KEEP IN SYNC (manually): ft8af/app/src/main/cpp/ft8af_glue/decode_params.h
+// holds the canonical, benchmark-justified values (see decode_bench.c).
+const MAX_CANDIDATES: usize = 256;
+const MIN_SCORE_FAST: i32 = 10;
+const MIN_SCORE_DEEP: i32 = 5;
 const LDPC_ITERS_NORMAL: i32 = 20;
 const LDPC_ITERS_DEEP: i32 = 30;
 
@@ -37,6 +41,7 @@ pub struct Decoder {
     candidates: Vec<ffi::candidate_t>,
     num_candidates: usize,
     ldpc_iters: i32,
+    deep: bool,
     hashtable: Box<HashTable>,
 }
 
@@ -49,7 +54,9 @@ impl Decoder {
             f_min: 100.0,
             f_max: 3500.0,
             sample_rate,
-            time_osr: 2,
+            // 4 halves worst-case symbol-timing error; the largest measured
+            // recall gain. freq_osr must stay 2 (4 regresses — see decode_params.h).
+            time_osr: 4,
             freq_osr: 2,
             protocol: if is_ft8 {
                 ffi::FTX_PROTOCOL_FT8
@@ -64,12 +71,15 @@ impl Decoder {
             candidates: vec![ffi::candidate_t::default(); MAX_CANDIDATES],
             num_candidates: 0,
             ldpc_iters: LDPC_ITERS_NORMAL,
+            deep: false,
             hashtable: Box::new(HashTable::new()),
         }
     }
 
-    /// Set deep-decode mode (more LDPC iterations). Mirrors `setDecodeMode`.
+    /// Set deep-decode mode (more LDPC iterations + a lower sync-score
+    /// threshold in `find_sync`). Mirrors `setDecodeMode`.
     pub fn set_deep(&mut self, deep: bool) {
+        self.deep = deep;
         self.ldpc_iters = if deep {
             LDPC_ITERS_DEEP
         } else {
@@ -95,12 +105,13 @@ impl Decoder {
 
     /// Locate sync candidates. Mirrors `DecoderFt8FindSync`.
     pub fn find_sync(&mut self) -> usize {
+        let min_score = if self.deep { MIN_SCORE_DEEP } else { MIN_SCORE_FAST };
         let n = unsafe {
             ffi::ft8_find_sync(
                 &self.mon.wf,
                 MAX_CANDIDATES as i32,
                 self.candidates.as_mut_ptr(),
-                MIN_SCORE,
+                min_score,
             )
         };
         self.num_candidates = n.clamp(0, MAX_CANDIDATES as i32) as usize;

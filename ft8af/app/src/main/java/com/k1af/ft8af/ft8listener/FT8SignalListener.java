@@ -170,8 +170,9 @@ public class FT8SignalListener {
 
                 /// Read audio data and perform preprocessing
                 // Note: decoding must complete within one cycle, otherwise a new decode cycle will begin
-                // FT2 and FT4 receive use the from-source decoder (ft8af_usb); FT8 uses the
-                // prebuilt (ft8af). All native ops dispatch through the *Decode helpers on this flag.
+                // Both decoders are from-source in libft8af.so: FT2/FT4 use the *Ft2 entry
+                // points (ft2_decode_jni.cpp), FT8 the plain ones (ft8_decode_jni.cpp). All
+                // native ops dispatch through the *Decode helpers on this flag.
                 final boolean fromSource = GeneralVariables.currentMode().usesFromSourceDecoder();
                 long ft8Decoder = initDecoder(utc, voiceData.length, fromSource);
 //                        , tempData.length, true);
@@ -181,7 +182,8 @@ public class FT8SignalListener {
 
                 ArrayList<Ft8Message> allMsg = new ArrayList<>();
 //                ArrayList<Ft8Message> msgs = runDecode(utc, voiceData,false);
-                ArrayList<Ft8Message> msgs = runDecode(ft8Decoder, utc, false, fromSource);
+                ArrayList<Ft8Message> msgs = runDecode(ft8Decoder, utc, false, fromSource,
+                        DeepDecodeBudget.NO_DEADLINE);
                 addMsgToList(allMsg, msgs);
                 timeSec = System.currentTimeMillis() - time;
                 decodeTimeSec.postValue(timeSec);// decode elapsed time
@@ -192,7 +194,8 @@ public class FT8SignalListener {
 
                 if (GeneralVariables.deepDecodeMode) {// enter deep decode mode
                     //float[] newSignal=tempData;
-                    msgs = runDecode(ft8Decoder, utc, true, fromSource);
+                    msgs = runDecode(ft8Decoder, utc, true, fromSource,
+                            DeepDecodeBudget.NO_DEADLINE);
                     addMsgToList(allMsg, msgs);
                     timeSec = System.currentTimeMillis() - time;
                     decodeTimeSec.postValue(timeSec);// decode elapsed time
@@ -205,13 +208,16 @@ public class FT8SignalListener {
                     // decode time. On a slow device the initial fast + first deep pass can already
                     // exceed the budget, which would abort subtraction before it ran even once.
                     final long deepLoopStart = System.currentTimeMillis();
+                    // Passes inside the loop also stop their candidate scan at this instant,
+                    // so one pass over a huge candidate list can't blow through the budget.
+                    final long passDeadline = DeepDecodeBudget.passDeadline(deepLoopStart, deepDecodeBudgetMs);
                     do {
                         if (DeepDecodeBudget.loopExhausted(deepLoopStart, System.currentTimeMillis(), deepDecodeBudgetMs)) break;// stop once the subtraction loop has spent its budget
                         // subtract decoded signals
                         subtractDecode(ft8Decoder, a91List, fromSource);
 
                         // perform another decode pass
-                        msgs = runDecode(ft8Decoder, utc, true, fromSource);
+                        msgs = runDecode(ft8Decoder, utc, true, fromSource, passDeadline);
                         addMsgToList(allMsg, msgs);
                         timeSec = System.currentTimeMillis() - time;
                         decodeTimeSec.postValue(timeSec);// decode elapsed time
@@ -232,7 +238,8 @@ public class FT8SignalListener {
     }
 
 
-    private ArrayList<Ft8Message> runDecode(long ft8Decoder, long utc, boolean isDeep, boolean fromSource) {
+    private ArrayList<Ft8Message> runDecode(long ft8Decoder, long utc, boolean isDeep, boolean fromSource,
+                                            long deadlineEpochMs) {
         ArrayList<Ft8Message> ft8Messages = new ArrayList<>();
         Ft8Message ft8Message = new Ft8Message(GeneralVariables.operatingMode);
 
@@ -242,10 +249,12 @@ public class FT8SignalListener {
 
         setDeepDecode(ft8Decoder, isDeep, fromSource);// set iteration count; isDeep==true increases iterations
 
-        int num_candidates = findSyncDecode(ft8Decoder, fromSource);// up to 120 candidates
-        //long startTime = System.currentTimeMillis();
+        int num_candidates = findSyncDecode(ft8Decoder, fromSource);// up to FT8AF_MAX_CANDIDATES candidates
         for (int idx = 0; idx < num_candidates; ++idx) {
-            //todo should add timeout calculation
+            if (DeepDecodeBudget.passExpired(deadlineEpochMs, System.currentTimeMillis())) {
+                Log.d(TAG, "pass deadline hit at candidate " + idx + "/" + num_candidates);
+                break;
+            }
             ft8Message.snr = Ft8Message.SNR_UNKNOWN; // reset before each candidate
             try {// protect against decode failure
                 if (analysisDecode(idx, ft8Decoder, ft8Message, fromSource)) {

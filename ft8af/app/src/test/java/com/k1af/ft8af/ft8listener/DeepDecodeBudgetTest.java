@@ -38,4 +38,24 @@ public class DeepDecodeBudgetTest {
         long now = loopStart + 100L;              // loop itself has run 100ms
         assertThat(DeepDecodeBudget.loopExhausted(loopStart, now, 11_250)).isFalse();
     }
+
+    // ---- per-pass candidate-loop deadline ------------------------------------------------
+
+    @Test
+    public void passDeadline_isLoopStartPlusBudget() {
+        assertThat(DeepDecodeBudget.passDeadline(10_000, 11_250)).isEqualTo(21_250);
+    }
+
+    @Test
+    public void passExpired_onlyAfterDeadlinePasses() {
+        long deadline = DeepDecodeBudget.passDeadline(10_000, 11_250);
+        assertThat(DeepDecodeBudget.passExpired(deadline, 21_250)).isFalse(); // exactly at: not expired
+        assertThat(DeepDecodeBudget.passExpired(deadline, 21_251)).isTrue();
+    }
+
+    @Test
+    public void noDeadline_neverExpires() {
+        // Fast pass and the first deep pass must always scan the full candidate list.
+        assertThat(DeepDecodeBudget.passExpired(DeepDecodeBudget.NO_DEADLINE, Long.MAX_VALUE - 1)).isFalse();
+    }
 }
