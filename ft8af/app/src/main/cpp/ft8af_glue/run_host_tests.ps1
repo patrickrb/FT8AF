@@ -147,8 +147,9 @@ $wavs = Get-ChildItem (Join-Path $corpus "*.wav") | ForEach-Object { $_.FullName
 $benchExit = $LASTEXITCODE
 
 # ---------------------------------------------------------------------------
-# Subtraction unit tests: tone-accurate deep-decode subtraction properties
-# (removal, neighbor preservation, masked co-channel recovery, bounded damage).
+# Subtraction unit tests: waterfall-domain (tone replacement) and coherent
+# time-domain deep-decode subtraction properties (removal, neighbor
+# preservation, masked/same-frequency co-channel recovery, bounded damage).
 # ---------------------------------------------------------------------------
 $subSrcs = @(
     "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",

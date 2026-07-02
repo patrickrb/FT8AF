@@ -26,6 +26,7 @@
 //     --osd-depth N       OSD flip depth in deep passes, 0 = off (default: app value)
 //     --max-loops N       subtract-and-redecode loop cap (default 16; the app
 //                         caps by wall-clock budget instead)
+//     --wf-subtract       waterfall-domain tone-replacement subtraction (A/B only)
 //     --zero-subtract     use the legacy ±4-bin zeroing subtraction (A/B only)
 //     --assert-floor F    read "name min_matched" lines from F; exit 1 if any
 //                         listed file matches fewer truth messages than its floor
@@ -75,7 +76,17 @@ static int g_window_ms = 13500;
 static int g_max_loops = 16;
 static bool g_deep = true;
 static bool g_verbose = false;
-static bool g_zero_subtract = false; // legacy ±4-bin zeroing, for A/B only
+
+// Subtraction backend for the deep loop (matches the app's default: coherent
+// time-domain subtraction from the float samples, waterfall recomputed per
+// pass). The other two are kept for A/B comparison only.
+enum
+{
+    SUBTRACT_TIME = 0, // ft8_subtract_signal_time + re-feed (app behavior)
+    SUBTRACT_WF = 1,   // waterfall-domain tone replacement (previous behavior)
+    SUBTRACT_ZERO = 2, // legacy ±4-bin zeroing (pre-#360 behavior)
+};
+static int g_subtract_mode = SUBTRACT_TIME;
 
 #define BENCH_MAX_CAND_CAP 1024
 #define BENCH_MAX_MSGS 256
@@ -352,9 +363,19 @@ static int run_pass(monitor_t* mon, int ldpc_iters, int min_score, int osd_depth
 // ---------------------------------------------------------------------------
 // Full pipeline over one audio buffer, mirroring decodeFt8():
 // fast pass -> deep pass -> (subtract, deep pass) until no new messages.
+// In the default time-domain mode the subtraction edits `signal` in place and
+// the waterfall is recomputed from the residual before each redecode pass —
+// exactly what the app does (doSubtractSignal + DecoderFt8FindSync rebuild).
 // Returns total pass count via *passes_out.
 // ---------------------------------------------------------------------------
-static void decode_buffer(const float* signal, int num_samples,
+static void feed_monitor(monitor_t* mon, const float* signal, int num_samples)
+{
+    monitor_reset(mon);
+    for (int pos = 0; pos + mon->block_size <= num_samples; pos += mon->block_size)
+        monitor_process(mon, signal + pos);
+}
+
+static void decode_buffer(float* signal, int num_samples,
                           bench_msglist_t* seen, int* passes_out)
 {
     monitor_config_t cfg;
@@ -367,9 +388,7 @@ static void decode_buffer(const float* signal, int num_samples,
 
     monitor_t mon;
     monitor_init(&mon, &cfg);
-    monitor_reset(&mon);
-    for (int pos = 0; pos + mon.block_size <= num_samples; pos += mon.block_size)
-        monitor_process(&mon, signal + pos);
+    feed_monitor(&mon, signal, num_samples);
 
     bench_hash_reset();
     static bench_declist_t pass_decs;
@@ -380,19 +399,50 @@ static void decode_buffer(const float* signal, int num_samples,
 
     if (g_deep)
     {
+        // Payloads already subtracted from the sample buffer this slot. The
+        // same transmission decodes from several neighboring candidates (and
+        // again from its residual in later loops); subtracting it more than
+        // once fits the fine sync to junk and pollutes the residual with the
+        // bogus estimate. Mirrors the dedup in ft8_decode_jni.cpp.
+        static uint8_t done[BENCH_MAX_MSGS][FTX_PAYLOAD_LENGTH_BYTES];
+        int done_count = 0;
+
         int new_msgs = run_pass(&mon, g_ldpc_deep, g_min_score_deep, g_osd_depth, seen, &pass_decs);
         passes++;
         for (int loop = 0; loop < g_max_loops; ++loop)
         {
+            bool subtracted = false;
             for (int i = 0; i < pass_decs.count; ++i)
             {
-                if (g_zero_subtract)
+                if (g_subtract_mode == SUBTRACT_ZERO)
                     subtract_signal_zeroing(&mon, &pass_decs.items[i]);
-                else
+                else if (g_subtract_mode == SUBTRACT_WF)
                     ft8_subtract_signal(&mon, pass_decs.items[i].payload,
                                         pass_decs.items[i].freq_hz,
                                         pass_decs.items[i].time_sec);
+                else
+                {
+                    bool dup = false;
+                    for (int j = 0; j < done_count && !dup; ++j)
+                        dup = (memcmp(done[j], pass_decs.items[i].payload,
+                                      FTX_PAYLOAD_LENGTH_BYTES) == 0);
+                    if (dup)
+                        continue;
+                    if (ft8_subtract_signal_time(&mon, signal, num_samples,
+                                                 BENCH_SAMPLE_RATE,
+                                                 pass_decs.items[i].payload,
+                                                 pass_decs.items[i].freq_hz,
+                                                 pass_decs.items[i].time_sec))
+                    {
+                        subtracted = true;
+                        if (done_count < BENCH_MAX_MSGS)
+                            memcpy(done[done_count++], pass_decs.items[i].payload,
+                                   FTX_PAYLOAD_LENGTH_BYTES);
+                    }
+                }
             }
+            if (g_subtract_mode == SUBTRACT_TIME && subtracted)
+                feed_monitor(&mon, signal, num_samples);
             new_msgs = run_pass(&mon, g_ldpc_deep, g_min_score_deep, g_osd_depth, seen, &pass_decs);
             passes++;
             if (new_msgs == 0)
@@ -567,7 +617,9 @@ int main(int argc, char** argv)
         else if (strcmp(a, "--self-test") == 0)
             do_self_test = true;
         else if (strcmp(a, "--zero-subtract") == 0)
-            g_zero_subtract = true;
+            g_subtract_mode = SUBTRACT_ZERO;
+        else if (strcmp(a, "--wf-subtract") == 0)
+            g_subtract_mode = SUBTRACT_WF;
         else if (strcmp(a, "--window-ms") == 0 && i + 1 < argc)
             g_window_ms = atoi(argv[++i]);
         else if (strcmp(a, "--candidates") == 0 && i + 1 < argc)

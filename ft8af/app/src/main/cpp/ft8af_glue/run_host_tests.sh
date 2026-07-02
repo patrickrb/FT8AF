@@ -120,8 +120,9 @@ bench_out="$tmp/ft8_decode_bench"
 "$bench_out" --self-test
 "$bench_out" --assert-floor "$here/testdata/ft8/floors.txt" "$here"/testdata/ft8/*.wav
 
-# Subtraction unit tests: tone-accurate deep-decode subtraction properties
-# (removal, neighbor preservation, masked co-channel recovery, bounded damage).
+# Subtraction unit tests: waterfall-domain (tone replacement) and coherent
+# time-domain deep-decode subtraction properties (removal, neighbor
+# preservation, masked/same-frequency co-channel recovery, bounded damage).
 subtract_srcs=(
     "$here/test_subtract.c"
     "$here/gfsk.c"
