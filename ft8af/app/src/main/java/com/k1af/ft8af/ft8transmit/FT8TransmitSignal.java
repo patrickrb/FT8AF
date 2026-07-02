@@ -46,6 +46,10 @@ public class FT8TransmitSignal {
 
     private boolean transmitFreeText = false;
     private String freeText = "FREE TEXT";
+    // When true, the queued free-text message is a one-shot (WSJT-X Tx5 style): it
+    // transmits once and then the sequencer auto-stops, rather than repeating every
+    // cycle like a CQ. Cleared after the single send completes (see afterPlayAudio).
+    private boolean freeTextOneShot = false;
 
     private final DatabaseOpr databaseOpr;// configuration info and related data database
     private TransmitCallsign toCallsign;// target callsign
@@ -325,7 +329,10 @@ public class FT8TransmitSignal {
         if (transmitCallsign.frequency == 0) {
             transmitCallsign.frequency = GeneralVariables.getBaseFrequency();
         }
-        if (GeneralVariables.synFrequency) {// if same-frequency mode, match target callsign frequency
+        // Same-frequency mode moves our TX offset onto the station we answer — unless
+        // "Hold TX freq" is on (WSJT-X "Hold Tx Freq"), in which case we keep calling
+        // on our own offset. Tester reported the auto-move felt inverted.
+        if (shouldFollowTargetFreq(GeneralVariables.synFrequency, GeneralVariables.holdTxFreq)) {
             setBaseFrequency(transmitCallsign.frequency);
         }
 
@@ -343,6 +350,16 @@ public class FT8TransmitSignal {
         GeneralVariables.setBaseFrequency(freq);
         // write to database
         databaseOpr.writeConfig("freq", String.format("%.0f", freq), null);
+    }
+
+    /**
+     * Whether to move our TX offset onto the frequency of the station we're about to
+     * answer. True only in TX=RX (synFrequency) mode AND when "Hold TX freq" is off —
+     * holding TX freq (WSJT-X "Hold Tx Freq") keeps us calling on our own offset.
+     * Pure decision logic so it can be unit-tested without the Android runtime.
+     */
+    static boolean shouldFollowTargetFreq(boolean synFrequency, boolean holdTxFreq) {
+        return synFrequency && !holdTxFreq;
     }
 
     /**
@@ -856,6 +873,16 @@ public class FT8TransmitSignal {
         if (audioTrack != null) {
             audioTrack.release();
             audioTrack = null;
+        }
+        // One-shot free text (WSJT-X Tx5 style) just finished sending: stop here
+        // instead of repeating it every cycle, and revert to standard messages so
+        // the next CQ is a normal CQ. Safe to deactivate now — the audio has already
+        // drained (isTransmitting is false above), so setActivated(false)'s
+        // setTransmitting(false) is a no-op for playback and just clears the run.
+        if (shouldStopAfterOneShot(transmitFreeText, freeTextOneShot)) {
+            freeTextOneShot = false;
+            transmitFreeText = false;
+            setActivated(false);
         }
     }
 
@@ -2053,6 +2080,47 @@ public class FT8TransmitSignal {
         } else {
             ToastMessage.show((GeneralVariables.getStringFromResource(R.string.trans_standard_messge_mode)));
         }
+    }
+
+    /**
+     * Send a free-text message ONCE, mirroring WSJT-X's free-text (Tx5) behavior:
+     * free text is an alternative to a 73, not a repeating CQ. The message goes out
+     * this cycle if we're early enough in the slot (immediate TX, like tapping a
+     * decode), otherwise at the next slot boundary, and then the sequencer
+     * auto-stops in {@link #afterPlayAudio()} instead of keying up again each cycle.
+     */
+    public void sendFreeTextOnce(String text) {
+        setFreeText(text);
+        transmitFreeText = true;
+        freeTextOneShot = true;
+        setActivated(true);
+        if (!activated) {
+            // SWR lockout or invalid callsign blocked activation — don't leave the
+            // one-shot armed.
+            freeTextOneShot = false;
+            transmitFreeText = false;
+            return;
+        }
+        GeneralVariables.resetLaunchSupervision();
+        // transmitNow() (and the status toast) dereference toCallsign, which stays
+        // null until the first setTransmit/resetToCQ. A free-text one-shot can be the
+        // very first TX action of a session (before any CQ or decode tap), so seed a
+        // CQ baseline here to avoid an NPE. The free-text message itself is built
+        // independently of toCallsign, so this only provides the baseline target.
+        if (toCallsign == null) {
+            resetToCQ();
+        }
+        transmitNow();// fire this cycle if within the late-start tolerance window
+    }
+
+    /**
+     * Whether the sequencer should auto-stop after the transmission that just
+     * completed. True only for a one-shot free-text send (WSJT-X Tx5 style), which
+     * goes out once and then stops rather than repeating like a CQ. Extracted as a
+     * pure predicate so it can be unit-tested without the Android runtime.
+     */
+    static boolean shouldStopAfterOneShot(boolean transmitFreeText, boolean freeTextOneShot) {
+        return transmitFreeText && freeTextOneShot;
     }
 
 

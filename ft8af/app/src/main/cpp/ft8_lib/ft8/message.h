@@ -109,6 +109,52 @@ void ftx_message_encode_telemetry(const uint8_t* telemetry);
 ftx_message_rc_t ftx_message_decode(const ftx_message_t* msg, ftx_callsign_hash_interface_t* hash_if, char* message);
 ftx_message_rc_t ftx_message_decode_std(const ftx_message_t* msg, ftx_callsign_hash_interface_t* hash_if, char* call_to, char* call_de, char* extra);
 ftx_message_rc_t ftx_message_decode_nonstd(const ftx_message_t* msg, ftx_callsign_hash_interface_t* hash_if, char* call_to, char* call_de, char* extra);
+
+/// Decode an ARRL Field Day message (i3=0, n3=3 or 4).
+/// @param[out] call_to   Destination callsign (at least 14 bytes)
+/// @param[out] call_de   Source callsign (at least 14 bytes)
+/// @param[out] r_flag    Roger flag (0 or 1)
+/// @param[out] num_tx    Number of transmitters (1..16)
+/// @param[out] fd_class  FD class letter as string, e.g. "A" (at least 2 bytes)
+/// @param[out] section   ARRL/RAC section string, e.g. "EMA" (at least 4 bytes)
+ftx_message_rc_t ftx_message_decode_fd(const ftx_message_t* msg, const ftx_callsign_hash_interface_t* hash_if,
+                                       char* call_to, char* call_de,
+                                       uint8_t* r_flag, uint8_t* num_tx,
+                                       char* fd_class, char* section);
+/// Decode a DXpedition message (i3=0, n3=1).
+/// @param[out] call_to   Acked callsign (at least 14 bytes)
+/// @param[out] call_de   Invited callsign (at least 14 bytes)
+/// @param[out] h10       10-bit hash of the fox callsign
+/// @param[out] report    Signal report (even values -30..+30 dB)
+ftx_message_rc_t ftx_message_decode_dxped(const ftx_message_t* msg, const ftx_callsign_hash_interface_t* hash_if,
+                                          char* call_to, char* call_de,
+                                          uint16_t* h10, int8_t* report);
+
+/// Decode an ARRL RTTY Roundup message (i3=3).
+/// @param[out] call_to       Destination callsign (at least 14 bytes)
+/// @param[out] call_de       Source callsign (at least 14 bytes)
+/// @param[out] tu_flag       TU flag (0 or 1)
+/// @param[out] r_flag        Roger flag (0 or 1)
+/// @param[out] report        RST report (529-599)
+/// @param[out] state_or_serial  State/province string or serial number as string (at least 8 bytes)
+/// @param[out] is_serial     True if state_or_serial is a serial number, false if state/province
+ftx_message_rc_t ftx_message_decode_rtty(const ftx_message_t* msg, const ftx_callsign_hash_interface_t* hash_if,
+                                         char* call_to, char* call_de,
+                                         uint8_t* tu_flag, uint8_t* r_flag,
+                                         uint16_t* report, char* state_or_serial, bool* is_serial);
+
+/// Decode a WWROF contest message (i3=5).
+/// @param[out] call_to   Destination callsign (at least 14 bytes)
+/// @param[out] call_de   Source callsign (at least 14 bytes)
+/// @param[out] tu_flag   TU flag (0 or 1)
+/// @param[out] r_flag    Roger flag (0 or 1)
+/// @param[out] report    Signal report (-35..+35 dB, but typically -30..+30)
+/// @param[out] grid2     Two-character grid prefix, e.g. "FN" (at least 3 bytes)
+ftx_message_rc_t ftx_message_decode_wwrof(const ftx_message_t* msg, const ftx_callsign_hash_interface_t* hash_if,
+                                          char* call_to, char* call_de,
+                                          uint8_t* tu_flag, uint8_t* r_flag,
+                                          int8_t* report, char* grid2);
+
 void ftx_message_decode_free(const ftx_message_t* msg, char* text);
 void ftx_message_decode_telemetry_hex(const ftx_message_t* msg, char* telemetry_hex);
 void ftx_message_decode_telemetry(const ftx_message_t* msg, uint8_t* telemetry);
