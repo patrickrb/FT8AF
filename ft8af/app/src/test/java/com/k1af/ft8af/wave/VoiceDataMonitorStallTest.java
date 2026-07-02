@@ -92,6 +92,22 @@ public class VoiceDataMonitorStallTest {
     }
 
     @Test
+    public void lateAudioCannotMutateADeliveredBuffer() {
+        // After the watchdog delivers a stalled buffer, late-arriving audio must
+        // not keep writing into the array the consumer is now reading.
+        RecordingCallback cb = new RecordingCallback();
+        HamRecorder.VoiceDataMonitor m = newMonitor(true, cb);
+        feed(m, 500, 0.25f);
+        assertThat(m.forceCompleteAfterStall(null)).isTrue();
+
+        feed(m, 700, 0.75f); // late audio arrives after delivery
+        float[] delivered = cb.deliveries.get(0);
+        assertThat(delivered[500]).isEqualTo(0f); // still the zero padding
+        assertThat(m.collectedSamples()).isEqualTo(500); // nothing appended
+        assertThat(cb.deliveries).hasSize(1); // and no second delivery
+    }
+
+    @Test
     public void loopingMonitorStillLoopsAfterFill() {
         // Sanity that the completion-guard refactor didn't break the looping
         // (waterfall) path: it must keep delivering on every fill.

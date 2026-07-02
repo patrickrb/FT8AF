@@ -34,7 +34,16 @@ public class HamRecorder {
     //private AudioRecord audioRecord = null;//AudioRecord object
     private volatile boolean isRunning = false;//whether currently in recording state
 
-    private final ArrayList<VoiceDataMonitor> voiceDataMonitorList = new ArrayList<>();//listener callback list, data is retrieved in listener callbacks
+    //listener callback list, data is retrieved in listener callbacks.
+    //CopyOnWriteArrayList: the list is iterated on the capture thread
+    //(doOnWaveDataReceived) while monitors are added from the cycle-timer
+    //thread (getVoiceData), removed from the capture thread (one-shot
+    //completion), and removed from the stall-watchdog thread
+    //(forceCompleteAfterStall) — a plain ArrayList races. Mutations are rare
+    //(a few per 15 s slot); iteration is the hot path, which COW makes
+    //lock-free over an immutable snapshot.
+    private final java.util.concurrent.CopyOnWriteArrayList<VoiceDataMonitor> voiceDataMonitorList =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
     private OnVoiceMonitorChanged onVoiceMonitorChanged=null;
 
     //Watchdog for stalled one-shot monitors (see VoiceDataMonitor.forceCompleteAfterStall):
@@ -72,10 +81,12 @@ public class HamRecorder {
      */
     public void doOnWaveDataReceived(int bufferLen,float[] buffer){
         if (!isRunning) return;
-        for (int i = 0; i < voiceDataMonitorList.size(); i++) {
+        //for-each over the CopyOnWriteArrayList iterates one consistent
+        //snapshot even if a monitor is added/removed concurrently
+        for (VoiceDataMonitor monitor : voiceDataMonitorList) {
             //invoke each listener's callback, providing data to the callback function
-            if (voiceDataMonitorList.get(i)!=null) {
-                voiceDataMonitorList.get(i).onHamRecord.OnReceiveData(buffer, bufferLen);
+            if (monitor != null) {
+                monitor.onHamRecord.OnReceiveData(buffer, bufferLen);
             }
         }
 
@@ -139,7 +150,7 @@ public class HamRecorder {
      * Get the list of monitors
      * @return monitor list
      */
-    public ArrayList<VoiceDataMonitor> getVoiceDataMonitors(){
+    public java.util.List<VoiceDataMonitor> getVoiceDataMonitors(){
         return this.voiceDataMonitorList;
     }
 
@@ -291,6 +302,12 @@ public class HamRecorder {
             onHamRecord = new OnHamRecord() {
                 @Override
                 public void OnReceiveData(float[] data, int size) {
+                    //Once a one-shot buffer has been delivered (normally or by the
+                    //stall watchdog), late-arriving audio must not keep mutating it
+                    //behind the consumer's back.
+                    if (afterDoneRemove && completed.get()) {
+                        return;
+                    }
                     int remainingSize = size+dataCount-voiceData.length;//if greater than 0, this is the remaining data amount
 
                     for (int i = 0; (i < size) && (dataCount < voiceData.length); i++) {

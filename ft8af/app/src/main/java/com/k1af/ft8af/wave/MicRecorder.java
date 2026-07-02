@@ -325,6 +325,14 @@ public class MicRecorder {
                             }
                             break;
                         }
+                        // Persistent non-fatal errors would otherwise retry in a
+                        // tight loop, spamming the log and burning CPU.
+                        try {
+                            Thread.sleep(50);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
                         continue;
                     }
 

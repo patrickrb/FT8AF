@@ -355,13 +355,16 @@ public class UsbAudioDevice {
             // Anti-aliased decimation (same windowed-sinc FIR as the native libusb
             // path) — the old per-window average was a box filter whose ~12 dB
             // stopband folded hiss into the FT8 passband whenever this fallback ran.
-            FirDecimator decimator = new FirDecimator(Math.max(1, ratio));
-            if (ratio > 0 && ratio * targetRate != inputSampleRate) {
+            // One clamped ratio drives both the FIR and the mismatch warning, so a
+            // degenerate ratio (0/negative) is reported with the value actually used.
+            final int decimRatio = Math.max(1, ratio);
+            FirDecimator decimator = new FirDecimator(decimRatio);
+            if (decimRatio * targetRate != inputSampleRate) {
                 com.k1af.ft8af.GeneralVariables.fileLog(String.format(
-                        "UsbAudio.captureLoop: input %d Hz is not an integer multiple "
-                                + "of target %d Hz (ratio floored to %d) — decode may "
-                                + "suffer from the resulting rate error",
-                        inputSampleRate, targetRate, ratio));
+                        "UsbAudio.captureLoop: input %d Hz is not %dx target %d Hz "
+                                + "(raw ratio %d) — decode may suffer from the "
+                                + "resulting rate error",
+                        inputSampleRate, decimRatio, targetRate, ratio));
             }
             float[] monoBuffer = new float[1];
             float[] outputBuffer = new float[1];
