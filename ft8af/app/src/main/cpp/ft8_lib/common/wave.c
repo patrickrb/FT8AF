@@ -26,6 +26,8 @@ int save_wav(const float* signal, int num_samples, int sample_rate, const char* 
     char format[4] = { 'W', 'A', 'V', 'E' };
 
     int16_t* raw_data = (int16_t*)malloc(num_samples * blockAlign);
+    if (raw_data == NULL)
+        return -1;
     for (int i = 0; i < num_samples; i++)
     {
         float x = signal[i];
@@ -38,7 +40,10 @@ int save_wav(const float* signal, int num_samples, int sample_rate, const char* 
 
     FILE* f = fopen(path, "wb");
     if (f == NULL)
+    {
+        free(raw_data);
         return -1;
+    }
 
     // NOTE: works only on little-endian architecture
     fwrite(chunkID, sizeof(chunkID), 1, f);
@@ -96,7 +101,10 @@ int load_wav(float* signal, int* num_samples, int* sample_rate, const char* path
     fread((void*)subChunk1ID, sizeof(subChunk1ID), 1, f);
     fread((void*)&subChunk1Size, sizeof(subChunk1Size), 1, f);
     if (subChunk1Size != 16)
+    {
+        fclose(f);
         return -2;
+    }
 
     fread((void*)&audioFormat, sizeof(audioFormat), 1, f);
     fread((void*)&numChannels, sizeof(numChannels), 1, f);
@@ -106,18 +114,29 @@ int load_wav(float* signal, int* num_samples, int* sample_rate, const char* path
     fread((void*)&bitsPerSample, sizeof(bitsPerSample), 1, f);
 
     if (audioFormat != 1 || numChannels != 1 || bitsPerSample != 16)
+    {
+        fclose(f);
         return -3;
+    }
 
     fread((void*)subChunk2ID, sizeof(subChunk2ID), 1, f);
     fread((void*)&subChunk2Size, sizeof(subChunk2Size), 1, f);
 
     if (subChunk2Size / blockAlign > *num_samples)
+    {
+        fclose(f);
         return -4;
+    }
 
     *num_samples = subChunk2Size / blockAlign;
     *sample_rate = sampleRate;
 
     int16_t* raw_data = (int16_t*)malloc(*num_samples * blockAlign);
+    if (raw_data == NULL)
+    {
+        fclose(f);
+        return -5;
+    }
 
     fread((void*)raw_data, blockAlign, *num_samples, f);
     for (int i = 0; i < *num_samples; i++)
