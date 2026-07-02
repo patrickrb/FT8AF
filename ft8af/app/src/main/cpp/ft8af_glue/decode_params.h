@@ -47,4 +47,24 @@
 #define FT8AF_OSD_DEPTH_DEEP 12
 #define FT8AF_OSD_LDPC_ERR_GATE 24
 
+// Fine-demod retry (ft8af_glue/ft8_fine.c), deep passes only: candidates the
+// waterfall LLRs can't decode are re-demodulated from the raw samples with
+// Costas fine dt/df sync. SYNC_MIN gates the retry on the fine sync quality
+// (aligned Costas power over misaligned trials) so noise candidates don't
+// get a second draw against the CRC+nhard gates. Swept: 1.0 -> 460 matched /
+// 65 extras, 1.2 -> 460/64, 1.4 -> 459/62, 1.7 -> 455/58, 2.0 -> 449/52 —
+// real decodes fall off fast above 1.2.
+// RARE_MIN applies instead when the decoded message is NOT a standard or
+// non-standard-call message: fabricated decodes land disproportionately in
+// the free-text/contest types (random 77-bit payloads), while genuine
+// traffic in those types is rare and strong. Junk observed at the base
+// gate ("1EQ8YXYQDW2 .", "W99WMQ JX3GAH 539 4274") sails through quality
+// ~1.2-2 on a busy band; genuine rare-type decodes clear 2.5 easily.
+#ifndef FT8AF_FINE_SYNC_MIN
+#define FT8AF_FINE_SYNC_MIN 1.2f
+#endif
+#ifndef FT8AF_FINE_SYNC_MIN_RARE
+#define FT8AF_FINE_SYNC_MIN_RARE 2.5f
+#endif
+
 #endif // FT8AF_DECODE_PARAMS_H

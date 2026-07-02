@@ -130,6 +130,7 @@ $benchSrcs = @(
 ) | ForEach-Object { Join-Path $ft8 $_ }
 $benchSrcs += (Join-Path $here "gfsk.c")
 $benchSrcs += (Join-Path $here "ft8_subtract.c")
+$benchSrcs += (Join-Path $here "ft8_fine.c")
 
 $srcBench = Join-Path $here "decode_bench.c"
 $outBench = Join-Path $env:TEMP "ft8_decode_bench.exe"
@@ -187,10 +188,33 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_osd)." }
 & $outOsd
 $osdExit = $LASTEXITCODE
 
+# ---------------------------------------------------------------------------
+# Fine-demod unit tests: the fine-sync coherent retry (partial-transmission
+# recovery, off-grid sync accuracy, pure-noise rejection).
+# ---------------------------------------------------------------------------
+$fineSrcs = @(
+    "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
+    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\osd.c","ft8\unpack.c",
+    "common\monitor.c",
+    "fft\kiss_fft.c","fft\kiss_fftr.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+$fineSrcs += (Join-Path $here "gfsk.c")
+$fineSrcs += (Join-Path $here "ft8_fine.c")
+
+$srcFine = Join-Path $here "test_fine.c"
+$outFine = Join-Path $env:TEMP "ft8_fine_test.exe"
+
+& $Clang @common $srcFine @fineSrcs -o $outFine
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_fine)." }
+
+& $outFine
+$fineExit = $LASTEXITCODE
+
 if ($goldenExit -ne 0) { exit $goldenExit }
 if ($dev625Exit -ne 0) { exit $dev625Exit }
 if ($firExit -ne 0) { exit $firExit }
 if ($benchSelfExit -ne 0) { exit $benchSelfExit }
 if ($benchExit -ne 0) { exit $benchExit }
 if ($subExit -ne 0) { exit $subExit }
-exit $osdExit
+if ($osdExit -ne 0) { exit $osdExit }
+exit $fineExit
