@@ -114,6 +114,8 @@ add_library(ft8af SHARED
         ft8af_glue/ft8_subtract.c
         # Fine-sync coherent demod retry (shared with host bench)
         ft8af_glue/ft8_fine.c
+        # Cross-slot decoding: LLR accumulation + message-history retry
+        ft8af_glue/ft8_xslot.c
         # JNI wrappers — FT2/FT4 decoder (from-source, was in ft8af_usb)
         ft8af_glue/ft2_decode_jni.cpp
 )
