@@ -95,6 +95,7 @@ fir_out="$tmp/ft8_fir_test"
 bench_srcs=(
     "$here/decode_bench.c"
     "$here/gfsk.c"
+    "$here/ft8_subtract.c"
     "$ft8/ft8/pack.c"
     "$ft8/ft8/encode.c"
     "$ft8/ft8/crc.c"
@@ -116,3 +117,28 @@ bench_out="$tmp/ft8_decode_bench"
 
 "$bench_out" --self-test
 "$bench_out" --assert-floor "$here/testdata/ft8/floors.txt" "$here"/testdata/ft8/*.wav
+
+# Subtraction unit tests: tone-accurate deep-decode subtraction properties
+# (removal, neighbor preservation, masked co-channel recovery, bounded damage).
+subtract_srcs=(
+    "$here/test_subtract.c"
+    "$here/gfsk.c"
+    "$here/ft8_subtract.c"
+    "$ft8/ft8/pack.c"
+    "$ft8/ft8/encode.c"
+    "$ft8/ft8/crc.c"
+    "$ft8/ft8/constants.c"
+    "$ft8/ft8/text.c"
+    "$ft8/ft8/message.c"
+    "$ft8/ft8/decode.c"
+    "$ft8/ft8/ldpc.c"
+    "$ft8/ft8/unpack.c"
+    "$ft8/common/monitor.c"
+    "$ft8/fft/kiss_fft.c"
+    "$ft8/fft/kiss_fftr.c"
+)
+subtract_out="$tmp/ft8_subtract_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${subtract_srcs[@]}" -lm -o "$subtract_out"
+"$subtract_out"

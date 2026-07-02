@@ -25,6 +25,7 @@
 //     --ldpc-deep N       LDPC iterations, deep pass (default 30)
 //     --max-loops N       subtract-and-redecode loop cap (default 16; the app
 //                         caps by wall-clock budget instead)
+//     --zero-subtract     use the legacy ±4-bin zeroing subtraction (A/B only)
 //     --assert-floor F    read "name min_matched" lines from F; exit 1 if any
 //                         listed file matches fewer truth messages than its floor
 //     --self-test         synthesize a clean FT8 signal, decode it, expect 1/1
@@ -51,6 +52,7 @@
 #include "common/wave.h"
 
 #include "decode_params.h"
+#include "ft8_subtract.h"
 
 // From gfsk.c (glue): GFSK synth used by the --self-test signal generator.
 void synth_gfsk_offset(const uint8_t* symbols, int n_sym, float f0,
@@ -71,6 +73,7 @@ static int g_window_ms = 13500;
 static int g_max_loops = 16;
 static bool g_deep = true;
 static bool g_verbose = false;
+static bool g_zero_subtract = false; // legacy ±4-bin zeroing, for A/B only
 
 #define BENCH_MAX_CAND_CAP 1024
 #define BENCH_MAX_MSGS 256
@@ -220,14 +223,12 @@ typedef struct
 } bench_declist_t;
 
 // ---------------------------------------------------------------------------
-// Baseline subtraction — byte-for-byte the app's current behavior
-// (Java_..._ReBuildSignal_doSubtractSignal in ft8_decode_jni.cpp): zero the
-// waterfall magnitudes ±4 bins around the signal for all 79 symbols, across
-// every time/freq oversampling plane. The decoded payload is ignored. This is
-// deliberately replicated here so the committed baseline matches the shipped
-// app; PR "subtract-v2" swaps both sides to a shared implementation.
+// Legacy zeroing subtraction — byte-for-byte the app's PREVIOUS behavior
+// (±4-bin waterfall zeroing, payload ignored), kept behind --zero-subtract
+// for A/B comparison against the shared tone-accurate implementation in
+// ft8_subtract.c that both the app and this bench now use by default.
 // ---------------------------------------------------------------------------
-static void subtract_signal_baseline(monitor_t* mon, const bench_decode_t* dec)
+static void subtract_signal_zeroing(monitor_t* mon, const bench_decode_t* dec)
 {
     waterfall_t* wf = &mon->wf;
     if (!wf->mag || wf->num_blocks <= 0)
@@ -381,7 +382,14 @@ static void decode_buffer(const float* signal, int num_samples,
         for (int loop = 0; loop < g_max_loops; ++loop)
         {
             for (int i = 0; i < pass_decs.count; ++i)
-                subtract_signal_baseline(&mon, &pass_decs.items[i]);
+            {
+                if (g_zero_subtract)
+                    subtract_signal_zeroing(&mon, &pass_decs.items[i]);
+                else
+                    ft8_subtract_signal(&mon, pass_decs.items[i].payload,
+                                        pass_decs.items[i].freq_hz,
+                                        pass_decs.items[i].time_sec);
+            }
             new_msgs = run_pass(&mon, g_ldpc_deep, g_min_score_deep, seen, &pass_decs);
             passes++;
             if (new_msgs == 0)
@@ -555,6 +563,8 @@ int main(int argc, char** argv)
             g_verbose = true;
         else if (strcmp(a, "--self-test") == 0)
             do_self_test = true;
+        else if (strcmp(a, "--zero-subtract") == 0)
+            g_zero_subtract = true;
         else if (strcmp(a, "--window-ms") == 0 && i + 1 < argc)
             g_window_ms = atoi(argv[++i]);
         else if (strcmp(a, "--candidates") == 0 && i + 1 < argc)
