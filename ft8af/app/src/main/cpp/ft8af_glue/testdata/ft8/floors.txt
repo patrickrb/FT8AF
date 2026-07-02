@@ -9,23 +9,25 @@
 #   Documented trade: 20m_busy_test_05 floor lowered 22 -> 21 (one decode lost
 #   to subtract-loop interplay with an OSD-recovered neighbor) for +8 matched
 #   across the corpus.
-20m_busy_test_01.wav 20
-20m_busy_test_02.wav 19
-20m_busy_test_03.wav 12
-20m_busy_test_04.wav 17
-20m_busy_test_05.wav 21
-20m_busy_test_06.wav 22
-20m_busy_test_07.wav 24
-20m_busy_test_08.wav 16
-20m_busy_test_09.wav 21
-20m_busy_test_10.wav 18
-20m_busy_test_11.wav 24
-20m_busy_test_12.wav 15
+# 2026-07-02 subtract-time (coherent time-domain subtraction, fine dt/df sync,
+#   STFT-lag correction, NFILT 1440): TOTAL matched=447 recall=94.5%.
+20m_busy_test_01.wav 24
+20m_busy_test_02.wav 21
+20m_busy_test_03.wav 18
+20m_busy_test_04.wav 18
+20m_busy_test_05.wav 29
+20m_busy_test_06.wav 26
+20m_busy_test_07.wav 30
+20m_busy_test_08.wav 18
+20m_busy_test_09.wav 26
+20m_busy_test_10.wav 20
+20m_busy_test_11.wav 29
+20m_busy_test_12.wav 16
 websdr_test1.wav 14
-websdr_test2.wav 19
-websdr_test3.wav 9
-websdr_test4.wav 21
-websdr_test5.wav 20
-websdr_test6.wav 21
-websdr_test7.wav 20
-websdr_test8.wav 21
+websdr_test2.wav 21
+websdr_test3.wav 11
+websdr_test4.wav 22
+websdr_test5.wav 26
+websdr_test6.wav 28
+websdr_test7.wav 24
+websdr_test8.wav 26

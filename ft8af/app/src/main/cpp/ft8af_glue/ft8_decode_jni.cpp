@@ -70,6 +70,9 @@ struct ft8_decoder_state
 
     float* samples;
     int num_samples;
+    int num_fed;   // samples actually captured into `samples` this slot
+    bool wf_dirty; // time-domain subtraction has edited `samples`; the
+                   // waterfall must be recomputed before the next find_sync
     int sample_rate;
     long utc;
 
@@ -81,6 +84,13 @@ struct ft8_decoder_state
 
     ftx_message_t last_message;
     bool have_last;
+
+    // Payloads already time-subtracted this slot: the same transmission
+    // decodes from several neighboring candidates and again from its own
+    // residual in later passes; a second subtraction would fit the fine sync
+    // to junk and pollute the residual samples.
+    uint8_t sub_done[kMaxCandidates][10];
+    int sub_done_count;
 
     ft8_hash_entry_t hashtable[FT8_HASHTABLE_SIZE];
     int hashtable_count;
@@ -270,8 +280,14 @@ static void ft8_feed(ft8_decoder_state* d, const float* data, int n)
 {
     if (!d || !d->mon_ready)
         return;
+    d->num_fed = 0;
+    d->wf_dirty = false;
+    d->sub_done_count = 0;
     if (d->samples && n <= d->num_samples)
+    {
         memcpy(d->samples, data, sizeof(float) * n);
+        d->num_fed = n;
+    }
     monitor_reset(&d->mon);
     for (int pos = 0; pos + d->mon.block_size <= n; pos += d->mon.block_size)
         monitor_process(&d->mon, data + pos);
@@ -347,6 +363,16 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderFt8FindSync(
     ft8_decoder_state* d = (ft8_decoder_state*)(intptr_t)handle;
     if (!d || !d->mon_ready)
         return 0;
+    if (d->wf_dirty && d->samples && d->num_fed > 0)
+    {
+        // Time-domain subtraction edited the retained samples; recompute the
+        // waterfall from the residual so this pass can uncover what was
+        // underneath the removed signals.
+        monitor_reset(&d->mon);
+        for (int pos = 0; pos + d->mon.block_size <= d->num_fed; pos += d->mon.block_size)
+            monitor_process(&d->mon, d->samples + pos);
+        d->wf_dirty = false;
+    }
     int min_score = d->deep ? FT8AF_MIN_SCORE_DEEP : FT8AF_MIN_SCORE_FAST;
     d->num_candidates = ft8_find_sync(&d->mon.wf, kMaxCandidates, d->candidates, min_score);
     return d->num_candidates;
@@ -624,6 +650,9 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderFt8Reset(
         return;
     d->utc = utcTime;
     d->num_samples = num_samples;
+    d->num_fed = 0;
+    d->wf_dirty = false;
+    d->sub_done_count = 0;
     monitor_reset(&d->mon);
 }
 
@@ -646,11 +675,14 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderGetA91(
 }
 
 // ---------------------------------------------------------------------------
-// doSubtractSignal — deep-decode subtraction for FT8: tone-accurate,
-// noise-floor-referenced removal of the decoded signal (ft8_subtract.c) so
-// the next find_sync pass can't re-detect it, while co-channel weaker
-// signals survive. Replaces the earlier ±4-bin waterfall zeroing, which
-// erased a ~56 Hz x 12.6 s swath including anything underneath.
+// doSubtractSignal — deep-decode subtraction for FT8. Preferred path:
+// coherent time-domain subtraction from the retained float samples
+// (ft8_subtract.c, WSJT-X subtractft8 approach) — removes the decoded
+// signal's full spectral footprint so even a co-channel signal a few Hz away
+// becomes decodable once DecoderFt8FindSync recomputes the waterfall from
+// the residual. Falls back to the waterfall-domain tone replacement when no
+// sample copy is available. Each payload is subtracted at most once per
+// slot: re-subtracting a residual fits junk and pollutes the samples.
 // ---------------------------------------------------------------------------
 extern "C" JNIEXPORT void JNICALL
 Java_com_k1af_ft8af_ft8listener_ReBuildSignal_doSubtractSignal(
@@ -668,6 +700,23 @@ Java_com_k1af_ft8af_ft8listener_ReBuildSignal_doSubtractSignal(
     if (n > FTX_LDPC_K_BYTES)
         n = FTX_LDPC_K_BYTES;
     env->GetByteArrayRegion(payload, 0, n, a91);
+
+    if (d->samples && d->num_fed > 0)
+    {
+        for (int i = 0; i < d->sub_done_count; ++i)
+            if (memcmp(d->sub_done[i], a91, sizeof(d->sub_done[0])) == 0)
+                return; // already subtracted this transmission this slot
+
+        if (ft8_subtract_signal_time(&d->mon, d->samples, d->num_fed,
+                                     d->sample_rate, (const uint8_t*)a91,
+                                     frequency, time_sec))
+        {
+            d->wf_dirty = true;
+            if (d->sub_done_count < kMaxCandidates)
+                memcpy(d->sub_done[d->sub_done_count++], a91, sizeof(d->sub_done[0]));
+            return;
+        }
+    }
 
     ft8_subtract_signal(&d->mon, (const uint8_t*)a91, frequency, time_sec);
 }
