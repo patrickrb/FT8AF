@@ -420,7 +420,12 @@ static void decode_buffer(float* signal, int num_samples,
     monitor_t mon;
     monitor_init(&mon, &cfg);
     feed_monitor(&mon, signal, num_samples);
-    ft8_fine_ctx_t* fine = ft8_fine_init(signal, num_samples, BENCH_SAMPLE_RATE);
+    // The fine-demod retry only runs in deep passes with OSD enabled
+    // (run_pass gates on osd_depth > 0); don't pay its full-buffer FFT
+    // when --fast or --osd-depth 0 makes it unreachable.
+    ft8_fine_ctx_t* fine = (g_deep && g_osd_depth > 0)
+        ? ft8_fine_init(signal, num_samples, BENCH_SAMPLE_RATE)
+        : NULL;
 
     bench_hash_reset();
     static bench_declist_t pass_decs;
@@ -477,9 +482,13 @@ static void decode_buffer(float* signal, int num_samples,
             {
                 feed_monitor(&mon, signal, num_samples);
                 // The samples changed: the fine-demod context must see the
-                // residual, not the original capture.
-                ft8_fine_free(fine);
-                fine = ft8_fine_init(signal, num_samples, BENCH_SAMPLE_RATE);
+                // residual, not the original capture. Rebuild only if the
+                // fine path is enabled at all (same gate as the init).
+                if (fine)
+                {
+                    ft8_fine_free(fine);
+                    fine = ft8_fine_init(signal, num_samples, BENCH_SAMPLE_RATE);
+                }
             }
             new_msgs = run_pass(&mon, fine, g_ldpc_deep, g_min_score_deep, g_osd_depth, seen, &pass_decs);
             passes++;

@@ -21,6 +21,7 @@
 #include "ft8_fine.h"
 
 #include <math.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -69,6 +70,12 @@ struct ft8_fine_ctx
 ft8_fine_ctx_t* ft8_fine_init(const float* samples, int num_samples, int sample_rate)
 {
     if (!samples || num_samples <= 0 || num_samples > FINE_NFFT1 || sample_rate <= 0)
+        return NULL;
+    // The FINE_* geometry is fixed for the 12 kHz -> 200 Hz mapping
+    // (FINE_NFFT1 / FINE_NFFT2 == sample_rate / FINE_RATE and FINE_SPS
+    // samples per symbol at FINE_RATE). Any other input rate would silently
+    // misplace the baseband and mis-scale dt/df — reject it.
+    if ((int64_t)sample_rate * FINE_NFFT2 != (int64_t)FINE_NFFT1 * FINE_RATE)
         return NULL;
 
     ft8_fine_ctx_t* ctx = (ft8_fine_ctx_t*)calloc(1, sizeof(ft8_fine_ctx_t));

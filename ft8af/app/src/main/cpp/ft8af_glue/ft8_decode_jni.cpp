@@ -74,7 +74,12 @@ struct ft8_decoder_state
     int num_fed;   // samples actually captured into `samples` this slot
     bool wf_dirty; // time-domain subtraction has edited `samples`; the
                    // waterfall must be recomputed before the next find_sync
-    ft8_fine_ctx_t* fine; // fine-demod context over the current `samples`
+    // Fine-demod context over the current `samples`, built LAZILY on the
+    // first deep-pass retry that needs it (deep mode is unknown at feed
+    // time, and non-deep slots must not pay its full-buffer FFT).
+    // fine_tried keeps a failed init from being retried per candidate.
+    ft8_fine_ctx_t* fine;
+    bool fine_tried;
     int sample_rate;
     long utc;
 
@@ -295,10 +300,11 @@ static void ft8_feed(ft8_decoder_state* d, const float* data, int n)
     for (int pos = 0; pos + d->mon.block_size <= n; pos += d->mon.block_size)
         monitor_process(&d->mon, data + pos);
 
+    // Invalidate only: the context is rebuilt lazily when a deep pass
+    // actually needs it (see DecoderFt8Analysis).
     ft8_fine_free(d->fine);
-    d->fine = (d->num_fed > 0)
-        ? ft8_fine_init(d->samples, d->num_fed, d->sample_rate)
-        : NULL;
+    d->fine = NULL;
+    d->fine_tried = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -374,13 +380,16 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderFt8FindSync(
     if (d->wf_dirty && d->samples && d->num_fed > 0)
     {
         // Time-domain subtraction edited the retained samples; recompute the
-        // waterfall (and the fine-demod context) from the residual so this
-        // pass can uncover what was underneath the removed signals.
+        // waterfall from the residual so this pass can uncover what was
+        // underneath the removed signals. The fine-demod context is only
+        // invalidated here — it is rebuilt lazily on first use so modes
+        // that never take the fine path don't pay its full-buffer FFT.
         monitor_reset(&d->mon);
         for (int pos = 0; pos + d->mon.block_size <= d->num_fed; pos += d->mon.block_size)
             monitor_process(&d->mon, d->samples + pos);
         ft8_fine_free(d->fine);
-        d->fine = ft8_fine_init(d->samples, d->num_fed, d->sample_rate);
+        d->fine = NULL;
+        d->fine_tried = false;
         d->wf_dirty = false;
     }
     int min_score = d->deep ? FT8AF_MIN_SCORE_DEEP : FT8AF_MIN_SCORE_FAST;
@@ -414,14 +423,23 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderFt8Analysis(
     int osd_depth = d->deep ? FT8AF_OSD_DEPTH_DEEP : 0; // OSD only in deep passes
     bool decoded = ft8_decode_osd(&d->mon.wf, cand, d->ldpc_iterations, osd_depth,
                                   FT8AF_OSD_LDPC_ERR_GATE, &message, &status);
-    if (!decoded && d->fine && osd_depth > 0)
+    if (!decoded && osd_depth > 0 && d->samples && d->num_fed > 0 &&
+        d->mon.wf.protocol == FTX_PROTOCOL_FT8)
     {
         // Second chance for deep passes: re-demodulate from the raw samples
         // with fine dt/df sync (ft8_fine.h) and rerun BP+OSD+CRC on the
-        // float LLRs. Junk guards mirror decode_bench.c: a sync-quality
-        // floor, raised for the junk-prone rare message types. On success
-        // the refined freq/time replace the grid values — they also flow
-        // into a91List and make the subsequent subtraction more accurate.
+        // float LLRs. The context (one full-buffer FFT) is built lazily on
+        // the first candidate that gets here, so fast-only or FT4 slots
+        // never pay for it. Junk guards mirror decode_bench.c: a
+        // sync-quality floor, raised for the junk-prone rare message types.
+        // On success the refined freq/time replace the grid values — they
+        // also flow into a91List and make the subsequent subtraction more
+        // accurate.
+        if (!d->fine && !d->fine_tried)
+        {
+            d->fine = ft8_fine_init(d->samples, d->num_fed, d->sample_rate);
+            d->fine_tried = true;
+        }
         float llrs[FTX_LDPC_N];
         float f_fine, t_fine, quality;
         if (ft8_fine_demod(d->fine, &d->mon, cand, llrs, &f_fine, &t_fine, &quality) &&
@@ -690,6 +708,9 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderFt8Reset(
     d->num_fed = 0;
     d->wf_dirty = false;
     d->sub_done_count = 0;
+    ft8_fine_free(d->fine);
+    d->fine = NULL;
+    d->fine_tried = false;
     monitor_reset(&d->mon);
 }
 
