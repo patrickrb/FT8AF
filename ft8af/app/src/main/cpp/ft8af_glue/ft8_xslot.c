@@ -35,14 +35,29 @@ typedef struct
     uint8_t payload[10];
     float freq_hz;
     int64_t utc_ms;
+    // Codeword signs (+1 bit 1 / -1 bit 0), precomputed at remember() time:
+    // the history test runs per failed candidate in the decode hot path and
+    // must not regenerate the 83 LDPC parity bits per entry per call.
+    float sign[FTX_LDPC_N];
 } xslot_hist_t;
 
 static xslot_entry_t g_entries[XSLOT_MAX_ENTRIES];
 static xslot_hist_t g_history[XSLOT_MAX_HISTORY];
 
+static void codeword_signs(const uint8_t payload[10], float sign[FTX_LDPC_N]);
+
 static int slot_parity(int64_t utc_ms)
 {
     return (int)((utc_ms / XSLOT_SLOT_MS) & 1);
+}
+
+// Entry lifetime check that also treats timestamps from the "future" as
+// expired: a backwards clock step (NTP correction, user adjustment) must
+// not pin entries in the cache until array churn evicts them.
+static bool expired(int64_t now_ms, int64_t entry_ms, int64_t max_age_ms)
+{
+    int64_t age = now_ms - entry_ms;
+    return age < 0 || age > max_age_ms;
 }
 
 void ft8_xslot_clear(void)
@@ -71,7 +86,7 @@ void ft8_xslot_store(float freq_hz, int64_t utc_ms, const float llrs[FTX_LDPC_N]
                 slot = i;
                 break;
             }
-            if (utc_ms - g_entries[i].utc_ms > FT8AF_XSLOT_MAX_AGE_MS)
+            if (expired(utc_ms, g_entries[i].utc_ms, FT8AF_XSLOT_MAX_AGE_MS))
             {
                 g_entries[i].used = false;
                 if (slot < 0)
@@ -150,7 +165,7 @@ void ft8_xslot_remember(const uint8_t payload[10], float freq_hz, int64_t utc_ms
                 slot = i; // refresh
                 break;
             }
-            if (utc_ms - g_history[i].utc_ms > FT8AF_XSLOT_HIST_MAX_AGE_MS)
+            if (expired(utc_ms, g_history[i].utc_ms, FT8AF_XSLOT_HIST_MAX_AGE_MS))
             {
                 g_history[i].used = false;
                 if (slot < 0)
@@ -174,6 +189,7 @@ void ft8_xslot_remember(const uint8_t payload[10], float freq_hz, int64_t utc_ms
     memcpy(g_history[slot].payload, payload, 10);
     g_history[slot].freq_hz = freq_hz;
     g_history[slot].utc_ms = utc_ms;
+    codeword_signs(payload, g_history[slot].sign);
 }
 
 // Build the 174-bit codeword signs (+1 for bit 1, -1 for bit 0) for a
@@ -224,13 +240,12 @@ bool ft8_xslot_try_history(float freq_hz, int64_t utc_ms, const float llrs[FTX_L
         // Normalized soft correlation: 1.0 = every bit agrees weighted by
         // confidence, ~N(0, 1/sqrt(174)) for an unrelated signal or noise.
         // The CRC proves nothing here (the payload is known), so this IS
-        // the acceptance evidence — threshold swept on the bench.
-        float sign[FTX_LDPC_N];
-        codeword_signs(h->payload, sign);
+        // the acceptance evidence — threshold swept on the bench. The sign
+        // vector was precomputed when the message was remembered.
         float num = 0.0f, den = 0.0f;
         for (int k = 0; k < FTX_LDPC_N; ++k)
         {
-            num += llrs[k] * sign[k];
+            num += llrs[k] * h->sign[k];
             den += fabsf(llrs[k]);
         }
         float c = (den > 0.0f) ? num / den : 0.0f;

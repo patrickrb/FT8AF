@@ -80,7 +80,11 @@ static void make_repeat(const uint8_t cw[FTX_LDPC_N], int n_erase, uint32_t seed
     int erased = 0;
     while (erased < n_erase)
     {
+        // Clamp: prng_uniform() approaches 1.0 closely enough that float
+        // rounding of the product must not be trusted to stay below N.
         int i = (int)(prng_uniform() * FTX_LDPC_N);
+        if (i >= FTX_LDPC_N)
+            i = FTX_LDPC_N - 1;
         if (llrs[i] == 0.0f)
             continue;
         llrs[i] = 0.0f;
