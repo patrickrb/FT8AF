@@ -447,8 +447,12 @@ bool ft8_decode_osd(const waterfall_t* wf, const candidate_t* cand, int max_iter
             return false;
         if (!osd_decode(log174, osd_depth, plain174, NULL))
             return false;
-        // plain174 now holds a codeword that already passed OSD's CRC and
-        // plausibility gates; fall through to the standard CRC/unpack path.
+        // plain174 now holds a valid codeword (zero unsatisfied parity checks
+        // by construction) that already passed OSD's CRC and plausibility
+        // gates: clear the BP error count so the success contract
+        // (ldpc_errors == 0) holds for callers, and fall through to the
+        // standard CRC/unpack path.
+        status->ldpc_errors = 0;
     }
 
     // Extract payload + CRC (first FTX_LDPC_K bits) packed into a byte array

@@ -11,6 +11,7 @@
 #include "osd.h"
 
 #include <math.h>
+#include <stdatomic.h>
 #include <string.h>
 
 #include "crc.h"
@@ -72,10 +73,13 @@ static inline int bits91_parity_and(const bits91_t* a, const bits91_t* b)
 // ---------------------------------------------------------------------------
 // Generator rows for all 174 codeword bits: rows 0..90 are the identity
 // (systematic message bits), rows 91..173 come from kFTX_LDPC_generator
-// (bit-packed MSB-first, 91 bits in 12 bytes). Built once, lazily.
+// (bit-packed MSB-first, 91 bits in 12 bytes). Built once, lazily, with an
+// atomic tri-state guard so concurrent decoders (e.g. a future threaded
+// decode loop) can't race the initialization: 0 = uninitialized,
+// 1 = one thread building, 2 = ready.
 // ---------------------------------------------------------------------------
 static bits91_t g_rows[FTX_LDPC_N];
-static bool g_rows_ready = false;
+static atomic_int g_rows_state; // zero-initialized = uninitialized
 
 static void build_rows(void)
 {
@@ -90,7 +94,26 @@ static void build_rows(void)
                 bits91_flip(&g_rows[FTX_LDPC_K + p], j);
         }
     }
-    g_rows_ready = true;
+}
+
+static void ensure_rows(void)
+{
+    if (atomic_load_explicit(&g_rows_state, memory_order_acquire) == 2)
+        return;
+    int expected = 0;
+    if (atomic_compare_exchange_strong_explicit(&g_rows_state, &expected, 1,
+                                                memory_order_acq_rel, memory_order_acquire))
+    {
+        build_rows();
+        atomic_store_explicit(&g_rows_state, 2, memory_order_release);
+    }
+    else
+    {
+        // Another thread is building; the table takes microseconds, spin.
+        while (atomic_load_explicit(&g_rows_state, memory_order_acquire) != 2)
+        {
+        }
+    }
 }
 
 // Re-encode 91 message bits (as a bits91_t) into the full 174-bit codeword.
@@ -153,8 +176,7 @@ static bool evaluate(const bits91_t* plain, const float log174[FTX_LDPC_N],
 bool osd_decode(const float log174[FTX_LDPC_N], int depth,
                 uint8_t plain174[FTX_LDPC_N], int* out_depth)
 {
-    if (!g_rows_ready)
-        build_rows();
+    ensure_rows();
 
     // Codeword bit indices sorted by |LLR|, most reliable first
     // (insertion sort — 174 elements, negligible).
