@@ -98,6 +98,7 @@ bench_srcs=(
     "$here/gfsk.c"
     "$here/ft8_subtract.c"
     "$here/ft8_fine.c"
+    "$here/ft8_xslot.c"
     "$ft8/ft8/pack.c"
     "$ft8/ft8/encode.c"
     "$ft8/ft8/crc.c"
@@ -193,3 +194,25 @@ fine_out="$tmp/ft8_fine_test"
     -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
     -I "$ft8" "${fine_srcs[@]}" -lm -o "$fine_out"
 "$fine_out"
+
+# Cross-slot unit tests: LLR accumulation across same-parity slots and the
+# message-history retry (acceptance, parity/frequency/noise rejection).
+xslot_srcs=(
+    "$here/test_xslot.c"
+    "$here/ft8_xslot.c"
+    "$ft8/ft8/pack.c"
+    "$ft8/ft8/encode.c"
+    "$ft8/ft8/crc.c"
+    "$ft8/ft8/constants.c"
+    "$ft8/ft8/text.c"
+    "$ft8/ft8/message.c"
+    "$ft8/ft8/decode.c"
+    "$ft8/ft8/ldpc.c"
+    "$ft8/ft8/osd.c"
+    "$ft8/ft8/unpack.c"
+)
+xslot_out="$tmp/ft8_xslot_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${xslot_srcs[@]}" -lm -o "$xslot_out"
+"$xslot_out"

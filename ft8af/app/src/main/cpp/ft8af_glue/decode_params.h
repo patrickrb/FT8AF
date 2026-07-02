@@ -67,4 +67,36 @@
 #define FT8AF_FINE_SYNC_MIN_RARE 2.5f
 #endif
 
+// Cross-slot decoding (ft8af_glue/ft8_xslot.c): FT8 stations repeat a
+// message for many cycles on the same parity and frequency, so failed
+// fine-demod LLRs are cached and combined with the next same-parity repeat
+// (~3 dB), and recently decoded messages are re-tested against failed
+// candidates by soft correlation. WSJT-X decodes each slot in isolation —
+// this recall exists only across slots.
+// FREQ_TOL: match window in Hz (fine-demod refined frequencies are good to
+// well under 1 Hz; stations sit still between repeats).
+// MAX_AGE: LLR entries live for two same-parity repeats (30 s apart).
+// HIST_*: remembered decodes live longer (CQers run for minutes); HIST_MIN
+// is the normalized soft-correlation acceptance for the history retry —
+// the CRC is vacuous there, so this gate carries the entire false-accept
+// burden. Statistics: noise correlates ~N(0, 1/sqrt(174)) (sigma 0.076), so
+// 0.55 is ~7 sigma. Swept on the bench (matched/extras): 0.35 -> 461/99,
+// 0.45 -> 461/90, 0.55 -> 462/80, 0.65 -> 460/77. Of the decodes the
+// mechanism adds at 0.55, 49 of 57 are corroborated by jt9's truth in
+// OTHER slots of the same session (jt9 misses them in the slot where the
+// retry fires) and the rest are consistent QSO progressions of stations
+// already decoded — this recall exists only across slots.
+#ifndef FT8AF_XSLOT_FREQ_TOL
+#define FT8AF_XSLOT_FREQ_TOL 4.0f
+#endif
+#ifndef FT8AF_XSLOT_MAX_AGE_MS
+#define FT8AF_XSLOT_MAX_AGE_MS 65000
+#endif
+#ifndef FT8AF_XSLOT_HIST_MAX_AGE_MS
+#define FT8AF_XSLOT_HIST_MAX_AGE_MS 120000
+#endif
+#ifndef FT8AF_XSLOT_HIST_MIN
+#define FT8AF_XSLOT_HIST_MIN 0.55f
+#endif
+
 #endif // FT8AF_DECODE_PARAMS_H

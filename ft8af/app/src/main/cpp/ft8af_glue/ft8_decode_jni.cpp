@@ -29,6 +29,7 @@ int ft8_snr(const waterfall_t* wf, const candidate_t* candidate);
 #include "decode_params.h"
 #include "ft8_fine.h"
 #include "ft8_subtract.h"
+#include "ft8_xslot.h"
 
 // ---------------------------------------------------------------------------
 // 22-bit WSJT-X callsign hash (same as ft2_decode_jni.cpp / test_golden_encode.c).
@@ -81,7 +82,8 @@ struct ft8_decoder_state
     ft8_fine_ctx_t* fine;
     bool fine_tried;
     int sample_rate;
-    long utc;
+    int64_t utc; // slot UTC in ms (jlong; drives cross-slot parity/aging —
+                 // `long` would truncate on 32-bit ABIs)
 
     int ldpc_iterations;
     bool deep; // deep passes lower the sync-score threshold (FT8AF_MIN_SCORE_DEEP)
@@ -443,23 +445,56 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderFt8Analysis(
         float llrs[FTX_LDPC_N];
         float f_fine, t_fine, quality;
         if (ft8_fine_demod(d->fine, &d->mon, cand, llrs, &f_fine, &t_fine, &quality) &&
-            quality >= FT8AF_FINE_SYNC_MIN &&
-            ftx_decode_llrs(FTX_PROTOCOL_FT8, llrs, d->ldpc_iterations, osd_depth,
-                            FT8AF_OSD_LDPC_ERR_GATE, &message, &status))
+            quality >= FT8AF_FINE_SYNC_MIN)
         {
-            ftx_message_type_t mtype = ftx_message_get_type(&message);
-            if (mtype == FTX_MESSAGE_TYPE_STANDARD ||
-                mtype == FTX_MESSAGE_TYPE_NONSTD_CALL ||
-                quality >= FT8AF_FINE_SYNC_MIN_RARE)
+            if (ftx_decode_llrs(FTX_PROTOCOL_FT8, llrs, d->ldpc_iterations, osd_depth,
+                                FT8AF_OSD_LDPC_ERR_GATE, &message, &status))
             {
-                decoded = true;
+                ftx_message_type_t mtype = ftx_message_get_type(&message);
+                if (mtype == FTX_MESSAGE_TYPE_STANDARD ||
+                    mtype == FTX_MESSAGE_TYPE_NONSTD_CALL ||
+                    quality >= FT8AF_FINE_SYNC_MIN_RARE)
+                    decoded = true;
+            }
+            if (!decoded)
+            {
+                // Cross-slot mechanism B (ft8_xslot.h): a recently decoded
+                // message at this frequency and slot parity, repeated but
+                // now below single-slot threshold.
+                memset(&status, 0, sizeof(status));
+                decoded = ft8_xslot_try_history(f_fine, d->utc, llrs, &message, NULL);
+            }
+            if (!decoded &&
+                ft8_xslot_try_accumulate(f_fine, d->utc, llrs, d->ldpc_iterations,
+                                         osd_depth, FT8AF_OSD_LDPC_ERR_GATE,
+                                         &message, &status))
+            {
+                // Cross-slot mechanism A: this repeat's LLRs combined with
+                // the previous same-parity repeat's. Fresh CRC decode —
+                // same rare-type bar as the fine path.
+                ftx_message_type_t mtype = ftx_message_get_type(&message);
+                if (mtype == FTX_MESSAGE_TYPE_STANDARD ||
+                    mtype == FTX_MESSAGE_TYPE_NONSTD_CALL ||
+                    quality >= FT8AF_FINE_SYNC_MIN_RARE)
+                    decoded = true;
+            }
+            if (decoded)
+            {
                 freq_hz = f_fine;
                 time_sec = t_fine;
+            }
+            else
+            {
+                // Keep this repeat's information for the next one.
+                ft8_xslot_store(f_fine, d->utc, llrs);
             }
         }
     }
     if (!decoded)
         return JNI_FALSE;
+
+    if (d->mon.wf.protocol == FTX_PROTOCOL_FT8)
+        ft8_xslot_remember(message.payload, freq_hz, d->utc);
 
     d->last_message = message;
     d->have_last = true;

@@ -28,6 +28,9 @@
 //                         caps by wall-clock budget instead)
 //     --wf-subtract       waterfall-domain tone-replacement subtraction (A/B only)
 //     --zero-subtract     use the legacy ±4-bin zeroing subtraction (A/B only)
+//     --no-cross-slot     disable cross-slot decoding (LLR accumulation +
+//                         message-history retry across the corpus files,
+//                         which are treated as consecutive 15 s slots)
 //     --assert-floor F    read "name min_matched" lines from F; exit 1 if any
 //                         listed file matches fewer truth messages than its floor
 //     --self-test         synthesize a clean FT8 signal, decode it, expect 1/1
@@ -56,6 +59,7 @@
 #include "decode_params.h"
 #include "ft8_fine.h"
 #include "ft8_subtract.h"
+#include "ft8_xslot.h"
 
 // From gfsk.c (glue): GFSK synth used by the --self-test signal generator.
 void synth_gfsk_offset(const uint8_t* symbols, int n_sym, float f0,
@@ -88,6 +92,14 @@ enum
     SUBTRACT_ZERO = 2, // legacy ±4-bin zeroing (pre-#360 behavior)
 };
 static int g_subtract_mode = SUBTRACT_TIME;
+
+// Synthetic slot clock for cross-slot decoding: the corpus files are
+// consecutive 15 s slots of one session (message repeats confirm the
+// even/odd parity structure), so file index * 15000 ms reproduces the
+// timing the app passes from real UTC. --no-cross-slot disables the
+// mechanism for A/B runs.
+static int64_t g_utc_ms = 0;
+static bool g_cross_slot = true;
 
 #define BENCH_MAX_CAND_CAP 1024
 #define BENCH_MAX_MSGS 256
@@ -312,26 +324,60 @@ static int run_pass(monitor_t* mon, ft8_fine_ctx_t* fine, int ldpc_iters, int mi
             float llrs[FTX_LDPC_N];
             float f_fine, t_fine, quality;
             if (ft8_fine_demod(fine, mon, cand, llrs, &f_fine, &t_fine, &quality) &&
-                quality >= FT8AF_FINE_SYNC_MIN &&
-                ftx_decode_llrs(FTX_PROTOCOL_FT8, llrs, ldpc_iters, osd_depth,
-                                FT8AF_OSD_LDPC_ERR_GATE, &message, &status))
+                quality >= FT8AF_FINE_SYNC_MIN)
             {
-                // Rare message types out of this second-chance path are
-                // junk-prone (see FT8AF_FINE_SYNC_MIN_RARE) — hold them to
-                // the higher sync-quality bar.
-                ftx_message_type_t mtype = ftx_message_get_type(&message);
-                if (mtype == FTX_MESSAGE_TYPE_STANDARD ||
-                    mtype == FTX_MESSAGE_TYPE_NONSTD_CALL ||
-                    quality >= FT8AF_FINE_SYNC_MIN_RARE)
+                if (ftx_decode_llrs(FTX_PROTOCOL_FT8, llrs, ldpc_iters, osd_depth,
+                                    FT8AF_OSD_LDPC_ERR_GATE, &message, &status))
                 {
-                    decoded = true;
+                    // Rare message types out of this second-chance path are
+                    // junk-prone (see FT8AF_FINE_SYNC_MIN_RARE) — hold them
+                    // to the higher sync-quality bar.
+                    ftx_message_type_t mtype = ftx_message_get_type(&message);
+                    if (mtype == FTX_MESSAGE_TYPE_STANDARD ||
+                        mtype == FTX_MESSAGE_TYPE_NONSTD_CALL ||
+                        quality >= FT8AF_FINE_SYNC_MIN_RARE)
+                        decoded = true;
+                }
+                if (!decoded && g_cross_slot)
+                {
+                    // Cross-slot mechanism B: a recently decoded message at
+                    // this frequency, repeated but now below single-slot
+                    // threshold, matches these LLRs by soft correlation.
+                    memset(&status, 0, sizeof(status));
+                    decoded = ft8_xslot_try_history(f_fine, g_utc_ms, llrs,
+                                                    &message, NULL);
+                }
+                if (!decoded && g_cross_slot &&
+                    ft8_xslot_try_accumulate(f_fine, g_utc_ms, llrs, ldpc_iters,
+                                             osd_depth, FT8AF_OSD_LDPC_ERR_GATE,
+                                             &message, &status))
+                {
+                    // Cross-slot mechanism A: combined with the previous
+                    // same-parity repeat's failed LLRs. Fresh CRC decode —
+                    // same rare-type bar as the fine path.
+                    ftx_message_type_t mtype = ftx_message_get_type(&message);
+                    if (mtype == FTX_MESSAGE_TYPE_STANDARD ||
+                        mtype == FTX_MESSAGE_TYPE_NONSTD_CALL ||
+                        quality >= FT8AF_FINE_SYNC_MIN_RARE)
+                        decoded = true;
+                }
+                if (decoded)
+                {
                     freq_hz = f_fine;
                     time_sec = t_fine;
+                }
+                else if (g_cross_slot)
+                {
+                    // Keep this repeat's information for the next one.
+                    ft8_xslot_store(f_fine, g_utc_ms, llrs);
                 }
             }
         }
         if (!decoded)
             continue;
+
+        if (g_cross_slot)
+            ft8_xslot_remember(message.payload, freq_hz, g_utc_ms);
 
         // Decode to text the same way DecoderFt8Analysis assembles it.
         char text[64] = { 0 };
@@ -668,6 +714,8 @@ int main(int argc, char** argv)
             g_subtract_mode = SUBTRACT_ZERO;
         else if (strcmp(a, "--wf-subtract") == 0)
             g_subtract_mode = SUBTRACT_WF;
+        else if (strcmp(a, "--no-cross-slot") == 0)
+            g_cross_slot = false;
         else if (strcmp(a, "--window-ms") == 0 && i + 1 < argc)
             g_window_ms = atoi(argv[++i]);
         else if (strcmp(a, "--candidates") == 0 && i + 1 < argc)
@@ -745,6 +793,7 @@ int main(int argc, char** argv)
 
     for (int w = 0; w < num_wavs; ++w)
     {
+        g_utc_ms = (int64_t)w * 15000; // corpus files are consecutive slots
         int num_samples = BENCH_MAX_SAMPLES; // in: capacity, out: samples read
         int sample_rate = 0;
         if (load_wav(signal, &num_samples, &sample_rate, wavs[w]) != 0)

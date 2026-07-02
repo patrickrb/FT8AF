@@ -131,6 +131,7 @@ $benchSrcs = @(
 $benchSrcs += (Join-Path $here "gfsk.c")
 $benchSrcs += (Join-Path $here "ft8_subtract.c")
 $benchSrcs += (Join-Path $here "ft8_fine.c")
+$benchSrcs += (Join-Path $here "ft8_xslot.c")
 
 $srcBench = Join-Path $here "decode_bench.c"
 $outBench = Join-Path $env:TEMP "ft8_decode_bench.exe"
@@ -210,6 +211,25 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_fine)." }
 & $outFine
 $fineExit = $LASTEXITCODE
 
+# ---------------------------------------------------------------------------
+# Cross-slot unit tests: LLR accumulation across same-parity slots and the
+# message-history retry (acceptance, parity/frequency/noise rejection).
+# ---------------------------------------------------------------------------
+$xslotSrcs = @(
+    "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
+    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\osd.c","ft8\unpack.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+$xslotSrcs += (Join-Path $here "ft8_xslot.c")
+
+$srcXslot = Join-Path $here "test_xslot.c"
+$outXslot = Join-Path $env:TEMP "ft8_xslot_test.exe"
+
+& $Clang @common $srcXslot @xslotSrcs -o $outXslot
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_xslot)." }
+
+& $outXslot
+$xslotExit = $LASTEXITCODE
+
 if ($goldenExit -ne 0) { exit $goldenExit }
 if ($dev625Exit -ne 0) { exit $dev625Exit }
 if ($firExit -ne 0) { exit $firExit }
@@ -217,4 +237,5 @@ if ($benchSelfExit -ne 0) { exit $benchSelfExit }
 if ($benchExit -ne 0) { exit $benchExit }
 if ($subExit -ne 0) { exit $subExit }
 if ($osdExit -ne 0) { exit $osdExit }
-exit $fineExit
+if ($fineExit -ne 0) { exit $fineExit }
+exit $xslotExit
