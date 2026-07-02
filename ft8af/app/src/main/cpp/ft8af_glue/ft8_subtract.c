@@ -32,11 +32,15 @@ float* synth_gfsk_dphi_alloc(const uint8_t* symbols, int n_sym, float f0,
 // above the local noise estimate by at least this much (units of 0.5 dB).
 #define SUBTRACT_MIN_EXCESS 2
 
-// Moving-average window (samples at 12 kHz) for the complex-gain estimate in
-// ft8_subtract_signal_time. Trade-off: wider tracks the gain with less noise
-// but attenuates the estimate when the candidate grid's residual frequency
-// error (up to ~±1.6 Hz at freq_osr=2) rotates the phase within the window;
-// narrower follows that rotation but estimates the gain from fewer samples.
+// Nominal moving-average window (samples at 12 kHz) for the complex-gain
+// estimate in ft8_subtract_signal_time. The average is centered and
+// symmetric, so the EFFECTIVE window is the odd 2*(SUBTRACT_TD_NFILT/2) + 1
+// samples (1441 at the default) — keep that in mind when comparing sweep
+// values; the half-width SUBTRACT_TD_NFILT/2 is what the code uses.
+// Trade-off: wider tracks the gain with less noise but attenuates the
+// estimate when the candidate grid's residual frequency error (up to
+// ~±1.6 Hz at freq_osr=2) rotates the phase within the window; narrower
+// follows that rotation but estimates the gain from fewer samples.
 // Swept on the decode benchmark (corpus recall): 960 -> 92.2, 1200 -> 93.7,
 // 1440 -> 94.5, 1680 -> 94.1, 1920 -> 94.3, 2880 -> 92.8, 3840 -> 91.5.
 // WSJT-X's subtractft8 uses a comparable ~1500-sample window at 12 kHz.
