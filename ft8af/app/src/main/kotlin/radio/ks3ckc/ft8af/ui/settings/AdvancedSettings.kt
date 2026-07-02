@@ -11,11 +11,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.os.LocaleListCompat
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
+import radio.ks3ckc.ft8af.theme.ThemeOption
+import radio.ks3ckc.ft8af.theme.applyTheme
+import radio.ks3ckc.ft8af.theme.currentThemeNameRes
+import radio.ks3ckc.ft8af.theme.loadTheme
+import radio.ks3ckc.ft8af.theme.saveTheme
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 import radio.ks3ckc.ft8af.ui.components.SettingsRow
 
@@ -78,14 +84,18 @@ fun AdvancedSettings(
     mainViewModel: MainViewModel,
     onBack: () -> Unit,
 ) {
+    val context = LocalContext.current
+
     var pttDelay by remember { mutableIntStateOf(GeneralVariables.pttDelay) }
     var txDelay by remember { mutableIntStateOf(GeneralVariables.transmitDelay) }
     var lateStartMs by remember { mutableIntStateOf(GeneralVariables.lateStartTolerance) }
+    var currentTheme by remember { mutableStateOf(loadTheme(context)) }
 
     var showPttDelay by remember { mutableStateOf(false) }
     var showTxDelay by remember { mutableStateOf(false) }
     var showLateStart by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
+    var showThemePicker by remember { mutableStateOf(false) }
 
     val txDelayStr = stringResource(R.string.settings_milliseconds_format, txDelay)
     val pttDelayStr = stringResource(R.string.settings_milliseconds_format, pttDelay)
@@ -185,6 +195,31 @@ fun AdvancedSettings(
         )
     }
 
+    // -- Theme Picker --
+    // Selecting a theme applies it live (swaps the Compose palette + night mode,
+    // no activity recreate) and persists the choice. Built like the language
+    // picker so adding a future theme is one ThemeOption entry.
+    if (showThemePicker) {
+        val themes = ThemeOption.entries
+        val themeLabels = ArrayList<String>(themes.size)
+        for (theme in themes) {
+            themeLabels.add(stringResource(theme.nameRes))
+        }
+        ListPickerDialog(
+            title = stringResource(R.string.settings_theme),
+            items = themeLabels,
+            selectedIndex = themes.indexOf(currentTheme).coerceAtLeast(0),
+            onDismiss = { showThemePicker = false },
+            onSelect = { index ->
+                showThemePicker = false
+                val theme = themes[index]
+                currentTheme = theme
+                applyTheme(theme)
+                saveTheme(context, theme)
+            },
+        )
+    }
+
     SettingsDetailScaffold(
         title = stringResource(R.string.settings_cat_advanced),
         onBack = onBack,
@@ -219,6 +254,21 @@ fun AdvancedSettings(
                         onClick = { showLateStart = true },
                     )
                 }
+            }
+        }
+
+        // =====================================================================
+        // APPEARANCE
+        // =====================================================================
+        SettingsSection(title = stringResource(R.string.settings_section_appearance)) {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                SettingsRow(
+                    label = stringResource(R.string.settings_theme),
+                    description = stringResource(R.string.settings_theme_desc),
+                    value = stringResource(currentThemeNameRes(currentTheme)),
+                    showChevron = true,
+                    onClick = { showThemePicker = true },
+                )
             }
         }
 

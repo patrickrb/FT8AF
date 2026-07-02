@@ -125,7 +125,8 @@ export type EngineEvent =
   | { type: "clock_sync"; data: ClockSyncEvent }
   | { type: "qso_completed"; data: QsoRecord }
   | { type: "waterfall"; data: { bins: number[]; rows: number; cols: number; hz_per_col: number } }
-  | { type: "waterfall_row"; data: { bins: number[]; hz_per_col: number } }
+  | { type: "waterfall_row"; data: { bins: number[]; hz_per_col: number; boundary: boolean } }
+  | { type: "input_level"; data: { db: number; silent: boolean } }
   | { type: "info"; data: string }
   | { type: "error"; data: string };
 
@@ -147,9 +148,11 @@ export const api = {
   setStation: (call: string, grid: string) => invoke("set_station", { call, grid }),
   setBand: (dialHz: number) => invoke("set_band", { dialHz }),
   setBaseFreq: (hz: number) => invoke("set_base_freq", { hz }),
+  setTxGain: (gain: number) => invoke("set_tx_gain", { gain }),
   setInputDevice: (name: string | null) => invoke("set_input_device", { name }),
   setOutputDevice: (name: string | null) => invoke("set_output_device", { name }),
   selectRig: (config: RigConfig) => invoke("select_rig", { config }),
+  disconnectRig: () => invoke("disconnect_rig"),
   refreshStatus: () => invoke("refresh_status"),
   resyncTime: () => invoke("resync_time"),
 

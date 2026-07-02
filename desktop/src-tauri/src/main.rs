@@ -82,6 +82,11 @@ fn set_base_freq(state: State<AppState>, hz: i32) {
 }
 
 #[tauri::command]
+fn set_tx_gain(state: State<AppState>, gain: f32) {
+    state.engine.send(EngineCommand::SetTxGain(gain));
+}
+
+#[tauri::command]
 fn set_input_device(state: State<AppState>, name: Option<String>) {
     state.engine.send(EngineCommand::SetInputDevice(name));
 }
@@ -94,6 +99,11 @@ fn set_output_device(state: State<AppState>, name: Option<String>) {
 #[tauri::command]
 fn select_rig(state: State<AppState>, config: RigConfig) {
     state.engine.send(EngineCommand::SelectRig(config));
+}
+
+#[tauri::command]
+fn disconnect_rig(state: State<AppState>) {
+    state.engine.send(EngineCommand::DisconnectRig);
 }
 
 #[tauri::command]
@@ -204,6 +214,15 @@ fn main() {
                 .name("ft8af-event-forwarder".into())
                 .spawn(move || {
                     while let Ok(ev) = evt_rx.recv() {
+                        // Mirror status messages to the terminal. The app has no
+                        // logger, so audio/rig/decode problems (e.g. "audio start
+                        // failed") were previously invisible outside the in-app
+                        // status line — making remote diagnosis impossible.
+                        match &ev {
+                            engine::EngineEvent::Error(m) => eprintln!("[ft8af] ERROR: {m}"),
+                            engine::EngineEvent::Info(m) => eprintln!("[ft8af] {m}"),
+                            _ => {}
+                        }
                         let _ = handle.emit("engine-event", ev);
                     }
                 })?;
@@ -220,9 +239,11 @@ fn main() {
             set_station,
             set_band,
             set_base_freq,
+            set_tx_gain,
             set_input_device,
             set_output_device,
             select_rig,
+            disconnect_rig,
             refresh_status,
             resync_time,
             start_cq,

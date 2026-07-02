@@ -375,14 +375,16 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 onCallCQ = {
                     if (GeneralVariables.myCallsign.isNullOrEmpty()) {
                         Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
+                    } else if (isFreeTextMode && freeTextMessage.isNotBlank()) {
+                        // Free text is a one-shot (WSJT-X Tx5 style): send it once,
+                        // immediately, then the engine auto-stops — it is an alternative
+                        // to a 73, not a repeating CQ. Consume the armed free text so the
+                        // next tap calls a normal CQ instead of re-sending it.
+                        mainViewModel.ft8TransmitSignal.sendFreeTextOnce(freeTextMessage)
+                        isFreeTextMode = false
+                        freeTextMessage = ""
                     } else {
-                        // Apply current CQ mode before activating
-                        if (isFreeTextMode && freeTextMessage.isNotBlank()) {
-                            mainViewModel.ft8TransmitSignal.setFreeText(freeTextMessage)
-                            mainViewModel.ft8TransmitSignal.setTransmitFreeText(true)
-                        } else {
-                            mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
-                        }
+                        mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
                         mainViewModel.ft8TransmitSignal.userResetToCQ()
                         mainViewModel.ft8TransmitSignal.setActivated(true)
                         GeneralVariables.resetLaunchSupervision()

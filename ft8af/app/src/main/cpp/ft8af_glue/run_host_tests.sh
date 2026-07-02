@@ -67,6 +67,7 @@ dev625_srcs=(
     "$ft8/ft8/message.c"
     "$ft8/ft8/decode.c"
     "$ft8/ft8/ldpc.c"
+    "$ft8/ft8/osd.c"
     "$ft8/ft8/unpack.c"
     "$here/fft_display.c"
 )
@@ -84,3 +85,134 @@ CXX="${CXX:-clang++}"
 fir_out="$tmp/ft8_fir_test"
 "$CXX" -std=c++14 -O2 -Wall "$here/test_fir_decimator.cpp" -lm -o "$fir_out"
 "$fir_out"
+
+# Decode benchmark / regression harness: replays the committed FT8 WAV corpus
+# through the app's exact decode pipeline (same monitor config, candidate
+# search, LDPC settings, dedup, and subtract-and-redecode loop as
+# FT8SignalListener + ft8_decode_jni.cpp) and scores against WSJT-X jt9 truth
+# sidecars. Fails if any corpus file matches fewer truth messages than its
+# committed floor (testdata/ft8/floors.txt) — the floors ratchet up as decoder
+# improvements land. See decode_bench.c's header for flags and output format.
+bench_srcs=(
+    "$here/decode_bench.c"
+    "$here/gfsk.c"
+    "$here/ft8_subtract.c"
+    "$here/ft8_fine.c"
+    "$here/ft8_xslot.c"
+    "$ft8/ft8/pack.c"
+    "$ft8/ft8/encode.c"
+    "$ft8/ft8/crc.c"
+    "$ft8/ft8/constants.c"
+    "$ft8/ft8/text.c"
+    "$ft8/ft8/message.c"
+    "$ft8/ft8/decode.c"
+    "$ft8/ft8/ldpc.c"
+    "$ft8/ft8/osd.c"
+    "$ft8/ft8/unpack.c"
+    "$ft8/common/monitor.c"
+    "$ft8/common/wave.c"
+    "$ft8/fft/kiss_fft.c"
+    "$ft8/fft/kiss_fftr.c"
+)
+bench_out="$tmp/ft8_decode_bench"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${bench_srcs[@]}" -lm -o "$bench_out"
+
+"$bench_out" --self-test
+"$bench_out" --assert-floor "$here/testdata/ft8/floors.txt" "$here"/testdata/ft8/*.wav
+
+# Subtraction unit tests: waterfall-domain (tone replacement) and coherent
+# time-domain deep-decode subtraction properties (removal, neighbor
+# preservation, masked/same-frequency co-channel recovery, bounded damage).
+subtract_srcs=(
+    "$here/test_subtract.c"
+    "$here/gfsk.c"
+    "$here/ft8_subtract.c"
+    "$ft8/ft8/pack.c"
+    "$ft8/ft8/encode.c"
+    "$ft8/ft8/crc.c"
+    "$ft8/ft8/constants.c"
+    "$ft8/ft8/text.c"
+    "$ft8/ft8/message.c"
+    "$ft8/ft8/decode.c"
+    "$ft8/ft8/ldpc.c"
+    "$ft8/ft8/osd.c"
+    "$ft8/ft8/unpack.c"
+    "$ft8/common/monitor.c"
+    "$ft8/fft/kiss_fft.c"
+    "$ft8/fft/kiss_fftr.c"
+)
+subtract_out="$tmp/ft8_subtract_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${subtract_srcs[@]}" -lm -o "$subtract_out"
+"$subtract_out"
+
+# OSD unit tests: the ordered-statistics backstop behind belief propagation
+# (generator consistency, BP-failure recovery, pure-noise rejection).
+osd_srcs=(
+    "$here/test_osd.c"
+    "$ft8/ft8/pack.c"
+    "$ft8/ft8/encode.c"
+    "$ft8/ft8/crc.c"
+    "$ft8/ft8/constants.c"
+    "$ft8/ft8/text.c"
+    "$ft8/ft8/message.c"
+    "$ft8/ft8/ldpc.c"
+    "$ft8/ft8/osd.c"
+    "$ft8/ft8/unpack.c"
+)
+osd_out="$tmp/ft8_osd_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${osd_srcs[@]}" -lm -o "$osd_out"
+"$osd_out"
+
+# Fine-demod unit tests: the fine-sync coherent retry (partial-transmission
+# recovery, off-grid sync accuracy, pure-noise rejection).
+fine_srcs=(
+    "$here/test_fine.c"
+    "$here/gfsk.c"
+    "$here/ft8_fine.c"
+    "$ft8/ft8/pack.c"
+    "$ft8/ft8/encode.c"
+    "$ft8/ft8/crc.c"
+    "$ft8/ft8/constants.c"
+    "$ft8/ft8/text.c"
+    "$ft8/ft8/message.c"
+    "$ft8/ft8/decode.c"
+    "$ft8/ft8/ldpc.c"
+    "$ft8/ft8/osd.c"
+    "$ft8/ft8/unpack.c"
+    "$ft8/common/monitor.c"
+    "$ft8/fft/kiss_fft.c"
+    "$ft8/fft/kiss_fftr.c"
+)
+fine_out="$tmp/ft8_fine_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${fine_srcs[@]}" -lm -o "$fine_out"
+"$fine_out"
+
+# Cross-slot unit tests: LLR accumulation across same-parity slots and the
+# message-history retry (acceptance, parity/frequency/noise rejection).
+xslot_srcs=(
+    "$here/test_xslot.c"
+    "$here/ft8_xslot.c"
+    "$ft8/ft8/pack.c"
+    "$ft8/ft8/encode.c"
+    "$ft8/ft8/crc.c"
+    "$ft8/ft8/constants.c"
+    "$ft8/ft8/text.c"
+    "$ft8/ft8/message.c"
+    "$ft8/ft8/decode.c"
+    "$ft8/ft8/ldpc.c"
+    "$ft8/ft8/osd.c"
+    "$ft8/ft8/unpack.c"
+)
+xslot_out="$tmp/ft8_xslot_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${xslot_srcs[@]}" -lm -o "$xslot_out"
+"$xslot_out"

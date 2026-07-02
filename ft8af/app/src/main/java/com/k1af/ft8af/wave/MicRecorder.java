@@ -308,7 +308,35 @@ public class MicRecorder {
                     //read recording data
                     int bufferReadResult = audioRecord.read(buffer, 0, bufferSize,AudioRecord.READ_BLOCKING);
 
-                    if (onDataListener!=null){
+                    if (bufferReadResult < 0) {
+                        // Error codes (ERROR_INVALID_OPERATION=-3, ERROR_BAD_VALUE=-2,
+                        // ERROR_DEAD_OBJECT=-6) must never reach onDataReceived as a
+                        // length — downstream VoiceDataMonitors would silently stall.
+                        GeneralVariables.fileLog(
+                                "MicRecorder: AudioRecord.read error " + bufferReadResult);
+                        if (bufferReadResult == AudioRecord.ERROR_DEAD_OBJECT) {
+                            // Route audio server death through the same throttled
+                            // reinitialize used by the USB capture-stopped path.
+                            isRunning = false;
+                            long sinceLast = System.currentTimeMillis() - lastReinitMs;
+                            if (sinceLast >= MIN_REINIT_INTERVAL_MS) {
+                                lastReinitMs = System.currentTimeMillis();
+                                reinitialize();
+                            }
+                            break;
+                        }
+                        // Persistent non-fatal errors would otherwise retry in a
+                        // tight loop, spamming the log and burning CPU.
+                        try {
+                            Thread.sleep(50);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                        continue;
+                    }
+
+                    if (onDataListener!=null && bufferReadResult > 0){
                         onDataListener.onDataReceived(buffer,bufferReadResult);
                     }
                 }

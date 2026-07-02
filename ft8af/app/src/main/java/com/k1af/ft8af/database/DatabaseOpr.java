@@ -26,6 +26,7 @@ import com.k1af.ft8af.callsign.CallsignDatabase;
 import com.k1af.ft8af.callsign.CallsignInfo;
 import com.k1af.ft8af.connector.ConnectMode;
 import com.k1af.ft8af.ft8signal.FT8Package;
+import com.k1af.ft8af.log.AdifFormat;
 import com.k1af.ft8af.log.OnQueryQSLCallsign;
 import com.k1af.ft8af.log.OnQueryQSLRecordCallsign;
 import com.k1af.ft8af.log.QSLCallsignRecord;
@@ -1341,8 +1342,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     , String.valueOf(record.isLotW_QSL ? 1 : 0)
                     , record.getToMaidenGrid()
                     , record.getMode()
-                    , String.valueOf(record.getSendReport())
-                    , String.valueOf(record.getReceivedReport())
+                    , AdifFormat.formatReport(record.getSendReport())
+                    , AdifFormat.formatReport(record.getReceivedReport())
                     , record.getQso_date()
                     , record.getTime_on()
 
@@ -1411,7 +1412,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             if (record.getSendReport() > -100) {
                 db.execSQL("UPDATE  QSLTable  SET rst_sent=? " +
                                 " WHERE (call=?) and (qso_date=?) and(time_on=?) and(mode=?)"
-                        , new Object[]{record.getSendReport(), record.getToCallsign()
+                        , new Object[]{AdifFormat.formatReport(record.getSendReport()), record.getToCallsign()
                                 , record.getQso_date()
                                 , record.getTime_on()
                                 , record.getMode()});
@@ -1419,7 +1420,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             if (record.getReceivedReport() > -100) {
                 db.execSQL("UPDATE  QSLTable  SET rst_rcvd=? " +
                                 " WHERE (call=?) and (qso_date=?) and(time_on=?) and(mode=?)"
-                        , new Object[]{record.getReceivedReport(), record.getToCallsign()
+                        , new Object[]{AdifFormat.formatReport(record.getReceivedReport()), record.getToCallsign()
                                 , record.getQso_date()
                                 , record.getTime_on()
                                 , record.getMode()});
@@ -1647,8 +1648,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             databaseOpr.db.execSQL(querySQL, new String[]{qslRecord.getToCallsign()
                     , qslRecord.getToMaidenGrid()
                     , qslRecord.getMode()
-                    , String.valueOf(qslRecord.getSendReport())
-                    , String.valueOf(qslRecord.getReceivedReport())
+                    , AdifFormat.formatReport(qslRecord.getSendReport())
+                    , AdifFormat.formatReport(qslRecord.getReceivedReport())
                     , qslRecord.getQso_date()
                     , qslRecord.getTime_on()
 
@@ -2378,6 +2379,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("synFreq")) {
                     GeneralVariables.synFrequency = !(result.equals("") || result.equals("0"));
                 }
+                if (name.equalsIgnoreCase("holdTxFreq")) {
+                    // Parse like synFreq above: any non-empty, non-"0" value is true,
+                    // so the two boolean configs handle stored values consistently.
+                    GeneralVariables.holdTxFreq = !(result.equals("") || result.equals("0"));
+                }
                 if (name.equalsIgnoreCase("transDelay")) {
                     if (result.matches("^\\d{1,4}$")) {//Regex: 1-4 digit number
                         GeneralVariables.transmitDelay = Integer.parseInt(result);
@@ -2428,6 +2434,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
                 if (name.equalsIgnoreCase("clearDecodesEveryCycle")) {
                     GeneralVariables.clearDecodesEveryCycle = result.equals("1");
+                }
+
+                if (name.equalsIgnoreCase("clearOnBandModeChange")) {
+                    GeneralVariables.clearOnBandModeChange = result.equals("1");
                 }
 
                 if (name.equalsIgnoreCase("ctrMode")) {

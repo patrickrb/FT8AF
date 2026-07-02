@@ -1,0 +1,39 @@
+# Decode-count floors for decode_bench --assert-floor.
+# One line per corpus file: <name> <minimum matched-truth decode count>.
+# Ratchet these UP as decoder improvements land; never down without a
+# documented regression decision.
+# 2026-07-01 baseline (stock 140/10/osr2): TOTAL matched=338 recall=71.5%
+# 2026-07-01 tuning (256, fast/deep 10/5, time_osr 4): TOTAL matched=349 recall=73.8%
+# 2026-07-01 subtract-v2 (tone-accurate subtraction): TOTAL matched=366 recall=77.4%
+# 2026-07-01 osd-backstop (OSD depth 12, nhard 38): TOTAL matched=374 recall=79.1%.
+#   Documented trade: 20m_busy_test_05 floor lowered 22 -> 21 (one decode lost
+#   to subtract-loop interplay with an OSD-recovered neighbor) for +8 matched
+#   across the corpus.
+# 2026-07-02 subtract-time (coherent time-domain subtraction, fine dt/df sync,
+#   STFT-lag correction, NFILT 1440): TOTAL matched=447 recall=94.5%.
+# 2026-07-02 osd-order2 (pair flips, nhard<=30 pair gate): TOTAL matched=449
+#   recall=94.9%; extras 52 -> 51.
+# 2026-07-02 fine-demod (fine-sync coherent retry from raw samples):
+#   TOTAL matched=459 recall=97.0%; 11 of 20 files at 100% of jt9.
+# 2026-07-02 cross-slot (LLR accumulation + message-history retry):
+#   TOTAL matched=462 recall=97.7%; 14 of 20 files at 100% of jt9.
+20m_busy_test_01.wav 24
+20m_busy_test_02.wav 21
+20m_busy_test_03.wav 18
+20m_busy_test_04.wav 19
+20m_busy_test_05.wav 32
+20m_busy_test_06.wav 26
+20m_busy_test_07.wav 31
+20m_busy_test_08.wav 19
+20m_busy_test_09.wav 27
+20m_busy_test_10.wav 20
+20m_busy_test_11.wav 31
+20m_busy_test_12.wav 18
+websdr_test1.wav 15
+websdr_test2.wav 21
+websdr_test3.wav 11
+websdr_test4.wav 22
+websdr_test5.wav 26
+websdr_test6.wav 28
+websdr_test7.wav 27
+websdr_test8.wav 26

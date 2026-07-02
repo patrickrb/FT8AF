@@ -33,7 +33,7 @@ function registerWfCanvas(c: HTMLCanvasElement | null) {
   wfCanvas = c;
   if (c) c.height = WF_HEIGHT;
 }
-function drawWaterfallRow(bins: number[]) {
+function drawWaterfallRow(bins: number[], boundary = false) {
   const cv = wfCanvas;
   if (!cv || bins.length === 0) return;
   const cols = bins.length;
@@ -52,6 +52,13 @@ function drawWaterfallRow(bins: number[]) {
     img.data[i * 4 + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
+  // 15 s cycle grid line, on the same rx-corrected clock as decode DT: a faint
+  // overlay so the waterfall's timing reads against the cycle (and the DT)
+  // rather than appearing to run ahead of it.
+  if (boundary) {
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.fillRect(0, 0, cols, 1);
+  }
 }
 
 export default function App() {
@@ -62,9 +69,12 @@ export default function App() {
   const [rig, setRig] = useState<RigStatusEvent | null>(null);
   const [clock, setClock] = useState<ClockSyncEvent | null>(null);
   const [decoding, setDecoding] = useState(false);
+  const [audio, setAudio] = useState<{ db: number; silent: boolean } | null>(null);
   const [status, setStatus] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [txFreq, setTxFreq] = useState(1500);
+  const [txGain, setTxGain] = useState(90); // TX level as a percentage (0–100)
+  const [rigLabel, setRigLabel] = useState(""); // optional display-name override
   const [bands, setBands] = useState<BandInfo[]>([]);
   const [dialHz, setDialHz] = useState<number>(14074000);
 
@@ -94,6 +104,14 @@ export default function App() {
     });
     api.getConfig("base_freq").then((v) => {
       if (v) setTxFreq(parseInt(v, 10));
+    });
+    api.getConfig("tx_gain").then((v) => {
+      if (v == null || v === "") return;
+      const pct = Math.round(parseFloat(v) * 100);
+      if (!Number.isNaN(pct)) setTxGain(pct); // keep a persisted 0% (not just falsy-skip)
+    });
+    api.getConfig("rig_label").then((v) => {
+      if (v) setRigLabel(v);
     });
     return () => {
       cancelled = true;
@@ -128,7 +146,10 @@ export default function App() {
         setClock(e.data);
         break;
       case "waterfall_row":
-        drawWaterfallRow(e.data.bins);
+        drawWaterfallRow(e.data.bins, e.data.boundary);
+        break;
+      case "input_level":
+        setAudio(e.data);
         break;
       case "qso_completed":
         setStatus(`QSO logged: ${e.data.call} ${e.data.rst_sent}/${e.data.rst_rcvd}`);
@@ -146,6 +167,7 @@ export default function App() {
     if (decodingRef.current) {
       api.stopDecode();
       setDecoding(false);
+      setAudio(null); // no input meter while stopped
     } else {
       api.startDecode();
       setDecoding(true);
@@ -172,6 +194,13 @@ export default function App() {
         onBand={onBand}
         rig={rig}
         clock={clock}
+        audio={audio}
+        rigLabel={rigLabel}
+        txGain={txGain}
+        onTxGain={(v) => {
+          setTxGain(v);
+          api.setTxGain(v / 100);
+        }}
       />
       <div className="tabs">
         {(["decode", "log", "settings"] as Tab[]).map((t) => (
@@ -195,7 +224,16 @@ export default function App() {
           />
         )}
         {tab === "log" && <LogScreen />}
-        {tab === "settings" && <SettingsScreen onStatus={setStatus} clock={clock} />}
+        {tab === "settings" && (
+          <SettingsScreen
+            onStatus={setStatus}
+            clock={clock}
+            onRigLabel={(v) => {
+              setRigLabel(v);
+              api.setConfig("rig_label", v);
+            }}
+          />
+        )}
       </div>
       <TxBar
         txState={txState}
@@ -218,8 +256,12 @@ function TopBar(props: {
   onBand: (hz: number) => void;
   rig: RigStatusEvent | null;
   clock: ClockSyncEvent | null;
+  audio: { db: number; silent: boolean } | null;
+  rigLabel: string;
+  txGain: number;
+  onTxGain: (v: number) => void;
 }) {
-  const { cycle, decoding, onToggleDecode, bands, dialHz, onBand, rig, clock } = props;
+  const { cycle, decoding, onToggleDecode, bands, dialHz, onBand, rig, clock, audio, rigLabel, txGain, onTxGain } = props;
   const utc = cycle ? new Date(cycle.utc_ms).toISOString().substring(11, 19) : "--:--:--";
   const pct = cycle ? (cycle.ms_into_cycle / 15000) * 100 : 0;
   return (
@@ -232,6 +274,22 @@ function TopBar(props: {
       </div>
       <span className="seq">seq {cycle?.sequential ?? "-"}</span>
       <div className="spacer" />
+      <span className="tx-level" title="TX output level (drive) — lower until ALC stops pinning">
+        <span className="muted">TX</span>
+        <input
+          type="range"
+          aria-label="TX output level (drive), percent"
+          min={0}
+          max={100}
+          step={1}
+          value={txGain}
+          onChange={(e) => onTxGain(parseInt(e.target.value, 10))}
+          style={{ width: 90 }}
+        />
+        <span className="muted" style={{ fontVariantNumeric: "tabular-nums", minWidth: 34, textAlign: "right" }}>
+          {txGain}%
+        </span>
+      </span>
       <select value={dialHz} onChange={(e) => onBand(parseInt(e.target.value, 10))}>
         {bands.map((b) => (
           <option key={b.name} value={b.dial_hz}>
@@ -240,13 +298,49 @@ function TopBar(props: {
         ))}
       </select>
       <span className="muted">
-        {rig?.connected ? `rig: ${rig.model}` : "no rig"}
+        {rig?.connected ? `rig: ${rigLabel || rig.model}` : "no rig"}
         {rig?.ptt ? " · PTT" : ""}
       </span>
+      <AudioBadge decoding={decoding} audio={audio} />
       <button className={decoding ? "danger" : "primary"} onClick={onToggleDecode}>
         {decoding ? "Stop" : "Start"} decode
       </button>
     </div>
+  );
+}
+
+// RX input-level indicator. Shows the captured level in dBFS while decoding, and
+// a clear "no audio" warning when the input is silent — the case where the source
+// (e.g. a DAX/soundcard channel) isn't actually routed and the waterfall is blank.
+function AudioBadge({
+  decoding,
+  audio,
+}: {
+  decoding: boolean;
+  audio: { db: number; silent: boolean } | null;
+}) {
+  if (!decoding) return null;
+  if (!audio) {
+    return <span className="muted" title="Waiting for the first input-level reading">audio …</span>;
+  }
+  if (audio.silent) {
+    return (
+      <span
+        style={{ color: "var(--tx)", fontVariantNumeric: "tabular-nums" }}
+        title="No audio is reaching the app. Check that the selected input device is the right one and that its source is routed (e.g. SmartSDR slice → DAX RX channel, soundcard input not muted)."
+      >
+        ⚠ no audio
+      </span>
+    );
+  }
+  return (
+    <span
+      className="muted"
+      style={{ fontVariantNumeric: "tabular-nums" }}
+      title="RX input level (dBFS) of the captured audio"
+    >
+      audio {audio.db.toFixed(0)} dB
+    </span>
   );
 }
 
@@ -501,9 +595,14 @@ function LogScreen() {
   );
 }
 
-function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSyncEvent | null }) {
-  const { onStatus, clock } = props;
+function SettingsScreen(props: {
+  onStatus: (s: string) => void;
+  clock: ClockSyncEvent | null;
+  onRigLabel: (v: string) => void;
+}) {
+  const { onStatus, clock, onRigLabel } = props;
   const [call, setCall] = useState("");
+  const [rigLabel, setRigLabel] = useState("");
   const [grid, setGrid] = useState("");
   const [inputs, setInputs] = useState<AudioDevice[]>([]);
   const [outputs, setOutputs] = useState<AudioDevice[]>([]);
@@ -545,7 +644,23 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
         }
       }
     });
+    api.getConfig("rig_label").then((v) => v && setRigLabel(v));
   }, []);
+
+  const refreshPorts = () => api.listSerialPorts().then(setPorts);
+
+  // Re-enumerate serial ports whenever a port-list backend becomes visible.
+  // Ports were previously read only once at mount, so a rig attached after
+  // launch — or Hamlib selected first, before its serial port was chosen —
+  // showed an empty/stale list. Switching to Hamlib (serial) or Direct serial
+  // now re-scans, so /dev/ttyACM0 (a QMX/QDX) appears without the
+  // select-Direct-then-Hamlib workaround.
+  const showsPortList =
+    rigCfg.backend === "serial" ||
+    (rigCfg.backend === "hamlib" && !rigCfg.hamlib_network);
+  useEffect(() => {
+    if (showsPortList) refreshPorts();
+  }, [showsPortList]);
 
   function saveStation() {
     api.setStation(call, grid);
@@ -664,6 +779,22 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
         <h3>Rig control</h3>
         <div className="col">
           <div className="field">
+            <label>Display name (optional)</label>
+            <input
+              value={rigLabel}
+              onChange={(e) => {
+                setRigLabel(e.target.value);
+                onRigLabel(e.target.value);
+              }}
+              placeholder="e.g. Flex 6400"
+            />
+            <span className="muted" style={{ display: "block", marginTop: 4 }}>
+              Shown in the top bar instead of the CAT model. Useful when connecting
+              a radio through an emulator (e.g. a Flex via SmartSDR CAT reports as
+              Kenwood TS-2000). Leave blank to show the detected model.
+            </span>
+          </div>
+          <div className="field">
             <label>Backend</label>
             <select
               value={rigCfg.backend}
@@ -735,14 +866,19 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
                 <div className="row">
                   <div className="field">
                     <label>Serial port</label>
-                    <select value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
-                      <option value="">(none — e.g. Dummy)</option>
-                      {ports.map((p) => (
-                        <option key={p.name} value={p.name}>
-                          {p.name} ({p.kind})
-                        </option>
-                      ))}
-                    </select>
+                    <div className="row">
+                      <select value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
+                        <option value="">(none — e.g. Dummy)</option>
+                        {ports.map((p) => (
+                          <option key={p.name} value={p.name}>
+                            {p.name} ({p.kind})
+                          </option>
+                        ))}
+                      </select>
+                      <button type="button" title="Re-scan serial ports" onClick={refreshPorts}>
+                        ↻
+                      </button>
+                    </div>
                   </div>
                   <div className="field">
                     <label>Baud</label>
@@ -805,14 +941,19 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
               </div>
               <div className="field">
                 <label>Serial port</label>
-                <select value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
-                  <option value="">— select —</option>
-                  {ports.map((p) => (
-                    <option key={p.name} value={p.name}>
-                      {p.name} ({p.kind})
-                    </option>
-                  ))}
-                </select>
+                <div className="row">
+                  <select value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
+                    <option value="">— select —</option>
+                    {ports.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.name} ({p.kind})
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" title="Re-scan serial ports" onClick={refreshPorts}>
+                    ↻
+                  </button>
+                </div>
               </div>
               <div className="row">
                 <div className="field">
@@ -872,6 +1013,14 @@ function SettingsScreen(props: { onStatus: (s: string) => void; clock: ClockSync
             }}
           >
             Connect rig
+          </button>
+          <button
+            onClick={() => {
+              api.disconnectRig();
+              onStatus("Rig disconnected");
+            }}
+          >
+            Disconnect
           </button>
         </div>
       </div>

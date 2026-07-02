@@ -86,7 +86,7 @@ $goldenExit = $LASTEXITCODE
 # ---------------------------------------------------------------------------
 $dev625Srcs = @(
     "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
-    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\unpack.c"
+    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\osd.c","ft8\unpack.c"
 ) | ForEach-Object { Join-Path $ft8 $_ }
 $dev625Srcs += (Join-Path $here "fft_display.c")
 
@@ -113,6 +113,129 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (fir_decimator)." }
 & $firOut
 $firExit = $LASTEXITCODE
 
+# ---------------------------------------------------------------------------
+# Decode benchmark / regression harness: replays the committed FT8 WAV corpus
+# through the app's exact decode pipeline (same monitor config, candidate
+# search, LDPC settings, dedup, and subtract-and-redecode loop as
+# FT8SignalListener + ft8_decode_jni.cpp) and scores against WSJT-X jt9 truth
+# sidecars. Fails if any corpus file matches fewer truth messages than its
+# committed floor (testdata/ft8/floors.txt) — the floors ratchet up as decoder
+# improvements land. See decode_bench.c's header for flags and output format.
+# ---------------------------------------------------------------------------
+$benchSrcs = @(
+    "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
+    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\osd.c","ft8\unpack.c",
+    "common\monitor.c","common\wave.c",
+    "fft\kiss_fft.c","fft\kiss_fftr.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+$benchSrcs += (Join-Path $here "gfsk.c")
+$benchSrcs += (Join-Path $here "ft8_subtract.c")
+$benchSrcs += (Join-Path $here "ft8_fine.c")
+$benchSrcs += (Join-Path $here "ft8_xslot.c")
+
+$srcBench = Join-Path $here "decode_bench.c"
+$outBench = Join-Path $env:TEMP "ft8_decode_bench.exe"
+
+& $Clang @common $srcBench @benchSrcs -o $outBench
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (decode_bench)." }
+
+& $outBench --self-test
+$benchSelfExit = $LASTEXITCODE
+
+$corpus = Join-Path $here "testdata\ft8"
+$floors = Join-Path $corpus "floors.txt"
+$wavs = Get-ChildItem (Join-Path $corpus "*.wav") | ForEach-Object { $_.FullName }
+& $outBench --assert-floor $floors @wavs
+$benchExit = $LASTEXITCODE
+
+# ---------------------------------------------------------------------------
+# Subtraction unit tests: waterfall-domain (tone replacement) and coherent
+# time-domain deep-decode subtraction properties (removal, neighbor
+# preservation, masked/same-frequency co-channel recovery, bounded damage).
+# ---------------------------------------------------------------------------
+$subSrcs = @(
+    "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
+    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\osd.c","ft8\unpack.c",
+    "common\monitor.c",
+    "fft\kiss_fft.c","fft\kiss_fftr.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+$subSrcs += (Join-Path $here "gfsk.c")
+$subSrcs += (Join-Path $here "ft8_subtract.c")
+
+$srcSub = Join-Path $here "test_subtract.c"
+$outSub = Join-Path $env:TEMP "ft8_subtract_test.exe"
+
+& $Clang @common $srcSub @subSrcs -o $outSub
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_subtract)." }
+
+& $outSub
+$subExit = $LASTEXITCODE
+
+# ---------------------------------------------------------------------------
+# OSD unit tests: the ordered-statistics backstop behind belief propagation
+# (generator consistency, BP-failure recovery, pure-noise rejection).
+# ---------------------------------------------------------------------------
+$osdSrcs = @(
+    "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
+    "ft8\text.c","ft8\message.c","ft8\ldpc.c","ft8\osd.c","ft8\unpack.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+
+$srcOsd = Join-Path $here "test_osd.c"
+$outOsd = Join-Path $env:TEMP "ft8_osd_test.exe"
+
+& $Clang @common $srcOsd @osdSrcs -o $outOsd
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_osd)." }
+
+& $outOsd
+$osdExit = $LASTEXITCODE
+
+# ---------------------------------------------------------------------------
+# Fine-demod unit tests: the fine-sync coherent retry (partial-transmission
+# recovery, off-grid sync accuracy, pure-noise rejection).
+# ---------------------------------------------------------------------------
+$fineSrcs = @(
+    "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
+    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\osd.c","ft8\unpack.c",
+    "common\monitor.c",
+    "fft\kiss_fft.c","fft\kiss_fftr.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+$fineSrcs += (Join-Path $here "gfsk.c")
+$fineSrcs += (Join-Path $here "ft8_fine.c")
+
+$srcFine = Join-Path $here "test_fine.c"
+$outFine = Join-Path $env:TEMP "ft8_fine_test.exe"
+
+& $Clang @common $srcFine @fineSrcs -o $outFine
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_fine)." }
+
+& $outFine
+$fineExit = $LASTEXITCODE
+
+# ---------------------------------------------------------------------------
+# Cross-slot unit tests: LLR accumulation across same-parity slots and the
+# message-history retry (acceptance, parity/frequency/noise rejection).
+# ---------------------------------------------------------------------------
+$xslotSrcs = @(
+    "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
+    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\osd.c","ft8\unpack.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+$xslotSrcs += (Join-Path $here "ft8_xslot.c")
+
+$srcXslot = Join-Path $here "test_xslot.c"
+$outXslot = Join-Path $env:TEMP "ft8_xslot_test.exe"
+
+& $Clang @common $srcXslot @xslotSrcs -o $outXslot
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_xslot)." }
+
+& $outXslot
+$xslotExit = $LASTEXITCODE
+
 if ($goldenExit -ne 0) { exit $goldenExit }
 if ($dev625Exit -ne 0) { exit $dev625Exit }
-exit $firExit
+if ($firExit -ne 0) { exit $firExit }
+if ($benchSelfExit -ne 0) { exit $benchSelfExit }
+if ($benchExit -ne 0) { exit $benchExit }
+if ($subExit -ne 0) { exit $subExit }
+if ($osdExit -ne 0) { exit $osdExit }
+if ($fineExit -ne 0) { exit $fineExit }
+exit $xslotExit

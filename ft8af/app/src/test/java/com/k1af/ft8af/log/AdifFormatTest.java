@@ -48,4 +48,34 @@ public class AdifFormatTest {
             assertThat(value).doesNotContain(">");
         }
     }
+
+    @Test
+    public void formatReport_alwaysSignedAndTwoDigits() {
+        // The bug: bare String.valueOf(int) gave "5"/"-5"/"0" — no sign on positives, no padding.
+        assertThat(AdifFormat.formatReport(5)).isEqualTo("+05");
+        assertThat(AdifFormat.formatReport(-3)).isEqualTo("-03");
+        assertThat(AdifFormat.formatReport(0)).isEqualTo("+00");
+        assertThat(AdifFormat.formatReport(20)).isEqualTo("+20");
+        assertThat(AdifFormat.formatReport(-12)).isEqualTo("-12");
+        assertThat(AdifFormat.formatReport(30)).isEqualTo("+30");
+        assertThat(AdifFormat.formatReport(-30)).isEqualTo("-30");
+    }
+
+    @Test
+    public void formatReport_everyValueHasSignAndAtLeastTwoDigits() {
+        for (int n = -30; n <= 30; n++) {
+            String s = AdifFormat.formatReport(n);
+            assertThat(s.charAt(0)).isAnyOf('+', '-');
+            // At least two digits after the sign.
+            assertThat(s.substring(1).length()).isAtLeast(2);
+            assertThat(Integer.parseInt(s)).isEqualTo(n);
+        }
+    }
+
+    @Test
+    public void formatReport_leavesNoReportSentinelsUnchanged() {
+        // -100/-120 mean "no report" and the logbook compares against those exact strings.
+        assertThat(AdifFormat.formatReport(-100)).isEqualTo("-100");
+        assertThat(AdifFormat.formatReport(-120)).isEqualTo("-120");
+    }
 }

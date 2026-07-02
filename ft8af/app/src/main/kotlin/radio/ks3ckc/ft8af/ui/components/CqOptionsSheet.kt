@@ -212,153 +212,151 @@ fun CqOptionsSheet(
                 )
             }
 
-            if (fieldDayEnabled) {
-                Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-                // Class chips
-                Text(
-                    text = stringResource(R.string.cq_fd_class),
-                    color = TextMuted,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = GeistMonoFamily,
-                    letterSpacing = 0.04.sp,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    for (cls in listOf("A", "B", "C", "D", "E", "F")) {
-                        val isSelected = fieldDayClass == cls
-                        val bgColor = if (isSelected) AccentSoft else BgSurface2
-                        val borderColor = if (isSelected) BorderAmber else Border
-                        val textColor = if (isSelected) Accent else TextMuted
+            // Class chips
+            Text(
+                text = stringResource(R.string.cq_fd_class),
+                color = TextMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GeistMonoFamily,
+                letterSpacing = 0.04.sp,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                for (cls in listOf("A", "B", "C", "D", "E", "F")) {
+                    val isSelected = fieldDayClass == cls
+                    val bgColor = if (isSelected) AccentSoft else BgSurface2
+                    val borderColor = if (isSelected) BorderAmber else Border
+                    val textColor = if (isSelected) Accent else TextMuted
 
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(chipShape)
-                                .background(bgColor, chipShape)
-                                .border(1.dp, borderColor, chipShape)
-                                .clickable { onFieldDayClassChange(cls) },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = cls,
-                                color = textColor,
-                                fontSize = 13.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                fontFamily = GeistMonoFamily,
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Transmitters stepper
-                Text(
-                    text = stringResource(R.string.cq_fd_transmitters),
-                    color = TextMuted,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = GeistMonoFamily,
-                    letterSpacing = 0.04.sp,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(BgSurface3)
-                            .clickable(enabled = fieldDayNumTx > 1) {
-                                onFieldDayNumTxChange((fieldDayNumTx - 1).coerceAtLeast(1))
-                            },
+                            .clip(chipShape)
+                            .background(bgColor, chipShape)
+                            .border(1.dp, borderColor, chipShape)
+                            .clickable { onFieldDayClassChange(cls) },
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = "\u2212",
-                            color = if (fieldDayNumTx > 1) TextMuted else TextFaint,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
+                            text = cls,
+                            color = textColor,
+                            fontSize = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                             fontFamily = GeistMonoFamily,
                         )
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Transmitters stepper
+            Text(
+                text = stringResource(R.string.cq_fd_transmitters),
+                color = TextMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GeistMonoFamily,
+                letterSpacing = 0.04.sp,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(BgSurface3)
+                        .clickable(enabled = fieldDayNumTx > 1) {
+                            onFieldDayNumTxChange((fieldDayNumTx - 1).coerceAtLeast(1))
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
                     Text(
-                        text = fieldDayNumTx.toString(),
-                        color = TextPrimary,
-                        fontSize = 15.sp,
+                        text = "\u2212",
+                        color = if (fieldDayNumTx > 1) TextMuted else TextFaint,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = GeistMonoFamily,
-                        letterSpacing = 0.02.sp,
                     )
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(BgSurface3)
-                            .clickable(enabled = fieldDayNumTx < 16) {
-                                onFieldDayNumTxChange((fieldDayNumTx + 1).coerceAtMost(16))
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "+",
-                            color = if (fieldDayNumTx < 16) TextMuted else TextFaint,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = GeistMonoFamily,
-                        )
-                    }
                 }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Section text field
                 Text(
-                    text = stringResource(R.string.cq_fd_section),
-                    color = TextMuted,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    text = fieldDayNumTx.toString(),
+                    color = TextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
                     fontFamily = GeistMonoFamily,
-                    letterSpacing = 0.04.sp,
+                    letterSpacing = 0.02.sp,
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                OutlinedTextField(
-                    value = fieldDaySection,
-                    onValueChange = {
-                        val cleaned = it.uppercase().filter { c -> c.isLetter() }.take(3)
-                        onFieldDaySectionChange(cleaned)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = {
-                        Text(
-                            text = stringResource(R.string.cq_fd_section_hint),
-                            color = TextFaint,
-                            fontSize = 13.sp,
-                            fontFamily = GeistMonoFamily,
-                        )
-                    },
-                    singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        color = TextPrimary,
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(BgSurface3)
+                        .clickable(enabled = fieldDayNumTx < 16) {
+                            onFieldDayNumTxChange((fieldDayNumTx + 1).coerceAtMost(16))
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "+",
+                        color = if (fieldDayNumTx < 16) TextMuted else TextFaint,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = GeistMonoFamily,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Section text field
+            Text(
+                text = stringResource(R.string.cq_fd_section),
+                color = TextMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GeistMonoFamily,
+                letterSpacing = 0.04.sp,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            OutlinedTextField(
+                value = fieldDaySection,
+                onValueChange = {
+                    val cleaned = it.uppercase().filter { c -> c.isLetter() }.take(3)
+                    onFieldDaySectionChange(cleaned)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = {
+                    Text(
+                        text = stringResource(R.string.cq_fd_section_hint),
+                        color = TextFaint,
                         fontSize = 13.sp,
                         fontFamily = GeistMonoFamily,
-                    ),
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.Characters,
-                    ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Accent,
-                        unfocusedBorderColor = Border,
-                        cursorColor = Accent,
-                    ),
-                )
-            }
+                    )
+                },
+                singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    color = TextPrimary,
+                    fontSize = 13.sp,
+                    fontFamily = GeistMonoFamily,
+                ),
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Characters,
+                ),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Accent,
+                    unfocusedBorderColor = Border,
+                    cursorColor = Accent,
+                ),
+            )
 
             // ---- Divider: "or" ----
             OrDivider()

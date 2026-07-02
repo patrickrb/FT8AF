@@ -356,6 +356,8 @@ public class GeneralVariables {
 
     public static boolean clearDecodesEveryCycle = false;//Clear the decode list at the start of each cycle
 
+    public static boolean clearOnBandModeChange = true;//Clear the decode list + reset TX target to CQ when the band or mode changes (default on)
+
     public static boolean swr_switch_on = true;//SWR alarm switch
     public static boolean alc_switch_on = true;//ALC alarm switch
 
@@ -379,6 +381,7 @@ public class GeneralVariables {
     public static String qrzXmlPassword = ""; //QRZ XML API password
     public static boolean pskOverlayEnabled = false; //PSK Reporter map overlay (issue #33)
     public static boolean synFrequency = false;//Same-frequency transmit
+    public static boolean holdTxFreq = false;//Hold TX freq: don't move the TX offset to a station you answer (WSJT-X "Hold Tx Freq")
     public static int transmitDelay = 500;//Transmit delay; also allows decoding time for the previous cycle
     public static int pttDelay = 100;//PTT response time; radios typically need some response time after PTT command, default 100ms
     public static int lateStartTolerance = 2000;//Max ms into a cycle that a manual TX may start; leading audio is clipped so TX still ends on the cycle boundary. 0-4000.
@@ -427,6 +430,9 @@ public class GeneralVariables {
 
     public static boolean autoFollowCQ = false;//Auto-follow CQ
     public static boolean huntCallsCQ = false;//Hunt+CQ hybrid: call CQ when idle, answer CQs when heard
+    // volatile: written from the Compose UI thread (DecodeScreen) and read from the
+    // transmit/decode processing thread (FT8TransmitSignal), like zoneMapReady above.
+    public static volatile boolean huntPotaOnly = false;//Mirror of the "CQ POTA" decode filter: Hunt only calls POTA CQs (issue #333)
     public static boolean autoCallFollow = true;//Auto-call followed callsigns
     public static boolean autoUpdateGridFromGPS = false;//Use device GPS to keep Maidenhead grid current
     public static ArrayList<String> QSL_Callsign_list = new ArrayList<>();//Successfully QSL'd callsigns
