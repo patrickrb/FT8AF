@@ -153,8 +153,9 @@ static bool crc_ok(const bits91_t* plain)
 }
 
 // Evaluate a candidate message: valid codeword bits are re-encoded and
-// compared to the received hard decisions (nhard, capped at nhard_max) and
-// soft values (dist, the summed |LLR| of disagreeing bits — lower is better).
+// compared to the received hard decisions (nhard; the candidate is REJECTED
+// when nhard exceeds nhard_max) and soft values (dist, the summed |LLR| of
+// disagreeing bits — lower is better).
 static bool evaluate(const bits91_t* plain, const float log174[FTX_LDPC_N],
                      int nhard_max, int* nhard_out, float* dist_out)
 {
