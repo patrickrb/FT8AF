@@ -36,8 +36,12 @@
 #define FT8AF_LDPC_ITERS_DEEP 30
 
 // Ordered-statistics backstop (ft8_lib/ft8/osd.c), deep passes only.
-// DEPTH = single-bit-flip retries over the least reliable basis positions.
-// Swept on the bench: 6 -> 78.6%, 12 -> 79.1%, 24 -> flat with more junk.
+// DEPTH = flip window over the least reliable basis positions: `depth`
+// single-bit retries plus C(depth,2) pair retries (order-2; pairs use a
+// stricter acceptance gate, see OSD_NHARD_MAX_ORDER2 in osd.c). Swept on
+// the bench: order-1 6 -> 78.6%, 12 -> 79.1%, 24 -> flat with more junk;
+// with order-2 pairs (post time-domain subtraction) depth 12 -> 94.9%,
+// 16..32 -> matched flat while false decodes climb. Keep 12.
 // ERR_GATE = max unsatisfied BP parity checks for which OSD is attempted
 // (junk candidates typically fail 40-80 checks and are skipped).
 #define FT8AF_OSD_DEPTH_DEEP 12

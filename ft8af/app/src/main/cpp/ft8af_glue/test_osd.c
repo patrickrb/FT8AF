@@ -11,6 +11,11 @@
 //      recovers the exact message (the reason the backstop exists).
 //   4. False-decode guard: 1000 seeded pure-noise LLR vectors produce zero
 //      accepted decodes.
+//   5. Order-2 recovery: TWO moderately confident wrong bits land in the
+//      reordered basis tail (forced by a mass of near-erasure correct bits),
+//      so the base decode and every single flip fail and only a pair flip
+//      reaches the codeword. Fails on the order-1-only implementation
+//      (verified against it on 252 of 300 seeds; this seed is one of them).
 
 #include <math.h>
 #include <stdbool.h>
@@ -143,6 +148,34 @@ int main(void)
     check(accepted == 0, "0 of 1000 pure-noise vectors accepted");
     if (accepted > 0)
         printf("  (accepted %d)\n", accepted);
+
+    // ---- 5. order-2 (pair-flip) recovery --------------------------------------
+    // Two moderately confident WRONG bits (|LLR| 0.4) plus 87 near-erasure
+    // CORRECT bits (|LLR| ~0.02-0.04). The erasure mass forces the wrong bits
+    // into the reliability-ordered basis near its tail: the base decode is
+    // wrong in two basis positions (CRC rejects), no single flip can fix
+    // both, and the pair search recovers the exact codeword. bp_decode fails
+    // outright (the erasure mass alone exceeds BP's capacity).
+    printf("test_osd_order2_pair_recovery:\n");
+    g_seed = 1;
+    clean_llrs(cw, 1.0f, llr);
+    corrupted = 0;
+    while (corrupted < 2 + 87)
+    {
+        int i = (int)(prng_uniform() * FTX_LDPC_N);
+        if (fabsf(llr[i]) < 0.9f)
+            continue; // already corrupted
+        if (corrupted < 2)
+            llr[i] = (cw[i] ? -1.0f : 1.0f) * 0.4f; // confident and WRONG
+        else
+            llr[i] = (cw[i] ? 1.0f : -1.0f) * 0.02f * (1.0f + prng_uniform());
+        corrupted++;
+    }
+    bp_decode(llr, 30, plain174, &errors);
+    check(errors > 0, "belief propagation fails (erasure mass over capacity)");
+    ok = osd_decode(llr, 12, plain174, &depth_used);
+    check(ok, "osd_decode recovers via a pair flip");
+    check(ok && memcmp(plain174, cw, FTX_LDPC_N) == 0, "recovered bits equal the codeword");
 
     if (g_failures == 0)
     {
