@@ -428,9 +428,157 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderFt8Analysis(
     {
         ok = (ftx_message_decode_nonstd(&message, &hash_if, call_to, call_de, extra) == FTX_MESSAGE_RC_OK);
     }
+    else if (type == FTX_MESSAGE_TYPE_ARRL_FD)
+    {
+        uint8_t r_flag_val = 0, num_tx_val = 0;
+        char fd_class[2] = {0}, fd_section[4] = {0};
+        if (ftx_message_decode_fd(&message, &hash_if, call_to, call_de,
+                                  &r_flag_val, &num_tx_val, fd_class, fd_section) == FTX_MESSAGE_RC_OK)
+        {
+            ft8_set_string(env, ft8Message, FF8.callsignTo, call_to);
+            ft8_set_string(env, ft8Message, FF8.callsignFrom, call_de);
+            ft8_set_call_hashes(env, ft8Message, call_to, FF8.callToHash10, FF8.callToHash12, FF8.callToHash22);
+            ft8_set_call_hashes(env, ft8Message, call_de, FF8.callFromHash10, FF8.callFromHash12, FF8.callFromHash22);
+
+            env->SetIntField(ft8Message, FF8.r_flag, r_flag_val);
+            env->SetIntField(ft8Message, FF8.eu_serial, num_tx_val);
+            ft8_set_string(env, ft8Message, FF8.arrl_class, fd_class);
+            ft8_set_string(env, ft8Message, FF8.arrl_rac, fd_section);
+
+            // Build exchange text for extraInfo display fallback
+            char exchange[20] = {0};
+            char* dst = exchange;
+            if (r_flag_val)
+                dst = stpcpy(dst, "R ");
+            if (num_tx_val >= 10)
+                *dst++ = '0' + (num_tx_val / 10);
+            *dst++ = '0' + (num_tx_val % 10);
+            *dst++ = fd_class[0];
+            *dst++ = ' ';
+            stpcpy(dst, fd_section);
+            ft8_set_string(env, ft8Message, FF8.extraInfo, exchange);
+
+            ok = true;
+        }
+    }
+    else if (type == FTX_MESSAGE_TYPE_DXPEDITION)
+    {
+        uint16_t h10_val = 0;
+        int8_t rpt_val = 0;
+        if (ftx_message_decode_dxped(&message, &hash_if, call_to, call_de,
+                                     &h10_val, &rpt_val) == FTX_MESSAGE_RC_OK)
+        {
+            ft8_set_string(env, ft8Message, FF8.callsignTo, call_to);
+            // call_de is the invited callsign; put it in dx_call_to2
+            ft8_set_string(env, ft8Message, FF8.dx_call_to2, call_de);
+            ft8_set_string(env, ft8Message, FF8.callsignFrom, "");
+            ft8_set_call_hashes(env, ft8Message, call_to, FF8.callToHash10, FF8.callToHash12, FF8.callToHash22);
+            ft8_set_call_hashes(env, ft8Message, call_de, FF8.callFromHash10, FF8.callFromHash12, FF8.callFromHash22);
+            // Store the fox 10-bit hash so Java can look it up
+            env->SetLongField(ft8Message, FF8.callFromHash10, (jlong)h10_val);
+            env->SetIntField(ft8Message, FF8.report, (jint)rpt_val);
+
+            // Build extraInfo for display fallback
+            char fox_call[14] = {0};
+            ft8_hash_lookup(FTX_CALLSIGN_HASH_10_BITS, h10_val, fox_call);
+            char exchange[48] = {0};
+            char* dst = exchange;
+            dst = stpcpy(dst, "RR73; ");
+            dst = stpcpy(dst, call_de);
+            *dst++ = ' ';
+            dst = stpcpy(dst, fox_call);
+            *dst++ = ' ';
+            if (rpt_val >= 0)
+            {
+                *dst++ = '+';
+                int_to_dd(dst, rpt_val, 2, false);
+            }
+            else
+            {
+                int_to_dd(dst, rpt_val, 2, true);
+            }
+            ft8_set_string(env, ft8Message, FF8.extraInfo, exchange);
+            ok = true;
+        }
+    }
+    else if (type == FTX_MESSAGE_TYPE_ARRL_RTTY)
+    {
+        uint8_t tu_val = 0, r_flag_val = 0;
+        uint16_t rpt_val = 0;
+        char state_str[8] = {0};
+        bool is_serial_val = false;
+        if (ftx_message_decode_rtty(&message, &hash_if, call_to, call_de,
+                                    &tu_val, &r_flag_val, &rpt_val,
+                                    state_str, &is_serial_val) == FTX_MESSAGE_RC_OK)
+        {
+            ft8_set_string(env, ft8Message, FF8.callsignTo, call_to);
+            ft8_set_string(env, ft8Message, FF8.callsignFrom, call_de);
+            ft8_set_call_hashes(env, ft8Message, call_to, FF8.callToHash10, FF8.callToHash12, FF8.callToHash22);
+            ft8_set_call_hashes(env, ft8Message, call_de, FF8.callFromHash10, FF8.callFromHash12, FF8.callFromHash22);
+            env->SetIntField(ft8Message, FF8.rtty_tu, (jint)tu_val);
+            env->SetIntField(ft8Message, FF8.r_flag, (jint)r_flag_val);
+            env->SetIntField(ft8Message, FF8.report, (jint)rpt_val);
+            ft8_set_string(env, ft8Message, FF8.rtty_state, state_str);
+
+            // Build extraInfo for display fallback
+            char exchange[40] = {0};
+            char* dst = exchange;
+            if (tu_val)
+                dst = stpcpy(dst, "TU; ");
+            if (r_flag_val)
+                dst = stpcpy(dst, "R ");
+            int_to_dd(dst, rpt_val, 3, false);
+            dst += strlen(dst);
+            *dst++ = ' ';
+            stpcpy(dst, state_str);
+            ft8_set_string(env, ft8Message, FF8.extraInfo, exchange);
+            ok = true;
+        }
+    }
+    else if (type == FTX_MESSAGE_TYPE_WWROF)
+    {
+        uint8_t tu_val = 0, r_flag_val = 0;
+        int8_t rpt_val = 0;
+        char grid2[4] = {0};
+        if (ftx_message_decode_wwrof(&message, &hash_if, call_to, call_de,
+                                     &tu_val, &r_flag_val, &rpt_val, grid2) == FTX_MESSAGE_RC_OK)
+        {
+            ft8_set_string(env, ft8Message, FF8.callsignTo, call_to);
+            ft8_set_string(env, ft8Message, FF8.callsignFrom, call_de);
+            ft8_set_call_hashes(env, ft8Message, call_to, FF8.callToHash10, FF8.callToHash12, FF8.callToHash22);
+            ft8_set_call_hashes(env, ft8Message, call_de, FF8.callFromHash10, FF8.callFromHash12, FF8.callFromHash22);
+            env->SetIntField(ft8Message, FF8.rtty_tu, (jint)tu_val);
+            env->SetIntField(ft8Message, FF8.r_flag, (jint)r_flag_val);
+            env->SetIntField(ft8Message, FF8.report, (jint)rpt_val);
+            ft8_set_string(env, ft8Message, FF8.maidenGrid, grid2);
+            env->SetIntField(ft8Message, FF8.eu_serial, 0);
+
+            // Build extraInfo for display fallback
+            char exchange[32] = {0};
+            char* dst = exchange;
+            if (tu_val)
+                dst = stpcpy(dst, "TU; ");
+            if (r_flag_val)
+                *dst++ = 'R';
+            if (rpt_val >= 0)
+            {
+                *dst++ = '+';
+                int_to_dd(dst, rpt_val, 2, false);
+            }
+            else
+            {
+                int_to_dd(dst, rpt_val, 2, true);
+            }
+            dst += strlen(dst);
+            *dst++ = ' ';
+            stpcpy(dst, grid2);
+            ft8_set_string(env, ft8Message, FF8.extraInfo, exchange);
+            ok = true;
+        }
+    }
     else
     {
-        // Contest sub-types: decode to full text into extraInfo.
+        // Contest sub-types (EU VHF 0.2, Contesting 0.6): decode to full text into extraInfo.
         char text[FTX_MAX_MESSAGE_LENGTH] = {0};
         if (ftx_message_decode(&message, &hash_if, text) == FTX_MESSAGE_RC_OK)
         {

@@ -54,9 +54,9 @@ public class Ft8Message {
     public String maidenGrid = null;
 
     public String rtty_state =null;//RTTY RU (i3=3 type) state name, two-letter code e.g.: CA, AL
-    public int r_flag=0;//RTTY RU, EU VHF (i3=3, i3=5 type) R flag
-    public int rtty_tu;//RTTY RU (i3=3 type) TU; flag
-    public int eu_serial;//EU VHF i3=5 serial number
+    public int r_flag=0;//RTTY RU, WWROF (i3=3, i3=5 type) R flag
+    public int rtty_tu;//RTTY RU, WWROF (i3=3, i3=5 type) TU; flag
+    public int eu_serial;//Field Day num_tx, or serial number
     public String arrl_rac;//Field day message, ARRL RAC
     public String arrl_class;//Field day transmit class
     public String dx_call_to2;//DXpedition message second receiving callsign
@@ -280,13 +280,14 @@ public class Ft8Message {
                     ,rtty_state);
         }
 
-        if (i3 == 5){//this is EU VHF <G4ABC> <PA9XYZ> R 570007 JO22DB
-            return String.format("%s %s %s%d%04d %s"
+        if (i3 == 5){//this is WWROF contest
+            return String.format("%s%s %s %s%s%d %s"
+                    , rtty_tu == 0 ? "" : "TU; "
                     , callsignTo
                     , callsignFrom
-                    , r_flag == 0?"":"R "
+                    , r_flag == 0 ? "" : "R"
+                    , report >= 0 ? "+" : ""
                     , report
-                    , eu_serial
                     , maidenGrid
                     ).trim();
         }

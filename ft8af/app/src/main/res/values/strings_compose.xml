@@ -114,6 +114,7 @@
     <string name="tx_stop">Stop</string>
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
+    <string name="tx_cq_options">CQ message options (modifier, free text, Field Day)</string>
 
     <!-- ===== Hound (DXpedition) setup ===== -->
     <string name="hound_title">Work a DXpedition (Hound)</string>
@@ -377,6 +378,13 @@
     <string name="settings_section_advanced">ADVANCED</string>
     <string name="settings_section_about">ABOUT</string>
     <string name="settings_section_language">LANGUAGE</string>
+    <string name="settings_section_appearance">APPEARANCE</string>
+
+    <!-- ===== Settings: appearance / theme ===== -->
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_desc">App color theme</string>
+    <string name="theme_name_dark">Dark</string>
+    <string name="theme_name_light">Light</string>
 
     <!-- ===== Settings: drill-down category labels ===== -->
     <string name="settings_cat_radio_audio">Radio &amp; Audio</string>
@@ -423,6 +431,10 @@
     <!-- ===== Settings: transmission ===== -->
     <string name="settings_tx_rx_split">TX/RX Split</string>
     <string name="settings_tx_rx_split_desc">Transmit on a different frequency than receive</string>
+    <string name="settings_hold_tx_freq">Hold TX freq</string>
+    <string name="settings_hold_tx_freq_desc">Keep your TX offset when answering a station instead of moving it to theirs</string>
+    <string name="settings_clear_on_change">Clear decodes on band/mode change</string>
+    <string name="settings_clear_on_change_desc">Wipe the decode list and reset the TX target to CQ when you change band or mode</string>
     <string name="settings_tx_watchdog">TX Watchdog</string>
     <string name="settings_tx_watchdog_desc">Auto-stop transmit after timeout</string>
     <string name="settings_stop_after">Stop After</string>
