@@ -97,6 +97,7 @@ bench_srcs=(
     "$here/decode_bench.c"
     "$here/gfsk.c"
     "$here/ft8_subtract.c"
+    "$here/ft8_fine.c"
     "$ft8/ft8/pack.c"
     "$ft8/ft8/encode.c"
     "$ft8/ft8/crc.c"
@@ -166,3 +167,29 @@ osd_out="$tmp/ft8_osd_test"
     -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
     -I "$ft8" "${osd_srcs[@]}" -lm -o "$osd_out"
 "$osd_out"
+
+# Fine-demod unit tests: the fine-sync coherent retry (partial-transmission
+# recovery, off-grid sync accuracy, pure-noise rejection).
+fine_srcs=(
+    "$here/test_fine.c"
+    "$here/gfsk.c"
+    "$here/ft8_fine.c"
+    "$ft8/ft8/pack.c"
+    "$ft8/ft8/encode.c"
+    "$ft8/ft8/crc.c"
+    "$ft8/ft8/constants.c"
+    "$ft8/ft8/text.c"
+    "$ft8/ft8/message.c"
+    "$ft8/ft8/decode.c"
+    "$ft8/ft8/ldpc.c"
+    "$ft8/ft8/osd.c"
+    "$ft8/ft8/unpack.c"
+    "$ft8/common/monitor.c"
+    "$ft8/fft/kiss_fft.c"
+    "$ft8/fft/kiss_fftr.c"
+)
+fine_out="$tmp/ft8_fine_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${fine_srcs[@]}" -lm -o "$fine_out"
+"$fine_out"

@@ -54,6 +54,7 @@
 #include "common/wave.h"
 
 #include "decode_params.h"
+#include "ft8_fine.h"
 #include "ft8_subtract.h"
 
 // From gfsk.c (glue): GFSK synth used by the --self-test signal generator.
@@ -279,8 +280,8 @@ static void subtract_signal_zeroing(monitor_t* mon, const bench_decode_t* dec)
 // (for subtraction); only messages not already in seen are new.
 // Returns the number of NEW messages.
 // ---------------------------------------------------------------------------
-static int run_pass(monitor_t* mon, int ldpc_iters, int min_score, int osd_depth,
-                    bench_msglist_t* seen, bench_declist_t* pass_decs)
+static int run_pass(monitor_t* mon, ft8_fine_ctx_t* fine, int ldpc_iters, int min_score,
+                    int osd_depth, bench_msglist_t* seen, bench_declist_t* pass_decs)
 {
     static candidate_t candidates[BENCH_MAX_CAND_CAP];
     pass_decs->count = 0;
@@ -291,16 +292,46 @@ static int run_pass(monitor_t* mon, int ldpc_iters, int min_score, int osd_depth
     for (int idx = 0; idx < num_candidates; ++idx)
     {
         const candidate_t* cand = &candidates[idx];
-        ftx_message_t message;
-        decode_status_t status;
-        if (!ft8_decode_osd(&mon->wf, cand, ldpc_iters, osd_depth,
-                            FT8AF_OSD_LDPC_ERR_GATE, &message, &status))
-            continue;
 
         float freq_hz = (mon->min_bin + cand->freq_offset +
                          (float)cand->freq_sub / mon->wf.freq_osr) / mon->symbol_period;
         float time_sec = (cand->time_offset +
                           (float)cand->time_sub / mon->wf.time_osr) * mon->symbol_period;
+
+        ftx_message_t message;
+        decode_status_t status;
+        bool decoded = ft8_decode_osd(&mon->wf, cand, ldpc_iters, osd_depth,
+                                      FT8AF_OSD_LDPC_ERR_GATE, &message, &status);
+        if (!decoded && fine && osd_depth > 0)
+        {
+            // Second chance for deep passes: re-demodulate the candidate
+            // from the raw samples with fine dt/df sync (see ft8_fine.h) and
+            // run the same BP+OSD+CRC chain on the float LLRs. On success,
+            // the refined freq/time also make the subsequent subtraction
+            // more accurate than the grid values.
+            float llrs[FTX_LDPC_N];
+            float f_fine, t_fine, quality;
+            if (ft8_fine_demod(fine, mon, cand, llrs, &f_fine, &t_fine, &quality) &&
+                quality >= FT8AF_FINE_SYNC_MIN &&
+                ftx_decode_llrs(FTX_PROTOCOL_FT8, llrs, ldpc_iters, osd_depth,
+                                FT8AF_OSD_LDPC_ERR_GATE, &message, &status))
+            {
+                // Rare message types out of this second-chance path are
+                // junk-prone (see FT8AF_FINE_SYNC_MIN_RARE) — hold them to
+                // the higher sync-quality bar.
+                ftx_message_type_t mtype = ftx_message_get_type(&message);
+                if (mtype == FTX_MESSAGE_TYPE_STANDARD ||
+                    mtype == FTX_MESSAGE_TYPE_NONSTD_CALL ||
+                    quality >= FT8AF_FINE_SYNC_MIN_RARE)
+                {
+                    decoded = true;
+                    freq_hz = f_fine;
+                    time_sec = t_fine;
+                }
+            }
+        }
+        if (!decoded)
+            continue;
 
         // Decode to text the same way DecoderFt8Analysis assembles it.
         char text[64] = { 0 };
@@ -389,12 +420,13 @@ static void decode_buffer(float* signal, int num_samples,
     monitor_t mon;
     monitor_init(&mon, &cfg);
     feed_monitor(&mon, signal, num_samples);
+    ft8_fine_ctx_t* fine = ft8_fine_init(signal, num_samples, BENCH_SAMPLE_RATE);
 
     bench_hash_reset();
     static bench_declist_t pass_decs;
     int passes = 0;
 
-    run_pass(&mon, g_ldpc_fast, g_min_score_fast, 0, seen, &pass_decs);
+    run_pass(&mon, fine, g_ldpc_fast, g_min_score_fast, 0, seen, &pass_decs);
     passes++;
 
     if (g_deep)
@@ -407,7 +439,7 @@ static void decode_buffer(float* signal, int num_samples,
         static uint8_t done[BENCH_MAX_MSGS][FTX_PAYLOAD_LENGTH_BYTES];
         int done_count = 0;
 
-        int new_msgs = run_pass(&mon, g_ldpc_deep, g_min_score_deep, g_osd_depth, seen, &pass_decs);
+        int new_msgs = run_pass(&mon, fine, g_ldpc_deep, g_min_score_deep, g_osd_depth, seen, &pass_decs);
         passes++;
         for (int loop = 0; loop < g_max_loops; ++loop)
         {
@@ -442,14 +474,21 @@ static void decode_buffer(float* signal, int num_samples,
                 }
             }
             if (g_subtract_mode == SUBTRACT_TIME && subtracted)
+            {
                 feed_monitor(&mon, signal, num_samples);
-            new_msgs = run_pass(&mon, g_ldpc_deep, g_min_score_deep, g_osd_depth, seen, &pass_decs);
+                // The samples changed: the fine-demod context must see the
+                // residual, not the original capture.
+                ft8_fine_free(fine);
+                fine = ft8_fine_init(signal, num_samples, BENCH_SAMPLE_RATE);
+            }
+            new_msgs = run_pass(&mon, fine, g_ldpc_deep, g_min_score_deep, g_osd_depth, seen, &pass_decs);
             passes++;
             if (new_msgs == 0)
                 break;
         }
     }
 
+    ft8_fine_free(fine);
     monitor_free(&mon);
     *passes_out = passes;
 }
