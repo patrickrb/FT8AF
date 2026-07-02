@@ -18,12 +18,15 @@ extern "C" {
 #endif
 
 // Remove the decoded signal described by (a91, freq_hz, time_sec) from
-// mon->wf. a91 is the decoder's 12-byte payload+CRC block (DecoderGetA91);
-// only the 77 payload bits are used — the tone sequence is re-encoded with
-// ft8_encode, and for each of the 79 symbols only the transmitted tone's
-// bin (plus its spill neighbor) is replaced with a local noise estimate
-// (the minimum of the 8 tone bins at that symbol). Bins that are not on the
-// signal's tone track are never touched.
+// mon->wf. a91 must point to at least 10 readable bytes holding the 77-bit
+// payload: either the decoder's 12-byte payload+CRC block (DecoderGetA91) or
+// a bare 10-byte ftx_message_t payload — only the 77 payload bits are used
+// (the CRC bits sharing byte 9 are cleared internally). The tone sequence is
+// re-encoded with ft8_encode, and for each of the 79 symbols only the
+// nearest bin to the transmitted tone is replaced with a local noise
+// estimate (the minimum of the 8 tone bins at that symbol) — deliberately
+// not the spill neighbor as well; see the measurement note in ft8_subtract.c.
+// Bins that are not on the signal's tone track are never touched.
 void ft8_subtract_signal(monitor_t* mon, const uint8_t* a91,
                          float freq_hz, float time_sec);
 
