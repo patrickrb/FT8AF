@@ -20,7 +20,6 @@ import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.activity.compose.setContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -38,6 +37,7 @@ import androidx.lifecycle.Observer
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
+import radio.ks3ckc.ft8af.sync.QsoAutoSync
 import com.k1af.ft8af.service.RxForegroundService
 import com.k1af.ft8af.service.RxServiceController
 import com.k1af.ft8af.bluetooth.BluetoothStateBroadcastReceive
@@ -55,6 +55,8 @@ import com.k1af.ft8af.maidenhead.MaidenheadGrid
 import com.k1af.ft8af.ui.ToastMessage
 import radio.ks3ckc.ft8af.pota.PotaSessionManager
 import radio.ks3ckc.ft8af.theme.FT8AFTheme
+import radio.ks3ckc.ft8af.theme.applyTheme
+import radio.ks3ckc.ft8af.theme.loadTheme
 import radio.ks3ckc.ft8af.ui.components.ExitConfirmDialog
 import java.io.File
 import java.io.IOException
@@ -66,6 +68,7 @@ class ComposeMainActivity : AppCompatActivity() {
 
     private var bluetoothReceiver: BluetoothStateBroadcastReceive? = null
     private var usbDetachReceiver: BroadcastReceiver? = null
+    private var qsoAutoSync: QsoAutoSync? = null
     private lateinit var mainViewModel: MainViewModel
     private val showExitConfirm: MutableState<Boolean> = mutableStateOf(false)
 
@@ -75,9 +78,11 @@ class ComposeMainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Force night mode so the DayNight theme resolves to dark immediately,
-        // preventing any light-mode surface colors from flashing before Compose loads.
-        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+        // Apply the saved theme synchronously before setContent: swap the live
+        // Compose palette and set the matching night mode so neither the
+        // pre-Compose native window background nor the first Compose frame
+        // flashes the wrong shade. Defaults to dark when nothing is saved.
+        applyTheme(loadTheme(this))
 
         // Build permissions list
         val permissions = buildPermissionsList()
@@ -154,6 +159,15 @@ class ComposeMainActivity : AppCompatActivity() {
         // UsbDeviceConnection. We tear down those handles here so the next
         // ATTACH event can rebind cleanly.
         registerUsbDetachReceiver()
+
+        // Auto-upload QSOs that failed to reach QRZ/Cloudlog while offline: listen for
+        // connectivity returning and flush the unsynced rows, and flush once on start
+        // (covers a QSO logged offline before the app was last closed). No-op unless a
+        // service is enabled and rows are actually pending.
+        qsoAutoSync = QsoAutoSync(applicationContext).apply {
+            register()
+            syncNow("app-start")
+        }
 
         // Set Compose UI — splash plays once per cold start, then crossfades into the app.
         setContent {
@@ -564,6 +578,7 @@ class ComposeMainActivity : AppCompatActivity() {
     override fun onDestroy() {
         unregisterBluetoothReceiver()
         unregisterUsbDetachReceiver()
+        qsoAutoSync?.unregister()
         super.onDestroy()
     }
 
