@@ -29,6 +29,16 @@
 #define OSD_NHARD_MAX 38
 #endif
 
+// Stricter acceptance for order-2 (pair-flip) solutions. Pair flips run
+// C(depth,2) trials per candidate instead of `depth`, so junk gets many more
+// draws against the CRC+nhard lottery. Benchmark-swept: at the order-1 gate
+// (38) the pairs admit fabricated decodes ("CQ VTIN 0J1NTF R 579 2608"-class
+// junk); 30..34 all keep the genuine pair recoveries and reject every junk
+// decode on the corpus; 28 starts losing genuine ones. 30 chosen for margin.
+#ifndef OSD_NHARD_MAX_ORDER2
+#define OSD_NHARD_MAX_ORDER2 30
+#endif
+
 // ---------------------------------------------------------------------------
 // 91-bit vectors as two 64-bit words.
 // ---------------------------------------------------------------------------
@@ -143,10 +153,10 @@ static bool crc_ok(const bits91_t* plain)
 }
 
 // Evaluate a candidate message: valid codeword bits are re-encoded and
-// compared to the received hard decisions (nhard) and soft values (dist,
-// the summed |LLR| of disagreeing bits — lower is better).
+// compared to the received hard decisions (nhard, capped at nhard_max) and
+// soft values (dist, the summed |LLR| of disagreeing bits — lower is better).
 static bool evaluate(const bits91_t* plain, const float log174[FTX_LDPC_N],
-                     int* nhard_out, float* dist_out)
+                     int nhard_max, int* nhard_out, float* dist_out)
 {
     if (bits91_zero(plain))
         return false;
@@ -166,7 +176,7 @@ static bool evaluate(const bits91_t* plain, const float log174[FTX_LDPC_N],
             dist += fabsf(log174[i]);
         }
     }
-    if (nhard > OSD_NHARD_MAX)
+    if (nhard > nhard_max)
         return false;
     *nhard_out = nhard;
     *dist_out = dist;
@@ -270,7 +280,7 @@ bool osd_decode(const float log174[FTX_LDPC_N], int depth,
 
         int nhard;
         float dist;
-        if (!evaluate(&plain, log174, &nhard, &dist))
+        if (!evaluate(&plain, log174, OSD_NHARD_MAX, &nhard, &dist))
             continue;
         if (best_depth == -2 || dist < best_dist)
         {
@@ -279,6 +289,45 @@ bool osd_decode(const float log174[FTX_LDPC_N], int depth,
             best_depth = flip;
             if (flip == -1)
                 break; // base decode passed all gates: accept immediately
+        }
+    }
+
+    // Order-2: toggle every PAIR of the `depth` least reliable accepted bits
+    // (C(depth,2) trials; 66 at depth 12). Reaches decodes where TWO
+    // moderately unreliable bits are wrong at once — measured on the bench
+    // corpus this converts co-channel near-misses (BP a few parity checks
+    // short) that no single flip can fix, e.g. two overlapping strong
+    // signals that block each other's first decode and therefore the whole
+    // subtract-and-redecode chain. Skipped when the base decode already
+    // passed (early break above leaves best_depth == -1). The same CRC +
+    // nhard gates in evaluate() bound the false-decode risk; cost is a few
+    // microseconds per trial.
+    if (best_depth != -1)
+    {
+        for (int f1 = 0; f1 < depth - 1 && f1 < FTX_LDPC_K - 1; ++f1)
+        {
+            for (int f2 = f1 + 1; f2 < depth && f2 < FTX_LDPC_K; ++f2)
+            {
+                bits91_t ytry = y;
+                bits91_flip(&ytry, FTX_LDPC_K - 1 - f1);
+                bits91_flip(&ytry, FTX_LDPC_K - 1 - f2);
+
+                bits91_t plain = { { 0, 0 } };
+                for (int j = 0; j < FTX_LDPC_K; ++j)
+                    if (bits91_parity_and(&rhs[j], &ytry))
+                        bits91_flip(&plain, pivot_col[j]);
+
+                int nhard;
+                float dist;
+                if (!evaluate(&plain, log174, OSD_NHARD_MAX_ORDER2, &nhard, &dist))
+                    continue;
+                if (best_depth == -2 || dist < best_dist)
+                {
+                    best_plain = plain;
+                    best_dist = dist;
+                    best_depth = f2; // deepest single index touched
+                }
+            }
         }
     }
 
