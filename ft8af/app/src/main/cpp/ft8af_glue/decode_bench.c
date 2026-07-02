@@ -93,30 +93,46 @@ static void bench_hash_reset(void)
     memset(g_hashtable, 0, sizeof(g_hashtable));
 }
 
+// Mirrors ft8_hash_lookup in ft8_decode_jni.cpp exactly (same shift/mask and
+// full-table scan) so hashed-call resolution — and therefore truth matching —
+// behaves the same here as in the app.
 static bool bench_hash_lookup(ftx_callsign_hash_type_e hash_type, uint32_t hash, char* callsign)
 {
+    uint8_t shift = (hash_type == FTX_CALLSIGN_HASH_10_BITS) ? 12
+                  : (hash_type == FTX_CALLSIGN_HASH_12_BITS) ? 10
+                                                             : 0;
     for (int i = 0; i < BENCH_HASHTABLE_SIZE; ++i)
     {
         if (g_hashtable[i].callsign[0] == '\0')
             continue;
-        uint32_t h22 = g_hashtable[i].hash;
-        uint32_t cmp = (hash_type == FTX_CALLSIGN_HASH_22_BITS) ? h22
-                     : (hash_type == FTX_CALLSIGN_HASH_12_BITS) ? (h22 >> 10)
-                                                                : (h22 >> 12);
-        if (cmp == hash)
+        if (((g_hashtable[i].hash & 0x3FFFFFu) >> shift) == hash)
         {
             strcpy(callsign, g_hashtable[i].callsign);
             return true;
         }
     }
+    callsign[0] = '\0';
     return false;
 }
 
+// Mirrors ft8_hash_save in ft8_decode_jni.cpp exactly: skip empty/placeholder
+// ("<...>") callsigns, open addressing keyed on the 10-bit hash with linear
+// probing, duplicate detection, and 11-char truncation.
 static void bench_hash_save(const char* callsign, uint32_t n22)
 {
-    bench_hash_entry_t* e = &g_hashtable[n22 % BENCH_HASHTABLE_SIZE];
-    snprintf(e->callsign, sizeof(e->callsign), "%s", callsign);
-    e->hash = n22;
+    if (callsign[0] == '\0' || callsign[0] == '<')
+        return;
+    uint16_t h10 = (n22 >> 12) & 0x3FF;
+    int idx = (h10 * 23) % BENCH_HASHTABLE_SIZE;
+    while (g_hashtable[idx].callsign[0] != '\0')
+    {
+        if (g_hashtable[idx].hash == n22)
+            return;
+        idx = (idx + 1) % BENCH_HASHTABLE_SIZE;
+    }
+    strncpy(g_hashtable[idx].callsign, callsign, 11);
+    g_hashtable[idx].callsign[11] = '\0';
+    g_hashtable[idx].hash = n22;
 }
 
 static ftx_callsign_hash_interface_t g_hash_if = { bench_hash_lookup, bench_hash_save };
@@ -126,7 +142,8 @@ static ftx_callsign_hash_interface_t g_hash_if = { bench_hash_lookup, bench_hash
 // ---------------------------------------------------------------------------
 
 // Collapse runs of whitespace to single spaces and trim; uppercase for
-// comparison stability (jt9 and ft8_lib both emit uppercase already).
+// comparison stability (jt9 and ft8_lib both emit uppercase already, so this
+// is belt-and-braces against a mixed-case source slipping into the corpus).
 static void normalize_text(char* s)
 {
     char out[64];
@@ -142,7 +159,10 @@ static void normalize_text(char* s)
         }
         else
         {
-            out[o++] = *p;
+            char c = *p;
+            if (c >= 'a' && c <= 'z')
+                c = (char)(c - 'a' + 'A');
+            out[o++] = c;
             in_space = false;
         }
     }
@@ -558,9 +578,32 @@ int main(int argc, char** argv)
             wavs[num_wavs++] = a;
     }
 
-    if (g_max_candidates > BENCH_MAX_CAND_CAP)
+    // Validate numeric flags up front: bad values would otherwise surface as
+    // divide-by-zero (osr in the freq/time formulas), zero-length windows, or
+    // silent no-ops deep inside the pipeline.
+    if (g_max_candidates < 1 || g_max_candidates > BENCH_MAX_CAND_CAP)
     {
-        fprintf(stderr, "ERROR: --candidates capped at %d\n", BENCH_MAX_CAND_CAP);
+        fprintf(stderr, "ERROR: --candidates must be 1..%d\n", BENCH_MAX_CAND_CAP);
+        return 2;
+    }
+    if (g_time_osr < 1 || g_time_osr > 8 || g_freq_osr < 1 || g_freq_osr > 8)
+    {
+        fprintf(stderr, "ERROR: --time-osr/--freq-osr must be 1..8\n");
+        return 2;
+    }
+    if (g_ldpc_fast < 1 || g_ldpc_deep < 1)
+    {
+        fprintf(stderr, "ERROR: --ldpc-fast/--ldpc-deep must be >= 1\n");
+        return 2;
+    }
+    if (g_window_ms < 1000 || g_window_ms > 15000)
+    {
+        fprintf(stderr, "ERROR: --window-ms must be 1000..15000\n");
+        return 2;
+    }
+    if (g_max_loops < 0)
+    {
+        fprintf(stderr, "ERROR: --max-loops must be >= 0\n");
         return 2;
     }
 
