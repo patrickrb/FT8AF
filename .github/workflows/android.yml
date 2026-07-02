@@ -567,6 +567,12 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           name: ${{ steps.tag.outputs.release_tag }}
+          # Without this, a not-yet-existing tag (the android-dev.* / auto-bumped
+          # android-v* lanes) is created by the release API from the repo's
+          # DEFAULT branch (main), not the commit that was built — so staging
+          # releases got tagged on main's HEAD and sorted under its old date on
+          # the Releases page.
+          target_commitish: ${{ github.sha }}
           files: ft8af/app/build/outputs/apk/release/FT8AF-*.apk
           generate_release_notes: true
           # android-dev.* releases are flagged as prerelease so they sort under
