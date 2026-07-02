@@ -6,6 +6,7 @@
 #include "unpack.h"
 
 #include <stdbool.h>
+#include <stddef.h> // NULL (not guaranteed by the headers above on glibc/macOS)
 #include <math.h>
 
 // #define LOG_LEVEL LOG_DEBUG
