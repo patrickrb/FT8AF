@@ -2,9 +2,11 @@
 #include "constants.h"
 #include "crc.h"
 #include "ldpc.h"
+#include "osd.h"
 #include "unpack.h"
 
 #include <stdbool.h>
+#include <stddef.h> // NULL (not guaranteed by the headers above on glibc/macOS)
 #include <math.h>
 
 // #define LOG_LEVEL LOG_DEBUG
@@ -417,7 +419,8 @@ static void ftx_normalize_logl(float* log174)
     }
 }
 
-bool ft8_decode(const waterfall_t* wf, const candidate_t* cand, int max_iterations, ftx_message_t* message, decode_status_t* status)
+bool ft8_decode_osd(const waterfall_t* wf, const candidate_t* cand, int max_iterations,
+                    int osd_depth, int osd_err_gate, ftx_message_t* message, decode_status_t* status)
 {
     float log174[FTX_LDPC_N]; // message bits encoded as likelihood
     if (wf->protocol != FTX_PROTOCOL_FT8) // FT4 and FT2 share the 2-bit/symbol layout
@@ -437,7 +440,20 @@ bool ft8_decode(const waterfall_t* wf, const candidate_t* cand, int max_iteratio
 
     if (status->ldpc_errors > 0)
     {
-        return false;
+        // OSD backstop: belief propagation failed, but a near-miss (few
+        // unsatisfied parity checks) is often recoverable by ordered
+        // statistics. The gate skips hopeless candidates (junk typically
+        // fails 40-80 checks) — cheap insurance for both CPU and precision.
+        if (osd_depth <= 0 || status->ldpc_errors > osd_err_gate)
+            return false;
+        if (!osd_decode(log174, osd_depth, plain174, NULL))
+            return false;
+        // plain174 now holds a valid codeword (zero unsatisfied parity checks
+        // by construction) that already passed OSD's CRC and plausibility
+        // gates: clear the BP error count so the success contract
+        // (ldpc_errors == 0) holds for callers, and fall through to the
+        // standard CRC/unpack path.
+        status->ldpc_errors = 0;
     }
 
     // Extract payload + CRC (first FTX_LDPC_K bits) packed into a byte array
@@ -479,6 +495,11 @@ bool ft8_decode(const waterfall_t* wf, const candidate_t* cand, int max_iteratio
 
     // LOG(LOG_DEBUG, "Decoded message (CRC %04x), trying to unpack...\n", status->crc_extracted);
     return true;
+}
+
+bool ft8_decode(const waterfall_t* wf, const candidate_t* cand, int max_iterations, ftx_message_t* message, decode_status_t* status)
+{
+    return ft8_decode_osd(wf, cand, max_iterations, 0, 0, message, status);
 }
 
 static float max2(float a, float b)

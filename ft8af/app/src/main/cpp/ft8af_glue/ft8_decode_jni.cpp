@@ -369,7 +369,9 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderFt8Analysis(
 
     ftx_message_t message;
     decode_status_t status;
-    if (!ft8_decode(&d->mon.wf, cand, d->ldpc_iterations, &message, &status))
+    int osd_depth = d->deep ? FT8AF_OSD_DEPTH_DEEP : 0; // OSD only in deep passes
+    if (!ft8_decode_osd(&d->mon.wf, cand, d->ldpc_iterations, osd_depth,
+                        FT8AF_OSD_LDPC_ERR_GATE, &message, &status))
         return JNI_FALSE;
 
     d->last_message = message;

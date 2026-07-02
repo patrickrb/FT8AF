@@ -70,6 +70,14 @@ int ft8_find_sync(const waterfall_t* power, int num_candidates, candidate_t heap
 /// @return True if the decoding was successful, false otherwise (check status for details)
 bool ft8_decode(const waterfall_t* power, const candidate_t* cand, int max_iterations, ftx_message_t* message, decode_status_t* status);
 
+/// Like ft8_decode, with an ordered-statistics (OSD) backstop behind belief
+/// propagation: when BP fails with at most osd_err_gate unsatisfied parity
+/// checks, osd_decode (osd.h) attempts recovery at the given flip depth.
+/// osd_depth 0 disables the backstop (== ft8_decode). Works for FT8, FT4 and
+/// FT2 alike — they share the LDPC(174,91) code.
+bool ft8_decode_osd(const waterfall_t* power, const candidate_t* cand, int max_iterations,
+                    int osd_depth, int osd_err_gate, ftx_message_t* message, decode_status_t* status);
+
 #ifdef __cplusplus
 }
 #endif
