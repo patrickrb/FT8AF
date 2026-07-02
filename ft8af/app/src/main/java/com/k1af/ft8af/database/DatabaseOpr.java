@@ -2379,6 +2379,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("synFreq")) {
                     GeneralVariables.synFrequency = !(result.equals("") || result.equals("0"));
                 }
+                if (name.equalsIgnoreCase("holdTxFreq")) {
+                    // Parse like synFreq above: any non-empty, non-"0" value is true,
+                    // so the two boolean configs handle stored values consistently.
+                    GeneralVariables.holdTxFreq = !(result.equals("") || result.equals("0"));
+                }
                 if (name.equalsIgnoreCase("transDelay")) {
                     if (result.matches("^\\d{1,4}$")) {//Regex: 1-4 digit number
                         GeneralVariables.transmitDelay = Integer.parseInt(result);
@@ -2429,6 +2434,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
                 if (name.equalsIgnoreCase("clearDecodesEveryCycle")) {
                     GeneralVariables.clearDecodesEveryCycle = result.equals("1");
+                }
+
+                if (name.equalsIgnoreCase("clearOnBandModeChange")) {
+                    GeneralVariables.clearOnBandModeChange = result.equals("1");
                 }
 
                 if (name.equalsIgnoreCase("ctrMode")) {

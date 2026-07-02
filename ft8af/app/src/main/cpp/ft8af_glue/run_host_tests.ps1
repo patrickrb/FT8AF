@@ -113,6 +113,40 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (fir_decimator)." }
 & $firOut
 $firExit = $LASTEXITCODE
 
+# ---------------------------------------------------------------------------
+# Decode benchmark / regression harness: replays the committed FT8 WAV corpus
+# through the app's exact decode pipeline (same monitor config, candidate
+# search, LDPC settings, dedup, and subtract-and-redecode loop as
+# FT8SignalListener + ft8_decode_jni.cpp) and scores against WSJT-X jt9 truth
+# sidecars. Fails if any corpus file matches fewer truth messages than its
+# committed floor (testdata/ft8/floors.txt) — the floors ratchet up as decoder
+# improvements land. See decode_bench.c's header for flags and output format.
+# ---------------------------------------------------------------------------
+$benchSrcs = @(
+    "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
+    "ft8\text.c","ft8\message.c","ft8\decode.c","ft8\ldpc.c","ft8\unpack.c",
+    "common\monitor.c","common\wave.c",
+    "fft\kiss_fft.c","fft\kiss_fftr.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+$benchSrcs += (Join-Path $here "gfsk.c")
+
+$srcBench = Join-Path $here "decode_bench.c"
+$outBench = Join-Path $env:TEMP "ft8_decode_bench.exe"
+
+& $Clang @common $srcBench @benchSrcs -o $outBench
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (decode_bench)." }
+
+& $outBench --self-test
+$benchSelfExit = $LASTEXITCODE
+
+$corpus = Join-Path $here "testdata\ft8"
+$floors = Join-Path $corpus "floors.txt"
+$wavs = Get-ChildItem (Join-Path $corpus "*.wav") | ForEach-Object { $_.FullName }
+& $outBench --assert-floor $floors @wavs
+$benchExit = $LASTEXITCODE
+
 if ($goldenExit -ne 0) { exit $goldenExit }
 if ($dev625Exit -ne 0) { exit $dev625Exit }
-exit $firExit
+if ($firExit -ne 0) { exit $firExit }
+if ($benchSelfExit -ne 0) { exit $benchSelfExit }
+exit $benchExit
