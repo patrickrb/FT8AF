@@ -95,8 +95,12 @@ fun RadioAudioSettings(
     }
 
     // RX input volume (issue #356): percent, 0..200, 100 = unity gain.
+    // Clamped on read so an out-of-range in-memory value (e.g. set before the
+    // defensive config-load clamp existed) can't start the row/slider invalid.
     var inputVolume by remember {
-        mutableIntStateOf((GeneralVariables.inputGainPercent * 100).toInt())
+        mutableIntStateOf(
+            clampVolumePercent((GeneralVariables.inputGainPercent * 100).toInt(), INPUT_VOLUME_MAX),
+        )
     }
 
     // Observe serial ports for USB Cable picker
@@ -453,7 +457,7 @@ fun RadioAudioSettings(
             title = stringResource(R.string.settings_input_volume),
             advice = stringResource(R.string.settings_input_volume_advice),
             initialValue = inputVolume,
-            maxValue = 200,
+            maxValue = INPUT_VOLUME_MAX,
             onChange = { value ->
                 inputVolume = value
                 GeneralVariables.inputGainPercent = value / 100f
@@ -830,7 +834,17 @@ private fun VolumeSliderDialog(
     onChange: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var current by remember { mutableIntStateOf(initialValue) }
+    // Clamp the starting value: a persisted/imported config value outside
+    // 0..maxValue must not start the slider in an invalid state.
+    var current by remember { mutableIntStateOf(clampVolumePercent(initialValue, maxValue)) }
+    // If clamping changed the value, sync it back to the caller immediately so
+    // dismissing without touching the slider persists the clamped value
+    // instead of re-persisting the out-of-range one.
+    LaunchedEffect(Unit) {
+        if (current != initialValue) {
+            onChange(current)
+        }
+    }
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -861,7 +875,7 @@ private fun VolumeSliderDialog(
             ) {
                 FT8AFIconButton(
                     onClick = {
-                        val clamped = (current - 5).coerceIn(0, maxValue)
+                        val clamped = clampVolumePercent(current - 5, maxValue)
                         if (clamped != current) {
                             current = clamped
                             onChange(clamped)
@@ -874,7 +888,7 @@ private fun VolumeSliderDialog(
                 IntSlider(
                     value = current,
                     onValueChange = { v ->
-                        val clamped = v.coerceIn(0, maxValue)
+                        val clamped = clampVolumePercent(v, maxValue)
                         if (clamped != current) {
                             current = clamped
                             onChange(clamped)
@@ -887,7 +901,7 @@ private fun VolumeSliderDialog(
                 )
                 FT8AFIconButton(
                     onClick = {
-                        val clamped = (current + 5).coerceIn(0, maxValue)
+                        val clamped = clampVolumePercent(current + 5, maxValue)
                         if (clamped != current) {
                             current = clamped
                             onChange(clamped)
@@ -941,3 +955,20 @@ private fun AudioDevicePickerDialog(
         onSelect = onSelect,
     )
 }
+
+/**
+ * Upper bound of the RX input volume slider, in percent (200% = 2.0x gain).
+ * Must stay in step with [com.k1af.ft8af.wave.InputAudioLevel.MAX_GAIN],
+ * which clamps the persisted value on config load.
+ */
+internal const val INPUT_VOLUME_MAX = 200
+
+/**
+ * Clamp a volume percent to a slider's legal range [0, maxValue].
+ *
+ * Used by [VolumeSliderDialog] both for the +/-/drag steps and, defensively,
+ * for the initial value: a persisted config value outside the range (possible
+ * via settings import, issue #357) must not start the slider invalid or be
+ * re-persisted unchanged on dismiss.
+ */
+internal fun clampVolumePercent(value: Int, maxValue: Int): Int = value.coerceIn(0, maxValue)

@@ -34,6 +34,7 @@ import com.k1af.ft8af.log.QSLRecord;
 import com.k1af.ft8af.log.QSLRecordStr;
 import com.k1af.ft8af.rigs.BaseRigOperation;
 import com.k1af.ft8af.timer.UtcTimer;
+import com.k1af.ft8af.wave.InputAudioLevel;
 
 import org.jetbrains.annotations.Nullable;
 import org.json.JSONArray;
@@ -2574,8 +2575,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.mutableVolumePercent.postValue(GeneralVariables.volumePercent);
                 }
                 if (name.equalsIgnoreCase("inputVolume")) {//RX input gain (percent, 100 = unity)
-                    GeneralVariables.inputGainPercent =
-                            result.equals("") ? 1.0f : Float.parseFloat(result) / 100f;
+                    //Defensive parse + clamp: the config value is a free-form
+                    //string and settings import (#382) can feed a corrupted or
+                    //out-of-range value through here at startup. Non-numeric
+                    //falls back to unity; numeric clamps to 0..200%.
+                    GeneralVariables.inputGainPercent = InputAudioLevel.parseGainPercent(result);
                 }
                 if (name.equalsIgnoreCase("showTxVolumeSlider")) {//Inline TX volume slider visibility
                     GeneralVariables.showTxVolumeSlider = !result.equals("0");

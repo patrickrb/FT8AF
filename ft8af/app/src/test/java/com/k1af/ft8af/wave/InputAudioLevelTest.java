@@ -157,4 +157,58 @@ public class InputAudioLevelTest {
         assertThat(levels).isNotNull();
         assertThat(levels.peak).isWithin(1e-6f).of(0.3f);
     }
+
+    // ------------------------------------------------------------------
+    // parseGainPercent (defensive config-value parsing, Copilot review
+    // on PR #387: settings import #382 can feed corrupted strings here)
+    // ------------------------------------------------------------------
+
+    @Test
+    public void parseGainPercent_validPercentIsScaled() {
+        assertThat(InputAudioLevel.parseGainPercent("150")).isWithin(1e-6f).of(1.5f);
+        assertThat(InputAudioLevel.parseGainPercent("100")).isWithin(1e-6f).of(1.0f);
+        assertThat(InputAudioLevel.parseGainPercent("0")).isEqualTo(0f);
+    }
+
+    @Test
+    public void parseGainPercent_emptyOrNullDefaultsToUnity() {
+        assertThat(InputAudioLevel.parseGainPercent("")).isEqualTo(1.0f);
+        assertThat(InputAudioLevel.parseGainPercent(null)).isEqualTo(1.0f);
+        assertThat(InputAudioLevel.parseGainPercent("   ")).isEqualTo(1.0f);
+    }
+
+    @Test
+    public void parseGainPercent_nonNumericDefaultsToUnity() {
+        assertThat(InputAudioLevel.parseGainPercent("garbage")).isEqualTo(1.0f);
+        assertThat(InputAudioLevel.parseGainPercent("12abc")).isEqualTo(1.0f);
+        assertThat(InputAudioLevel.parseGainPercent("1,5")).isEqualTo(1.0f);
+    }
+
+    @Test
+    public void parseGainPercent_clampsAboveMax() {
+        // > 200% (e.g. a hand-edited or corrupted import) clamps to MAX_GAIN,
+        // never crashes and never exceeds what the slider can express.
+        assertThat(InputAudioLevel.parseGainPercent("500")).isEqualTo(InputAudioLevel.MAX_GAIN);
+        assertThat(InputAudioLevel.parseGainPercent("200.0001")).isEqualTo(InputAudioLevel.MAX_GAIN);
+        assertThat(InputAudioLevel.parseGainPercent("Infinity")).isEqualTo(InputAudioLevel.MAX_GAIN);
+    }
+
+    @Test
+    public void parseGainPercent_clampsBelowZero() {
+        assertThat(InputAudioLevel.parseGainPercent("-50")).isEqualTo(0f);
+        assertThat(InputAudioLevel.parseGainPercent("-Infinity")).isEqualTo(0f);
+    }
+
+    @Test
+    public void parseGainPercent_nanDefaultsToUnity() {
+        // Float.parseFloat("NaN") succeeds, so NaN needs its own guard: a NaN
+        // gain would silently zero the whole audio path.
+        assertThat(InputAudioLevel.parseGainPercent("NaN")).isEqualTo(1.0f);
+    }
+
+    @Test
+    public void parseGainPercent_toleratesWhitespaceAndFractions() {
+        assertThat(InputAudioLevel.parseGainPercent(" 75 ")).isWithin(1e-6f).of(0.75f);
+        assertThat(InputAudioLevel.parseGainPercent("12.5")).isWithin(1e-6f).of(0.125f);
+    }
 }

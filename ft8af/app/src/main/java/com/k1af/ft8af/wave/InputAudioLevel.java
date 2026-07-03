@@ -64,6 +64,45 @@ public final class InputAudioLevel {
     }
 
     /**
+     * Maximum RX input gain: the settings slider tops out at 200%, i.e. a
+     * 2.0x multiplier. {@link #parseGainPercent} clamps to this so a
+     * corrupted persisted value can never push metering or the decoders
+     * beyond what the UI can express.
+     */
+    public static final float MAX_GAIN = 2.0f;
+
+    /**
+     * Defensively parse a persisted "inputVolume" config value (a percent
+     * string, legal range 0..200) into a gain multiplier.
+     *
+     * <p>The config table stores free-form strings, and the settings
+     * backup/import feature (issue #357 / PR #382) means a hand-edited or
+     * corrupted file can feed anything through here at startup. Non-numeric,
+     * empty, or NaN input falls back to unity gain (1.0 = 100%, the
+     * default); numeric input is clamped to [0, {@link #MAX_GAIN}].
+     */
+    public static float parseGainPercent(String raw) {
+        if (raw == null) {
+            return 1.0f;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return 1.0f;
+        }
+        float percent;
+        try {
+            percent = Float.parseFloat(trimmed);
+        } catch (NumberFormatException nfe) {
+            return 1.0f;
+        }
+        if (Float.isNaN(percent)) {
+            return 1.0f;
+        }
+        float gain = percent / 100f;
+        return Math.max(0f, Math.min(MAX_GAIN, gain));
+    }
+
+    /**
      * Feed post-gain samples into the meter. Returns a {@link Levels}
      * snapshot each time a full {@link #WINDOW_SAMPLES} window completes
      * (possibly the last of several windows when {@code len} is huge),
