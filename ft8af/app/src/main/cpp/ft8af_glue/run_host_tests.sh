@@ -86,6 +86,13 @@ fir_out="$tmp/ft8_fir_test"
 "$CXX" -std=c++14 -O2 -Wall "$here/test_fir_decimator.cpp" -lm -o "$fir_out"
 "$fir_out"
 
+# Rational resampler tests (C++): true polyphase L/M resampling for non-48 kHz
+# USB capture devices (issue #364 — a floored 44.1k/12k ratio shifted every FT8
+# tone off the 6.25 Hz grid). Header-only, no ft8_lib deps.
+rat_out="$tmp/ft8_rational_test"
+"$CXX" -std=c++14 -O2 -Wall "$here/test_rational_resampler.cpp" -lm -o "$rat_out"
+"$rat_out"
+
 # Decode benchmark / regression harness: replays the committed FT8 WAV corpus
 # through the app's exact decode pipeline (same monitor config, candidate
 # search, LDPC settings, dedup, and subtract-and-redecode loop as

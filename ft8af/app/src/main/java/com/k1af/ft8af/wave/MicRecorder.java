@@ -175,7 +175,8 @@ public class MicRecorder {
             return null;
         }
 
-        GeneralVariables.fileLog("openUsbAudioInput: SUCCESS at 48000 Hz");
+        GeneralVariables.fileLog("openUsbAudioInput: SUCCESS at "
+                + usbDev.getInputSampleRate() + " Hz");
         return usbDev;
     }
 
