@@ -742,6 +742,41 @@ public class DatabaseOpr extends SQLiteOpenHelper {
     }
 
     /**
+     * Read every config key/value pair synchronously into an insertion-ordered map.
+     * Backs the settings-export feature (issue #357). Must be called off the main
+     * thread (it touches SQLite directly).
+     */
+    @SuppressLint("Range")
+    public java.util.LinkedHashMap<String, String> getAllConfigSync() {
+        java.util.LinkedHashMap<String, String> map = new java.util.LinkedHashMap<>();
+        Cursor cursor = db.rawQuery("select KeyName,Value from config", null);
+        try {
+            while (cursor.moveToNext()) {
+                map.put(cursor.getString(cursor.getColumnIndex("KeyName")),
+                        cursor.getString(cursor.getColumnIndex("Value")));
+            }
+        } finally {
+            cursor.close();
+        }
+        return map;
+    }
+
+    /**
+     * Upsert every entry of {@code config} synchronously (same delete-then-insert as
+     * {@link WriteConfig}). Backs the settings-import feature (issue #357). Must be
+     * called off the main thread. After calling, run {@link #getAllConfigParameter}
+     * to re-hydrate {@link GeneralVariables} from the freshly written values.
+     */
+    public void writeConfigSync(java.util.Map<String, String> config) {
+        for (java.util.Map.Entry<String, String> entry : config.entrySet()) {
+            String value = entry.getValue() == null ? "" : entry.getValue();
+            db.execSQL("DELETE FROM config where KeyName =?", new String[]{entry.getKey()});
+            db.execSQL("INSERT INTO config (KeyName,Value)Values(?,?)",
+                    new String[]{entry.getKey(), value});
+        }
+    }
+
+    /**
      * Query all successfully contacted callsigns, filtered by QSO frequency
      */
     public void getAllQSLCallsigns() {

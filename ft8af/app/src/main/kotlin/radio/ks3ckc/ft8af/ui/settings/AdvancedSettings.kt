@@ -1,22 +1,49 @@
 package radio.ks3ckc.ft8af.ui.settings
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.core.os.LocaleListCompat
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
+import com.k1af.ft8af.database.OnAfterQueryConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import radio.ks3ckc.ft8af.theme.Accent
+import radio.ks3ckc.ft8af.theme.BgSurface2
+import radio.ks3ckc.ft8af.theme.TextMuted
+import radio.ks3ckc.ft8af.theme.TextPrimary
 import radio.ks3ckc.ft8af.theme.ThemeOption
 import radio.ks3ckc.ft8af.theme.applyTheme
 import radio.ks3ckc.ft8af.theme.currentThemeNameRes
@@ -24,6 +51,9 @@ import radio.ks3ckc.ft8af.theme.loadTheme
 import radio.ks3ckc.ft8af.theme.saveTheme
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 import radio.ks3ckc.ft8af.ui.components.SettingsRow
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * One selectable app language: its BCP-47 tag (as handed to
@@ -96,6 +126,136 @@ fun AdvancedSettings(
     var showLateStart by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
     var showThemePicker by remember { mutableStateOf(false) }
+
+    // -- Backup & restore (issue #357) --
+    val scope = rememberCoroutineScope()
+    val databaseOpr = mainViewModel.databaseOpr
+    var showExportDialog by remember { mutableStateOf(false) }
+    // Captured at launch time so the SAF result callback knows whether to include
+    // sensitive keys in the file it writes.
+    var exportIncludeSensitive by remember { mutableStateOf(false) }
+    // Non-null while the import confirmation dialog is showing the parsed backup.
+    var pendingImport by remember { mutableStateOf<SettingsBackup.ParsedBackup?>(null) }
+
+    // Storage Access Framework: user picks where to write the export. On result we
+    // read the whole config table off the main thread, serialize it, and stream it
+    // to the chosen document.
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val config = databaseOpr.getAllConfigSync()
+                    val json = SettingsBackup.buildBackupJson(
+                        config = config,
+                        includeSensitive = exportIncludeSensitive,
+                        appVersion = GeneralVariables.VERSION,
+                        createdAt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date()),
+                    )
+                    context.contentResolver.openOutputStream(uri)?.use {
+                        it.write(json.toByteArray(Charsets.UTF_8))
+                    } ?: error("Could not open the selected file for writing")
+                }
+            }
+            result.fold(
+                onSuccess = {
+                    Toast.makeText(context, R.string.settings_export_success, Toast.LENGTH_LONG).show()
+                },
+                onFailure = {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.settings_export_failed, it.message ?: ""),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                },
+            )
+        }
+    }
+
+    // SAF: user picks a backup file. On result we read + validate it off the main
+    // thread; a valid parse opens the confirmation dialog, a bad file just toasts.
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val text = context.contentResolver.openInputStream(uri)?.use {
+                        it.readBytes().toString(Charsets.UTF_8)
+                    } ?: error("Could not open the selected file")
+                    SettingsBackup.parseBackupJson(text)
+                }
+            }
+            result.fold(
+                onSuccess = { pendingImport = it },
+                onFailure = {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.settings_import_failed, it.message ?: ""),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                },
+            )
+        }
+    }
+
+    // -- Export options dialog (choose whether to include secrets) --
+    if (showExportDialog) {
+        ExportSettingsDialog(
+            includeSensitive = exportIncludeSensitive,
+            onToggleSensitive = { exportIncludeSensitive = it },
+            onDismiss = { showExportDialog = false },
+            onExport = {
+                showExportDialog = false
+                val fileName = SettingsBackup.defaultFileName(
+                    date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()),
+                    appVersion = GeneralVariables.VERSION,
+                )
+                exportLauncher.launch(fileName)
+            },
+        )
+    }
+
+    // -- Import confirmation dialog (preview count, confirm overwrite) --
+    pendingImport?.let { backup ->
+        ConfirmImportDialog(
+            keyCount = backup.config.size,
+            createdAt = backup.createdAt.ifBlank { "?" },
+            onDismiss = { pendingImport = null },
+            onConfirm = {
+                pendingImport = null
+                val toApply = backup.config
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        runCatching { databaseOpr.writeConfigSync(toApply) }
+                    }
+                    result.fold(
+                        onSuccess = {
+                            // Re-hydrate GeneralVariables from the freshly written config so
+                            // most settings take effect without waiting for an app restart.
+                            databaseOpr.getAllConfigParameter(object : OnAfterQueryConfig {
+                                override fun doOnBeforeQueryConfig(keyName: String?) {}
+                                override fun doOnAfterQueryConfig(keyName: String?, value: String?) {}
+                            })
+                            Toast.makeText(
+                                context, R.string.settings_import_success, Toast.LENGTH_LONG,
+                            ).show()
+                        },
+                        onFailure = {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.settings_import_failed, it.message ?: ""),
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        },
+                    )
+                }
+            },
+        )
+    }
 
     val txDelayStr = stringResource(R.string.settings_milliseconds_format, txDelay)
     val pttDelayStr = stringResource(R.string.settings_milliseconds_format, pttDelay)
@@ -286,6 +446,149 @@ fun AdvancedSettings(
                     showChevron = true,
                     onClick = { showLanguagePicker = true },
                 )
+            }
+        }
+
+        // =====================================================================
+        // BACKUP & RESTORE (issue #357)
+        // =====================================================================
+        SettingsSection(title = stringResource(R.string.settings_section_backup)) {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    SettingsRow(
+                        label = stringResource(R.string.settings_export),
+                        description = stringResource(R.string.settings_export_desc),
+                        showChevron = true,
+                        onClick = { showExportDialog = true },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_import),
+                        description = stringResource(R.string.settings_import_desc),
+                        showChevron = true,
+                        onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Export options dialog: a single toggle for whether to include sensitive
+ * credentials in the backup, then Export/Cancel. Styled like [EditOperatorDialog]
+ * to match the app's dialog look.
+ */
+@Composable
+private fun ExportSettingsDialog(
+    includeSensitive: Boolean,
+    onToggleSensitive: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    onExport: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(BgSurface2)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.settings_export_dialog_title),
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 18.sp,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.settings_backup_include_sensitive),
+                        color = TextPrimary,
+                        fontSize = 15.sp,
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_backup_include_sensitive_desc),
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                    )
+                }
+                Switch(
+                    checked = includeSensitive,
+                    onCheckedChange = onToggleSensitive,
+                    colors = SwitchDefaults.colors(checkedTrackColor = Accent),
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.action_cancel), color = TextMuted)
+                }
+                TextButton(onClick = onExport) {
+                    Text(
+                        stringResource(R.string.action_export),
+                        color = Accent,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Import confirmation dialog: previews how many keys will be overwritten and when
+ * the backup was created, then requires an explicit confirm before applying.
+ */
+@Composable
+private fun ConfirmImportDialog(
+    keyCount: Int,
+    createdAt: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(BgSurface2)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.settings_import_confirm_title),
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 18.sp,
+            )
+            Text(
+                text = stringResource(R.string.settings_import_confirm_msg, keyCount, createdAt),
+                color = TextMuted,
+                fontSize = 14.sp,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.action_cancel), color = TextMuted)
+                }
+                TextButton(onClick = onConfirm) {
+                    Text(
+                        stringResource(R.string.action_import),
+                        color = Accent,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
         }
     }
