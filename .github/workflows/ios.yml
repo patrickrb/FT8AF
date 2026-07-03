@@ -80,7 +80,40 @@ jobs:
       # header-search-path / non-modular-include caveats if any regress.
       - name: Run FT8AFKit tests
         working-directory: ios/FT8AFKit
-        run: swift test
+        run: swift test --enable-code-coverage
+
+      # Export the SwiftPM coverage run to lcov. swift test writes a merged
+      # default.profdata plus the combined *PackageTests.xctest bundle under the
+      # build bin dir; llvm-cov turns those into lcov for Codecov. .build (vendored
+      # SwiftPM checkouts) is excluded so the ios flag reflects our own sources.
+      - name: Export iOS coverage to lcov
+        working-directory: ios/FT8AFKit
+        run: |
+          set -euo pipefail
+          bin="$(swift build --show-bin-path)"
+          prof="$bin/codecov/default.profdata"
+          # Collect every test bundle's executable (usually one merged bundle).
+          objs=()
+          while IFS= read -r xctest; do
+            objs+=("$xctest/Contents/MacOS/$(basename "${xctest%.xctest}")")
+          done < <(find "$bin" -name '*.xctest' -maxdepth 1)
+          if [[ ${#objs[@]} -eq 0 ]]; then
+            echo "::error::No .xctest bundle found under $bin"; exit 1
+          fi
+          args=("${objs[0]}")
+          for o in "${objs[@]:1}"; do args+=("-object" "$o"); done
+          xcrun llvm-cov export -format=lcov -instr-profile "$prof" \
+            --ignore-filename-regex='\.build/' \
+            "${args[@]}" > ios.lcov
+          echo "Wrote $(wc -l < ios.lcov) lines of lcov."
+
+      - name: Upload iOS coverage to Codecov
+        continue-on-error: true
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ios/FT8AFKit/ios.lcov
+          flags: ios
 
       # The app's .xcodeproj is generated from project.yml via XcodeGen and no
       # shared scheme is committed, so regenerate it to get a buildable scheme.
