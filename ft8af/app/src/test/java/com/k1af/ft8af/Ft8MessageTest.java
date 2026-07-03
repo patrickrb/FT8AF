@@ -341,6 +341,45 @@ public class Ft8MessageTest {
     }
 
     @Test
+    public void copyConstructor_learnsHashFromFullCall_thenResolvesLaterFrames() {
+        // #392 dynamic case: a compound station we've never heard is received as
+        // a bare hash and shows "<...>". When that station later sends its full
+        // call (e.g. "CQ ZZ9/AB1CDE"), the decoder carries the call plain and the
+        // copy constructor learns hash->call (Ft8Message.addHash on the callFrom
+        // hashes). Subsequent hashed frames then resolve. Uses a distinct hash so
+        // it can't collide with other tests sharing the static hashList; i3=1
+        // keeps it off the native getHashNN path.
+        long h = 0x123456L; // the compound call's 22-bit hash (consistent value)
+
+        // (1) Heard as a hash BEFORE we know the mapping -> stays "<...>".
+        Ft8Message before = new Ft8Message(FT8Common.FT8_MODE);
+        before.i3 = 1;
+        before.callsignTo = "<...>";
+        before.callsignFrom = "W1AW";
+        before.extraInfo = "FN31";
+        before.callToHash22 = h;
+        assertThat(new Ft8Message(before).callsignTo).isEqualTo("<...>");
+
+        // (2) The station's full call arrives plain -> the map learns hash->call.
+        Ft8Message full = new Ft8Message(FT8Common.FT8_MODE);
+        full.i3 = 1;
+        full.callsignTo = "K1ABC";
+        full.callsignFrom = "ZZ9/AB1CDE";
+        full.extraInfo = "FN31";
+        full.callFromHash22 = h; // native sets this to the call's 22-bit hash
+        new Ft8Message(full);    // copy ctor calls hashList.addHash(h, "ZZ9/AB1CDE")
+
+        // (3) The same hashed frame now resolves to the learned call.
+        Ft8Message after = new Ft8Message(FT8Common.FT8_MODE);
+        after.i3 = 1;
+        after.callsignTo = "<...>";
+        after.callsignFrom = "W1AW";
+        after.extraInfo = "FN31";
+        after.callToHash22 = h;
+        assertThat(new Ft8Message(after).callsignTo).isEqualTo("<ZZ9/AB1CDE>");
+    }
+
+    @Test
     public void copyConstructor_leavesUnknownHashAsPlaceholder() {
         // A hash the list has never seen stays "<...>" — no false resolution.
         Ft8Message src = new Ft8Message(FT8Common.FT8_MODE);
