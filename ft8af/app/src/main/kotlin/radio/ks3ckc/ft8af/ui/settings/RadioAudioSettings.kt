@@ -44,6 +44,8 @@ import com.k1af.ft8af.database.RigNameList
 import com.k1af.ft8af.rigs.BaseRigOperation
 import com.k1af.ft8af.rigs.InstructionSet
 import com.k1af.ft8af.ui.AudioDeviceSpinnerAdapter
+import radio.ks3ckc.ft8af.PER_BAND_OUTPUT_LEVEL_KEY
+import radio.ks3ckc.ft8af.saveOutputLevelForCurrentBand
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.FT8AFIconButton
 import radio.ks3ckc.ft8af.ui.components.FT8AFIcons
@@ -431,6 +433,7 @@ fun RadioAudioSettings(
                 showTxVolume = false
                 mainViewModel.databaseOpr.writeConfig("volumeValue", txVolume.toString(), null)
                 mainViewModel.baseRig?.connector?.setRFVolume(txVolume)
+                saveOutputLevelForCurrentBand(mainViewModel.databaseOpr, txVolume)
             },
         )
     }
@@ -627,6 +630,33 @@ fun RadioAudioSettings(
                                 mainViewModel.databaseOpr.writeConfig(
                                     "showTxVolumeSlider", if (enabled) "1" else "0", null,
                                 )
+                            },
+                        )
+                    }
+                    SectionDivider()
+                    run {
+                        var perBand by remember {
+                            mutableStateOf(GeneralVariables.savePerBandOutputLevel)
+                        }
+                        SettingsRow(
+                            label = stringResource(R.string.settings_per_band_volume),
+                            description = stringResource(R.string.settings_per_band_volume_desc),
+                            toggle = perBand,
+                            onToggleChange = { enabled ->
+                                perBand = enabled
+                                GeneralVariables.savePerBandOutputLevel = enabled
+                                mainViewModel.databaseOpr.writeConfig(
+                                    PER_BAND_OUTPUT_LEVEL_KEY, if (enabled) "1" else "0", null,
+                                )
+                                // Seed the current band with the current (global) level so
+                                // it is remembered from the moment the feature turns on;
+                                // other bands fall back to the global level until adjusted.
+                                if (enabled) {
+                                    saveOutputLevelForCurrentBand(
+                                        mainViewModel.databaseOpr,
+                                        Math.round(GeneralVariables.volumePercent * 100),
+                                    )
+                                }
                             },
                         )
                     }

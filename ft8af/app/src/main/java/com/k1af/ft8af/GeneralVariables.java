@@ -91,6 +91,11 @@ public class GeneralVariables {
     public static boolean showTxVolumeSlider = true;//Show inline TX volume slider on main screen
     public static MutableLiveData<Boolean> mutableShowTxVolumeSlider = new MutableLiveData<>(true);
 
+    //Save TX output level per band (issue #355), defaults off (global level only).
+    public static boolean savePerBandOutputLevel = false;
+    //Serialized band=level CSV ("20m=60,40m=85"); parsed/updated in PerBandOutputLevel.kt.
+    public static volatile String perBandOutputLevels = "";
+
     public static int flexMaxRfPower = 10;//Flex radio max transmit power
     public static int flexMaxTunePower = 10;//Flex radio max tune power
 

@@ -698,6 +698,7 @@ class ComposeMainActivity : AppCompatActivity() {
                 val intVal = (newVol * 100).toInt()
                 mainViewModel.databaseOpr.writeConfig("volumeValue", intVal.toString(), null)
                 mainViewModel.baseRig?.connector?.setRFVolume(intVal)
+                saveOutputLevelForCurrentBand(mainViewModel.databaseOpr, intVal)
 
                 // Also adjust system music stream so audio is actually audible
                 val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
