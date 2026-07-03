@@ -248,6 +248,44 @@ public final class UacAudioFormats {
         return new Choice(bestFormat.altSetting, bestRate, bestFormat.channels);
     }
 
+    /**
+     * The set of sample rates a given (interface, alt setting) can run, when that set is
+     * finite and known: the union of the discrete-rate tables of its FORMAT_TYPE
+     * descriptors, with a degenerate continuous range ({@code min == max}) counting as a
+     * single rate. Returns an empty array when the alt setting reports a genuinely
+     * continuous range ({@code min < max}) or nothing was parsed for it — the caller must
+     * then treat the device's current rate as unknowable from descriptors alone.
+     *
+     * <p>Used by {@code UsbAudioDevice} to decide what rate to assume when the
+     * SAMPLING_FREQ SET_CUR control transfer fails: a single-rate alt setting runs its
+     * one rate regardless of whether SET_CUR is even implemented.
+     */
+    public static int[] discreteRatesFor(List<StreamFormat> formats, int interfaceId,
+                                         int altSetting) {
+        List<Integer> rates = new ArrayList<>();
+        if (formats != null) {
+            for (StreamFormat f : formats) {
+                if (f.interfaceId != interfaceId || f.altSetting != altSetting) continue;
+                if (f.continuous) {
+                    if (f.minRate == f.maxRate && f.minRate > 0) {
+                        if (!rates.contains(f.minRate)) rates.add(f.minRate);
+                    } else {
+                        return new int[0];  // continuous range: not enumerable
+                    }
+                } else {
+                    for (int r : f.discreteRates) {
+                        if (r > 0 && !rates.contains(r)) rates.add(r);
+                    }
+                }
+            }
+        }
+        int[] out = new int[rates.size()];
+        for (int i = 0; i < out.length; i++) {
+            out[i] = rates.get(i);
+        }
+        return out;
+    }
+
     // Ranking for fallback rates; larger is better. Bit 62: rate can feed the decoder at all.
     // Bit 61: integer multiple of the decoder rate (FirDecimator fast path, no rational
     // stage). Then proximity to the preferred rate, then a current-alt tiebreak (avoid an

@@ -289,4 +289,59 @@ public class UacAudioFormatsTest {
         assertThat(c).isNotNull();
         assertThat(c.channels).isEqualTo(2);
     }
+
+    // --- discreteRatesFor (SET_CUR-failure rate resolution input) -------------
+
+    @Test
+    public void discreteRatesForReturnsTheAltSettingsRateTable() {
+        List<UacAudioFormats.StreamFormat> formats = UacAudioFormats.parse(cm108Style());
+        assertThat(UacAudioFormats.discreteRatesFor(formats, 2, 1))
+                .isEqualTo(new int[] {48000, 44100});
+    }
+
+    @Test
+    public void discreteRatesForIsScopedToTheRequestedInterfaceAndAlt() {
+        byte[] raw = concat(
+                audioStreamingIface(1, 1),
+                formatTypeI(1, 2, 16, 44100),
+                audioStreamingIface(1, 2),
+                formatTypeI(1, 2, 16, 48000));
+        List<UacAudioFormats.StreamFormat> formats = UacAudioFormats.parse(raw);
+        assertThat(UacAudioFormats.discreteRatesFor(formats, 1, 1))
+                .isEqualTo(new int[] {44100});
+        assertThat(UacAudioFormats.discreteRatesFor(formats, 1, 2))
+                .isEqualTo(new int[] {48000});
+        // Other interface / alt with no formats: unknown, not someone else's rates.
+        assertThat(UacAudioFormats.discreteRatesFor(formats, 7, 1)).isEmpty();
+        assertThat(UacAudioFormats.discreteRatesFor(formats, 1, 0)).isEmpty();
+    }
+
+    @Test
+    public void discreteRatesForTreatsContinuousRangeAsUnknown() {
+        // A genuinely continuous range can't be enumerated — after a SET_CUR failure the
+        // device's rate is unknowable from descriptors, so the set must come back empty.
+        byte[] raw = concat(
+                audioStreamingIface(3, 1),
+                formatTypeIContinuous(1, 2, 16, 8000, 48000));
+        assertThat(UacAudioFormats.discreteRatesFor(UacAudioFormats.parse(raw), 3, 1))
+                .isEmpty();
+    }
+
+    @Test
+    public void discreteRatesForTreatsDegenerateContinuousRangeAsSingleRate() {
+        // min == max is a single-rate device that chose the continuous encoding; the one
+        // rate it can run is known.
+        byte[] raw = concat(
+                audioStreamingIface(3, 1),
+                formatTypeIContinuous(1, 2, 16, 44100, 44100));
+        assertThat(UacAudioFormats.discreteRatesFor(UacAudioFormats.parse(raw), 3, 1))
+                .isEqualTo(new int[] {44100});
+    }
+
+    @Test
+    public void discreteRatesForHandlesNullAndEmpty() {
+        assertThat(UacAudioFormats.discreteRatesFor(null, 1, 0)).isEmpty();
+        assertThat(UacAudioFormats.discreteRatesFor(
+                UacAudioFormats.parse(new byte[0]), 1, 0)).isEmpty();
+    }
 }
