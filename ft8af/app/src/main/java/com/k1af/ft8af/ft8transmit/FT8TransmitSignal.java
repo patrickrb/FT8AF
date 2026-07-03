@@ -184,6 +184,11 @@ public class FT8TransmitSignal {
 
     }
 
+    /** Current message order (1-6). Package-visible for tests. */
+    int getFunctionOrder() {
+        return functionOrder;
+    }
+
     /** The cycle-trigger callback, shared between the constructor and {@link #rebuildTimer}. */
     private OnUtcTimer makeTimerCallback() {
         return new OnUtcTimer() {
@@ -1349,18 +1354,40 @@ public class FT8TransmitSignal {
      */
     //@RequiresApi(api = Build.VERSION_CODES.N)
     public void parseMessageToFunction(ArrayList<Ft8Message> msgList) {
+        parseMessageToFunction(msgList, false);
+    }
+
+    /**
+     * Parse decoded messages and drive the QSO state machine.
+     *
+     * <p>When {@code evidenceOnly} is true (deep / subtraction / late-pass decodes,
+     * see issue: sequencer blind to deep decodes), the messages may contribute
+     * <em>positive evidence</em> — the partner replied, someone is calling me —
+     * but never <em>absence-of-evidence</em> decisions (no-reply counting,
+     * give-up, "partner went silent" completions). The fast pass already made
+     * this cycle's absence calls; letting a deep pass repeat them would
+     * double-count no-replies within one cycle.
+     *
+     * @param msgList      message list (a single decode pass's deliveries)
+     * @param evidenceOnly true for deep/late-pass decodes
+     */
+    public void parseMessageToFunction(ArrayList<Ft8Message> msgList, boolean evidenceOnly) {
         if (GeneralVariables.myCallsign.length() < 3) {
             return;
         }
         if (msgList.size() == 0) return;// no messages to parse, return
 
-        if (msgList.get(0).getSequence() == sequential) {
+        // Own-slot early-out: only for the fast pass. An evidence list can mix
+        // slots (stashed deep decodes replayed after TX ends), so it relies on
+        // the per-message sequence checks inside the matchers instead.
+        if (!evidenceOnly && msgList.get(0).getSequence() == sequential) {
             GeneralVariables.fileLog("QSO: skip cycle, newest decode in own slot " + sequential);
             return;
         }
         ArrayList<Ft8Message> messages = new ArrayList<>(msgList);// prevent thread conflicts
 
         if (GeneralVariables.houndMode) {// DXpedition Hound: dedicated QSO handler
+            if (evidenceOnly) return;// Hound sequencing stays fast-pass-only
             handleHoundCycle(messages);
             return;
         }
@@ -1368,7 +1395,8 @@ public class FT8TransmitSignal {
         int newOrder = checkFunctionOrdFromMessages(messages);// check reply message sequence from the other party; -1 means not received
         // Per-cycle spine of the QSO trace: current state, what (if anything) the
         // other party sent us this cycle, who we're working, and the no-reply count.
-        GeneralVariables.fileLog(String.format("QSO: cycle slot=%d order=%d newOrder=%d to=%s noReply=%d/%d",
+        GeneralVariables.fileLog(String.format("QSO: cycle%s slot=%d order=%d newOrder=%d to=%s noReply=%d/%d",
+                evidenceOnly ? "(deep)" : "",
                 sequential, functionOrder, newOrder,
                 toCallsign != null ? toCallsign.callsign : "null",
                 GeneralVariables.noReplyCount, GeneralVariables.noReplyLimit));
@@ -1395,18 +1423,9 @@ public class FT8TransmitSignal {
         // determine QSO success: other party replied 73 (5) || I am at 73 (5) and other party did not reply (-1)
         // or I am at RR73 (4) and no-reply threshold reached with no-reply limit enabled
         // or I am at RR73 (4) and the other party started calling someone else, to prevent RR73 deadlock
-        if (newOrder == 5// target replied 73 to me
-                || (functionOrder == 5 && newOrder == -1)// QSO success: other party replied 73 (5) || I am at 73 (5) and no reply (-1)
-                || (functionOrder == 4 &&
-                (GeneralVariables.noReplyCount > GeneralVariables.noReplyLimit * 2)
-                && (GeneralVariables.noReplyLimit > 0)) // or I am at RR73 (4), reached no-reply threshold, with no-reply limit enabled
-
-                || (functionOrder == 4 && checkTargetCallMe(messages) > 1)// or I am at RR73 (4) and target started calling others (>1 means target is calling others)
-
-                || (functionOrder == 4 && (GeneralVariables.noReplyCount > RR73_GIVEUP_CYCLES)
-                && (GeneralVariables.noReplyLimit == 0))// when no-reply is "ignore" and I am at RR73 (4): the QSO is already logged, so reset after a few unacknowledged RR73s instead of holding the run frequency for minutes
-
-        ) {
+        if (shouldCompleteQso(evidenceOnly, functionOrder, newOrder,
+                GeneralVariables.noReplyCount, GeneralVariables.noReplyLimit,
+                functionOrder == 4 && checkTargetCallMe(messages) > 1)) {
             GeneralVariables.fileLog("QSO: complete with "
                     + (toCallsign != null ? toCallsign.callsign : "?")
                     + " (order=" + functionOrder + " newOrder=" + newOrder + ") -> reset to CQ");
@@ -1463,6 +1482,13 @@ public class FT8TransmitSignal {
             return;
         }
 
+        // Everything below reacts to the ABSENCE of a reply this cycle (queue
+        // rotation while CQing, no-reply counting, give-up). Those decisions
+        // belong to the fast pass alone; a deep pass finding nothing new is not
+        // a second no-reply.
+        if (evidenceOnly) {
+            return;
+        }
 
         // at this point, no reply messages were received
         // if I am in CQ state, newOrder must be -1
@@ -1941,6 +1967,39 @@ public class FT8TransmitSignal {
      */
     static boolean shouldGiveUpTarget(int noReplyLimit, int noReplyCount) {
         return noReplyLimit > 0 && noReplyCount >= noReplyLimit;
+    }
+
+    /**
+     * Whether the current cycle completes the QSO (reset to CQ / next caller).
+     *
+     * <p>The first two arms are positive evidence — the partner sent 73, or (at
+     * RR73) started calling someone else — and apply to every pass. The
+     * remaining arms conclude the QSO from the partner's <em>silence</em>
+     * (order 5 with no reply, RR73 no-reply caps); those are fast-pass-only
+     * decisions, so they are suppressed when {@code evidenceOnly} is set: a
+     * deep pass that merely failed to find anything new must not complete a
+     * QSO.
+     *
+     * <p>Package-visible for testing.
+     *
+     * @param evidenceOnly        this is a deep/late-pass parse (positive evidence only)
+     * @param functionOrder       my current message order (1-6)
+     * @param newOrder            order of the partner's message this pass, -1 if none
+     * @param noReplyCount        consecutive cycles without a reply
+     * @param noReplyLimit        user no-reply limit (0 = unlimited)
+     * @param targetCallingOthers at RR73 and the partner is calling someone else
+     */
+    static boolean shouldCompleteQso(boolean evidenceOnly, int functionOrder, int newOrder,
+                                     int noReplyCount, int noReplyLimit,
+                                     boolean targetCallingOthers) {
+        if (newOrder == 5) return true;// target replied 73 to me
+        if (targetCallingOthers) return true;// RR73 deadlock: target moved on
+        if (evidenceOnly) return false;// absence-of-evidence arms below are fast-pass-only
+        return (functionOrder == 5 && newOrder == -1)// I am at 73 and no reply
+                || (functionOrder == 4 && (noReplyCount > noReplyLimit * 2)
+                && (noReplyLimit > 0))// I am at RR73, no-reply threshold reached, limit enabled
+                || (functionOrder == 4 && (noReplyCount > RR73_GIVEUP_CYCLES)
+                && (noReplyLimit == 0));// no-reply "ignore" at RR73: QSO already logged, don't hold the run frequency for minutes
     }
 
     /**
