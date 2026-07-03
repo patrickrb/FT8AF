@@ -456,6 +456,9 @@
     <string name="settings_tx_volume_desc" formatted="false">Transmit audio level (hardware buttons ±5%)</string>
     <string name="settings_show_volume_slider">Show Volume Slider</string>
     <string name="settings_show_volume_slider_desc">Display TX volume slider on main screen</string>
+    <string name="settings_per_band_volume">Save Output Level Per Band</string>
+    <string name="settings_per_band_volume_desc">Remember the TX output level for each band and restore it when you switch bands</string>
+    <string name="per_band_volume_restored" formatted="false">Restored %1$d%% output level for %2$s</string>
 
     <!-- ===== Settings: transmission ===== -->
     <string name="settings_tx_rx_split">TX/RX Split</string>

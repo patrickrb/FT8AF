@@ -698,6 +698,8 @@ class ComposeMainActivity : AppCompatActivity() {
                 val intVal = (newVol * 100).toInt()
                 mainViewModel.databaseOpr.writeConfig("volumeValue", intVal.toString(), null)
                 mainViewModel.baseRig?.connector?.setRFVolume(intVal)
+                // Track this band's saved level when per-band saving is on (#355).
+                mainViewModel.savePerBandOutputLevel(intVal)
 
                 // Also adjust system music stream so audio is actually audible
                 val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager

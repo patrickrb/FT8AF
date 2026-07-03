@@ -80,6 +80,7 @@ import com.k1af.ft8af.log.QSLRecord;
 import com.k1af.ft8af.log.SWLQsoList;
 import com.k1af.ft8af.log.ThirdPartyService;
 import com.k1af.ft8af.rigs.BaseRig;
+import com.k1af.ft8af.audio.PerBandVolume;
 import com.k1af.ft8af.rigs.BaseRigOperation;
 import com.k1af.ft8af.rigs.CatConnectionState;
 import com.k1af.ft8af.rigs.CatLiveness;
@@ -305,6 +306,18 @@ public class MainViewModel extends ViewModel {
             if (shouldClearOnBandChange(GeneralVariables.clearOnBandModeChange,
                     oldWaveLength, newWaveLength)) {
                 clearDecodesAndTarget();
+            }
+
+            // Restore the saved per-band output level, but only on a real band hop
+            // (wavelength changed) — an in-band dial nudge must not stomp a level the
+            // operator just set on this band (#355).
+            if (!oldWaveLength.equals(newWaveLength)) {
+                int restored = restorePerBandOutputLevel();
+                if (restored >= 0) {
+                    ToastMessage.show(String.format(
+                            getStringFromResource(R.string.per_band_volume_restored),
+                            restored, newWaveLength));
+                }
             }
 
             databaseOpr.getAllQSLCallsigns();//read out successfully contacted callsigns
@@ -1078,6 +1091,58 @@ public class MainViewModel extends ViewModel {
                 baseRig.setFreqToRig();
             }
         }, 800);
+    }
+
+    /**
+     * Per-band output level (issue #355): when {@link GeneralVariables#saveOutputLevelPerBand}
+     * is on, restore the saved TX output level for the band {@link GeneralVariables#band} now
+     * sits in. Applies the level in-memory, persists it as the new global {@code volumeValue},
+     * pushes it to the rig, and notifies observers.
+     *
+     * @return the restored level (0-100), or -1 if nothing was restored (feature off, no rig
+     *         band, or no saved value for this band — in which case the current level stands).
+     */
+    public int restorePerBandOutputLevel() {
+        if (!GeneralVariables.saveOutputLevelPerBand) {
+            return -1;
+        }
+        java.util.Map<String, Integer> levels =
+                PerBandVolume.parse(GeneralVariables.perBandOutputLevels);
+        String band = BaseRigOperation.getMeterFromFreq(GeneralVariables.band);
+        Integer saved = PerBandVolume.lookup(levels, band);
+        if (saved == null) {
+            return -1;
+        }
+        applyOutputLevel(saved);
+        return saved;
+    }
+
+    /**
+     * Persist {@code percent} as the saved output level for the current band, but only when
+     * per-band saving is enabled. Called whenever the user commits a volume change so the
+     * active band's stored value tracks the slider.
+     */
+    public void savePerBandOutputLevel(int percent) {
+        if (!GeneralVariables.saveOutputLevelPerBand) {
+            return;
+        }
+        java.util.Map<String, Integer> levels =
+                PerBandVolume.parse(GeneralVariables.perBandOutputLevels);
+        String band = BaseRigOperation.getMeterFromFreq(GeneralVariables.band);
+        java.util.Map<String, Integer> updated = PerBandVolume.put(levels, band, percent);
+        String json = PerBandVolume.serialize(updated);
+        GeneralVariables.perBandOutputLevels = json;
+        databaseOpr.writeConfig("perBandOutputLevels", json, null);
+    }
+
+    /** Apply an output level everywhere: in-memory, observers, persisted global, and the rig. */
+    private void applyOutputLevel(int percent) {
+        GeneralVariables.volumePercent = percent / 100f;
+        GeneralVariables.mutableVolumePercent.postValue(percent / 100f);
+        databaseOpr.writeConfig("volumeValue", String.valueOf(percent), null);
+        if (baseRig != null && baseRig.getConnector() != null) {
+            baseRig.getConnector().setRFVolume(percent);
+        }
     }
 
     /**

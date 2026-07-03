@@ -371,6 +371,8 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 onVolumeChangeFinished = {
                     mainViewModel.databaseOpr.writeConfig("volumeValue", txVolume.toString(), null)
                     mainViewModel.baseRig?.connector?.setRFVolume(txVolume)
+                    // Track this band's saved level when per-band saving is on (#355).
+                    mainViewModel.savePerBandOutputLevel(txVolume)
                 },
                 onCallCQ = {
                     if (GeneralVariables.myCallsign.isNullOrEmpty()) {

@@ -431,6 +431,8 @@ fun RadioAudioSettings(
                 showTxVolume = false
                 mainViewModel.databaseOpr.writeConfig("volumeValue", txVolume.toString(), null)
                 mainViewModel.baseRig?.connector?.setRFVolume(txVolume)
+                // Track this band's saved level when per-band saving is on (#355).
+                mainViewModel.savePerBandOutputLevel(txVolume)
             },
         )
     }
@@ -627,6 +629,31 @@ fun RadioAudioSettings(
                                 mainViewModel.databaseOpr.writeConfig(
                                     "showTxVolumeSlider", if (enabled) "1" else "0", null,
                                 )
+                            },
+                        )
+                    }
+                    SectionDivider()
+                    run {
+                        var perBand by remember {
+                            mutableStateOf(GeneralVariables.saveOutputLevelPerBand)
+                        }
+                        SettingsRow(
+                            label = stringResource(R.string.settings_per_band_volume),
+                            description = stringResource(R.string.settings_per_band_volume_desc),
+                            toggle = perBand,
+                            onToggleChange = { enabled ->
+                                perBand = enabled
+                                GeneralVariables.saveOutputLevelPerBand = enabled
+                                GeneralVariables.mutableSaveOutputLevelPerBand.postValue(enabled)
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "saveOutputLevelPerBand", if (enabled) "1" else "0", null,
+                                )
+                                // Seed the current band with the active level so it has a
+                                // saved value straight away instead of only after the next
+                                // slider move (#355).
+                                if (enabled) {
+                                    mainViewModel.savePerBandOutputLevel(txVolume)
+                                }
                             },
                         )
                     }

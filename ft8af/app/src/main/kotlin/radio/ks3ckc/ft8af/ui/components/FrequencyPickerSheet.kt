@@ -86,6 +86,20 @@ fun selectBandIndex(mainViewModel: MainViewModel, context: Context, index: Int) 
     if (cm == ControlMode.CAT || cm == ControlMode.RTS || cm == ControlMode.DTR) {
         mainViewModel.setOperationBand()
     }
+
+    // Restore the saved per-band output level, but only on a real band hop so an
+    // alternate-frequency pick within the same wavelength band doesn't stomp the
+    // level the operator set there (#355).
+    if (oldWaveLength != newWaveLength) {
+        val restored = mainViewModel.restorePerBandOutputLevel()
+        if (restored >= 0) {
+            android.widget.Toast.makeText(
+                context,
+                context.getString(R.string.per_band_volume_restored, restored, newWaveLength),
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
 }
 
 private data class BandGroup(

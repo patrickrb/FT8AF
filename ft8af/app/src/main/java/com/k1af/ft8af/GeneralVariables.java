@@ -91,6 +91,15 @@ public class GeneralVariables {
     public static boolean showTxVolumeSlider = true;//Show inline TX volume slider on main screen
     public static MutableLiveData<Boolean> mutableShowTxVolumeSlider = new MutableLiveData<>(true);
 
+    // Save output level per band (issue #355). When on, the app remembers the TX
+    // output level for each wavelength band and restores it on band change.
+    // Off by default to preserve the single-global-level behavior.
+    public static boolean saveOutputLevelPerBand = false;
+    public static MutableLiveData<Boolean> mutableSaveOutputLevelPerBand = new MutableLiveData<>(false);
+    // JSON map of {bandWaveLength -> outputLevelPercent}, persisted under the
+    // "perBandOutputLevels" config key. Parsed on demand via PerBandVolume.
+    public static String perBandOutputLevels = "";
+
     public static int flexMaxRfPower = 10;//Flex radio max transmit power
     public static int flexMaxTunePower = 10;//Flex radio max tune power
 
