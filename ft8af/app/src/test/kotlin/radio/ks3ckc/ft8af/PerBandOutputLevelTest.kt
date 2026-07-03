@@ -156,4 +156,49 @@ class PerBandOutputLevelTest {
         // On 17m (never saved): fall back to current/global level.
         assertThat(resolvePerBandOutputLevel(true, "17m", serialized, 85)).isNull()
     }
+
+    // ---- outputLevelFromVolumePercent (shared percent -> 0-100 conversion) ----
+
+    @Test
+    fun outputLevel_roundsInsteadOfFlooring() {
+        // volumePercent is not always an exact multiple of 0.01 (slider drags
+        // and accumulated 0.05f key-steps produce arbitrary fractions). For a
+        // value like 0.699, toInt() (the old hardware-volume-key path) floors
+        // 69.9 to 69 while the per-band restore/compare used Math.round -> 70,
+        // producing off-by-one map entries and spurious restore toasts. The
+        // shared helper must round like the comparer does.
+        assertThat((0.699f * 100).toInt()).isEqualTo(69) // documents the floor/round divergence
+        assertThat(outputLevelFromVolumePercent(0.699f)).isEqualTo(70)
+        assertThat(outputLevelFromVolumePercent(0.7f)).isEqualTo(70)
+    }
+
+    @Test
+    fun outputLevel_matchesEveryFivePercentVolumeKeyStep() {
+        // The hardware volume keys step by 0.05; every reachable step must map
+        // to the exact multiple of 5 the user sees in the toast.
+        var vol = 0.0f
+        for (step in 0..20) {
+            assertThat(outputLevelFromVolumePercent(vol)).isEqualTo(step * 5)
+            vol = (vol + 0.05f).coerceIn(0.0f, 1.0f)
+        }
+    }
+
+    @Test
+    fun outputLevel_agreesWithRestoreComparison() {
+        // A level produced by the helper and stored in the map must compare
+        // equal in resolve (no restore) for the same volumePercent.
+        val level = outputLevelFromVolumePercent(0.7f)
+        val serialized = recordPerBandOutputLevel(true, "20m", level, "")!!
+        assertThat(
+            resolvePerBandOutputLevel(true, "20m", serialized, outputLevelFromVolumePercent(0.7f)),
+        ).isNull()
+    }
+
+    @Test
+    fun outputLevel_clampsToValidRange() {
+        assertThat(outputLevelFromVolumePercent(-0.2f)).isEqualTo(0)
+        assertThat(outputLevelFromVolumePercent(0.0f)).isEqualTo(0)
+        assertThat(outputLevelFromVolumePercent(1.0f)).isEqualTo(100)
+        assertThat(outputLevelFromVolumePercent(1.2f)).isEqualTo(100)
+    }
 }

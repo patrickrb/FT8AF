@@ -91,20 +91,49 @@ internal fun recordPerBandOutputLevel(
 }
 
 /**
+ * Convert a 0.0-1.0 volume fraction to the 0-100 integer level used by the
+ * "volumeValue" config and the per-band map. Uses Math.round (not toInt/floor)
+ * so every producer and consumer of the level agrees on the same integer —
+ * float representation error (e.g. 0.7f * 100 == 69.99999...) would otherwise
+ * make a floored writer disagree with a rounding comparer by one, causing
+ * spurious per-band writes/restore toasts.
+ */
+fun outputLevelFromVolumePercent(volumePercent: Float): Int =
+    Math.round(volumePercent * 100).coerceIn(0, 100)
+
+/** Serializes all per-band map read-modify-writes (UI thread + MeterProtectionController). */
+private val perBandOutputLevelLock = Any()
+
+/**
  * Record [level] (0-100) as the saved output level for the current band and
  * persist the updated map. No-op when the per-band feature is disabled or
  * the value is unchanged. Call wherever the output level is adjusted.
  */
 fun saveOutputLevelForCurrentBand(databaseOpr: DatabaseOpr, level: Int) {
     val band = BaseRigOperation.getMeterFromFreq(GeneralVariables.band)
-    val serialized = recordPerBandOutputLevel(
-        GeneralVariables.savePerBandOutputLevel,
-        band,
-        level,
-        GeneralVariables.perBandOutputLevels,
-    ) ?: return
-    GeneralVariables.perBandOutputLevels = serialized
-    databaseOpr.writeConfig(PER_BAND_OUTPUT_LEVELS_KEY, serialized, null)
+    saveOutputLevelForBand(band, level) { serialized ->
+        databaseOpr.writeConfig(PER_BAND_OUTPUT_LEVELS_KEY, serialized, null)
+    }
+}
+
+/**
+ * Synchronized read-modify-write of GeneralVariables.perBandOutputLevels.
+ * Callers race (a TxStrip/Settings adjustment on the UI thread vs a
+ * MeterProtectionController auto-reduction on a background thread); without
+ * the lock a stale read could drop the other writer's band entry. [persist]
+ * runs inside the lock, only when the map actually changed.
+ */
+internal fun saveOutputLevelForBand(band: String?, level: Int, persist: (String) -> Unit) {
+    synchronized(perBandOutputLevelLock) {
+        val serialized = recordPerBandOutputLevel(
+            GeneralVariables.savePerBandOutputLevel,
+            band,
+            level,
+            GeneralVariables.perBandOutputLevels,
+        ) ?: return
+        GeneralVariables.perBandOutputLevels = serialized
+        persist(serialized)
+    }
 }
 
 /**
@@ -116,5 +145,5 @@ fun restoredOutputLevelForBand(band: String?): Int? = resolvePerBandOutputLevel(
     GeneralVariables.savePerBandOutputLevel,
     band,
     GeneralVariables.perBandOutputLevels,
-    Math.round(GeneralVariables.volumePercent * 100),
+    outputLevelFromVolumePercent(GeneralVariables.volumePercent),
 )

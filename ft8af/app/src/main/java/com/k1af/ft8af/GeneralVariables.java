@@ -92,7 +92,10 @@ public class GeneralVariables {
     public static MutableLiveData<Boolean> mutableShowTxVolumeSlider = new MutableLiveData<>(true);
 
     //Save TX output level per band (issue #355), defaults off (global level only).
-    public static boolean savePerBandOutputLevel = false;
+    // volatile: written from DatabaseOpr's background config-load thread and the
+    // Settings toggle, read from UI + MeterProtectionController threads (same
+    // convention as zoneMapReady/huntPotaOnly/perBandOutputLevels below).
+    public static volatile boolean savePerBandOutputLevel = false;
     //Serialized band=level CSV ("20m=60,40m=85"); parsed/updated in PerBandOutputLevel.kt.
     public static volatile String perBandOutputLevels = "";
 

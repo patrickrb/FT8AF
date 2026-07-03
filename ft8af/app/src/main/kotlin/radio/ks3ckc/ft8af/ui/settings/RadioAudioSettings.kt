@@ -45,6 +45,7 @@ import com.k1af.ft8af.rigs.BaseRigOperation
 import com.k1af.ft8af.rigs.InstructionSet
 import com.k1af.ft8af.ui.AudioDeviceSpinnerAdapter
 import radio.ks3ckc.ft8af.PER_BAND_OUTPUT_LEVEL_KEY
+import radio.ks3ckc.ft8af.outputLevelFromVolumePercent
 import radio.ks3ckc.ft8af.saveOutputLevelForCurrentBand
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.FT8AFIconButton
@@ -654,7 +655,7 @@ fun RadioAudioSettings(
                                 if (enabled) {
                                     saveOutputLevelForCurrentBand(
                                         mainViewModel.databaseOpr,
-                                        Math.round(GeneralVariables.volumePercent * 100),
+                                        outputLevelFromVolumePercent(GeneralVariables.volumePercent),
                                     )
                                 }
                             },
