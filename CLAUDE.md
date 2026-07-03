@@ -19,12 +19,10 @@ different task). Instead spin up an isolated worktree per task:
 git worktree add ../NEXT-FT8CN-<short-task-name> -b feat/<task>
 ```
 
-Two gotchas for a fresh worktree:
+Notes for a fresh worktree:
 
-- The `ft8af/app/src/main/cpp/` native sources (`ft8_lib`, `ft8af_glue`,
-  `libsamplerate`) are **untracked** (see `git status` / memory
-  `ft8af-untracked-native-sources.md`), so a new worktree won't have them and the
-  NDK build fails. Copy them over from the primary checkout before building.
+- The `ft8af/app/src/main/cpp/` native sources (`ft8_lib`, `ft8af_glue`) are
+  **tracked** in git, so a fresh worktree builds with no manual copying.
 - Build/install still uses the Windows wrapper from inside the worktree's `ft8af`
   dir (`cmd.exe /c "gradlew.bat installDebug"`).
 
