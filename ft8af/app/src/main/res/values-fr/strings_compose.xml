@@ -457,6 +457,13 @@
     <string name="settings_enabled_bands_dialog_desc">Les bandes masquées n\'apparaîtront pas dans les sélecteurs de fréquence.</string>
     <string name="settings_select_serial_port">Sélectionner le port série</string>
     <string name="settings_tx_volume_advice">Ajustez en direct — votre prochain TX utilise ce niveau. Surveillez l\'ALC de votre radio et réduisez jusqu\'à ce qu\'il effleure tout juste la ligne.</string>
+    <string name="settings_input_volume">Volume d\'entrée</string>
+    <string name="settings_input_volume_desc" formatted="false">Gain audio RX appliqué avant le décodage (100 % = inchangé)</string>
+    <string name="settings_input_volume_advice">Appliqué à l\'audio entrant avant le décodage. Surveillez l\'indicateur de niveau RX sur la cascade et visez la zone verte ; le rouge signale l\'écrêtage.</string>
+    <string name="input_level_too_low">Faible</string>
+    <string name="input_level_good">Bon</string>
+    <string name="input_level_too_high">Élevé</string>
+    <string name="input_level_clipping">Clip</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Langue</string>

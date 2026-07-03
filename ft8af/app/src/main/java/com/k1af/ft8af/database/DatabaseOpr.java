@@ -2573,6 +2573,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.volumePercent = result.equals("") ? 1.0f : Float.parseFloat(result) / 100f;
                     GeneralVariables.mutableVolumePercent.postValue(GeneralVariables.volumePercent);
                 }
+                if (name.equalsIgnoreCase("inputVolume")) {//RX input gain (percent, 100 = unity)
+                    GeneralVariables.inputGainPercent =
+                            result.equals("") ? 1.0f : Float.parseFloat(result) / 100f;
+                }
                 if (name.equalsIgnoreCase("showTxVolumeSlider")) {//Inline TX volume slider visibility
                     GeneralVariables.showTxVolumeSlider = !result.equals("0");
                     GeneralVariables.mutableShowTxVolumeSlider.postValue(GeneralVariables.showTxVolumeSlider);

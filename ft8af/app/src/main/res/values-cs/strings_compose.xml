@@ -535,6 +535,13 @@
     <string name="settings_enabled_bands_dialog_desc">Skrytá pásma se neobjeví ve výběru frekvencí.</string>
     <string name="settings_select_serial_port">Vyberte sériový port</string>
     <string name="settings_tx_volume_advice">Upravujte naživo — vaše příští TX použije tuto úroveň. Sledujte ALC svého rádia a stahujte, dokud se právě nedotýká čáry.</string>
+    <string name="settings_input_volume">Vstupní hlasitost</string>
+    <string name="settings_input_volume_desc" formatted="false">Zesílení přijímaného zvuku před dekódováním (100 % = beze změny)</string>
+    <string name="settings_input_volume_advice">Použije se na příchozí zvuk před dekódováním. Sledujte měřič úrovně RX na vodopádu a mířte do zelené zóny; červená znamená ořezávání.</string>
+    <string name="input_level_too_low">Nízká</string>
+    <string name="input_level_good">Dobrá</string>
+    <string name="input_level_too_high">Vysoká</string>
+    <string name="input_level_clipping">Ořez</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Jazyk</string>

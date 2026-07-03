@@ -524,6 +524,13 @@
     <string name="settings_enabled_bands_dialog_desc">Приховані діапазони не з’являтимуться у виборі частоти.</string>
     <string name="settings_select_serial_port">Виберіть послідовний порт</string>
     <string name="settings_tx_volume_advice">Регулюйте наживо — ваш наступний TX використає цей рівень. Стежте за ALC радіо й зменшуйте, доки воно лише торкається лінії.</string>
+    <string name="settings_input_volume">Гучність входу</string>
+    <string name="settings_input_volume_desc" formatted="false">Підсилення прийнятого звуку перед декодуванням (100% = без змін)</string>
+    <string name="settings_input_volume_advice">Застосовується до вхідного звуку перед декодуванням. Стежте за індикатором рівня RX на водоспаді та тримайтеся зеленої зони; червоний означає кліпінг.</string>
+    <string name="input_level_too_low">Низький</string>
+    <string name="input_level_good">Добре</string>
+    <string name="input_level_too_high">Високий</string>
+    <string name="input_level_clipping">Кліпінг</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Мова</string>

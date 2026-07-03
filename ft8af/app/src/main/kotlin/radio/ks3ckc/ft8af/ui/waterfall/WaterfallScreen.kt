@@ -44,6 +44,7 @@ import com.k1af.ft8af.ui.ColumnarView
 import com.k1af.ft8af.ui.SpectrumFragment
 import com.k1af.ft8af.ui.WaterfallView
 import radio.ks3ckc.ft8af.theme.*
+import radio.ks3ckc.ft8af.ui.components.InputLevelIndicator
 import radio.ks3ckc.ft8af.ui.components.TopBar
 
 /**
@@ -89,6 +90,9 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
     var updateCount by remember { mutableIntStateOf(0) }
 
     val isTransmitting by mainViewModel.ft8TransmitSignal.mutableIsTransmitting.observeAsState(false)
+    // Live RX input level (post-gain peak + RMS), published by HamRecorder
+    // once per ~250ms metering window (issue #356).
+    val inputLevels by GeneralVariables.mutableInputLevel.observeAsState()
     val txFreq by GeneralVariables.mutableBaseFrequency.observeAsState(GeneralVariables.getBaseFrequency())
     val spectrumWidth by GeneralVariables.mutableSpectrumWidth.observeAsState(GeneralVariables.getSpectrumWidth())
     var deNoise by remember { mutableStateOf(mainViewModel.deNoise) }
@@ -271,6 +275,12 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
                     mainViewModel.markMessage = showMessages
                 },
             )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Live RX input-level meter: too low / just right / too high, with
+            // clipping indication when peaks hit full scale.
+            InputLevelIndicator(levels = inputLevels)
 
             Spacer(modifier = Modifier.weight(1f))
 

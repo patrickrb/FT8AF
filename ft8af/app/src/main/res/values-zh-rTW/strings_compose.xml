@@ -457,6 +457,13 @@
     <string name="settings_enabled_bands_dialog_desc">隱藏的波段不會出現在頻率選擇器中。</string>
     <string name="settings_select_serial_port">選擇序列埠</string>
     <string name="settings_tx_volume_advice">即時調整 — 您下次 TX 將使用此音量。注意您無線電的 ALC，並向下調整直到剛好碰到界線。</string>
+    <string name="settings_input_volume">輸入音量</string>
+    <string name="settings_input_volume_desc" formatted="false">解碼前套用的接收音訊增益（100% = 不變）</string>
+    <string name="settings_input_volume_advice">在解碼前套用於輸入音訊。請觀察瀑布圖上的 RX 電平表，並保持在綠色區域；紅色表示削波。</string>
+    <string name="input_level_too_low">過低</string>
+    <string name="input_level_good">良好</string>
+    <string name="input_level_too_high">過高</string>
+    <string name="input_level_clipping">削波</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">語言</string>

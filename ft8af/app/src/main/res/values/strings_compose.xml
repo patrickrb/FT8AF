@@ -616,6 +616,14 @@
     <string name="settings_enabled_bands_dialog_desc">Hidden bands won\'t appear in the frequency pickers.</string>
     <string name="settings_select_serial_port">Select Serial Port</string>
     <string name="settings_tx_volume_advice">Adjust live — your next TX uses this level. Watch your radio\'s ALC and dial down until it\'s just kissing the line.</string>
+    <string name="settings_input_volume">Input Volume</string>
+    <string name="settings_input_volume_desc" formatted="false">RX audio gain applied before decoding (100% = unchanged)</string>
+    <string name="settings_input_volume_advice">Applied to incoming audio before decoding. Watch the RX level meter on the waterfall and aim for the green zone; red means clipping.</string>
+    <string name="input_level_rx_label" translatable="false">RX</string>
+    <string name="input_level_too_low">Low</string>
+    <string name="input_level_good">Good</string>
+    <string name="input_level_too_high">High</string>
+    <string name="input_level_clipping">Clip</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Language</string>
