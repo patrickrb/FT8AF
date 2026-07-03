@@ -157,6 +157,36 @@ int main(void)
         CHECK(!ft8af_nonstd_hash12(&msg, NULL, NULL));
     }
 
+    // ---- WSJT-X interop golden vectors -------------------------------------
+    // The 77-bit payloads below were produced by WSJT-X's own reference packer
+    // (ft8code, WSJT-X 2.x) for the two frames a station sends when answering
+    // CQ from SV8/DM5HF, with the compound call carried as a 22-bit hash:
+    //   "<SV8/DM5HF> K1ABC JN35"  (hash in the call_to / n28a position)
+    //   "K1ABC <SV8/DM5HF> R-10"  (hash in the call_de / n28b position)
+    // WSJT-X's hash22calc reports SV8/DM5HF => 711279. Pinning WSJT-X's bytes
+    // (not our own packer's) proves the helper interoperates with WSJT-X
+    // specifically; a WAV of the first frame decoded through the app pipeline
+    // resolves to "SV8/DM5HF K1ABC JN35".
+    {
+        struct { const char* bits; int pos; } cases[] = {
+            { "00000010101001010111010101110000010011011110111100011010100100010001111111001", 0 },
+            { "00001001101111011110001101010000000101010010101110101011101111111010101001001", 1 },
+        };
+        for (int i = 0; i < 2; ++i)
+        {
+            ftx_message_t msg;
+            memset(msg.payload, 0, sizeof(msg.payload));
+            for (int b = 0; cases[i].bits[b]; ++b)
+                if (cases[i].bits[b] == '1')
+                    msg.payload[b >> 3] |= (uint8_t)(0x80u >> (b & 7));
+
+            uint32_t n22 = 0;
+            CHECK(ft8af_std_hash22(&msg, cases[i].pos, &n22));
+            CHECK(n22 == 711279u);              // == WSJT-X hash22calc
+            CHECK(n22 == ref_n22("SV8/DM5HF")); // == the app's own hash
+        }
+    }
+
     if (g_failures == 0)
         printf("test_call_hash: all checks passed\n");
     else
