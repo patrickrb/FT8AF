@@ -41,7 +41,14 @@ public class FT8SignalListener {
 
     private DatabaseOpr db;
 
-    private final A91List a91List = new A91List();// a91 list
+    // The FT8 cross-slot recall cache (cpp/ft8af_glue/ft8_xslot.c) is process-global and,
+    // by its own contract, NOT thread-safe; in the app it is only ever touched from
+    // inside DecoderFt8Analysis. The late full-slot pass (issue #363) lets a previous
+    // slot's decode thread overlap the next slot's decode thread, so candidate analysis
+    // must be serialized across threads. All other native decode state is per-decoder
+    // (or thread-local), so per-candidate granularity is enough — the concurrent thread
+    // waits at most one candidate's decode.
+    private static final Object DECODE_ANALYSIS_LOCK = new Object();
 
 
     static {
@@ -137,18 +144,45 @@ public class FT8SignalListener {
             int recordMs = GeneralVariables.earlyDecode
                     ? mode.earlyDecodeMillis
                     : mode.slotMillis;
+            // Late full-slot pass (issue #363): the early window loses signals whose DT
+            // pushes them past its end (~+0.86s for FT8). When eligible, also record the
+            // WHOLE slot into a second one-shot monitor; the decode thread picks that
+            // buffer up after the early passes finish and decodes only the new messages
+            // as an extra late (isDeep) delivery. See LateDecode.
+            final LateDecode.Handoff lateHandoff =
+                    LateDecode.shouldRunLatePass(GeneralVariables.earlyDecode, mode)
+                            ? new LateDecode.Handoff(System.currentTimeMillis(), mode.slotMillis)
+                            : null;
             onWaveDataListener.getVoiceData(recordMs, true
                     , new OnGetVoiceDataDone() {
                         @Override
                         public void onGetDone(float[] data) {
                             Log.d(TAG, String.format("Starting decode...###, data length: %d",data.length));
-                            decodeFt8(utc, data);
+                            decodeFt8(utc, data, lateHandoff);
                         }
                     });
+            if (lateHandoff != null) {
+                onWaveDataListener.getVoiceData(mode.slotMillis, true
+                        , new OnGetVoiceDataDone() {
+                            @Override
+                            public void onGetDone(float[] data) {
+                                lateHandoff.offer(data);
+                            }
+                        });
+            }
         }
     }
 
     public void decodeFt8(long utc, float[] voiceData) {
+        decodeFt8(utc, voiceData, null);
+    }
+
+    /**
+     * @param lateHandoff when non-null, the source of a second full-slot buffer to decode
+     *                    after the early passes finish (late full-slot pass, issue #363);
+     *                    null = no late pass this cycle
+     */
+    public void decodeFt8(long utc, float[] voiceData, LateDecode.Handoff lateHandoff) {
 
         // Test code below -------------------------
 //        String fileName = getCacheFileName("test_01.wav");
@@ -180,10 +214,15 @@ public class FT8SignalListener {
 //                DecoderMonitorPressFloat(tempData, ft8Decoder);// load audio data
 
 
+                // The a91 list is LOCAL to this decode thread (not instance state): the
+                // late full-slot pass keeps this thread alive into the next slot, whose
+                // own decode thread must be able to run concurrently without either
+                // corrupting the other's subtract bookkeeping.
+                final A91List a91List = new A91List();
                 ArrayList<Ft8Message> allMsg = new ArrayList<>();
 //                ArrayList<Ft8Message> msgs = runDecode(utc, voiceData,false);
                 ArrayList<Ft8Message> msgs = runDecode(ft8Decoder, utc, false, fromSource,
-                        DeepDecodeBudget.NO_DEADLINE);
+                        DeepDecodeBudget.NO_DEADLINE, a91List);
                 addMsgToList(allMsg, msgs);
                 timeSec = System.currentTimeMillis() - time;
                 decodeTimeSec.postValue(timeSec);// decode elapsed time
@@ -195,7 +234,7 @@ public class FT8SignalListener {
                 if (GeneralVariables.deepDecodeMode) {// enter deep decode mode
                     //float[] newSignal=tempData;
                     msgs = runDecode(ft8Decoder, utc, true, fromSource,
-                            DeepDecodeBudget.NO_DEADLINE);
+                            DeepDecodeBudget.NO_DEADLINE, a91List);
                     addMsgToList(allMsg, msgs);
                     timeSec = System.currentTimeMillis() - time;
                     decodeTimeSec.postValue(timeSec);// decode elapsed time
@@ -217,7 +256,7 @@ public class FT8SignalListener {
                         subtractDecode(ft8Decoder, a91List, fromSource);
 
                         // perform another decode pass
-                        msgs = runDecode(ft8Decoder, utc, true, fromSource, passDeadline);
+                        msgs = runDecode(ft8Decoder, utc, true, fromSource, passDeadline, a91List);
                         addMsgToList(allMsg, msgs);
                         timeSec = System.currentTimeMillis() - time;
                         decodeTimeSec.postValue(timeSec);// decode elapsed time
@@ -233,13 +272,79 @@ public class FT8SignalListener {
 
                 Log.d(TAG, String.format("Decode took: %d ms", System.currentTimeMillis() - time));
 
+                // Late full-slot pass (issue #363): runs after the early buffer has been
+                // fully processed and its decoder freed, on this same thread, so the late
+                // decodes share the slot's allMsg dedup scope and only NEW messages get
+                // delivered. Runs into the next slot's cycle by design; the next slot's
+                // decode uses its own thread, decoder, and a91 list.
+                if (lateHandoff != null) {
+                    runLateFullSlotPass(utc, allMsg, a91List, fromSource, lateHandoff);
+                }
+
             }
         }).start();
     }
 
+    /**
+     * Decode the full-slot buffer captured alongside the early window, recovering signals
+     * whose DT pushed them past the early window's end. Deliveries reuse the slot's
+     * {@code allMsg} dedup scope, so everything the early passes already reported is
+     * filtered out and only genuinely new messages reach {@code afterDecode} — flagged
+     * isDeep=true so the auto-sequencer (which already acted on the early results) is not
+     * triggered a second time.
+     *
+     * <p>Deliberately does NOT touch {@link #timeSec}/{@link #decodeTimeSec}: by the time
+     * this runs the next slot may already be decoding, and clobbering the shared elapsed
+     * time could make MainViewModel's auto-reply budget check misjudge that slot.
+     */
+    private void runLateFullSlotPass(long utc, ArrayList<Ft8Message> allMsg, A91List a91List,
+                                     boolean fromSource, LateDecode.Handoff handoff) {
+        float[] fullData = handoff.awaitBuffer(System.currentTimeMillis());
+        if (fullData == null) {
+            // Capture stopped mid-slot (or never started); the buffer is not coming.
+            Log.w(TAG, "late full-slot pass skipped: full-slot buffer never arrived");
+            return;
+        }
+        long time = System.currentTimeMillis();
+        long lateDecoder = initDecoder(utc, fullData.length, fromSource);
+        try {
+            pressFloatDecode(fullData, lateDecoder, fromSource);
+            // Bound the whole late pass (fast + deep candidate loops) by the mode's deep
+            // budget so a slow device can't chain late work across multiple later slots.
+            final long deadline = DeepDecodeBudget.passDeadline(time,
+                    GeneralVariables.currentMode().deepDecodeBudgetMillis());
+            deliverLateMessages(utc, allMsg,
+                    runDecode(lateDecoder, utc, false, fromSource, deadline, a91List));
+            if (GeneralVariables.deepDecodeMode) {
+                deliverLateMessages(utc, allMsg,
+                        runDecode(lateDecoder, utc, true, fromSource, deadline, a91List));
+            }
+        } finally {
+            deleteDecoder(lateDecoder, fromSource);
+        }
+        Log.d(TAG, String.format("Late full-slot pass took: %d ms",
+                System.currentTimeMillis() - time));
+    }
+
+    /**
+     * Merge one late pass's decodes into the slot's dedup scope and deliver only the NEW
+     * messages. An empty remainder is not delivered at all — the late pass runs during the
+     * next slot's cycle, and a no-op afterDecode would clear that slot's decoding marker
+     * and waterfall labels behind its back.
+     */
+    private void deliverLateMessages(long utc, ArrayList<Ft8Message> allMsg,
+                                     ArrayList<Ft8Message> msgs) {
+        addMsgToList(allMsg, msgs);// drops everything the early passes already delivered
+        if (msgs.isEmpty() || onFt8Listen == null) {
+            return;
+        }
+        // isDeep=true: MainViewModel appends these without re-triggering auto-sequence.
+        onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, true);
+    }
+
 
     private ArrayList<Ft8Message> runDecode(long ft8Decoder, long utc, boolean isDeep, boolean fromSource,
-                                            long deadlineEpochMs) {
+                                            long deadlineEpochMs, A91List a91List) {
         ArrayList<Ft8Message> ft8Messages = new ArrayList<>();
         Ft8Message ft8Message = new Ft8Message(GeneralVariables.operatingMode);
 
@@ -318,8 +423,13 @@ public class FT8SignalListener {
     }
 
     private boolean analysisDecode(int idx, long decoder, Ft8Message msg, boolean fromSource) {
-        return fromSource ? DecoderFt2Analysis(idx, decoder, msg)
-                : DecoderFt8Analysis(idx, decoder, msg);
+        // Serialized: DecoderFt8Analysis reads/writes the process-global cross-slot cache
+        // (ft8_xslot.c), and the late full-slot pass can overlap the next slot's decode
+        // thread. See DECODE_ANALYSIS_LOCK.
+        synchronized (DECODE_ANALYSIS_LOCK) {
+            return fromSource ? DecoderFt2Analysis(idx, decoder, msg)
+                    : DecoderFt8Analysis(idx, decoder, msg);
+        }
     }
 
     private byte[] getA91Decode(long decoder, boolean fromSource) {
@@ -353,12 +463,17 @@ public class FT8SignalListener {
     }
 
     /**
-     * Add messages to the list.
+     * Merge {@code newMsg} into {@code allMsg}, the slot-wide dedup scope: messages whose
+     * text is already in {@code allMsg} are REMOVED from {@code newMsg} (upgrading the
+     * kept copy's SNR where better, see {@link #checkMessageSame}); the rest are appended
+     * to {@code allMsg}. After the call {@code newMsg} holds only the genuinely new
+     * messages — which is what makes the late full-slot pass deliver only messages the
+     * early passes missed. Static (no instance state) so it is unit-testable.
      *
      * @param allMsg message list
      * @param newMsg new messages
      */
-    private void addMsgToList(ArrayList<Ft8Message> allMsg, ArrayList<Ft8Message> newMsg) {
+    static void addMsgToList(ArrayList<Ft8Message> allMsg, ArrayList<Ft8Message> newMsg) {
         for (int i = newMsg.size() - 1; i >= 0; i--) {
             if (checkMessageSame(allMsg, newMsg.get(i))) {
                 newMsg.remove(i);
@@ -375,7 +490,7 @@ public class FT8SignalListener {
      * @param ft8Message  message
      * @return boolean
      */
-    private boolean checkMessageSame(ArrayList<Ft8Message> ft8Messages, Ft8Message ft8Message) {
+    static boolean checkMessageSame(ArrayList<Ft8Message> ft8Messages, Ft8Message ft8Message) {
         for (Ft8Message msg : ft8Messages) {
             if (msg.getMessageText().equals(ft8Message.getMessageText())) {
                 // Prefer known SNR over unknown; when both are known, keep the higher value.
