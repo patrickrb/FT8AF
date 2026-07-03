@@ -7,8 +7,6 @@ import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
-import android.os.Bundle;
-import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
@@ -38,9 +36,12 @@ import com.k1af.ft8af.timer.UtcTimer;
  * satisfaction, no root required.
  *
  * <p>Singleton — call {@link #refresh(Context)} whenever the toggle/interval changes or
- * the activity starts. Mirrors {@link GridLocationUpdater}.
+ * the activity starts. The subscription lifecycle is shared with
+ * {@link GridLocationUpdater} via {@link LocationSubscriber} (issue #380); this class
+ * supplies the clock-specific pieces: GPS-only provider at a configurable, re-tunable
+ * cadence, offset computation on each fix, and capture/restore of the pre-GPS baseline.
  */
-public class GpsClockUpdater {
+public class GpsClockUpdater extends LocationSubscriber {
     private static final String TAG = "GpsClockUpdater";
 
     /**
@@ -64,13 +65,10 @@ public class GpsClockUpdater {
 
     private static GpsClockUpdater instance;
 
-    private final Context appContext;
-    private LocationManager locationManager;
-    // running is read from applyFix (main looper) without holding the monitor, so it must be
-    // volatile for the disable/stop() write to be visible and abort a late in-flight fix.
-    private volatile boolean running = false;
     private long subscribedIntervalMs = -1;
-    private LocationListener listener;
+    // The interval chosen by prepareStart() for the in-flight start(); consumed by
+    // subscribeProviders() and onSubscribed(). Only touched under the monitor.
+    private long pendingIntervalMs = -1;
     // The offset UtcTimer.delay held *before* GPS discipline took it over (NTP's %-15000
     // sync, a manual correction, or 0). Captured on the first start() and restored by stop()
     // so disabling GPS returns the clock to its pre-GPS state instead of clobbering it with
@@ -78,7 +76,7 @@ public class GpsClockUpdater {
     private int savedDelayBeforeGps = NO_SAVED_DELAY;
 
     private GpsClockUpdater(Context context) {
-        this.appContext = context.getApplicationContext();
+        super(context);
     }
 
     public static synchronized GpsClockUpdater getInstance(Context context) {
@@ -93,118 +91,104 @@ public class GpsClockUpdater {
      * Safe to call repeatedly.
      */
     public static synchronized void refresh(Context context) {
-        GpsClockUpdater u = getInstance(context);
-        if (GeneralVariables.disciplineClockFromGPS) {
-            u.start();
-        } else {
-            u.stop();
-        }
+        getInstance(context).refreshSubscription();
     }
 
-    @SuppressLint("MissingPermission")
-    private synchronized void start() {
+    @Override
+    protected String tag() {
+        return TAG;
+    }
+
+    @Override
+    protected boolean isEnabled() {
+        return GeneralVariables.disciplineClockFromGPS;
+    }
+
+    // GPS_PROVIDER requires ACCESS_FINE_LOCATION; a coarse-only grant (Android 12+
+    // "approximate location") can't subscribe to it, so treating coarse as sufficient
+    // here would just trade this guard for a SecurityException on subscribe.
+    @Override
+    protected boolean hasRequiredPermission() {
+        if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            Log.d(TAG, "ACCESS_FINE_LOCATION not granted; skipping start");
+            return false;
+        }
+        return true;
+    }
+
+    @Override
+    protected synchronized boolean prepareStart() {
         long intervalMs = clampIntervalMinutes(GeneralVariables.gpsClockIntervalMinutes) * 60_000L;
 
         // Already running at the requested cadence — nothing to do.
-        if (!shouldResubscribe(running, subscribedIntervalMs, intervalMs)) return;
+        if (!shouldResubscribe(isRunning(), subscribedIntervalMs, intervalMs)) return false;
 
         // Running at a different cadence: drop the old subscription and re-subscribe. Use
         // unsubscribe(), NOT stop(): a re-tune must not disturb UtcTimer.delay (the GPS
         // offset is still valid) or the captured pre-GPS baseline.
-        if (running) unsubscribe();
+        if (isRunning()) unsubscribe();
 
-        // GPS_PROVIDER requires ACCESS_FINE_LOCATION; a coarse-only grant (Android 12+
-        // "approximate location") can't subscribe to it, so treating coarse as sufficient
-        // here would just trade this guard for a SecurityException below.
-        if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
-            Log.d(TAG, "ACCESS_FINE_LOCATION not granted; skipping start");
-            return;
-        }
-        if (locationManager == null) {
-            locationManager = (LocationManager) appContext.getSystemService(Context.LOCATION_SERVICE);
-        }
-        if (locationManager == null) {
-            Log.e(TAG, "No LocationManager available");
-            return;
-        }
+        pendingIntervalMs = intervalMs;
+        return true;
+    }
 
-        listener = new LocationListener() {
-            @Override
-            public void onLocationChanged(Location location) {
-                applyFix(location);
-            }
-
-            @Override
-            public void onStatusChanged(String provider, int status, Bundle extras) {}
-
-            @Override
-            public void onProviderEnabled(String provider) {}
-
-            @Override
-            public void onProviderDisabled(String provider) {}
-        };
-
+    @SuppressLint("MissingPermission")
+    @Override
+    protected boolean subscribeProviders(LocationManager manager, LocationListener listener) {
         try {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, intervalMs, 0f,
+            manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, pendingIntervalMs, 0f,
                     listener, Looper.getMainLooper());
+            return true;
         } catch (SecurityException se) {
             Log.e(TAG, "SecurityException subscribing to GPS: " + se.getMessage());
-            listener = null;
-            return;
+            return false;
         } catch (IllegalArgumentException iae) {
             // No GPS provider on this device — gracefully no-op (issue #373 acceptance).
             Log.d(TAG, "GPS provider unavailable on this device");
-            listener = null;
-            return;
+            return false;
         }
+    }
 
+    @Override
+    protected synchronized void onSubscribed() {
         // Capture the pre-GPS offset once, before any fix overwrites UtcTimer.delay, so stop()
         // can hand the clock back exactly as it was. Only on the first start() — a re-tune
         // reaches here with delay already holding a GPS offset, which must not be captured.
         if (savedDelayBeforeGps == NO_SAVED_DELAY) {
             savedDelayBeforeGps = UtcTimer.delay;
         }
-
-        running = true;
-        subscribedIntervalMs = intervalMs;
-        Log.d(TAG, "Started GPS clock discipline, interval " + intervalMs + "ms");
-
-        // Discipline immediately from the last known GPS fix so the clock snaps into
-        // alignment without waiting a full interval for the next fix.
-        new Handler(Looper.getMainLooper()).post(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    Location last = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-                    if (last != null) applyFix(last);
-                } catch (SecurityException se) {
-                    Log.e(TAG, "getLastKnownLocation denied: " + se.getMessage());
-                }
-            }
-        });
+        subscribedIntervalMs = pendingIntervalMs;
+        Log.d(TAG, "Started GPS clock discipline, interval " + pendingIntervalMs + "ms");
     }
 
-    /**
-     * Drop the location subscription without touching the clock. Used both by the public
-     * {@link #stop()} and by a re-tune in {@link #start()} (which must keep the GPS offset).
-     */
-    private synchronized void unsubscribe() {
-        if (locationManager != null && listener != null) {
-            try {
-                locationManager.removeUpdates(listener);
-            } catch (Exception e) {
-                Log.e(TAG, "removeUpdates failed: " + e.getMessage());
-            }
-        }
-        listener = null;
-        running = false;
+    @Override
+    protected synchronized void onUnsubscribed() {
         subscribedIntervalMs = -1;
     }
 
+    @Override
+    protected void onFix(Location location) {
+        applyFix(location);
+    }
+
+    // Discipline immediately from the last known GPS fix so the clock snaps into
+    // alignment without waiting a full interval for the next fix.
+    @SuppressLint("MissingPermission")
+    @Override
+    protected void applyLastKnown() {
+        try {
+            Location last = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            if (last != null) applyFix(last);
+        } catch (SecurityException se) {
+            Log.e(TAG, "getLastKnownLocation denied: " + se.getMessage());
+        }
+    }
+
     /** Disable discipline: unsubscribe and restore the clock to its pre-GPS offset. */
-    private synchronized void stop() {
-        if (!running && savedDelayBeforeGps == NO_SAVED_DELAY) return;
+    @Override
+    protected synchronized void stop() {
+        if (!isRunning() && savedDelayBeforeGps == NO_SAVED_DELAY) return;
         unsubscribe();
 
         // Return UtcTimer.delay to whatever it was before GPS took over (an NTP sync, a manual
@@ -226,7 +210,7 @@ public class GpsClockUpdater {
         // main looper when the user disabled discipline (stop() flipped running=false) is
         // dropped instead of re-writing the clock after we've handed it back.
         Integer offsetMs = computeAppliedOffset(
-                running,
+                isRunning(),
                 fixUtcMs,
                 location.getElapsedRealtimeNanos(),
                 SystemClock.elapsedRealtimeNanos(),
@@ -315,7 +299,7 @@ public class GpsClockUpdater {
     }
 
     /**
-     * Whether {@link #start()} needs to (re)subscribe: yes when not currently running, or when
+     * Whether {@code start()} needs to (re)subscribe: yes when not currently running, or when
      * running at a cadence different from the one requested. A no-op when already subscribed at
      * the requested interval, so repeated refreshes don't churn the location subscription.
      */

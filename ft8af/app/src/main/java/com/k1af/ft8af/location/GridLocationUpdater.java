@@ -7,8 +7,6 @@ import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
-import android.os.Bundle;
-import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
@@ -24,9 +22,12 @@ import com.google.android.gms.maps.model.LatLng;
  * is enabled, and writes the resulting Maidenhead grid back to GeneralVariables + config.
  *
  * Singleton — call {@link #refresh(Context, MainViewModel)} whenever the toggle changes
- * or when the activity starts.
+ * or when the activity starts. The subscription lifecycle lives in
+ * {@link LocationSubscriber} (issue #380); this class supplies the grid-specific pieces:
+ * all enabled providers at a fixed 5-minute cadence, and lat/lon → Maidenhead grid on
+ * each fix.
  */
-public class GridLocationUpdater {
+public class GridLocationUpdater extends LocationSubscriber {
     private static final String TAG = "GridLocationUpdater";
 
     // 5-minute update interval, 1km min distance — keeps battery use light.
@@ -35,13 +36,16 @@ public class GridLocationUpdater {
 
     private static GridLocationUpdater instance;
 
-    private final Context appContext;
-    private LocationManager locationManager;
-    private boolean running = false;
-    private LocationListener listener;
+    // The view model whose databaseOpr receives grid writes. refresh() records the caller's
+    // view model in requestedViewModel; prepareStart() latches it into mainViewModel only
+    // when a start actually proceeds. This mirrors the pre-refactor behavior, where the
+    // anonymous listener captured the view model at subscribe time — a refresh() while
+    // already running kept writing through the originally captured view model.
+    private MainViewModel requestedViewModel;
+    private MainViewModel mainViewModel;
 
     private GridLocationUpdater(Context context) {
-        this.appContext = context.getApplicationContext();
+        super(context);
     }
 
     public static synchronized GridLocationUpdater getInstance(Context context) {
@@ -57,52 +61,51 @@ public class GridLocationUpdater {
      */
     public static synchronized void refresh(Context context, MainViewModel mainViewModel) {
         GridLocationUpdater u = getInstance(context);
-        if (GeneralVariables.autoUpdateGridFromGPS) {
-            u.start(mainViewModel);
-        } else {
-            u.stop();
-        }
+        u.setRequestedViewModel(mainViewModel);
+        u.refreshSubscription();
     }
 
-    @SuppressLint("MissingPermission")
-    private synchronized void start(final MainViewModel mainViewModel) {
-        if (running) return;
+    private synchronized void setRequestedViewModel(MainViewModel viewModel) {
+        this.requestedViewModel = viewModel;
+    }
+
+    @Override
+    protected String tag() {
+        return TAG;
+    }
+
+    @Override
+    protected boolean isEnabled() {
+        return GeneralVariables.autoUpdateGridFromGPS;
+    }
+
+    @Override
+    protected boolean hasRequiredPermission() {
         if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.ACCESS_FINE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED
                 && ContextCompat.checkSelfPermission(appContext, Manifest.permission.ACCESS_COARSE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED) {
             Log.d(TAG, "Location permission not granted; skipping start");
-            return;
+            return false;
         }
-        if (locationManager == null) {
-            locationManager = (LocationManager) appContext.getSystemService(Context.LOCATION_SERVICE);
-        }
-        if (locationManager == null) {
-            Log.e(TAG, "No LocationManager available");
-            return;
-        }
+        return true;
+    }
 
-        listener = new LocationListener() {
-            @Override
-            public void onLocationChanged(Location location) {
-                applyGridFromLatLng(location.getLatitude(), location.getLongitude(), mainViewModel);
-            }
+    @Override
+    protected synchronized boolean prepareStart() {
+        if (isRunning()) return false;
+        mainViewModel = requestedViewModel;
+        return true;
+    }
 
-            @Override
-            public void onStatusChanged(String provider, int status, Bundle extras) {}
-
-            @Override
-            public void onProviderEnabled(String provider) {}
-
-            @Override
-            public void onProviderDisabled(String provider) {}
-        };
-
-        // Use the best available provider; subscribe to both for robustness.
+    // Use the best available provider; subscribe to all enabled ones for robustness.
+    @SuppressLint("MissingPermission")
+    @Override
+    protected boolean subscribeProviders(LocationManager manager, LocationListener listener) {
         boolean subscribed = false;
-        for (String provider : locationManager.getProviders(true)) {
+        for (String provider : manager.getProviders(true)) {
             try {
-                locationManager.requestLocationUpdates(provider, MIN_TIME_MS, MIN_DISTANCE_M,
+                manager.requestLocationUpdates(provider, MIN_TIME_MS, MIN_DISTANCE_M,
                         listener, Looper.getMainLooper());
                 subscribed = true;
             } catch (SecurityException se) {
@@ -113,35 +116,22 @@ public class GridLocationUpdater {
         }
         if (!subscribed) {
             Log.d(TAG, "No providers subscribed");
-            listener = null;
-            return;
         }
-
-        running = true;
-
-        // Also fire an immediate update from last known location so the grid refreshes promptly.
-        new Handler(Looper.getMainLooper()).post(new Runnable() {
-            @Override
-            public void run() {
-                LatLng latLng = MaidenheadGrid.getLocalLocation(appContext);
-                if (latLng != null) {
-                    applyGridFromLatLng(latLng.latitude, latLng.longitude, mainViewModel);
-                }
-            }
-        });
+        return subscribed;
     }
 
-    private synchronized void stop() {
-        if (!running) return;
-        if (locationManager != null && listener != null) {
-            try {
-                locationManager.removeUpdates(listener);
-            } catch (Exception e) {
-                Log.e(TAG, "removeUpdates failed: " + e.getMessage());
-            }
+    @Override
+    protected void onFix(Location location) {
+        applyGridFromLatLng(location.getLatitude(), location.getLongitude(), mainViewModel);
+    }
+
+    // Immediate update from the last known location so the grid refreshes promptly.
+    @Override
+    protected void applyLastKnown() {
+        LatLng latLng = MaidenheadGrid.getLocalLocation(appContext);
+        if (latLng != null) {
+            applyGridFromLatLng(latLng.latitude, latLng.longitude, mainViewModel);
         }
-        listener = null;
-        running = false;
     }
 
     private void applyGridFromLatLng(double lat, double lon, MainViewModel mainViewModel) {
