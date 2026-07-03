@@ -746,14 +746,16 @@ public class DatabaseOpr extends SQLiteOpenHelper {
      * Backs the settings-export feature (issue #357). Must be called off the main
      * thread (it touches SQLite directly).
      */
-    @SuppressLint("Range")
     public java.util.LinkedHashMap<String, String> getAllConfigSync() {
         java.util.LinkedHashMap<String, String> map = new java.util.LinkedHashMap<>();
-        Cursor cursor = db.rawQuery("select KeyName,Value from config", null);
+        // ORDER BY: SQLite guarantees no row order without it, so the map's insertion
+        // order (which this method promises) would otherwise be nondeterministic.
+        Cursor cursor = db.rawQuery("select KeyName,Value from config order by KeyName", null);
         try {
+            int keyIdx = cursor.getColumnIndexOrThrow("KeyName");
+            int valueIdx = cursor.getColumnIndexOrThrow("Value");
             while (cursor.moveToNext()) {
-                map.put(cursor.getString(cursor.getColumnIndex("KeyName")),
-                        cursor.getString(cursor.getColumnIndex("Value")));
+                map.put(cursor.getString(keyIdx), cursor.getString(valueIdx));
             }
         } finally {
             cursor.close();
@@ -768,11 +770,19 @@ public class DatabaseOpr extends SQLiteOpenHelper {
      * to re-hydrate {@link GeneralVariables} from the freshly written values.
      */
     public void writeConfigSync(java.util.Map<String, String> config) {
-        for (java.util.Map.Entry<String, String> entry : config.entrySet()) {
-            String value = entry.getValue() == null ? "" : entry.getValue();
-            db.execSQL("DELETE FROM config where KeyName =?", new String[]{entry.getKey()});
-            db.execSQL("INSERT INTO config (KeyName,Value)Values(?,?)",
-                    new String[]{entry.getKey(), value});
+        // One transaction: an interrupted import can't leave the table half-updated,
+        // and batching the statements is much faster than autocommitting each one.
+        db.beginTransaction();
+        try {
+            for (java.util.Map.Entry<String, String> entry : config.entrySet()) {
+                String value = entry.getValue() == null ? "" : entry.getValue();
+                db.execSQL("DELETE FROM config where KeyName =?", new String[]{entry.getKey()});
+                db.execSQL("INSERT INTO config (KeyName,Value)Values(?,?)",
+                        new String[]{entry.getKey(), value});
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
         }
     }
 

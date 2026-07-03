@@ -108,7 +108,7 @@ class SettingsBackupTest {
 
     @Test
     fun `parse rejects a future format version`() {
-        val future = "{\"formatVersion\":999,\"config\":{\"callsign\":\"K1AF\"}}"
+        val future = "{\"appName\":\"FT8AF\",\"formatVersion\":999,\"config\":{\"callsign\":\"K1AF\"}}"
         val e = runCatching { SettingsBackup.parseBackupJson(future) }.exceptionOrNull()
         assertThat(e).isInstanceOf(IllegalArgumentException::class.java)
         assertThat(e).hasMessageThat().contains("newer")
@@ -116,8 +116,25 @@ class SettingsBackupTest {
 
     @Test
     fun `parse rejects a backup with an empty config`() {
-        val empty = "{\"formatVersion\":1,\"config\":{}}"
+        val empty = "{\"appName\":\"FT8AF\",\"formatVersion\":1,\"config\":{}}"
         val e = runCatching { SettingsBackup.parseBackupJson(empty) }.exceptionOrNull()
+        assertThat(e).isInstanceOf(IllegalArgumentException::class.java)
+    }
+
+    @Test
+    fun `parse rejects JSON missing the appName marker`() {
+        // formatVersion+config alone must not be treated as one of our backups.
+        val unmarked = "{\"formatVersion\":1,\"config\":{\"callsign\":\"K1AF\"}}"
+        val e = runCatching { SettingsBackup.parseBackupJson(unmarked) }.exceptionOrNull()
+        assertThat(e).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(e).hasMessageThat().contains("FT8AF")
+    }
+
+    @Test
+    fun `parse rejects JSON with a foreign appName`() {
+        val foreign =
+            "{\"appName\":\"OtherApp\",\"formatVersion\":1,\"config\":{\"callsign\":\"K1AF\"}}"
+        val e = runCatching { SettingsBackup.parseBackupJson(foreign) }.exceptionOrNull()
         assertThat(e).isInstanceOf(IllegalArgumentException::class.java)
     }
 

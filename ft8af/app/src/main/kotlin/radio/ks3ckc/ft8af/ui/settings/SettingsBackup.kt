@@ -89,6 +89,12 @@ object SettingsBackup {
         } catch (e: Exception) {
             throw IllegalArgumentException("Not a valid backup file (invalid JSON).")
         }
+        // The appName marker is what actually distinguishes our backups from any
+        // other JSON that happens to carry formatVersion+config keys — reject
+        // anything not stamped by us before looking at versions.
+        if (root.optString("appName") != APP_NAME) {
+            throw IllegalArgumentException("Not a valid FT8AF settings backup.")
+        }
         if (!root.has("config") || !root.has("formatVersion")) {
             throw IllegalArgumentException("Not a valid FT8AF settings backup.")
         }
