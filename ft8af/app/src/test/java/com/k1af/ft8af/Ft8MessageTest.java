@@ -314,6 +314,46 @@ public class Ft8MessageTest {
         assertThat(telemetry.isJunkDecode()).isFalse();
     }
 
+    // ---- copy-constructor hash resolution (#392) ----------------------------
+
+    @Test
+    public void copyConstructor_resolvesHashedCompoundCallFromSeededHashList() {
+        // Issue #392: a station answering a compound call (SV8/DM5HF) sends a
+        // standard frame in which that call is carried only as a 22-bit hash.
+        // The decoder can't resolve it and returns "<...>", but the JNI now
+        // preserves the raw hash in callToHash22 (ft8_call_hash.h) so the copy
+        // constructor can resolve it against the hash list the app seeds with
+        // the operator's own call. i3=1 keeps this off the native getHashNN
+        // path, which is exercised host-side in test_call_hash.c.
+        long h22 = 0x2ABCDEL; // stand-in for FT8Package.getHash22("SV8/DM5HF")
+        Ft8Message.hashList.addHash(h22, "SV8/DM5HF");
+
+        Ft8Message src = new Ft8Message(FT8Common.FT8_MODE);
+        src.i3 = 1; // standard frame
+        src.callsignTo = "<...>";
+        src.callsignFrom = "K1ABC";
+        src.extraInfo = "JN35";
+        src.callToHash22 = h22;
+
+        Ft8Message copy = new Ft8Message(src);
+        assertThat(copy.callsignTo).isEqualTo("<SV8/DM5HF>");
+        assertThat(copy.callsignFrom).isEqualTo("K1ABC");
+    }
+
+    @Test
+    public void copyConstructor_leavesUnknownHashAsPlaceholder() {
+        // A hash the list has never seen stays "<...>" — no false resolution.
+        Ft8Message src = new Ft8Message(FT8Common.FT8_MODE);
+        src.i3 = 1;
+        src.callsignTo = "<...>";
+        src.callsignFrom = "K1ABC";
+        src.extraInfo = "JN35";
+        src.callToHash22 = 0x155555L; // not seeded
+
+        Ft8Message copy = new Ft8Message(src);
+        assertThat(copy.callsignTo).isEqualTo("<...>");
+    }
+
     // ---- simple formatters: getDt / getdB / getFreq_hz ----------------------
 
     @Test
