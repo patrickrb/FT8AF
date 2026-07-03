@@ -100,7 +100,7 @@ jobs:
           objs=()
           while IFS= read -r xctest; do
             objs+=("$xctest/Contents/MacOS/$(basename "${xctest%.xctest}")")
-          done < <(find "$bin" -name '*.xctest' -maxdepth 1)
+          done < <(find "$bin" -maxdepth 1 -name '*.xctest')
           if [[ ${#objs[@]} -eq 0 ]]; then
             echo "::error::No .xctest bundle found under $bin"; exit 1
           fi

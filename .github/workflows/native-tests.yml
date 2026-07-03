@@ -38,9 +38,18 @@ jobs:
       # continue-on-error, so a coverage hiccup (tool mismatch, apt flake) can never
       # fail the required golden-vector check. The source lists mirror the golden
       # and dev625 builds in run_host_tests.sh — keep them in sync when that changes.
+      # DEBIAN_FRONTEND=noninteractive + DPkg::Lock::Timeout guard against the two
+      # ways apt hangs forever on hosted runners (a debconf prompt that -y doesn't
+      # suppress, and the dpkg lock held by a background apt-daily job) — this step
+      # is best-effort, but a hang would still stall the required golden-encode job.
       - name: Install LLVM coverage tools
         continue-on-error: true
-        run: sudo apt-get update && sudo apt-get install -y llvm
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update -o DPkg::Lock::Timeout=600
+          sudo apt-get install -y --no-install-recommends \
+            -o DPkg::Lock::Timeout=600 llvm
 
       - name: Build & run suites with coverage
         continue-on-error: true
