@@ -67,6 +67,16 @@ internal data class TxStripActionState(
 internal fun clampVolume(current: Int, delta: Int): Int =
     (current + delta).coerceIn(0, 100)
 
+/**
+ * Convert a 0.0–1.0 volume fraction (GeneralVariables.volumePercent) to the
+ * whole-percent value shown on the slider. Rounds rather than truncates so a
+ * stored level round-trips to the same integer: e.g. 59 -> 0.59f -> 58.999… would
+ * truncate back to 58, making the per-band restore toast (which reports the stored
+ * int) disagree with the slider by 1. Extracted for unit-testing.
+ */
+internal fun volumePercentToDisplay(fraction: Float): Int =
+    Math.round(fraction * 100).coerceIn(0, 100)
+
 internal fun txStripActionState(isActivated: Boolean, huntEnabled: Boolean) = TxStripActionState(
     huntDisabled = isActivated && !huntEnabled,
     huntActive = huntEnabled,

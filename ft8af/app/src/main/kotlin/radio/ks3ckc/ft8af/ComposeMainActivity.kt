@@ -695,7 +695,7 @@ class ComposeMainActivity : AppCompatActivity() {
                 val newVol = (GeneralVariables.volumePercent + delta).coerceIn(0.0f, 1.0f)
                 GeneralVariables.volumePercent = newVol
                 GeneralVariables.mutableVolumePercent.postValue(newVol)
-                val intVal = (newVol * 100).toInt()
+                val intVal = radio.ks3ckc.ft8af.ui.components.volumePercentToDisplay(newVol)
                 mainViewModel.databaseOpr.writeConfig("volumeValue", intVal.toString(), null)
                 mainViewModel.baseRig?.connector?.setRFVolume(intVal)
                 // Track this band's saved level when per-band saving is on (#355).

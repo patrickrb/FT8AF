@@ -48,6 +48,7 @@ import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.FT8AFIconButton
 import radio.ks3ckc.ft8af.ui.components.FT8AFIcons
 import radio.ks3ckc.ft8af.ui.components.IntSlider
+import radio.ks3ckc.ft8af.ui.components.volumePercentToDisplay
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 import radio.ks3ckc.ft8af.ui.components.SettingsRow
 import radio.ks3ckc.ft8af.ui.components.Toggle
@@ -88,10 +89,10 @@ fun RadioAudioSettings(
     val volumeLive by GeneralVariables.mutableVolumePercent.observeAsState(
         GeneralVariables.volumePercent,
     )
-    var txVolume by remember { mutableIntStateOf((GeneralVariables.volumePercent * 100).toInt()) }
+    var txVolume by remember { mutableIntStateOf(volumePercentToDisplay(GeneralVariables.volumePercent)) }
     // Keep txVolume in sync when hardware buttons (or other sources) update the LiveData
     LaunchedEffect(volumeLive) {
-        txVolume = ((volumeLive ?: GeneralVariables.volumePercent) * 100).toInt()
+        txVolume = volumePercentToDisplay(volumeLive ?: GeneralVariables.volumePercent)
     }
 
     // Observe serial ports for USB Cable picker

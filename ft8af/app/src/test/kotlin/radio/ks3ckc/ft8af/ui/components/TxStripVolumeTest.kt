@@ -73,4 +73,30 @@ class TxStripVolumeTest {
     fun `boundary value 0 with zero delta`() {
         assertThat(clampVolume(0, 0)).isEqualTo(0)
     }
+
+    // -- volumePercentToDisplay --
+
+    @Test
+    fun `display rounds 0_59 fraction to 59 not 58`() {
+        // Regression: 0.59f * 100 == 58.999… truncates to 58, disagreeing with the
+        // stored int 59 that the per-band restore toast reports (#355).
+        assertThat(volumePercentToDisplay(0.59f)).isEqualTo(59)
+    }
+
+    @Test
+    fun `display round-trips every whole percent`() {
+        for (p in 0..100) {
+            assertThat(volumePercentToDisplay(p / 100f)).isEqualTo(p)
+        }
+    }
+
+    @Test
+    fun `display clamps above 1_0`() {
+        assertThat(volumePercentToDisplay(1.5f)).isEqualTo(100)
+    }
+
+    @Test
+    fun `display clamps below 0`() {
+        assertThat(volumePercentToDisplay(-0.2f)).isEqualTo(0)
+    }
 }

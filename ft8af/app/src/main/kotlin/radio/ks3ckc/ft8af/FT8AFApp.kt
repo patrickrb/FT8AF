@@ -50,6 +50,7 @@ import radio.ks3ckc.ft8af.ui.components.FT8AFTab
 import radio.ks3ckc.ft8af.ui.components.FrequencyPickerSheet
 import radio.ks3ckc.ft8af.ui.components.HoundSetupSheet
 import radio.ks3ckc.ft8af.ui.components.formatMhz
+import radio.ks3ckc.ft8af.ui.components.volumePercentToDisplay
 import radio.ks3ckc.ft8af.ui.components.QsoCelebration
 import radio.ks3ckc.ft8af.ui.components.SlotTimerBar
 import radio.ks3ckc.ft8af.ui.components.TabBar
@@ -108,9 +109,9 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     val volumeLive by GeneralVariables.mutableVolumePercent.observeAsState(
         GeneralVariables.volumePercent,
     )
-    var txVolume by remember { mutableIntStateOf((GeneralVariables.volumePercent * 100).toInt()) }
+    var txVolume by remember { mutableIntStateOf(volumePercentToDisplay(GeneralVariables.volumePercent)) }
     LaunchedEffect(volumeLive) {
-        txVolume = ((volumeLive ?: GeneralVariables.volumePercent) * 100).toInt()
+        txVolume = volumePercentToDisplay(volumeLive ?: GeneralVariables.volumePercent)
     }
 
     // Inline volume slider visibility — observed so toggling in Settings
