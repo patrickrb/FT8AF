@@ -87,6 +87,10 @@ jobs:
       # build bin dir; llvm-cov turns those into lcov for Codecov. .build (vendored
       # SwiftPM checkouts) is excluded so the ios flag reflects our own sources.
       - name: Export iOS coverage to lcov
+        # Non-fatal: a coverage-export hiccup must never fail the required
+        # ios-gate (mirrors the native/desktop coverage guards). If this or the
+        # upload below no-ops, the simulator build still gates the PR.
+        continue-on-error: true
         working-directory: ios/FT8AFKit
         run: |
           set -euo pipefail

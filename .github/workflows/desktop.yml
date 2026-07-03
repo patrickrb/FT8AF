@@ -286,6 +286,22 @@ jobs:
             libudev-dev \
             libasound2-dev
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # cargo llvm-cov runs `cargo test`, which compiles build.rs ->
+      # tauri_build::build(). tauri.conf.json's frontendDist ("../dist") must
+      # exist at compile time, and cargo — unlike `tauri build` — does NOT run the
+      # configured beforeBuildCommand, so build the Vite frontend (outDir: dist)
+      # here first. Without this the crate fails to compile on a missing dist.
+      - name: Build frontend (produces desktop/dist for tauri-build)
+        working-directory: desktop
+        run: |
+          npm ci
+          npm run build
+
       - name: Run tests with coverage
         working-directory: desktop/src-tauri
         run: cargo llvm-cov --lcov --output-path desktop.lcov
