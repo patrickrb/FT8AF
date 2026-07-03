@@ -833,9 +833,25 @@ public class FT8TransmitSignal {
                 playLength, GeneralVariables.audioSampleRate));
         boolean success = usbDev.writeAudio(unscaled, GeneralVariables.audioSampleRate);
         GeneralVariables.fileLog(buildWriteAudioResultLog(success));
+        // A drop is invisible at the rig (it keys and shows normal behavior but
+        // transmits dead air), so tell the operator — unless the "failure" is
+        // just the user pressing STOP mid-message.
+        if (shouldWarnTxDropped(success, UsbAudioNative.writeCancelled)) {
+            ToastMessage.show(GeneralVariables.getStringFromResource(R.string.tx_audio_dropped));
+        }
 
         usbDev.close();
         afterPlayAudio();
+    }
+
+    /**
+     * Whether a failed USB-audio write warrants the on-screen "TX dropped"
+     * warning. A cancelled write is the operator's own STOP, not a fault.
+     *
+     * <p>Package-visible for testing.
+     */
+    static boolean shouldWarnTxDropped(boolean success, boolean cancelled) {
+        return !success && !cancelled;
     }
 
     /**
