@@ -437,9 +437,9 @@ public class GeneralVariables {
     public static boolean autoUpdateGridFromGPS = false;//Use device GPS to keep Maidenhead grid current
     public static boolean disciplineClockFromGPS = false;//Discipline the app clock (UtcTimer.delay) from GPS satellite time (issue #373). Off by default — consensual.
     public static int gpsClockIntervalMinutes = 5;//How often to re-read GPS time for clock discipline. Clamped 1-30 by GpsClockUpdater.
-    //Runtime status for the Time Sync UI (not persisted): wall-clock ms of the last successful
-    //GPS discipline (0 = never yet) and the offset it applied to UtcTimer.delay.
-    public static volatile long gpsClockLastSyncSystemMs = 0;
+    //Runtime status for the Time Sync UI (not persisted): the offset the last GPS fix applied
+    //to UtcTimer.delay. The last-sync *timestamp* is the retained value of mutableGpsClockSync
+    //below, so there's no separate field for it.
     public static volatile int gpsClockOffsetMs = 0;
     //Posted each time a GPS fix disciplines the clock, so the Time Sync screen can recompose
     //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.

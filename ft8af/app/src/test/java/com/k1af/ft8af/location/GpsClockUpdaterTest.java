@@ -107,4 +107,62 @@ public class GpsClockUpdaterTest {
         assertThat(GpsClockUpdater.clampIntervalMinutes(1)).isEqualTo(1);
         assertThat(GpsClockUpdater.clampIntervalMinutes(30)).isEqualTo(30);
     }
+
+    // ---- parseIntervalMinutes (shared with DatabaseOpr config load) ----
+
+    @Test
+    public void parseInterval_nullOrBlankOrGarbage_fallsBackToDefault() {
+        assertThat(GpsClockUpdater.parseIntervalMinutes(null)).isEqualTo(GpsClockUpdater.DEFAULT_INTERVAL_MINUTES);
+        assertThat(GpsClockUpdater.parseIntervalMinutes("")).isEqualTo(GpsClockUpdater.DEFAULT_INTERVAL_MINUTES);
+        assertThat(GpsClockUpdater.parseIntervalMinutes("abc")).isEqualTo(GpsClockUpdater.DEFAULT_INTERVAL_MINUTES);
+    }
+
+    @Test
+    public void parseInterval_parsesAndClamps() {
+        assertThat(GpsClockUpdater.parseIntervalMinutes(" 10 ")).isEqualTo(10);
+        assertThat(GpsClockUpdater.parseIntervalMinutes("0")).isEqualTo(GpsClockUpdater.MIN_INTERVAL_MINUTES);
+        assertThat(GpsClockUpdater.parseIntervalMinutes("999")).isEqualTo(GpsClockUpdater.MAX_INTERVAL_MINUTES);
+    }
+
+    // ---- shouldResubscribe (start()'s re-tune / no-op decision) ----
+
+    @Test
+    public void resubscribe_whenNotRunning() {
+        // Enabling from a stopped state always subscribes, regardless of the stale interval.
+        assertThat(GpsClockUpdater.shouldResubscribe(false, -1, 300_000L)).isTrue();
+    }
+
+    @Test
+    public void resubscribe_falseWhenAlreadyAtRequestedCadence() {
+        // Repeated refresh at the same interval must not churn the subscription.
+        assertThat(GpsClockUpdater.shouldResubscribe(true, 300_000L, 300_000L)).isFalse();
+    }
+
+    @Test
+    public void resubscribe_trueWhenCadenceChanges() {
+        assertThat(GpsClockUpdater.shouldResubscribe(true, 300_000L, 60_000L)).isTrue();
+    }
+
+    // ---- computeAppliedOffset (applyFix guard: not-running / insane are dropped) ----
+
+    @Test
+    public void appliedOffset_nullWhenNotRunning() {
+        // A fix that raced past a disable (running flipped false) must not touch the clock.
+        Integer r = GpsClockUpdater.computeAppliedOffset(false, 10_000L, 5000L * MS, 5000L * MS, 8_000L);
+        assertThat(r).isNull();
+    }
+
+    @Test
+    public void appliedOffset_nullWhenInsane() {
+        // fixUtc==0 (no time in the fix) is rejected even while running.
+        Integer r = GpsClockUpdater.computeAppliedOffset(true, 0L, 5000L * MS, 5000L * MS, 8_000L);
+        assertThat(r).isNull();
+    }
+
+    @Test
+    public void appliedOffset_returnsOffsetWhenRunningAndSane() {
+        // GPS UTC now = 10_000 (fresh fix), device reads 8_000 => +2_000.
+        Integer r = GpsClockUpdater.computeAppliedOffset(true, 10_000L, 5000L * MS, 5000L * MS, 8_000L);
+        assertThat(r).isEqualTo(2_000);
+    }
 }

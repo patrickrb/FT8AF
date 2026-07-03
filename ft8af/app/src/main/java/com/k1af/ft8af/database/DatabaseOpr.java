@@ -2478,13 +2478,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.disciplineClockFromGPS = result.equals("1");
                 }
                 if (name.equalsIgnoreCase("gpsClockIntervalMin")) {//GPS discipline update interval (minutes)
-                    int min;
-                    try {
-                        min = Integer.parseInt(result.trim());
-                    } catch (NumberFormatException e) {
-                        min = 5;
-                    }
-                    GeneralVariables.gpsClockIntervalMinutes = com.k1af.ft8af.location.GpsClockUpdater.clampIntervalMinutes(min);
+                    GeneralVariables.gpsClockIntervalMinutes =
+                            com.k1af.ft8af.location.GpsClockUpdater.parseIntervalMinutes(result);
                 }
                 if (name.equalsIgnoreCase("pttDelay")) {//PTT delay setting
                     GeneralVariables.pttDelay = result.equals("") ? 100 : Integer.parseInt(result);

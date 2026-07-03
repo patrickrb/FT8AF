@@ -405,6 +405,7 @@
     <string name="settings_time_suggest_none">No decodes yet — start receiving to get a suggestion.</string>
     <string name="settings_time_suggest_label">Recent average DT: %1$s</string>
     <string name="settings_time_suggest_apply">Apply suggested correction</string>
+    <string name="settings_time_correction_gps_locked">GPS clock discipline is controlling the clock — turn it off below to adjust manually.</string>
 
     <!-- ===== Settings: Time Sync (GPS clock discipline, issue #373) ===== -->
     <string name="settings_gps_clock_section">GPS Clock Discipline</string>

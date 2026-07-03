@@ -63,9 +63,11 @@ fun TimeSyncSettings(
     // GPS clock discipline (issue #373).
     var disciplineFromGps by remember { mutableStateOf(GeneralVariables.disciplineClockFromGPS) }
     var gpsIntervalMin by remember { mutableIntStateOf(GeneralVariables.gpsClockIntervalMinutes) }
-    // Re-read the status readout whenever a GPS fix disciplines the clock.
+    // Re-read the status readout whenever a GPS fix disciplines the clock. The LiveData
+    // retains its last posted timestamp, so seeding from .value shows a prior sync when the
+    // screen is reopened in the same session.
     val lastGpsSync by GeneralVariables.mutableGpsClockSync.observeAsState(
-        if (GeneralVariables.gpsClockLastSyncSystemMs > 0) GeneralVariables.gpsClockLastSyncSystemMs else null
+        GeneralVariables.mutableGpsClockSync.value
     )
 
     // Latest cycle's average decode DT (seconds), posted in MainViewModel.afterDecode.
@@ -109,27 +111,41 @@ fun TimeSyncSettings(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    // While GPS discipline owns the clock the manual controls are inert —
+                    // editing them would fight the next GPS fix and overwrite the persisted
+                    // manual value. Disable them and say why.
+                    val manualEnabled = !disciplineFromGps
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        StepButton("-0.5", Modifier.weight(1f)) { apply(stepCorrectionMs(correctionMs, -500)) }
-                        StepButton("-0.1", Modifier.weight(1f)) { apply(stepCorrectionMs(correctionMs, -100)) }
-                        StepButton("+0.1", Modifier.weight(1f)) { apply(stepCorrectionMs(correctionMs, 100)) }
-                        StepButton("+0.5", Modifier.weight(1f)) { apply(stepCorrectionMs(correctionMs, 500)) }
+                        StepButton("-0.5", Modifier.weight(1f), manualEnabled) { apply(stepCorrectionMs(correctionMs, -500)) }
+                        StepButton("-0.1", Modifier.weight(1f), manualEnabled) { apply(stepCorrectionMs(correctionMs, -100)) }
+                        StepButton("+0.1", Modifier.weight(1f), manualEnabled) { apply(stepCorrectionMs(correctionMs, 100)) }
+                        StepButton("+0.5", Modifier.weight(1f), manualEnabled) { apply(stepCorrectionMs(correctionMs, 500)) }
                     }
-                    Text(
-                        text = stringResource(R.string.settings_time_correction_reset),
-                        color = if (correctionMs == 0) TextFaint else Accent,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = correctionMs != 0) { apply(0) }
-                            .padding(vertical = 6.dp),
-                    )
+                    if (disciplineFromGps) {
+                        Text(
+                            text = stringResource(R.string.settings_time_correction_gps_locked),
+                            color = TextMuted,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.settings_time_correction_reset),
+                            color = if (correctionMs == 0) TextFaint else Accent,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = correctionMs != 0) { apply(0) }
+                                .padding(vertical = 6.dp),
+                        )
+                    }
                 }
             }
             Text(
@@ -326,18 +342,19 @@ private fun IntervalChip(
 private fun StepButton(
     label: String,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     Box(
         modifier = modifier
             .border(BorderStroke(1.dp, BorderStrong), RoundedCornerShape(10.dp))
-            .clickable { onClick() }
+            .clickable(enabled = enabled) { onClick() }
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            color = Accent,
+            color = if (enabled) Accent else TextFaint,
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = GeistMonoFamily,

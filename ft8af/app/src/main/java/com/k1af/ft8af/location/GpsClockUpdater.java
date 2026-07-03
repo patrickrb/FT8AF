@@ -54,14 +54,26 @@ public class GpsClockUpdater {
     /** Configurable update-interval bounds (minutes), per issue #373. */
     static final int MIN_INTERVAL_MINUTES = 1;
     static final int MAX_INTERVAL_MINUTES = 30;
+    /** Default interval (minutes) when the persisted value is absent or unparseable. */
+    static final int DEFAULT_INTERVAL_MINUTES = 5;
+
+    /** Sentinel for {@link #savedDelayBeforeGps}: no pre-GPS offset captured. */
+    private static final int NO_SAVED_DELAY = Integer.MIN_VALUE;
 
     private static GpsClockUpdater instance;
 
     private final Context appContext;
     private LocationManager locationManager;
-    private boolean running = false;
+    // running is read from applyFix (main looper) without holding the monitor, so it must be
+    // volatile for the disable/stop() write to be visible and abort a late in-flight fix.
+    private volatile boolean running = false;
     private long subscribedIntervalMs = -1;
     private LocationListener listener;
+    // The offset UtcTimer.delay held *before* GPS discipline took it over (NTP's %-15000
+    // sync, a manual correction, or 0). Captured on the first start() and restored by stop()
+    // so disabling GPS returns the clock to its pre-GPS state instead of clobbering it with
+    // manualTimeCorrectionMs, which NTP never writes. NO_SAVED_DELAY means "not disciplining".
+    private int savedDelayBeforeGps = NO_SAVED_DELAY;
 
     private GpsClockUpdater(Context context) {
         this.appContext = context.getApplicationContext();
@@ -92,10 +104,12 @@ public class GpsClockUpdater {
         long intervalMs = clampIntervalMinutes(GeneralVariables.gpsClockIntervalMinutes) * 60_000L;
 
         // Already running at the requested cadence — nothing to do.
-        if (running && intervalMs == subscribedIntervalMs) return;
+        if (!shouldResubscribe(running, subscribedIntervalMs, intervalMs)) return;
 
-        // Running at a different cadence: tear the old subscription down and re-subscribe.
-        if (running) stop();
+        // Running at a different cadence: drop the old subscription and re-subscribe. Use
+        // unsubscribe(), NOT stop(): a re-tune must not disturb UtcTimer.delay (the GPS
+        // offset is still valid) or the captured pre-GPS baseline.
+        if (running) unsubscribe();
 
         if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.ACCESS_FINE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED
@@ -142,6 +156,13 @@ public class GpsClockUpdater {
             return;
         }
 
+        // Capture the pre-GPS offset once, before any fix overwrites UtcTimer.delay, so stop()
+        // can hand the clock back exactly as it was. Only on the first start() — a re-tune
+        // reaches here with delay already holding a GPS offset, which must not be captured.
+        if (savedDelayBeforeGps == NO_SAVED_DELAY) {
+            savedDelayBeforeGps = UtcTimer.delay;
+        }
+
         running = true;
         subscribedIntervalMs = intervalMs;
         Log.d(TAG, "Started GPS clock discipline, interval " + intervalMs + "ms");
@@ -161,8 +182,11 @@ public class GpsClockUpdater {
         });
     }
 
-    private synchronized void stop() {
-        if (!running) return;
+    /**
+     * Drop the location subscription without touching the clock. Used both by the public
+     * {@link #stop()} and by a re-tune in {@link #start()} (which must keep the GPS offset).
+     */
+    private synchronized void unsubscribe() {
         if (locationManager != null && listener != null) {
             try {
                 locationManager.removeUpdates(listener);
@@ -173,33 +197,46 @@ public class GpsClockUpdater {
         listener = null;
         running = false;
         subscribedIntervalMs = -1;
+    }
 
-        // Hand the clock back to the persisted manual correction so disabling GPS
-        // doesn't strand the last GPS offset in place until the next relaunch.
-        UtcTimer.delay = GeneralVariables.manualTimeCorrectionMs;
-        Log.d(TAG, "Stopped GPS clock discipline; restored manual offset "
-                + GeneralVariables.manualTimeCorrectionMs + "ms");
+    /** Disable discipline: unsubscribe and restore the clock to its pre-GPS offset. */
+    private synchronized void stop() {
+        if (!running && savedDelayBeforeGps == NO_SAVED_DELAY) return;
+        unsubscribe();
+
+        // Return UtcTimer.delay to whatever it was before GPS took over (an NTP sync, a manual
+        // correction, or 0) rather than to manualTimeCorrectionMs — NTP writes delay but never
+        // manualTimeCorrectionMs, so restoring the latter would silently discard the NTP sync.
+        if (savedDelayBeforeGps != NO_SAVED_DELAY) {
+            UtcTimer.delay = savedDelayBeforeGps;
+            Log.d(TAG, "Stopped GPS clock discipline; restored pre-GPS offset "
+                    + savedDelayBeforeGps + "ms");
+            savedDelayBeforeGps = NO_SAVED_DELAY;
+        }
     }
 
     /** Compute, sanity-check, and apply the offset from a single GPS fix. */
     private void applyFix(Location location) {
         if (location == null) return;
         long fixUtcMs = location.getTime();
-        int offsetMs = gpsClockOffsetMs(
+        // computeAppliedOffset also re-checks running, so a fix that was already queued on the
+        // main looper when the user disabled discipline (stop() flipped running=false) is
+        // dropped instead of re-writing the clock after we've handed it back.
+        Integer offsetMs = computeAppliedOffset(
+                running,
                 fixUtcMs,
                 location.getElapsedRealtimeNanos(),
                 SystemClock.elapsedRealtimeNanos(),
                 System.currentTimeMillis());
 
-        if (!isOffsetSane(fixUtcMs, offsetMs)) {
-            Log.d(TAG, "Ignoring GPS fix: implausible offset " + offsetMs + "ms (fixUtc=" + fixUtcMs + ")");
+        if (offsetMs == null) {
+            Log.d(TAG, "Ignoring GPS fix (not running or implausible): fixUtc=" + fixUtcMs);
             return;
         }
 
         UtcTimer.delay = offsetMs;
         GeneralVariables.gpsClockOffsetMs = offsetMs;
-        GeneralVariables.gpsClockLastSyncSystemMs = System.currentTimeMillis();
-        GeneralVariables.mutableGpsClockSync.postValue(GeneralVariables.gpsClockLastSyncSystemMs);
+        GeneralVariables.mutableGpsClockSync.postValue(System.currentTimeMillis());
         Log.d(TAG, "GPS clock discipline applied offset " + offsetMs + "ms");
     }
 
@@ -245,5 +282,44 @@ public class GpsClockUpdater {
     public static int clampIntervalMinutes(int minutes) {
         if (minutes < MIN_INTERVAL_MINUTES) return MIN_INTERVAL_MINUTES;
         return Math.min(minutes, MAX_INTERVAL_MINUTES);
+    }
+
+    /**
+     * Parse a persisted interval string into a valid interval (minutes): the default when it
+     * is null/blank/non-numeric, otherwise the parsed value clamped into range. Shared with
+     * {@code DatabaseOpr}'s config load so the fallback and clamp are covered by one test.
+     */
+    public static int parseIntervalMinutes(String raw) {
+        if (raw == null) return DEFAULT_INTERVAL_MINUTES;
+        int minutes;
+        try {
+            minutes = Integer.parseInt(raw.trim());
+        } catch (NumberFormatException e) {
+            return DEFAULT_INTERVAL_MINUTES;
+        }
+        return clampIntervalMinutes(minutes);
+    }
+
+    /**
+     * Whether {@link #start()} needs to (re)subscribe: yes when not currently running, or when
+     * running at a cadence different from the one requested. A no-op when already subscribed at
+     * the requested interval, so repeated refreshes don't churn the location subscription.
+     */
+    static boolean shouldResubscribe(boolean running, long subscribedIntervalMs, long requestedIntervalMs) {
+        return !running || subscribedIntervalMs != requestedIntervalMs;
+    }
+
+    /**
+     * The offset to apply for a fix, or {@code null} to ignore it. Ignored when discipline is
+     * no longer running (a fix that raced past a disable) or when the implied correction is
+     * implausible ({@link #isOffsetSane}). Kept pure so both guard branches are unit-tested
+     * without a {@link LocationManager}.
+     */
+    static Integer computeAppliedOffset(boolean running, long fixUtcMs, long fixElapsedRealtimeNanos,
+                                        long nowElapsedRealtimeNanos, long nowSystemMs) {
+        if (!running) return null;
+        int offsetMs = gpsClockOffsetMs(fixUtcMs, fixElapsedRealtimeNanos, nowElapsedRealtimeNanos, nowSystemMs);
+        if (!isOffsetSane(fixUtcMs, offsetMs)) return null;
+        return offsetMs;
     }
 }
