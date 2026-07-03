@@ -163,7 +163,11 @@ abstract class LocationSubscriber {
         new Handler(Looper.getMainLooper()).post(new Runnable() {
             @Override
             public void run() {
-                applyLastKnown();
+                // The subscriber may have been stopped (toggle off, re-tune) between the
+                // post and this running; a stopped subscriber must not apply updates.
+                if (isRunning()) {
+                    applyLastKnown();
+                }
             }
         });
     }

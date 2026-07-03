@@ -756,7 +756,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             int keyIdx = cursor.getColumnIndexOrThrow("KeyName");
             int valueIdx = cursor.getColumnIndexOrThrow("Value");
             while (cursor.moveToNext()) {
-                map.put(cursor.getString(keyIdx), cursor.getString(valueIdx));
+                // The schema allows NULL Value; coerce to "" so a backup export keeps the
+                // key (JSONObject.put(key, null) drops it) and matches writeConfigSync's
+                // null->"" import semantics.
+                String value = cursor.isNull(valueIdx) ? "" : cursor.getString(valueIdx);
+                map.put(cursor.getString(keyIdx), value);
             }
         } finally {
             cursor.close();

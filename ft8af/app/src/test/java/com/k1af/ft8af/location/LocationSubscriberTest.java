@@ -189,6 +189,20 @@ public class LocationSubscriberTest {
     }
 
     @Test
+    public void stop_beforeBootstrapRuns_suppressesLastKnown() {
+        // The bootstrap is posted to the main looper; if the subscriber is stopped
+        // before the post runs (toggle flipped off immediately), the stale Runnable
+        // must not apply a grid/clock update from a stopped subscriber.
+        subscriber.enabled = true;
+        subscriber.refreshSubscription();
+        subscriber.enabled = false;
+        subscriber.refreshSubscription();
+
+        shadowOf(Looper.getMainLooper()).idle();
+        assertThat(subscriber.lastKnownCalls).isEqualTo(0);
+    }
+
+    @Test
     public void liveFix_isDispatchedToOnFix() {
         subscriber.enabled = true;
         subscriber.refreshSubscription();

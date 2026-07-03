@@ -85,4 +85,16 @@ public class DatabaseOprConfigSyncTest {
 
         assertThat(opr.getAllConfigSync()).containsEntry("cloudlogApiKey", "");
     }
+
+    @Test
+    public void read_coercesNullValueToEmptyString() {
+        // The schema allows NULL Value (writeConfigSync never writes one, but older
+        // builds / hand-edited databases can). A NULL must read back as "" — a null
+        // map value would be dropped from a backup export by JSONObject.put(key, null),
+        // silently losing the key on round-trip.
+        opr.getWritableDatabase().execSQL(
+                "INSERT INTO config (KeyName,Value) VALUES ('legacyNullKey', NULL)");
+
+        assertThat(opr.getAllConfigSync()).containsEntry("legacyNullKey", "");
+    }
 }
