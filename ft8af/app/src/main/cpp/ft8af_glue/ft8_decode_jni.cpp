@@ -28,6 +28,7 @@ int ft8_snr(const waterfall_t* wf, const candidate_t* candidate);
 
 #include "decode_params.h"
 #include "ft8_fine.h"
+#include "ft8_hashfields.h"
 #include "ft8_subtract.h"
 #include "ft8_xslot.h"
 
@@ -103,6 +104,11 @@ struct ft8_decoder_state
 
     ft8_hash_entry_t hashtable[FT8_HASHTABLE_SIZE];
     int hashtable_count;
+
+    // Hash lookups that failed during the current ftx_message_decode_* call,
+    // i.e. the received bits behind each "<...>" output. Handed to Java so
+    // its persistent hash map can resolve the callsign (issue #392).
+    ft8af_unresolved_t unresolved;
 };
 
 // --- hash interface callbacks (TLS pointer to current decoder_state) --------
@@ -146,6 +152,11 @@ static bool ft8_hash_lookup(ftx_callsign_hash_type_e type, uint32_t hash, char* 
             return true;
         }
     }
+    // Not heard in full this slot: unpack will emit "<...>". Keep the
+    // received bits so ft8_set_call_hashes can pass them up to Java.
+    ft8af_unresolved_record(&d->unresolved,
+                            (type == FTX_CALLSIGN_HASH_10_BITS) ? 10 : (type == FTX_CALLSIGN_HASH_12_BITS ? 12 : 22),
+                            hash);
     callsign[0] = '\0';
     return false;
 }
@@ -214,19 +225,25 @@ static bool ft8_looks_like_grid(const char* s)
 static void ft8_set_call_hashes(JNIEnv* env, jobject msg, const char* call,
                                 jfieldID f10, jfieldID f12, jfieldID f22)
 {
+    uint32_t h10 = 0, h12 = 0, h22 = 0;
     if (call && call[0] != '\0' && call[0] != '<')
     {
         uint32_t n22 = ft8_compute_n22(call);
-        env->SetLongField(msg, f22, (jlong)n22);
-        env->SetLongField(msg, f12, (jlong)(n22 >> 10));
-        env->SetLongField(msg, f10, (jlong)(n22 >> 12));
+        h22 = n22;
+        h12 = n22 >> 10;
+        h10 = n22 >> 12;
     }
-    else
+    else if (g_active)
     {
-        env->SetLongField(msg, f22, 0);
-        env->SetLongField(msg, f12, 0);
-        env->SetLongField(msg, f10, 0);
+        // "<...>": the callsign arrived as a hash we couldn't resolve.
+        // Hand the received bits to Java so Ft8Message.hashList (which knows
+        // the operator's own call and every call it has decoded) can resolve
+        // it — e.g. a reply addressed to <SV8/DM5HF> (issue #392).
+        ft8af_unresolved_consume(&g_active->unresolved, call, &h10, &h12, &h22);
     }
+    env->SetLongField(msg, f22, (jlong)h22);
+    env->SetLongField(msg, f12, (jlong)h12);
+    env->SetLongField(msg, f10, (jlong)h10);
 }
 
 // ---------------------------------------------------------------------------
@@ -499,6 +516,7 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderFt8Analysis(
     d->last_message = message;
     d->have_last = true;
     g_active = d;
+    ft8af_unresolved_reset(&d->unresolved);
     int snr = ft8_snr(&d->mon.wf, cand);
 
     env->SetFloatField(ft8Message, FF8.freq_hz, freq_hz);

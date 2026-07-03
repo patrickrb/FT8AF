@@ -223,3 +223,21 @@ xslot_out="$tmp/ft8_xslot_test"
     -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
     -I "$ft8" "${xslot_srcs[@]}" -lm -o "$xslot_out"
 "$xslot_out"
+
+# Hash-field unit tests: propagating received hash bits behind "<...>"
+# callsigns up to Java's persistent hash map (issue #392 — replies to a
+# nonstandard own callsign like SV8/DM5HF never resolved).
+hash_srcs=(
+    "$here/test_hashfields.c"
+    "$ft8/ft8/pack.c"
+    "$ft8/ft8/encode.c"
+    "$ft8/ft8/crc.c"
+    "$ft8/ft8/constants.c"
+    "$ft8/ft8/text.c"
+    "$ft8/ft8/message.c"
+)
+hash_out="$tmp/ft8_hashfields_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${hash_srcs[@]}" -lm -o "$hash_out"
+"$hash_out"

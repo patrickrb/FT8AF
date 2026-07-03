@@ -242,6 +242,25 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_xslot)." }
 & $outXslot
 $xslotExit = $LASTEXITCODE
 
+# ---------------------------------------------------------------------------
+# Hash-field unit tests: propagating received hash bits behind "<...>"
+# callsigns up to Java's persistent hash map (issue #392 — replies to a
+# nonstandard own callsign like SV8/DM5HF never resolved).
+# ---------------------------------------------------------------------------
+$hashSrcs = @(
+    "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
+    "ft8\text.c","ft8\message.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+
+$srcHash = Join-Path $here "test_hashfields.c"
+$outHash = Join-Path $env:TEMP "ft8_hashfields_test.exe"
+
+& $Clang @common $srcHash @hashSrcs -o $outHash
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_hashfields)." }
+
+& $outHash
+$hashExit = $LASTEXITCODE
+
 if ($goldenExit -ne 0) { exit $goldenExit }
 if ($dev625Exit -ne 0) { exit $dev625Exit }
 if ($firExit -ne 0) { exit $firExit }
@@ -251,4 +270,5 @@ if ($benchExit -ne 0) { exit $benchExit }
 if ($subExit -ne 0) { exit $subExit }
 if ($osdExit -ne 0) { exit $osdExit }
 if ($fineExit -ne 0) { exit $fineExit }
-exit $xslotExit
+if ($xslotExit -ne 0) { exit $xslotExit }
+exit $hashExit
