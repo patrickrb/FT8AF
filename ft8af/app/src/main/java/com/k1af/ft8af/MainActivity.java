@@ -47,6 +47,7 @@ import androidx.navigation.fragment.NavHostFragment;
 import androidx.navigation.ui.NavigationUI;
 
 import com.k1af.ft8af.bluetooth.BluetoothStateBroadcastReceive;
+import com.k1af.ft8af.bluetooth.ScoPolicy;
 import com.k1af.ft8af.callsign.CallsignDatabase;
 import com.k1af.ft8af.connector.CableSerialPort;
 import com.k1af.ft8af.database.DatabaseOpr;
@@ -132,7 +133,10 @@ public class MainActivity extends AppCompatActivity {
 
         ToastMessage.getInstance();
         registerBluetoothReceiver();//register Bluetooth state change broadcast
-        if (mainViewModel.isBTConnected()) {
+        // Only force headset/SCO mode when the rig itself is on Bluetooth --
+        // opening SCO against a car/headphones kicks it out of A2DP music mode.
+        if (ScoPolicy.shouldEnterHeadsetMode(
+                GeneralVariables.connectMode, mainViewModel.isBTConnected())) {
             mainViewModel.setBlueToothOn();
         }
 

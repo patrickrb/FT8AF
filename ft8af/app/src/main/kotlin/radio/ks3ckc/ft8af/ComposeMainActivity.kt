@@ -41,6 +41,7 @@ import radio.ks3ckc.ft8af.sync.QsoAutoSync
 import com.k1af.ft8af.service.RxForegroundService
 import com.k1af.ft8af.service.RxServiceController
 import com.k1af.ft8af.bluetooth.BluetoothStateBroadcastReceive
+import com.k1af.ft8af.bluetooth.ScoPolicy
 import com.k1af.ft8af.connector.CableSerialPort
 import com.k1af.ft8af.connector.ConnectMode
 import com.k1af.ft8af.callsign.CallsignDatabase
@@ -150,7 +151,12 @@ class ComposeMainActivity : AppCompatActivity() {
 
         // Register Bluetooth state broadcast receiver
         registerBluetoothReceiver()
-        if (mainViewModel.isBTConnected()) {
+        // Only force headset/SCO mode when the rig itself is on Bluetooth.
+        // Any paired BT audio device (a car, headphones) makes isBTConnected()
+        // true, and opening SCO against it kicks it out of A2DP music mode.
+        if (ScoPolicy.shouldEnterHeadsetMode(
+                GeneralVariables.connectMode, mainViewModel.isBTConnected())
+        ) {
             mainViewModel.setBlueToothOn()
         }
 
