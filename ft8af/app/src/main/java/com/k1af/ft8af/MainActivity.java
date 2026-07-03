@@ -47,6 +47,7 @@ import androidx.navigation.fragment.NavHostFragment;
 import androidx.navigation.ui.NavigationUI;
 
 import com.k1af.ft8af.bluetooth.BluetoothStateBroadcastReceive;
+import com.k1af.ft8af.bluetooth.ScoPolicy;
 import com.k1af.ft8af.callsign.CallsignDatabase;
 import com.k1af.ft8af.connector.CableSerialPort;
 import com.k1af.ft8af.database.DatabaseOpr;
@@ -132,9 +133,8 @@ public class MainActivity extends AppCompatActivity {
 
         ToastMessage.getInstance();
         registerBluetoothReceiver();//register Bluetooth state change broadcast
-        if (mainViewModel.isBTConnected()) {
-            mainViewModel.setBlueToothOn();
-        }
+        // The launch-time headset/SCO decision happens in the config-loaded
+        // callback below -- the persisted connectMode isn't in memory yet here.
 
 
         //observe DEBUG messages
@@ -488,6 +488,19 @@ public class MainActivity extends AppCompatActivity {
                     //write to database
                     mainViewModel.databaseOpr.writeConfig("grid", grid, null);
                 }
+
+                // Bring up headset/SCO for Bluetooth-rig users now that the persisted
+                // connectMode is known; gating on connect mode keeps a car/headphones
+                // paired for music from being yanked out of A2DP (PR #377).
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (ScoPolicy.shouldEnterHeadsetMode(
+                                GeneralVariables.connectMode, mainViewModel.isBTConnected())) {
+                            mainViewModel.setBlueToothOn();
+                        }
+                    }
+                });
 
                 mainViewModel.ft8TransmitSignal.setTimer_sec(GeneralVariables.transmitDelay);
                 //if callsign or grid is empty, navigate to the settings page
