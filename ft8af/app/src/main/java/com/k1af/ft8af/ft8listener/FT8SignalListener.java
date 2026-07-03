@@ -46,9 +46,11 @@ public class FT8SignalListener {
     // inside DecoderFt8Analysis. The late full-slot pass (issue #363) lets a previous
     // slot's decode thread overlap the next slot's decode thread, so candidate analysis
     // must be serialized across threads. All other native decode state is per-decoder
-    // (or thread-local), so per-candidate granularity is enough — the concurrent thread
-    // waits at most one candidate's decode.
-    private static final Object DECODE_ANALYSIS_LOCK = new Object();
+    // (or thread-local), so per-candidate granularity is enough. The gate is asymmetric:
+    // the time-critical early path blocks (bounded by one candidate), the best-effort
+    // late path tries briefly and aborts its remaining candidates on contention, so late
+    // work never slows the next slot's early decode. See LateDecode.AnalysisGate.
+    private static final LateDecode.AnalysisGate ANALYSIS_GATE = new LateDecode.AnalysisGate();
 
 
     static {
@@ -137,36 +139,34 @@ public class FT8SignalListener {
         Log.d(TAG, "Starting recording...");
 
         if (onWaveDataListener != null) {
-            // Fast turnaround: collect a shorter window so decoding finishes (and CQ
-            // decodes appear) ~1s before the cycle boundary, leaving time to answer
-            // on the next slot. Off = full slot window (max sensitivity).
-            ModeProfile mode = GeneralVariables.currentMode();
-            int recordMs = GeneralVariables.earlyDecode
-                    ? mode.earlyDecodeMillis
-                    : mode.slotMillis;
-            // Late full-slot pass (issue #363): the early window loses signals whose DT
-            // pushes them past its end (~+0.86s for FT8). When eligible, also record the
-            // WHOLE slot into a second one-shot monitor; the decode thread picks that
-            // buffer up after the early passes finish and decodes only the new messages
-            // as an extra late (isDeep) delivery. See LateDecode.
-            final LateDecode.Handoff lateHandoff =
-                    LateDecode.shouldRunLatePass(GeneralVariables.earlyDecode, mode)
-                            ? new LateDecode.Handoff(System.currentTimeMillis(), mode.slotMillis)
-                            : null;
-            onWaveDataListener.getVoiceData(recordMs, true
+            // Freeze the whole cycle's decode plan NOW, at the slot boundary: the record
+            // window (fast turnaround = shorter window so decoding finishes ~1s before
+            // the cycle boundary; off = full slot for max sensitivity), whether a late
+            // full-slot pass runs (issue #363: the early window loses signals whose DT
+            // pushes them past its end, ~+0.86s for FT8), and — critically — the
+            // OPERATING MODE every decode pass of this slot must use. A mid-slot mode
+            // switch must not retroactively change how this slot's buffers are decoded;
+            // see LateDecode.planSlot.
+            final LateDecode.SlotPlan plan = LateDecode.planSlot(
+                    GeneralVariables.earlyDecode, GeneralVariables.currentMode(),
+                    System.currentTimeMillis());
+            onWaveDataListener.getVoiceData(plan.recordMillis, true
                     , new OnGetVoiceDataDone() {
                         @Override
                         public void onGetDone(float[] data) {
                             Log.d(TAG, String.format("Starting decode...###, data length: %d",data.length));
-                            decodeFt8(utc, data, lateHandoff);
+                            decodeFt8(utc, data, plan.mode, plan.lateHandoff);
                         }
                     });
-            if (lateHandoff != null) {
-                onWaveDataListener.getVoiceData(mode.slotMillis, true
+            if (plan.lateHandoff != null) {
+                // Second one-shot monitor over the WHOLE slot; the decode thread picks
+                // the buffer up after the early passes finish and decodes only the new
+                // messages as an extra late (isDeep) delivery. See LateDecode.
+                onWaveDataListener.getVoiceData(plan.mode.slotMillis, true
                         , new OnGetVoiceDataDone() {
                             @Override
                             public void onGetDone(float[] data) {
-                                lateHandoff.offer(data);
+                                plan.lateHandoff.offer(data);
                             }
                         });
             }
@@ -174,15 +174,23 @@ public class FT8SignalListener {
     }
 
     public void decodeFt8(long utc, float[] voiceData) {
-        decodeFt8(utc, voiceData, null);
+        decodeFt8(utc, voiceData, GeneralVariables.currentMode(), null);
     }
 
     /**
+     * @param mode        the operating mode {@code voiceData} was RECORDED under, captured
+     *                    at the slot boundary (see {@link LateDecode#planSlot}). Every
+     *                    decode pass of this slot — decoder init, protocol, deep budget,
+     *                    late pass — uses this snapshot, never
+     *                    {@code GeneralVariables.currentMode()}: a mid-slot mode switch
+     *                    must not make an in-flight decode reinterpret its buffer under
+     *                    the new mode's protocol.
      * @param lateHandoff when non-null, the source of a second full-slot buffer to decode
      *                    after the early passes finish (late full-slot pass, issue #363);
      *                    null = no late pass this cycle
      */
-    public void decodeFt8(long utc, float[] voiceData, LateDecode.Handoff lateHandoff) {
+    public void decodeFt8(long utc, float[] voiceData, ModeProfile mode,
+                          LateDecode.Handoff lateHandoff) {
 
         // Test code below -------------------------
 //        String fileName = getCacheFileName("test_01.wav");
@@ -206,9 +214,10 @@ public class FT8SignalListener {
                 // Note: decoding must complete within one cycle, otherwise a new decode cycle will begin
                 // Both decoders are from-source in libft8af.so: FT2/FT4 use the *Ft2 entry
                 // points (ft2_decode_jni.cpp), FT8 the plain ones (ft8_decode_jni.cpp). All
-                // native ops dispatch through the *Decode helpers on this flag.
-                final boolean fromSource = GeneralVariables.currentMode().usesFromSourceDecoder();
-                long ft8Decoder = initDecoder(utc, voiceData.length, fromSource);
+                // native ops dispatch through the *Decode helpers on this flag — derived
+                // from the RECORD-TIME mode snapshot, not the live global.
+                final boolean fromSource = mode.usesFromSourceDecoder();
+                long ft8Decoder = initDecoder(utc, voiceData.length, mode);
 //                        , tempData.length, true);
                 pressFloatDecode(voiceData, ft8Decoder, fromSource);// load audio data
 //                DecoderMonitorPressFloat(tempData, ft8Decoder);// load audio data
@@ -221,8 +230,8 @@ public class FT8SignalListener {
                 final A91List a91List = new A91List();
                 ArrayList<Ft8Message> allMsg = new ArrayList<>();
 //                ArrayList<Ft8Message> msgs = runDecode(utc, voiceData,false);
-                ArrayList<Ft8Message> msgs = runDecode(ft8Decoder, utc, false, fromSource,
-                        DeepDecodeBudget.NO_DEADLINE, a91List);
+                ArrayList<Ft8Message> msgs = runDecode(ft8Decoder, utc, false, mode,
+                        DeepDecodeBudget.NO_DEADLINE, a91List, null);
                 addMsgToList(allMsg, msgs);
                 timeSec = System.currentTimeMillis() - time;
                 decodeTimeSec.postValue(timeSec);// decode elapsed time
@@ -233,8 +242,8 @@ public class FT8SignalListener {
 
                 if (GeneralVariables.deepDecodeMode) {// enter deep decode mode
                     //float[] newSignal=tempData;
-                    msgs = runDecode(ft8Decoder, utc, true, fromSource,
-                            DeepDecodeBudget.NO_DEADLINE, a91List);
+                    msgs = runDecode(ft8Decoder, utc, true, mode,
+                            DeepDecodeBudget.NO_DEADLINE, a91List, null);
                     addMsgToList(allMsg, msgs);
                     timeSec = System.currentTimeMillis() - time;
                     decodeTimeSec.postValue(timeSec);// decode elapsed time
@@ -242,7 +251,7 @@ public class FT8SignalListener {
                         onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, true);
                     }
 
-                    final long deepDecodeBudgetMs = GeneralVariables.currentMode().deepDecodeBudgetMillis();
+                    final long deepDecodeBudgetMs = mode.deepDecodeBudgetMillis();
                     // Budget the subtract-and-redecode loop by ITS OWN elapsed time, not the total
                     // decode time. On a slow device the initial fast + first deep pass can already
                     // exceed the budget, which would abort subtraction before it ran even once.
@@ -256,7 +265,7 @@ public class FT8SignalListener {
                         subtractDecode(ft8Decoder, a91List, fromSource);
 
                         // perform another decode pass
-                        msgs = runDecode(ft8Decoder, utc, true, fromSource, passDeadline, a91List);
+                        msgs = runDecode(ft8Decoder, utc, true, mode, passDeadline, a91List, null);
                         addMsgToList(allMsg, msgs);
                         timeSec = System.currentTimeMillis() - time;
                         decodeTimeSec.postValue(timeSec);// decode elapsed time
@@ -278,7 +287,7 @@ public class FT8SignalListener {
                 // delivered. Runs into the next slot's cycle by design; the next slot's
                 // decode uses its own thread, decoder, and a91 list.
                 if (lateHandoff != null) {
-                    runLateFullSlotPass(utc, allMsg, a91List, fromSource, lateHandoff);
+                    runLateFullSlotPass(utc, allMsg, a91List, mode, lateHandoff);
                 }
 
             }
@@ -296,28 +305,37 @@ public class FT8SignalListener {
      * <p>Deliberately does NOT touch {@link #timeSec}/{@link #decodeTimeSec}: by the time
      * this runs the next slot may already be decoding, and clobbering the shared elapsed
      * time could make MainViewModel's auto-reply budget check misjudge that slot.
+     *
+     * @param mode the RECORD-TIME mode snapshot for this slot; the late buffer must be
+     *             decoded under the mode it was captured in, even if the user has since
+     *             switched modes
      */
     private void runLateFullSlotPass(long utc, ArrayList<Ft8Message> allMsg, A91List a91List,
-                                     boolean fromSource, LateDecode.Handoff handoff) {
+                                     ModeProfile mode, LateDecode.Handoff handoff) {
         float[] fullData = handoff.awaitBuffer(System.currentTimeMillis());
         if (fullData == null) {
             // Capture stopped mid-slot (or never started); the buffer is not coming.
             Log.w(TAG, "late full-slot pass skipped: full-slot buffer never arrived");
             return;
         }
+        final boolean fromSource = mode.usesFromSourceDecoder();
         long time = System.currentTimeMillis();
-        long lateDecoder = initDecoder(utc, fullData.length, fromSource);
+        long lateDecoder = initDecoder(utc, fullData.length, mode);
         try {
             pressFloatDecode(fullData, lateDecoder, fromSource);
             // Bound the whole late pass (fast + deep candidate loops) by the mode's deep
             // budget so a slow device can't chain late work across multiple later slots.
             final long deadline = DeepDecodeBudget.passDeadline(time,
-                    GeneralVariables.currentMode().deepDecodeBudgetMillis());
+                    mode.deepDecodeBudgetMillis());
+            // Best-effort priority: the first analysis-gate contention with the next
+            // slot's early decode trips this and the late pass gives up the rest of its
+            // candidates (and the deep pass). See LateDecode.AnalysisGate.
+            final LateDecode.LateAbort lateAbort = new LateDecode.LateAbort();
             deliverLateMessages(utc, allMsg,
-                    runDecode(lateDecoder, utc, false, fromSource, deadline, a91List));
-            if (GeneralVariables.deepDecodeMode) {
+                    runDecode(lateDecoder, utc, false, mode, deadline, a91List, lateAbort));
+            if (GeneralVariables.deepDecodeMode && !lateAbort.tripped()) {
                 deliverLateMessages(utc, allMsg,
-                        runDecode(lateDecoder, utc, true, fromSource, deadline, a91List));
+                        runDecode(lateDecoder, utc, true, mode, deadline, a91List, lateAbort));
             }
         } finally {
             deleteDecoder(lateDecoder, fromSource);
@@ -343,10 +361,19 @@ public class FT8SignalListener {
     }
 
 
-    private ArrayList<Ft8Message> runDecode(long ft8Decoder, long utc, boolean isDeep, boolean fromSource,
-                                            long deadlineEpochMs, A91List a91List) {
+    /**
+     * @param mode      the RECORD-TIME mode snapshot for the slot being decoded (never the
+     *                  live {@code GeneralVariables.currentMode()})
+     * @param lateAbort non-null only for late full-slot passes: candidate analysis then
+     *                  yields to the next slot's early decode, tripping this flag (and
+     *                  stopping the scan) on the first analysis-gate contention
+     */
+    private ArrayList<Ft8Message> runDecode(long ft8Decoder, long utc, boolean isDeep, ModeProfile mode,
+                                            long deadlineEpochMs, A91List a91List,
+                                            LateDecode.LateAbort lateAbort) {
+        final boolean fromSource = mode.usesFromSourceDecoder();
         ArrayList<Ft8Message> ft8Messages = new ArrayList<>();
-        Ft8Message ft8Message = new Ft8Message(GeneralVariables.operatingMode);
+        Ft8Message ft8Message = new Ft8Message(mode.id);
 
         ft8Message.utcTime = utc;
         ft8Message.band = GeneralVariables.band;
@@ -360,9 +387,14 @@ public class FT8SignalListener {
                 Log.d(TAG, "pass deadline hit at candidate " + idx + "/" + num_candidates);
                 break;
             }
+            if (lateAbort != null && lateAbort.tripped()) {
+                Log.d(TAG, "late pass aborted by analysis-gate contention at candidate "
+                        + idx + "/" + num_candidates);
+                break;
+            }
             ft8Message.snr = Ft8Message.SNR_UNKNOWN; // reset before each candidate
             try {// protect against decode failure
-                if (analysisDecode(idx, ft8Decoder, ft8Message, fromSource)) {
+                if (analysisDecode(idx, ft8Decoder, ft8Message, fromSource, lateAbort)) {
 
                     if (ft8Message.isValid) {
                         if (!ft8Message.hasSnr()) {
@@ -399,13 +431,19 @@ public class FT8SignalListener {
     // (= ModeProfile.usesFromSourceDecoder()). The from-source init takes the ftx protocol
     // so it configures the monitor for FT2 vs FT4 symbol timing.
 
-    private long initDecoder(long utc, int numSamples, boolean fromSource) {
-        if (fromSource) {
-            return InitDecoderFt2(utc, FT8Common.SAMPLE_RATE, numSamples,
-                    GeneralVariables.currentMode().ftxProtocol());
+    /**
+     * @param mode the RECORD-TIME mode snapshot: selects the entry-point family AND the
+     *             protocol/flags. Must never read {@code GeneralVariables.currentMode()} —
+     *             the late full-slot pass inits its decoder well after the slot boundary
+     *             (possibly into the next slot), by which time the user may have switched
+     *             modes, and initializing with the new mode's protocol against the old
+     *             mode's buffer would decode garbage.
+     */
+    private long initDecoder(long utc, int numSamples, ModeProfile mode) {
+        if (mode.usesFromSourceDecoder()) {
+            return InitDecoderFt2(utc, FT8Common.SAMPLE_RATE, numSamples, mode.ftxProtocol());
         }
-        return InitDecoder(utc, FT8Common.SAMPLE_RATE, numSamples,
-                GeneralVariables.currentMode().isFt8);
+        return InitDecoder(utc, FT8Common.SAMPLE_RATE, numSamples, mode.isFt8);
     }
 
     private void pressFloatDecode(float[] data, long decoder, boolean fromSource) {
@@ -422,13 +460,31 @@ public class FT8SignalListener {
         return fromSource ? DecoderFt2FindSync(decoder) : DecoderFt8FindSync(decoder);
     }
 
-    private boolean analysisDecode(int idx, long decoder, Ft8Message msg, boolean fromSource) {
-        // Serialized: DecoderFt8Analysis reads/writes the process-global cross-slot cache
-        // (ft8_xslot.c), and the late full-slot pass can overlap the next slot's decode
-        // thread. See DECODE_ANALYSIS_LOCK.
-        synchronized (DECODE_ANALYSIS_LOCK) {
+    /**
+     * Serialized: DecoderFt8Analysis reads/writes the process-global cross-slot cache
+     * (ft8_xslot.c), and the late full-slot pass can overlap the next slot's decode
+     * thread — no two analysis calls may ever run concurrently. The gate is asymmetric
+     * so the late pass can never stall the time-critical early path: early/primary calls
+     * ({@code lateAbort == null}) block unconditionally (bounded by one candidate), late
+     * calls only try briefly and on contention trip {@code lateAbort} and bail — the
+     * caller's candidate loop then aborts. See {@link LateDecode.AnalysisGate}.
+     *
+     * @return true if the candidate decoded; false if it didn't OR the late path yielded
+     *         (in which case {@code lateAbort} is tripped)
+     */
+    private boolean analysisDecode(int idx, long decoder, Ft8Message msg, boolean fromSource,
+                                   LateDecode.LateAbort lateAbort) {
+        if (lateAbort == null) {
+            ANALYSIS_GATE.acquireBlocking();
+        } else if (!ANALYSIS_GATE.tryAcquireForLate()) {
+            lateAbort.trip();
+            return false;
+        }
+        try {
             return fromSource ? DecoderFt2Analysis(idx, decoder, msg)
                     : DecoderFt8Analysis(idx, decoder, msg);
+        } finally {
+            ANALYSIS_GATE.release();
         }
     }
 

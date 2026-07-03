@@ -129,4 +129,49 @@ public class LateDecodeTest {
             Thread.interrupted();// clear the flag so it can't leak into other tests
         }
     }
+
+    // ---- planSlot: the record-time capture of the whole cycle's decode parameters ------
+    // A mid-slot mode switch must not retroactively change how an in-flight slot decodes,
+    // so EVERYTHING mode-derived is frozen into the SlotPlan at the slot boundary.
+
+    @Test
+    public void planSlot_ft8WithEarlyDecode_freezesModeEarlyWindowAndLateHandoff() {
+        LateDecode.SlotPlan plan = LateDecode.planSlot(true, ModeProfile.FT8, 1_000_000L);
+        assertThat(plan.mode).isEqualTo(ModeProfile.FT8);
+        assertThat(plan.recordMillis).isEqualTo(ModeProfile.FT8.earlyDecodeMillis);
+        assertThat(plan.lateHandoff).isNotNull();
+    }
+
+    @Test
+    public void planSlot_earlyDecodeOff_recordsFullSlotWithNoLatePass() {
+        // With early decode off the primary window already covers the whole slot; a late
+        // pass would be a pure duplicate.
+        LateDecode.SlotPlan plan = LateDecode.planSlot(false, ModeProfile.FT8, 1_000_000L);
+        assertThat(plan.mode).isEqualTo(ModeProfile.FT8);
+        assertThat(plan.recordMillis).isEqualTo(ModeProfile.FT8.slotMillis);
+        assertThat(plan.lateHandoff).isNull();
+    }
+
+    @Test
+    public void planSlot_fastModes_earlyWindowButNoLatePass() {
+        // Matches shouldRunLatePass: FT4/FT2 keep a single early-window pass.
+        for (ModeProfile mode : new ModeProfile[]{ModeProfile.FT4, ModeProfile.FT2}) {
+            LateDecode.SlotPlan plan = LateDecode.planSlot(true, mode, 1_000_000L);
+            assertThat(plan.mode).isEqualTo(mode);
+            assertThat(plan.recordMillis).isEqualTo(mode.earlyDecodeMillis);
+            assertThat(plan.lateHandoff).isNull();
+        }
+    }
+
+    @Test
+    public void planSlot_handoffDeadline_anchoredAtPlanTime() {
+        LateDecode.SlotPlan plan = LateDecode.planSlot(true, ModeProfile.FT8, 1_000_000L);
+        // Past the plan-time-anchored deadline (slot end + grace) the wait is zero: a
+        // decode thread that finishes its early passes very late must not block at all.
+        long pastDeadline = 1_000_000L + ModeProfile.FT8.slotMillis
+                + LateDecode.DELIVERY_GRACE_MS + 1;
+        long before = System.currentTimeMillis();
+        assertThat(plan.lateHandoff.awaitBuffer(pastDeadline)).isNull();
+        assertThat(System.currentTimeMillis() - before).isLessThan(1_000L);
+    }
 }

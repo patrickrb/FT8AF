@@ -4,6 +4,7 @@ import com.k1af.ft8af.ModeProfile;
 
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Policy and buffer handoff for the late full-slot decode pass (issue #363).
@@ -48,6 +49,48 @@ public final class LateDecode {
      */
     public static boolean shouldRunLatePass(boolean earlyDecode, ModeProfile mode) {
         return earlyDecode && mode.isFt8 && mode.earlyDecodeMillis < mode.slotMillis;
+    }
+
+    /**
+     * Capture one cycle's decode plan at record time. Everything the decode thread (and
+     * its late full-slot pass) needs from the operating mode is frozen HERE, at the slot
+     * boundary: the user can switch modes mid-slot (rebuilding the cycle timers does not
+     * interrupt an in-flight decode thread, and the late pass deliberately runs into the
+     * next slot), and a decode that re-read {@code GeneralVariables.currentMode()} later
+     * would then initialize the decoder with the NEW mode's protocol/flags against a
+     * buffer recorded under the OLD mode — producing garbage. Thread {@link SlotPlan#mode}
+     * through the whole decode instead of re-reading the global.
+     *
+     * @param earlyDecode current value of {@code GeneralVariables.earlyDecode}
+     * @param mode        the operating mode at the slot boundary
+     * @param nowMs       wall-clock time the monitors are being registered
+     */
+    public static SlotPlan planSlot(boolean earlyDecode, ModeProfile mode, long nowMs) {
+        int recordMillis = earlyDecode ? mode.earlyDecodeMillis : mode.slotMillis;
+        Handoff lateHandoff = shouldRunLatePass(earlyDecode, mode)
+                ? new Handoff(nowMs, mode.slotMillis)
+                : null;
+        return new SlotPlan(mode, recordMillis, lateHandoff);
+    }
+
+    /**
+     * Immutable per-cycle decode plan, captured by {@link #planSlot} at the slot boundary:
+     * the mode every decode pass of this slot must use, the primary record window, and the
+     * late full-slot handoff (null = no late pass this cycle).
+     */
+    public static final class SlotPlan {
+        /** The operating mode frozen at record time; ALL of this slot's decode passes use it. */
+        public final ModeProfile mode;
+        /** Primary capture window: early window when fast decode is on, else the full slot. */
+        public final int recordMillis;
+        /** Buffer handoff for the late full-slot pass, or null when no late pass runs. */
+        public final Handoff lateHandoff;
+
+        SlotPlan(ModeProfile mode, int recordMillis, Handoff lateHandoff) {
+            this.mode = mode;
+            this.recordMillis = recordMillis;
+            this.lateHandoff = lateHandoff;
+        }
     }
 
     /**
@@ -110,6 +153,73 @@ public final class LateDecode {
                 Thread.currentThread().interrupt();
                 return null;
             }
+        }
+    }
+
+    /**
+     * Serializes per-candidate native analysis across decode threads. The FT8 cross-slot
+     * recall cache (cpp/ft8af_glue/ft8_xslot.c) is process-global and NOT thread-safe, and
+     * the late full-slot pass lets a previous slot's decode thread overlap the next slot's
+     * decode thread — so no two analysis calls may ever run concurrently.
+     *
+     * <p>The gate is asymmetric so best-effort late work can never stall time-critical
+     * early work: the early/primary path always blocks (its wait is bounded by ONE
+     * in-flight candidate, since the late holder releases between candidates), while the
+     * late path only tries briefly and treats failure as "the next slot's early decode has
+     * started" — its cue to abort the remaining late candidates entirely.
+     */
+    public static final class AnalysisGate {
+        /**
+         * How long the late pass waits for the gate before declaring contention. Long
+         * enough to absorb a micro-race for a free lock, far shorter than one candidate's
+         * analysis — so a late pass genuinely overlapping an early decode aborts on the
+         * first collision instead of interleaving with (and slowing) every early candidate.
+         */
+        static final long LATE_TRYLOCK_TIMEOUT_MS = 10;
+
+        private final ReentrantLock lock = new ReentrantLock();
+
+        /** Early/primary path: always acquires; waits at most one candidate's analysis. */
+        public void acquireBlocking() {
+            lock.lock();
+        }
+
+        /**
+         * Late path: best-effort acquire bounded by {@link #LATE_TRYLOCK_TIMEOUT_MS}.
+         *
+         * @return true if acquired (caller MUST {@link #release()}); false on contention
+         *         or interrupt — the caller must NOT release, and should abort its
+         *         remaining late candidates
+         */
+        public boolean tryAcquireForLate() {
+            try {
+                return lock.tryLock(LATE_TRYLOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+
+        public void release() {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Sticky abort flag for one late full-slot pass. Tripped on the first analysis-gate
+     * contention; once tripped, the late pass stops scanning candidates and skips any
+     * remaining late passes (e.g. the deep pass) — the next slot's early decode has
+     * priority and re-contending per candidate would just burn CPU against it.
+     */
+    public static final class LateAbort {
+        private volatile boolean tripped;
+
+        public void trip() {
+            tripped = true;
+        }
+
+        public boolean tripped() {
+            return tripped;
         }
     }
 }
