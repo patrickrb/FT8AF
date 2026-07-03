@@ -328,20 +328,20 @@ public class WaterfallView extends View {
         //Messages have 3 types: normal, CQ, and involving me
         if (drawMessage && messages != null) {
             drawMessage = false;//Consume the one-shot arming
-            // FT8 decodes in more than one pass per cycle (a normal pass and a slower deep
-            // pass), and every completed pass re-arms drawMessage. Without this guard the
-            // same labels get stamped onto the scrolling bitmap several times per cycle, at
-            // different scroll offsets, so they appear to repeat down the waterfall —
-            // including over the next cycle's not-yet-populated rows where the signal is
-            // gone. Stamp at most once per decode slot. Key the gate on the current mode's
-            // slot length (NOT a fixed 15s) so FT4 (7.5s) and FT2 (3.75s) each get one stamp
-            // per slot instead of one stamp per two-or-more slots. Pass slotMillis as part
-            // of the key too: this view (and its gate) is reused across mode changes, and a
-            // new mode's slotPeriod can collide with one already stamped under the old mode,
-            // which would wrongly suppress the first label after the switch.
+            // FT8 decodes in more than one pass per cycle (a normal pass, a deep pass, then
+            // a budgeted subtraction/cross-slot loop), and every completed pass re-arms
+            // drawMessage. Without this guard the same labels get stamped onto the scrolling
+            // bitmap several times per cycle, at different scroll offsets, so they appear to
+            // repeat down the waterfall. Stamp at most once per decode slot, keyed on the
+            // slot the messages were DECODED FROM (their utcTime), not the wall clock now:
+            // the deep loop's budget (~0.75 slot) starts near the end of the slot, so late
+            // passes routinely finish after the slot boundary — a wall-clock key would land
+            // in a fresh slot index and restamp every label a few scrolled rows lower,
+            // doubling/garbling all of them. slotMillis stays part of the key so a mode
+            // change (FT8/FT4/FT2 divide utc differently) can't collide with a slot already
+            // stamped under the previous mode.
             long slotMillis = GeneralVariables.currentMode().slotMillis;
-            long slotPeriod = slotMillis > 0 ? utcMs / slotMillis : period;
-            if (messageGate.shouldStamp(slotMillis, slotPeriod)) {
+            if (messageGate.shouldStamp(slotMillis, messages)) {
                 Log.d(TAG, String.format("Drawing %d messages on waterfall", messages.size()));
                 for (Ft8Message msg : messages) {
 

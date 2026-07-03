@@ -1,5 +1,9 @@
 package com.k1af.ft8af.ui;
 
+import com.k1af.ft8af.Ft8Message;
+
+import java.util.List;
+
 /**
  * Gates the waterfall's decoded-message labels to one stamp per decode slot.
  *
@@ -18,6 +22,15 @@ package com.k1af.ft8af.ui;
  * index already stamped under the previous mode and wrongly suppress the new mode's first
  * label. Including {@code slotMillis} makes any mode change a distinct key, so the first
  * slot after the switch always stamps once.
+ *
+ * <p>The slot index must be derived from the <em>decoded</em> slot (the messages' own
+ * {@link Ft8Message#utcTime}), NOT from the wall clock at stamp time — use
+ * {@link #shouldStamp(long, List)}. The deep-decode subtraction/cross-slot passes run on a
+ * budget of most of a slot ({@code ModeProfile#deepDecodeBudgetMillis}) starting near the
+ * end of the slot, so late passes routinely finish <em>after</em> the slot boundary. Each
+ * one re-arms the stamp; keyed on wall clock they land in a fresh slot index, the gate
+ * lets them through, and the same slot's labels are stamped again a few scrolled rows
+ * lower — every label on the waterfall appears doubled/garbled.
  *
  * <p>Plain Java (no Android), so the once-per-slot rule can be unit-tested directly.
  */
@@ -52,6 +65,28 @@ public final class WaterfallLabelGate {
      */
     public boolean shouldStamp(long period) {
         return shouldStamp(NO_MODE, period);
+    }
+
+    /**
+     * Whether the labels for {@code messages} should be stamped now, keyed on the slot the
+     * messages were <em>decoded from</em> ({@link Ft8Message#utcTime}, the slot-start UTC the
+     * listener stamps on every decode of a run) rather than the wall clock at stamp time.
+     * All passes over one slot's audio share that utcTime, so a deep/subtraction pass that
+     * finishes after the slot boundary maps to the already-stamped key and is suppressed,
+     * instead of restamping the same labels at a new scroll offset.
+     *
+     * <p>An empty (or null) list never stamps and — unlike the index overloads — does not
+     * consume the gate: there is nothing to draw, and marking the key would collide with a
+     * later pass of the slot that does find messages (the wall-clock fallback of a silent
+     * slot shares the index space with the message-derived keys).
+     */
+    public boolean shouldStamp(long slotMillis, List<Ft8Message> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return false;
+        }
+        long decodedUtcMs = messages.get(0).utcTime;
+        long period = slotMillis > 0 ? decodedUtcMs / slotMillis : decodedUtcMs;
+        return shouldStamp(slotMillis, period);
     }
 
     /** Forget the last stamped slot (e.g. when the bitmap is recreated). */
