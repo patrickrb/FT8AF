@@ -63,6 +63,23 @@ fun selectBandIndex(mainViewModel: MainViewModel, context: Context, index: Int) 
         mainViewModel.clearDecodesAndTarget()
     }
 
+    // Per-band output level (issue #355): when enabled and this band has a
+    // saved level that differs from the current one, restore it and tell the
+    // operator where the change came from. Bands with no saved value keep the
+    // current (global) level.
+    val restoredLevel = radio.ks3ckc.ft8af.restoredOutputLevelForBand(newWaveLength)
+    if (restoredLevel != null) {
+        GeneralVariables.volumePercent = restoredLevel / 100f
+        GeneralVariables.mutableVolumePercent.postValue(restoredLevel / 100f)
+        mainViewModel.databaseOpr.writeConfig("volumeValue", restoredLevel.toString(), null)
+        mainViewModel.baseRig?.connector?.setRFVolume(restoredLevel)
+        android.widget.Toast.makeText(
+            context,
+            context.getString(R.string.per_band_volume_restored, restoredLevel, newWaveLength),
+            android.widget.Toast.LENGTH_SHORT,
+        ).show()
+    }
+
     val cm = GeneralVariables.controlMode
     val connected = mainViewModel.isRigConnected()
     android.util.Log.d(

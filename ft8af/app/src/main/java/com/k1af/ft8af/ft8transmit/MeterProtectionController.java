@@ -224,8 +224,14 @@ public class MeterProtectionController {
             com.k1af.ft8af.database.DatabaseOpr db =
                     com.k1af.ft8af.database.DatabaseOpr.getInstance(ctx, "data.db");
             if (db != null) {
-                int pct = Math.round(GeneralVariables.volumePercent * 100);
+                int pct = radio.ks3ckc.ft8af.PerBandOutputLevelKt
+                        .outputLevelFromVolumePercent(GeneralVariables.volumePercent);
                 db.writeConfig("volumeValue", String.valueOf(pct), null);
+                // Keep the per-band map in step with a protective auto-reduction
+                // (high SWR/ALC is band/antenna specific) so re-entering the band
+                // doesn't restore the level that tripped protection. No-op when
+                // per-band levels are disabled.
+                radio.ks3ckc.ft8af.PerBandOutputLevelKt.saveOutputLevelForCurrentBand(db, pct);
             }
         } catch (Exception e) {
             Log.w(TAG, "Failed to persist volume", e);

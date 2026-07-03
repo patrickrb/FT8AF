@@ -695,9 +695,12 @@ class ComposeMainActivity : AppCompatActivity() {
                 val newVol = (GeneralVariables.volumePercent + delta).coerceIn(0.0f, 1.0f)
                 GeneralVariables.volumePercent = newVol
                 GeneralVariables.mutableVolumePercent.postValue(newVol)
-                val intVal = (newVol * 100).toInt()
+                // Math.round via the shared helper (not toInt/floor) so this
+                // producer agrees with the per-band restore/compare logic.
+                val intVal = outputLevelFromVolumePercent(newVol)
                 mainViewModel.databaseOpr.writeConfig("volumeValue", intVal.toString(), null)
                 mainViewModel.baseRig?.connector?.setRFVolume(intVal)
+                saveOutputLevelForCurrentBand(mainViewModel.databaseOpr, intVal)
 
                 // Also adjust system music stream so audio is actually audible
                 val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager

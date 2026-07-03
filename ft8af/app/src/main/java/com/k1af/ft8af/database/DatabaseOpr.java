@@ -2577,6 +2577,12 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.showTxVolumeSlider = !result.equals("0");
                     GeneralVariables.mutableShowTxVolumeSlider.postValue(GeneralVariables.showTxVolumeSlider);
                 }
+                if (name.equalsIgnoreCase("perBandOutputLevel")) {//Save TX output level per band, defaults off
+                    GeneralVariables.savePerBandOutputLevel = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("perBandOutputLevels")) {//Per-band TX output levels ("20m=60,40m=85")
+                    GeneralVariables.perBandOutputLevels = result == null ? "" : result;
+                }
                 if (name.equalsIgnoreCase("excludedCallsigns")) {//Blocklist: callsign prefixes
                     GeneralVariables.addExcludedCallsigns(result);
                 }

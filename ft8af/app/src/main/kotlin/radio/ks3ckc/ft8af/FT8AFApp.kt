@@ -371,6 +371,7 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 onVolumeChangeFinished = {
                     mainViewModel.databaseOpr.writeConfig("volumeValue", txVolume.toString(), null)
                     mainViewModel.baseRig?.connector?.setRFVolume(txVolume)
+                    saveOutputLevelForCurrentBand(mainViewModel.databaseOpr, txVolume)
                 },
                 onCallCQ = {
                     if (GeneralVariables.myCallsign.isNullOrEmpty()) {
