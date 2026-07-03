@@ -2,15 +2,23 @@ package com.k1af.ft8af.location;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import android.content.Context;
+
+import androidx.test.core.app.ApplicationProvider;
+
+import com.k1af.ft8af.GeneralVariables;
+import com.k1af.ft8af.timer.UtcTimer;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
 /**
  * Covers the pure offset/should-apply/interval logic extracted from
- * {@link GpsClockUpdater} for GPS clock discipline (issue #373). Robolectric is
- * used only so the Android-typed class links cleanly; the methods under test are
- * plain arithmetic and never touch a {@code LocationManager}.
+ * {@link GpsClockUpdater} for GPS clock discipline (issue #373), plus the
+ * toggle/permission gating the class wires into {@link LocationSubscriber}
+ * (issue #380). Robolectric is used so the Android-typed class links cleanly;
+ * the arithmetic under test never touches a {@code LocationManager}.
  */
 @RunWith(RobolectricTestRunner.class)
 public class GpsClockUpdaterTest {
@@ -177,5 +185,32 @@ public class GpsClockUpdaterTest {
     @Test
     public void disciplinedUtc_shiftsFastClockBack() {
         assertThat(GpsClockUpdater.disciplinedUtcMs(10_000L, -1_500)).isEqualTo(8_500L);
+    }
+
+    // ---- LocationSubscriber wiring (issue #380): toggle + permission gates ----
+
+    @Test
+    public void refresh_toggleOff_leavesDisciplineStopped() {
+        Context ctx = ApplicationProvider.getApplicationContext();
+        GeneralVariables.disciplineClockFromGPS = false;
+        GpsClockUpdater.refresh(ctx);
+        assertThat(GpsClockUpdater.getInstance(ctx).isRunning()).isFalse();
+    }
+
+    @Test
+    public void refresh_toggleOn_withoutFinePermission_doesNotStartOrTouchClock() {
+        // Robolectric grants no runtime permissions by default, so the FINE-only
+        // check must veto the start — and a vetoed start must not capture/alter
+        // the pre-GPS clock offset.
+        Context ctx = ApplicationProvider.getApplicationContext();
+        int delayBefore = UtcTimer.delay;
+        GeneralVariables.disciplineClockFromGPS = true;
+        try {
+            GpsClockUpdater.refresh(ctx);
+            assertThat(GpsClockUpdater.getInstance(ctx).isRunning()).isFalse();
+            assertThat(UtcTimer.delay).isEqualTo(delayBefore);
+        } finally {
+            GeneralVariables.disciplineClockFromGPS = false;
+        }
     }
 }
