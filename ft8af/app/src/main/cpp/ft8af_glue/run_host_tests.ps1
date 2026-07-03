@@ -114,6 +114,18 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (fir_decimator)." }
 $firExit = $LASTEXITCODE
 
 # ---------------------------------------------------------------------------
+# Rational resampler tests (C++): true polyphase L/M resampling for non-48 kHz
+# USB capture devices (issue #364 — a floored 44.1k/12k ratio shifted every
+# FT8 tone off the 6.25 Hz grid). Header-only, no ft8_lib deps.
+# ---------------------------------------------------------------------------
+$ratSrc = Join-Path $here "test_rational_resampler.cpp"
+$ratOut = Join-Path $env:TEMP "ft8_rational_test.exe"
+& $clangxx -std=c++14 -O2 -x c++ $ratSrc -o $ratOut
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (rational_resampler)." }
+& $ratOut
+$ratExit = $LASTEXITCODE
+
+# ---------------------------------------------------------------------------
 # Decode benchmark / regression harness: replays the committed FT8 WAV corpus
 # through the app's exact decode pipeline (same monitor config, candidate
 # search, LDPC settings, dedup, and subtract-and-redecode loop as
@@ -233,6 +245,7 @@ $xslotExit = $LASTEXITCODE
 if ($goldenExit -ne 0) { exit $goldenExit }
 if ($dev625Exit -ne 0) { exit $dev625Exit }
 if ($firExit -ne 0) { exit $firExit }
+if ($ratExit -ne 0) { exit $ratExit }
 if ($benchSelfExit -ne 0) { exit $benchSelfExit }
 if ($benchExit -ne 0) { exit $benchExit }
 if ($subExit -ne 0) { exit $subExit }

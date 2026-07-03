@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "fir_decimator.h"
+#include "rational_resampler.h"
 
 #define TAG "ft8af_usb_capture"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  TAG, __VA_ARGS__)
@@ -71,6 +72,14 @@ struct CaptureSession {
     // result. Both are reused across iso callbacks (which fire every ~8ms) so the hot capture
     // path does no per-transfer heap allocation.
     FirDecimator        decimator{4};
+    // True rational resampling for devices whose rate is not an integer multiple
+    // of the target (issue #364): 44.1 kHz -> 12 kHz used to be floored to /3,
+    // producing 14.7 kHz audio labeled 12 kHz — every FT8 tone off the 6.25 Hz
+    // grid, zero decodes. When `useRational` is set, `resampler` (polyphase
+    // L/M, e.g. 40/147) replaces `decimator`; the 48 kHz integer fast path is
+    // untouched.
+    RationalResampler   resampler;
+    bool                useRational = false;
     std::vector<float>  monoScratch;
     std::vector<float>  outScratch;
 };
@@ -187,14 +196,19 @@ void LIBUSB_CALL onTransferComplete(libusb_transfer* xfer) {
         }
     }
 
-    // Anti-alias + decimate to the target rate. The FIR carries state across transfers, so
-    // partial input is fine — it just emits ~frames/ratio output samples per call.
+    // Anti-alias + resample to the target rate. Both stages carry state across transfers, so
+    // partial input is fine — they just emit ~frames*L/M output samples per call.
     if (!s->monoScratch.empty()) {
         // Reused buffer: clear() keeps the capacity from prior callbacks, so process()'s
         // push_backs don't reallocate on the hot path.
         s->outScratch.clear();
-        s->decimator.process(s->monoScratch.data(),
-                             (int)s->monoScratch.size(), s->outScratch);
+        if (s->useRational) {
+            s->resampler.process(s->monoScratch.data(),
+                                 (int)s->monoScratch.size(), s->outScratch);
+        } else {
+            s->decimator.process(s->monoScratch.data(),
+                                 (int)s->monoScratch.size(), s->outScratch);
+        }
         if (!s->outScratch.empty()) {
             emitAudioData(s, s->outScratch.data(), (int)s->outScratch.size());
         }
@@ -298,24 +312,36 @@ Java_com_k1af_ft8af_wave_UsbAudioNative_nativeStart(
     s->inputBytesPerSample = inputBytesPerSample > 0 ? inputBytesPerSample : 2;
     s->targetRate          = targetSampleRate;
     // Integer decimation ratio (e.g. 48k/12k = 4), computed defensively so a bad
-    // rate pair can't divide-by-zero or mis-rate the decoder. Warn on the two
-    // degenerate cases the helper folds into a pass-through ratio of 1.
+    // rate pair can't divide-by-zero or mis-rate the decoder. Warn on the
+    // degenerate cases the helper folds into a pass-through ratio of 1. A rate
+    // pair that isn't an integer multiple (e.g. a 44.1 kHz-only codec) gets the
+    // exact polyphase rational resampler instead of a floored ratio, which used
+    // to mislabel 14.7 kHz audio as 12 kHz and shift every FT8 tone off the
+    // 6.25 Hz grid (issue #364).
     const int ratio = decimationRatioFor(inputSampleRate, targetSampleRate);
     if (targetSampleRate <= 0 || inputSampleRate < targetSampleRate) {
         LOGE("invalid sample rates input=%d target=%d; disabling decimation "
              "(ratio=1, audio passed through unchanged)",
              inputSampleRate, targetSampleRate);
     } else if (inputSampleRate % targetSampleRate != 0) {
-        LOGE("input rate %d is not an integer multiple of target %d; using floor "
-             "ratio %d (output rate %d != expected %d, decode may suffer)",
-             inputSampleRate, targetSampleRate, ratio,
-             inputSampleRate / ratio, targetSampleRate);
+        s->useRational = true;
     }
     s->decimationRatio     = ratio;
-    // Build the anti-aliasing FIR for the actual integer ratio.
-    s->decimator.configure(ratio);
+    if (s->useRational) {
+        const RationalRatio lm = rationalRatioFor(inputSampleRate, targetSampleRate);
+        s->resampler.configure(lm.L, lm.M);
+        LOGI("input rate %d is not an integer multiple of target %d; using rational "
+             "polyphase resampler L/M=%d/%d (exact output rate %d)",
+             inputSampleRate, targetSampleRate, lm.L, lm.M,
+             (int)((int64_t)inputSampleRate * lm.L / lm.M));
+    } else {
+        // Build the anti-aliasing FIR for the actual integer ratio.
+        s->decimator.configure(ratio);
+    }
     s->monoScratch.reserve(inputSampleRate / 100);  // ~10ms of input headroom
-    s->outScratch.reserve(inputSampleRate / 100 / ratio + 1);  // decimated headroom
+    s->outScratch.reserve(targetSampleRate > 0
+            ? targetSampleRate / 100 + 2
+            : inputSampleRate / 100 + 2);           // resampled headroom
 
     jclass cbClass = env->GetObjectClass(callback);
     s->onData    = env->GetMethodID(cbClass, "onAudioData",       "([FI)V");
@@ -376,9 +402,12 @@ Java_com_k1af_ft8af_wave_UsbAudioNative_nativeStart(
     }
 
     LOGI("started capture: fd=%d ep=0x%02x maxPkt=%d inputRate=%d ch=%d targetRate=%d "
-         "decim=%d transfers=%zu packets/xfer=%d",
+         "L/M=%d/%d transfers=%zu packets/xfer=%d",
          fd, s->endpoint, s->maxPacketSize, s->inputRate, s->inputChannels,
-         s->targetRate, s->decimationRatio, s->transfers.size(), kPacketsPerTransfer);
+         s->targetRate,
+         s->useRational ? s->resampler.interpolation() : 1,
+         s->useRational ? s->resampler.decimation() : s->decimationRatio,
+         s->transfers.size(), kPacketsPerTransfer);
 
     s->eventThread = std::thread(eventLoop, s);
     return reinterpret_cast<jlong>(s);
