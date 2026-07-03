@@ -2,6 +2,7 @@ package com.k1af.ft8af;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -312,6 +313,113 @@ public class Ft8MessageTest {
         telemetry.n3 = 5;
         telemetry.callsignFrom = "123456789ABCDEF012";
         assertThat(telemetry.isJunkDecode()).isFalse();
+    }
+
+    // ---- copy-constructor hash resolution (#392) ----------------------------
+
+    @Before
+    public void clearHashList() {
+        // hashList is static; clear it so the resolution tests below are
+        // order-independent and never match a hash seeded by another test.
+        Ft8Message.hashList.clear();
+    }
+
+    @Test
+    public void copyConstructor_resolvesHashedCompoundCallFromSeededHashList() {
+        // Issue #392: a station answering a compound call (SV8/DM5HF) sends a
+        // standard frame in which that call is carried only as a 22-bit hash.
+        // The decoder can't resolve it and returns "<...>", but the JNI now
+        // preserves the raw hash in callToHash22 (ft8_call_hash.h) so the copy
+        // constructor can resolve it against the hash list the app seeds with
+        // the operator's own call. i3=1 keeps this off the native getHashNN
+        // path, which is exercised host-side in test_call_hash.c.
+        long h22 = 0x2ABCDEL; // stand-in for FT8Package.getHash22("SV8/DM5HF")
+        Ft8Message.hashList.addHash(h22, "SV8/DM5HF");
+
+        Ft8Message src = new Ft8Message(FT8Common.FT8_MODE);
+        src.i3 = 1; // standard frame
+        src.callsignTo = "<...>";
+        src.callsignFrom = "K1ABC";
+        src.extraInfo = "JN35";
+        src.callToHash22 = h22;
+
+        Ft8Message copy = new Ft8Message(src);
+        assertThat(copy.callsignTo).isEqualTo("<SV8/DM5HF>");
+        assertThat(copy.callsignFrom).isEqualTo("K1ABC");
+    }
+
+    @Test
+    public void copyConstructor_leavesUnknownHashAsPlaceholder() {
+        // A hash the list has never seen stays "<...>" — no false resolution.
+        Ft8Message src = new Ft8Message(FT8Common.FT8_MODE);
+        src.i3 = 1;
+        src.callsignTo = "<...>";
+        src.callsignFrom = "K1ABC";
+        src.extraInfo = "JN35";
+        src.callToHash22 = 0x155555L; // not seeded
+
+        Ft8Message copy = new Ft8Message(src);
+        assertThat(copy.callsignTo).isEqualTo("<...>");
+    }
+
+    @Test
+    public void copyConstructor_resolvesFromH12_whenOnlyH12Received() {
+        // A Type-4 frame ("<SV8/DM5HF> K1ABC RR73") carries only the 12-bit
+        // hash; the JNI leaves the other hash fields 0 (zero keys are never
+        // stored in the list, so they can't match anything).
+        long h22 = 0x2ABCDEL;
+        long h12 = h22 >> 10;
+        Ft8Message.hashList.addHash(h12, "SV8/DM5HF");
+
+        Ft8Message src = new Ft8Message(FT8Common.FT8_MODE);
+        src.i3 = 1;
+        src.callsignTo = "<...>";
+        src.callsignFrom = "K1ABC";
+        src.extraInfo = "RR73";
+        src.callToHash12 = h12;
+
+        Ft8Message copy = new Ft8Message(src);
+        assertThat(copy.callsignTo).isEqualTo("<SV8/DM5HF>");
+    }
+
+    @Test
+    public void copyConstructor_prefersWidestHash_overColliding10BitEntry() {
+        // A 10-bit hash has only 1024 buckets, so an unrelated callsign can
+        // legitimately occupy this message's h10 value. Resolution must check
+        // the widest hash first (h22 -> h12 -> h10) so the 22-bit match wins.
+        long h22 = 0x2ABCDEL;
+        Ft8Message.hashList.addHash(h22 >> 12, "K1COLLIDE"); // unrelated call at our h10
+        Ft8Message.hashList.addHash(h22, "SV8/DM5HF");
+
+        Ft8Message src = new Ft8Message(FT8Common.FT8_MODE);
+        src.i3 = 1;
+        src.callsignFrom = "<...>";
+        src.callsignTo = "K1ABC";
+        src.callFromHash22 = h22;
+        src.callFromHash12 = h22 >> 10;
+        src.callFromHash10 = h22 >> 12;
+
+        Ft8Message copy = new Ft8Message(src);
+        assertThat(copy.callsignFrom).isEqualTo("<SV8/DM5HF>");
+    }
+
+    @Test
+    public void resolvedCompoundCall_isRecognizedAsMyCallsign() {
+        // The full issue-#392 chain: once the reply resolves, the app must
+        // recognize it as addressed to the operator so a QSO can proceed.
+        GeneralVariables.myCallsign = "SV8/DM5HF";
+        long h22 = 0x2ABCDEL;
+        Ft8Message.hashList.addHash(h22, "SV8/DM5HF");
+
+        Ft8Message src = new Ft8Message(FT8Common.FT8_MODE);
+        src.i3 = 1;
+        src.callsignTo = "<...>";
+        src.callsignFrom = "K1ABC";
+        src.extraInfo = "R-10";
+        src.callToHash22 = h22;
+
+        Ft8Message copy = new Ft8Message(src);
+        assertThat(GeneralVariables.checkIsMyCallsign(copy.getCallsignTo())).isTrue();
     }
 
     // ---- simple formatters: getDt / getdB / getFreq_hz ----------------------

@@ -79,6 +79,25 @@ out625="$tmp/ft8_dev625_test"
 # Not exec'd, so the EXIT trap cleans up $tmp. set -e propagates a failure.
 "$out625"
 
+# Callsign-hash recovery tests (issue #392): the pure helpers in ft8_call_hash.h
+# that pull a compound call's 12-/22-bit hash out of a decoded frame so the
+# seeded Java MessageHashMap can resolve an answer that the decoder returns as
+# "<...>". Links only the pack/encode/message path it exercises.
+call_hash_srcs=(
+    "$here/test_call_hash.c"
+    "$ft8/ft8/pack.c"
+    "$ft8/ft8/encode.c"
+    "$ft8/ft8/crc.c"
+    "$ft8/ft8/constants.c"
+    "$ft8/ft8/text.c"
+    "$ft8/ft8/message.c"
+)
+call_hash_out="$tmp/ft8_call_hash_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${call_hash_srcs[@]}" -lm -o "$call_hash_out"
+"$call_hash_out"
+
 # FIR decimator tests (C++): anti-aliasing downsample that replaced the box filter
 # in usb_audio_capture.cpp. Header-only, no ft8_lib deps. Compiled as C++.
 CXX="${CXX:-clang++}"
@@ -223,21 +242,3 @@ xslot_out="$tmp/ft8_xslot_test"
     -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
     -I "$ft8" "${xslot_srcs[@]}" -lm -o "$xslot_out"
 "$xslot_out"
-
-# Hash-field unit tests: propagating received hash bits behind "<...>"
-# callsigns up to Java's persistent hash map (issue #392 — replies to a
-# nonstandard own callsign like SV8/DM5HF never resolved).
-hash_srcs=(
-    "$here/test_hashfields.c"
-    "$ft8/ft8/pack.c"
-    "$ft8/ft8/encode.c"
-    "$ft8/ft8/crc.c"
-    "$ft8/ft8/constants.c"
-    "$ft8/ft8/text.c"
-    "$ft8/ft8/message.c"
-)
-hash_out="$tmp/ft8_hashfields_test"
-"$CC" -std=c11 -O2 -D_GNU_SOURCE \
-    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
-    -I "$ft8" "${hash_srcs[@]}" -lm -o "$hash_out"
-"$hash_out"

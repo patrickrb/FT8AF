@@ -100,6 +100,26 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (dev625)." }
 $dev625Exit = $LASTEXITCODE
 
 # ---------------------------------------------------------------------------
+# Callsign-hash recovery tests (issue #392): the pure helpers in ft8_call_hash.h
+# that pull a compound call's 12-/22-bit hash out of a decoded frame so the
+# seeded Java MessageHashMap can resolve an answer that the decoder returns as
+# "<...>". Links only the pack/encode/message path it exercises.
+# ---------------------------------------------------------------------------
+$callHashSrcs = @(
+    "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
+    "ft8\text.c","ft8\message.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+
+$srcCallHash = Join-Path $here "test_call_hash.c"
+$outCallHash = Join-Path $env:TEMP "ft8_call_hash_test.exe"
+
+& $Clang @common $srcCallHash @callHashSrcs -o $outCallHash
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_call_hash)." }
+
+& $outCallHash
+$callHashExit = $LASTEXITCODE
+
+# ---------------------------------------------------------------------------
 # FIR decimator tests (C++): anti-aliasing downsample that replaced the box
 # filter in usb_audio_capture.cpp. Header-only, no ft8_lib deps; compiled with
 # clang++ (the header is C++). Own main(); exit 0 == all pass.
@@ -242,27 +262,9 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_xslot)." }
 & $outXslot
 $xslotExit = $LASTEXITCODE
 
-# ---------------------------------------------------------------------------
-# Hash-field unit tests: propagating received hash bits behind "<...>"
-# callsigns up to Java's persistent hash map (issue #392 — replies to a
-# nonstandard own callsign like SV8/DM5HF never resolved).
-# ---------------------------------------------------------------------------
-$hashSrcs = @(
-    "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
-    "ft8\text.c","ft8\message.c"
-) | ForEach-Object { Join-Path $ft8 $_ }
-
-$srcHash = Join-Path $here "test_hashfields.c"
-$outHash = Join-Path $env:TEMP "ft8_hashfields_test.exe"
-
-& $Clang @common $srcHash @hashSrcs -o $outHash
-if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_hashfields)." }
-
-& $outHash
-$hashExit = $LASTEXITCODE
-
 if ($goldenExit -ne 0) { exit $goldenExit }
 if ($dev625Exit -ne 0) { exit $dev625Exit }
+if ($callHashExit -ne 0) { exit $callHashExit }
 if ($firExit -ne 0) { exit $firExit }
 if ($ratExit -ne 0) { exit $ratExit }
 if ($benchSelfExit -ne 0) { exit $benchSelfExit }
@@ -270,5 +272,4 @@ if ($benchExit -ne 0) { exit $benchExit }
 if ($subExit -ne 0) { exit $subExit }
 if ($osdExit -ne 0) { exit $osdExit }
 if ($fineExit -ne 0) { exit $fineExit }
-if ($xslotExit -ne 0) { exit $xslotExit }
-exit $hashExit
+exit $xslotExit
