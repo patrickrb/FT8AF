@@ -55,23 +55,21 @@ android {
         versionName ciVersionName ?: '1.1.0'
 
 
-        dataBinding{
-            enabled true
-        }
-
         externalNativeBuild {
             cmake {
-                // No extra cppFlags — the upstream FT8CN's '-JENABLE_XOM=false' was
-                // a typo (likely intended -D, not -J) that clang rejects when an
-                // actual native build is wired up. It had no effect before because
-                // the legacy libft8cn.so is shipped prebuilt via jniLibs.
+                // No extra cppFlags — all native code (the FT8 DSP core plus the
+                // USB audio glue) builds from source via src/main/cpp/CMakeLists.txt
+                // into libft8af.so, and that build needs nothing beyond the
+                // defaults. The upstream FT8CN's '-JENABLE_XOM=false' was a typo
+                // (likely intended -D, not -J) that clang rejects, so it stays out.
                 cppFlags ''
             }
         }
 
-        // The legacy libft8cn.so binaries in app/libs/<abi>/ stay packaged via
-        // jniLibs.srcDirs; this filter just keeps NDK builds focused on the
-        // four ABIs we ship and prevents an unexpected ABI slipping in.
+        // Native code is built from source (see src/main/cpp/CMakeLists.txt) into
+        // libft8af.so; there are no prebuilt jniLibs. This filter just limits the
+        // NDK build to the four ABIs we ship and prevents an unexpected ABI
+        // slipping in.
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
         }
@@ -313,11 +311,11 @@ tasks.register('jacocoTestReport', JacocoReport) {
     ]
 
     classDirectories.setFrom(files(
-            fileTree(dir: "$buildDir/intermediates/javac/debug/classes", excludes: excludes),
-            fileTree(dir: "$buildDir/tmp/kotlin-classes/debug", excludes: excludes)
+            fileTree(dir: layout.buildDirectory.dir('intermediates/javac/debug/classes').get().asFile, excludes: excludes),
+            fileTree(dir: layout.buildDirectory.dir('tmp/kotlin-classes/debug').get().asFile, excludes: excludes)
     ))
     sourceDirectories.setFrom(files('src/main/java', 'src/main/kotlin'))
-    executionData.setFrom(fileTree(dir: "$buildDir", includes: [
+    executionData.setFrom(fileTree(dir: layout.buildDirectory.get().asFile, includes: [
             'jacoco/testDebugUnitTest.exec',
             'outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec'
     ]))
