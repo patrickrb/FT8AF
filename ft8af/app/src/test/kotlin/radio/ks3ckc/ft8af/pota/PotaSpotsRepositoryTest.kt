@@ -37,4 +37,26 @@ class PotaSpotsRepositoryTest {
     fun spotsByCall_defaultsToEmpty() {
         assertThat(PotaSpotsRepository.spotsByCall.value).isEmpty()
     }
+
+    @Test
+    fun spotLookupKey_stripsAngleBracketsFromHashedCallsigns() {
+        assertThat(spotLookupKey("<K1ABC/P>")).isEqualTo("K1ABC/P")
+    }
+
+    @Test
+    fun spotLookupKey_uppercasesPlainCallsigns() {
+        assertThat(spotLookupKey("k1abc")).isEqualTo("K1ABC")
+    }
+
+    @Test
+    fun spotLookupKey_nullAndBlankResolveToNull() {
+        assertThat(spotLookupKey(null)).isNull()
+        assertThat(spotLookupKey("")).isNull()
+        assertThat(spotLookupKey("<>")).isNull()
+    }
+
+    @Test
+    fun parkRefFor_bracketedCallsign_missesEmptyCacheWithoutThrowing() {
+        assertThat(PotaSpotsRepository.parkRefFor("<K1ABC/P>")).isNull()
+    }
 }
