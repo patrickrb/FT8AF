@@ -88,6 +88,15 @@ public class GeneralVariables {
     public static MutableLiveData<Float> mutableVolumePercent = new MutableLiveData<>();
     public static float volumePercent = 0.8f;//Audio playback volume, as a percentage
 
+    // RX input gain (issue #356): multiplier applied to incoming audio samples
+    // before resampling/decoding. 1.0 = 100% = unchanged behavior. Persisted
+    // under the "inputVolume" config key as a percent (0..200).
+    public static volatile float inputGainPercent = 1.0f;
+    // Live RX input level (peak + short-term RMS of post-gain samples),
+    // published by HamRecorder once per metering window for the UI meter.
+    public static final MutableLiveData<com.k1af.ft8af.wave.InputAudioLevel.Levels>
+            mutableInputLevel = new MutableLiveData<>();
+
     public static boolean showTxVolumeSlider = true;//Show inline TX volume slider on main screen
     public static MutableLiveData<Boolean> mutableShowTxVolumeSlider = new MutableLiveData<>(true);
 

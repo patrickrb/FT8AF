@@ -97,6 +97,15 @@ fun RadioAudioSettings(
         txVolume = ((volumeLive ?: GeneralVariables.volumePercent) * 100).toInt()
     }
 
+    // RX input volume (issue #356): percent, 0..200, 100 = unity gain.
+    // Clamped on read so an out-of-range in-memory value (e.g. set before the
+    // defensive config-load clamp existed) can't start the row/slider invalid.
+    var inputVolume by remember {
+        mutableIntStateOf(
+            clampVolumePercent((GeneralVariables.inputGainPercent * 100).toInt(), INPUT_VOLUME_MAX),
+        )
+    }
+
     // Observe serial ports for USB Cable picker
     val serialPorts by mainViewModel.mutableSerialPorts.observeAsState()
 
@@ -124,6 +133,7 @@ fun RadioAudioSettings(
     var showAudioInputPicker by remember { mutableStateOf(false) }
     var showAudioOutputPicker by remember { mutableStateOf(false) }
     var showTxVolume by remember { mutableStateOf(false) }
+    var showInputVolume by remember { mutableStateOf(false) }
     var showSerialPortPicker by remember { mutableStateOf(false) }
     var showBluetoothPicker by remember { mutableStateOf(false) }
     var showFlexRadioPicker by remember { mutableStateOf(false) }
@@ -423,8 +433,11 @@ fun RadioAudioSettings(
     // in-memory volumePercent immediately so the next TX uses the new level,
     // and we persist to the config DB on dismiss.
     if (showTxVolume) {
-        TxVolumeSliderDialog(
+        VolumeSliderDialog(
+            title = stringResource(R.string.settings_tx_volume),
+            advice = stringResource(R.string.settings_tx_volume_advice),
             initialValue = txVolume,
+            maxValue = 100,
             onChange = { value ->
                 txVolume = value
                 GeneralVariables.volumePercent = value / 100f
@@ -435,6 +448,27 @@ fun RadioAudioSettings(
                 mainViewModel.databaseOpr.writeConfig("volumeValue", txVolume.toString(), null)
                 mainViewModel.baseRig?.connector?.setRFVolume(txVolume)
                 saveOutputLevelForCurrentBand(mainViewModel.databaseOpr, txVolume)
+            },
+        )
+    }
+
+    // -- Input Volume Editor (issue #356) --
+    // RX gain applied to incoming samples before resampling/decoding. Live
+    // update while dragging (the very next audio buffer uses the new gain);
+    // persisted to the config DB on dismiss, mirroring the TX volume dialog.
+    if (showInputVolume) {
+        VolumeSliderDialog(
+            title = stringResource(R.string.settings_input_volume),
+            advice = stringResource(R.string.settings_input_volume_advice),
+            initialValue = inputVolume,
+            maxValue = INPUT_VOLUME_MAX,
+            onChange = { value ->
+                inputVolume = value
+                GeneralVariables.inputGainPercent = value / 100f
+            },
+            onDismiss = {
+                showInputVolume = false
+                mainViewModel.databaseOpr.writeConfig("inputVolume", inputVolume.toString(), null)
             },
         )
     }
@@ -608,6 +642,14 @@ fun RadioAudioSettings(
                             audioOutputAdapter.refreshDevices()
                             showAudioOutputPicker = true
                         },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_input_volume),
+                        description = stringResource(R.string.settings_input_volume_desc),
+                        value = stringResource(R.string.settings_percent_format, inputVolume),
+                        showChevron = true,
+                        onClick = { showInputVolume = true },
                     )
                     SectionDivider()
                     SettingsRow(
@@ -809,17 +851,31 @@ private fun SerialPortPickerDialog(
 }
 
 /**
- * Slider-based TX volume editor with live update. Dragging commits the new
- * level immediately (no Save/Cancel friction — the next TX uses what you
- * dialed); we persist to the config DB only on dismiss.
+ * Slider-based volume editor with live update. Dragging commits the new
+ * level immediately (no Save/Cancel friction — the next TX / next RX buffer
+ * uses what you dialed); we persist to the config DB only on dismiss.
+ * Used for both TX volume (0–100%) and RX input volume (0–200%).
  */
 @Composable
-private fun TxVolumeSliderDialog(
+private fun VolumeSliderDialog(
+    title: String,
+    advice: String,
     initialValue: Int,
+    maxValue: Int,
     onChange: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var current by remember { mutableIntStateOf(initialValue) }
+    // Clamp the starting value: a persisted/imported config value outside
+    // 0..maxValue must not start the slider in an invalid state.
+    var current by remember { mutableIntStateOf(clampVolumePercent(initialValue, maxValue)) }
+    // If clamping changed the value, sync it back to the caller immediately so
+    // dismissing without touching the slider persists the clamped value
+    // instead of re-persisting the out-of-range one.
+    LaunchedEffect(Unit) {
+        if (current != initialValue) {
+            onChange(current)
+        }
+    }
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -830,7 +886,7 @@ private fun TxVolumeSliderDialog(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = stringResource(R.string.settings_tx_volume),
+                text = title,
                 color = TextPrimary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 18.sp,
@@ -850,7 +906,7 @@ private fun TxVolumeSliderDialog(
             ) {
                 FT8AFIconButton(
                     onClick = {
-                        val clamped = (current - 5).coerceIn(0, 100)
+                        val clamped = clampVolumePercent(current - 5, maxValue)
                         if (clamped != current) {
                             current = clamped
                             onChange(clamped)
@@ -863,20 +919,20 @@ private fun TxVolumeSliderDialog(
                 IntSlider(
                     value = current,
                     onValueChange = { v ->
-                        val clamped = v.coerceIn(0, 100)
+                        val clamped = clampVolumePercent(v, maxValue)
                         if (clamped != current) {
                             current = clamped
                             onChange(clamped)
                         }
                     },
-                    valueRange = 0f..100f,
+                    valueRange = 0f..maxValue.toFloat(),
                     modifier = Modifier.weight(1f),
                     thumbColor = Accent,
                     activeTrackColor = Accent,
                 )
                 FT8AFIconButton(
                     onClick = {
-                        val clamped = (current + 5).coerceIn(0, 100)
+                        val clamped = clampVolumePercent(current + 5, maxValue)
                         if (clamped != current) {
                             current = clamped
                             onChange(clamped)
@@ -889,7 +945,7 @@ private fun TxVolumeSliderDialog(
             }
 
             Text(
-                text = stringResource(R.string.settings_tx_volume_advice),
+                text = advice,
                 color = TextMuted,
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
@@ -930,3 +986,20 @@ private fun AudioDevicePickerDialog(
         onSelect = onSelect,
     )
 }
+
+/**
+ * Upper bound of the RX input volume slider, in percent (200% = 2.0x gain).
+ * Must stay in step with [com.k1af.ft8af.wave.InputAudioLevel.MAX_GAIN],
+ * which clamps the persisted value on config load.
+ */
+internal const val INPUT_VOLUME_MAX = 200
+
+/**
+ * Clamp a volume percent to a slider's legal range [0, maxValue].
+ *
+ * Used by [VolumeSliderDialog] both for the +/-/drag steps and, defensively,
+ * for the initial value: a persisted config value outside the range (possible
+ * via settings import, issue #357) must not start the slider invalid or be
+ * re-persisted unchanged on dismiss.
+ */
+internal fun clampVolumePercent(value: Int, maxValue: Int): Int = value.coerceIn(0, maxValue)

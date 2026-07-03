@@ -535,6 +535,13 @@
     <string name="settings_enabled_bands_dialog_desc">لن تظهر النطاقات المخفية في منتقيات التردد.</string>
     <string name="settings_select_serial_port">اختر المنفذ التسلسلي</string>
     <string name="settings_tx_volume_advice">عدِّل مباشرة — يستخدم TX التالي هذا المستوى. راقب ALC في راديوك وخفِّضه حتى يلامس الخط بالكاد.</string>
+    <string name="settings_input_volume">مستوى صوت الإدخال</string>
+    <string name="settings_input_volume_desc" formatted="false">كسب صوت الاستقبال المطبق قبل فك التشفير (100% = بدون تغيير)</string>
+    <string name="settings_input_volume_advice">يُطبق على الصوت الوارد قبل فك التشفير. راقب مقياس مستوى الاستقبال على الشلال واستهدف المنطقة الخضراء؛ الأحمر يعني تشبع الإشارة.</string>
+    <string name="input_level_too_low">منخفض</string>
+    <string name="input_level_good">جيد</string>
+    <string name="input_level_too_high">مرتفع</string>
+    <string name="input_level_clipping">تشبع</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">اللغة</string>

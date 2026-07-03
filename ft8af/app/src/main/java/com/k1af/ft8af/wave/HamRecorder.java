@@ -4,6 +4,8 @@ import android.annotation.SuppressLint;
 import android.media.AudioFormat;
 import android.util.Log;
 
+import com.k1af.ft8af.GeneralVariables;
+
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -59,6 +61,12 @@ public class HamRecorder {
     private boolean isMicRecord=true;
     private MicRecorder micRecorder=new MicRecorder();
 
+    //RX input-level meter (issue #356). Fed post-gain samples in
+    //doOnWaveDataReceived; emits one Levels snapshot per 250ms window which we
+    //publish for the Compose input-level indicator. Only touched on the audio
+    //dispatch path, so no synchronization needed.
+    private final InputAudioLevel inputLevelMeter = new InputAudioLevel();
+
 
     public HamRecorder(OnVoiceMonitorChanged onVoiceMonitorChanged){
         this.onVoiceMonitorChanged=onVoiceMonitorChanged;
@@ -81,6 +89,22 @@ public class HamRecorder {
      */
     public void doOnWaveDataReceived(int bufferLen,float[] buffer){
         if (!isRunning) return;
+
+        //RX input gain (issue #356): every audio source funnels through here
+        //(mic AudioRecord, direct-USB capture, network connectors), so this is
+        //the single point where the user's input volume is applied before the
+        //samples reach the decoders and the waterfall. Buffers arrive freshly
+        //read/decoded and are copied by each monitor downstream, so the
+        //in-place multiply is safe. Unity gain is a no-op.
+        InputAudioLevel.applyGain(buffer, bufferLen, GeneralVariables.inputGainPercent);
+
+        //Meter the post-gain samples; one snapshot per ~250ms window keeps
+        //the LiveData/main-thread traffic bounded.
+        InputAudioLevel.Levels levels = inputLevelMeter.process(buffer, bufferLen);
+        if (levels != null) {
+            GeneralVariables.mutableInputLevel.postValue(levels);
+        }
+
         //for-each over the CopyOnWriteArrayList iterates one consistent
         //snapshot even if a monitor is added/removed concurrently
         for (VoiceDataMonitor monitor : voiceDataMonitorList) {

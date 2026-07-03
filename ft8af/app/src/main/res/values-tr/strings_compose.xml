@@ -524,6 +524,13 @@
     <string name="settings_enabled_bands_dialog_desc">Gizli bantlar frekans seçicilerde görünmez.</string>
     <string name="settings_select_serial_port">Seri Port Seç</string>
     <string name="settings_tx_volume_advice">Canlı ayarlayın — bir sonraki TX\'iniz bu düzeyi kullanır. Radyonuzun ALC\'sini izleyin ve çizgiye değecek kadar düşürün.</string>
+    <string name="settings_input_volume">Giriş Ses Düzeyi</string>
+    <string name="settings_input_volume_desc" formatted="false">Kod çözmeden önce uygulanan RX ses kazancı (%100 = değişmez)</string>
+    <string name="settings_input_volume_advice">Kod çözmeden önce gelen sese uygulanır. Şelaledeki RX seviye göstergesini izleyin ve yeşil bölgeyi hedefleyin; kırmızı kırpılma demektir.</string>
+    <string name="input_level_too_low">Düşük</string>
+    <string name="input_level_good">İyi</string>
+    <string name="input_level_too_high">Yüksek</string>
+    <string name="input_level_clipping">Kırpma</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Dil</string>

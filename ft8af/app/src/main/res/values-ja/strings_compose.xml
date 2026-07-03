@@ -457,6 +457,13 @@
     <string name="settings_enabled_bands_dialog_desc">非表示のバンドは周波数ピッカーに表示されません。</string>
     <string name="settings_select_serial_port">シリアルポートを選択</string>
     <string name="settings_tx_volume_advice">ライブで調整してください — 次の TX でこのレベルが使われます。無線機の ALC を見ながら、ラインに軽く触れる程度まで下げてください。</string>
+    <string name="settings_input_volume">入力音量</string>
+    <string name="settings_input_volume_desc" formatted="false">デコード前に適用される受信音声ゲイン（100% = 変更なし）</string>
+    <string name="settings_input_volume_advice">デコード前の受信音声に適用されます。ウォーターフォールのRXレベルメーターを見ながら緑のゾーンを目指してください。赤はクリッピングを示します。</string>
+    <string name="input_level_too_low">低</string>
+    <string name="input_level_good">適正</string>
+    <string name="input_level_too_high">高</string>
+    <string name="input_level_clipping">クリップ</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">言語</string>
