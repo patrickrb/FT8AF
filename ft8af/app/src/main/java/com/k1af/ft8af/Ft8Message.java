@@ -158,14 +158,17 @@ public class Ft8Message {
 
             messageHash = message.messageHash;
 
-            if (message.callsignFrom.equals("<...>")) {//look up in the hash list
-                callsignFrom = hashList.getCallsign(new long[]{message.callFromHash10, message.callFromHash12, message.callFromHash22});
+            //Look up "<...>" in the hash list, widest hash first: a 22-bit match
+            //identifies one callsign, while the 10-bit hash has only 1024 buckets
+            //and could hit an entry belonging to a different callsign.
+            if (message.callsignFrom.equals("<...>")) {
+                callsignFrom = hashList.getCallsign(new long[]{message.callFromHash22, message.callFromHash12, message.callFromHash10});
             } else {
                 callsignFrom = message.callsignFrom;
             }
 
-            if (message.callsignTo.equals("<...>")) {//look up in the hash list
-                callsignTo = hashList.getCallsign(new long[]{message.callToHash10, message.callToHash12, message.callToHash22});
+            if (message.callsignTo.equals("<...>")) {
+                callsignTo = hashList.getCallsign(new long[]{message.callToHash22, message.callToHash12, message.callToHash10});
             } else {
                 callsignTo = message.callsignTo;
             }

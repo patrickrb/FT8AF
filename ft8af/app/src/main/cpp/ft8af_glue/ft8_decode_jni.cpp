@@ -30,6 +30,7 @@ int ft8_snr(const waterfall_t* wf, const candidate_t* candidate);
 #include "ft8_fine.h"
 #include "ft8_subtract.h"
 #include "ft8_xslot.h"
+#include "ft8_call_hash.h"
 
 // ---------------------------------------------------------------------------
 // 22-bit WSJT-X callsign hash (same as ft2_decode_jni.cpp / test_golden_encode.c).
@@ -721,6 +722,28 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderFt8Analysis(
             ft8_set_string(env, ft8Message, FF8.maidenGrid, extra);
         ft8_set_call_hashes(env, ft8Message, call_to, FF8.callToHash10, FF8.callToHash12, FF8.callToHash22);
         ft8_set_call_hashes(env, ft8Message, call_de, FF8.callFromHash10, FF8.callFromHash12, FF8.callFromHash22);
+
+        // A hashed compound call (e.g. answers to SV8/DM5HF) that the decoder's
+        // own hash table couldn't resolve comes back as "<...>", and the call
+        // above zeroed its hash fields. Recover the raw hash straight from the
+        // frame so Java's seeded MessageHashMap can resolve it (issue #392).
+        if (type == FTX_MESSAGE_TYPE_NONSTD_CALL)
+        {
+            uint32_t n12 = 0;
+            bool is_to = false;
+            if (ft8af_nonstd_hash12(&message, &n12, &is_to))
+                env->SetLongField(ft8Message,
+                                  is_to ? FF8.callToHash12 : FF8.callFromHash12,
+                                  (jlong)n12);
+        }
+        else // FTX_MESSAGE_TYPE_STANDARD
+        {
+            uint32_t n22 = 0;
+            if (call_to[0] == '<' && ft8af_std_hash22(&message, 0, &n22))
+                env->SetLongField(ft8Message, FF8.callToHash22, (jlong)n22);
+            if (call_de[0] == '<' && ft8af_std_hash22(&message, 1, &n22))
+                env->SetLongField(ft8Message, FF8.callFromHash22, (jlong)n22);
+        }
     }
 
     env->SetBooleanField(ft8Message, FF8.isValid, ok ? JNI_TRUE : JNI_FALSE);
