@@ -1,5 +1,31 @@
 # FT8AF Project Instructions
 
+## Development environments
+
+Two checkouts are in use; the commands differ, so figure out which one you're on
+first (`uname` / the primary working directory) and follow the matching path
+throughout:
+
+- **Windows** (`C:\Users\burns\Projects\NEXT-FT8CN`, driven from WSL) — the
+  original build-and-deploy machine, with a Pixel 8 attached. Uses the
+  `cmd.exe /c "gradlew.bat …"` wrapper.
+- **macOS** (`/Users/reidcrowe/Documents/GitHub/FT8AF`) — builds and runs unit
+  tests natively (`./gradlew …`, needs JDK 17) and has `adb` plus a device
+  attached (a Moto G Stylus 5G, `ZY22G8KCH2`, usually alongside an emulator), so
+  it can do the full `installDebug` + on-device verification loop too.
+
+Both machines can build, test, install, and drive a real device. Check which
+one you're on first (`uname` / the primary working directory) — the gradle
+invocation differs (`gradlew.bat` wrapper vs. `./gradlew` with JDK 17), and the
+attached phone differs (Pixel 8 on Windows, Moto G Stylus 5G on macOS). Where a
+section below gives a command for one, the other's equivalent is called out
+inline.
+
+On macOS, `screencap` can come back all-black on the Moto during the splash
+animation or when a hardware overlay is active; wait for the app to settle and
+retry, and use the accessibility tree only as a fallback (`uiautomator dump`
+often can't reach idle because the UI animates continuously).
+
 ## Workflow
 
 **Every work item requires a pull request — no direct commits to `dev` or
@@ -23,10 +49,15 @@ Notes for a fresh worktree:
 
 - The `ft8af/app/src/main/cpp/` native sources (`ft8_lib`, `ft8af_glue`) are
   **tracked** in git, so a fresh worktree builds with no manual copying.
-- Build/install still uses the Windows wrapper from inside the worktree's `ft8af`
-  dir (`cmd.exe /c "gradlew.bat installDebug"`).
+- Build/install from inside the worktree's `ft8af` dir: Windows uses the wrapper
+  (`cmd.exe /c "gradlew.bat installDebug"`); macOS uses `./gradlew` (see Build &
+  Deploy for the JDK 17 requirement). Both can install to their attached device.
 
 Remove the worktree when the branch is merged: `git worktree remove <path>`.
+
+On macOS the primary checkout is not on the Windows path, so a feature branch in
+place is fine when nothing else is in flight, but a worktree per task is still the
+recommended default.
 
 ## Testing
 
@@ -45,7 +76,9 @@ Tests live in `ft8af/app/src/test/` (Kotlin under `.../kotlin`, Java under
 Android/Play-Services types (e.g. anything reaching `MaidenheadGrid`,
 `GeneralVariables`, `LatLng`). Pure math/logic needs no runner.
 
-Run from the worktree's `ft8af` dir:
+Run from the `ft8af` dir.
+
+**Windows:**
 
 ```
 cmd.exe /c "gradlew.bat testDebugUnitTest"
@@ -53,26 +86,54 @@ cmd.exe /c "gradlew.bat testDebugUnitTest"
 cmd.exe /c "gradlew.bat testDebugUnitTest --tests <fully.qualified.ClassName>"
 ```
 
+**macOS** (needs JDK 17 — see Build & Deploy):
+
+```
+export JAVA_HOME=~/.local/jdks/jdk-17.0.19+10/Contents/Home
+./gradlew testDebugUnitTest
+# or a single class:
+./gradlew testDebugUnitTest --tests <fully.qualified.ClassName>
+```
+
 ## Build & Deploy
 
 After making code changes, always build and install on the connected device.
+Both machines have a device attached and can do this.
 
-The WSL shell has no Linux JDK, so `./gradlew` fails with `JAVA_HOME is not set`.
-Use the Windows wrapper instead — it picks up the Android Studio JBR automatically:
+**Windows:** The WSL shell has no Linux JDK, so `./gradlew` fails with
+`JAVA_HOME is not set`. Use the Windows wrapper instead — it picks up the Android
+Studio JBR automatically:
 
 ```
 cd ft8af && cmd.exe /c "gradlew.bat installDebug"
 ```
 
-The user's phone is a Pixel 8 (transport_id changes; identify by `adb devices -l`
-model `Pixel_8`). An Android emulator is usually also attached — Gradle's install
-step will print `TimeoutException`/`Unknown API Level` warnings for the emulator
-and still successfully install on the phone. `Installed on 1 device.` near the end
-of the output means the phone got the APK; ignore the emulator noise.
+**macOS:** AGP 8.7.3 / Gradle 8.9 need **JDK 17**; the system JDK is 11, so builds
+fail without pointing `JAVA_HOME` at a 17. Temurin 17 is installed user-locally
+(no sudo — the Homebrew cask installer needs a sudo password) at
+`~/.local/jdks/jdk-17.0.19+10/Contents/Home`. The `installDebug` task installs to
+*every* attached device (including the emulator); to target only the phone, build
+the APK and push it with an explicit serial:
 
-When multiple devices are attached, target the phone explicitly with `-s` and the
-phone's serial (from `adb devices`). adb itself lives at
-`/mnt/c/Users/burns/AppData/Local/Android/Sdk/platform-tools/adb.exe`.
+```
+cd ft8af && JAVA_HOME=~/.local/jdks/jdk-17.0.19+10/Contents/Home ./gradlew assembleDebug
+adb -s ZY22G8KCH2 install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+`adb` is on the PATH (`/opt/homebrew/bin/adb`). To drive the UI, `adb -s
+ZY22G8KCH2 exec-out screencap -p > shot.png` and tap with `adb -s ZY22G8KCH2
+shell input tap <x> <y>` (coordinates in the device's real pixel space, 1080×2460).
+
+The phones: **Windows** has a Pixel 8 (`adb devices -l` model `Pixel_8`); **macOS**
+has a Moto G Stylus 5G (`ZY22G8KCH2`). On both, an emulator is usually also
+attached — Gradle's install step prints `TimeoutException`/`Unknown API Level`
+warnings for the emulator and still installs on the phone; `Installed on 1 device.`
+means the phone got the APK, so ignore the emulator noise.
+
+When multiple devices are attached, target the phone explicitly with `-s` and its
+serial (from `adb devices`). On Windows, adb lives at
+`/mnt/c/Users/burns/AppData/Local/Android/Sdk/platform-tools/adb.exe`; on macOS
+it's `/opt/homebrew/bin/adb`.
 
 ## Debug logs
 
