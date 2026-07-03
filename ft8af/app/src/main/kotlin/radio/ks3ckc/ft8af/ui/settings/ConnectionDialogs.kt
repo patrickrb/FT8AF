@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -58,6 +61,7 @@ import com.k1af.ft8af.rigs.InstructionSet
 import com.k1af.ft8af.ui.ToastMessage
 import com.k1af.ft8af.x6100.X6100Radio
 import com.k1af.ft8af.x6100.XieguRadioFactory
+import kotlinx.coroutines.delay
 import radio.ks3ckc.ft8af.theme.*
 
 // ─────────────────────────────────────────────────────────────────────
@@ -249,27 +253,84 @@ fun FlexRadioPickerDialog(
     onDismiss: () -> Unit,
 ) {
     var ipText by remember { mutableStateOf("") }
+    var showManualEntry by remember { mutableStateOf(false) }
+    var autoTriggered by remember { mutableStateOf(false) }
     val discoveredRadios = remember { mutableStateListOf<FlexRadio>() }
+    val context = LocalContext.current
+    // True only if the picker opened with NO radios cached in the factory singleton.
+    // Gates auto-connect to a freshly discovered radio, never a stale cached one.
+    val startedEmpty = remember { FlexRadioFactory.getInstance().flexRadios.isEmpty() }
 
-    // Subscribe to FlexRadioFactory discovery events
+    fun connect(radio: FlexRadio, how: String) {
+        GeneralVariables.fileLog("FlexDiscovery: connect ($how) model=${radio.model} ip=${radio.ip}")
+        mainViewModel.connectFlexRadioRig(GeneralVariables.getMainContext(), radio)
+        onDismiss()
+    }
+
+    // Hold a MulticastLock while the picker is open. This is the load-bearing
+    // part of discovery: the FlexRadioFactory UDP listener is already running,
+    // but Android's Wi-Fi chip drops incoming broadcast/multicast packets (which
+    // is what Flex discovery is) unless an app holds this lock — without it the
+    // discovered list stays empty and the user is forced to type an IP. Held only
+    // while the picker is open, so it doesn't drain battery the rest of the time.
     DisposableEffect(Unit) {
-        val factory = FlexRadioFactory.getInstance()
-        // Seed with any already-discovered radios
-        discoveredRadios.clear()
-        discoveredRadios.addAll(factory.flexRadios)
-
-        val listener = object : FlexRadioFactory.OnFlexRadioEvents {
-            override fun OnFlexRadioAdded(flexRadio: FlexRadio) {
-                discoveredRadios.clear()
-                discoveredRadios.addAll(factory.flexRadios)
-            }
-            override fun OnFlexRadioInvalid(flexRadio: FlexRadio) {
-                discoveredRadios.clear()
-                discoveredRadios.addAll(factory.flexRadios)
-            }
+        val wifi = context.applicationContext
+            .getSystemService(android.content.Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+        val multicastLock = wifi.createMulticastLock("ft8af-flex-discovery").apply {
+            setReferenceCounted(true)
+            runCatching { acquire() }
         }
-        factory.setOnFlexRadioEvents(listener)
-        onDispose { factory.setOnFlexRadioEvents(null) }
+        GeneralVariables.fileLog(
+            "FlexDiscovery: picker open, multicastLock.held=${multicastLock.isHeld}, " +
+                "seeded=${FlexRadioFactory.getInstance().flexRadios.size}, startedEmpty=$startedEmpty",
+        )
+        onDispose {
+            if (multicastLock.isHeld) runCatching { multicastLock.release() }
+        }
+    }
+
+    // Poll discovery while the dialog is open so radios found *after* opening
+    // (discovery typically takes a few seconds) appear live — no need to close
+    // and reopen the picker. Polling also sidesteps the factory's add callback,
+    // which fires before the radio is appended to its list. Rebuild only when the
+    // discovered set actually changes (FlexPickerLogic) to avoid resetting scroll.
+    LaunchedEffect(Unit) {
+        val factory = FlexRadioFactory.getInstance()
+        while (true) {
+            val latest = factory.flexRadios.toList()
+            val displayedKeys = discoveredRadios.map { FlexPickerLogic.identityKey(it.serial, it.ip) }
+            val latestKeys = latest.map { FlexPickerLogic.identityKey(it.serial, it.ip) }
+            if (FlexPickerLogic.listChanged(displayedKeys, latestKeys)) {
+                discoveredRadios.clear()
+                discoveredRadios.addAll(latest)
+            }
+            delay(1000)
+        }
+    }
+
+    // Auto-connect the moment a single radio is discovered and the user hasn't
+    // started typing — the "just connect to my Flex" path. Heavily gated (see
+    // shouldAutoConnectFlex) so it never fires on a stale cached radio or while a
+    // rig is already connected. One-shot via autoTriggered.
+    LaunchedEffect(discoveredRadios.size, ipText) {
+        if (shouldAutoConnectFlex(
+                discoveredCount = discoveredRadios.size,
+                userTypedIp = ipText.isNotBlank(),
+                alreadyTriggered = autoTriggered,
+                startedEmpty = startedEmpty,
+                rigAlreadyConnected = mainViewModel.isRigConnected(),
+            )
+        ) {
+            autoTriggered = true
+            val radio = discoveredRadios.first()
+            ToastMessage.show(
+                String.format(
+                    GeneralVariables.getStringFromResource(R.string.select_flex_device),
+                    radio.model,
+                ),
+            )
+            connect(radio, "auto")
+        }
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -290,50 +351,25 @@ fun FlexRadioPickerDialog(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Manual IP entry
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    value = ipText,
-                    onValueChange = { ipText = it },
-                    label = { Text("IP Address") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                    colors = DialogFieldColors(),
-                    modifier = Modifier.weight(1f),
-                )
-                DialogAccentButton(
-                    label = stringResource(R.string.icom_login_button),
-                    enabled = ipText.isNotBlank(),
-                    modifier = Modifier.width(80.dp),
+            if (discoveredRadios.isEmpty()) {
+                // Searching state — discovery is active; no manual typing required.
+                Row(
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    ToastMessage.show(
-                        String.format(
-                            GeneralVariables.getStringFromResource(R.string.connect_flex_ip),
-                            ipText,
-                        ),
+                    CircularProgressIndicator(
+                        color = Accent,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(18.dp),
                     )
-                    val flexRadio = FlexRadio()
-                    flexRadio.ip = ipText.trim()
-                    flexRadio.model = "FlexRadio"
-                    mainViewModel.connectFlexRadioRig(GeneralVariables.getMainContext(), flexRadio)
-                    onDismiss()
+                    Text(
+                        text = stringResource(R.string.flex_searching),
+                        color = TextMuted,
+                        fontSize = 14.sp,
+                    )
                 }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Discovered radios
-            if (discoveredRadios.isNotEmpty()) {
-                HorizontalDivider(color = Border, modifier = Modifier.padding(horizontal = 24.dp))
-
-                Spacer(modifier = Modifier.height(8.dp))
-
+            } else {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -350,11 +386,7 @@ fun FlexRadioPickerDialog(
                                             radio.model,
                                         ),
                                     )
-                                    mainViewModel.connectFlexRadioRig(
-                                        GeneralVariables.getMainContext(),
-                                        radio,
-                                    )
-                                    onDismiss()
+                                    connect(radio, "tap")
                                 }
                                 .padding(horizontal = 24.dp, vertical = 10.dp),
                         ) {
@@ -371,6 +403,54 @@ fun FlexRadioPickerDialog(
                         }
                         HorizontalDivider(color = Border)
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Manual IP entry — a fallback for when discovery can't reach the rig
+            // (different subnet, VPN, broadcast blocked). Collapsed by default so
+            // discovery is the obvious path.
+            if (showManualEntry) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = ipText,
+                        onValueChange = { ipText = it },
+                        label = { Text("IP Address") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        colors = DialogFieldColors(),
+                        modifier = Modifier.weight(1f),
+                    )
+                    DialogAccentButton(
+                        label = stringResource(R.string.icom_login_button),
+                        enabled = ipText.isNotBlank(),
+                        modifier = Modifier.width(80.dp),
+                    ) {
+                        ToastMessage.show(
+                            String.format(
+                                GeneralVariables.getStringFromResource(R.string.connect_flex_ip),
+                                ipText,
+                            ),
+                        )
+                        val flexRadio = FlexRadio()
+                        flexRadio.ip = ipText.trim()
+                        flexRadio.model = "FlexRadio"
+                        connect(flexRadio, "manual")
+                    }
+                }
+            } else {
+                TextButton(
+                    onClick = { showManualEntry = true },
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                ) {
+                    Text(stringResource(R.string.flex_enter_ip_manually), color = TextMuted)
                 }
             }
 

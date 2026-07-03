@@ -2575,6 +2575,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("flexMaxTunePower")) {//Flex max tune power
                     GeneralVariables.flexMaxTunePower = result.equals("") ? 10 : Integer.parseInt(result);
                 }
+                if (name.equalsIgnoreCase("flexLastIp")) {//Last Flex address, for CAT-chip reconnect
+                    GeneralVariables.flexLastIp = result == null ? "" : result;
+                }
                 if (name.equalsIgnoreCase("saveSWL")) {//Save decoded messages
                     GeneralVariables.saveSWLMessage = result.equals("1");
                 }
@@ -2676,6 +2679,25 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("alcTargetHigh")) {
                     GeneralVariables.alcTargetHigh = result.equals("") ? 100 : Integer.parseInt(result);
+                }
+                // Meters HUD enabled-meters (SWR/ALC default on, rest default off)
+                if (name.equalsIgnoreCase("meterShowSwr")) {
+                    GeneralVariables.meterShowSwr = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("meterShowAlc")) {
+                    GeneralVariables.meterShowAlc = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("meterShowPower")) {
+                    GeneralVariables.meterShowPower = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("meterShowSMeter")) {
+                    GeneralVariables.meterShowSMeter = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("meterShowVoltage")) {
+                    GeneralVariables.meterShowVoltage = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("meterShowTemp")) {
+                    GeneralVariables.meterShowTemp = result.equals("1");
                 }
                 if (name.equalsIgnoreCase("spectrumWidth")) {
                     GeneralVariables.setSpectrumWidth(result.equals("") ? 3500 : Integer.parseInt(result));

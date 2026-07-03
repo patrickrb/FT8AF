@@ -93,6 +93,9 @@ public class GeneralVariables {
 
     public static int flexMaxRfPower = 10;//Flex radio max transmit power
     public static int flexMaxTunePower = 10;//Flex radio max tune power
+    // Last FlexRadio address connected to (discovered or typed). Persisted so the
+    // CAT chip can reconnect on a cold start without re-opening the picker.
+    public static String flexLastIp = "";
 
     // Hidden debug mode (unlocked by tapping the version 7 times in About).
     // When true, Settings exposes the Debug screen for log viewing/sharing.
@@ -367,6 +370,21 @@ public class GeneralVariables {
     public static int swrHaltThreshold = 120;          // 0-255 normalized (~3.0:1)
     public static int alcTargetLow = 60;               // ALC target window low (0-255)
     public static int alcTargetHigh = 100;             // ALC target window high (0-255)
+
+    // Meters HUD: which meters the pull-down HUD shows. The HUD adapts per rig —
+    // only meters the connected rig actually reports are shown — and these flags
+    // gate which of the available ones the user wants. SWR + ALC are the two
+    // universal across CAT rigs and default on; the richer meters (only some
+    // rigs, e.g. FlexRadio/Xiegu network, report them) default off.
+    public static boolean meterShowSwr = true;
+    public static boolean meterShowAlc = true;
+    // Power defaults on: only the network rigs (Flex/Xiegu) report output watts,
+    // and on those it's the natural companion to the in-HUD TX-power control.
+    // Serial rigs don't report it, so "adapt per rig" hides it there anyway.
+    public static boolean meterShowPower = true;
+    public static boolean meterShowSMeter = false;
+    public static boolean meterShowVoltage = false;
+    public static boolean meterShowTemp = false;
 
     public static MutableLiveData<Float> mutableBaseFrequency = new MutableLiveData<>();
 

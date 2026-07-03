@@ -9,6 +9,10 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" /> <!-- For GPS location access -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Required to hold a WifiManager.MulticastLock so the Wi-Fi chip delivers
+         FlexRadio UDP discovery broadcasts to us (Android filters broadcast/
+         multicast packets without it). -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission
         android:name="android.permission.BLUETOOTH"
         android:maxSdkVersion="30" />

@@ -66,6 +66,7 @@ import radio.ks3ckc.ft8af.ui.components.TopBar
 private enum class SettingsCategory {
     RADIO_AUDIO,
     TRANSMISSION,
+    METERS,
     TIME_SYNC,
     DECODE_FILTERS,
     LOGGING,
@@ -135,6 +136,8 @@ fun SettingsScreen(
                 RadioAudioSettings(mainViewModel, onBack = { currentCategory = null })
             SettingsCategory.TRANSMISSION ->
                 TransmissionSettings(mainViewModel, onBack = { currentCategory = null })
+            SettingsCategory.METERS ->
+                MetersSettings(mainViewModel, onBack = { currentCategory = null })
             SettingsCategory.TIME_SYNC ->
                 TimeSyncSettings(mainViewModel, onBack = { currentCategory = null })
             SettingsCategory.DECODE_FILTERS ->
@@ -299,6 +302,13 @@ private fun SettingsLanding(
                         label = stringResource(R.string.settings_cat_transmission),
                         showChevron = true,
                         onClick = { onOpenCategory(SettingsCategory.TRANSMISSION) },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_cat_meters),
+                        description = stringResource(R.string.settings_cat_meters_desc),
+                        showChevron = true,
+                        onClick = { onOpenCategory(SettingsCategory.METERS) },
                     )
                     SectionDivider()
                     SettingsRow(

@@ -604,7 +604,10 @@ public class MainViewModel extends ViewModel {
 
 
                 getQTHRunnable.messages = messages;
-                getQTHThreadPool.execute(getQTHRunnable);//query location via thread pool
+                //query location via thread pool; guarded so a decode landing during
+                //ViewModel teardown (pool shut down in onCleared()) drops the lookup
+                //instead of crashing with RejectedExecutionException.
+                ExecutorUtils.safeExecute(getQTHThreadPool, getQTHRunnable);
 
                 //this variable also notifies message list changes
                 mutable_Decoded_Counter.postValue(
@@ -698,8 +701,8 @@ public class MainViewModel extends ViewModel {
                         if (baseRig.isConnected()) {
                             sendWaveDataRunnable.baseRig = baseRig;
                             sendWaveDataRunnable.message = msg;
-                            //send network data packets via thread pool
-                            sendWaveDataThreadPool.execute(sendWaveDataRunnable);
+                            //send network data packets via thread pool (guarded against teardown race)
+                            ExecutorUtils.safeExecute(sendWaveDataThreadPool, sendWaveDataRunnable);
                         }
                     }
                 }
@@ -727,7 +730,7 @@ public class MainViewModel extends ViewModel {
                 }
                 sendWaveDataRunnable.baseRig = baseRig;
                 sendWaveDataRunnable.message = msg;
-                sendWaveDataThreadPool.execute(sendWaveDataRunnable);
+                ExecutorUtils.safeExecute(sendWaveDataThreadPool, sendWaveDataRunnable);
             }
 
         }, new OnTransmitSuccess() {//when QSO is successful
@@ -1319,7 +1322,32 @@ public class MainViewModel extends ViewModel {
      * @param context   context
      * @param flexRadio FlexRadio object
      */
+    // IP of a Flex connect currently in flight (set when a connect starts, cleared
+    // when it succeeds or fails), so two near-simultaneous connect requests to the
+    // same radio don't both run the connect sequence. See the guard below.
+    private volatile String flexConnectInProgressIp = null;
+
     public void connectFlexRadioRig(Context context, FlexRadio flexRadio) {
+        final String requestedIp = (flexRadio != null) ? flexRadio.getIp() : null;
+        // Guard against a DUPLICATE connect to the same Flex. Two UI paths can each
+        // fire a connect — the network picker's auto-connect and the CAT chip / a
+        // manual tap — and a second connect re-runs `client disconnect` + `slice
+        // create`, which spawns a SECOND slice on the radio (duplicate LEVEL/ALC
+        // meters) and tears down the GUI client whose meter subscription is live, so
+        // meters stream briefly then die. If we're already connected to this IP, or a
+        // connect to it is already in flight, make this call a no-op.
+        if (requestedIp != null && !requestedIp.isEmpty()) {
+            if (requestedIp.equals(flexConnectInProgressIp)) {
+                return;
+            }
+            if (baseRig != null && baseRig.getConnector() instanceof FlexConnector
+                    && baseRig.getConnector().isConnected()
+                    && requestedIp.equals(((FlexConnector) baseRig.getConnector()).getFlexIp())) {
+                setCatConnectionState(CatConnectionState.CONNECTED);
+                return;
+            }
+        }
+        flexConnectInProgressIp = requestedIp;
         if (GeneralVariables.connectMode == ConnectMode.NETWORK) {
             if (baseRig != null) {
                 if (baseRig.getConnector() != null) {
@@ -1328,11 +1356,47 @@ public class MainViewModel extends ViewModel {
             }
         }
         GeneralVariables.controlMode = ControlMode.CAT;//network control mode
+        // A FlexRadio always uses network (DAX) audio — force NETWORK connect mode
+        // so TX and RX audio route over the network. Otherwise a stale connectMode
+        // (e.g. left as USB_CABLE from a previously-attached USB sound card) sends
+        // TX audio to that USB output instead of the Flex (radio transmits 0 W) and
+        // pulls RX from the phone mic instead of DAX. Also clear any stale USB-audio
+        // output override for the same reason.
+        GeneralVariables.connectMode = ConnectMode.NETWORK;
+        databaseOpr.writeConfig("connectMode", String.valueOf(ConnectMode.NETWORK), null);
+        GeneralVariables.usbAudioOutputVendorId = 0;
+        GeneralVariables.usbAudioOutputProductId = 0;
+        // Remember the address so the CAT chip can reconnect on a cold start
+        // without re-opening the picker.
+        if (flexRadio != null && flexRadio.getIp() != null && !flexRadio.getIp().isEmpty()) {
+            GeneralVariables.flexLastIp = flexRadio.getIp();
+            databaseOpr.writeConfig("flexLastIp", flexRadio.getIp(), null);
+        }
+        // Reflect the in-progress attempt on the CAT chip immediately; the Flex
+        // connect is async (TCP), so without this the chip looks idle until/unless
+        // the link comes up.
+        setCatConnectionState(CatConnectionState.CONNECTING);
         FlexConnector flexConnector = new FlexConnector(context, flexRadio, GeneralVariables.controlMode);
         flexConnector.setOnWaveDataReceived(new FlexConnector.OnWaveDataReceived() {
             @Override
             public void OnDataReceived(int bufferLen, float[] buffer) {
                 hamRecorder.doOnWaveDataReceived(bufferLen, buffer);
+            }
+        });
+        // Surface success/failure: the Flex path doesn't fire the BaseRig
+        // onConnected() callback, so without this the CAT chip never turns
+        // connected and there's no "connected" confirmation toast.
+        flexConnector.setOnConnectionResult(new FlexConnector.OnConnectionResult() {
+            @Override
+            public void onConnected() {
+                flexConnectInProgressIp = null;
+                setCatConnectionState(CatConnectionState.CONNECTED);
+                ToastMessage.show(getStringFromResource(R.string.connected_rig));
+            }
+            @Override
+            public void onFailed() {
+                flexConnectInProgressIp = null;
+                setCatConnectionState(CatConnectionState.ERROR);
             }
         });
         flexConnector.connect();
@@ -1570,6 +1634,15 @@ public class MainViewModel extends ViewModel {
      */
     public void reconnectRig() {
         if (baseRig == null || baseRig.getConnector() == null) {
+            return;
+        }
+        // Don't tear down a live or in-progress connection. Repeated CAT-chip taps would
+        // otherwise call connect() again on the Flex, opening a parallel TCP session whose
+        // "client gui" mints a new handle and orphans the slice/streams of the prior
+        // session — leaving the radio "connected" but owning nothing. Only reconnect when
+        // genuinely disconnected.
+        if (catConnectionState == CatConnectionState.CONNECTING
+                || catConnectionState == CatConnectionState.CONNECTED) {
             return;
         }
         setCatConnectionState(CatConnectionState.CONNECTING);

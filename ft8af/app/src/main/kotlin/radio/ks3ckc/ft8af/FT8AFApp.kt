@@ -38,10 +38,14 @@ import com.k1af.ft8af.ModeProfile
 import com.k1af.ft8af.R
 import com.k1af.ft8af.database.OperationBand
 import com.k1af.ft8af.ft8transmit.FT8TransmitSignal
+import com.k1af.ft8af.flex.FlexRadio
 import com.k1af.ft8af.rigs.CatConnectionState
+import com.k1af.ft8af.rigs.InstructionSet
 import com.k1af.ft8af.rigs.BaseRigOperation
 import radio.ks3ckc.ft8af.theme.BgApp
 import radio.ks3ckc.ft8af.ui.components.ActiveQsoPanel
+import radio.ks3ckc.ft8af.ui.components.CatTapAction
+import radio.ks3ckc.ft8af.ui.components.catTapAction
 import radio.ks3ckc.ft8af.ui.components.shouldShowCatChip
 import radio.ks3ckc.ft8af.ui.components.CqOptionsSheet
 import radio.ks3ckc.ft8af.ui.components.canEnableFieldDay
@@ -49,6 +53,8 @@ import radio.ks3ckc.ft8af.ui.components.shouldPersistSection
 import radio.ks3ckc.ft8af.ui.components.FT8AFTab
 import radio.ks3ckc.ft8af.ui.components.FrequencyPickerSheet
 import radio.ks3ckc.ft8af.ui.components.HoundSetupSheet
+import radio.ks3ckc.ft8af.ui.components.MetersSheet
+import radio.ks3ckc.ft8af.ui.components.MetersHandle
 import radio.ks3ckc.ft8af.ui.components.formatMhz
 import radio.ks3ckc.ft8af.ui.components.QsoCelebration
 import radio.ks3ckc.ft8af.ui.components.SlotTimerBar
@@ -158,6 +164,9 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
 
     // Frequency picker sheet state
     var showFrequencyPicker by rememberSaveable { mutableStateOf(false) }
+
+    // Meters HUD (ALC/SWR pull-down) state — opened by a top-edge swipe-down.
+    var showMeters by rememberSaveable { mutableStateOf(false) }
 
     // A tapped Needed-DX notification asks us to jump to the Decode tab (DecodeScreen
     // then scrolls to + highlights the alerted station).
@@ -490,7 +499,29 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                         ).show()
                     }
                 },
-                onReconnectCat = { mainViewModel.reconnectRig() },
+                onReconnectCat = {
+                    when (
+                        catTapAction(
+                            connectorExists = mainViewModel.baseRig?.connector != null,
+                            isFlexNetwork = GeneralVariables.instructionSet == InstructionSet.FLEX_NETWORK,
+                            savedFlexIp = GeneralVariables.flexLastIp,
+                        )
+                    ) {
+                        CatTapAction.RECONNECT_EXISTING -> mainViewModel.reconnectRig()
+                        CatTapAction.CONNECT_SAVED_FLEX -> {
+                            val flexRadio = FlexRadio()
+                            flexRadio.ip = GeneralVariables.flexLastIp
+                            flexRadio.model = "FlexRadio"
+                            mainViewModel.connectFlexRadioRig(GeneralVariables.getMainContext(), flexRadio)
+                        }
+                        CatTapAction.NEEDS_SETUP ->
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.cat_needs_setup),
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                    }
+                },
                 onOpenFrequencyPicker = { showFrequencyPicker = true },
                 onToggleExpand = { qsoPanelExpanded = !qsoPanelExpanded },
             )
@@ -641,6 +672,23 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                     GeneralVariables.resetLaunchSupervision()
                 }
             },
+        )
+
+        // Visible pull-tab at the top center opens the meters HUD from anywhere
+        // (tap or short drag down). Hidden while the HUD is open.
+        MetersHandle(
+            enabled = !showMeters,
+            onOpen = { showMeters = true },
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
+
+        // Meters HUD (ALC/SWR) — sibling overlay so its scrim and panel sit above
+        // the tab bar and TxStrip, like the other sheets.
+        MetersSheet(
+            visible = showMeters,
+            mainViewModel = mainViewModel,
+            isTransmitting = isTransmitting,
+            onDismiss = { showMeters = false },
         )
     }
 }

@@ -56,19 +56,6 @@ public class FlexMeterInfos extends HashMap<Integer, FlexMeterInfos.FlexMeterInf
                     }
                     if (val[0].toLowerCase().contains(".nam")) {
                         meterInfo.nam = val[1];
-                        //For fast MeterList lookup
-                        if (val[1].toUpperCase().contains("LEVEL")) {
-                            sMeterId = index;
-                        } else if (val[1].toUpperCase().contains("PATEMP")) {
-                            tempCId = index;
-                        } else if (val[1].toUpperCase().contains("SWR")) {
-                            swrId = index;
-                        } else if (val[1].toUpperCase().contains("FWDPWR")) {
-                            pwrId = index;
-                        } else if (val[1].toUpperCase().contains("ALC")) {
-                            alcId = index;
-                        }
-
                     }
                     if (val[0].toLowerCase().contains(".low")) {
                         try { meterInfo.low = Float.parseFloat(val[1]); }
@@ -105,11 +92,48 @@ public class FlexMeterInfos extends HashMap<Integer, FlexMeterInfos.FlexMeterInf
                 }
             }
         }
+        resolveMeterIds();
 //        sMeterId=getMeterId("LEVEL");
 //        tempCId=getMeterId("PATEMP");
 //        swrId=getMeterId("SWR");
 //        pwrId=getMeterId("FWDPWR");
 //        alcId=getMeterId("ALC");
+    }
+
+    /**
+     * Re-resolve the five fast-lookup meter ids from the full accumulated meter
+     * table, deterministically. A Flex reports DUPLICATE meters with the same
+     * name — a second receive slice has its own LEVEL meter, and a second
+     * transmit block (num=9) has its own ALC — so the original "remember the
+     * id of whatever name I last saw" logic latched ALC onto the inactive id33
+     * and the S-meter onto the unused slice-1 id27 (both idle at -150), which is
+     * why those two meters read dead while temp/SWR/PWR (unique names) were fine.
+     *
+     * Fix: scan every known meter in ascending id order and keep the LOWEST id
+     * whose name matches exactly. The lowest id is the original receive slice /
+     * the active transmit block — the meter that actually moves. Rescanning the
+     * whole table on every call makes this idempotent: re-requesting the meter
+     * list (e.g. each time the HUD opens) can no longer flip a good id to a
+     * duplicate, even when this FlexMeterInfos instance is reused across reconnects.
+     */
+    private synchronized void resolveMeterIds() {
+        sMeterId = -1;
+        tempCId = -1;
+        swrId = -1;
+        pwrId = -1;
+        alcId = -1;
+        java.util.List<Integer> keys = new java.util.ArrayList<>(keySet());
+        java.util.Collections.sort(keys);
+        for (int key : keys) {
+            FlexMeterInfo info = get(key);
+            if (info == null || info.nam == null) continue;
+            String name = info.nam.toUpperCase();
+            if (sMeterId == -1 && name.equals("LEVEL")) sMeterId = key;
+            else if (tempCId == -1 && name.equals("PATEMP")) tempCId = key;
+            else if (swrId == -1 && name.equals("SWR")) swrId = key;
+            else if (pwrId == -1 && name.equals("FWDPWR")) pwrId = key;
+            else if (alcId == -1 && name.equals("ALC")) alcId = key;
+        }
     }
 
     /**
