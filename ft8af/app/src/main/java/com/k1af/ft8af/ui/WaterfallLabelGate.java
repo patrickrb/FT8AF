@@ -32,7 +32,11 @@ import java.util.List;
  * lets them through, and the same slot's labels are stamped again a few scrolled rows
  * lower — every label on the waterfall appears doubled/garbled.
  *
- * <p>Plain Java (no Android), so the once-per-slot rule can be unit-tested directly.
+ * <p>Makes no Android framework calls of its own, so the once-per-slot rule is unit-tested
+ * directly. The {@link #shouldStamp(long, List)} overload does reference {@link Ft8Message},
+ * whose fields pull in Android/Play-Services types — tests exercising that overload run
+ * under Robolectric (see {@code WaterfallLabelGateSlotKeyTest}); the index-keyed overloads
+ * stay testable on plain JUnit.
  */
 public final class WaterfallLabelGate {
 
