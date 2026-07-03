@@ -435,6 +435,15 @@ public class GeneralVariables {
     public static volatile boolean huntPotaOnly = false;//Mirror of the "CQ POTA" decode filter: Hunt only calls POTA CQs (issue #333)
     public static boolean autoCallFollow = true;//Auto-call followed callsigns
     public static boolean autoUpdateGridFromGPS = false;//Use device GPS to keep Maidenhead grid current
+    public static boolean disciplineClockFromGPS = false;//Discipline the app clock (UtcTimer.delay) from GPS satellite time (issue #373). Off by default — consensual.
+    public static int gpsClockIntervalMinutes = 5;//How often to re-read GPS time for clock discipline. Clamped 1-30 by GpsClockUpdater.
+    //Runtime status for the Time Sync UI (not persisted): the offset the last GPS fix applied
+    //to UtcTimer.delay. The last-sync *timestamp* is the retained value of mutableGpsClockSync
+    //below, so there's no separate field for it.
+    public static volatile int gpsClockOffsetMs = 0;
+    //Posted each time a GPS fix disciplines the clock, so the Time Sync screen can recompose
+    //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.
+    public static MutableLiveData<Long> mutableGpsClockSync = new MutableLiveData<>();
     public static ArrayList<String> QSL_Callsign_list = new ArrayList<>();//Successfully QSL'd callsigns
     public static ArrayList<String> QSL_Callsign_list_other_band = new ArrayList<>();//Successfully QSL'd callsigns on other bands
     public static HashSet<String> QSL_Grid_list = new HashSet<>();//Distinct worked 4-char Maidenhead grids (any band)

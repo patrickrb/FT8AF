@@ -12,24 +12,34 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.Manifest
+import android.app.Activity
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
+import com.k1af.ft8af.location.GpsClockUpdater
 import com.k1af.ft8af.timer.UtcTimer
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.GlassCard
+import radio.ks3ckc.ft8af.ui.components.SettingsRow
 import kotlin.math.roundToInt
 
 /**
@@ -46,12 +56,31 @@ fun TimeSyncSettings(
     mainViewModel: MainViewModel,
     onBack: () -> Unit,
 ) {
+    val context = LocalContext.current
+
     // UtcTimer.delay is the live source of truth; seed local state from it.
     var correctionMs by remember { mutableIntStateOf(UtcTimer.delay) }
+
+    // GPS clock discipline (issue #373).
+    var disciplineFromGps by remember { mutableStateOf(GeneralVariables.disciplineClockFromGPS) }
+    var gpsIntervalMin by remember { mutableIntStateOf(GeneralVariables.gpsClockIntervalMinutes) }
+    // Re-read the status readout whenever a GPS fix disciplines the clock. The LiveData
+    // retains its last posted timestamp, so seeding from .value shows a prior sync when the
+    // screen is reopened in the same session.
+    val lastGpsSync by GeneralVariables.mutableGpsClockSync.observeAsState(
+        GeneralVariables.mutableGpsClockSync.value
+    )
 
     // Latest cycle's average decode DT (seconds), posted in MainViewModel.afterDecode.
     // Null until the first decode this session.
     val avgDtSec by mainViewModel.mutableTimerOffset.observeAsState()
+
+    // While GPS discipline owns the clock, each fix rewrites UtcTimer.delay behind this
+    // screen's back — and disabling it restores the pre-GPS offset. Re-read the live value
+    // on every posted sync and on toggle changes so the "Current" readout can't go stale.
+    LaunchedEffect(lastGpsSync, disciplineFromGps) {
+        correctionMs = UtcTimer.delay
+    }
 
     // Apply a new correction everywhere: live timer, in-memory config mirror, and DB.
     fun apply(newMs: Int) {
@@ -90,27 +119,41 @@ fun TimeSyncSettings(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    // While GPS discipline owns the clock the manual controls are inert —
+                    // editing them would fight the next GPS fix and overwrite the persisted
+                    // manual value. Disable them and say why.
+                    val manualEnabled = !disciplineFromGps
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        StepButton("-0.5", Modifier.weight(1f)) { apply(stepCorrectionMs(correctionMs, -500)) }
-                        StepButton("-0.1", Modifier.weight(1f)) { apply(stepCorrectionMs(correctionMs, -100)) }
-                        StepButton("+0.1", Modifier.weight(1f)) { apply(stepCorrectionMs(correctionMs, 100)) }
-                        StepButton("+0.5", Modifier.weight(1f)) { apply(stepCorrectionMs(correctionMs, 500)) }
+                        StepButton("-0.5", Modifier.weight(1f), manualEnabled) { apply(stepCorrectionMs(correctionMs, -500)) }
+                        StepButton("-0.1", Modifier.weight(1f), manualEnabled) { apply(stepCorrectionMs(correctionMs, -100)) }
+                        StepButton("+0.1", Modifier.weight(1f), manualEnabled) { apply(stepCorrectionMs(correctionMs, 100)) }
+                        StepButton("+0.5", Modifier.weight(1f), manualEnabled) { apply(stepCorrectionMs(correctionMs, 500)) }
                     }
-                    Text(
-                        text = stringResource(R.string.settings_time_correction_reset),
-                        color = if (correctionMs == 0) TextFaint else Accent,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = correctionMs != 0) { apply(0) }
-                            .padding(vertical = 6.dp),
-                    )
+                    if (disciplineFromGps) {
+                        Text(
+                            text = stringResource(R.string.settings_time_correction_gps_locked),
+                            color = TextMuted,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.settings_time_correction_reset),
+                            color = if (correctionMs == 0) TextFaint else Accent,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = correctionMs != 0) { apply(0) }
+                                .padding(vertical = 6.dp),
+                        )
+                    }
                 }
             }
             Text(
@@ -161,6 +204,142 @@ fun TimeSyncSettings(
                 }
             }
         }
+
+        // =====================================================================
+        // GPS CLOCK DISCIPLINE (issue #373)
+        // =====================================================================
+        SettingsSection(title = stringResource(R.string.settings_gps_clock_section)) {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                SettingsRow(
+                    label = stringResource(R.string.settings_gps_clock_toggle),
+                    description = stringResource(R.string.settings_gps_clock_toggle_desc),
+                    toggle = disciplineFromGps,
+                    onToggleChange = { checked ->
+                        // On enable, make sure we have location permission — the
+                        // updater silently no-ops without it (same pattern as the
+                        // GPS grid toggle).
+                        if (checked) {
+                            val granted = ContextCompat.checkSelfPermission(
+                                context, Manifest.permission.ACCESS_FINE_LOCATION,
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (!granted) {
+                                (context as? Activity)?.let { activity ->
+                                    ActivityCompat.requestPermissions(
+                                        activity,
+                                        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                                        42,
+                                    )
+                                }
+                            }
+                        }
+                        disciplineFromGps = checked
+                        GeneralVariables.disciplineClockFromGPS = checked
+                        mainViewModel.databaseOpr.writeConfig(
+                            "disciplineClockFromGPS", if (checked) "1" else "0", null,
+                        )
+                        GpsClockUpdater.refresh(context)
+                    },
+                )
+            }
+
+            if (disciplineFromGps) {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_gps_clock_interval),
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            for (min in GPS_INTERVAL_OPTIONS) {
+                                IntervalChip(
+                                    label = stringResource(R.string.settings_gps_clock_interval_value, min),
+                                    selected = gpsIntervalMin == min,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    gpsIntervalMin = min
+                                    GeneralVariables.gpsClockIntervalMinutes = min
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "gpsClockIntervalMin", min.toString(), null,
+                                    )
+                                    // Re-subscribe at the new cadence.
+                                    GpsClockUpdater.refresh(context)
+                                }
+                            }
+                        }
+
+                        // Status readout: last sync + applied offset, or "waiting".
+                        val syncMs = lastGpsSync
+                        if (syncMs == null) {
+                            Text(
+                                text = stringResource(R.string.settings_gps_clock_waiting),
+                                color = TextMuted,
+                                fontSize = 14.sp,
+                            )
+                        } else {
+                            Text(
+                                text = stringResource(
+                                    R.string.settings_gps_clock_last_sync,
+                                    UtcTimer.getDatetimeStr(syncMs),
+                                ),
+                                color = TextPrimary,
+                                fontSize = 14.sp,
+                                fontFamily = GeistMonoFamily,
+                            )
+                            Text(
+                                text = stringResource(
+                                    R.string.settings_gps_clock_offset,
+                                    formatOffsetMs(GeneralVariables.gpsClockOffsetMs),
+                                ),
+                                color = if (GeneralVariables.gpsClockOffsetMs == 0) TextPrimary else Accent,
+                                fontSize = 14.sp,
+                                fontFamily = GeistMonoFamily,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Update-interval presets (minutes) offered for GPS clock discipline. */
+private val GPS_INTERVAL_OPTIONS = intArrayOf(1, 5, 10, 15, 30)
+
+/**
+ * A bordered, tappable interval chip that highlights when selected. Local to this screen.
+ */
+@Composable
+private fun IntervalChip(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .border(
+                BorderStroke(1.dp, if (selected) Accent else BorderStrong),
+                RoundedCornerShape(10.dp),
+            )
+            .clickable { onClick() }
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = if (selected) Accent else TextPrimary,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+            fontFamily = GeistMonoFamily,
+        )
     }
 }
 
@@ -171,18 +350,19 @@ fun TimeSyncSettings(
 private fun StepButton(
     label: String,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     Box(
         modifier = modifier
             .border(BorderStroke(1.dp, BorderStrong), RoundedCornerShape(10.dp))
-            .clickable { onClick() }
+            .clickable(enabled = enabled) { onClick() }
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            color = Accent,
+            color = if (enabled) Accent else TextFaint,
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = GeistMonoFamily,
