@@ -100,12 +100,13 @@ audible-but-undecodable signals. Both of these were diagnosed the hard
 way and re-introducing either makes TX silently broken — the rig keys,
 audio is audible, ALC looks right, and zero spots appear on PSKReporter.
 
-**1. `libft8cn.so` generates the entire waveform.** `GenerateFT8.generateFt8(msg,
+**1. The native library generates the entire waveform.** `GenerateFT8.generateFt8(msg,
 freq, 12000)` returns a mono 12.64-second `float[]` at 12 kHz containing the full
 FT8 message. The Costas sync arrays at symbols 0-6, 36-42, 72-78 are
-embedded by `synth_gfsk` in the native lib (the .so is a closed-source JNI
-wrapper around kgoba `ft8_lib @ 6f528128`; see the user's memory entry
-`libft8cn-native-origin.md`). The buffer is correct as generated — everything
+embedded by `synth_gfsk` in the native lib — today that's the from-source
+`libft8af.so` (`System.loadLibrary("ft8af")`, built from the vendored
+`ft8_lib`; historically this was the retired closed prebuilt `libft8cn.so`).
+The buffer is correct as generated — everything
 downstream just has to *not break it*.
 
 **2. `lateStartSkipMs` clips leading audio, but only if we'd overrun the cycle.**
