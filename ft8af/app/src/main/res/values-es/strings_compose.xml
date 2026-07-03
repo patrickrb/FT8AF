@@ -457,6 +457,13 @@
     <string name="settings_enabled_bands_dialog_desc">Las bandas ocultas no aparecerán en los selectores de frecuencia.</string>
     <string name="settings_select_serial_port">Seleccionar puerto serie</string>
     <string name="settings_tx_volume_advice">Ajústalo en vivo — tu próximo TX usa este nivel. Vigila el ALC de tu radio y bájalo hasta que apenas roce la línea.</string>
+    <string name="settings_input_volume">Volumen de entrada</string>
+    <string name="settings_input_volume_desc" formatted="false">Ganancia del audio RX aplicada antes de decodificar (100% = sin cambios)</string>
+    <string name="settings_input_volume_advice">Se aplica al audio entrante antes de decodificar. Observa el medidor de nivel RX en la cascada y apunta a la zona verde; el rojo indica recorte.</string>
+    <string name="input_level_too_low">Bajo</string>
+    <string name="input_level_good">Bien</string>
+    <string name="input_level_too_high">Alto</string>
+    <string name="input_level_clipping">Recorte</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Idioma</string>

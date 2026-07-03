@@ -524,6 +524,13 @@
     <string name="settings_enabled_bands_dialog_desc">Ukryte pasma nie pojawią się w wyborze częstotliwości.</string>
     <string name="settings_select_serial_port">Wybierz port szeregowy</string>
     <string name="settings_tx_volume_advice">Dostosuj na żywo — następne TX użyje tego poziomu. Obserwuj ALC radia i zmniejszaj, aż ledwo dotyka linii.</string>
+    <string name="settings_input_volume">Głośność wejścia</string>
+    <string name="settings_input_volume_desc" formatted="false">Wzmocnienie audio RX stosowane przed dekodowaniem (100% = bez zmian)</string>
+    <string name="settings_input_volume_advice">Stosowane do przychodzącego dźwięku przed dekodowaniem. Obserwuj miernik poziomu RX na wodospadzie i celuj w zieloną strefę; czerwony oznacza przesterowanie.</string>
+    <string name="input_level_too_low">Niski</string>
+    <string name="input_level_good">Dobry</string>
+    <string name="input_level_too_high">Wysoki</string>
+    <string name="input_level_clipping">Przester</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Język</string>

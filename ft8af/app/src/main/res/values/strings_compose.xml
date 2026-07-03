@@ -379,6 +379,24 @@
     <string name="settings_section_about">ABOUT</string>
     <string name="settings_section_language">LANGUAGE</string>
     <string name="settings_section_appearance">APPEARANCE</string>
+    <string name="settings_section_backup">BACKUP &amp; RESTORE</string>
+
+    <!-- ===== Settings: backup / restore (export & import config) ===== -->
+    <string name="settings_export">Export settings</string>
+    <string name="settings_export_desc">Save all settings to a backup file</string>
+    <string name="settings_import">Import settings</string>
+    <string name="settings_import_desc">Restore settings from a backup file</string>
+    <string name="settings_export_dialog_title">Export settings</string>
+    <string name="settings_backup_include_sensitive">Include sensitive data</string>
+    <string name="settings_backup_include_sensitive_desc">API keys and passwords (Cloudlog, QRZ, rig login)</string>
+    <string name="action_export">Export</string>
+    <string name="action_import">Import</string>
+    <string name="settings_import_confirm_title">Import settings?</string>
+    <string name="settings_import_confirm_msg">This will overwrite %1$d setting(s) with values from the backup created %2$s.</string>
+    <string name="settings_export_success">Settings exported</string>
+    <string name="settings_export_failed">Export failed: %1$s</string>
+    <string name="settings_import_success">Settings imported — restart the app to apply all changes</string>
+    <string name="settings_import_failed">Import failed: %1$s</string>
 
     <!-- ===== Settings: appearance / theme ===== -->
     <string name="settings_theme">Theme</string>
@@ -405,6 +423,17 @@
     <string name="settings_time_suggest_none">No decodes yet — start receiving to get a suggestion.</string>
     <string name="settings_time_suggest_label">Recent average DT: %1$s</string>
     <string name="settings_time_suggest_apply">Apply suggested correction</string>
+    <string name="settings_time_correction_gps_locked">GPS clock discipline is controlling the clock — turn it off below to adjust manually.</string>
+
+    <!-- ===== Settings: Time Sync (GPS clock discipline, issue #373) ===== -->
+    <string name="settings_gps_clock_section">GPS Clock Discipline</string>
+    <string name="settings_gps_clock_toggle">Discipline clock from GPS</string>
+    <string name="settings_gps_clock_toggle_desc">Use satellite time to align the FT8 cycle to true UTC. Overrides the manual correction while on. Needs location permission and a GPS fix.</string>
+    <string name="settings_gps_clock_interval">Update interval</string>
+    <string name="settings_gps_clock_interval_value">%1$d min</string>
+    <string name="settings_gps_clock_waiting">Waiting for a GPS fix…</string>
+    <string name="settings_gps_clock_last_sync">Last GPS sync: %1$s UTC</string>
+    <string name="settings_gps_clock_offset">Applied offset: %1$s</string>
 
     <!-- ===== Settings: operator identity ===== -->
     <string name="settings_auto_update_grid">Auto-update Grid (GPS)</string>
@@ -427,6 +456,9 @@
     <string name="settings_tx_volume_desc" formatted="false">Transmit audio level (hardware buttons ±5%)</string>
     <string name="settings_show_volume_slider">Show Volume Slider</string>
     <string name="settings_show_volume_slider_desc">Display TX volume slider on main screen</string>
+    <string name="settings_per_band_volume">Save Output Level per Band</string>
+    <string name="settings_per_band_volume_desc">Remember the TX volume separately for each band and restore it on band change</string>
+    <string name="per_band_volume_restored">TX volume %1$d%% restored for %2$s</string>
 
     <!-- ===== Settings: transmission ===== -->
     <string name="settings_tx_rx_split">TX/RX Split</string>
@@ -587,6 +619,14 @@
     <string name="settings_enabled_bands_dialog_desc">Hidden bands won\'t appear in the frequency pickers.</string>
     <string name="settings_select_serial_port">Select Serial Port</string>
     <string name="settings_tx_volume_advice">Adjust live — your next TX uses this level. Watch your radio\'s ALC and dial down until it\'s just kissing the line.</string>
+    <string name="settings_input_volume">Input Volume</string>
+    <string name="settings_input_volume_desc" formatted="false">RX audio gain applied before decoding (100% = unchanged)</string>
+    <string name="settings_input_volume_advice">Applied to incoming audio before decoding. Watch the RX level meter on the waterfall and aim for the green zone; red means clipping.</string>
+    <string name="input_level_rx_label" translatable="false">RX</string>
+    <string name="input_level_too_low">Low</string>
+    <string name="input_level_good">Good</string>
+    <string name="input_level_too_high">High</string>
+    <string name="input_level_clipping">Clip</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Language</string>

@@ -535,6 +535,13 @@
     <string name="settings_enabled_bands_dialog_desc">숨겨진 밴드는 주파수 선택기에 나타나지 않습니다.</string>
     <string name="settings_select_serial_port">시리얼 포트 선택</string>
     <string name="settings_tx_volume_advice">실시간으로 조정하세요 — 다음 TX가 이 레벨을 사용합니다. 무전기의 ALC를 지켜보며 선에 살짝 닿을 때까지 낮추세요.</string>
+    <string name="settings_input_volume">입력 볼륨</string>
+    <string name="settings_input_volume_desc" formatted="false">디코딩 전에 적용되는 수신 오디오 게인 (100% = 변경 없음)</string>
+    <string name="settings_input_volume_advice">디코딩 전에 수신 오디오에 적용됩니다. 워터폴의 RX 레벨 미터를 보면서 녹색 구간을 목표로 하세요. 빨간색은 클리핑을 의미합니다.</string>
+    <string name="input_level_too_low">낮음</string>
+    <string name="input_level_good">적정</string>
+    <string name="input_level_too_high">높음</string>
+    <string name="input_level_clipping">클립</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">언어</string>

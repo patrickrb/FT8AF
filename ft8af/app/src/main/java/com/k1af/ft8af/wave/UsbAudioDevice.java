@@ -29,7 +29,13 @@ public class UsbAudioDevice {
     public static final int USB_SUBCLASS_AUDIOSTREAMING = 0x02;
 
     private static final int SET_CUR = 0x01;
+    private static final int GET_CUR = 0x81;
     private static final int SAMPLING_FREQ_CONTROL = 0x01;
+
+    // The FT8 decoder's sample rate; used to rank fallback rates when a device
+    // can't stream the preferred 48 kHz (integer multiples of this avoid the
+    // rational resampling stage entirely).
+    private static final int FT8_DECODER_RATE = 12000;
 
     // Number of URBs for isochronous ring buffer
     private static final int NUM_URBS = 16;
@@ -42,6 +48,9 @@ public class UsbAudioDevice {
     private UsbEndpoint endpointIn;
     private int inputSampleRate = 48000;
     private int inputChannels = 1;
+    // UAC format descriptors parsed during selectInputAltSetting(); consulted again
+    // when SET_CUR fails to work out what rate the device is actually running.
+    private List<UacAudioFormats.StreamFormat> inputFormats = Collections.emptyList();
     private volatile boolean capturing = false;
     // Non-zero when the libusb-backed capture session is live; in that case
     // captureLoop() is bypassed and stopCapture() routes through native.
@@ -196,9 +205,18 @@ public class UsbAudioDevice {
 
     /**
      * Activate the audio input (microphone) stream.
+     *
+     * <p>{@code preferredRate} (48 kHz in practice) is a preference, not an assumption
+     * (issue #364): the device's UAC format descriptors are parsed and an alt setting that
+     * actually supports the preferred rate is selected when one exists. When the device can't
+     * do it at 16-bit, the best rate it really supports is negotiated instead and
+     * {@link #getInputSampleRate()} reports it, so the capture path can resample rationally
+     * (e.g. 44.1 kHz -> 12 kHz via a 40/147 polyphase) rather than mislabeling the stream.
      */
-    public boolean activateInput(int sampleRate) {
+    public boolean activateInput(int preferredRate) {
         if (streamingInterfaceIn == null || endpointIn == null) return false;
+
+        int negotiatedRate = selectInputAltSetting(preferredRate);
 
         if (!connection.claimInterface(streamingInterfaceIn, true)) {
             Log.e(TAG, "Failed to claim input interface");
@@ -207,13 +225,166 @@ public class UsbAudioDevice {
 
         connection.setInterface(streamingInterfaceIn);
 
-        inputSampleRate = sampleRate;
-        setSampleRate(endpointIn.getAddress(), sampleRate);
-        // If setSampleRate fails, the device may use its default rate (usually 48kHz)
-        // which is fine — we resample anyway
+        if (setSampleRate(endpointIn.getAddress(), negotiatedRate)) {
+            inputSampleRate = negotiatedRate;
+        } else {
+            // SET_CUR failed, so the device is not necessarily running negotiatedRate —
+            // and the downstream resample ratio is derived from inputSampleRate, so
+            // assuming wrong here re-creates exactly the mislabeled-stream failure of
+            // issue #364. Fall back to the most defensible rate: ask the device via
+            // GET_CUR; else, if the active alt setting supports exactly one rate, the
+            // device must be running that (SET_CUR is often unimplemented precisely
+            // because there is nothing to choose); else keep the negotiated assumption.
+            int reportedRate = getCurrentSampleRate(endpointIn.getAddress());
+            int[] altRates = UacAudioFormats.discreteRatesFor(
+                    inputFormats, streamingInterfaceIn.getId(),
+                    streamingInterfaceIn.getAlternateSetting());
+            inputSampleRate = resolveRateAfterSetCurFailure(
+                    negotiatedRate, reportedRate, altRates);
+            com.k1af.ft8af.GeneralVariables.fileLog(String.format(
+                    "UsbAudioDevice: SET_CUR %d Hz FAILED on ep 0x%02x — GET_CUR says %d, "
+                            + "alt setting offers %s — assuming %d Hz for resampling",
+                    negotiatedRate, endpointIn.getAddress(), reportedRate,
+                    java.util.Arrays.toString(altRates), inputSampleRate));
+        }
 
         Log.d(TAG, "Input activated at " + inputSampleRate + " Hz");
         return true;
+    }
+
+    /**
+     * Decides the sample rate to report for the input stream after the
+     * SAMPLING_FREQ_CONTROL SET_CUR request failed, i.e. when the rate we asked for was
+     * not acknowledged by the device. Ranked by how much each source can be trusted:
+     *
+     * <ol>
+     *   <li>{@code reportedRate} — what the device itself says it is running (GET_CUR on
+     *       the sampling-frequency control), when the readback succeeded and the value is
+     *       plausible. A live answer from the device beats any inference.</li>
+     *   <li>The active alt setting's sole supported rate, when its descriptors list
+     *       exactly one: a single-rate endpoint runs that rate no matter what — such
+     *       devices commonly omit SAMPLING_FREQ_CONTROL entirely, which is why the
+     *       SET_CUR (and GET_CUR) fail in the first place.</li>
+     *   <li>{@code requestedRate} — with multiple candidate rates and no readback the
+     *       truth is genuinely unknown; keep the negotiated assumption (it at least came
+     *       from the device's own descriptors) and let the caller log loudly.</li>
+     * </ol>
+     *
+     * <p>Package-visible for testing.
+     *
+     * @param requestedRate    the rate SET_CUR tried to set (from descriptor negotiation)
+     * @param reportedRate     GET_CUR readback, or negative when the readback failed
+     * @param altSettingRates  the active alt setting's known discrete rates (empty when
+     *                         unknown or continuous)
+     */
+    static int resolveRateAfterSetCurFailure(int requestedRate, int reportedRate,
+                                             int[] altSettingRates) {
+        if (isPlausibleRate(reportedRate)) {
+            return reportedRate;
+        }
+        if (altSettingRates != null && altSettingRates.length == 1
+                && isPlausibleRate(altSettingRates[0])) {
+            return altSettingRates[0];
+        }
+        return requestedRate;
+    }
+
+    /**
+     * Whether a GET_CUR readback (or descriptor value) looks like a real audio sample
+     * rate. UAC 1.0 hardware spans 8 kHz telephony codecs to 384/768 kHz DACs; anything
+     * outside that is a failed or garbage control transfer, not a rate. Package-visible
+     * for testing.
+     */
+    static boolean isPlausibleRate(int rate) {
+        return rate >= 8000 && rate <= 768000;
+    }
+
+    /**
+     * Parse the device's UAC descriptors and prefer an alt setting of the input streaming
+     * interface that supports {@code preferredRate}; otherwise fall back to the best rate it
+     * does support. May reassign {@link #streamingInterfaceIn}/{@link #endpointIn} to a
+     * different alt setting of the same interface, and {@link #inputChannels} to the
+     * descriptor-reported channel count (more reliable than the packet-size guess in
+     * {@link #findEndpoints()}, which assumes 48 kHz).
+     *
+     * @return the sample rate to negotiate; when descriptor parsing yields nothing usable,
+     *     returns {@code preferredRate} and leaves the selection untouched (legacy behavior).
+     */
+    private int selectInputAltSetting(int preferredRate) {
+        byte[] raw = null;
+        try {
+            raw = connection.getRawDescriptors();
+        } catch (Exception e) {
+            Log.w(TAG, "getRawDescriptors threw: " + e.getMessage());
+        }
+        List<UacAudioFormats.StreamFormat> formats = UacAudioFormats.parse(raw);
+        inputFormats = formats;
+        final int ifaceId = streamingInterfaceIn.getId();
+        final int currentAlt = streamingInterfaceIn.getAlternateSetting();
+
+        UacAudioFormats.Choice choice = UacAudioFormats.choose(
+                formats, ifaceId, currentAlt, preferredRate, FT8_DECODER_RATE);
+        if (choice == null) {
+            com.k1af.ft8af.GeneralVariables.fileLog(String.format(
+                    "UsbAudioDevice: no usable UAC format descriptors for iface %d — "
+                            + "assuming %d Hz (legacy behavior)", ifaceId, preferredRate));
+            return preferredRate;
+        }
+
+        if (choice.altSetting != currentAlt) {
+            UsbInterface target = null;
+            UsbEndpoint targetEp = null;
+            for (int i = 0; i < usbDevice.getInterfaceCount(); i++) {
+                UsbInterface iface = usbDevice.getInterface(i);
+                if (iface.getId() != ifaceId
+                        || iface.getAlternateSetting() != choice.altSetting) {
+                    continue;
+                }
+                for (int j = 0; j < iface.getEndpointCount(); j++) {
+                    UsbEndpoint ep = iface.getEndpoint(j);
+                    if (ep.getType() == UsbConstants.USB_ENDPOINT_XFER_ISOC
+                            && ep.getDirection() == UsbConstants.USB_DIR_IN) {
+                        targetEp = ep;
+                        break;
+                    }
+                }
+                if (targetEp != null) target = iface;
+                break;
+            }
+            if (target != null) {
+                streamingInterfaceIn = target;
+                endpointIn = targetEp;
+            } else {
+                // Android's view doesn't expose the alt setting the raw descriptors
+                // promised; re-choose among the current alt setting only.
+                final int wantedAlt = choice.altSetting;
+                List<UacAudioFormats.StreamFormat> currentOnly = new ArrayList<>();
+                for (UacAudioFormats.StreamFormat f : formats) {
+                    if (f.interfaceId == ifaceId && f.altSetting == currentAlt) {
+                        currentOnly.add(f);
+                    }
+                }
+                choice = UacAudioFormats.choose(
+                        currentOnly, ifaceId, currentAlt, preferredRate, FT8_DECODER_RATE);
+                if (choice == null) {
+                    com.k1af.ft8af.GeneralVariables.fileLog(String.format(
+                            "UsbAudioDevice: alt %d not visible via UsbManager and current "
+                                    + "alt %d has no usable format — assuming %d Hz (legacy)",
+                            wantedAlt, currentAlt, preferredRate));
+                    return preferredRate;
+                }
+            }
+        }
+
+        if (choice.channels == 1 || choice.channels == 2) {
+            inputChannels = choice.channels;
+        }
+        com.k1af.ft8af.GeneralVariables.fileLog(String.format(
+                "UsbAudioDevice: UAC alt-setting select — iface %d alt %d rate %d ch %d "
+                        + "(preferred %d, was alt %d)",
+                ifaceId, streamingInterfaceIn.getAlternateSetting(), choice.sampleRate,
+                inputChannels, preferredRate, currentAlt));
+        return choice.sampleRate;
     }
 
     /**
@@ -236,7 +407,8 @@ public class UsbAudioDevice {
         return true;
     }
 
-    private void setSampleRate(int endpointAddress, int sampleRate) {
+    /** @return true when the device acknowledged the SET_CUR request. */
+    private boolean setSampleRate(int endpointAddress, int sampleRate) {
         byte[] data = new byte[3];
         data[0] = (byte) (sampleRate & 0xFF);
         data[1] = (byte) ((sampleRate >> 8) & 0xFF);
@@ -254,6 +426,26 @@ public class UsbAudioDevice {
                     + " endpoint 0x" + Integer.toHexString(endpointAddress)
                     + " result=" + result);
         }
+        return result >= 0;
+    }
+
+    /**
+     * Reads back the endpoint's current sampling frequency (UAC 1.0 GET_CUR on the
+     * sampling-frequency control).
+     *
+     * @return the device-reported rate in Hz, or -1 when the request failed or returned
+     *     fewer than the 3 bytes the control is defined to carry
+     */
+    private int getCurrentSampleRate(int endpointAddress) {
+        byte[] data = new byte[3];
+        int result = connection.controlTransfer(
+                0xA2, // USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_ENDPOINT
+                GET_CUR,
+                SAMPLING_FREQ_CONTROL << 8,
+                endpointAddress,
+                data, data.length, 1000);
+        if (result < 3) return -1;
+        return (data[0] & 0xFF) | ((data[1] & 0xFF) << 8) | ((data[2] & 0xFF) << 16);
     }
 
     /**
@@ -323,15 +515,14 @@ public class UsbAudioDevice {
         // Fallback: original UsbRequest-based loop. Kept so devices that work
         // with Android's iso path don't regress on the new native lib.
         final int packetSize = endpointIn.getMaxPacketSize();
-        final int ratio = inputSampleRate / targetSampleRate;
 
         new Thread(() -> {
-            captureLoop(targetSampleRate, ratio, packetSize, callback);
+            captureLoop(targetSampleRate, packetSize, callback);
         }, "USB-Audio-Capture").start();
     }
 
     @SuppressWarnings("deprecation")
-    private void captureLoop(int targetRate, int ratio, int packetSize,
+    private void captureLoop(int targetRate, int packetSize,
                              AudioInputCallback callback) {
         ByteBuffer[] buffers = new ByteBuffer[NUM_URBS];
         UsbRequest[] requests = new UsbRequest[NUM_URBS];
@@ -352,19 +543,37 @@ public class UsbAudioDevice {
                 }
             }
 
-            // Anti-aliased decimation (same windowed-sinc FIR as the native libusb
-            // path) — the old per-window average was a box filter whose ~12 dB
-            // stopband folded hiss into the FT8 passband whenever this fallback ran.
-            // One clamped ratio drives both the FIR and the mismatch warning, so a
-            // degenerate ratio (0/negative) is reported with the value actually used.
-            final int decimRatio = Math.max(1, ratio);
-            FirDecimator decimator = new FirDecimator(decimRatio);
-            if (decimRatio * targetRate != inputSampleRate) {
+            // Rate conversion (same DSP as the native libusb path): integer FIR
+            // decimation when the input rate is an exact multiple of the target
+            // (48k -> 12k), otherwise a true rational polyphase resampler (e.g.
+            // 44.1k -> 12k = interpolate 40 / decimate 147). Flooring the ratio
+            // here used to mislabel 14.7 kHz audio as 12 kHz and shift every FT8
+            // tone off the 6.25 Hz grid (issue #364).
+            final boolean rational = targetRate > 0 && inputSampleRate > targetRate
+                    && inputSampleRate % targetRate != 0;
+            final FirDecimator decimator;
+            final RationalResampler resampler;
+            if (rational) {
+                int[] lm = RationalResampler.ratioFor(inputSampleRate, targetRate);
+                resampler = new RationalResampler(lm[0], lm[1]);
+                decimator = null;
                 com.k1af.ft8af.GeneralVariables.fileLog(String.format(
-                        "UsbAudio.captureLoop: input %d Hz is not %dx target %d Hz "
-                                + "(raw ratio %d) — decode may suffer from the "
-                                + "resulting rate error",
-                        inputSampleRate, decimRatio, targetRate, ratio));
+                        "UsbAudio.captureLoop: input %d Hz is not an integer multiple "
+                                + "of target %d Hz — using rational polyphase "
+                                + "resampler L/M=%d/%d",
+                        inputSampleRate, targetRate, lm[0], lm[1]));
+            } else {
+                final int decimRatio =
+                        FirDecimator.decimationRatioFor(inputSampleRate, targetRate);
+                decimator = new FirDecimator(decimRatio);
+                resampler = null;
+                if (decimRatio * targetRate != inputSampleRate) {
+                    com.k1af.ft8af.GeneralVariables.fileLog(String.format(
+                            "UsbAudio.captureLoop: degenerate rates (input %d Hz, "
+                                    + "target %d Hz) — passing audio through at "
+                                    + "ratio %d, decode may suffer",
+                            inputSampleRate, targetRate, decimRatio));
+                }
             }
             float[] monoBuffer = new float[1];
             float[] outputBuffer = new float[1];
@@ -378,10 +587,10 @@ public class UsbAudioDevice {
                                 "UsbAudio.captureLoop: requestWait returned null "
                                         + "after %d iterations (target=%dHz "
                                         + "input=%dHz channels=%d packetSize=%d "
-                                        + "ratio=%d) — host likely cannot drive "
+                                        + "rational=%b) — host likely cannot drive "
                                         + "isochronous transfers via UsbRequest",
                                 iterations, targetRate, inputSampleRate,
-                                inputChannels, packetSize, ratio));
+                                inputChannels, packetSize, rational));
                     }
                     break;
                 }
@@ -414,14 +623,18 @@ public class UsbAudioDevice {
                     }
                 }
 
-                // FIR-decimate and deliver; the decimator carries state across
-                // packets, so no leftover-sample bookkeeping is needed.
+                // Resample and deliver; both stages carry state across packets,
+                // so no leftover-sample bookkeeping is needed.
                 if (monoCount > 0) {
-                    int maxOut = monoCount / decimator.ratio() + 1;
+                    int maxOut = (resampler != null)
+                            ? resampler.maxOutputFor(monoCount)
+                            : monoCount / decimator.ratio() + 1;
                     if (outputBuffer.length < maxOut) {
                         outputBuffer = new float[maxOut];
                     }
-                    int outputSamples = decimator.process(monoBuffer, monoCount, outputBuffer);
+                    int outputSamples = (resampler != null)
+                            ? resampler.process(monoBuffer, monoCount, outputBuffer)
+                            : decimator.process(monoBuffer, monoCount, outputBuffer);
                     if (outputSamples > 0) {
                         callback.onAudioData(outputBuffer, outputSamples);
                     }

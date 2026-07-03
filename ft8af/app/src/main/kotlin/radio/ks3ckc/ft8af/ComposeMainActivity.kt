@@ -41,12 +41,14 @@ import radio.ks3ckc.ft8af.sync.QsoAutoSync
 import com.k1af.ft8af.service.RxForegroundService
 import com.k1af.ft8af.service.RxServiceController
 import com.k1af.ft8af.bluetooth.BluetoothStateBroadcastReceive
+import com.k1af.ft8af.bluetooth.ScoPolicy
 import com.k1af.ft8af.connector.CableSerialPort
 import com.k1af.ft8af.connector.ConnectMode
 import com.k1af.ft8af.callsign.CallsignDatabase
 import com.k1af.ft8af.database.DatabaseOpr
 import com.k1af.ft8af.database.OnAfterQueryConfig
 import com.k1af.ft8af.database.OperationBand
+import com.k1af.ft8af.location.GpsClockUpdater
 import com.k1af.ft8af.location.GridLocationUpdater
 import com.k1af.ft8af.log.ImportSharedLogs
 import com.k1af.ft8af.wave.UsbAudioNative
@@ -148,11 +150,10 @@ class ComposeMainActivity : AppCompatActivity() {
             }
         })
 
-        // Register Bluetooth state broadcast receiver
+        // Register Bluetooth state broadcast receiver. The launch-time
+        // headset/SCO decision happens in initData's config-loaded callback:
+        // it needs the persisted connectMode, which isn't in memory yet here.
         registerBluetoothReceiver()
-        if (mainViewModel.isBTConnected()) {
-            mainViewModel.setBlueToothOn()
-        }
 
         // Register USB detach receiver — without this, a cable yank leaves the
         // recorder waiting on a dead handle and TX still pointing at a closed
@@ -324,6 +325,15 @@ class ComposeMainActivity : AppCompatActivity() {
             GridLocationUpdater.refresh(applicationContext, mainViewModel)
         }
 
+        // Same first-grant race for GPS clock discipline (issue #373): if the user just
+        // granted location while the toggle is on, start disciplining in this session.
+        if (locationGrantedIn(permissions, grantResults)
+            && GeneralVariables.disciplineClockFromGPS
+        ) {
+            fileLog("onRequestPermissionsResult: location granted, starting GPS clock discipline")
+            GpsClockUpdater.refresh(applicationContext)
+        }
+
         // On Android 12+ the BT auto-connect at config-load time may have bailed with
         // NO_PERMISSION because BLUETOOTH_CONNECT was still pending. Once the user grants it,
         // retry the SPP/CAT auto-reconnect in the same session (issue #223). The rigConnected
@@ -372,6 +382,9 @@ class ComposeMainActivity : AppCompatActivity() {
                     }
                     GridLocationUpdater.refresh(applicationContext, mainViewModel)
                 }
+                if (GeneralVariables.disciplineClockFromGPS) {
+                    GpsClockUpdater.refresh(applicationContext)
+                }
                 mainViewModel.ft8TransmitSignal.setTimer_sec(GeneralVariables.transmitDelay)
 
                 // The cycle timers were built (for FT8) before config loaded; now that the
@@ -387,6 +400,19 @@ class ComposeMainActivity : AppCompatActivity() {
                 val ports = mainViewModel.mutableSerialPorts.value
                 fileLog("initData: found ${ports?.size ?: 0} serial port(s)")
                 mainViewModel.reinitializeAudioInput()
+
+                // Bring up headset/SCO for Bluetooth-rig users now that the persisted
+                // connectMode is known. Gating this at onCreate time would read the
+                // USB_CABLE default and skip SCO for every Bluetooth rig (PR #377
+                // review); gating on connect mode at all keeps a car/headphones paired
+                // for music from being yanked out of A2DP (the original bug).
+                Handler(Looper.getMainLooper()).post {
+                    if (ScoPolicy.shouldEnterHeadsetMode(
+                            GeneralVariables.connectMode, mainViewModel.isBTConnected())
+                    ) {
+                        mainViewModel.setBlueToothOn()
+                    }
+                }
 
                 // USB auto-connect is driven by the mutableSerialPorts observer; Bluetooth has
                 // no such device-arrival event, so re-open the remembered SPP/CAT link here now
@@ -669,9 +695,12 @@ class ComposeMainActivity : AppCompatActivity() {
                 val newVol = (GeneralVariables.volumePercent + delta).coerceIn(0.0f, 1.0f)
                 GeneralVariables.volumePercent = newVol
                 GeneralVariables.mutableVolumePercent.postValue(newVol)
-                val intVal = (newVol * 100).toInt()
+                // Math.round via the shared helper (not toInt/floor) so this
+                // producer agrees with the per-band restore/compare logic.
+                val intVal = outputLevelFromVolumePercent(newVol)
                 mainViewModel.databaseOpr.writeConfig("volumeValue", intVal.toString(), null)
                 mainViewModel.baseRig?.connector?.setRFVolume(intVal)
+                saveOutputLevelForCurrentBand(mainViewModel.databaseOpr, intVal)
 
                 // Also adjust system music stream so audio is actually audible
                 val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager

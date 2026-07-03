@@ -457,6 +457,13 @@
     <string name="settings_enabled_bands_dialog_desc">Скрытые диапазоны не появятся в выборе частоты.</string>
     <string name="settings_select_serial_port">Выберите последовательный порт</string>
     <string name="settings_tx_volume_advice">Регулируйте вживую — следующая передача использует этот уровень. Следите за ALC трансивера и убавляйте, пока он лишь слегка касается линии.</string>
+    <string name="settings_input_volume">Громкость входа</string>
+    <string name="settings_input_volume_desc" formatted="false">Усиление принимаемого звука перед декодированием (100% = без изменений)</string>
+    <string name="settings_input_volume_advice">Применяется к входящему звуку перед декодированием. Следите за индикатором уровня RX на водопаде и держитесь зелёной зоны; красный означает клиппинг.</string>
+    <string name="input_level_too_low">Низкий</string>
+    <string name="input_level_good">Норма</string>
+    <string name="input_level_too_high">Высокий</string>
+    <string name="input_level_clipping">Клип</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Язык</string>

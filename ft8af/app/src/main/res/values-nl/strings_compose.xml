@@ -535,6 +535,13 @@
     <string name="settings_enabled_bands_dialog_desc">Verborgen banden verschijnen niet in de frequentiekiezers.</string>
     <string name="settings_select_serial_port">Seriële poort selecteren</string>
     <string name="settings_tx_volume_advice">Pas live aan — je volgende TX gebruikt dit niveau. Houd de ALC van je radio in de gaten en draai terug tot deze net de lijn raakt.</string>
+    <string name="settings_input_volume">Ingangsvolume</string>
+    <string name="settings_input_volume_desc" formatted="false">RX-audioversterking toegepast vóór het decoderen (100% = ongewijzigd)</string>
+    <string name="settings_input_volume_advice">Toegepast op binnenkomende audio vóór het decoderen. Houd de RX-niveaumeter op de waterval in de gaten en mik op de groene zone; rood betekent clipping.</string>
+    <string name="input_level_too_low">Laag</string>
+    <string name="input_level_good">Goed</string>
+    <string name="input_level_too_high">Hoog</string>
+    <string name="input_level_clipping">Clip</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Taal</string>

@@ -535,6 +535,13 @@
     <string name="settings_enabled_bands_dialog_desc">Band yang disembunyikan tidak akan muncul di pemilih frekuensi.</string>
     <string name="settings_select_serial_port">Pilih Port Serial</string>
     <string name="settings_tx_volume_advice">Sesuaikan langsung — TX berikutnya menggunakan tingkat ini. Perhatikan ALC radio Anda dan turunkan sampai hanya menyentuh garis.</string>
+    <string name="settings_input_volume">Volume Masukan</string>
+    <string name="settings_input_volume_desc" formatted="false">Penguatan audio RX yang diterapkan sebelum dekode (100% = tidak berubah)</string>
+    <string name="settings_input_volume_advice">Diterapkan pada audio masuk sebelum dekode. Perhatikan meter level RX di waterfall dan bidik zona hijau; merah berarti clipping.</string>
+    <string name="input_level_too_low">Rendah</string>
+    <string name="input_level_good">Baik</string>
+    <string name="input_level_too_high">Tinggi</string>
+    <string name="input_level_clipping">Clip</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Bahasa</string>

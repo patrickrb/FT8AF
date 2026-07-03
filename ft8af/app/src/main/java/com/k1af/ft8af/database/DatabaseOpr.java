@@ -34,6 +34,7 @@ import com.k1af.ft8af.log.QSLRecord;
 import com.k1af.ft8af.log.QSLRecordStr;
 import com.k1af.ft8af.rigs.BaseRigOperation;
 import com.k1af.ft8af.timer.UtcTimer;
+import com.k1af.ft8af.wave.InputAudioLevel;
 
 import org.jetbrains.annotations.Nullable;
 import org.json.JSONArray;
@@ -739,6 +740,55 @@ public class DatabaseOpr extends SQLiteOpenHelper {
     //Get all configuration parameters
     public void getAllConfigParameter(OnAfterQueryConfig onAfterQueryConfig) {
         new GetAllConfigParameter(db, onAfterQueryConfig).execute();
+    }
+
+    /**
+     * Read every config key/value pair synchronously into an insertion-ordered map.
+     * Backs the settings-export feature (issue #357). Must be called off the main
+     * thread (it touches SQLite directly).
+     */
+    public java.util.LinkedHashMap<String, String> getAllConfigSync() {
+        java.util.LinkedHashMap<String, String> map = new java.util.LinkedHashMap<>();
+        // ORDER BY: SQLite guarantees no row order without it, so the map's insertion
+        // order (which this method promises) would otherwise be nondeterministic.
+        Cursor cursor = db.rawQuery("select KeyName,Value from config order by KeyName", null);
+        try {
+            int keyIdx = cursor.getColumnIndexOrThrow("KeyName");
+            int valueIdx = cursor.getColumnIndexOrThrow("Value");
+            while (cursor.moveToNext()) {
+                // The schema allows NULL Value; coerce to "" so a backup export keeps the
+                // key (JSONObject.put(key, null) drops it) and matches writeConfigSync's
+                // null->"" import semantics.
+                String value = cursor.isNull(valueIdx) ? "" : cursor.getString(valueIdx);
+                map.put(cursor.getString(keyIdx), value);
+            }
+        } finally {
+            cursor.close();
+        }
+        return map;
+    }
+
+    /**
+     * Upsert every entry of {@code config} synchronously (same delete-then-insert as
+     * {@link WriteConfig}). Backs the settings-import feature (issue #357). Must be
+     * called off the main thread. After calling, run {@link #getAllConfigParameter}
+     * to re-hydrate {@link GeneralVariables} from the freshly written values.
+     */
+    public void writeConfigSync(java.util.Map<String, String> config) {
+        // One transaction: an interrupted import can't leave the table half-updated,
+        // and batching the statements is much faster than autocommitting each one.
+        db.beginTransaction();
+        try {
+            for (java.util.Map.Entry<String, String> entry : config.entrySet()) {
+                String value = entry.getValue() == null ? "" : entry.getValue();
+                db.execSQL("DELETE FROM config where KeyName =?", new String[]{entry.getKey()});
+                db.execSQL("INSERT INTO config (KeyName,Value)Values(?,?)",
+                        new String[]{entry.getKey(), value});
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
     }
 
     /**
@@ -2474,6 +2524,13 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("autoGridFromGPS")) {//Auto-update grid from GPS
                     GeneralVariables.autoUpdateGridFromGPS = result.equals("1");
                 }
+                if (name.equalsIgnoreCase("disciplineClockFromGPS")) {//Discipline clock from GPS (issue #373)
+                    GeneralVariables.disciplineClockFromGPS = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("gpsClockIntervalMin")) {//GPS discipline update interval (minutes)
+                    GeneralVariables.gpsClockIntervalMinutes =
+                            com.k1af.ft8af.location.GpsClockUpdater.parseIntervalMinutes(result);
+                }
                 if (name.equalsIgnoreCase("pttDelay")) {//PTT delay setting
                     GeneralVariables.pttDelay = result.equals("") ? 100 : Integer.parseInt(result);
                 }
@@ -2521,9 +2578,22 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.volumePercent = result.equals("") ? 1.0f : Float.parseFloat(result) / 100f;
                     GeneralVariables.mutableVolumePercent.postValue(GeneralVariables.volumePercent);
                 }
+                if (name.equalsIgnoreCase("inputVolume")) {//RX input gain (percent, 100 = unity)
+                    //Defensive parse + clamp: the config value is a free-form
+                    //string and settings import (#382) can feed a corrupted or
+                    //out-of-range value through here at startup. Non-numeric
+                    //falls back to unity; numeric clamps to 0..200%.
+                    GeneralVariables.inputGainPercent = InputAudioLevel.parseGainPercent(result);
+                }
                 if (name.equalsIgnoreCase("showTxVolumeSlider")) {//Inline TX volume slider visibility
                     GeneralVariables.showTxVolumeSlider = !result.equals("0");
                     GeneralVariables.mutableShowTxVolumeSlider.postValue(GeneralVariables.showTxVolumeSlider);
+                }
+                if (name.equalsIgnoreCase("perBandOutputLevel")) {//Save TX output level per band, defaults off
+                    GeneralVariables.savePerBandOutputLevel = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("perBandOutputLevels")) {//Per-band TX output levels ("20m=60,40m=85")
+                    GeneralVariables.perBandOutputLevels = result == null ? "" : result;
                 }
                 if (name.equalsIgnoreCase("excludedCallsigns")) {//Blocklist: callsign prefixes
                     GeneralVariables.addExcludedCallsigns(result);

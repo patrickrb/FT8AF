@@ -154,6 +154,9 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ft8af/app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
+          # Tag this upload so Codecov reports the Android JVM suite as its own
+          # component instead of merging it into one undifferentiated total.
+          flags: android
 
       - name: Upload test reports on failure
         if: steps.codecov.outcome == 'failure'

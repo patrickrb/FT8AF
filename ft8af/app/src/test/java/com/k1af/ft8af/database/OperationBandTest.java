@@ -163,6 +163,27 @@ public class OperationBandTest {
     }
 
     @Test
+    public void elevenMeterFt8_isMarked27265AsFt8() {
+        // Issue #378: 27.265 MHz is the 11m FT8 calling frequency, shipped as a
+        // marked (default) FT8 entry in assets/bands.txt.
+        OperationBand.Band b = new OperationBand.Band("*:27265000:11m");
+        assertThat(b.marked).isTrue();
+        assertThat(b.band).isEqualTo(27_265_000L);
+        assertThat(b.waveLength).isEqualTo("11m");
+        assertThat(b.mode).isEqualTo(com.k1af.ft8af.FT8Common.FT8_MODE);
+        assertThat(b.getBandInfo()).isEqualTo("* 27.265 MHz (11m)");
+    }
+
+    @Test
+    public void elevenMeterFt8_resolvesAsFt8BandDial() {
+        // The 11m entry must be selectable as the FT8 dial for the 11m band.
+        OperationBand.bandList.add(new OperationBand.Band("*:27265000:11m"));
+        assertThat(OperationBand.getModeBandFreq("11m", com.k1af.ft8af.FT8Common.FT8_MODE))
+                .isEqualTo(27_265_000L);
+        assertThat(OperationBand.getIndexByFreq(27_265_000L)).isEqualTo(0);
+    }
+
+    @Test
     public void getModeBandFreq_returnsModeSpecificDial() {
         OperationBand.bandList.add(new OperationBand.Band("*:14074000:20m"));
         OperationBand.bandList.add(new OperationBand.Band("*:14080000:20m:FT4"));

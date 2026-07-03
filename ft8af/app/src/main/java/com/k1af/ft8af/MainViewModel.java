@@ -52,6 +52,7 @@ import androidx.lifecycle.ViewModelStoreOwner;
 import com.k1af.ft8af.callsign.CallsignDatabase;
 import com.k1af.ft8af.callsign.CallsignInfo;
 import com.k1af.ft8af.callsign.OnAfterQueryCallsignLocation;
+import com.k1af.ft8af.bluetooth.ScoPolicy;
 import com.k1af.ft8af.connector.BluetoothRigConnector;
 import com.k1af.ft8af.connector.CableConnector;
 import com.k1af.ft8af.connector.CableSerialPort;
@@ -651,13 +652,10 @@ public class MainViewModel extends ViewModel {
         //create transmit object; callbacks: before transmit, after transmit, after QSL success.
         ft8TransmitSignal = new FT8TransmitSignal(databaseOpr, new OnDoTransmitted() {
             private boolean needControlSco() {//determine whether SCO needs to be enabled based on control mode
-                if (GeneralVariables.connectMode == ConnectMode.NETWORK) {
-                    return false;
-                }
-                if (GeneralVariables.controlMode != ControlMode.CAT) {
-                    return true;
-                }
-                return baseRig != null && !baseRig.supportWaveOverCAT();
+                return ScoPolicy.needControlSco(GeneralVariables.connectMode,
+                        GeneralVariables.controlMode,
+                        baseRig != null,
+                        baseRig != null && baseRig.supportWaveOverCAT());
             }
 
             @Override
