@@ -44,10 +44,12 @@ public class GpsClockUpdater {
     private static final String TAG = "GpsClockUpdater";
 
     /**
-     * A fix older than this (or one implying a correction larger than this) is treated
-     * as bad data and ignored. GPS UTC and the device clock are never legitimately an
-     * hour apart; a value that big means a mock provider, a bogus fix, or a timezone
-     * confusion, none of which should be allowed to yank the transmit timing.
+     * A fix implying a correction larger than this is treated as bad data and ignored
+     * (see {@link #isOffsetSane}). Fix age is not checked separately: {@link #gpsUtcNow}
+     * folds it into the implied offset, so a stale fix shows up here as a large offset.
+     * GPS UTC and the device clock are never legitimately an hour apart; a value that
+     * big means a mock provider, a bogus fix, or a timezone confusion, none of which
+     * should be allowed to yank the transmit timing.
      */
     static final long MAX_SANE_OFFSET_MS = 60L * 60L * 1000L;
 
@@ -111,11 +113,12 @@ public class GpsClockUpdater {
         // offset is still valid) or the captured pre-GPS baseline.
         if (running) unsubscribe();
 
+        // GPS_PROVIDER requires ACCESS_FINE_LOCATION; a coarse-only grant (Android 12+
+        // "approximate location") can't subscribe to it, so treating coarse as sufficient
+        // here would just trade this guard for a SecurityException below.
         if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED
-                && ContextCompat.checkSelfPermission(appContext, Manifest.permission.ACCESS_COARSE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED) {
-            Log.d(TAG, "Location permission not granted; skipping start");
+            Log.d(TAG, "ACCESS_FINE_LOCATION not granted; skipping start");
             return;
         }
         if (locationManager == null) {
@@ -236,7 +239,10 @@ public class GpsClockUpdater {
 
         UtcTimer.delay = offsetMs;
         GeneralVariables.gpsClockOffsetMs = offsetMs;
-        GeneralVariables.mutableGpsClockSync.postValue(System.currentTimeMillis());
+        // The UI renders this as "... UTC", so post the disciplined time, not the raw
+        // (possibly-wrong) system clock we just computed a correction for.
+        GeneralVariables.mutableGpsClockSync.postValue(
+                disciplinedUtcMs(System.currentTimeMillis(), offsetMs));
         Log.d(TAG, "GPS clock discipline applied offset " + offsetMs + "ms");
     }
 
@@ -298,6 +304,14 @@ public class GpsClockUpdater {
             return DEFAULT_INTERVAL_MINUTES;
         }
         return clampIntervalMinutes(minutes);
+    }
+
+    /**
+     * The corrected UTC instant for a system-clock reading: what the disciplined clock
+     * says "now" is. Used for the last-sync timestamp shown (as UTC) in settings.
+     */
+    static long disciplinedUtcMs(long nowSystemMs, int offsetMs) {
+        return nowSystemMs + offsetMs;
     }
 
     /**

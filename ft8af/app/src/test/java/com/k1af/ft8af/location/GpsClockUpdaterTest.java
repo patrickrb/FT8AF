@@ -165,4 +165,17 @@ public class GpsClockUpdaterTest {
         Integer r = GpsClockUpdater.computeAppliedOffset(true, 10_000L, 5000L * MS, 5000L * MS, 8_000L);
         assertThat(r).isEqualTo(2_000);
     }
+
+    // ---- disciplinedUtcMs (last-sync timestamp shown as UTC in settings) ----
+
+    @Test
+    public void disciplinedUtc_shiftsSlowClockForward() {
+        // Device 2s behind GPS: the displayed sync instant must be the corrected time.
+        assertThat(GpsClockUpdater.disciplinedUtcMs(8_000L, 2_000)).isEqualTo(10_000L);
+    }
+
+    @Test
+    public void disciplinedUtc_shiftsFastClockBack() {
+        assertThat(GpsClockUpdater.disciplinedUtcMs(10_000L, -1_500)).isEqualTo(8_500L);
+    }
 }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableIntStateOf
@@ -73,6 +74,13 @@ fun TimeSyncSettings(
     // Latest cycle's average decode DT (seconds), posted in MainViewModel.afterDecode.
     // Null until the first decode this session.
     val avgDtSec by mainViewModel.mutableTimerOffset.observeAsState()
+
+    // While GPS discipline owns the clock, each fix rewrites UtcTimer.delay behind this
+    // screen's back — and disabling it restores the pre-GPS offset. Re-read the live value
+    // on every posted sync and on toggle changes so the "Current" readout can't go stale.
+    LaunchedEffect(lastGpsSync, disciplineFromGps) {
+        correctionMs = UtcTimer.delay
+    }
 
     // Apply a new correction everywhere: live timer, in-memory config mirror, and DB.
     fun apply(newMs: Int) {
