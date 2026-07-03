@@ -364,15 +364,19 @@ public class Ft8MessageTest {
 
     @Test
     public void copyConstructor_resolvesFromH12_whenOnlyH12Received() {
-        // A Type-4 frame ("<SV8/DM5HF> K1ABC RR73") carries only the 12-bit
-        // hash; the JNI leaves the other hash fields 0 (zero keys are never
-        // stored in the list, so they can't match anything).
+        // Over the air this is the Type-4 (i3=4) case: "<SV8/DM5HF> K1ABC RR73"
+        // carries only the 12-bit hash, and the JNI leaves the other hash
+        // fields 0 (zero keys are never stored in the list, so they can't
+        // match anything). The message here uses i3=1 because the copy
+        // constructor's i3==4 branch calls the native FT8Package.getHash*
+        // helpers, which aren't loadable in a JVM test — the resolution path
+        // under test is identical for both frame types.
         long h22 = 0x2ABCDEL;
         long h12 = h22 >> 10;
         Ft8Message.hashList.addHash(h12, "SV8/DM5HF");
 
         Ft8Message src = new Ft8Message(FT8Common.FT8_MODE);
-        src.i3 = 1;
+        src.i3 = 1; // keep off the native getHashNN path (see comment above)
         src.callsignTo = "<...>";
         src.callsignFrom = "K1ABC";
         src.extraInfo = "RR73";
@@ -407,19 +411,26 @@ public class Ft8MessageTest {
     public void resolvedCompoundCall_isRecognizedAsMyCallsign() {
         // The full issue-#392 chain: once the reply resolves, the app must
         // recognize it as addressed to the operator so a QSO can proceed.
-        GeneralVariables.myCallsign = "SV8/DM5HF";
-        long h22 = 0x2ABCDEL;
-        Ft8Message.hashList.addHash(h22, "SV8/DM5HF");
+        // myCallsign is a global static — restore it so no state leaks into
+        // other tests.
+        String previousMyCallsign = GeneralVariables.myCallsign;
+        try {
+            GeneralVariables.myCallsign = "SV8/DM5HF";
+            long h22 = 0x2ABCDEL;
+            Ft8Message.hashList.addHash(h22, "SV8/DM5HF");
 
-        Ft8Message src = new Ft8Message(FT8Common.FT8_MODE);
-        src.i3 = 1;
-        src.callsignTo = "<...>";
-        src.callsignFrom = "K1ABC";
-        src.extraInfo = "R-10";
-        src.callToHash22 = h22;
+            Ft8Message src = new Ft8Message(FT8Common.FT8_MODE);
+            src.i3 = 1;
+            src.callsignTo = "<...>";
+            src.callsignFrom = "K1ABC";
+            src.extraInfo = "R-10";
+            src.callToHash22 = h22;
 
-        Ft8Message copy = new Ft8Message(src);
-        assertThat(GeneralVariables.checkIsMyCallsign(copy.getCallsignTo())).isTrue();
+            Ft8Message copy = new Ft8Message(src);
+            assertThat(GeneralVariables.checkIsMyCallsign(copy.getCallsignTo())).isTrue();
+        } finally {
+            GeneralVariables.myCallsign = previousMyCallsign;
+        }
     }
 
     // ---- simple formatters: getDt / getdB / getFreq_hz ----------------------
