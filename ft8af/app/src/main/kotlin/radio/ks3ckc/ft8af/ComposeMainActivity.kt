@@ -149,16 +149,10 @@ class ComposeMainActivity : AppCompatActivity() {
             }
         })
 
-        // Register Bluetooth state broadcast receiver
+        // Register Bluetooth state broadcast receiver. The launch-time
+        // headset/SCO decision happens in initData's config-loaded callback:
+        // it needs the persisted connectMode, which isn't in memory yet here.
         registerBluetoothReceiver()
-        // Only force headset/SCO mode when the rig itself is on Bluetooth.
-        // Any paired BT audio device (a car, headphones) makes isBTConnected()
-        // true, and opening SCO against it kicks it out of A2DP music mode.
-        if (ScoPolicy.shouldEnterHeadsetMode(
-                GeneralVariables.connectMode, mainViewModel.isBTConnected())
-        ) {
-            mainViewModel.setBlueToothOn()
-        }
 
         // Register USB detach receiver — without this, a cable yank leaves the
         // recorder waiting on a dead handle and TX still pointing at a closed
@@ -393,6 +387,19 @@ class ComposeMainActivity : AppCompatActivity() {
                 val ports = mainViewModel.mutableSerialPorts.value
                 fileLog("initData: found ${ports?.size ?: 0} serial port(s)")
                 mainViewModel.reinitializeAudioInput()
+
+                // Bring up headset/SCO for Bluetooth-rig users now that the persisted
+                // connectMode is known. Gating this at onCreate time would read the
+                // USB_CABLE default and skip SCO for every Bluetooth rig (PR #377
+                // review); gating on connect mode at all keeps a car/headphones paired
+                // for music from being yanked out of A2DP (the original bug).
+                Handler(Looper.getMainLooper()).post {
+                    if (ScoPolicy.shouldEnterHeadsetMode(
+                            GeneralVariables.connectMode, mainViewModel.isBTConnected())
+                    ) {
+                        mainViewModel.setBlueToothOn()
+                    }
+                }
 
                 // USB auto-connect is driven by the mutableSerialPorts observer; Bluetooth has
                 // no such device-arrival event, so re-open the remembered SPP/CAT link here now
