@@ -406,6 +406,16 @@
     <string name="settings_time_suggest_label">Recent average DT: %1$s</string>
     <string name="settings_time_suggest_apply">Apply suggested correction</string>
 
+    <!-- ===== Settings: Time Sync (GPS clock discipline, issue #373) ===== -->
+    <string name="settings_gps_clock_section">GPS Clock Discipline</string>
+    <string name="settings_gps_clock_toggle">Discipline clock from GPS</string>
+    <string name="settings_gps_clock_toggle_desc">Use satellite time to align the FT8 cycle to true UTC. Overrides the manual correction while on. Needs location permission and a GPS fix.</string>
+    <string name="settings_gps_clock_interval">Update interval</string>
+    <string name="settings_gps_clock_interval_value">%1$d min</string>
+    <string name="settings_gps_clock_waiting">Waiting for a GPS fix…</string>
+    <string name="settings_gps_clock_last_sync">Last GPS sync: %1$s UTC</string>
+    <string name="settings_gps_clock_offset">Applied offset: %1$s</string>
+
     <!-- ===== Settings: operator identity ===== -->
     <string name="settings_auto_update_grid">Auto-update Grid (GPS)</string>
     <string name="settings_auto_update_grid_desc">Use device GPS to keep your Maidenhead grid current</string>

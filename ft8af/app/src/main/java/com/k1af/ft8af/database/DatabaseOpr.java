@@ -2474,6 +2474,18 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("autoGridFromGPS")) {//Auto-update grid from GPS
                     GeneralVariables.autoUpdateGridFromGPS = result.equals("1");
                 }
+                if (name.equalsIgnoreCase("disciplineClockFromGPS")) {//Discipline clock from GPS (issue #373)
+                    GeneralVariables.disciplineClockFromGPS = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("gpsClockIntervalMin")) {//GPS discipline update interval (minutes)
+                    int min;
+                    try {
+                        min = Integer.parseInt(result.trim());
+                    } catch (NumberFormatException e) {
+                        min = 5;
+                    }
+                    GeneralVariables.gpsClockIntervalMinutes = com.k1af.ft8af.location.GpsClockUpdater.clampIntervalMinutes(min);
+                }
                 if (name.equalsIgnoreCase("pttDelay")) {//PTT delay setting
                     GeneralVariables.pttDelay = result.equals("") ? 100 : Integer.parseInt(result);
                 }
