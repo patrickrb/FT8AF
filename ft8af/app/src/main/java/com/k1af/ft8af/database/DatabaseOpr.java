@@ -742,6 +742,51 @@ public class DatabaseOpr extends SQLiteOpenHelper {
     }
 
     /**
+     * Read every config key/value pair synchronously into an insertion-ordered map.
+     * Backs the settings-export feature (issue #357). Must be called off the main
+     * thread (it touches SQLite directly).
+     */
+    public java.util.LinkedHashMap<String, String> getAllConfigSync() {
+        java.util.LinkedHashMap<String, String> map = new java.util.LinkedHashMap<>();
+        // ORDER BY: SQLite guarantees no row order without it, so the map's insertion
+        // order (which this method promises) would otherwise be nondeterministic.
+        Cursor cursor = db.rawQuery("select KeyName,Value from config order by KeyName", null);
+        try {
+            int keyIdx = cursor.getColumnIndexOrThrow("KeyName");
+            int valueIdx = cursor.getColumnIndexOrThrow("Value");
+            while (cursor.moveToNext()) {
+                map.put(cursor.getString(keyIdx), cursor.getString(valueIdx));
+            }
+        } finally {
+            cursor.close();
+        }
+        return map;
+    }
+
+    /**
+     * Upsert every entry of {@code config} synchronously (same delete-then-insert as
+     * {@link WriteConfig}). Backs the settings-import feature (issue #357). Must be
+     * called off the main thread. After calling, run {@link #getAllConfigParameter}
+     * to re-hydrate {@link GeneralVariables} from the freshly written values.
+     */
+    public void writeConfigSync(java.util.Map<String, String> config) {
+        // One transaction: an interrupted import can't leave the table half-updated,
+        // and batching the statements is much faster than autocommitting each one.
+        db.beginTransaction();
+        try {
+            for (java.util.Map.Entry<String, String> entry : config.entrySet()) {
+                String value = entry.getValue() == null ? "" : entry.getValue();
+                db.execSQL("DELETE FROM config where KeyName =?", new String[]{entry.getKey()});
+                db.execSQL("INSERT INTO config (KeyName,Value)Values(?,?)",
+                        new String[]{entry.getKey(), value});
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    /**
      * Query all successfully contacted callsigns, filtered by QSO frequency
      */
     public void getAllQSLCallsigns() {

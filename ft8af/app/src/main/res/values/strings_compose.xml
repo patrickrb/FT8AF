@@ -379,6 +379,24 @@
     <string name="settings_section_about">ABOUT</string>
     <string name="settings_section_language">LANGUAGE</string>
     <string name="settings_section_appearance">APPEARANCE</string>
+    <string name="settings_section_backup">BACKUP &amp; RESTORE</string>
+
+    <!-- ===== Settings: backup / restore (export & import config) ===== -->
+    <string name="settings_export">Export settings</string>
+    <string name="settings_export_desc">Save all settings to a backup file</string>
+    <string name="settings_import">Import settings</string>
+    <string name="settings_import_desc">Restore settings from a backup file</string>
+    <string name="settings_export_dialog_title">Export settings</string>
+    <string name="settings_backup_include_sensitive">Include sensitive data</string>
+    <string name="settings_backup_include_sensitive_desc">API keys and passwords (Cloudlog, QRZ, rig login)</string>
+    <string name="action_export">Export</string>
+    <string name="action_import">Import</string>
+    <string name="settings_import_confirm_title">Import settings?</string>
+    <string name="settings_import_confirm_msg">This will overwrite %1$d setting(s) with values from the backup created %2$s.</string>
+    <string name="settings_export_success">Settings exported</string>
+    <string name="settings_export_failed">Export failed: %1$s</string>
+    <string name="settings_import_success">Settings imported — restart the app to apply all changes</string>
+    <string name="settings_import_failed">Import failed: %1$s</string>
 
     <!-- ===== Settings: appearance / theme ===== -->
     <string name="settings_theme">Theme</string>
