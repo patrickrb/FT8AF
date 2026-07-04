@@ -557,4 +557,6 @@
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">TX-audio mislukt — geen signaal verzonden deze cyclus (USB-audiofout)</string>
     <string name="cq_offset_moved">CQ-offset verplaatst naar een vrije plek: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Automatisch vrije TX-offset</string>
+    <string name="settings_auto_clear_tx_desc">Kiest bij het roepen van CQ een vrije plek op basis van recente bandactiviteit en wijkt uit als die bezet raakt</string>
 </resources>

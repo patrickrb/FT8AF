@@ -557,4 +557,6 @@
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">Audio TX gagal — tidak ada sinyal terkirim pada siklus ini (kesalahan audio USB)</string>
     <string name="cq_offset_moved">Offset CQ dipindahkan ke tempat kosong: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Offset TX kosong otomatis</string>
+    <string name="settings_auto_clear_tx_desc">Saat memanggil CQ, memilih tempat kosong dari aktivitas band terkini dan berpindah jika terisi</string>
 </resources>

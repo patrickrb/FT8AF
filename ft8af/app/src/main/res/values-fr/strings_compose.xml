@@ -514,4 +514,6 @@
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">Échec audio TX — aucun signal émis ce cycle (erreur audio USB)</string>
     <string name="cq_offset_moved">Décalage CQ déplacé vers un créneau libre : %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Décalage TX libre automatique</string>
+    <string name="settings_auto_clear_tx_desc">En appelant CQ, choisit un créneau libre selon l\'activité récente de la bande et se déplace s\'il devient occupé</string>
 </resources>

@@ -421,8 +421,8 @@ fun TransmissionSettings(
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     SettingsRow(
-                        label = "Auto clear TX offset",
-                        description = "When calling CQ, pick a clear spot from recent band activity and move away if it becomes occupied",
+                        label = stringResource(R.string.settings_auto_clear_tx),
+                        description = stringResource(R.string.settings_auto_clear_tx_desc),
                         toggle = autoClearTxFreq,
                         onToggleChange = { checked ->
                             autoClearTxFreq = checked

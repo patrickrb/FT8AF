@@ -653,4 +653,6 @@
 
     <string name="tx_audio_dropped">TX audio failed — no signal was sent this cycle (USB audio error)</string>
     <string name="cq_offset_moved">CQ offset moved to a clear spot: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Auto clear TX offset</string>
+    <string name="settings_auto_clear_tx_desc">When calling CQ, pick a clear spot from recent band activity and move away if it becomes occupied</string>
 </resources>

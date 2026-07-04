@@ -514,4 +514,6 @@
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">Falló el audio de TX — no se transmitió señal en este ciclo (error de audio USB)</string>
     <string name="cq_offset_moved">Desplazamiento de CQ movido a un hueco libre: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Offset de TX libre automático</string>
+    <string name="settings_auto_clear_tx_desc">Al llamar CQ, elige un hueco libre según la actividad reciente de la banda y se aparta si se ocupa</string>
 </resources>

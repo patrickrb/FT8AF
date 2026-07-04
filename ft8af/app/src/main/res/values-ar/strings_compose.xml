@@ -557,4 +557,6 @@
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">فشل صوت الإرسال — لم تُرسل أي إشارة في هذه الدورة (خطأ في صوت USB)</string>
     <string name="cq_offset_moved">تم نقل إزاحة CQ إلى موضع خالٍ: %1$d هرتز</string>
+    <string name="settings_auto_clear_tx">اختيار إزاحة إرسال خالية تلقائيًا</string>
+    <string name="settings_auto_clear_tx_desc">عند نداء CQ يختار موضعًا خاليًا وفق نشاط النطاق الأخير وينتقل إذا أصبح مشغولًا</string>
 </resources>

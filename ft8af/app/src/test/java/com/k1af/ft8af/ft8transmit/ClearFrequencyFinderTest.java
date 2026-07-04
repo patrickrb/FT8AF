@@ -81,6 +81,19 @@ public class ClearFrequencyFinderTest {
         assertThat(f.selectClearOffset(1500f)).isNull(); // back to no-information
     }
 
+    @Test
+    public void clearAlsoResetsTheHoldDown() {
+        // A band/mode hop invalidates the hold-down along with the history: the
+        // old band's move must not suppress the first relocation on the new band.
+        ClearFrequencyFinder f = finder();
+        occupy(f, 1500f, T0);
+        f.noteMoved(T0);
+        f.clear();
+
+        occupy(f, 1500f, T0 + FT8_SLOT_MS); // new band, occupied right away
+        assertThat(f.shouldRelocate(1500f, T0 + FT8_SLOT_MS)).isTrue();
+    }
+
     // ---- selection ------------------------------------------------------------
 
     @Test

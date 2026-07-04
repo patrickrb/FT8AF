@@ -88,6 +88,10 @@ public final class ClearFrequencyFinder {
     public synchronized void clear() {
         history.clear();
         newestUtcMs = Long.MIN_VALUE;
+        // The hold-down protected callers on the OLD band's offset; carrying it
+        // across a band/mode hop would wrongly suppress the first relocation on
+        // the new band for up to moveHolddownMs.
+        lastMoveUtcMs = Long.MIN_VALUE;
     }
 
     /** Observations currently inside the window (test/diagnostic visibility). */

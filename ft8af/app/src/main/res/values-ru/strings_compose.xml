@@ -514,4 +514,6 @@
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">Сбой TX-аудио — в этом цикле сигнал не передан (ошибка USB-аудио)</string>
     <string name="cq_offset_moved">Смещение CQ перенесено на свободное место: %1$d Гц</string>
+    <string name="settings_auto_clear_tx">Автовыбор свободного смещения TX</string>
+    <string name="settings_auto_clear_tx_desc">При вызове CQ выбирает свободное место по недавней активности диапазона и уходит, если оно занимается</string>
 </resources>

@@ -546,4 +546,6 @@
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">Błąd audio TX — w tym cyklu nie wysłano sygnału (błąd audio USB)</string>
     <string name="cq_offset_moved">Offset CQ przeniesiony w wolne miejsce: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Automatyczny wolny offset TX</string>
+    <string name="settings_auto_clear_tx_desc">Przy wołaniu CQ wybiera wolne miejsce na podstawie ostatniej aktywności pasma i przenosi się, gdy zostanie zajęte</string>
 </resources>

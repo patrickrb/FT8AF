@@ -546,4 +546,6 @@
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">Збій TX-аудіо — у цьому циклі сигнал не передано (помилка USB-аудіо)</string>
     <string name="cq_offset_moved">Зсув CQ перенесено на вільне місце: %1$d Гц</string>
+    <string name="settings_auto_clear_tx">Автовибір вільного зсуву TX</string>
+    <string name="settings_auto_clear_tx_desc">Під час виклику CQ обирає вільне місце за нещодавньою активністю діапазону і зміщується, якщо воно займається</string>
 </resources>
