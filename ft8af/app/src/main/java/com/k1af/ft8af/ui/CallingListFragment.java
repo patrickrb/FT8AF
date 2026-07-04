@@ -105,7 +105,7 @@ public class CallingListFragment extends Fragment {
             public void onChanged(Integer integer) {
                 binding.decoderCounterTextView.setText(
                         String.format(GeneralVariables.getStringFromResource(R.string.message_count_count)
-                                , mainViewModel.currentDecodeCount, mainViewModel.ft8Messages.size()));
+                                , mainViewModel.getCurrentDecodeCount(), mainViewModel.ft8Messages.size()));
 
 
             }

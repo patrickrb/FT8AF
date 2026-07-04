@@ -62,7 +62,7 @@ public class SpectrumFragment extends Fragment {
         setMarkMessageSwitchState();
 
         binding.rulerFrequencyView.setFreq(Math.round(GeneralVariables.getBaseFrequency()));
-        mainViewModel.currentMessages=null;
+        mainViewModel.clearCurrentMessages();
 
 
         //Raw spectrum switch
@@ -71,7 +71,7 @@ public class SpectrumFragment extends Fragment {
             public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
                 mainViewModel.deNoise = b;
                 setDeNoiseSwitchState();
-                mainViewModel.currentMessages=null;
+                mainViewModel.clearCurrentMessages();
             }
         });
         //Mark message switch
@@ -194,7 +194,7 @@ public class SpectrumFragment extends Fragment {
         }
         binding.columnarView.setWaveData(fft);
         if (mainViewModel.markMessage) {//Whether to mark messages
-            binding.waterfallView.setWaveData(fft, mainViewModel.currentMessages);
+            binding.waterfallView.setWaveData(fft, mainViewModel.getCurrentMessages());
         } else {
             binding.waterfallView.setWaveData(fft, null);
         }
