@@ -149,6 +149,24 @@ public abstract class BaseRig {
     public void onDisconnecting() {
     }
 
+    /**
+     * Whether this rig's protocol has a CAT command to start the internal
+     * antenna tuner (ATU). Capability can't be queried over CAT, so "true"
+     * means the protocol family defines the command — rigs without an ATU
+     * ignore it harmlessly (CI-V NG / ASCII "?;").
+     */
+    public boolean supportsAtuTune() {
+        return false;
+    }
+
+    /**
+     * Fire-and-forget start of the rig's internal ATU tune cycle. The rig
+     * keys its own low-power carrier and stops by itself; no PTT or audio
+     * from the app is involved.
+     */
+    public void startAtuTune() {
+    }
+
     // Meter data callback for MeterProtectionController (ALC auto-volume, SWR halt)
     public interface OnMeterData {
         void onMeterUpdate(int normalizedAlc, int normalizedSwr);

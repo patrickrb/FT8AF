@@ -370,9 +370,11 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 onToggleTune = {
                     // Toggle (WSJT-X style latching Tune): tap to key the carrier,
                     // tap again to stop. startTune() toasts the reason when blocked.
+                    // Per the tune-method setting the tap may instead fire the rig's
+                    // internal ATU (issue #425) — a one-shot command, nothing to latch.
                     if (isTuning) {
                         mainViewModel.ft8TransmitSignal.stopTune()
-                    } else {
+                    } else if (!mainViewModel.tryStartTuneViaAtu()) {
                         mainViewModel.ft8TransmitSignal.startTune()
                     }
                 },

@@ -548,10 +548,17 @@
     <string name="cq_offset_moved">Зсув CQ перенесено на вільне місце: %1$d Гц</string>
     <string name="settings_auto_clear_tx">Автовибір вільного зсуву TX</string>
     <string name="settings_auto_clear_tx_desc">Під час виклику CQ обирає вільне місце за нещодавньою активністю діапазону і зміщується, якщо воно займається</string>
-    <string name="tune_content_description">Tune: передає безперервну несучу для налаштування антени</string>
+    <string name="tune_content_description">Tune: запускає тюнер трансивера або передає безперервну несучу для налаштування антени</string>
     <string name="tune_stopped_timeout">Tune зупинено через %1$d с</string>
     <string name="tune_blocked_tx">Зупиніть CQ/QSO перед використанням Tune</string>
     <string name="tune_unavailable_route">Tune поки не підтримується на цьому аудіотракті</string>
+    <string name="tune_atu_started">Антенний тюнер трансивера запущено</string>
+    <string name="tune_atu_unavailable">Тюнер недоступний — підключіть CAT-трансивер із вбудованим тюнером</string>
+    <string name="settings_tune_method">Метод Tune</string>
+    <string name="settings_tune_method_desc">Автоматично запускає вбудований тюнер трансивера через CAT, якщо доступний, інакше передає малопотужний тон</string>
+    <string name="tune_method_automatic">Автоматично</string>
+    <string name="tune_method_internal">Вбудований тюнер</string>
+    <string name="tune_method_tone">Малопотужний тон</string>
 
     <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
     <string name="settings_section_fft_waterfall">FFT / ВОДОСПАД (ДЛЯ РОЗРОБНИКІВ)</string>

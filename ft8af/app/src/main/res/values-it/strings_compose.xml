@@ -548,10 +548,17 @@
     <string name="cq_offset_moved">Offset CQ spostato in uno spazio libero: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Offset TX libero automatico</string>
     <string name="settings_auto_clear_tx_desc">Chiamando CQ, sceglie uno spazio libero dall\'attività recente della banda e si sposta se viene occupato</string>
-    <string name="tune_content_description">Tune: trasmette una portante continua per l\'accordo dell\'antenna</string>
+    <string name="tune_content_description">Tune: avvia l\'accordatore della radio o trasmette una portante continua per l\'accordo dell\'antenna</string>
     <string name="tune_stopped_timeout">Tune fermato dopo %1$d s</string>
     <string name="tune_blocked_tx">Ferma il CQ/QSO prima di usare Tune</string>
     <string name="tune_unavailable_route">Tune non è ancora disponibile su questo percorso audio</string>
+    <string name="tune_atu_started">Accordatore d\'antenna della radio avviato</string>
+    <string name="tune_atu_unavailable">Accordatore non disponibile — collega una radio CAT con accordatore interno</string>
+    <string name="settings_tune_method">Metodo di Tune</string>
+    <string name="settings_tune_method_desc">Automatico avvia l\'accordatore interno della radio via CAT quando disponibile, altrimenti riproduce il tono a bassa potenza</string>
+    <string name="tune_method_automatic">Automatico</string>
+    <string name="tune_method_internal">Accordatore interno</string>
+    <string name="tune_method_tone">Tono a bassa potenza</string>
 
     <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
     <string name="settings_section_fft_waterfall">FFT / CASCATA (SVILUPPATORE)</string>

@@ -559,10 +559,17 @@
     <string name="cq_offset_moved">Offset CQ přesunut na volné místo: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Automaticky volný TX offset</string>
     <string name="settings_auto_clear_tx_desc">Při volání CQ vybere volné místo podle nedávné aktivity v pásmu a uhne, pokud se obsadí</string>
-    <string name="tune_content_description">Tune: vysílá souvislou nosnou pro ladění antény</string>
+    <string name="tune_content_description">Tune: spustí tuner rádia nebo vysílá souvislou nosnou pro ladění antény</string>
     <string name="tune_stopped_timeout">Tune zastaven po %1$d s</string>
     <string name="tune_blocked_tx">Před použitím Tune zastavte CQ/QSO</string>
     <string name="tune_unavailable_route">Tune zatím není na této zvukové cestě podporován</string>
+    <string name="tune_atu_started">Anténní tuner rádia spuštěn</string>
+    <string name="tune_atu_unavailable">Tuner není k dispozici — připojte CAT rádio s interním tunerem</string>
+    <string name="settings_tune_method">Metoda Tune</string>
+    <string name="settings_tune_method_desc">Automaticky spustí interní tuner rádia přes CAT, je-li k dispozici, jinak přehraje tón s nízkým výkonem</string>
+    <string name="tune_method_automatic">Automaticky</string>
+    <string name="tune_method_internal">Interní tuner</string>
+    <string name="tune_method_tone">Tón s nízkým výkonem</string>
 
     <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
     <string name="settings_section_fft_waterfall">FFT / VODOPÁD (VÝVOJÁŘ)</string>

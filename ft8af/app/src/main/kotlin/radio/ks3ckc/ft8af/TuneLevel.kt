@@ -39,6 +39,9 @@ const val TUNE_LEVEL_KEY = "tuneLevel"
 /** Config key: the per-band independent tune levels ("20m=25,40m=40"). */
 const val PER_BAND_TUNE_LEVELS_KEY = "perBandTuneLevels"
 
+/** Config key: tune method — TuneMethod.AUTOMATIC/INTERNAL/TONE (issue #425). */
+const val TUNE_METHOD_KEY = "tuneMethod"
+
 /**
  * Resolve the level (0..100) the tune tone should play at.
  *
