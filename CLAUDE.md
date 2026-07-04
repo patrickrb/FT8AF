@@ -10,8 +10,12 @@ a PR.
 open a pull request against `dev` (do the work on a feature branch, then
 `gh pr create --base dev`). Don't merge straight to `main`.
 
+> **Placeholder note:** Replace all `<...>` examples below with your own local
+> values (checkout paths, usernames, device serials, and app ID). For example,
+> use your own `<windows-checkout>` or `<mac-checkout>`.
+
 **Use a git worktree for every separate line of work.** Don't switch branches in
-the primary checkout (`C:\Users\burns\Projects\NEXT-FT8CN`) — branch-switching
+the primary checkout (for example `<windows-checkout>` or `<mac-checkout>`) — branch-switching
 there collides with anything else in flight (a running build, an `adb install`, a
 different task). Instead spin up an isolated worktree per task:
 
@@ -59,22 +63,23 @@ cmd.exe /c "gradlew.bat testDebugUnitTest --tests <fully.qualified.ClassName>"
 
 After making code changes, always build and install on the connected device.
 
-The WSL shell has no Linux JDK, so `./gradlew` fails with `JAVA_HOME is not set`.
-Use the Windows wrapper instead — it picks up the Android Studio JBR automatically:
+The WSL shell may not have Linux JDK 17 configured (`JAVA_HOME` unset). Use a
+JDK 17 install (for example user-local Temurin 17 at `<jdk17-home>`) and/or use
+the Windows wrapper — it typically picks up the Android Studio JBR automatically:
 
 ```
 cd ft8af && cmd.exe /c "gradlew.bat installDebug"
 ```
 
-The user's phone is a Pixel 8 (transport_id changes; identify by `adb devices -l`
-model `Pixel_8`). An Android emulator is usually also attached — Gradle's install
-step will print `TimeoutException`/`Unknown API Level` warnings for the emulator
+Use any attached Android phone (transport IDs can change; identify the phone with
+`adb devices -l`). An Android emulator may also be attached — Gradle's install
+step can print `TimeoutException`/`Unknown API Level` warnings for the emulator
 and still successfully install on the phone. `Installed on 1 device.` near the end
-of the output means the phone got the APK; ignore the emulator noise.
+of the output means the phone got the APK; ignore emulator noise.
 
-When multiple devices are attached, target the phone explicitly with `-s` and the
-phone's serial (from `adb devices`). adb itself lives at
-`/mnt/c/Users/burns/AppData/Local/Android/Sdk/platform-tools/adb.exe`.
+When multiple devices are attached, target the phone explicitly with `-s` and
+`<phone-serial>` (from `adb devices`). Use the `adb` binary from your local
+Android SDK (for example `<android-sdk>/platform-tools/adb`).
 
 ## Debug logs
 
@@ -91,9 +96,8 @@ adb -s <phone-serial> pull /sdcard/Android/data/radio.ks3ckc.ft8af/files/debug.l
 For runtime detail not in `debug.log` (audio recording loop, system USB events,
 crashes), use `adb logcat`. Useful tags: `FT8SignalListener`, `MicRecorder`,
 `UsbAudioDevice`, `CableConnector`, `CableSerialPort`, `UsbHostManager`,
-`UsbAlsaManager`. The app's `applicationId` is `radio.ks3ckc.ft8af` — pid-filter
-with `--pid=$(adb shell pidof radio.ks3ckc.ft8af)` when you only want app-internal
-lines.
+`UsbAlsaManager`. Use your app's `<applicationId>` for pid filtering, e.g.
+`--pid=$(adb shell pidof <applicationId>)`.
 
 ## FT8 TX audio pipeline
 
