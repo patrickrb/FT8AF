@@ -106,13 +106,16 @@ class ComposeMainActivity : AppCompatActivity() {
         mainViewModel = MainViewModel.getInstance(this)
         ToastMessage.getInstance()
 
+        // The notification's Exit button routes here so it runs the same shutdown as the
+        // in-app exit; cleared in onDestroy so a destroyed activity isn't leaked. Registered
+        // BEFORE the service starts so there's no window where the notification can appear
+        // and be tapped before the handler exists (which would fall back to a bare
+        // stopSelf()/System.exit(0) that skips rig disconnect and RX teardown).
+        RxForegroundService.setExitHandler { closeApp() }
+
         // Keep RX alive in the background (no-op until RECORD_AUDIO is granted; the
         // permission-result callback re-invokes this once the user grants it).
         startRxServiceIfPermitted()
-
-        // The notification's Exit button routes here so it runs the same shutdown as the
-        // in-app exit; cleared in onDestroy so a destroyed activity isn't leaked.
-        RxForegroundService.setExitHandler { closeApp() }
 
         // Forward every TX-volume change to the native USB-direct write loop so a
         // slider move (or hardware-button / ALC auto-volume change) attenuates the

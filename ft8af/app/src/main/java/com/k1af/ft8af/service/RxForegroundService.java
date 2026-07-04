@@ -165,7 +165,7 @@ public class RxForegroundService extends Service {
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .setContentIntent(pi)
-                .addAction(0, getString(R.string.action_exit), exitPi)
+                .addAction(R.drawable.ic_baseline_close_32, getString(R.string.action_exit), exitPi)
                 .build();
     }
 }
