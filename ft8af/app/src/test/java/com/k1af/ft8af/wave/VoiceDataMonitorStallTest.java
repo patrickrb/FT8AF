@@ -20,8 +20,13 @@ public class VoiceDataMonitorStallTest {
     private static class RecordingCallback implements OnGetVoiceDataDone {
         final ArrayList<float[]> deliveries = new ArrayList<>();
 
+        // synchronized: the race tests below invoke this from either the
+        // capture thread or the watchdog thread. If a regression ever produced
+        // two near-simultaneous deliveries, the harness must record both and
+        // fail the hasSize(1) assertion cleanly — not corrupt an unsynchronized
+        // ArrayList and die with a confusing secondary error.
         @Override
-        public void onGetDone(float[] data) {
+        public synchronized void onGetDone(float[] data) {
             deliveries.add(data);
         }
     }
@@ -217,13 +222,18 @@ public class VoiceDataMonitorStallTest {
             assertThat(cb.deliveries).hasSize(1);
             float[] delivered = cb.deliveries.get(0);
             // Either outcome is legal, but the collected prefix must be intact and
-            // stable: at least the pre-fed 1100 samples, and if the fill won, all 1200.
+            // stable: at least the pre-fed 1100 samples...
             for (int i = 0; i < 1100; i++) {
                 assertThat(delivered[i]).isEqualTo(0.25f);
             }
-            boolean fullDelivery = delivered[1199] == 0.25f;
-            boolean shortDelivery = delivered[1199] == 0f;
-            assertThat(fullDelivery || shortDelivery).isTrue();
+            // ...and the final chunk must be all-or-nothing: every sample real
+            // (fill won the lock) or every sample zero (watchdog won). A torn
+            // half-copied chunk — some real samples then zeros — is exactly the
+            // failure the buffer lock exists to prevent.
+            boolean fullDelivery = delivered[1100] == 0.25f;
+            for (int i = 1100; i < 1200; i++) {
+                assertThat(delivered[i]).isEqualTo(fullDelivery ? 0.25f : 0f);
+            }
         }
     }
 }
