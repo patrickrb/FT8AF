@@ -1,7 +1,7 @@
 # FT8AF Project Instructions
 
 > **Placeholders.** This file is written for any contributor's machine.
-> Substitute your own values wherever you see `<…>`:
+> Substitute your own values wherever you see `<…>`. The recurring ones:
 > `<windows-checkout>` / `<mac-checkout>` — your local clone of this repo;
 > `<jdk17-home>` — the home directory of a JDK 17 install;
 > `<phone-serial>` — your phone's serial from `adb devices`;
@@ -127,7 +127,7 @@ adb -s <phone-serial> install -r app/build/outputs/apk/debug/app-debug.apk
 
 To drive the UI: `adb -s <phone-serial> exec-out screencap -p > shot.png` and
 tap with `adb -s <phone-serial> shell input tap <x> <y>` (coordinates in the
-device's real pixel space — check it with `adb shell wm size`).
+device's real pixel space — check it with `adb -s <phone-serial> shell wm size`).
 
 When an emulator is attached alongside the phone, Gradle's install step prints
 `TimeoutException`/`Unknown API Level` warnings for the emulator and still
@@ -157,8 +157,8 @@ crashes), use `adb logcat`. Useful tags: `FT8SignalListener`, `MicRecorder`,
 `UsbAudioDevice`, `CableConnector`, `CableSerialPort`, `UsbHostManager`,
 `UsbAlsaManager`. The app's `applicationId` is `radio.ks3ckc.ft8af` (the same
 for every contributor — it's set in `ft8af/app/build.gradle`) — pid-filter with
-`--pid=$(adb shell pidof radio.ks3ckc.ft8af)` when you only want app-internal
-lines.
+`adb -s <phone-serial> logcat --pid=$(adb -s <phone-serial> shell pidof radio.ks3ckc.ft8af)`
+when you only want app-internal lines.
 
 ## FT8 TX audio pipeline
 
