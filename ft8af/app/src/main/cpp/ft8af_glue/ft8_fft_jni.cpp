@@ -61,9 +61,13 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_k1af_ft8af_ui_SpectrumFragment_setFFTDisplayParams(
         JNIEnv*, jclass, jint windowType, jint averagingMode)
 {
-    g_window_type = (int)windowType;
-    if ((int)averagingMode != g_avg_mode) {
-        g_avg_mode = (int)averagingMode;
+    // The Java setters already clamp, but this is the native trust boundary:
+    // sanitize again so a caller bypassing GeneralVariables (or corrupted
+    // persisted state) can't select an undefined window/averaging mode.
+    g_window_type = ft8af_sanitize_window_type((int)windowType);
+    int avg = ft8af_sanitize_avg_mode((int)averagingMode);
+    if (avg != g_avg_mode) {
+        g_avg_mode = avg;
         g_ema_primed = false; // restart smoothing cleanly on mode change
     }
 }

@@ -35,6 +35,17 @@ static int g_failures = 0;
         }                                                                       \
     } while (0)
 
+#define CHECK_EQ_INT(actual, expected, label)                                   \
+    do {                                                                        \
+        int a_ = (actual), e_ = (expected);                                     \
+        if (a_ != e_) {                                                         \
+            printf("  FAIL: %s: got %d, expected %d\n", (label), a_, e_);       \
+            ++g_failures;                                                       \
+        } else {                                                                \
+            printf("  ok:   %s\n", (label));                                    \
+        }                                                                       \
+    } while (0)
+
 #define CHECK_NEAR(actual, expected, tol, label)                                \
     do {                                                                        \
         float a_ = (actual), e_ = (expected);                                   \
@@ -205,6 +216,26 @@ static void test_leakage_rect_vs_hann(void)
 }
 
 // ---------------------------------------------------------------------------
+// Wire-value sanitizers: the JNI boundary must clamp out-of-range knob values
+// to the defaults (Hann / off) instead of trusting persisted state.
+// ---------------------------------------------------------------------------
+static void test_sanitizers(void)
+{
+    printf("wire-value sanitizers:\n");
+    for (int v = FT8AF_WIN_RECT; v <= FT8AF_WIN_BLACKMAN_HARRIS; ++v)
+        CHECK_EQ_INT(ft8af_sanitize_window_type(v), v, "valid window passes through");
+    CHECK_EQ_INT(ft8af_sanitize_window_type(-1), FT8AF_WIN_HANN, "window -1 -> hann");
+    CHECK_EQ_INT(ft8af_sanitize_window_type(5), FT8AF_WIN_HANN, "window 5 -> hann");
+    CHECK_EQ_INT(ft8af_sanitize_window_type(99), FT8AF_WIN_HANN, "window 99 -> hann");
+
+    for (int v = 0; v <= 2; ++v)
+        CHECK_EQ_INT(ft8af_sanitize_avg_mode(v), v, "valid avg mode passes through");
+    CHECK_EQ_INT(ft8af_sanitize_avg_mode(-1), 0, "avg -1 -> off");
+    CHECK_EQ_INT(ft8af_sanitize_avg_mode(3), 0, "avg 3 -> off (not heavy EMA)");
+    CHECK_EQ_INT(ft8af_sanitize_avg_mode(99), 0, "avg 99 -> off");
+}
+
+// ---------------------------------------------------------------------------
 // ft8af_mag_ema: passthrough at alpha 1, two-step arithmetic, convergence.
 // ---------------------------------------------------------------------------
 static void test_mag_ema(void)
@@ -239,6 +270,7 @@ int main(void)
     test_window_coefficients();
     test_window_apply();
     test_leakage_rect_vs_hann();
+    test_sanitizers();
     test_mag_ema();
 
     if (g_failures)

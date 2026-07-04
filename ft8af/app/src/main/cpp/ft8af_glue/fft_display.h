@@ -33,6 +33,22 @@ typedef enum {
     FT8AF_WIN_BLACKMAN_HARRIS = 4, // 4-term minimum-sidelobe
 } ft8af_window_type;
 
+// Clamp wire values arriving at the native boundary (JNI / persisted config)
+// to their valid ranges; anything else falls back to the default. Without
+// this, an out-of-range averaging mode would silently enable EMA with the
+// heavy alpha (any mode > 0 reads as "on", any mode != 1 as "heavy").
+static inline int ft8af_sanitize_window_type(int type)
+{
+    return (type >= FT8AF_WIN_RECT && type <= FT8AF_WIN_BLACKMAN_HARRIS)
+               ? type
+               : FT8AF_WIN_HANN;
+}
+
+static inline int ft8af_sanitize_avg_mode(int mode)
+{
+    return (mode >= 0 && mode <= 2) ? mode : 0; // 0=off 1=EMA 0.5 2=EMA 0.25
+}
+
 // Fill w[0..n-1] with window coefficients (symmetric form, denominator n-1).
 // Unknown types fall back to rectangular. No-op if n <= 0; n == 1 yields 1.0.
 //
