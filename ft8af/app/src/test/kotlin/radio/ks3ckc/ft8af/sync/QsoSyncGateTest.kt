@@ -2,6 +2,7 @@ package radio.ks3ckc.ft8af.sync
 
 import com.google.common.truth.Truth.assertThat
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Test
 
@@ -60,15 +61,22 @@ class QsoSyncGateTest {
     fun twoRacingTriggers_concurrentThreads_onlyOneWins() {
         val gate = QsoSyncGate(minIntervalMs = 1000)
         val ready = CountDownLatch(1)
+        val done = CountDownLatch(2)
         val wins = AtomicInteger(0)
-        val threads = (1..2).map {
+        repeat(2) {
             Thread {
-                ready.await()
-                if (gate.tryStart(now = 0, anyServiceEnabled = true)) wins.incrementAndGet()
-            }.apply { start() }
+                try {
+                    ready.await()
+                    if (gate.tryStart(now = 0, anyServiceEnabled = true)) wins.incrementAndGet()
+                } finally {
+                    done.countDown()
+                }
+            }.start()
         }
         ready.countDown()
-        threads.forEach { it.join() }
+        // Bounded wait: a wedged thread fails this assertion instead of hanging
+        // the whole suite on an untimed join().
+        assertThat(done.await(5, TimeUnit.SECONDS)).isTrue()
         assertThat(wins.get()).isEqualTo(1)
     }
 
