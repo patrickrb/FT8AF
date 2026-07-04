@@ -556,4 +556,8 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">Audio TX gagal — tidak ada sinyal terkirim pada siklus ini (kesalahan audio USB)</string>
+    <string name="tune_content_description">Tune: memancarkan gelombang pembawa kontinu untuk penalaan antena</string>
+    <string name="tune_stopped_timeout">Tune dihentikan setelah %1$d dtk</string>
+    <string name="tune_blocked_tx">Hentikan CQ/QSO sebelum menggunakan Tune</string>
+    <string name="tune_unavailable_route">Tune belum didukung pada jalur audio ini</string>
 </resources>

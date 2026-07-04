@@ -688,8 +688,13 @@ public class MainViewModel extends ViewModel {
                         baseRig != null && baseRig.supportWaveOverCAT());
             }
 
-            @Override
-            public void onBeforeTransmit(Ft8Message message, int functionOder) {
+            /**
+             * Assert PTT (+ pause SCO) through the configured control path. Shared
+             * by the FT8 TX path and the tune carrier (issue #408) so the
+             * CAT/RTS/DTR branching lives in one place; with no control path
+             * (VOX), this is a no-op and the audio itself keys the rig.
+             */
+            private void beginKeying() {
                 if (GeneralVariables.controlMode == ControlMode.CAT
                         || GeneralVariables.controlMode == ControlMode.RTS
                         || GeneralVariables.controlMode == ControlMode.DTR) {
@@ -699,15 +704,10 @@ public class MainViewModel extends ViewModel {
                         baseRig.setPTT(true);
                     }
                 }
-                if (ft8TransmitSignal.isActivated()) {
-                    GeneralVariables.transmitMessages.add(message);
-                    //mutableTransmitMessages.postValue(GeneralVariables.transmitMessages);
-                    mutableTransmitMessagesCount.postValue(1);
-                }
             }
 
-            @Override
-            public void onAfterTransmit(Ft8Message message, int functionOder) {
+            /** Release PTT (+ restore SCO); counterpart of {@link #beginKeying()}. */
+            private void endKeying() {
                 if (GeneralVariables.controlMode == ControlMode.CAT
                         || GeneralVariables.controlMode == ControlMode.RTS
                         || GeneralVariables.controlMode == ControlMode.DTR) {
@@ -717,6 +717,31 @@ public class MainViewModel extends ViewModel {
                         if (needControlSco()) startSco();
                     }
                 }
+            }
+
+            @Override
+            public void onBeforeTransmit(Ft8Message message, int functionOder) {
+                beginKeying();
+                if (ft8TransmitSignal.isActivated()) {
+                    GeneralVariables.transmitMessages.add(message);
+                    //mutableTransmitMessages.postValue(GeneralVariables.transmitMessages);
+                    mutableTransmitMessagesCount.postValue(1);
+                }
+            }
+
+            @Override
+            public void onAfterTransmit(Ft8Message message, int functionOder) {
+                endKeying();
+            }
+
+            @Override
+            public void onTuneKeyDown() {
+                beginKeying();
+            }
+
+            @Override
+            public void onTuneKeyUp() {
+                endKeying();
             }
 
             @Override

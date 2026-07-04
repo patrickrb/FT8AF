@@ -556,4 +556,8 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">TX 오디오 실패 — 이번 주기에 신호가 송신되지 않았습니다 (USB 오디오 오류)</string>
+    <string name="tune_content_description">Tune: 안테나 조정을 위한 연속 반송파를 송신합니다</string>
+    <string name="tune_stopped_timeout">Tune이 %1$d초 후 정지되었습니다</string>
+    <string name="tune_blocked_tx">Tune 전에 CQ/QSO를 정지하세요</string>
+    <string name="tune_unavailable_route">이 오디오 경로에서는 아직 Tune을 사용할 수 없습니다</string>
 </resources>

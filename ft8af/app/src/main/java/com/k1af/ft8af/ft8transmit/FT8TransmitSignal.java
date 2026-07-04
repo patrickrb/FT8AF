@@ -137,6 +137,13 @@ public class FT8TransmitSignal {
         this.meterProtectionController = controller;
     }
 
+    // Tune carrier (issue #408): lifecycle/safety state machine + UI state.
+    // The controller enforces the hard max-on timeout and single-flight; the
+    // worker thread owns keying + AudioTrack teardown in a finally.
+    private final TuneController tuneController = new TuneController(System::currentTimeMillis);
+    public final MutableLiveData<Boolean> mutableIsTuning = new MutableLiveData<>();
+    public final MutableLiveData<Integer> mutableTuneRemainingSec = new MutableLiveData<>();
+
     private final OnDoTransmitted onDoTransmitted;// typically used for opening/closing PTT
     private final ExecutorService doTransmitThreadPool = Executors.newCachedThreadPool();
     private final DoTransmitRunnable doTransmitRunnable = new DoTransmitRunnable(this);
@@ -1780,6 +1787,11 @@ public class FT8TransmitSignal {
             ToastMessage.show(GeneralVariables.getStringFromResource(R.string.swr_lockout_toast));
             return;
         }
+        if (activated) {
+            // Tune and FT8 TX are mutually exclusive (issue #408): arming the
+            // sequencer ends a running tune so the scheduled TX can key cleanly.
+            tuneController.requestStop(TuneController.STOP_TX);
+        }
         this.activated = activated;
         if (!this.activated) {//force stop transmitting
             setTransmitting(false);
@@ -1840,6 +1852,10 @@ public class FT8TransmitSignal {
             mutableTransmittingMessage.postValue("");
         }
 
+        if (transmitting) {
+            // Tune must yield to a real transmission (issue #408).
+            tuneController.requestStop(TuneController.STOP_TX);
+        }
         mutableIsTransmitting.postValue(transmitting);
         isTransmitting = transmitting;
     }
@@ -2196,6 +2212,223 @@ public class FT8TransmitSignal {
      */
     static boolean shouldStopAfterOneShot(boolean transmitFreeText, boolean freeTextOneShot) {
         return transmitFreeText && freeTextOneShot;
+    }
+
+    // =========================================================================
+    // Tune: on-demand single-tone carrier for antenna/amplifier tuning
+    // (issue #408). Reuses the FT8 keying path (OnDoTransmitted.onTuneKeyDown/
+    // Up -> MainViewModel beginKeying/endKeying) and the chunked MODE_STREAM
+    // AudioTrack pattern from playFT8Signal; the samples come from
+    // TuneToneGenerator instead of the native FT8 encoder, and the loop runs
+    // until the operator stops it or TuneController's hard timeout fires.
+    // =========================================================================
+
+    /** Why a tune request was refused; NONE means it may start. */
+    enum TuneBlockReason {
+        NONE,
+        TX_ACTIVE,
+        SWR_LOCKED,
+        WSPR_FREQUENCY,
+        UNSUPPORTED_ROUTE,
+    }
+
+    /**
+     * Pure gate for starting the tune carrier. Ordered by severity: an armed or
+     * live FT8 TX wins (tune must never fight the sequencer for the rig), then
+     * the same protections the FT8 path applies (SWR lockout, WSPR sub-band
+     * blacklist — tune must not be a backdoor around TX inhibits), then route
+     * support (MVP plays through the Android AudioTrack sink only; the truSDX
+     * CAT-audio, network-rig, and USB-direct routes are follow-ups).
+     */
+    static TuneBlockReason tuneBlockReason(boolean txActiveOrArmed,
+                                           boolean swrLocked,
+                                           boolean wsprFrequency,
+                                           boolean catAudioRoute,
+                                           boolean networkRoute,
+                                           boolean usbDirectRoute) {
+        if (txActiveOrArmed) return TuneBlockReason.TX_ACTIVE;
+        if (swrLocked) return TuneBlockReason.SWR_LOCKED;
+        if (wsprFrequency) return TuneBlockReason.WSPR_FREQUENCY;
+        if (catAudioRoute || networkRoute || usbDirectRoute) {
+            return TuneBlockReason.UNSUPPORTED_ROUTE;
+        }
+        return TuneBlockReason.NONE;
+    }
+
+    public boolean isTuning() {
+        return tuneController.isActive();
+    }
+
+    /** Milliseconds until the tune safety timeout fires; 0 when not tuning. */
+    public long tuneRemainingMs() {
+        return tuneController.remainingMs();
+    }
+
+    /**
+     * Start the tune carrier: key PTT, play a steady tone at the current TX
+     * offset until {@link #stopTune()}, the max-on timeout, or an FT8 TX start.
+     * Returns false (with an operator toast) when blocked.
+     */
+    public boolean startTune() {
+        TuneBlockReason block = tuneBlockReason(
+                isTransmitting || activated,
+                meterProtectionController != null && meterProtectionController.isSwrLocked(),
+                BaseRigOperation.checkIsWSPR2(
+                        GeneralVariables.band + Math.round(GeneralVariables.getBaseFrequency())),
+                onDoTransmitted != null && onDoTransmitted.supportTransmitOverCAT(),
+                GeneralVariables.connectMode == ConnectMode.NETWORK,
+                GeneralVariables.audioOutputDeviceId == -1
+                        && GeneralVariables.usbAudioOutputVendorId != 0);
+        switch (block) {
+            case TX_ACTIVE:
+                ToastMessage.show(GeneralVariables.getStringFromResource(R.string.tune_blocked_tx));
+                return false;
+            case SWR_LOCKED:
+                ToastMessage.show(GeneralVariables.getStringFromResource(R.string.swr_lockout_toast));
+                return false;
+            case WSPR_FREQUENCY:
+                ToastMessage.show(String.format(
+                        GeneralVariables.getStringFromResource(R.string.use_wspr2_error)
+                        , BaseRigOperation.getFrequencyAllInfo(GeneralVariables.band)));
+                return false;
+            case UNSUPPORTED_ROUTE:
+                ToastMessage.show(GeneralVariables.getStringFromResource(
+                        R.string.tune_unavailable_route));
+                return false;
+            case NONE:
+            default:
+                break;
+        }
+        if (!tuneController.tryStart(GeneralVariables.tuneMaxOnSeconds)) {
+            return false; // already tuning
+        }
+        Thread worker = new Thread(this::playTuneTone, "TuneTone");
+        worker.start();
+        return true;
+    }
+
+    /** Operator stop: the worker ramps the tone down and unkeys. */
+    public void stopTune() {
+        tuneController.requestStop(TuneController.STOP_USER);
+    }
+
+    /** The tune level (0..100) resolved from settings, as an amplitude 0..1. */
+    private static float currentTuneAmplitude() {
+        return radio.ks3ckc.ft8af.TuneLevelKt.currentTuneLevel() / 100f;
+    }
+
+    /**
+     * Tune audio worker. Owns keying and the AudioTrack for its whole life;
+     * every exit path (stop, timeout, write error, exception) releases PTT and
+     * the track via the finally block — a stuck carrier is never acceptable.
+     */
+    private void playTuneTone() {
+        long startedAt = System.currentTimeMillis();
+        float offsetHz = GeneralVariables.getBaseFrequency();
+        AudioTrack track = null;
+        boolean keyed = false;
+        try {
+            GeneralVariables.fileLog(String.format(
+                    "TUNE: start offset=%.0fHz level=%d%% maxOn=%ds rate=%d",
+                    offsetHz, radio.ks3ckc.ft8af.TuneLevelKt.currentTuneLevel(),
+                    TuneController.clampMaxOnSeconds(GeneralVariables.tuneMaxOnSeconds),
+                    GeneralVariables.audioSampleRate));
+            onDoTransmitted.onTuneKeyDown();
+            keyed = true;
+            mutableIsTuning.postValue(true);
+
+            int sampleRate = GeneralVariables.audioSampleRate;
+            AudioAttributes tuneAttributes = new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build();
+            int encoding = GeneralVariables.audioOutput32Bit
+                    ? AudioFormat.ENCODING_PCM_FLOAT : AudioFormat.ENCODING_PCM_16BIT;
+            AudioFormat tuneFormat = new AudioFormat.Builder().setSampleRate(sampleRate)
+                    .setEncoding(encoding)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build();
+            // Same small-buffer MODE_STREAM sizing as playFT8Signal: the buffer
+            // depth bounds the latency from a level change (or stop) to the air.
+            int bytesPerSample = GeneralVariables.audioOutput32Bit ? 4 : 2;
+            int targetBufBytes = (sampleRate / 5) * bytesPerSample;
+            int minBuf = AudioTrack.getMinBufferSize(sampleRate,
+                    AudioFormat.CHANNEL_OUT_MONO, encoding);
+            int bufBytes = Math.max(targetBufBytes, minBuf > 0 ? minBuf : targetBufBytes);
+            track = new AudioTrack(tuneAttributes, tuneFormat, bufBytes,
+                    AudioTrack.MODE_STREAM, 0);
+            if (GeneralVariables.audioOutputDeviceId > 0) {
+                AudioDeviceInfo deviceInfo = findAudioDeviceById(
+                        GeneralVariables.audioOutputDeviceId, AudioManager.GET_DEVICES_OUTPUTS);
+                track.setPreferredDevice(deviceInfo);
+            }
+            track.play();
+            track.setVolume(1.0f);
+
+            TuneToneGenerator generator = new TuneToneGenerator(offsetHz, sampleRate,
+                    Math.max(1, sampleRate / 200)); // ~5ms ramp
+            final int chunkSamples = Math.max(1, sampleRate / 20); // ~50ms
+            float[] chunk = new float[chunkSamples];
+            int lastPostedSec = -1;
+            while (true) {
+                if (!tuneController.shouldContinue()) {
+                    generator.requestStop(); // final chunk(s) ramp to zero
+                }
+                // Level read fresh per chunk so a settings change lands mid-tune,
+                // exactly like the FT8 volume slider.
+                int written = generator.nextChunk(chunk, chunkSamples, currentTuneAmplitude());
+                if (written <= 0) {
+                    break;
+                }
+                int writeResult;
+                if (GeneralVariables.audioOutput32Bit) {
+                    writeResult = track.write(chunk, 0, written, AudioTrack.WRITE_BLOCKING);
+                } else {
+                    short[] pcm = floatToInt16NoPad(chunk, written);
+                    writeResult = track.write(pcm, 0, written, AudioTrack.WRITE_BLOCKING);
+                }
+                if (writeResult < 0) {
+                    Log.e(TAG, "Tune playback error: " + writeResult);
+                    tuneController.requestStop(TuneController.STOP_ERROR);
+                    break;
+                }
+                int remainingSec = (int) Math.ceil(tuneController.remainingMs() / 1000.0);
+                if (remainingSec != lastPostedSec) {
+                    lastPostedSec = remainingSec;
+                    mutableTuneRemainingSec.postValue(remainingSec);
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Tune worker failed: " + e);
+            tuneController.requestStop(TuneController.STOP_ERROR);
+        } finally {
+            // Single point of teardown: whatever happened above, the carrier
+            // stops and PTT drops here.
+            tuneController.requestStop(TuneController.STOP_ERROR);
+            if (track != null) {
+                try {
+                    track.stop();
+                } catch (IllegalStateException ignored) {
+                }
+                track.release();
+            }
+            if (keyed) {
+                try {
+                    onDoTransmitted.onTuneKeyUp();
+                } catch (Exception e) {
+                    Log.e(TAG, "Tune key-up failed: " + e);
+                }
+            }
+            mutableIsTuning.postValue(false);
+            String reason = tuneController.lastStopReason();
+            GeneralVariables.fileLog(String.format(
+                    "TUNE: stop reason=%s durationMs=%d offset=%.0fHz",
+                    reason, System.currentTimeMillis() - startedAt, offsetHz));
+            if (TuneController.STOP_TIMEOUT.equals(reason)) {
+                ToastMessage.show(String.format(
+                        GeneralVariables.getStringFromResource(R.string.tune_stopped_timeout),
+                        TuneController.clampMaxOnSeconds(GeneralVariables.tuneMaxOnSeconds)));
+            }
+        }
     }
 
 

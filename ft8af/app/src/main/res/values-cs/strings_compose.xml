@@ -556,4 +556,8 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">Selhalo TX audio — v tomto cyklu nebyl vyslán žádný signál (chyba USB audia)</string>
+    <string name="tune_content_description">Tune: vysílá souvislou nosnou pro ladění antény</string>
+    <string name="tune_stopped_timeout">Tune zastaven po %1$d s</string>
+    <string name="tune_blocked_tx">Před použitím Tune zastavte CQ/QSO</string>
+    <string name="tune_unavailable_route">Tune zatím není na této zvukové cestě podporován</string>
 </resources>

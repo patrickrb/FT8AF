@@ -545,4 +545,8 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">TX sesi başarısız — bu döngüde sinyal gönderilmedi (USB ses hatası)</string>
+    <string name="tune_content_description">Tune: anten ayarı için sürekli taşıyıcı gönderir</string>
+    <string name="tune_stopped_timeout">Tune %1$d s sonra durduruldu</string>
+    <string name="tune_blocked_tx">Tune kullanmadan önce CQ/QSO\'yu durdurun</string>
+    <string name="tune_unavailable_route">Tune bu ses yolunda henüz desteklenmiyor</string>
 </resources>

@@ -513,4 +513,8 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">發射音訊失敗 — 本週期未發出訊號（USB 音訊錯誤）</string>
+    <string name="tune_content_description">Tune：發射連續載波用於天線調諧</string>
+    <string name="tune_stopped_timeout">Tune已在%1$d秒後停止</string>
+    <string name="tune_blocked_tx">使用Tune前請先停止CQ/QSO</string>
+    <string name="tune_unavailable_route">此音訊路徑暫不支援Tune</string>
 </resources>

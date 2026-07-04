@@ -556,4 +556,8 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">فشل صوت الإرسال — لم تُرسل أي إشارة في هذه الدورة (خطأ في صوت USB)</string>
+    <string name="tune_content_description">Tune: يرسل موجة حاملة مستمرة لضبط الهوائي</string>
+    <string name="tune_stopped_timeout">توقف Tune بعد %1$d ث</string>
+    <string name="tune_blocked_tx">أوقف CQ/QSO قبل استخدام Tune</string>
+    <string name="tune_unavailable_route">Tune غير مدعوم بعد على مسار الصوت هذا</string>
 </resources>

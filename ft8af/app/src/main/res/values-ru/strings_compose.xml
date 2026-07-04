@@ -513,4 +513,8 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">Сбой TX-аудио — в этом цикле сигнал не передан (ошибка USB-аудио)</string>
+    <string name="tune_content_description">Tune: передаёт непрерывную несущую для настройки антенны</string>
+    <string name="tune_stopped_timeout">Tune остановлен через %1$d с</string>
+    <string name="tune_blocked_tx">Остановите CQ/QSO перед использованием Tune</string>
+    <string name="tune_unavailable_route">Tune пока не поддерживается на этом аудиотракте</string>
 </resources>

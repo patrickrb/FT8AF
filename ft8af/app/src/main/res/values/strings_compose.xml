@@ -652,4 +652,9 @@
     <string name="language_name_ar" translatable="false">العربية</string>
 
     <string name="tx_audio_dropped">TX audio failed — no signal was sent this cycle (USB audio error)</string>
+    <string name="tune_button" translatable="false">TUNE</string>
+    <string name="tune_content_description">Tune — transmit a steady carrier for antenna tuning</string>
+    <string name="tune_stopped_timeout">Tune stopped after %1$d s</string>
+    <string name="tune_blocked_tx">Stop the CQ/QSO before tuning</string>
+    <string name="tune_unavailable_route">Tune is not yet supported on this audio route</string>
 </resources>
