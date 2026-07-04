@@ -40,7 +40,14 @@ public final class PendingSequencerDecodes {
 
     private final ArrayList<Ft8Message> pending = new ArrayList<>();
 
-    /** Stash one pass's decodes for replay after TX ends. */
+    /**
+     * Stash one pass's decodes for replay after TX ends.
+     *
+     * @param nowMs current time in the same base as {@code Ft8Message.utcTime},
+     *              i.e. {@code UtcTimer.getSystemTime()} (NTP/GPS-corrected) —
+     *              not the raw system clock, whose correction offset would skew
+     *              the age comparison
+     */
     public synchronized void stash(List<Ft8Message> messages, long nowMs) {
         evictStale(nowMs);
         pending.addAll(messages);
@@ -49,6 +56,9 @@ public final class PendingSequencerDecodes {
     /**
      * Remove and return all stashed decodes still fresh at {@code nowMs}.
      * Returns an empty list when nothing is pending.
+     *
+     * @param nowMs current time in the {@code UtcTimer.getSystemTime()} base
+     *              (see {@link #stash})
      */
     public synchronized ArrayList<Ft8Message> drain(long nowMs) {
         evictStale(nowMs);

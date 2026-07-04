@@ -603,7 +603,11 @@ public class MainViewModel extends ViewModel {
                 // advances the next cycle instead of being dropped.
                 if (isDeep) {
                     if (ft8TransmitSignal.isTransmitting()) {
-                        pendingSequencerDecodes.stash(messages, System.currentTimeMillis());
+                        // UtcTimer.getSystemTime(), not System.currentTimeMillis():
+                        // Ft8Message.utcTime is in the NTP/GPS-corrected time base,
+                        // and the stash ages entries against it — mixing bases would
+                        // shift eviction by the (possibly large) clock correction.
+                        pendingSequencerDecodes.stash(messages, UtcTimer.getSystemTime());
                     } else {
                         ft8TransmitSignal.parseMessageToFunction(messages, true);
                     }
@@ -612,7 +616,7 @@ public class MainViewModel extends ViewModel {
                 // ~1s after key-up): replay anything stashed mid-TX.
                 if (!ft8TransmitSignal.isTransmitting() && !pendingSequencerDecodes.isEmpty()) {
                     ArrayList<Ft8Message> stashed =
-                            pendingSequencerDecodes.drain(System.currentTimeMillis());
+                            pendingSequencerDecodes.drain(UtcTimer.getSystemTime());
                     if (!stashed.isEmpty()) {
                         ft8TransmitSignal.parseMessageToFunction(stashed, true);
                     }
