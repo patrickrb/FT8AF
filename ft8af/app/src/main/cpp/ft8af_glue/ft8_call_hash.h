@@ -41,26 +41,65 @@
 #define FT8AF_NTOKENS 2063592u
 #define FT8AF_MAX22 4194304u
 
-// Standard message (i3 in {1,2}): if the callsign at position `which`
-// (0 = call_to / n28a, 1 = call_de / n28b) was transmitted as a 22-bit hash,
-// write that hash to *n22 and return true. Returns false when the field is a
-// real callsign or a directed token (nothing to resolve). Mirrors the
-// n28 - NTOKENS < MAX22 test in unpack28().
-static inline bool ft8af_std_hash22(const ftx_message_t* msg, int which, uint32_t* n22)
+// Read the 28-bit callsign field starting at payload bit `start_bit`
+// (MSB-first, the convention every decoder in ft8_lib's message.c uses).
+static inline uint32_t ft8af_get_field28(const ftx_message_t* msg, int start_bit)
 {
-    // n29a/n29b as extracted by ftx_message_decode_std; the 28-bit field is the
-    // top 28 bits (n29 >> 1); the low bit is the /R /P suffix flag.
-    uint32_t n29a = ((uint32_t)msg->payload[0] << 21) |
-                    ((uint32_t)msg->payload[1] << 13) |
-                    ((uint32_t)msg->payload[2] << 5) |
-                    ((uint32_t)msg->payload[3] >> 3);
-    uint32_t n29b = (((uint32_t)msg->payload[3] & 0x07u) << 26) |
-                    ((uint32_t)msg->payload[4] << 18) |
-                    ((uint32_t)msg->payload[5] << 10) |
-                    ((uint32_t)msg->payload[6] << 2) |
-                    ((uint32_t)msg->payload[7] >> 6);
-    uint32_t n28 = (which == 0 ? n29a : n29b) >> 1;
+    uint32_t v = 0;
+    for (int i = 0; i < 28; ++i)
+    {
+        int b = start_bit + i;
+        v = (v << 1) | ((uint32_t)(msg->payload[b >> 3] >> (7 - (b & 7))) & 1u);
+    }
+    return v;
+}
 
+// Generalized recovery (issue #402): if the c28 callsign field at position
+// `which` (0 = call_to, 1 = call_de) of ANY known message type was transmitted
+// as a 22-bit hash, write that hash to *n22 and return true. Returns false when
+// the message type carries no such field, the field is a directed token
+// (CQ/DE/QRZ), or a packed standard callsign (mirrors the
+// n28 - NTOKENS < MAX22 test in unpack28()).
+//
+// Field offsets per type, straight from the decoders in ft8_lib's message.c:
+//   STANDARD (i3=1,2)     n29a bits 0-28, n29b bits 29-57; c28 = n29 >> 1,
+//                         i.e. plain 28-bit reads at bits 0 and 29
+//   ARRL_FD (0.3/0.4),
+//   DXPEDITION (0.1),
+//   CONTESTING (0.6)      c28a bits 0-27, c28b bits 28-55
+//   EU_VHF (0.2)          a single c28 at bits 0-27 — the reporting station,
+//                         surfaced as call_de (which == 1)
+//   ARRL_RTTY (i3=3),
+//   WWROF (i3=5)          t1 at bit 0, c28a bits 1-28, c28b bits 29-56
+// New decoders that carry c28 fields only need a case here to get hash
+// recovery — instead of re-implementing the #392 backstop per JNI branch.
+static inline bool ft8af_call_hash22(const ftx_message_t* msg, int which, uint32_t* n22)
+{
+    int off;
+    switch (ftx_message_get_type(msg))
+    {
+    case FTX_MESSAGE_TYPE_STANDARD:
+        off = (which == 0) ? 0 : 29;
+        break;
+    case FTX_MESSAGE_TYPE_ARRL_FD:
+    case FTX_MESSAGE_TYPE_DXPEDITION:
+    case FTX_MESSAGE_TYPE_CONTESTING:
+        off = (which == 0) ? 0 : 28;
+        break;
+    case FTX_MESSAGE_TYPE_EU_VHF:
+        if (which != 1)
+            return false; // only one call in the frame: the reporting station
+        off = 0;
+        break;
+    case FTX_MESSAGE_TYPE_ARRL_RTTY:
+    case FTX_MESSAGE_TYPE_WWROF:
+        off = (which == 0) ? 1 : 29;
+        break;
+    default:
+        return false; // free text / telemetry / type-4 (see ft8af_nonstd_hash12)
+    }
+
+    uint32_t n28 = ft8af_get_field28(msg, off);
     if (n28 < FT8AF_NTOKENS)
         return false; // directed token (CQ/DE/QRZ), not a hash
     n28 -= FT8AF_NTOKENS;
@@ -69,6 +108,18 @@ static inline bool ft8af_std_hash22(const ftx_message_t* msg, int which, uint32_
     if (n22 != NULL)
         *n22 = n28;
     return true;
+}
+
+// Standard message (i3 in {1,2}): if the callsign at position `which`
+// (0 = call_to / n28a, 1 = call_de / n28b) was transmitted as a 22-bit hash,
+// write that hash to *n22 and return true. Kept as the historical entry point;
+// now a thin wrapper over the generalized type-keyed recovery above.
+static inline bool ft8af_std_hash22(const ftx_message_t* msg, int which, uint32_t* n22)
+{
+    ftx_message_type_t type = ftx_message_get_type(msg);
+    if (type != FTX_MESSAGE_TYPE_STANDARD)
+        return false;
+    return ft8af_call_hash22(msg, which, n22);
 }
 
 // Non-standard message (Type 4, i3=4): the frame carries exactly one 12-bit

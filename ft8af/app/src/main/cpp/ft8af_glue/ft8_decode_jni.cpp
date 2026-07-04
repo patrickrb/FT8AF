@@ -722,11 +722,18 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderFt8Analysis(
             ft8_set_string(env, ft8Message, FF8.maidenGrid, extra);
         ft8_set_call_hashes(env, ft8Message, call_to, FF8.callToHash10, FF8.callToHash12, FF8.callToHash22);
         ft8_set_call_hashes(env, ft8Message, call_de, FF8.callFromHash10, FF8.callFromHash12, FF8.callFromHash22);
+    }
 
-        // A hashed compound call (e.g. answers to SV8/DM5HF) that the decoder's
-        // own hash table couldn't resolve comes back as "<...>", and the call
-        // above zeroed its hash fields. Recover the raw hash straight from the
-        // frame so Java's seeded MessageHashMap can resolve it (issue #392).
+    // Post-decode hash-recovery pass, for EVERY message type (issue #402). A
+    // hashed compound call (e.g. answers to SV8/DM5HF) that the decoder's own
+    // hash table couldn't resolve comes back as "<...>" with zeroed hash fields
+    // (ft8_set_call_hashes can't hash a placeholder). Recover the raw hash
+    // straight from the frame so Java's seeded MessageHashMap can resolve it
+    // (issue #392) — keyed on the message type's field layout inside
+    // ft8af_call_hash22, so FD/RTTY/WWROF/EU_VHF/CONTESTING (and any future
+    // decoder with c28 fields) get the backstop without a per-branch copy.
+    if (ok)
+    {
         if (type == FTX_MESSAGE_TYPE_NONSTD_CALL)
         {
             uint32_t n12 = 0;
@@ -736,12 +743,17 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderFt8Analysis(
                                   is_to ? FF8.callToHash12 : FF8.callFromHash12,
                                   (jlong)n12);
         }
-        else // FTX_MESSAGE_TYPE_STANDARD
+        else
         {
+            // Only overwrite when the decoder did NOT produce a plain call for
+            // the field: "<...>"/"<>" (unresolved hash) or "" (the generic-text
+            // contest path, which never surfaces callsign fields at all).
             uint32_t n22 = 0;
-            if (call_to[0] == '<' && ft8af_std_hash22(&message, 0, &n22))
+            if ((call_to[0] == '\0' || call_to[0] == '<')
+                    && ft8af_call_hash22(&message, 0, &n22))
                 env->SetLongField(ft8Message, FF8.callToHash22, (jlong)n22);
-            if (call_de[0] == '<' && ft8af_std_hash22(&message, 1, &n22))
+            if ((call_de[0] == '\0' || call_de[0] == '<')
+                    && ft8af_call_hash22(&message, 1, &n22))
                 env->SetLongField(ft8Message, FF8.callFromHash22, (jlong)n22);
         }
     }
