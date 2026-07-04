@@ -116,6 +116,28 @@ public class IcomRigConstant {
     }
 
     /**
+     * Start the internal antenna tuner (CI-V command 0x1C, sub 0x01,
+     * value 0x02 = start tuning). The rig keys its own low-power carrier and
+     * stops by itself; rigs without an ATU reply NG (0xFA) and do nothing.
+     *
+     * @param ctrAddr controller address
+     * @param rigAddr rig address
+     * @return command data packet
+     */
+    public static byte[] startAtuTune(int ctrAddr, int rigAddr) {
+        byte[] data = new byte[8];
+        data[0] = (byte) 0xfe;
+        data[1] = (byte) 0xfe;
+        data[2] = (byte) rigAddr;
+        data[3] = (byte) ctrAddr;
+        data[4] = (byte) 0x1c;//main command code
+        data[5] = (byte) 0x01;//sub-command code: antenna tuner
+        data[6] = (byte) 0x02;//02=start tuning (00=off, 01=on)
+        data[7] = (byte) 0xfd;
+        return data;
+    }
+
+    /**
      * Read SWR meter
      *
      * @param ctrAddr controller address

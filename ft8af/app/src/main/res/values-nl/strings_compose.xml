@@ -559,8 +559,15 @@
     <string name="cq_offset_moved">CQ-offset verplaatst naar een vrije plek: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Automatisch vrije TX-offset</string>
     <string name="settings_auto_clear_tx_desc">Kiest bij het roepen van CQ een vrije plek op basis van recente bandactiviteit en wijkt uit als die bezet raakt</string>
-    <string name="tune_content_description">Tune: zendt een continue draaggolf uit voor antenne-afstemming</string>
+    <string name="tune_content_description">Tune: start de tuner van de radio of zendt een continue draaggolf uit voor antenne-afstemming</string>
     <string name="tune_stopped_timeout">Tune gestopt na %1$d s</string>
     <string name="tune_blocked_tx">Stop de CQ/QSO voordat je Tune gebruikt</string>
     <string name="tune_unavailable_route">Tune is nog niet beschikbaar op deze audioroute</string>
+    <string name="tune_atu_started">Antennetuner van de radio gestart</string>
+    <string name="tune_atu_unavailable">Tuner niet beschikbaar — sluit een CAT-radio met interne tuner aan</string>
+    <string name="settings_tune_method">Tune-methode</string>
+    <string name="settings_tune_method_desc">Automatisch start de interne tuner van de radio via CAT indien beschikbaar, anders klinkt de toon met laag vermogen</string>
+    <string name="tune_method_automatic">Automatisch</string>
+    <string name="tune_method_internal">Interne tuner</string>
+    <string name="tune_method_tone">Toon met laag vermogen</string>
 </resources>

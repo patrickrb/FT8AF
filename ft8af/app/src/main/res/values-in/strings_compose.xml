@@ -559,8 +559,15 @@
     <string name="cq_offset_moved">Offset CQ dipindahkan ke tempat kosong: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Offset TX kosong otomatis</string>
     <string name="settings_auto_clear_tx_desc">Saat memanggil CQ, memilih tempat kosong dari aktivitas band terkini dan berpindah jika terisi</string>
-    <string name="tune_content_description">Tune: memancarkan gelombang pembawa kontinu untuk penalaan antena</string>
+    <string name="tune_content_description">Tune: memulai tuner radio atau memancarkan gelombang pembawa kontinu untuk penalaan antena</string>
     <string name="tune_stopped_timeout">Tune dihentikan setelah %1$d dtk</string>
     <string name="tune_blocked_tx">Hentikan CQ/QSO sebelum menggunakan Tune</string>
     <string name="tune_unavailable_route">Tune belum didukung pada jalur audio ini</string>
+    <string name="tune_atu_started">Tuner antena radio dimulai</string>
+    <string name="tune_atu_unavailable">Tuner tidak tersedia — hubungkan radio CAT dengan tuner internal</string>
+    <string name="settings_tune_method">Metode Tune</string>
+    <string name="settings_tune_method_desc">Otomatis memulai tuner internal radio lewat CAT bila tersedia, jika tidak memainkan nada daya rendah</string>
+    <string name="tune_method_automatic">Otomatis</string>
+    <string name="tune_method_internal">Tuner internal</string>
+    <string name="tune_method_tone">Nada daya rendah</string>
 </resources>

@@ -559,8 +559,15 @@
     <string name="cq_offset_moved">تم نقل إزاحة CQ إلى موضع خالٍ: %1$d هرتز</string>
     <string name="settings_auto_clear_tx">اختيار إزاحة إرسال خالية تلقائيًا</string>
     <string name="settings_auto_clear_tx_desc">عند نداء CQ يختار موضعًا خاليًا وفق نشاط النطاق الأخير وينتقل إذا أصبح مشغولًا</string>
-    <string name="tune_content_description">Tune: يرسل موجة حاملة مستمرة لضبط الهوائي</string>
+    <string name="tune_content_description">Tune: يبدأ موالف الجهاز أو يرسل موجة حاملة مستمرة لضبط الهوائي</string>
     <string name="tune_stopped_timeout">توقف Tune بعد %1$d ث</string>
     <string name="tune_blocked_tx">أوقف CQ/QSO قبل استخدام Tune</string>
     <string name="tune_unavailable_route">Tune غير مدعوم بعد على مسار الصوت هذا</string>
+    <string name="tune_atu_started">تم بدء موالف هوائي الجهاز</string>
+    <string name="tune_atu_unavailable">الموالف غير متاح — قم بتوصيل جهاز CAT مزوّد بموالف داخلي</string>
+    <string name="settings_tune_method">طريقة Tune</string>
+    <string name="settings_tune_method_desc">التلقائي يبدأ الموالف الداخلي للجهاز عبر CAT عند توفره، وإلا يرسل نغمة منخفضة القدرة</string>
+    <string name="tune_method_automatic">تلقائي</string>
+    <string name="tune_method_internal">الموالف الداخلي</string>
+    <string name="tune_method_tone">نغمة منخفضة القدرة</string>
 </resources>

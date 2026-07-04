@@ -124,6 +124,9 @@ public class GeneralVariables {
     public static volatile boolean tuneLevelIndependent = false;
     public static volatile int tuneLevel = 25;
     public static volatile String perBandTuneLevels = "";
+    //Tune method (issue #425): TuneMethod.AUTOMATIC/INTERNAL/TONE — whether the
+    //TUNE chip starts the rig's internal ATU over CAT or plays the carrier tone.
+    public static volatile int tuneMethod = 0;
 
     public static int flexMaxRfPower = 10;//Flex radio max transmit power
     public static int flexMaxTunePower = 10;//Flex radio max tune power

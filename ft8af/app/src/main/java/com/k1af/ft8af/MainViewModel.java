@@ -73,6 +73,7 @@ import com.k1af.ft8af.ft8transmit.FT8TransmitSignal;
 import com.k1af.ft8af.ft8transmit.MeterProtectionController;
 import com.k1af.ft8af.ft8transmit.OnDoTransmitted;
 import com.k1af.ft8af.ft8transmit.OnTransmitSuccess;
+import com.k1af.ft8af.ft8transmit.TuneMethod;
 import com.k1af.ft8af.html.LogHttpServer;
 import com.k1af.ft8af.icom.WifiRig;
 import com.k1af.ft8af.log.QSLCallsignRecord;
@@ -1153,6 +1154,33 @@ public class MainViewModel extends ViewModel {
         });
     }
 
+
+    /**
+     * Handle a TUNE tap according to the tune-method setting (issue #425).
+     * Returns true when the tap was handled here — either the rig's internal
+     * ATU was started (it keys its own carrier and stops by itself) or the
+     * operator chose Internal but no capable rig is connected (toast, no
+     * surprise carrier). Returns false when the caller should run the normal
+     * low-power carrier tune.
+     */
+    public boolean tryStartTuneViaAtu() {
+        boolean atuAvailable = baseRig != null && baseRig.isConnected()
+                && baseRig.supportsAtuTune() && !baseRig.isPttOn();
+        int action = TuneMethod.decide(GeneralVariables.tuneMethod, atuAvailable);
+        if (action == TuneMethod.ACTION_RIG_ATU) {
+            fileLog("tune: starting rig ATU (method=" + GeneralVariables.tuneMethod
+                    + ", rig=" + baseRig.getName() + ")");
+            baseRig.startAtuTune();
+            ToastMessage.show(getStringFromResource(R.string.tune_atu_started));
+            return true;
+        }
+        if (action == TuneMethod.ACTION_UNAVAILABLE) {
+            fileLog("tune: method=INTERNAL but no ATU-capable rig connected");
+            ToastMessage.show(getStringFromResource(R.string.tune_atu_unavailable));
+            return true;
+        }
+        return false;
+    }
 
     /**
      * Set the operating carrier frequency. Only operates if the rig is connected.

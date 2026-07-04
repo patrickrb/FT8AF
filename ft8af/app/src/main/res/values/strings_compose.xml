@@ -656,8 +656,15 @@
     <string name="settings_auto_clear_tx">Auto clear TX offset</string>
     <string name="settings_auto_clear_tx_desc">When calling CQ, pick a clear spot from recent band activity and move away if it becomes occupied</string>
     <string name="tune_button" translatable="false">TUNE</string>
-    <string name="tune_content_description">Tune — transmit a steady carrier for antenna tuning</string>
+    <string name="tune_content_description">Tune — start the rig\'s tuner or transmit a steady carrier for antenna tuning</string>
     <string name="tune_stopped_timeout">Tune stopped after %1$d s</string>
     <string name="tune_blocked_tx">Stop the CQ/QSO before tuning</string>
     <string name="tune_unavailable_route">Tune is not yet supported on this audio route</string>
+    <string name="tune_atu_started">Rig antenna tuner started</string>
+    <string name="tune_atu_unavailable">Rig tuner unavailable — connect a CAT radio with an internal tuner</string>
+    <string name="settings_tune_method">Tune method</string>
+    <string name="settings_tune_method_desc">Automatic starts the rig\'s internal tuner over CAT when available, otherwise plays the low power tone</string>
+    <string name="tune_method_automatic">Automatic</string>
+    <string name="tune_method_internal">Internal tuner</string>
+    <string name="tune_method_tone">Low power tone</string>
 </resources>

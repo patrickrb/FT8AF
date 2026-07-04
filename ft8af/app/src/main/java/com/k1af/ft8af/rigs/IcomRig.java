@@ -98,6 +98,16 @@ public class IcomRig extends BaseRig {
     }
 
     @Override
+    public boolean supportsAtuTune() {
+        return true;
+    }
+
+    @Override
+    public void startAtuTune() {
+        sendCivData(IcomRigConstant.startAtuTune(ctrAddress, getCivAddress()));
+    }
+
+    @Override
     public void setFreqToRig() {
         if (getConnector() != null) {
             getConnector().sendData(IcomRigConstant.setOperationFrequency(ctrAddress

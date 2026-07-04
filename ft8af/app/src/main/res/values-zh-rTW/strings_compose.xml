@@ -516,8 +516,15 @@
     <string name="cq_offset_moved">CQ頻偏已移至空閒位置：%1$d Hz</string>
     <string name="settings_auto_clear_tx">自動選擇空閒TX頻偏</string>
     <string name="settings_auto_clear_tx_desc">呼叫CQ時根據近期頻段活動選擇空閒位置，被佔用時自動移開</string>
-    <string name="tune_content_description">Tune：發射連續載波用於天線調諧</string>
+    <string name="tune_content_description">Tune：啟動電台調諧器或發射連續載波用於天線調諧</string>
     <string name="tune_stopped_timeout">Tune已在%1$d秒後停止</string>
     <string name="tune_blocked_tx">使用Tune前請先停止CQ/QSO</string>
     <string name="tune_unavailable_route">此音訊路徑暫不支援Tune</string>
+    <string name="tune_atu_started">已啟動電台天線調諧器</string>
+    <string name="tune_atu_unavailable">調諧器不可用 — 請連接具有內建調諧器的CAT電台</string>
+    <string name="settings_tune_method">Tune方式</string>
+    <string name="settings_tune_method_desc">自動：可用時透過CAT啟動電台內建調諧器，否則發射低功率音頻</string>
+    <string name="tune_method_automatic">自動</string>
+    <string name="tune_method_internal">內建調諧器</string>
+    <string name="tune_method_tone">低功率音頻</string>
 </resources>
