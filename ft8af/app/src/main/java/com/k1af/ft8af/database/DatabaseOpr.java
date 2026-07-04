@@ -2597,22 +2597,26 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("tuneMaxOnSeconds")) {//Tune carrier hard cap (issue #408)
                     //Defensive parse: settings import (#382) can feed anything here.
-                    //Non-numeric keeps the default; TuneController clamps the range.
-                    try {
-                        GeneralVariables.tuneMaxOnSeconds =
-                                com.k1af.ft8af.ft8transmit.TuneController.clampMaxOnSeconds(
-                                        Integer.parseInt(result.trim()));
-                    } catch (NumberFormatException ignored) {
+                    //Null/non-numeric keeps the default; TuneController clamps the range.
+                    if (result != null) {
+                        try {
+                            GeneralVariables.tuneMaxOnSeconds =
+                                    com.k1af.ft8af.ft8transmit.TuneController.clampMaxOnSeconds(
+                                            Integer.parseInt(result.trim()));
+                        } catch (NumberFormatException ignored) {
+                        }
                     }
                 }
                 if (name.equalsIgnoreCase("tuneLevelIndependent")) {//Tune level decoupled from TX drive
-                    GeneralVariables.tuneLevelIndependent = result.equals("1");
+                    GeneralVariables.tuneLevelIndependent = "1".equals(result);
                 }
                 if (name.equalsIgnoreCase("tuneLevel")) {//Global independent tune level (0..100)
-                    try {
-                        GeneralVariables.tuneLevel =
-                                Math.max(0, Math.min(100, Integer.parseInt(result.trim())));
-                    } catch (NumberFormatException ignored) {
+                    if (result != null) {
+                        try {
+                            GeneralVariables.tuneLevel =
+                                    Math.max(0, Math.min(100, Integer.parseInt(result.trim())));
+                        } catch (NumberFormatException ignored) {
+                        }
                     }
                 }
                 if (name.equalsIgnoreCase("perBandTuneLevels")) {//Per-band independent tune levels
