@@ -755,12 +755,15 @@ public class UsbAudioDevice {
                     fd, ifaceNum, altSet, epAddr, maxPkt,
                     pcmData.length, outputSampleRate, outputChannels));
 
-            long writeStartMs = System.currentTimeMillis();
+            // Monotonic clock: wall time can jump (NTP set, user change) and a
+            // backwards step would fake a fast failure, wrongly allowing the
+            // restart-from-zero fallback after audio already went to air.
+            long writeStartMs = android.os.SystemClock.elapsedRealtime();
             int rc = UsbAudioNative.nativeWrite(
                     fd, ifaceNum, altSet, epAddr, maxPkt,
                     outputSampleRate, outputChannels, /*bytesPerSample=*/2,
                     pcmData);
-            long writeElapsedMs = System.currentTimeMillis() - writeStartMs;
+            long writeElapsedMs = android.os.SystemClock.elapsedRealtime() - writeStartMs;
 
             if (rc == 0) {
                 com.k1af.ft8af.GeneralVariables.fileLog(

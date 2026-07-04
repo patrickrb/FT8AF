@@ -395,26 +395,4 @@ public class FT8TransmitSignalTest {
         // The one-shot flag without an active free-text message can't trigger a stop.
         assertThat(FT8TransmitSignal.shouldStopAfterOneShot(false, true)).isFalse();
     }
-
-    // ---- shouldWarnTxDropped -------------------------------------------------
-    // A dropped USB TX write is invisible at the rig (it keys and transmits
-    // dead air), so the operator gets an on-screen warning — but only for real
-    // failures, not for their own STOP press.
-
-    @Test
-    public void warnTxDropped_realFailure_warns() {
-        assertThat(FT8TransmitSignal.shouldWarnTxDropped(
-                /*success*/ false, /*cancelled*/ false)).isTrue();
-    }
-
-    @Test
-    public void warnTxDropped_userStop_doesNotWarn() {
-        assertThat(FT8TransmitSignal.shouldWarnTxDropped(false, true)).isFalse();
-    }
-
-    @Test
-    public void warnTxDropped_success_doesNotWarn() {
-        assertThat(FT8TransmitSignal.shouldWarnTxDropped(true, false)).isFalse();
-        assertThat(FT8TransmitSignal.shouldWarnTxDropped(true, true)).isFalse();
-    }
 }

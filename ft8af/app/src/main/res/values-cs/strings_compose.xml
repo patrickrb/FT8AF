@@ -555,5 +555,5 @@
     <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
-    <string name="tx_audio_dropped">Selhalo TX audio — v tomto cyklu nebyl vyslán žádný signál (USB audio zařízení se odpojilo)</string>
+    <string name="tx_audio_dropped">Selhalo TX audio — v tomto cyklu nebyl vyslán žádný signál (chyba USB audia)</string>
 </resources>
