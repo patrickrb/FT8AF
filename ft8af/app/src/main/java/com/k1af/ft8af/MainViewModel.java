@@ -211,6 +211,8 @@ public class MainViewModel extends ViewModel {
     public HamRecorder hamRecorder;//recording object
     public FT8SignalListener ft8SignalListener;//object for listening to and decoding FT8 signals
     public FT8TransmitSignal ft8TransmitSignal;//object for transmitting signals
+    // Deep-pass decodes that arrived mid-TX, replayed to the sequencer after key-up
+    private final PendingSequencerDecodes pendingSequencerDecodes = new PendingSequencerDecodes();
     public MeterProtectionController meterProtectionController;//ALC auto-volume + SWR halt
     public SpectrumListener spectrumListener;//object for drawing the spectrum
     public boolean markMessage = true;//whether to mark messages toggle
@@ -584,12 +586,40 @@ public class MainViewModel extends ViewModel {
                 //if exceeded cycle by 2 seconds, should not parse
                 int autoReplyBudgetMs = Math.max(2000, GeneralVariables.lateStartTolerance);
                 if (!ft8TransmitSignal.isTransmitting()
-                        && !isDeep//block deep decode from activating auto procedure
-                        //deep decode list should be added to the new message list without deep decode
+                        && !isDeep//deep passes go through the evidence-only path below
                         && (ft8SignalListener.timeSec
                         + GeneralVariables.pttDelay
                         + GeneralVariables.transmitDelay <= autoReplyBudgetMs)) {//budget scales with late-start tolerance
                     ft8TransmitSignal.parseMessageToFunction(messages);//parse messages and process
+                }
+
+                // Deep/subtraction/late passes routinely find replies the fast
+                // pass missed; feed them to the sequencer as positive evidence
+                // (advance/RR73/complete/enqueue — never no-reply counting, see
+                // parseMessageToFunction(list, true)). When they land before TX
+                // keys (~:29.0-:29.8 vs key-up ~:29.9) this upgrades the very
+                // next transmission; when TX is already playing they are
+                // stashed and replayed after key-up so the evidence still
+                // advances the next cycle instead of being dropped.
+                if (isDeep) {
+                    if (ft8TransmitSignal.isTransmitting()) {
+                        // UtcTimer.getSystemTime(), not System.currentTimeMillis():
+                        // Ft8Message.utcTime is in the NTP/GPS-corrected time base,
+                        // and the stash ages entries against it — mixing bases would
+                        // shift eviction by the (possibly large) clock correction.
+                        pendingSequencerDecodes.stash(messages, UtcTimer.getSystemTime());
+                    } else {
+                        ft8TransmitSignal.parseMessageToFunction(messages, true);
+                    }
+                }
+                // First delivery with TX idle (typically the own-slot fast pass
+                // ~1s after key-up): replay anything stashed mid-TX.
+                if (!ft8TransmitSignal.isTransmitting() && !pendingSequencerDecodes.isEmpty()) {
+                    ArrayList<Ft8Message> stashed =
+                            pendingSequencerDecodes.drain(UtcTimer.getSystemTime());
+                    if (!stashed.isEmpty()) {
+                        ft8TransmitSignal.parseMessageToFunction(stashed, true);
+                    }
                 }
 
                 currentMessages = WaterfallLabelMessages.afterPass(currentMessages, messages, isDeep);

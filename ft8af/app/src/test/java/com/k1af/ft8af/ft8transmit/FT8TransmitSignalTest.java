@@ -395,4 +395,70 @@ public class FT8TransmitSignalTest {
         // The one-shot flag without an active free-text message can't trigger a stop.
         assertThat(FT8TransmitSignal.shouldStopAfterOneShot(false, true)).isFalse();
     }
+
+    // ---- shouldCompleteQso ---------------------------------------------------
+    // Completion decision for the QSO state machine. The evidenceOnly flag marks
+    // deep/late-pass parses: positive evidence (partner sent 73, partner moved
+    // on) completes from any pass, but silence-based completions belong to the
+    // fast pass alone — a deep pass that found nothing new is not "no reply".
+
+    @Test
+    public void complete_partner73_completesOnAnyPass() {
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                /*evidenceOnly*/ false, /*order*/ 5, /*newOrder*/ 5, 0, 3, false)).isTrue();
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                /*evidenceOnly*/ true, /*order*/ 5, /*newOrder*/ 5, 0, 3, false)).isTrue();
+    }
+
+    @Test
+    public void complete_targetCallingOthers_completesOnAnyPass() {
+        // RR73 deadlock breaker: the partner started calling someone else.
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                false, 4, -1, 0, 3, /*targetCallingOthers*/ true)).isTrue();
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                true, 4, -1, 0, 3, /*targetCallingOthers*/ true)).isTrue();
+    }
+
+    @Test
+    public void complete_at73WithNoReply_fastPassOnly() {
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                false, 5, -1, 0, 3, false)).isTrue();
+        // A deep pass finding nothing must not conclude the partner went silent.
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                true, 5, -1, 0, 3, false)).isFalse();
+    }
+
+    @Test
+    public void complete_rr73NoReplyCapWithLimit_fastPassOnly() {
+        // order 4, limit 3: cap is noReplyCount > 6.
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                false, 4, -1, /*noReplyCount*/ 7, /*noReplyLimit*/ 3, false)).isTrue();
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                true, 4, -1, 7, 3, false)).isFalse();
+    }
+
+    @Test
+    public void complete_rr73NoReplyCapWithLimit_belowThresholdKeepsGoing() {
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                false, 4, -1, /*noReplyCount*/ 6, /*noReplyLimit*/ 3, false)).isFalse();
+    }
+
+    @Test
+    public void complete_rr73GiveupWhenLimitIgnored_fastPassOnly() {
+        // noReplyLimit 0 ("ignore"): RR73 still resets after RR73_GIVEUP_CYCLES (3).
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                false, 4, -1, /*noReplyCount*/ 4, /*noReplyLimit*/ 0, false)).isTrue();
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                true, 4, -1, 4, 0, false)).isFalse();
+    }
+
+    @Test
+    public void complete_midQsoWithReply_neverCompletes() {
+        // A normal advance (partner sent R-report while we're at order 2) is not
+        // a completion on either pass.
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                false, 2, 3, 0, 3, false)).isFalse();
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                true, 2, 3, 0, 3, false)).isFalse();
+    }
 }
