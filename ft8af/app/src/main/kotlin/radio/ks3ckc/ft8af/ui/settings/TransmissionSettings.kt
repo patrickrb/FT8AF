@@ -53,6 +53,7 @@ fun TransmissionSettings(
     var alcTargetHigh by remember { mutableIntStateOf(GeneralVariables.alcTargetHigh) }
 
     // Auto-sequence state
+    var autoClearTxFreq by remember { mutableStateOf(GeneralVariables.autoClearTxFreq) }
     var autoFollowCQ by remember { mutableStateOf(GeneralVariables.autoFollowCQ) }
     var huntCallsCQ by remember { mutableStateOf(GeneralVariables.huntCallsCQ) }
     var autoCallFollow by remember { mutableStateOf(GeneralVariables.autoCallFollow) }
@@ -419,6 +420,19 @@ fun TransmissionSettings(
         SettingsSection(title = stringResource(R.string.settings_section_auto_sequence)) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
+                    SettingsRow(
+                        label = "Auto clear TX offset",
+                        description = "When calling CQ, pick a clear spot from recent band activity and move away if it becomes occupied",
+                        toggle = autoClearTxFreq,
+                        onToggleChange = { checked ->
+                            autoClearTxFreq = checked
+                            GeneralVariables.autoClearTxFreq = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "autoClearTxFreq", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
                     SettingsRow(
                         label = stringResource(R.string.settings_hunt),
                         description = stringResource(R.string.settings_hunt_desc),

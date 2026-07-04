@@ -556,4 +556,5 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">TX 오디오 실패 — 이번 주기에 신호가 송신되지 않았습니다 (USB 오디오 오류)</string>
+    <string name="cq_offset_moved">CQ 오프셋을 빈 자리로 이동: %1$d Hz</string>
 </resources>

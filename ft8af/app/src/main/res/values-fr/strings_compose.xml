@@ -513,4 +513,5 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">Échec audio TX — aucun signal émis ce cycle (erreur audio USB)</string>
+    <string name="cq_offset_moved">Décalage CQ déplacé vers un créneau libre : %1$d Hz</string>
 </resources>

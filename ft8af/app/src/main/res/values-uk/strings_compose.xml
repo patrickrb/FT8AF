@@ -545,4 +545,5 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">Збій TX-аудіо — у цьому циклі сигнал не передано (помилка USB-аудіо)</string>
+    <string name="cq_offset_moved">Зсув CQ перенесено на вільне місце: %1$d Гц</string>
 </resources>

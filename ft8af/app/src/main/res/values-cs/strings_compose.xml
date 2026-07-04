@@ -556,4 +556,5 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">Selhalo TX audio — v tomto cyklu nebyl vyslán žádný signál (chyba USB audia)</string>
+    <string name="cq_offset_moved">Offset CQ přesunut na volné místo: %1$d Hz</string>
 </resources>

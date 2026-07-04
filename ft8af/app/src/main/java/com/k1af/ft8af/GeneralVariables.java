@@ -108,6 +108,11 @@ public class GeneralVariables {
     //Serialized band=level CSV ("20m=60,40m=85"); parsed/updated in PerBandOutputLevel.kt.
     public static volatile String perBandOutputLevels = "";
 
+    //Auto-select a clear TX offset when calling CQ (issue #418), defaults off.
+    //volatile: written from the config-load thread + Settings toggle, read from
+    //the decode-delivery thread inside recordBandActivity.
+    public static volatile boolean autoClearTxFreq = false;
+
     public static int flexMaxRfPower = 10;//Flex radio max transmit power
     public static int flexMaxTunePower = 10;//Flex radio max tune power
 

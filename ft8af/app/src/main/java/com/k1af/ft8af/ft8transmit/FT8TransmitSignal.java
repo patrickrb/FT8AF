@@ -137,6 +137,11 @@ public class FT8TransmitSignal {
         this.meterProtectionController = controller;
     }
 
+    // Clear-CQ-slot picker (issue #418): multi-cycle occupancy history + candidate
+    // scoring. Fed from afterDecode via recordBandActivity; consulted at CQ start
+    // and re-checked (with hold-down) while CQing. See docs/clear-cq-slot-selection.md.
+    private final ClearFrequencyFinder clearFrequencyFinder = new ClearFrequencyFinder();
+
     private final OnDoTransmitted onDoTransmitted;// typically used for opening/closing PTT
     private final ExecutorService doTransmitThreadPool = Executors.newCachedThreadPool();
     private final DoTransmitRunnable doTransmitRunnable = new DoTransmitRunnable(this);
@@ -1915,12 +1920,103 @@ public class FT8TransmitSignal {
      * auto-follow or dequeue — the CQ message transmits cleanly first.
      */
     public void userResetToCQ() {
+        // Pick a clear TX offset BEFORE the CQ baseline is generated so the very
+        // first CQ already transmits in the gap (issue #418). No-op unless the
+        // auto-clear setting is on and the history says the current spot is taken.
+        maybeSelectClearCqOffset();
         resetToCQ();
         clearCallerQueue();
         pendingUserCQ = true;
         // A user-initiated CQ run is not a single tapped QSO: it should keep
         // calling CQ after each contact, so clear the one-shot flag.
         singleQsoMode = false;
+    }
+
+    // =========================================================================
+    // Clear-CQ-slot selection (issue #418). The scoring/occupancy logic lives
+    // in ClearFrequencyFinder (pure, unit-tested); this is the wiring: decode
+    // deliveries feed the history, CQ start consults it, and a mid-CQ re-check
+    // relocates (hold-down-paced) when the chosen spot becomes occupied.
+    // See docs/clear-cq-slot-selection.md for the design note.
+    // =========================================================================
+
+    /**
+     * Feed one decode delivery's kept messages into the occupancy history and,
+     * when a CQ run is idling on an offset that has become occupied, relocate
+     * it (at most once per hold-down window). Called from afterDecode for every
+     * pass — deep passes see signals the fast pass missed.
+     */
+    public void recordBandActivity(ArrayList<Ft8Message> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return;
+        }
+        long slotMillis = GeneralVariables.currentMode().slotMillis;
+        long newestUtc = Long.MIN_VALUE;
+        for (Ft8Message m : messages) {
+            clearFrequencyFinder.record(m.freq_hz, m.utcTime, slotMillis);
+            if (m.utcTime > newestUtc) {
+                newestUtc = m.utcTime;
+            }
+        }
+        if (shouldAutoPickCqOffset(GeneralVariables.autoClearTxFreq, activated,
+                isTransmitting, functionOrder, toCallsign)
+                && clearFrequencyFinder.shouldRelocate(
+                        GeneralVariables.getBaseFrequency(), newestUtc)) {
+            Float pick = clearFrequencyFinder.selectClearOffset(
+                    GeneralVariables.getBaseFrequency());
+            if (pick != null) {
+                applyClearCqOffset(pick, newestUtc, "occupied");
+            }
+        }
+    }
+
+    /** Band or mode changed: the accumulated occupancy belongs to another band. */
+    public void clearBandActivity() {
+        clearFrequencyFinder.clear();
+    }
+
+    /**
+     * Gate for the mid-CQ relocation: only while the auto-clear setting is on
+     * and the sequencer is idling at the CQ baseline (order 6, no station
+     * locked) between transmissions — a live QSO must never QSY. Pure
+     * predicate so it can be unit-tested without the Android runtime.
+     */
+    static boolean shouldAutoPickCqOffset(boolean enabled, boolean activated,
+                                          boolean transmitting, int functionOrder,
+                                          TransmitCallsign toCallsign) {
+        if (!enabled || !activated || transmitting) {
+            return false;
+        }
+        if (functionOrder != 6) {
+            return false;
+        }
+        // "no target" == null or the CQ placeholder (same convention as
+        // isHuntListeningIdle / TransmitCallsign.haveTargetCallsign).
+        return toCallsign == null || !toCallsign.haveTargetCallsign();
+    }
+
+    /** CQ-start hook: apply a clear-slot pick when the feature is enabled. */
+    private void maybeSelectClearCqOffset() {
+        if (!GeneralVariables.autoClearTxFreq) {
+            return;
+        }
+        Float pick = clearFrequencyFinder.selectClearOffset(
+                GeneralVariables.getBaseFrequency());
+        if (pick != null) {
+            applyClearCqOffset(pick, UtcTimer.getSystemTime(), "cq-start");
+        }
+    }
+
+    private void applyClearCqOffset(float offsetHz, long utcMs, String reason) {
+        float from = GeneralVariables.getBaseFrequency();
+        setBaseFrequency(offsetHz);
+        clearFrequencyFinder.noteMoved(utcMs);
+        GeneralVariables.fileLog(String.format(
+                "CLEARFREQ: %s moved TX offset %.0f -> %.0f Hz (history=%d)",
+                reason, from, offsetHz, clearFrequencyFinder.observationCount()));
+        ToastMessage.show(String.format(
+                GeneralVariables.getStringFromResource(R.string.cq_offset_moved),
+                Math.round(offsetHz)));
     }
 
     /**

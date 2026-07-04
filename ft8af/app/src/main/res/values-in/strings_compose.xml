@@ -556,4 +556,5 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">Audio TX gagal — tidak ada sinyal terkirim pada siklus ini (kesalahan audio USB)</string>
+    <string name="cq_offset_moved">Offset CQ dipindahkan ke tempat kosong: %1$d Hz</string>
 </resources>

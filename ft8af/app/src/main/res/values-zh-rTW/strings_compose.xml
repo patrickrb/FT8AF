@@ -513,4 +513,5 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">發射音訊失敗 — 本週期未發出訊號（USB 音訊錯誤）</string>
+    <string name="cq_offset_moved">CQ頻偏已移至空閒位置：%1$d Hz</string>
 </resources>
