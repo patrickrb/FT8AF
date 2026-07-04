@@ -513,4 +513,8 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">TX音声に失敗 — このサイクルでは信号が送信されませんでした（USBオーディオエラー）</string>
+    <string name="tune_content_description">Tune：アンテナ調整用の連続キャリアを送信します</string>
+    <string name="tune_stopped_timeout">Tuneは%1$d秒後に停止しました</string>
+    <string name="tune_blocked_tx">Tuneの前にCQ/QSOを停止してください</string>
+    <string name="tune_unavailable_route">このオーディオ経路ではTuneはまだ利用できません</string>
 </resources>

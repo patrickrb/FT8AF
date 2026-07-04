@@ -2595,6 +2595,33 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("perBandOutputLevels")) {//Per-band TX output levels ("20m=60,40m=85")
                     GeneralVariables.perBandOutputLevels = result == null ? "" : result;
                 }
+                if (name.equalsIgnoreCase("tuneMaxOnSeconds")) {//Tune carrier hard cap (issue #408)
+                    //Defensive parse: settings import (#382) can feed anything here.
+                    //Null/non-numeric keeps the default; TuneController clamps the range.
+                    if (result != null) {
+                        try {
+                            GeneralVariables.tuneMaxOnSeconds =
+                                    com.k1af.ft8af.ft8transmit.TuneController.clampMaxOnSeconds(
+                                            Integer.parseInt(result.trim()));
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
+                if (name.equalsIgnoreCase("tuneLevelIndependent")) {//Tune level decoupled from TX drive
+                    GeneralVariables.tuneLevelIndependent = "1".equals(result);
+                }
+                if (name.equalsIgnoreCase("tuneLevel")) {//Global independent tune level (0..100)
+                    if (result != null) {
+                        try {
+                            GeneralVariables.tuneLevel =
+                                    Math.max(0, Math.min(100, Integer.parseInt(result.trim())));
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
+                if (name.equalsIgnoreCase("perBandTuneLevels")) {//Per-band independent tune levels
+                    GeneralVariables.perBandTuneLevels = result == null ? "" : result;
+                }
                 if (name.equalsIgnoreCase("excludedCallsigns")) {//Blocklist: callsign prefixes
                     GeneralVariables.addExcludedCallsigns(result);
                 }

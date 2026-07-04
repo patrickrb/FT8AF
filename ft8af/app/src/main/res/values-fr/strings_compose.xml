@@ -513,4 +513,8 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">Échec audio TX — aucun signal émis ce cycle (erreur audio USB)</string>
+    <string name="tune_content_description">Tune : émet une porteuse continue pour l\'accord d\'antenne</string>
+    <string name="tune_stopped_timeout">Tune arrêté après %1$d s</string>
+    <string name="tune_blocked_tx">Arrêtez le CQ/QSO avant d\'utiliser Tune</string>
+    <string name="tune_unavailable_route">Tune n\'est pas encore disponible sur cette voie audio</string>
 </resources>

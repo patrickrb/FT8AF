@@ -601,6 +601,18 @@ class ComposeMainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStop() {
+        // A tune carrier must never outlive the operator's attention (issue
+        // #408): backgrounding or swiping the app away mid-tune force-stops the
+        // tone and drops PTT. Normal FT8 TX is left alone — it is cycle-bounded
+        // and self-terminates.
+        try {
+            mainViewModel.ft8TransmitSignal.stopTune()
+        } catch (_: Exception) {
+        }
+        super.onStop()
+    }
+
     override fun onDestroy() {
         unregisterBluetoothReceiver()
         unregisterUsbDetachReceiver()

@@ -556,4 +556,8 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">TX-audio mislukt — geen signaal verzonden deze cyclus (USB-audiofout)</string>
+    <string name="tune_content_description">Tune: zendt een continue draaggolf uit voor antenne-afstemming</string>
+    <string name="tune_stopped_timeout">Tune gestopt na %1$d s</string>
+    <string name="tune_blocked_tx">Stop de CQ/QSO voordat je Tune gebruikt</string>
+    <string name="tune_unavailable_route">Tune is nog niet beschikbaar op deze audioroute</string>
 </resources>

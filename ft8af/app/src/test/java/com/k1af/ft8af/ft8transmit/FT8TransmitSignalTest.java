@@ -416,6 +416,59 @@ public class FT8TransmitSignalTest {
         assertThat(FT8TransmitSignal.isCallsignReadyToTransmit(null)).isFalse();
     }
 
+    // ---- tuneBlockReason (issue #408) ----------------------------------------
+    // The gate for starting the tune carrier. Ordered by severity: TX beats the
+    // protections, protections beat route support — and tune must never become
+    // a backdoor around a TX inhibit (SWR lockout, WSPR blacklist).
+
+    @Test
+    public void tune_allClear_mayStart() {
+        assertThat(FT8TransmitSignal.tuneBlockReason(
+                false, false, false, false, false, false))
+                .isEqualTo(FT8TransmitSignal.TuneBlockReason.NONE);
+    }
+
+    @Test
+    public void tune_txActiveOrArmed_blocks() {
+        assertThat(FT8TransmitSignal.tuneBlockReason(
+                true, false, false, false, false, false))
+                .isEqualTo(FT8TransmitSignal.TuneBlockReason.TX_ACTIVE);
+        // TX outranks every other reason.
+        assertThat(FT8TransmitSignal.tuneBlockReason(
+                true, true, true, true, true, true))
+                .isEqualTo(FT8TransmitSignal.TuneBlockReason.TX_ACTIVE);
+    }
+
+    @Test
+    public void tune_swrLockout_blocks() {
+        assertThat(FT8TransmitSignal.tuneBlockReason(
+                false, true, false, false, false, false))
+                .isEqualTo(FT8TransmitSignal.TuneBlockReason.SWR_LOCKED);
+    }
+
+    @Test
+    public void tune_wsprFrequency_blocks() {
+        // The WSPR sub-band TX inhibit applies to tune too.
+        assertThat(FT8TransmitSignal.tuneBlockReason(
+                false, false, true, false, false, false))
+                .isEqualTo(FT8TransmitSignal.TuneBlockReason.WSPR_FREQUENCY);
+    }
+
+    @Test
+    public void tune_unsupportedRoutes_block() {
+        // MVP: AudioTrack sink only; CAT-audio (truSDX), network rigs, and the
+        // USB-direct path are Phase-2 follow-ups.
+        assertThat(FT8TransmitSignal.tuneBlockReason(
+                false, false, false, true, false, false))
+                .isEqualTo(FT8TransmitSignal.TuneBlockReason.UNSUPPORTED_ROUTE);
+        assertThat(FT8TransmitSignal.tuneBlockReason(
+                false, false, false, false, true, false))
+                .isEqualTo(FT8TransmitSignal.TuneBlockReason.UNSUPPORTED_ROUTE);
+        assertThat(FT8TransmitSignal.tuneBlockReason(
+                false, false, false, false, false, true))
+                .isEqualTo(FT8TransmitSignal.TuneBlockReason.UNSUPPORTED_ROUTE);
+    }
+
     // ---- shouldCompleteQso ---------------------------------------------------
     // Completion decision for the QSO state machine. The evidenceOnly flag marks
     // deep/late-pass parses: positive evidence (partner sent 73, partner moved

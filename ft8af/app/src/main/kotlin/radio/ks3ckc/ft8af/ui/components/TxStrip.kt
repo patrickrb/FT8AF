@@ -75,6 +75,14 @@ internal fun txStripActionState(isActivated: Boolean, huntEnabled: Boolean) = Tx
 )
 
 /**
+ * Label for the TUNE chip: the plain label when idle, "label countdown" while
+ * the carrier is up (e.g. "TUNE 7s") so the operator sees the safety timeout
+ * running. Extracted so it can be unit-tested without Compose.
+ */
+internal fun tuneChipLabel(label: String, isTuning: Boolean, remainingSec: Int): String =
+    if (isTuning) "$label ${remainingSec.coerceAtLeast(0)}s" else label
+
+/**
  * The small subtitle shown under "Call CQ" that reflects which CQ variant is queued.
  * Precedence: free-text > Field Day > custom modifier > none. Null while the button is
  * in its STOP state. Extracted so the precedence can be unit-tested without Compose.
@@ -111,6 +119,9 @@ fun TxStrip(
     cqModifier: String = "",
     isFreeTextMode: Boolean = false,
     fieldDayEnabled: Boolean = false,
+    isTuning: Boolean = false,
+    tuneRemainingSec: Int = 0,
+    onToggleTune: () -> Unit = {},
     onVolumeChange: (Int) -> Unit = {},
     onVolumeChangeFinished: () -> Unit = {},
     onCallCQ: () -> Unit,
@@ -249,6 +260,33 @@ fun TxStrip(
                     enabled = true,
                     onClick = onToggleDx,
                 )
+
+                // TUNE toggle pill (issue #408): tap keys a steady carrier at the
+                // TX offset for antenna/amplifier tuning; tap again stops it. While
+                // active it turns red and counts down the code-enforced safety
+                // timeout. Locked off while the sequencer is armed/transmitting —
+                // tune and FT8 TX are mutually exclusive.
+                val tuneDescription = stringResource(R.string.tune_content_description)
+                Box(modifier = Modifier.semantics { contentDescription = tuneDescription }) {
+                    TxChip(
+                        label = tuneChipLabel(
+                            stringResource(R.string.tune_button), isTuning, tuneRemainingSec,
+                        ),
+                        background = when {
+                            isTuning -> StatusBad
+                            isActivated || isTransmitting -> BgSurface3.copy(alpha = 0.4f)
+                            else -> BgSurface3
+                        },
+                        textColor = when {
+                            isTuning -> Color.White
+                            isActivated || isTransmitting -> TextMuted.copy(alpha = 0.4f)
+                            else -> TextMuted
+                        },
+                        bold = isTuning,
+                        enabled = isTuning || (!isActivated && !isTransmitting),
+                        onClick = onToggleTune,
+                    )
+                }
             }
         }
 
