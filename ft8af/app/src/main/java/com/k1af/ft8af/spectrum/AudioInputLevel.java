@@ -93,10 +93,23 @@ public final class AudioInputLevel {
             sumSquares += (double) s * (double) s;
         }
         float rms = (float) Math.sqrt(sumSquares / samples.length);
+        return fromPeakRms(peak, rms);
+    }
 
-        float peakDbfs = toDbfs(peak);
-        float rmsDbfs = toDbfs(rms);
-        return new Reading(peak, rms, peakDbfs, rmsDbfs, classify(peak, peakDbfs, rmsDbfs));
+    /**
+     * Meter from an already-accumulated linear peak/RMS pair — e.g. the 250&nbsp;ms
+     * window snapshots {@code InputAudioLevel} produces for the Compose waterfall
+     * strip. This is the single classification entry point for every RX level UI
+     * (issue #405): the spectrum fragment's per-buffer {@link #compute} and the
+     * windowed Compose meter both land here, so the "healthy gain window" lives in
+     * exactly one set of thresholds.
+     */
+    public static Reading fromPeakRms(float peak, float rms) {
+        float p = Math.max(0f, peak);
+        float r = Math.max(0f, rms);
+        float peakDbfs = toDbfs(p);
+        float rmsDbfs = toDbfs(r);
+        return new Reading(p, r, peakDbfs, rmsDbfs, classify(p, peakDbfs, rmsDbfs));
     }
 
     /** Linear magnitude (>=0) to dBFS, with a {@link #MIN_DBFS} floor for silence. */

@@ -33,6 +33,44 @@ public class AudioInputLevelTest {
         }
     }
 
+    // ---- fromPeakRms (issue #405: the shared entry point for windowed meters) ----
+
+    @Test
+    public void fromPeakRms_agreesWithComputeOnTheSameAudio() {
+        // The Compose strip feeds window peak/RMS pairs through fromPeakRms;
+        // classification must be identical to compute() over the raw buffer.
+        float[][] buffers = {
+                constant(0.001f, 256), // LOW
+                constant(0.1f, 256),   // GOOD
+                constant(0.9f, 256),   // HIGH
+                constant(1.0f, 64),    // CLIPPING
+        };
+        for (float[] buffer : buffers) {
+            Reading direct = AudioInputLevel.compute(buffer);
+            Reading viaPair = AudioInputLevel.fromPeakRms(direct.peak, direct.rms);
+            assertThat(viaPair.status).isEqualTo(direct.status);
+            assertThat(viaPair.peakDbfs).isEqualTo(direct.peakDbfs);
+            assertThat(viaPair.rmsDbfs).isEqualTo(direct.rmsDbfs);
+        }
+    }
+
+    @Test
+    public void fromPeakRms_zeroPair_isSilent() {
+        Reading r = AudioInputLevel.fromPeakRms(0f, 0f);
+        assertThat(r.status).isEqualTo(Status.SILENT);
+        assertThat(r.peakDbfs).isEqualTo(AudioInputLevel.MIN_DBFS);
+        assertThat(r.rmsDbfs).isEqualTo(AudioInputLevel.MIN_DBFS);
+    }
+
+    @Test
+    public void fromPeakRms_negativeInputs_clampToSilence() {
+        // Defensive: a corrupted snapshot must not produce NaN dBFS.
+        Reading r = AudioInputLevel.fromPeakRms(-0.5f, -0.5f);
+        assertThat(r.peak).isEqualTo(0f);
+        assertThat(r.rms).isEqualTo(0f);
+        assertThat(r.status).isEqualTo(Status.SILENT);
+    }
+
     @Test
     public void peakAndRms_ofConstantMagnitude() {
         // |sample| == 0.1 everywhere, so peak == rms == 0.1, i.e. -20 dBFS.
