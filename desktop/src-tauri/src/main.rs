@@ -12,6 +12,7 @@ use ft8af::bands;
 use ft8af::db::{Db, QsoRecord};
 use ft8af::engine::{self, AnswerArgs, EngineCommand, EngineHandle};
 use ft8af::rig::{self, HamlibRig, RigConfig, SerialPortInfo};
+use ft8af::wf::WfConfig;
 
 struct AppState {
     engine: EngineHandle,
@@ -183,6 +184,13 @@ fn all_config(state: State<AppState>) -> Vec<(String, String)> {
     state.db.all_config()
 }
 
+#[tauri::command]
+fn set_waterfall_config(state: State<AppState>, config: WfConfig) {
+    // The engine sanitizes, persists (wf_window/wf_fft_size/wf_avg), and
+    // rebuilds its FFT plan; see EngineCommand::SetWaterfallConfig.
+    state.engine.send(EngineCommand::SetWaterfallConfig(config));
+}
+
 fn main() {
     // Debug helper: `ft8af --list-rigs` prints the Hamlib-enumerated rig count
     // and exits — verifies the bundled Hamlib library loads without the GUI.
@@ -259,6 +267,7 @@ fn main() {
             get_config,
             set_config,
             all_config,
+            set_waterfall_config,
         ])
         .run(tauri::generate_context!())
         .expect("error running FT8AF");

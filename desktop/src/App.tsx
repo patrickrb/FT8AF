@@ -15,6 +15,8 @@ import {
   type TxStage,
   type TxStateEvent,
   type UiMessage,
+  type WaterfallConfig,
+  type WfWindow,
 } from "./ipc";
 
 type Tab = "decode" | "log" | "settings";
@@ -611,6 +613,13 @@ function SettingsScreen(props: {
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
   const [baseFreq, setBaseFreq] = useState(1500);
+  // Live-waterfall FFT developer knobs (issue #428). Defaults mirror
+  // WfConfig::default() on the Rust side: hann / 2048 / 6.
+  const [wfCfg, setWfCfg] = useState<WaterfallConfig>({
+    window: "hann",
+    fft_size: 2048,
+    avg: 6,
+  });
   const [rigCfg, setRigCfg] = useState<RigConfig>({
     backend: "hamlib",
     model: "none",
@@ -645,7 +654,24 @@ function SettingsScreen(props: {
       }
     });
     api.getConfig("rig_label").then((v) => v && setRigLabel(v));
+    // Restore persisted waterfall knobs (written by the engine on change).
+    Promise.all([
+      api.getConfig("wf_window"),
+      api.getConfig("wf_fft_size"),
+      api.getConfig("wf_avg"),
+    ]).then(([w, size, avg]) =>
+      setWfCfg((prev) => ({
+        window: (w as WfWindow) || prev.window,
+        fft_size: size ? parseInt(size, 10) : prev.fft_size,
+        avg: avg ? parseInt(avg, 10) : prev.avg,
+      })),
+    );
   }, []);
+
+  function applyWfCfg(next: WaterfallConfig) {
+    setWfCfg(next);
+    api.setWaterfallConfig(next);
+  }
 
   const refreshPorts = () => api.listSerialPorts().then(setPorts);
 
@@ -1022,6 +1048,55 @@ function SettingsScreen(props: {
           >
             Disconnect
           </button>
+        </div>
+      </div>
+
+      <div className="panel">
+        <h3>Developer — waterfall FFT</h3>
+        <div className="col">
+          <div className="muted">
+            Spectrum/waterfall rendering experiments (issue #428) — affects the
+            display only, never decoding. Defaults: Hann, 2048, 6 averages.
+          </div>
+          <div className="field">
+            <label>Window function</label>
+            <select
+              value={wfCfg.window}
+              onChange={(e) => applyWfCfg({ ...wfCfg, window: e.target.value as WfWindow })}
+            >
+              <option value="rect">Rectangular (none)</option>
+              <option value="hann">Hann (default)</option>
+              <option value="hamming">Hamming</option>
+              <option value="blackman">Blackman</option>
+              <option value="blackman_harris">Blackman-Harris</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>FFT size</label>
+            <select
+              value={wfCfg.fft_size}
+              onChange={(e) => applyWfCfg({ ...wfCfg, fft_size: parseInt(e.target.value, 10) })}
+            >
+              {[512, 1024, 2048, 4096, 8192].map((n) => (
+                <option key={n} value={n}>
+                  {n} — {(12000 / n).toFixed(1)} Hz/bin{n === 2048 ? " (default)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Averaging (Welch segments per row)</label>
+            <select
+              value={wfCfg.avg}
+              onChange={(e) => applyWfCfg({ ...wfCfg, avg: parseInt(e.target.value, 10) })}
+            >
+              {[1, 2, 3, 4, 6, 8, 12, 16].map((n) => (
+                <option key={n} value={n}>
+                  {n}{n === 6 ? " (default)" : n === 1 ? " (off)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
     </div>
