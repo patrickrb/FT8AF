@@ -78,12 +78,16 @@ fun TransmissionSettings(
     var showTuneMethod by remember { mutableStateOf(false) }
 
     // Index == TuneMethod.AUTOMATIC/INTERNAL/TONE
-    val tuneMethodOptions = listOf("Automatic", "Internal tuner", "Low power tone")
+    val tuneMethodOptions = listOf(
+        stringResource(R.string.tune_method_automatic),
+        stringResource(R.string.tune_method_internal),
+        stringResource(R.string.tune_method_tone),
+    )
 
     // -- Tune Method Picker (issue #425) --
     if (showTuneMethod) {
         ListPickerDialog(
-            title = "Tune method",
+            title = stringResource(R.string.settings_tune_method),
             items = tuneMethodOptions,
             selectedIndex = TuneMethod.clamp(tuneMethod),
             onDismiss = { showTuneMethod = false },
@@ -457,9 +461,8 @@ fun TransmissionSettings(
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     SettingsRow(
-                        label = "Tune method",
-                        description = "Automatic starts the rig's internal tuner over CAT " +
-                            "when available, otherwise plays the low power tone",
+                        label = stringResource(R.string.settings_tune_method),
+                        description = stringResource(R.string.settings_tune_method_desc),
                         value = tuneMethodOptions[TuneMethod.clamp(tuneMethod)],
                         showChevron = true,
                         onClick = { showTuneMethod = true },

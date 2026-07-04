@@ -516,10 +516,15 @@
     <string name="cq_offset_moved">Décalage CQ déplacé vers un créneau libre : %1$d Hz</string>
     <string name="settings_auto_clear_tx">Décalage TX libre automatique</string>
     <string name="settings_auto_clear_tx_desc">En appelant CQ, choisit un créneau libre selon l\'activité récente de la bande et se déplace s\'il devient occupé</string>
-    <string name="tune_content_description">Tune : émet une porteuse continue pour l\'accord d\'antenne</string>
+    <string name="tune_content_description">Tune : démarre le coupleur de la radio ou émet une porteuse continue pour l\'accord d\'antenne</string>
     <string name="tune_stopped_timeout">Tune arrêté après %1$d s</string>
     <string name="tune_blocked_tx">Arrêtez le CQ/QSO avant d\'utiliser Tune</string>
     <string name="tune_unavailable_route">Tune n\'est pas encore disponible sur cette voie audio</string>
     <string name="tune_atu_started">Coupleur d\'antenne de la radio démarré</string>
     <string name="tune_atu_unavailable">Coupleur indisponible — connectez une radio CAT avec coupleur interne</string>
+    <string name="settings_tune_method">Méthode de Tune</string>
+    <string name="settings_tune_method_desc">Automatique démarre le coupleur interne de la radio via CAT s\'il est disponible, sinon émet la tonalité à faible puissance</string>
+    <string name="tune_method_automatic">Automatique</string>
+    <string name="tune_method_internal">Coupleur interne</string>
+    <string name="tune_method_tone">Tonalité à faible puissance</string>
 </resources>

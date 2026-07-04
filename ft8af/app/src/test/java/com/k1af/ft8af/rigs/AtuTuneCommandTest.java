@@ -4,6 +4,8 @@ import static com.google.common.truth.Truth.assertThat;
 
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
+
 /**
  * Byte-exact coverage for the ATU-start CAT commands (issue #425). These are
  * radio-facing wire bytes — a wrong sub-command on CI-V (0x00 is PTT!) or a
@@ -30,12 +32,14 @@ public class AtuTuneCommandTest {
 
     @Test
     public void yaesu3AtuStart_isAC002() {
-        assertThat(new String(Yaesu3RigConstant.startAtuTune())).isEqualTo("AC002;");
+        assertThat(new String(Yaesu3RigConstant.startAtuTune(), StandardCharsets.US_ASCII))
+                .isEqualTo("AC002;");
     }
 
     @Test
     public void kenwoodAtuStart_isAC111() {
-        assertThat(new String(KenwoodTK90RigConstant.startAtuTune())).isEqualTo("AC111;");
+        assertThat(new String(KenwoodTK90RigConstant.startAtuTune(), StandardCharsets.US_ASCII))
+                .isEqualTo("AC111;");
     }
 
     @Test
