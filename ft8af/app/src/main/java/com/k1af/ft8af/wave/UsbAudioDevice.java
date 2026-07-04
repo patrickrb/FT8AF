@@ -48,6 +48,10 @@ public class UsbAudioDevice {
     private UsbEndpoint endpointIn;
     private int inputSampleRate = 48000;
     private int inputChannels = 1;
+    // True when inputChannels came from parsed UAC descriptors (authoritative); false
+    // while it is only the wMaxPacketSize-derived guess, which must be re-derived once
+    // the real sample rate is known (issue #400).
+    private boolean inputChannelsFromDescriptors = false;
     // UAC format descriptors parsed during selectInputAltSetting(); consulted again
     // when SET_CUR fails to work out what rate the device is actually running.
     private List<UacAudioFormats.StreamFormat> inputFormats = Collections.emptyList();
@@ -183,24 +187,41 @@ public class UsbAudioDevice {
             }
         }
 
-        // Detect channel count from max packet size
-        // USB audio at 48kHz, 16-bit: mono=96 bytes/ms, stereo=192 bytes/ms
+        // Detect channel count from max packet size, provisionally assuming the default
+        // 48 kHz until a stream is activated — activateInput()/activateOutput() re-derive
+        // the count from the rate actually in use (issue #400: a 44.1 kHz stereo endpoint
+        // judged against the 48 kHz frame size counts as mono).
         if (endpointIn != null) {
-            int mps = endpointIn.getMaxPacketSize();
-            // samples_per_ms = sampleRate / 1000 = 48
-            // bytes_per_ms = samples_per_ms * channels * 2 (16-bit)
-            inputChannels = mps / (48 * 2);
-            if (inputChannels < 1) inputChannels = 1;
-            if (inputChannels > 2) inputChannels = 2;
+            inputChannels = channelsForMaxPacketSize(endpointIn.getMaxPacketSize(), 48000);
+            inputChannelsFromDescriptors = false;
             Log.d(TAG, "Input channels detected: " + inputChannels);
         }
         if (endpointOut != null) {
-            int mps = endpointOut.getMaxPacketSize();
-            outputChannels = mps / (48 * 2);
-            if (outputChannels < 1) outputChannels = 1;
-            if (outputChannels > 2) outputChannels = 2;
+            outputChannels = channelsForMaxPacketSize(endpointOut.getMaxPacketSize(), 48000);
             Log.d(TAG, "Output channels detected: " + outputChannels);
         }
+    }
+
+    /**
+     * Channel count implied by an isochronous audio endpoint's {@code wMaxPacketSize} at a
+     * given sample rate (16-bit samples, full-speed USB: one packet per 1 ms frame, sized
+     * to carry {@code rate/1000} samples per channel). Rounded, not truncated: a 44.1 kHz
+     * endpoint carries 44/45 samples per frame, so its packet size is not an exact multiple
+     * of the per-channel byte rate. Clamped to [1, 2] — this pipeline handles mono/stereo.
+     *
+     * <p>An implausible rate (see {@link #isPlausibleRate}: outside the 8-768 kHz UAC
+     * hardware range, e.g. from garbage descriptor data) fails safe to mono rather than
+     * letting a tiny divisor round up to "stereo".
+     *
+     * <p>Package-visible for tests.
+     */
+    static int channelsForMaxPacketSize(int maxPacketSize, int sampleRateHz) {
+        if (!isPlausibleRate(sampleRateHz)) return 1;
+        double bytesPerFramePerChannel = (sampleRateHz / 1000.0) * 2.0;
+        int channels = (int) Math.round(maxPacketSize / bytesPerFramePerChannel);
+        if (channels < 1) return 1;
+        if (channels > 2) return 2;
+        return channels;
     }
 
     /**
@@ -246,6 +267,23 @@ public class UsbAudioDevice {
                             + "alt setting offers %s — assuming %d Hz for resampling",
                     negotiatedRate, endpointIn.getAddress(), reportedRate,
                     java.util.Arrays.toString(altRates), inputSampleRate));
+        }
+
+        // The findEndpoints() channel-count guess divides wMaxPacketSize by the 48 kHz
+        // frame size. When descriptor parsing yielded no channel count (the legacy
+        // fallback paths above) and the stream actually runs at another rate, that guess
+        // is wrong — a 44.1 kHz stereo endpoint (~180-byte packets) counts as mono and
+        // the capture loop de-interleaves garbage (issue #400). Re-derive from the rate
+        // we just settled on.
+        if (!inputChannelsFromDescriptors) {
+            int detected = channelsForMaxPacketSize(endpointIn.getMaxPacketSize(), inputSampleRate);
+            if (detected != inputChannels) {
+                com.k1af.ft8af.GeneralVariables.fileLog(String.format(
+                        "UsbAudioDevice: input channel guess corrected %d -> %d "
+                                + "(wMaxPacketSize=%d at %d Hz)",
+                        inputChannels, detected, endpointIn.getMaxPacketSize(), inputSampleRate));
+                inputChannels = detected;
+            }
         }
 
         Log.d(TAG, "Input activated at " + inputSampleRate + " Hz");
@@ -378,6 +416,7 @@ public class UsbAudioDevice {
 
         if (choice.channels == 1 || choice.channels == 2) {
             inputChannels = choice.channels;
+            inputChannelsFromDescriptors = true;
         }
         com.k1af.ft8af.GeneralVariables.fileLog(String.format(
                 "UsbAudioDevice: UAC alt-setting select — iface %d alt %d rate %d ch %d "
@@ -402,6 +441,10 @@ public class UsbAudioDevice {
 
         outputSampleRate = sampleRate;
         setSampleRate(endpointOut.getAddress(), sampleRate);
+
+        // Same correction as the input side (issue #400): the findEndpoints() guess
+        // assumed 48 kHz; re-derive the channel count from the rate actually requested.
+        outputChannels = channelsForMaxPacketSize(endpointOut.getMaxPacketSize(), sampleRate);
 
         Log.d(TAG, "Output activated at " + outputSampleRate + " Hz");
         return true;
