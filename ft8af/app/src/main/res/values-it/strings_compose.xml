@@ -552,4 +552,6 @@
     <string name="tune_stopped_timeout">Tune fermato dopo %1$d s</string>
     <string name="tune_blocked_tx">Ferma il CQ/QSO prima di usare Tune</string>
     <string name="tune_unavailable_route">Tune non è ancora disponibile su questo percorso audio</string>
+    <string name="tune_atu_started">Accordatore d\'antenna della radio avviato</string>
+    <string name="tune_atu_unavailable">Accordatore non disponibile — collega una radio CAT con accordatore interno</string>
 </resources>

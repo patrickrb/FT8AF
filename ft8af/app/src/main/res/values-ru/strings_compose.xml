@@ -520,4 +520,6 @@
     <string name="tune_stopped_timeout">Tune остановлен через %1$d с</string>
     <string name="tune_blocked_tx">Остановите CQ/QSO перед использованием Tune</string>
     <string name="tune_unavailable_route">Tune пока не поддерживается на этом аудиотракте</string>
+    <string name="tune_atu_started">Антенный тюнер трансивера запущен</string>
+    <string name="tune_atu_unavailable">Тюнер недоступен — подключите CAT-трансивер со встроенным тюнером</string>
 </resources>

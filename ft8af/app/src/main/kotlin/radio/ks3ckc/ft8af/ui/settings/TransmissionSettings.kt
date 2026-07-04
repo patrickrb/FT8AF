@@ -24,9 +24,11 @@ import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import com.k1af.ft8af.ft8transmit.MeterProtectionController
 import com.k1af.ft8af.ft8transmit.TuneController
+import com.k1af.ft8af.ft8transmit.TuneMethod
 import radio.ks3ckc.ft8af.TUNE_LEVEL_INDEPENDENT_KEY
 import radio.ks3ckc.ft8af.TUNE_LEVEL_KEY
 import radio.ks3ckc.ft8af.TUNE_MAX_ON_SECONDS_KEY
+import radio.ks3ckc.ft8af.TUNE_METHOD_KEY
 import radio.ks3ckc.ft8af.saveTuneLevelForCurrentBand
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.FT8AFIconButton
@@ -61,6 +63,7 @@ fun TransmissionSettings(
     var tuneMaxOnSeconds by remember { mutableIntStateOf(GeneralVariables.tuneMaxOnSeconds) }
     var tuneLevelIndependent by remember { mutableStateOf(GeneralVariables.tuneLevelIndependent) }
     var tuneLevel by remember { mutableIntStateOf(GeneralVariables.tuneLevel) }
+    var tuneMethod by remember { mutableIntStateOf(GeneralVariables.tuneMethod) }
 
     // Auto-sequence state
     var autoClearTxFreq by remember { mutableStateOf(GeneralVariables.autoClearTxFreq) }
@@ -72,6 +75,29 @@ fun TransmissionSettings(
 
     var showWatchdog by remember { mutableStateOf(false) }
     var showStopAfter by remember { mutableStateOf(false) }
+    var showTuneMethod by remember { mutableStateOf(false) }
+
+    // Index == TuneMethod.AUTOMATIC/INTERNAL/TONE
+    val tuneMethodOptions = listOf("Automatic", "Internal tuner", "Low power tone")
+
+    // -- Tune Method Picker (issue #425) --
+    if (showTuneMethod) {
+        ListPickerDialog(
+            title = "Tune method",
+            items = tuneMethodOptions,
+            selectedIndex = TuneMethod.clamp(tuneMethod),
+            onDismiss = { showTuneMethod = false },
+            onSelect = { index ->
+                showTuneMethod = false
+                val method = TuneMethod.clamp(index)
+                tuneMethod = method
+                GeneralVariables.tuneMethod = method
+                mainViewModel.databaseOpr.writeConfig(
+                    TUNE_METHOD_KEY, method.toString(), null,
+                )
+            },
+        )
+    }
 
     val watchdogMinutes = watchdogMs / 60000
     val watchdogStr = if (watchdogMinutes == 0) stringResource(R.string.common_off)
@@ -430,6 +456,15 @@ fun TransmissionSettings(
         SettingsSection(title = "TUNE") {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
+                    SettingsRow(
+                        label = "Tune method",
+                        description = "Automatic starts the rig's internal tuner over CAT " +
+                            "when available, otherwise plays the low power tone",
+                        value = tuneMethodOptions[TuneMethod.clamp(tuneMethod)],
+                        showChevron = true,
+                        onClick = { showTuneMethod = true },
+                    )
+                    SectionDivider()
                     SettingsRow(
                         label = "Tune timeout",
                         description = "Hard cap on the tune carrier — it always stops by itself",

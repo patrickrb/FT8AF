@@ -552,4 +552,6 @@
     <string name="tune_stopped_timeout">Tune zatrzymany po %1$d s</string>
     <string name="tune_blocked_tx">Zatrzymaj CQ/QSO przed użyciem Tune</string>
     <string name="tune_unavailable_route">Tune nie jest jeszcze dostępny na tej ścieżce audio</string>
+    <string name="tune_atu_started">Uruchomiono tuner antenowy radia</string>
+    <string name="tune_atu_unavailable">Tuner niedostępny — podłącz radio CAT z wewnętrznym tunerem</string>
 </resources>

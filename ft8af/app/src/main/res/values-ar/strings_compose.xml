@@ -563,4 +563,6 @@
     <string name="tune_stopped_timeout">توقف Tune بعد %1$d ث</string>
     <string name="tune_blocked_tx">أوقف CQ/QSO قبل استخدام Tune</string>
     <string name="tune_unavailable_route">Tune غير مدعوم بعد على مسار الصوت هذا</string>
+    <string name="tune_atu_started">تم بدء موالف هوائي الجهاز</string>
+    <string name="tune_atu_unavailable">الموالف غير متاح — قم بتوصيل جهاز CAT مزوّد بموالف داخلي</string>
 </resources>

@@ -43,6 +43,11 @@ public class KenwoodTK90RigConstant {
     private static final String TS570_PTT_OFF = "RX;";//KENWOOD TS570,PTT
     private static final String TS570_PTT_ON = "TX;";//KENWOOD TS570,PTT
 
+    // Start the internal antenna tuner (TS-590/TS-2000 AC command:
+    // P1=1 RX AT in, P2=1 TX AT in, P3=1 = start tuning). The rig keys its
+    // own carrier and stops by itself; rigs without an ATU answer "?;".
+    private static final String START_ATU_TUNE = "AC111;";
+
 
     // (tr)uSDX extensions
     private static final String TRUSDX_STREAMING_OFF = "UA0;";
@@ -78,6 +83,10 @@ public class KenwoodTK90RigConstant {
             return PTT_OFF.getBytes();
         }
 
+    }
+
+    public static byte[] startAtuTune() {
+        return START_ATU_TUNE.getBytes();
     }
 
     public static byte[] setTS590PTTState(boolean on) {

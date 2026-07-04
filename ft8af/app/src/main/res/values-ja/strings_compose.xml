@@ -520,4 +520,6 @@
     <string name="tune_stopped_timeout">Tuneは%1$d秒後に停止しました</string>
     <string name="tune_blocked_tx">Tuneの前にCQ/QSOを停止してください</string>
     <string name="tune_unavailable_route">このオーディオ経路ではTuneはまだ利用できません</string>
+    <string name="tune_atu_started">無線機のアンテナチューナーを開始しました</string>
+    <string name="tune_atu_unavailable">チューナーを使用できません — 内蔵チューナー付きのCAT無線機を接続してください</string>
 </resources>

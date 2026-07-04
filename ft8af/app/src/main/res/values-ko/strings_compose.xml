@@ -563,4 +563,6 @@
     <string name="tune_stopped_timeout">Tune이 %1$d초 후 정지되었습니다</string>
     <string name="tune_blocked_tx">Tune 전에 CQ/QSO를 정지하세요</string>
     <string name="tune_unavailable_route">이 오디오 경로에서는 아직 Tune을 사용할 수 없습니다</string>
+    <string name="tune_atu_started">무전기 안테나 튜너 시작됨</string>
+    <string name="tune_atu_unavailable">튜너를 사용할 수 없습니다 — 내장 튜너가 있는 CAT 무전기를 연결하세요</string>
 </resources>

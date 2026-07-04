@@ -520,4 +520,6 @@
     <string name="tune_stopped_timeout">Tune detenido tras %1$d s</string>
     <string name="tune_blocked_tx">Detén el CQ/QSO antes de usar Tune</string>
     <string name="tune_unavailable_route">Tune aún no está disponible en esta ruta de audio</string>
+    <string name="tune_atu_started">Sintonizador de antena del equipo iniciado</string>
+    <string name="tune_atu_unavailable">Sintonizador no disponible — conecta un equipo CAT con sintonizador interno</string>
 </resources>

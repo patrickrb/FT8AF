@@ -563,4 +563,6 @@
     <string name="tune_stopped_timeout">Tune dihentikan setelah %1$d dtk</string>
     <string name="tune_blocked_tx">Hentikan CQ/QSO sebelum menggunakan Tune</string>
     <string name="tune_unavailable_route">Tune belum didukung pada jalur audio ini</string>
+    <string name="tune_atu_started">Tuner antena radio dimulai</string>
+    <string name="tune_atu_unavailable">Tuner tidak tersedia — hubungkan radio CAT dengan tuner internal</string>
 </resources>

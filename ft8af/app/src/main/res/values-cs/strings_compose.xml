@@ -563,4 +563,6 @@
     <string name="tune_stopped_timeout">Tune zastaven po %1$d s</string>
     <string name="tune_blocked_tx">Před použitím Tune zastavte CQ/QSO</string>
     <string name="tune_unavailable_route">Tune zatím není na této zvukové cestě podporován</string>
+    <string name="tune_atu_started">Anténní tuner rádia spuštěn</string>
+    <string name="tune_atu_unavailable">Tuner není k dispozici — připojte CAT rádio s interním tunerem</string>
 </resources>

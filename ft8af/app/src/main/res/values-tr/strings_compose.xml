@@ -552,4 +552,6 @@
     <string name="tune_stopped_timeout">Tune %1$d s sonra durduruldu</string>
     <string name="tune_blocked_tx">Tune kullanmadan önce CQ/QSO\'yu durdurun</string>
     <string name="tune_unavailable_route">Tune bu ses yolunda henüz desteklenmiyor</string>
+    <string name="tune_atu_started">Telsizin anten tuneri başlatıldı</string>
+    <string name="tune_atu_unavailable">Tuner kullanılamıyor — dahili tunerli bir CAT telsizi bağlayın</string>
 </resources>

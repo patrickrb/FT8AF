@@ -2625,6 +2625,16 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("perBandTuneLevels")) {//Per-band independent tune levels
                     GeneralVariables.perBandTuneLevels = result == null ? "" : result;
                 }
+                if (name.equalsIgnoreCase("tuneMethod")) {//Tune method: rig ATU vs carrier (issue #425)
+                    if (result != null) {
+                        try {
+                            GeneralVariables.tuneMethod =
+                                    com.k1af.ft8af.ft8transmit.TuneMethod.clamp(
+                                            Integer.parseInt(result.trim()));
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
                 if (name.equalsIgnoreCase("excludedCallsigns")) {//Blocklist: callsign prefixes
                     GeneralVariables.addExcludedCallsigns(result);
                 }
