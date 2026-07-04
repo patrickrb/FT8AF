@@ -755,15 +755,33 @@ public class UsbAudioDevice {
                     fd, ifaceNum, altSet, epAddr, maxPkt,
                     pcmData.length, outputSampleRate, outputChannels));
 
+            // Monotonic clock: wall time can jump (NTP set, user change) and a
+            // backwards step would fake a fast failure, wrongly allowing the
+            // restart-from-zero fallback after audio already went to air.
+            long writeStartMs = android.os.SystemClock.elapsedRealtime();
             int rc = UsbAudioNative.nativeWrite(
                     fd, ifaceNum, altSet, epAddr, maxPkt,
                     outputSampleRate, outputChannels, /*bytesPerSample=*/2,
                     pcmData);
+            long writeElapsedMs = android.os.SystemClock.elapsedRealtime() - writeStartMs;
 
             if (rc == 0) {
                 com.k1af.ft8af.GeneralVariables.fileLog(
                         "UsbAudioDevice: libusb native write OK");
                 return true;
+            }
+            if (!shouldFallbackToUsbRequest(rc, writeElapsedMs)) {
+                // Mid-stream death (part of the message already went to air) or
+                // the device left the bus: the UsbRequest loop below restarts
+                // the message from byte 0, which this deep into the slot would
+                // transmit an off-grid, overlapping mess — drop the cycle
+                // instead. The QSO sequencer self-corrects next cycle.
+                com.k1af.ft8af.GeneralVariables.fileLog(
+                        "UsbAudioDevice: libusb native write FAILED ("
+                                + describeLibusbWriteError(rc)
+                                + ") after " + writeElapsedMs
+                                + "ms, no UsbRequest fallback (mid-stream or device gone)");
+                return false;
             }
             com.k1af.ft8af.GeneralVariables.fileLog(
                     "UsbAudioDevice: libusb native write FAILED ("
@@ -899,15 +917,17 @@ public class UsbAudioDevice {
 
     /**
      * Maps a {@link UsbAudioNative#nativeWrite} return code to a readable label
-     * for the debug log. {@code nativeWrite} returns 0 on success or a libusb
-     * {@code libusb_error} code (always negative) on failure; naming the code
-     * makes a dropped TX cycle diagnosable instead of an opaque {@code rc=-4}.
-     * A device-level error ({@code NO_DEVICE}, {@code NOT_FOUND}) means the
-     * UsbRequest fallback below will almost certainly fail too.
+     * for the debug log. {@code nativeWrite} returns 0 on success, a libusb
+     * {@code libusb_error} code (negative) for setup failures, or — when a
+     * transfer dies after streaming started — the failing transfer's
+     * {@code libusb_transfer_status} (positive, stored by
+     * {@code onOutputComplete} in {@code usb_audio_capture.cpp}). The positive
+     * statuses were previously logged as {@code UNKNOWN}, which hid the actual
+     * field failure mode: {@code rc=5 TRANSFER_NO_DEVICE}, the device falling
+     * off the bus mid-transmission (typically RF into the USB link at TX
+     * power). Naming the code makes a dropped TX cycle diagnosable.
      *
-     * <p>Any value outside the known enum (e.g. an unexpected positive code) is
-     * labelled {@code UNKNOWN} rather than guessed at. Package-visible for
-     * testing.
+     * <p>Package-visible for testing.
      */
     static String describeLibusbWriteError(int rc) {
         String name;
@@ -926,10 +946,53 @@ public class UsbAudioDevice {
             case -11: name = "NO_MEM"; break;
             case -12: name = "NOT_SUPPORTED"; break;
             case -99: name = "OTHER"; break;
+            // libusb_transfer_status values (positive) from a mid-stream death:
+            case 1:   name = "TRANSFER_ERROR"; break;
+            case 2:   name = "TRANSFER_TIMED_OUT"; break;
+            case 3:   name = "TRANSFER_CANCELLED"; break;
+            case 4:   name = "TRANSFER_STALL"; break;
+            case 5:   name = "TRANSFER_NO_DEVICE"; break;
+            case 6:   name = "TRANSFER_OVERFLOW"; break;
             default:  name = "UNKNOWN"; break;
         }
         return "rc=" + rc + " " + name;
     }
+
+    /**
+     * Whether a failed libusb native write should be retried through the
+     * Android {@code UsbRequest} fallback loop.
+     *
+     * <p>The fallback restarts the message from byte 0. That is only sane when
+     * the native attempt failed <em>before anything went to air</em> — e.g. the
+     * libusb context/wrap/submit failed immediately on a kernel where libusb
+     * can't run (the fallback's original purpose). Once the native write has
+     * streamed for a while ({@code elapsedMs} beyond
+     * {@link #MAX_FALLBACK_ELAPSED_MS}), part of the FT8 message has already
+     * been transmitted; restarting from the beginning mid-slot would key an
+     * off-grid, overlapping signal that no receiver can decode — worse than
+     * dropping the cycle. Device-gone ({@code NO_DEVICE}/{@code
+     * TRANSFER_NO_DEVICE}) and cancelled ({@code TRANSFER_CANCELLED}, the user
+     * pressed STOP) failures never retry either, regardless of timing.
+     *
+     * <p>Package-visible for testing.
+     *
+     * @param rc        non-zero {@link UsbAudioNative#nativeWrite} return code
+     * @param elapsedMs how long the native write ran before failing
+     */
+    static boolean shouldFallbackToUsbRequest(int rc, long elapsedMs) {
+        if (rc == 0) return false;// success — nothing to fall back from
+        if (rc == -4 || rc == 5) return false;// device left the bus
+        if (rc == 3) return false;// cancelled: the user stopped the TX
+        return elapsedMs <= MAX_FALLBACK_ELAPSED_MS;
+    }
+
+    /**
+     * Longest a failed native write may have run and still be treated as
+     * "failed before streaming": ~1 s is far below the earliest point where
+     * restarted audio could still produce a decodable message, and far above
+     * any immediate setup failure.
+     */
+    static final long MAX_FALLBACK_ELAPSED_MS = 1_000;
 
     public boolean hasInput() { return endpointIn != null; }
     public boolean hasOutput() { return endpointOut != null; }
