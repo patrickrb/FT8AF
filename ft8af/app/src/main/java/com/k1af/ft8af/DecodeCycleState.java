@@ -17,9 +17,11 @@ import java.util.ArrayList;
  * goes through this class's synchronized methods, serializing the RMWs and giving
  * readers a happens-before on the latest published snapshot.
  *
- * <p>The label lists themselves are never mutated after publication
- * ({@link WaterfallLabelMessages#afterPass} builds fresh lists), so a reader
- * holding a snapshot can iterate it safely while the next pass publishes a new one.
+ * <p>The label lists themselves are never mutated after publication:
+ * {@link WaterfallLabelMessages#afterPass} either passes a list through unchanged
+ * (the normal pass's own {@code kept} list, or {@code previous} on an empty deep
+ * pass) or builds a new merged list — it never appends into a list a reader may
+ * already hold. So a reader iterating a snapshot can't be torn by the next pass.
  */
 public final class DecodeCycleState {
 

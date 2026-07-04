@@ -8,6 +8,7 @@ import org.robolectric.RobolectricTestRunner;
 
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Unit tests for {@link DecodeCycleState} — the synchronized holder for the
@@ -90,12 +91,17 @@ public class DecodeCycleStateTest {
         DecodeCycleState state = new DecodeCycleState();
         final int threads = 4;
         final int perThread = 500;
-        CountDownLatch ready = new CountDownLatch(1);
+        // Two-latch start: every worker signals it has reached the line before
+        // all are released together — otherwise late-starting threads run mostly
+        // sequentially and the test loses the overlap it exists to create.
+        CountDownLatch allReady = new CountDownLatch(threads);
+        CountDownLatch go = new CountDownLatch(1);
         ArrayList<Thread> pool = new ArrayList<>();
         for (int t = 0; t < threads; t++) {
             Thread thread = new Thread(() -> {
+                allReady.countDown();
                 try {
-                    ready.await();
+                    go.await();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     return;
@@ -107,9 +113,11 @@ public class DecodeCycleStateTest {
             thread.start();
             pool.add(thread);
         }
-        ready.countDown();
+        assertThat(allReady.await(5, TimeUnit.SECONDS)).isTrue();
+        go.countDown();
         for (Thread thread : pool) {
-            thread.join();
+            thread.join(10_000);
+            assertThat(thread.isAlive()).isFalse();
         }
         assertThat(state.getDecodeCount()).isEqualTo(threads * perThread);
     }
@@ -122,12 +130,15 @@ public class DecodeCycleStateTest {
         DecodeCycleState state = new DecodeCycleState();
         final int threads = 4;
         final int perThread = 100;
-        CountDownLatch ready = new CountDownLatch(1);
+        // Same two-latch start as the count test, for the same overlap reason.
+        CountDownLatch allReady = new CountDownLatch(threads);
+        CountDownLatch go = new CountDownLatch(1);
         ArrayList<Thread> pool = new ArrayList<>();
         for (int t = 0; t < threads; t++) {
             Thread thread = new Thread(() -> {
+                allReady.countDown();
                 try {
-                    ready.await();
+                    go.await();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     return;
@@ -139,9 +150,11 @@ public class DecodeCycleStateTest {
             thread.start();
             pool.add(thread);
         }
-        ready.countDown();
+        assertThat(allReady.await(5, TimeUnit.SECONDS)).isTrue();
+        go.countDown();
         for (Thread thread : pool) {
-            thread.join();
+            thread.join(10_000);
+            assertThat(thread.isAlive()).isFalse();
         }
         assertThat(state.getMessages()).hasSize(threads * perThread);
     }
