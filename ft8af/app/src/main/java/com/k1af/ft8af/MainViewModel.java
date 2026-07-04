@@ -506,7 +506,14 @@ public class MainViewModel extends ViewModel {
         //synchronize time. Microsoft's NTP server
         UtcTimer.syncTime(null);
 
-        mutableFt8MessageList.setValue(ft8Messages);
+        // Seed with a snapshot, never the live ft8Messages instance. observeAsState
+        // compares structurally, and every later snapshot published from
+        // publishFt8MessageList() is content-equal to the live list it was copied
+        // from — so a UI seeded with the live list stays pinned to it forever
+        // (equal values are skipped, the state keeps the old reference) and Compose
+        // ends up iterating the very list the decode thread mutates:
+        // ConcurrentModificationException in buildQsoLog during recomposition.
+        mutableFt8MessageList.setValue(uiSeedSnapshot(ft8Messages));
 
         //create listener object; callback actions handle decoding, transmitting, adding to followed callsign list, etc.
         ft8SignalListener = new FT8SignalListener(databaseOpr, new OnFt8Listen() {
@@ -589,10 +596,13 @@ public class MainViewModel extends ViewModel {
 
                 synchronized (ft8Messages) {
                     // "Clear every cycle" mode does its wipe in beforeListen (start of the
-                    // cycle), so by here the list is already fresh — just append.
+                    // cycle), so by here the list is already fresh — just append. The
+                    // excess-trim must hold the same lock: it removes from the list, and
+                    // an unguarded removal can race the snapshot copy in
+                    // publishFt8MessageList().
                     ft8Messages.addAll(messages);//add messages to list
+                    GeneralVariables.deleteArrayListMore(ft8Messages);//remove excess messages; FT8CN limits the total displayable messages
                 }
-                GeneralVariables.deleteArrayListMore(ft8Messages);//remove excess messages; FT8CN limits the total displayable messages
 
                 publishFt8MessageList();//post an immutable snapshot so the UI recomposes immediately
                 mutableTimerOffset.postValue(time_sec);//this cycle's time offset
@@ -957,6 +967,19 @@ public class MainViewModel extends ViewModel {
      */
     public static boolean shouldClearOnBandChange(boolean enabled, String oldWaveLength, String newWaveLength) {
         return enabled && !java.util.Objects.equals(oldWaveLength, newWaveLength);
+    }
+
+    /**
+     * Copy used to seed {@code mutableFt8MessageList} — the UI must never be
+     * handed the live {@code ft8Messages} instance. Because observeAsState
+     * compares structurally and every snapshot published later is content-equal
+     * to the live list it was copied from, a UI seeded with the live list keeps
+     * that reference forever (equal writes are skipped) and Compose iterates the
+     * very list the decode thread mutates — ConcurrentModificationException
+     * during recomposition. Package-visible for testing.
+     */
+    static ArrayList<Ft8Message> uiSeedSnapshot(ArrayList<Ft8Message> live) {
+        return new ArrayList<>(live);
     }
 
     /**

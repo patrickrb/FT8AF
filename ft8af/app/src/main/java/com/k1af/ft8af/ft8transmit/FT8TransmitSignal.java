@@ -306,7 +306,7 @@ public class FT8TransmitSignal {
                 + " msg=[" + getFunctionCommand(functionOrder).getMessageText() + "]");
         doTransmitThreadPool.execute(doTransmitRunnable);
 
-        mutableFunctions.postValue(functionList);
+        mutableFunctions.postValue(snapshotForUi(functionList));
     }
 
     /**
@@ -470,17 +470,37 @@ public class FT8TransmitSignal {
             GeneralVariables.noReplyCount = 0;
             lastNoReplyTarget = currentTarget;
         }
-        functionList.clear();
-        for (int i = 1; i <= 6; i++) {
-            if (functionOrder == 6) {// if current command is 6 (CQ), generate only one message
-                functionList.add(new FunctionOfTransmit(6, getFunctionCommand(6), false));
-                break;
-            } else {
-                functionList.add(new FunctionOfTransmit(i, getFunctionCommand(i), false));
+        synchronized (functionList) {
+            functionList.clear();
+            for (int i = 1; i <= 6; i++) {
+                if (functionOrder == 6) {// if current command is 6 (CQ), generate only one message
+                    functionList.add(new FunctionOfTransmit(6, getFunctionCommand(6), false));
+                    break;
+                } else {
+                    functionList.add(new FunctionOfTransmit(i, getFunctionCommand(i), false));
+                }
             }
         }
-        mutableFunctions.postValue(functionList);
+        mutableFunctions.postValue(snapshotForUi(functionList));
         setCurrentFunctionOrder(functionOrder);// set current message
+    }
+
+    /**
+     * Defensive copy of {@link #functionList} for LiveData publication. The live
+     * list is rebuilt in place (clear() + add() in {@link #generateFun()}) by the
+     * auto-sequencer on background threads, while Compose's TxSelector iterates
+     * whatever instance it last observed — publishing the live list is a
+     * ConcurrentModificationException during recomposition (seen in the field).
+     * Every {@code mutableFunctions.postValue} must go through this, mirroring
+     * the caller-queue publications which already post copies.
+     *
+     * <p>Synchronizes on the list so a snapshot taken while another thread is
+     * mid-rebuild doesn't itself throw. Package-visible for testing.
+     */
+    static ArrayList<FunctionOfTransmit> snapshotForUi(ArrayList<FunctionOfTransmit> live) {
+        synchronized (live) {
+            return new ArrayList<>(live);
+        }
     }
 
     /**
@@ -999,7 +1019,7 @@ public class FT8TransmitSignal {
         if (order == 4 || order == 5) {
             updateQSlRecordList(order, toCallsign);
         }
-        mutableFunctions.postValue(functionList);
+        mutableFunctions.postValue(snapshotForUi(functionList));
     }
 
 
@@ -1442,7 +1462,7 @@ public class FT8TransmitSignal {
             GeneralVariables.fileLog("QSO: rx RR73 from "
                     + (toCallsign != null ? toCallsign.callsign : "?") + " -> reply 73");
             functionOrder = 5;
-            mutableFunctions.postValue(functionList);
+            mutableFunctions.postValue(snapshotForUi(functionList));
             mutableFunctionOrder.postValue(functionOrder);
             setCurrentFunctionOrder(functionOrder);
             return;
@@ -1497,7 +1517,7 @@ public class FT8TransmitSignal {
             GeneralVariables.fileLog("QSO: advance order " + functionOrder + "->" + (newOrder + 1)
                     + " with " + (toCallsign != null ? toCallsign.callsign : "?"));
             functionOrder = newOrder + 1;// execute the next message in sequence
-            mutableFunctions.postValue(functionList);
+            mutableFunctions.postValue(snapshotForUi(functionList));
             mutableFunctionOrder.postValue(functionOrder);
             setCurrentFunctionOrder(functionOrder);// set current message
             return;
