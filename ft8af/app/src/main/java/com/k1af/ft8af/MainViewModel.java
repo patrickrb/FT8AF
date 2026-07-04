@@ -44,6 +44,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
+import androidx.annotation.Nullable;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 import androidx.lifecycle.ViewModelProvider;
@@ -444,6 +445,17 @@ public class MainViewModel extends ViewModel {
         if (viewModel == null) {
             viewModel = new ViewModelProvider(owner).get(MainViewModel.class);
         }
+        return viewModel;
+    }
+
+    /**
+     * Nullable peek at the singleton for observers that must never boot the engine —
+     * only ComposeMainActivity may create the instance. The Android Auto screens use
+     * this: null means the phone UI hasn't run yet this process, and the car display
+     * shows an "open the app on your phone" message instead.
+     */
+    @Nullable
+    public static MainViewModel peekInstance() {
         return viewModel;
     }
 
