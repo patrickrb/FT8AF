@@ -36,6 +36,21 @@ public class MicRecorder {
     private volatile boolean isRunning = false;//whether currently in recording state
     private OnDataListener onDataListener;
 
+    // AudioRecord capture-thread handoff. reinitialize() can be called from
+    // several threads at once (USB onCaptureStopped, one usbDetach event per
+    // interface of a composite device, the reader thread's DEAD_OBJECT path) —
+    // a real cable unplug fires three within ~150ms. Each used to release/null
+    // the shared audioRecord field and spawn a fresh reader thread while the
+    // previous one was still blocked in read(), which is exactly the NPE at
+    // read() and the fatal native 'releaseBuffer: mUnreleased out of range'
+    // abort seen in the field. Now: lifecycle methods are synchronized, the
+    // reader thread only ever touches the AudioRecord instance it was started
+    // with, checks its generation each pass, and reinitialize() stops + joins
+    // the old thread before releasing the old AudioRecord.
+    private Thread captureThread = null;
+    private volatile int captureGeneration = 0;
+    private static final long CAPTURE_JOIN_TIMEOUT_MS = 1000;
+
     // USB-audio death-loop guard. On some hosts (notably car-dash Android
     // tablets) UsbRequest.requestWait() returns null on first iteration and
     // onCaptureStopped() fires immediately. Without this, MicRecorder would
@@ -197,7 +212,7 @@ public class MicRecorder {
         return null;
     }
 
-    public void start(){
+    public synchronized void start(){
         if (isRunning) return;
 
         if (useUsbAudio && usbAudioDevice != null) {
@@ -286,28 +301,38 @@ public class MicRecorder {
     }
 
     private void startAudioRecordCapture() {
+        // The reader thread works exclusively on these locals. reinitialize()
+        // releases and reassigns the audioRecord/bufferSize *fields* from other
+        // threads; reading the fields from the loop is what crashed (NPE at
+        // read(), native releaseBuffer abort from two threads on one instance).
+        final AudioRecord rec = audioRecord;
+        final int myGeneration = captureGeneration;
         float[] buffer = new float[bufferSize];
         try {
-            audioRecord.startRecording();//start recording
+            rec.startRecording();//start recording
         }catch (Exception e){
             ToastMessage.show(String.format(GeneralVariables.getStringFromResource(
                     R.string.recorder_cannot_record),e.getMessage()));
             Log.d(TAG, "startRecord: "+e.getMessage() );
         }
 
-        new Thread(new Runnable() {
+        captureThread = new Thread(new Runnable() {
             @Override
             public void run() {
-                while (isRunning) {
+                while (captureLoopShouldContinue(isRunning, myGeneration, captureGeneration)) {
                     //check if in recording state; state!=3 means not in recording state
-                    if (audioRecord.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) {
-                        isRunning = false;
-                        Log.d(TAG, String.format("Recording failed, state code: %d", audioRecord.getRecordingState()));
+                    if (rec.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) {
+                        // A stale generation means reinitialize() owns the lifecycle
+                        // now; only a current-generation thread may stop the capture.
+                        if (myGeneration == captureGeneration) {
+                            isRunning = false;
+                        }
+                        Log.d(TAG, String.format("Recording failed, state code: %d", rec.getRecordingState()));
                         break;
                     }
 
                     //read recording data
-                    int bufferReadResult = audioRecord.read(buffer, 0, bufferSize,AudioRecord.READ_BLOCKING);
+                    int bufferReadResult = rec.read(buffer, 0, buffer.length,AudioRecord.READ_BLOCKING);
 
                     if (bufferReadResult < 0) {
                         // Error codes (ERROR_INVALID_OPERATION=-3, ERROR_BAD_VALUE=-2,
@@ -316,6 +341,12 @@ public class MicRecorder {
                         GeneralVariables.fileLog(
                                 "MicRecorder: AudioRecord.read error " + bufferReadResult);
                         if (bufferReadResult == AudioRecord.ERROR_DEAD_OBJECT) {
+                            // A stale thread must not drive lifecycle — a reinit
+                            // already replaced it and killing its AudioRecord here
+                            // is how the double-reader abort happened. Just exit.
+                            if (myGeneration != captureGeneration) {
+                                break;
+                            }
                             // Route audio server death through the same throttled
                             // reinitialize used by the USB capture-stopped path.
                             isRunning = false;
@@ -342,8 +373,8 @@ public class MicRecorder {
                     }
                 }
                 try {
-                    if (audioRecord.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
-                        audioRecord.stop();//stop recording
+                    if (rec.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
+                        rec.stop();//stop recording
                     }
                 }catch (Exception e){
                     ToastMessage.show(String.format(GeneralVariables.getStringFromResource(
@@ -351,13 +382,14 @@ public class MicRecorder {
                     Log.d(TAG, "startRecord: "+e.getMessage() );
                 }
             }
-        }).start();
+        });
+        captureThread.start();
     }
 
     /**
      * Stop recording. When recording stops, all monitors in the listener list are removed.
      */
-    public void stopRecord() {
+    public synchronized void stopRecord() {
         isRunning = false;
         if (useUsbAudio && usbAudioDevice != null) {
             usbAudioDevice.stopCapture();
@@ -379,15 +411,28 @@ public class MicRecorder {
      * was originally constructed.
      */
     @SuppressLint("MissingPermission")
-    public void reinitialize() {
+    public synchronized void reinitialize() {
         boolean wasRunning = isRunning;
         OnDataListener savedListener = onDataListener;
 
-        // Stop current capture
+        // Supersede the running reader thread's generation, then stop capture.
+        captureGeneration++;
         stopRecord();
 
-        // Release old AudioRecord (stopRecord only sets isRunning=false)
+        // Release old AudioRecord (stopRecord only sets isRunning=false). The
+        // reader thread may still be inside a blocking read() on it: stop()
+        // unblocks that read, and we must wait for the thread to exit before
+        // release() — releasing mid-read is a fatal native abort
+        // ('releaseBuffer: mUnreleased out of range'), not a catchable exception.
         if (audioRecord != null) {
+            try {
+                if (audioRecord.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
+                    audioRecord.stop();
+                }
+            } catch (Exception e) {
+                Log.d(TAG, "reinitialize: error stopping AudioRecord: " + e.getMessage());
+            }
+            joinCaptureThread();
             try {
                 audioRecord.release();
             } catch (Exception e) {
@@ -460,6 +505,55 @@ public class MicRecorder {
         if (wasRunning) {
             start();
         }
+    }
+
+    /**
+     * Wait for the AudioRecord reader thread to exit before its AudioRecord is
+     * released. Bounded by {@link #CAPTURE_JOIN_TIMEOUT_MS} so a thread stuck
+     * waiting to enter this object's monitor (the reader's DEAD_OBJECT path
+     * re-enters reinitialize()) can never deadlock the reinit.
+     */
+    private void joinCaptureThread() {
+        Thread t = captureThread;
+        if (!shouldJoinCaptureThread(t, Thread.currentThread())) {
+            return;
+        }
+        try {
+            t.join(CAPTURE_JOIN_TIMEOUT_MS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        if (t.isAlive()) {
+            GeneralVariables.fileLog("MicRecorder: capture thread still alive after "
+                    + CAPTURE_JOIN_TIMEOUT_MS + "ms join; releasing anyway");
+        }
+    }
+
+    /**
+     * Whether the AudioRecord reader loop may run another pass: recording must
+     * still be on AND no reinitialize() has superseded this thread's generation.
+     * The generation check is what stops a stale thread that never observed
+     * {@code isRunning == false} (it was blocked in read() across a full
+     * stop/start cycle) from sharing the *new* AudioRecord with the replacement
+     * thread — two concurrent readers trip a fatal native abort in libaudioclient.
+     *
+     * <p>Package-visible for testing.
+     */
+    static boolean captureLoopShouldContinue(boolean running, int loopGeneration,
+                                             int currentGeneration) {
+        return running && loopGeneration == currentGeneration;
+    }
+
+    /**
+     * Whether reinitialize() must wait for the capture thread before releasing
+     * the AudioRecord: only when a live reader thread exists and it isn't the
+     * calling thread itself — the reader's DEAD_OBJECT path calls
+     * reinitialize() from inside the loop, and joining yourself never returns.
+     *
+     * <p>Package-visible for testing.
+     */
+    static boolean shouldJoinCaptureThread(Thread capture, Thread current) {
+        return capture != null && capture != current && capture.isAlive();
     }
 
     /**
