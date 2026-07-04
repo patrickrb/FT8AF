@@ -72,6 +72,26 @@ public class AudioInputLevelTest {
     }
 
     @Test
+    public void fromPeakRms_nonFiniteInputs_sanitizeToSilence() {
+        // Math.max(0f, NaN) is NaN, and every classify() comparison against NaN
+        // is false — which would misreport GOOD with NaN dB values. Non-finite
+        // inputs (corrupted upstream math) must read as digital silence instead.
+        float[] poison = {Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY};
+        for (float bad : poison) {
+            Reading r = AudioInputLevel.fromPeakRms(bad, bad);
+            assertThat(r.peak).isEqualTo(0f);
+            assertThat(r.rms).isEqualTo(0f);
+            assertThat(r.peakDbfs).isEqualTo(AudioInputLevel.MIN_DBFS);
+            assertThat(r.rmsDbfs).isEqualTo(AudioInputLevel.MIN_DBFS);
+            assertThat(r.status).isEqualTo(Status.SILENT);
+        }
+        // One poisoned field doesn't corrupt the other's value.
+        Reading mixed = AudioInputLevel.fromPeakRms(Float.NaN, 0.05f);
+        assertThat(mixed.peak).isEqualTo(0f);
+        assertThat(mixed.rms).isWithin(1e-6f).of(0.05f);
+    }
+
+    @Test
     public void peakAndRms_ofConstantMagnitude() {
         // |sample| == 0.1 everywhere, so peak == rms == 0.1, i.e. -20 dBFS.
         Reading r = AudioInputLevel.compute(constant(0.1f, 256));

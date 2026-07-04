@@ -105,11 +105,18 @@ public final class AudioInputLevel {
      * exactly one set of thresholds.
      */
     public static Reading fromPeakRms(float peak, float rms) {
-        float p = Math.max(0f, peak);
-        float r = Math.max(0f, rms);
+        // Sanitize non-finite inputs to digital silence: Math.max(0f, NaN) is
+        // NaN, which would flow into toDbfs/classify (where every comparison
+        // against a NaN is false) and misreport GOOD with NaN dB values.
+        float p = isFinite(peak) ? Math.max(0f, peak) : 0f;
+        float r = isFinite(rms) ? Math.max(0f, rms) : 0f;
         float peakDbfs = toDbfs(p);
         float rmsDbfs = toDbfs(r);
         return new Reading(p, r, peakDbfs, rmsDbfs, classify(p, peakDbfs, rmsDbfs));
+    }
+
+    private static boolean isFinite(float v) {
+        return !Float.isNaN(v) && !Float.isInfinite(v);
     }
 
     /** Linear magnitude (>=0) to dBFS, with a {@link #MIN_DBFS} floor for silence. */
