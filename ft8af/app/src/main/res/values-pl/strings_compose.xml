@@ -545,6 +545,9 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">Błąd audio TX — w tym cyklu nie wysłano sygnału (błąd audio USB)</string>
+    <string name="cq_offset_moved">Offset CQ przeniesiony w wolne miejsce: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Automatyczny wolny offset TX</string>
+    <string name="settings_auto_clear_tx_desc">Przy wołaniu CQ wybiera wolne miejsce na podstawie ostatniej aktywności pasma i przenosi się, gdy zostanie zajęte</string>
     <string name="tune_content_description">Tune: nadaje ciągłą nośną do strojenia anteny</string>
     <string name="tune_stopped_timeout">Tune zatrzymany po %1$d s</string>
     <string name="tune_blocked_tx">Zatrzymaj CQ/QSO przed użyciem Tune</string>

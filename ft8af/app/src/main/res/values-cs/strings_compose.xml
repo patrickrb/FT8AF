@@ -556,6 +556,9 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">Selhalo TX audio — v tomto cyklu nebyl vyslán žádný signál (chyba USB audia)</string>
+    <string name="cq_offset_moved">Offset CQ přesunut na volné místo: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Automaticky volný TX offset</string>
+    <string name="settings_auto_clear_tx_desc">Při volání CQ vybere volné místo podle nedávné aktivity v pásmu a uhne, pokud se obsadí</string>
     <string name="tune_content_description">Tune: vysílá souvislou nosnou pro ladění antény</string>
     <string name="tune_stopped_timeout">Tune zastaven po %1$d s</string>
     <string name="tune_blocked_tx">Před použitím Tune zastavte CQ/QSO</string>

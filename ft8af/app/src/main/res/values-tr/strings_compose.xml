@@ -545,6 +545,9 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">TX sesi başarısız — bu döngüde sinyal gönderilmedi (USB ses hatası)</string>
+    <string name="cq_offset_moved">CQ ofseti boş bir noktaya taşındı: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Otomatik boş TX ofseti</string>
+    <string name="settings_auto_clear_tx_desc">CQ çağrılırken son bant etkinliğine göre boş bir nokta seçer ve doldurulursa başka yere taşınır</string>
     <string name="tune_content_description">Tune: anten ayarı için sürekli taşıyıcı gönderir</string>
     <string name="tune_stopped_timeout">Tune %1$d s sonra durduruldu</string>
     <string name="tune_blocked_tx">Tune kullanmadan önce CQ/QSO\'yu durdurun</string>

@@ -316,6 +316,12 @@ public class MainViewModel extends ViewModel {
             GeneralVariables.mutableBandChange.postValue(GeneralVariables.bandListIndex);
             String newWaveLength = BaseRigOperation.getMeterFromFreq(freq);
 
+            // A real band hop invalidates the clear-CQ-slot occupancy history —
+            // the recorded offsets belong to the old band's activity (issue #418).
+            if (ft8TransmitSignal != null && !newWaveLength.equals(oldWaveLength)) {
+                ft8TransmitSignal.clearBandActivity();
+            }
+
             // The rig reported a band change (e.g. the operator turned the dial) —
             // optionally clear the stale decodes + reset the TX target.
             if (shouldClearOnBandChange(GeneralVariables.clearOnBandModeChange,
@@ -593,6 +599,12 @@ public class MainViewModel extends ViewModel {
 
 
                 findIncludedCallsigns(messages);//find matching messages and add to the call list
+
+                // Clear-CQ-slot occupancy (issue #418): every kept decode (all
+                // passes — deep passes see signals the fast pass missed) feeds
+                // the history; a CQ idling on a now-occupied offset relocates
+                // from inside this call, hold-down-paced.
+                ft8TransmitSignal.recordBandActivity(messages);
 
                 //check transmit procedure. Parse transmit procedure from message list
                 //if exceeded cycle by 2 seconds, should not parse
@@ -1186,6 +1198,9 @@ public class MainViewModel extends ViewModel {
         }
         if (ft8TransmitSignal != null) {
             ft8TransmitSignal.rebuildTimer(mode);
+            // Mode switch changes the slot length and usually the dial: the
+            // clear-CQ-slot occupancy history no longer applies (issue #418).
+            ft8TransmitSignal.clearBandActivity();
         }
 
         // Retune within the SAME band to the new mode's dial (see safety note above).

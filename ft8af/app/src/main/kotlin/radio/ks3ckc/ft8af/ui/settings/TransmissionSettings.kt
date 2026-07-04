@@ -63,6 +63,7 @@ fun TransmissionSettings(
     var tuneLevel by remember { mutableIntStateOf(GeneralVariables.tuneLevel) }
 
     // Auto-sequence state
+    var autoClearTxFreq by remember { mutableStateOf(GeneralVariables.autoClearTxFreq) }
     var autoFollowCQ by remember { mutableStateOf(GeneralVariables.autoFollowCQ) }
     var huntCallsCQ by remember { mutableStateOf(GeneralVariables.huntCallsCQ) }
     var autoCallFollow by remember { mutableStateOf(GeneralVariables.autoCallFollow) }
@@ -522,6 +523,19 @@ fun TransmissionSettings(
         SettingsSection(title = stringResource(R.string.settings_section_auto_sequence)) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
+                    SettingsRow(
+                        label = stringResource(R.string.settings_auto_clear_tx),
+                        description = stringResource(R.string.settings_auto_clear_tx_desc),
+                        toggle = autoClearTxFreq,
+                        onToggleChange = { checked ->
+                            autoClearTxFreq = checked
+                            GeneralVariables.autoClearTxFreq = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "autoClearTxFreq", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
                     SettingsRow(
                         label = stringResource(R.string.settings_hunt),
                         description = stringResource(R.string.settings_hunt_desc),

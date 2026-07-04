@@ -556,6 +556,9 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">TX-audio mislukt — geen signaal verzonden deze cyclus (USB-audiofout)</string>
+    <string name="cq_offset_moved">CQ-offset verplaatst naar een vrije plek: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Automatisch vrije TX-offset</string>
+    <string name="settings_auto_clear_tx_desc">Kiest bij het roepen van CQ een vrije plek op basis van recente bandactiviteit en wijkt uit als die bezet raakt</string>
     <string name="tune_content_description">Tune: zendt een continue draaggolf uit voor antenne-afstemming</string>
     <string name="tune_stopped_timeout">Tune gestopt na %1$d s</string>
     <string name="tune_blocked_tx">Stop de CQ/QSO voordat je Tune gebruikt</string>

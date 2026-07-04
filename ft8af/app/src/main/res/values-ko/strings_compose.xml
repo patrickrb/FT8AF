@@ -556,6 +556,9 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_audio_dropped">TX 오디오 실패 — 이번 주기에 신호가 송신되지 않았습니다 (USB 오디오 오류)</string>
+    <string name="cq_offset_moved">CQ 오프셋을 빈 자리로 이동: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">빈 TX 오프셋 자동 선택</string>
+    <string name="settings_auto_clear_tx_desc">CQ 호출 시 최근 밴드 활동을 바탕으로 빈 자리를 선택하고, 점유되면 이동합니다</string>
     <string name="tune_content_description">Tune: 안테나 조정을 위한 연속 반송파를 송신합니다</string>
     <string name="tune_stopped_timeout">Tune이 %1$d초 후 정지되었습니다</string>
     <string name="tune_blocked_tx">Tune 전에 CQ/QSO를 정지하세요</string>
