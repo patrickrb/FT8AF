@@ -527,4 +527,24 @@
     <string name="tune_method_automatic">Automático</string>
     <string name="tune_method_internal">Sintonizador interno</string>
     <string name="tune_method_tone">Tono de baja potencia</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / CASCADA (DESARROLLADOR)</string>
+    <string name="settings_fft_window">Función de ventana FFT</string>
+    <string name="settings_fft_window_desc">Ventana previa a la FFT para el espectro/cascada; Hann reduce la fuga espectral</string>
+    <string name="settings_fft_window_rect">Rectangular (ninguna)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">Promediado de cuadros</string>
+    <string name="settings_fft_averaging_desc">Suaviza la pantalla entre cuadros FFT; Desactivado muestra cada cuadro tal cual</string>
+    <string name="settings_fft_avg_off">Desactivado</string>
+    <string name="settings_fft_avg_light">Ligero (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">Fuerte (EMA 0.25)</string>
+    <string name="settings_bin_agg">Combinación de bins del espectro</string>
+    <string name="settings_bin_agg_desc">Cómo se combinan bins FFT adyacentes en una barra del espectro</string>
+    <string name="settings_bin_agg_max">Máximo</string>
+    <string name="settings_bin_agg_avg">Promedio</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

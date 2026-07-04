@@ -527,4 +527,24 @@
     <string name="tune_method_automatic">自動</string>
     <string name="tune_method_internal">內建調諧器</string>
     <string name="tune_method_tone">低功率音頻</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / 瀑布圖（開發者）</string>
+    <string name="settings_fft_window">FFT 視窗函數</string>
+    <string name="settings_fft_window_desc">頻譜/瀑布圖顯示的 FFT 前加窗；Hann 窗可減少頻譜洩漏</string>
+    <string name="settings_fft_window_rect">矩形（無窗）</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">幀平均</string>
+    <string name="settings_fft_averaging_desc">在 FFT 幀之間平滑顯示；關閉時按原樣顯示每一幀</string>
+    <string name="settings_fft_avg_off">關閉</string>
+    <string name="settings_fft_avg_light">輕度 (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">重度 (EMA 0.25)</string>
+    <string name="settings_bin_agg">頻譜柱合併</string>
+    <string name="settings_bin_agg_desc">相鄰 FFT 頻點如何合併為一根頻譜柱</string>
+    <string name="settings_bin_agg_max">最大值</string>
+    <string name="settings_bin_agg_avg">平均值</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

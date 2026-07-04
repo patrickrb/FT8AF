@@ -99,3 +99,32 @@ The frontend builds independently with `npm run build` (emits to `desktop/dist`)
   waveform. Leading audio is clipped only when starting late
   (`ms_late = max(0, into_cycle - 2360)`) to preserve the Costas sync arrays.
 - **Logging:** completed QSOs are written to SQLite and exportable as ADIF.
+
+## Waterfall display pipeline (developer settings)
+
+The live waterfall is computed in Rust (`src-tauri/src/wf.rs`, driven from
+`engine.rs::emit_waterfall_row`) — it is separate from the decoder's internal
+FFT, so none of these settings affect decoding. Per row (~10×/s):
+
+1. Peek the most recent `fft_size + (avg-1)*fft_size/2` samples (12 kHz mono).
+2. Welch average: `avg` overlapping segments (50% overlap), each windowed and
+   FFT'd; power `re²+im²` summed per bin.
+3. `mag = sqrt(power/avg) * 2 / fft_size`, `dB = 20·log10(mag + 1e-12)`.
+4. Noise floor = 30th-percentile dB, smoothed over time with an EMA
+   (`floor = 0.9·floor + 0.1·pct`, initialized at −60 dB).
+5. Brightness: 0 at `floor + 4 dB` (black offset), 255 at 26 dB above that
+   (span); linear in between.
+6. Emitted as `WaterfallRow { bins, hz_per_col }` up to 3500 Hz; the canvas
+   draws 1 bin = 1 column and the browser scales to CSS pixels, so there is no
+   bins-per-pixel aggregation step on desktop (unlike Android's spectrum strip).
+
+Settings → *Developer — waterfall FFT* exposes the window function
+(Rect/Hann/Hamming/Blackman/Blackman-Harris), FFT size (512–8192), and
+averaging count (1–16) for issue #428 experiments. Defaults — **Hann, 2048
+(≈5.86 Hz/bin), 6 averages** — reproduce the previous hard-coded pipeline
+exactly and intentionally match the iOS app. Changing a knob rebuilds the FFT
+plan immediately and persists to the config table (`wf_window`, `wf_fft_size`,
+`wf_avg`); the noise-floor EMA restarts and reconverges within ~2 s.
+
+Note: `EngineEvent::Waterfall` / `dsp/decoder.rs::waterfall_heatmap` is a dead
+legacy path (never emitted); the live path above is the only one rendered.

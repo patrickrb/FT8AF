@@ -8,8 +8,6 @@ use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::sync::Arc;
 use std::time::Duration;
 
-use rustfft::num_complex::Complex;
-use rustfft::{Fft, FftPlanner};
 use serde::{Deserialize, Serialize};
 
 use crate::audio::{output, AudioInput, SlotAccumulator};
@@ -19,6 +17,7 @@ use crate::dsp::{DecodedMessage, Decoder, SAMPLE_RATE};
 use crate::qso::{QsoEngine, QsoOutcome, QsoStatus};
 use crate::rig::{RigConfig, RigConnection};
 use crate::util;
+use crate::wf::{WfConfig, WfProcessor, WfWindow};
 
 const CYCLE_MS: i64 = 15_000;
 const TX_SLACK_MS: i64 = 2_360; // 12.64 s audio in a 15 s slot
@@ -44,12 +43,8 @@ const DEFAULT_TX_GAIN: f32 = 0.9;
 fn clamp_tx_gain(g: f32) -> f32 {
     g.clamp(0.0, 1.0)
 }
-const WF_FFT_SIZE: usize = 2048; // ~5.86 Hz/bin at 12 kHz
-const WF_AVG: usize = 6; // averaged FFT segments per row (Welch) to smooth the noise floor
-const WF_STEP: usize = WF_FFT_SIZE / 2; // 50% overlap between averaged segments
-const WF_MAX_HZ: f32 = 3_500.0; // displayed top of the audio band (matches decoder f_max)
-const WF_SPAN_DB: f32 = 26.0; // dB above the black point that maps to full brightness
-const WF_BLACK_OFFSET_DB: f32 = 4.0; // push the black point above the noise floor so noise stays dark
+// Live-waterfall FFT parameters (window/size/averaging + display constants)
+// live in `crate::wf` and are runtime-configurable via SetWaterfallConfig.
 // Input RMS at/below this (dBFS) counts as silence — no audio reaching the app.
 // Real RX audio through a soundcard/DAX sits well above this even on a quiet band;
 // a fully-routed-but-silent virtual device floors near -100 dBFS.
@@ -121,6 +116,8 @@ pub enum EngineCommand {
     SetClockOffset(i64),
     /// Kick off an immediate one-shot NTP re-sync (manual "Resync" button).
     ResyncTime,
+    /// Apply new live-waterfall FFT parameters (developer knobs, issue #428).
+    SetWaterfallConfig(WfConfig),
     Shutdown,
 }
 
@@ -288,10 +285,8 @@ struct Engine {
     /// `!Send`); polled each loop tick so completion drops PTT, and dropped to
     /// stop audio immediately on Stop TX.
     tx_playback: Option<output::PreparedTx>,
-    // live waterfall FFT
-    fft: Arc<dyn Fft<f32>>,
-    hann: Vec<f32>,
-    wf_floor_db: f32, // smoothed noise-floor estimate for auto color scaling
+    // live waterfall FFT (plan + window table + floor state; rebuilt on config change)
+    wf: WfProcessor,
     last_wf_slot: i64, // last cycle slot marked on the live waterfall (rx-corrected)
 }
 
@@ -326,12 +321,25 @@ impl Engine {
         qso.band = bands::band_for_freq_hz(dial_hz).to_string();
         qso.freq_mhz = bands::freq_mhz_string(dial_hz);
 
-        let fft = FftPlanner::<f32>::new().plan_fft_forward(WF_FFT_SIZE);
-        let hann: Vec<f32> = (0..WF_FFT_SIZE)
-            .map(|i| {
-                0.5 - 0.5 * (2.0 * std::f32::consts::PI * i as f32 / WF_FFT_SIZE as f32).cos()
-            })
-            .collect();
+        // Restore persisted waterfall FFT knobs (issue #428); defaults match
+        // the historical hard-coded pipeline (Hann, 2048, 6-segment Welch).
+        let wf_defaults = WfConfig::default();
+        let wf_cfg = WfConfig {
+            window: db
+                .get_config("wf_window")
+                .map(|s| WfWindow::parse(&s))
+                .unwrap_or(wf_defaults.window),
+            fft_size: db
+                .get_config("wf_fft_size")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(wf_defaults.fft_size),
+            avg: db
+                .get_config("wf_avg")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(wf_defaults.avg),
+        }
+        .sanitize();
+        let wf = WfProcessor::new(wf_cfg);
 
         // Decode worker: owns the (!Send) Decoder on its own thread so the heavy
         // per-slot DSP never blocks the engine loop (which drives the live
@@ -376,9 +384,7 @@ impl Engine {
             cmd_tx,
             ptt: false,
             tx_playback: None,
-            fft,
-            hann,
-            wf_floor_db: -60.0,
+            wf,
             last_wf_slot: -1,
         }
     }
@@ -644,58 +650,14 @@ impl Engine {
     /// it for the scrolling waterfall. Color is auto-scaled relative to a smoothed
     /// noise-floor estimate so the floor stays blue regardless of input gain.
     fn emit_waterfall_row(&mut self) {
-        // Average WF_AVG overlapping FFTs (Welch) to cut the per-bin variance of
-        // a single FFT, so the noise floor reads as a smooth blue instead of
-        // speckled yellow.
-        let need = WF_FFT_SIZE + (WF_AVG - 1) * WF_STEP;
-        let samples = self.accum.peek_recent(need);
-        if samples.len() < need {
+        let samples = self.accum.peek_recent(self.wf.samples_needed());
+        let Some((bins, hz_per_col)) = self.wf.process_row(&samples, SAMPLE_RATE as f32) else {
             return; // still warming up
-        }
-
-        let bin_hz = SAMPLE_RATE as f32 / WF_FFT_SIZE as f32;
-        let cols = ((WF_MAX_HZ / bin_hz) as usize).min(WF_FFT_SIZE / 2).max(1);
-
-        let mut power = vec![0f32; cols];
-        let mut buf: Vec<Complex<f32>> = vec![Complex { re: 0.0, im: 0.0 }; WF_FFT_SIZE];
-        for seg in 0..WF_AVG {
-            let off = seg * WF_STEP;
-            for i in 0..WF_FFT_SIZE {
-                buf[i] = Complex { re: samples[off + i] * self.hann[i], im: 0.0 };
-            }
-            self.fft.process(&mut buf);
-            for (i, p) in power.iter_mut().enumerate() {
-                *p += buf[i].re * buf[i].re + buf[i].im * buf[i].im;
-            }
-        }
-
-        // Averaged power -> dB magnitude per bin.
-        let mut dbs = vec![0f32; cols];
-        for (i, &p) in power.iter().enumerate() {
-            let avg = p / WF_AVG as f32;
-            let mag = (avg.sqrt() * 2.0) / WF_FFT_SIZE as f32;
-            dbs[i] = 20.0 * (mag + 1e-12).log10();
-        }
-
-        // Estimate the noise floor from the 30th-percentile dB (robust even on a
-        // busy band where signals fill much of the spectrum), smoothed over time.
-        let mut sorted = dbs.clone();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        let pct = sorted[((cols as f32 * 0.30) as usize).min(cols - 1)];
-        self.wf_floor_db = self.wf_floor_db * 0.9 + pct * 0.1;
-
-        // Black point sits a few dB above the floor so the noise renders dark and
-        // only signals above it take on color.
-        let black_point = self.wf_floor_db + WF_BLACK_OFFSET_DB;
-        let mut bins = vec![0u8; cols];
-        for (i, &db) in dbs.iter().enumerate() {
-            let t = ((db - black_point) / WF_SPAN_DB).clamp(0.0, 1.0);
-            bins[i] = (t * 255.0) as u8;
-        }
+        };
         // Mark this row if it's the first at/after a cycle boundary on the same
         // rx-corrected clock the decoder uses, so the grid line aligns with DT.
         let boundary = wf_boundary_row(self.now() - self.rx_offset_ms, &mut self.last_wf_slot);
-        self.emit(EngineEvent::WaterfallRow(WaterfallRow { bins, hz_per_col: bin_hz, boundary }));
+        self.emit(EngineEvent::WaterfallRow(WaterfallRow { bins, hz_per_col, boundary }));
     }
 
     fn publish_decodes(&self, decoded: &[DecodedMessage]) {
@@ -790,6 +752,21 @@ impl Engine {
             EngineCommand::SetTxGain(g) => {
                 self.tx_gain = clamp_tx_gain(g);
                 let _ = self.db.set_config("tx_gain", &self.tx_gain.to_string());
+            }
+            EngineCommand::SetWaterfallConfig(cfg) => {
+                let cfg = cfg.sanitize();
+                let _ = self.db.set_config("wf_window", cfg.window.as_str());
+                let _ = self.db.set_config("wf_fft_size", &cfg.fft_size.to_string());
+                let _ = self.db.set_config("wf_avg", &cfg.avg.to_string());
+                // Rebuild plan + window table; the noise-floor EMA restarts and
+                // reconverges within a couple of seconds.
+                self.wf = WfProcessor::new(cfg);
+                self.emit(EngineEvent::Info(format!(
+                    "waterfall: {} {} avg {}",
+                    cfg.window.as_str(),
+                    cfg.fft_size,
+                    cfg.avg
+                )));
             }
             EngineCommand::SetInputDevice(name) => {
                 self.input_device = name.clone();

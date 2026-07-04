@@ -527,4 +527,24 @@
     <string name="tune_method_automatic">自動</string>
     <string name="tune_method_internal">内蔵チューナー</string>
     <string name="tune_method_tone">低出力トーン</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT／ウォーターフォール（開発者向け）</string>
+    <string name="settings_fft_window">FFT窓関数</string>
+    <string name="settings_fft_window_desc">スペクトラム／ウォーターフォール表示のFFT前窓関数。Hannはスペクトル漏れを低減します</string>
+    <string name="settings_fft_window_rect">矩形（なし）</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">フレーム平均化</string>
+    <string name="settings_fft_averaging_desc">FFTフレーム間で表示を平滑化します。オフは各フレームをそのまま表示します</string>
+    <string name="settings_fft_avg_off">オフ</string>
+    <string name="settings_fft_avg_light">弱（EMA 0.5）</string>
+    <string name="settings_fft_avg_heavy">強（EMA 0.25）</string>
+    <string name="settings_bin_agg">スペクトラムのビン結合</string>
+    <string name="settings_bin_agg_desc">隣接するFFTビンを1本のバーにまとめる方法</string>
+    <string name="settings_bin_agg_max">最大値</string>
+    <string name="settings_bin_agg_avg">平均</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

@@ -99,6 +99,16 @@ export interface BandInfo {
   dial_hz: number;
 }
 
+/** Waterfall FFT window (developer setting, issue #428). */
+export type WfWindow = "rect" | "hann" | "hamming" | "blackman" | "blackman_harris";
+
+/** Live-waterfall FFT parameters. Defaults: hann / 2048 / 6. */
+export interface WaterfallConfig {
+  window: WfWindow;
+  fft_size: number;
+  avg: number;
+}
+
 export type RigBackend = "none" | "serial" | "flrig" | "hamlib";
 export type RigModel = "yaesu" | "kenwood" | "icom" | "none";
 export type PttMethod = "cat" | "rts" | "dtr" | "none";
@@ -173,4 +183,8 @@ export const api = {
   getConfig: (key: string) => invoke<string | null>("get_config", { key }),
   setConfig: (key: string, value: string) => invoke("set_config", { key, value }),
   allConfig: () => invoke<[string, string][]>("all_config"),
+
+  /** Apply + persist live-waterfall FFT parameters (Rust side persists). */
+  setWaterfallConfig: (config: WaterfallConfig) =>
+    invoke("set_waterfall_config", { config }),
 };
