@@ -157,6 +157,124 @@ int main(void)
         CHECK(!ft8af_nonstd_hash12(&msg, NULL, NULL));
     }
 
+    // ---- Generalized recovery across the contest decoders (issue #402) ------
+    // The #392 backstop is now keyed on the message type's field layout
+    // (ft8af_call_hash22), so FD/RTTY/WWROF/EU_VHF/CONTESTING frames carrying a
+    // hashed compound call recover it too. Assemble each frame with an
+    // MSB-first bit writer and place NTOKENS + n22 in a c28 field.
+    {
+        const uint32_t n22 = ref_n22(COMPOUND);
+        const uint32_t hashed_c28 = FT8AF_NTOKENS + n22;
+        // A packed standard callsign for the non-hashed side (any value past
+        // the hash range); mined from the real packer below where it matters,
+        // here an arbitrary in-range constant suffices for "not a hash".
+        const uint32_t plain_c28 = FT8AF_NTOKENS + FT8AF_MAX22 + 12345u;
+
+        ftx_message_t msg;
+        uint32_t got = 0;
+
+        // Local MSB-first bit writer (bit b -> payload[b>>3], mask 0x80>>(b&7)).
+        #define PUT_BITS(payload, start, nbits, value)                          \
+            do {                                                                \
+                for (int _i = 0; _i < (nbits); ++_i) {                          \
+                    int _b = (start) + _i;                                      \
+                    if (((uint64_t)(value) >> ((nbits) - 1 - _i)) & 1u)         \
+                        (payload)[_b >> 3] |= (uint8_t)(0x80u >> (_b & 7));     \
+                }                                                               \
+            } while (0)
+
+        // ARRL_FD (i3=0 n3=3): c28a 0-27 hashed, c28b 28-55 plain.
+        memset(msg.payload, 0, sizeof(msg.payload));
+        PUT_BITS(msg.payload, 0, 28, hashed_c28);
+        PUT_BITS(msg.payload, 28, 28, plain_c28);
+        PUT_BITS(msg.payload, 71, 3, 3);
+        PUT_BITS(msg.payload, 74, 3, 0);
+        CHECK(ftx_message_get_type(&msg) == FTX_MESSAGE_TYPE_ARRL_FD);
+        CHECK(ft8af_call_hash22(&msg, 0, &got) && got == n22);
+        CHECK(!ft8af_call_hash22(&msg, 1, &got)); // plain call: nothing to resolve
+
+        // CONTESTING (i3=0 n3=6): c28b 28-55 hashed this time.
+        memset(msg.payload, 0, sizeof(msg.payload));
+        PUT_BITS(msg.payload, 0, 28, plain_c28);
+        PUT_BITS(msg.payload, 28, 28, hashed_c28);
+        PUT_BITS(msg.payload, 71, 3, 6);
+        PUT_BITS(msg.payload, 74, 3, 0);
+        CHECK(ftx_message_get_type(&msg) == FTX_MESSAGE_TYPE_CONTESTING);
+        CHECK(!ft8af_call_hash22(&msg, 0, &got));
+        CHECK(ft8af_call_hash22(&msg, 1, &got) && got == n22);
+
+        // DXPEDITION (i3=0 n3=1): same 0/28 layout as FD/CONTESTING.
+        memset(msg.payload, 0, sizeof(msg.payload));
+        PUT_BITS(msg.payload, 0, 28, hashed_c28);
+        PUT_BITS(msg.payload, 28, 28, hashed_c28);
+        PUT_BITS(msg.payload, 71, 3, 1);
+        PUT_BITS(msg.payload, 74, 3, 0);
+        CHECK(ftx_message_get_type(&msg) == FTX_MESSAGE_TYPE_DXPEDITION);
+        CHECK(ft8af_call_hash22(&msg, 0, &got) && got == n22);
+        CHECK(ft8af_call_hash22(&msg, 1, &got) && got == n22);
+
+        // EU_VHF (i3=0 n3=2): single c28 at 0-27, surfaced as call_de.
+        memset(msg.payload, 0, sizeof(msg.payload));
+        PUT_BITS(msg.payload, 0, 28, hashed_c28);
+        PUT_BITS(msg.payload, 71, 3, 2);
+        PUT_BITS(msg.payload, 74, 3, 0);
+        CHECK(ftx_message_get_type(&msg) == FTX_MESSAGE_TYPE_EU_VHF);
+        CHECK(!ft8af_call_hash22(&msg, 0, &got)); // no call_to in the frame
+        CHECK(ft8af_call_hash22(&msg, 1, &got) && got == n22);
+
+        // ARRL_RTTY (i3=3): t1 at bit 0 shifts the fields to 1-28 / 29-56.
+        memset(msg.payload, 0, sizeof(msg.payload));
+        PUT_BITS(msg.payload, 0, 1, 1); // t1 ("TU;") set — must not corrupt c28a
+        PUT_BITS(msg.payload, 1, 28, hashed_c28);
+        PUT_BITS(msg.payload, 29, 28, plain_c28);
+        PUT_BITS(msg.payload, 74, 3, 3);
+        CHECK(ftx_message_get_type(&msg) == FTX_MESSAGE_TYPE_ARRL_RTTY);
+        CHECK(ft8af_call_hash22(&msg, 0, &got) && got == n22);
+        CHECK(!ft8af_call_hash22(&msg, 1, &got));
+
+        // WWROF (i3=5): same t1-shifted layout as RTTY.
+        memset(msg.payload, 0, sizeof(msg.payload));
+        PUT_BITS(msg.payload, 1, 28, plain_c28);
+        PUT_BITS(msg.payload, 29, 28, hashed_c28);
+        PUT_BITS(msg.payload, 74, 3, 5);
+        CHECK(ftx_message_get_type(&msg) == FTX_MESSAGE_TYPE_WWROF);
+        CHECK(!ft8af_call_hash22(&msg, 0, &got));
+        CHECK(ft8af_call_hash22(&msg, 1, &got) && got == n22);
+
+        // FREE_TEXT (i3=0 n3=0): no callsign fields at all -> never recovers.
+        memset(msg.payload, 0, sizeof(msg.payload));
+        CHECK(ftx_message_get_type(&msg) == FTX_MESSAGE_TYPE_FREE_TEXT);
+        CHECK(!ft8af_call_hash22(&msg, 0, &got));
+        CHECK(!ft8af_call_hash22(&msg, 1, &got));
+
+        // A directed token (CQ, c28 == 2) in a contest frame: not a hash.
+        memset(msg.payload, 0, sizeof(msg.payload));
+        PUT_BITS(msg.payload, 0, 28, 2); // "CQ"
+        PUT_BITS(msg.payload, 28, 28, hashed_c28);
+        PUT_BITS(msg.payload, 71, 3, 6);
+        PUT_BITS(msg.payload, 74, 3, 0);
+        CHECK(!ft8af_call_hash22(&msg, 0, &got));
+        CHECK(ft8af_call_hash22(&msg, 1, &got) && got == n22);
+
+        #undef PUT_BITS
+    }
+
+    // ---- The standard-frame wrapper still agrees with the general pass ------
+    // ft8af_std_hash22 is now a thin wrapper over ft8af_call_hash22; re-run the
+    // packer-produced standard frame through BOTH entry points.
+    {
+        ftx_message_t msg;
+        ftx_message_rc_t rc =
+            ftx_message_encode_std(&msg, &g_hash_if, COMPOUND, "K1ABC", "JN35");
+        CHECK(rc == FTX_MESSAGE_RC_OK);
+
+        uint32_t via_std = 0, via_general = 0;
+        CHECK(ft8af_std_hash22(&msg, 0, &via_std));
+        CHECK(ft8af_call_hash22(&msg, 0, &via_general));
+        CHECK(via_std == via_general);
+        CHECK(via_general == ref_n22(COMPOUND));
+    }
+
     // ---- WSJT-X interop golden vectors -------------------------------------
     // The 77-bit payloads below were produced by WSJT-X's own reference packer
     // (ft8code, WSJT-X 2.x) for the two frames a station sends when answering

@@ -258,7 +258,7 @@ public class FT8TransmitSignal {
      */
     //@RequiresApi(api = Build.VERSION_CODES.N)
     public void transmitNow() {
-        if (GeneralVariables.myCallsign.length() < 3) {
+        if (!isCallsignReadyToTransmit(GeneralVariables.myCallsign)) {
             ToastMessage.show(GeneralVariables.getStringFromResource(R.string.callsign_error));
             return;
         }
@@ -1809,9 +1809,27 @@ public class FT8TransmitSignal {
         return isTransmitting;
     }
 
+    /**
+     * Whether {@code myCallsign} is a callsign transmit can start with — the guard
+     * {@link #setTransmitting} and {@link #transmitNow} apply before keying. Extracted
+     * as a pure predicate so the free-text one-shot arming check (issue #401) provably
+     * matches the check that would otherwise silently block the transmission.
+     */
+    static boolean isCallsignReadyToTransmit(String myCallsign) {
+        return myCallsign != null && myCallsign.length() >= 3;
+    }
+
     public void setTransmitting(boolean transmitting) {
-        if (GeneralVariables.myCallsign.length() < 3 && transmitting) {
+        if (!isCallsignReadyToTransmit(GeneralVariables.myCallsign) && transmitting) {
             ToastMessage.show(GeneralVariables.getStringFromResource(R.string.callsign_error));
+            // A refused TX start never reaches afterPlayAudio(), whose
+            // shouldStopAfterOneShot() is what normally clears an armed free-text
+            // one-shot — so disarm it here or the stale free text leaks into the
+            // next standard/CQ over (issue #401).
+            if (freeTextOneShot) {
+                freeTextOneShot = false;
+                transmitFreeText = false;
+            }
             return;
         }
 
@@ -1865,7 +1883,7 @@ public class FT8TransmitSignal {
      */
     //@RequiresApi(api = Build.VERSION_CODES.N)
     public void restTransmitting() {
-        if (GeneralVariables.myCallsign.length() < 3) {
+        if (!isCallsignReadyToTransmit(GeneralVariables.myCallsign)) {
             return;
         }
         clearCallerQueue();
@@ -2181,13 +2199,21 @@ public class FT8TransmitSignal {
      * auto-stops in {@link #afterPlayAudio()} instead of keying up again each cycle.
      */
     public void sendFreeTextOnce(String text) {
+        // Check the callsign BEFORE arming: setActivated() doesn't validate it (only
+        // SWR lockout), so with a short/empty callsign activation would "succeed" and
+        // the guard below wouldn't clean up — while setTransmitting()/transmitNow()
+        // would refuse to key, so afterPlayAudio()/shouldStopAfterOneShot() never runs
+        // and the armed free text would leak into the next standard/CQ over (issue #401).
+        if (!isCallsignReadyToTransmit(GeneralVariables.myCallsign)) {
+            ToastMessage.show(GeneralVariables.getStringFromResource(R.string.callsign_error));
+            return;
+        }
         setFreeText(text);
         transmitFreeText = true;
         freeTextOneShot = true;
         setActivated(true);
         if (!activated) {
-            // SWR lockout or invalid callsign blocked activation — don't leave the
-            // one-shot armed.
+            // SWR lockout blocked activation — don't leave the one-shot armed.
             freeTextOneShot = false;
             transmitFreeText = false;
             return;

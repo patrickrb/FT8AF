@@ -98,6 +98,26 @@ call_hash_out="$tmp/ft8_call_hash_test"
     -I "$ft8" "${call_hash_srcs[@]}" -lm -o "$call_hash_out"
 "$call_hash_out"
 
+# EU_VHF / CONTESTING decoder tests (issue #403): the hand-rolled bit
+# extraction + direct formatting for i3=0 n3=2 and i3=0 n3=6 frames. Payloads
+# are assembled by an independent bit writer; callsign bits come from the
+# vendored packer, so shift/mask regressions in message.c change the rendered
+# text and fail here.
+contest_srcs=(
+    "$here/test_contest_decode.c"
+    "$ft8/ft8/pack.c"
+    "$ft8/ft8/encode.c"
+    "$ft8/ft8/crc.c"
+    "$ft8/ft8/constants.c"
+    "$ft8/ft8/text.c"
+    "$ft8/ft8/message.c"
+)
+contest_out="$tmp/ft8_contest_decode_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${contest_srcs[@]}" -lm -o "$contest_out"
+"$contest_out"
+
 # FIR decimator tests (C++): anti-aliasing downsample that replaced the box filter
 # in usb_audio_capture.cpp. Header-only, no ft8_lib deps. Compiled as C++.
 CXX="${CXX:-clang++}"
