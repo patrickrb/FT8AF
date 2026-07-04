@@ -106,6 +106,27 @@
                 android:value="true" />
         </service>
 
+        <!-- Android Auto (phone projection): read-only QSO status screens rendered
+             with car-app-library templates. Exported so the Android Auto host can
+             bind; access is gated by FT8AFCarAppService's HostValidator. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+        <!-- Level 1 = every templates-capable Android Auto host; we use no newer
+             template features. -->
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1" />
+
+        <service
+            android:name="radio.ks3ckc.ft8af.car.FT8AFCarAppService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.IOT" />
+            </intent-filter>
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="radio.ks3ckc.ft8af.fileprovider"
