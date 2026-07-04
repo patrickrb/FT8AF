@@ -516,4 +516,8 @@
     <string name="cq_offset_moved">Décalage CQ déplacé vers un créneau libre : %1$d Hz</string>
     <string name="settings_auto_clear_tx">Décalage TX libre automatique</string>
     <string name="settings_auto_clear_tx_desc">En appelant CQ, choisit un créneau libre selon l\'activité récente de la bande et se déplace s\'il devient occupé</string>
+    <string name="tune_content_description">Tune : émet une porteuse continue pour l\'accord d\'antenne</string>
+    <string name="tune_stopped_timeout">Tune arrêté après %1$d s</string>
+    <string name="tune_blocked_tx">Arrêtez le CQ/QSO avant d\'utiliser Tune</string>
+    <string name="tune_unavailable_route">Tune n\'est pas encore disponible sur cette voie audio</string>
 </resources>

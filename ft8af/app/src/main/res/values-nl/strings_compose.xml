@@ -559,4 +559,8 @@
     <string name="cq_offset_moved">CQ-offset verplaatst naar een vrije plek: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Automatisch vrije TX-offset</string>
     <string name="settings_auto_clear_tx_desc">Kiest bij het roepen van CQ een vrije plek op basis van recente bandactiviteit en wijkt uit als die bezet raakt</string>
+    <string name="tune_content_description">Tune: zendt een continue draaggolf uit voor antenne-afstemming</string>
+    <string name="tune_stopped_timeout">Tune gestopt na %1$d s</string>
+    <string name="tune_blocked_tx">Stop de CQ/QSO voordat je Tune gebruikt</string>
+    <string name="tune_unavailable_route">Tune is nog niet beschikbaar op deze audioroute</string>
 </resources>

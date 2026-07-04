@@ -23,6 +23,11 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import com.k1af.ft8af.ft8transmit.MeterProtectionController
+import com.k1af.ft8af.ft8transmit.TuneController
+import radio.ks3ckc.ft8af.TUNE_LEVEL_INDEPENDENT_KEY
+import radio.ks3ckc.ft8af.TUNE_LEVEL_KEY
+import radio.ks3ckc.ft8af.TUNE_MAX_ON_SECONDS_KEY
+import radio.ks3ckc.ft8af.saveTuneLevelForCurrentBand
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.FT8AFIconButton
 import radio.ks3ckc.ft8af.ui.components.FT8AFIcons
@@ -51,6 +56,11 @@ fun TransmissionSettings(
     var swrHaltThreshold by remember { mutableIntStateOf(GeneralVariables.swrHaltThreshold) }
     var alcTargetLow by remember { mutableIntStateOf(GeneralVariables.alcTargetLow) }
     var alcTargetHigh by remember { mutableIntStateOf(GeneralVariables.alcTargetHigh) }
+
+    // Tune state (issue #408)
+    var tuneMaxOnSeconds by remember { mutableIntStateOf(GeneralVariables.tuneMaxOnSeconds) }
+    var tuneLevelIndependent by remember { mutableStateOf(GeneralVariables.tuneLevelIndependent) }
+    var tuneLevel by remember { mutableIntStateOf(GeneralVariables.tuneLevel) }
 
     // Auto-sequence state
     var autoClearTxFreq by remember { mutableStateOf(GeneralVariables.autoClearTxFreq) }
@@ -407,6 +417,99 @@ fun TransmissionSettings(
                             Text(
                                 "7:1",
                                 style = TextStyle(fontSize = 12.sp, color = TextMuted),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // TUNE (issue #408)
+        // =====================================================================
+        SettingsSection(title = "TUNE") {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    SettingsRow(
+                        label = "Tune timeout",
+                        description = "Hard cap on the tune carrier — it always stops by itself",
+                        value = "${tuneMaxOnSeconds}s",
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .padding(bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IntSlider(
+                            value = tuneMaxOnSeconds,
+                            onValueChange = { v ->
+                                val clamped = TuneController.clampMaxOnSeconds(v)
+                                tuneMaxOnSeconds = clamped
+                                GeneralVariables.tuneMaxOnSeconds = clamped
+                            },
+                            onValueChangeFinished = {
+                                mainViewModel.databaseOpr.writeConfig(
+                                    TUNE_MAX_ON_SECONDS_KEY, tuneMaxOnSeconds.toString(), null,
+                                )
+                            },
+                            valueRange = TuneController.MIN_MAX_ON_SECONDS.toFloat()..
+                                TuneController.MAX_MAX_ON_SECONDS.toFloat(),
+                            modifier = Modifier.weight(1f),
+                            thumbColor = Accent,
+                            activeTrackColor = Accent,
+                        )
+                    }
+                    SectionDivider()
+                    SettingsRow(
+                        label = "Independent tune level",
+                        description = "Tune at its own drive level (e.g. reduced power) without touching the TX drive",
+                        toggle = tuneLevelIndependent,
+                        onToggleChange = { checked ->
+                            tuneLevelIndependent = checked
+                            GeneralVariables.tuneLevelIndependent = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                TUNE_LEVEL_INDEPENDENT_KEY, if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    if (tuneLevelIndependent) {
+                        SectionDivider()
+                        SettingsRow(
+                            label = "Tune audio level",
+                            description = if (GeneralVariables.savePerBandOutputLevel)
+                                "Remembered per band (Save output level per band is on)"
+                            else "Single level for all bands",
+                            value = "$tuneLevel%",
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .padding(bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            IntSlider(
+                                value = tuneLevel,
+                                onValueChange = { v ->
+                                    val clamped = v.coerceIn(0, 100)
+                                    tuneLevel = clamped
+                                    GeneralVariables.tuneLevel = clamped
+                                },
+                                onValueChangeFinished = {
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        TUNE_LEVEL_KEY, tuneLevel.toString(), null,
+                                    )
+                                    // When per-band levels are on, the independent tune
+                                    // level is remembered for the current band too — in
+                                    // its own map, never the FT8 one (issue #408).
+                                    saveTuneLevelForCurrentBand(mainViewModel.databaseOpr, tuneLevel)
+                                },
+                                valueRange = 0f..100f,
+                                modifier = Modifier.weight(1f),
+                                thumbColor = Accent,
+                                activeTrackColor = Accent,
                             )
                         }
                     }

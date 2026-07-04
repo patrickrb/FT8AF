@@ -92,6 +92,8 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     // Observe transmit state
     val isTransmitting by mainViewModel.ft8TransmitSignal.mutableIsTransmitting.observeAsState(false)
     val isActivated by mainViewModel.ft8TransmitSignal.mutableIsActivated.observeAsState(false)
+    val isTuning by mainViewModel.ft8TransmitSignal.mutableIsTuning.observeAsState(false)
+    val tuneRemainingSec by mainViewModel.ft8TransmitSignal.mutableTuneRemainingSec.observeAsState(0)
     val txSlot by mainViewModel.ft8TransmitSignal.mutableSequential.observeAsState(mainViewModel.ft8TransmitSignal.sequential)
     val qsoCompletedAt by mainViewModel.ft8TransmitSignal.mutableQsoCompletedAt.observeAsState()
     // CAT connection status for the TX-strip chip. Hidden for VOX / audio-only
@@ -363,6 +365,17 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 cqModifier = cqModifier,
                 isFreeTextMode = isFreeTextMode,
                 fieldDayEnabled = fieldDayEnabled,
+                isTuning = isTuning,
+                tuneRemainingSec = tuneRemainingSec,
+                onToggleTune = {
+                    // Toggle (WSJT-X style latching Tune): tap to key the carrier,
+                    // tap again to stop. startTune() toasts the reason when blocked.
+                    if (isTuning) {
+                        mainViewModel.ft8TransmitSignal.stopTune()
+                    } else {
+                        mainViewModel.ft8TransmitSignal.startTune()
+                    }
+                },
                 onVolumeChange = { newVolume ->
                     txVolume = newVolume
                     GeneralVariables.volumePercent = newVolume / 100f
@@ -505,7 +518,9 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
 
         // Transmit breathing border — sibling overlay so its per-frame invalidations
         // don't bubble into the waterfall composable. Pointer events pass through.
-        TransmitGlow(isTransmitting = isTransmitting)
+        // The tune carrier is a real transmission too (issue #408): the operator
+        // must never be unsure whether the rig is keyed.
+        TransmitGlow(isTransmitting = isTransmitting || isTuning)
 
         // One-shot particle burst when a QSO completes.
         QsoCelebration(triggerAt = qsoCompletedAt)

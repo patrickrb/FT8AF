@@ -113,6 +113,18 @@ public class GeneralVariables {
     //the decode-delivery thread inside recordBandActivity.
     public static volatile boolean autoClearTxFreq = false;
 
+    //Tune button (issue #408): hard cap on a single tune carrier in seconds
+    //(clamped by TuneController), whether the tune level is independent of the
+    //FT8 drive, the global independent level (0..100), and the per-band
+    //independent levels (same CSV format as perBandOutputLevels; gated on the
+    //same savePerBandOutputLevel toggle, separate backing store — see
+    //TuneLevel.kt). volatile: written from the config-load thread + Settings,
+    //read from the tune audio worker per chunk.
+    public static volatile int tuneMaxOnSeconds = 10;
+    public static volatile boolean tuneLevelIndependent = false;
+    public static volatile int tuneLevel = 25;
+    public static volatile String perBandTuneLevels = "";
+
     public static int flexMaxRfPower = 10;//Flex radio max transmit power
     public static int flexMaxTunePower = 10;//Flex radio max tune power
 
