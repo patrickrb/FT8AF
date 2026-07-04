@@ -396,6 +396,26 @@ public class FT8TransmitSignalTest {
         assertThat(FT8TransmitSignal.shouldStopAfterOneShot(false, true)).isFalse();
     }
 
+    // ---- isCallsignReadyToTransmit -------------------------------------------
+    // The guard setTransmitting/transmitNow apply before keying. sendFreeTextOnce
+    // must apply the SAME predicate before arming its one-shot (issue #401), or a
+    // blocked transmission leaves the free text armed to leak into the next over.
+
+    @Test
+    public void callsignReady_realCalls_ready() {
+        assertThat(FT8TransmitSignal.isCallsignReadyToTransmit("K1AF")).isTrue();
+        assertThat(FT8TransmitSignal.isCallsignReadyToTransmit("2E0ABC")).isTrue();
+        // Exactly the 3-character minimum the keying guard enforces.
+        assertThat(FT8TransmitSignal.isCallsignReadyToTransmit("K1A")).isTrue();
+    }
+
+    @Test
+    public void callsignReady_shortOrMissing_notReady() {
+        assertThat(FT8TransmitSignal.isCallsignReadyToTransmit("K1")).isFalse();
+        assertThat(FT8TransmitSignal.isCallsignReadyToTransmit("")).isFalse();
+        assertThat(FT8TransmitSignal.isCallsignReadyToTransmit(null)).isFalse();
+    }
+
     // ---- shouldCompleteQso ---------------------------------------------------
     // Completion decision for the QSO state machine. The evidenceOnly flag marks
     // deep/late-pass parses: positive evidence (partner sent 73, partner moved
