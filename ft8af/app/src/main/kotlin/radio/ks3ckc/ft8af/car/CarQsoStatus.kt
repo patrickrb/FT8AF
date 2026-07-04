@@ -16,7 +16,7 @@ internal enum class CarTxState { OFF, ARMED_RX, TRANSMITTING }
 internal data class CarQsoStatus(
     /** "Calling CQ" / "QSOing with W1XYZ" / "Waiting for W1XYZ" / "Monitoring — TX off". */
     val headline: CarStringSpec,
-    /** Target SNR ("−12 dB"), null when there is no target or its SNR is unknown. */
+    /** Target SNR ("-12 dB", ASCII hyphen), null when there is no target or its SNR is unknown. */
     val snrLabel: String?,
     val txState: CarTxState,
     /** The message text going out right now; null when not transmitting. */
@@ -106,7 +106,7 @@ internal fun carBandLine(freqHz: Long, bandName: String, modeName: String): Stri
     append(modeName)
 }
 
-/** "+3 dB" / "−12 dB"; null in (SNR unknown) gives null out. */
+/** "+3 dB" / "-12 dB" (ASCII hyphen from Int.toString); null in (SNR unknown) gives null out. */
 internal fun formatSnrLabel(snr: Int?): String? = snr?.let { if (it > 0) "+$it dB" else "$it dB" }
 
 /** One row of the car's recent-decodes list. */
@@ -126,7 +126,7 @@ internal fun buildCarDecodeRows(
         .take(maxRows.coerceAtLeast(0))
         .map { (utc, text, snr) -> CarDecodeRow(utc, text, formatSnrLabel(snr)) }
 
-/** Secondary line of a decode row: "12:34:45 UTC · −12 dB" (SNR omitted when unknown). */
+/** Secondary line of a decode row: "12:34:45 UTC · -12 dB" (SNR omitted when unknown). */
 internal fun carDecodeSecondary(utcTimeMs: Long, snrLabel: String?): String {
     val fmt = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US)
     fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")

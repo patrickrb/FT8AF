@@ -18,16 +18,27 @@ import com.k1af.ft8af.R
  */
 class RecentDecodesScreen(carContext: CarContext) : Screen(carContext) {
 
-    init {
-        // Fires on every decode pass (the engine re-posts the list after each
-        // cycle); observer detaches with the Screen's lifecycle.
-        MainViewModel.peekInstance()?.mutableFt8MessageList?.observe(this) { invalidate() }
+    private var attached = false
+
+    /**
+     * Observe the decode list once the engine singleton exists. Attached lazily
+     * from [onGetTemplate] rather than in init, so a Screen that somehow renders
+     * before the engine is up still hooks the list on a later render instead of
+     * staying stale forever. Fires on every decode pass; the observer detaches
+     * with the Screen's lifecycle.
+     */
+    private fun maybeAttach(vm: MainViewModel) {
+        if (attached) return
+        attached = true
+        vm.mutableFt8MessageList.observe(this) { invalidate() }
     }
 
     override fun onGetTemplate(): Template {
         val vm = MainViewModel.peekInstance() ?: return openPhoneTemplate(carContext)
-        // Snapshot: the engine mutates and re-posts the same ArrayList instance.
-        val messages = vm.mutableFt8MessageList.value?.toList().orEmpty()
+        maybeAttach(vm)
+        // publishFt8MessageList() posts a defensive copy that is never mutated
+        // after posting, so the value is safe to iterate directly.
+        val messages = vm.mutableFt8MessageList.value.orEmpty()
         val rows = buildCarDecodeRows(
             decodes = messages.map {
                 Triple(it.utcTime, it.getMessageText(), if (it.hasSnr()) it.snr else null)

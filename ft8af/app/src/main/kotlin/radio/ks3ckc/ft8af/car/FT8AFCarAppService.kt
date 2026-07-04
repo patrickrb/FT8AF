@@ -20,6 +20,11 @@ class FT8AFCarAppService : CarAppService() {
             // Debug builds accept any host so the Desktop Head Unit works.
             HostValidator.ALLOW_ALL_HOSTS_VALIDATOR
         } else {
+            // Despite the "sample" name, hosts_allowlist_sample is the
+            // library-shipped list of official Google host signatures
+            // (gearhead, Automotive OS) and the production pattern in the
+            // Android for Cars docs; it updates with the library, unlike an
+            // app-owned copy, which would go stale.
             HostValidator.Builder(applicationContext)
                 .addAllowedHosts(androidx.car.app.R.array.hosts_allowlist_sample)
                 .build()
