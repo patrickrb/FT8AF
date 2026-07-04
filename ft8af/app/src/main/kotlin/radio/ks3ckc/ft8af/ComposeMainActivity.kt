@@ -110,6 +110,10 @@ class ComposeMainActivity : AppCompatActivity() {
         // permission-result callback re-invokes this once the user grants it).
         startRxServiceIfPermitted()
 
+        // The notification's Exit button routes here so it runs the same shutdown as the
+        // in-app exit; cleared in onDestroy so a destroyed activity isn't leaked.
+        RxForegroundService.setExitHandler { closeApp() }
+
         // Forward every TX-volume change to the native USB-direct write loop so a
         // slider move (or hardware-button / ALC auto-volume change) attenuates the
         // in-progress transmission live, protecting the rig from overdrive. Every
@@ -614,6 +618,7 @@ class ComposeMainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        RxForegroundService.setExitHandler(null)
         unregisterBluetoothReceiver()
         unregisterUsbDetachReceiver()
         qsoAutoSync?.unregister()

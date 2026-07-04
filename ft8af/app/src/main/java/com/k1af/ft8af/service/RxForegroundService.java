@@ -37,6 +37,18 @@ public class RxForegroundService extends Service {
 
     private PowerManager.WakeLock wakeLock;
 
+    /**
+     * Cleanup hook run when the notification's Exit button is tapped. The activity registers
+     * its {@code closeApp()} here (and clears it on destroy) because the full shutdown —
+     * disconnect rig, stop listener/recorder/timer — needs the activity-scoped ViewModel,
+     * which this service can't reach.
+     */
+    private static volatile Runnable exitHandler;
+
+    public static void setExitHandler(Runnable handler) {
+        exitHandler = handler;
+    }
+
     public static void start(Context context) {
         ContextCompat.startForegroundService(
                 context, new Intent(context, RxForegroundService.class));
@@ -59,6 +71,21 @@ public class RxForegroundService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        String action = intent == null ? null : intent.getAction();
+        if (RxServiceController.commandForAction(action) == RxServiceController.Command.EXIT) {
+            GeneralVariables.fileLog("RxForegroundService: notification Exit tapped");
+            Runnable handler = exitHandler;
+            if (handler != null) {
+                // closeApp(): stops TX/RX, disconnects the rig, stops this service, then
+                // System.exit(0) — does not return.
+                handler.run();
+            } else {
+                // Activity already destroyed; nothing left to clean up beyond the process.
+                stopSelf();
+                System.exit(0);
+            }
+            return START_NOT_STICKY;
+        }
         Notification notification = buildNotification();
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -127,6 +154,9 @@ public class RxForegroundService extends Service {
             piFlags |= PendingIntent.FLAG_IMMUTABLE;
         }
         PendingIntent pi = PendingIntent.getActivity(this, 0, intent, piFlags);
+        Intent exitIntent = new Intent(this, RxForegroundService.class)
+                .setAction(RxServiceController.ACTION_EXIT);
+        PendingIntent exitPi = PendingIntent.getService(this, 1, exitIntent, piFlags);
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(getString(R.string.rx_service_title))
@@ -135,6 +165,7 @@ public class RxForegroundService extends Service {
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .setContentIntent(pi)
+                .addAction(0, getString(R.string.action_exit), exitPi)
                 .build();
     }
 }
