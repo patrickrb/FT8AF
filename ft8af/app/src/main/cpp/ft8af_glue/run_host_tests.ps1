@@ -120,6 +120,27 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_call_hash)." }
 $callHashExit = $LASTEXITCODE
 
 # ---------------------------------------------------------------------------
+# EU_VHF / CONTESTING decoder tests (issue #403): the hand-rolled bit
+# extraction + direct formatting for i3=0 n3=2 and i3=0 n3=6 frames. Payloads
+# are assembled by an independent bit writer; callsign bits come from the
+# vendored packer, so shift/mask regressions in message.c change the rendered
+# text and fail here.
+# ---------------------------------------------------------------------------
+$contestSrcs = @(
+    "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
+    "ft8\text.c","ft8\message.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+
+$srcContest = Join-Path $here "test_contest_decode.c"
+$outContest = Join-Path $env:TEMP "ft8_contest_decode_test.exe"
+
+& $Clang @common $srcContest @contestSrcs -o $outContest
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_contest_decode)." }
+
+& $outContest
+$contestExit = $LASTEXITCODE
+
+# ---------------------------------------------------------------------------
 # FIR decimator tests (C++): anti-aliasing downsample that replaced the box
 # filter in usb_audio_capture.cpp. Header-only, no ft8_lib deps; compiled with
 # clang++ (the header is C++). Own main(); exit 0 == all pass.
@@ -265,6 +286,7 @@ $xslotExit = $LASTEXITCODE
 if ($goldenExit -ne 0) { exit $goldenExit }
 if ($dev625Exit -ne 0) { exit $dev625Exit }
 if ($callHashExit -ne 0) { exit $callHashExit }
+if ($contestExit -ne 0) { exit $contestExit }
 if ($firExit -ne 0) { exit $firExit }
 if ($ratExit -ne 0) { exit $ratExit }
 if ($benchSelfExit -ne 0) { exit $benchSelfExit }
