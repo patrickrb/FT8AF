@@ -563,4 +563,24 @@
     <string name="tune_stopped_timeout">Tune gestopt na %1$d s</string>
     <string name="tune_blocked_tx">Stop de CQ/QSO voordat je Tune gebruikt</string>
     <string name="tune_unavailable_route">Tune is nog niet beschikbaar op deze audioroute</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / WATERVAL (ONTWIKKELAAR)</string>
+    <string name="settings_fft_window">FFT-vensterfunctie</string>
+    <string name="settings_fft_window_desc">Venster vóór de FFT voor de spectrum-/watervalweergave; Hann vermindert spectrale lekkage</string>
+    <string name="settings_fft_window_rect">Rechthoekig (geen)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">Frame-middeling</string>
+    <string name="settings_fft_averaging_desc">Maakt de weergave vloeiender over FFT-frames; Uit toont elk frame ongewijzigd</string>
+    <string name="settings_fft_avg_off">Uit</string>
+    <string name="settings_fft_avg_light">Licht (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">Sterk (EMA 0.25)</string>
+    <string name="settings_bin_agg">Spectrum-bin-combinatie</string>
+    <string name="settings_bin_agg_desc">Hoe aangrenzende FFT-bins samenvoegen tot één spectrumbalk</string>
+    <string name="settings_bin_agg_max">Maximum</string>
+    <string name="settings_bin_agg_avg">Gemiddelde</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

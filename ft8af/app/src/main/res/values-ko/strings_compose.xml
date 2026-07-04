@@ -563,4 +563,24 @@
     <string name="tune_stopped_timeout">Tune이 %1$d초 후 정지되었습니다</string>
     <string name="tune_blocked_tx">Tune 전에 CQ/QSO를 정지하세요</string>
     <string name="tune_unavailable_route">이 오디오 경로에서는 아직 Tune을 사용할 수 없습니다</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / 워터폴 (개발자)</string>
+    <string name="settings_fft_window">FFT 창 함수</string>
+    <string name="settings_fft_window_desc">스펙트럼/워터폴 표시용 FFT 전 창 함수. Hann은 스펙트럼 누설을 줄입니다</string>
+    <string name="settings_fft_window_rect">직사각형(없음)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">프레임 평균</string>
+    <string name="settings_fft_averaging_desc">FFT 프레임 간 표시를 부드럽게 합니다. 끄면 각 프레임을 그대로 표시합니다</string>
+    <string name="settings_fft_avg_off">끄기</string>
+    <string name="settings_fft_avg_light">약하게 (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">강하게 (EMA 0.25)</string>
+    <string name="settings_bin_agg">스펙트럼 빈 결합</string>
+    <string name="settings_bin_agg_desc">인접한 FFT 빈을 하나의 막대로 결합하는 방법</string>
+    <string name="settings_bin_agg_max">최대</string>
+    <string name="settings_bin_agg_avg">평균</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

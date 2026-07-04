@@ -100,6 +100,25 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (dev625)." }
 $dev625Exit = $LASTEXITCODE
 
 # ---------------------------------------------------------------------------
+# FFT display window / averaging tests (issue #428): the pre-FFT window
+# functions + cross-frame magnitude EMA in fft_display.c, plus a rect-vs-Hann
+# spectral-leakage comparison through the same kissfft path the display uses.
+# ---------------------------------------------------------------------------
+$fftWinSrcs = @(
+    "fft\kiss_fft.c","fft\kiss_fftr.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+$fftWinSrcs += (Join-Path $here "fft_display.c")
+
+$srcFftWin = Join-Path $here "test_fft_window.c"
+$outFftWin = Join-Path $env:TEMP "ft8_fft_window_test.exe"
+
+& $Clang @common $srcFftWin @fftWinSrcs -o $outFftWin
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_fft_window)." }
+
+& $outFftWin
+$fftWinExit = $LASTEXITCODE
+
+# ---------------------------------------------------------------------------
 # Callsign-hash recovery tests (issue #392): the pure helpers in ft8_call_hash.h
 # that pull a compound call's 12-/22-bit hash out of a decoded frame so the
 # seeded Java MessageHashMap can resolve an answer that the decoder returns as
@@ -285,6 +304,7 @@ $xslotExit = $LASTEXITCODE
 
 if ($goldenExit -ne 0) { exit $goldenExit }
 if ($dev625Exit -ne 0) { exit $dev625Exit }
+if ($fftWinExit -ne 0) { exit $fftWinExit }
 if ($callHashExit -ne 0) { exit $callHashExit }
 if ($contestExit -ne 0) { exit $contestExit }
 if ($firExit -ne 0) { exit $firExit }

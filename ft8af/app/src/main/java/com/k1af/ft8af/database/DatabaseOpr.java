@@ -2780,6 +2780,16 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("spectrumWidth")) {
                     GeneralVariables.setSpectrumWidth(result.equals("") ? 3500 : Integer.parseInt(result));
                 }
+                // FFT display developer knobs (issue #428); setters clamp bad values.
+                if (name.equalsIgnoreCase("fftWindowType")) {
+                    GeneralVariables.setFftWindowType(result.equals("") ? 1 : Integer.parseInt(result));
+                }
+                if (name.equalsIgnoreCase("fftAveragingMode")) {
+                    GeneralVariables.setFftAveragingMode(result.equals("") ? 0 : Integer.parseInt(result));
+                }
+                if (name.equalsIgnoreCase("spectrumBinAggregation")) {
+                    GeneralVariables.setSpectrumBinAggregation(result.equals("") ? 0 : Integer.parseInt(result));
+                }
 
                 if (name.equalsIgnoreCase("highlightNewDxcc")) {
                     GeneralVariables.highlightNewDxcc = result.equals("1");

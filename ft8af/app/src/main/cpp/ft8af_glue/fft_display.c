@@ -21,6 +21,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 // dB above the noise floor that maps to full (255) brightness.
 #define FT8AF_DISPLAY_DB_RANGE 50.0f
 // Intensity assigned to the noise floor itself. In the raw view we keep the floor
@@ -107,4 +111,54 @@ void ft8af_magnitudes_to_display(const float* mag, int n_bins, int* output, int 
     }
 
     free(db);
+}
+
+// --- FFT display window functions + frame averaging (issue #428) -----------
+
+void ft8af_window_fill(int type, float* w, int n)
+{
+    if (n <= 0)
+        return;
+    if (n == 1)
+    {
+        w[0] = 1.0f;
+        return;
+    }
+    for (int i = 0; i < n; ++i)
+    {
+        // Symmetric form: x sweeps 0..2π across the n samples.
+        float x = 2.0f * (float)M_PI * (float)i / (float)(n - 1);
+        switch (type)
+        {
+        case FT8AF_WIN_HANN:
+            w[i] = 0.5f - 0.5f * cosf(x);
+            break;
+        case FT8AF_WIN_HAMMING:
+            w[i] = 0.54f - 0.46f * cosf(x);
+            break;
+        case FT8AF_WIN_BLACKMAN:
+            w[i] = 0.42f - 0.5f * cosf(x) + 0.08f * cosf(2.0f * x);
+            break;
+        case FT8AF_WIN_BLACKMAN_HARRIS:
+            w[i] = 0.35875f - 0.48829f * cosf(x) + 0.14128f * cosf(2.0f * x)
+                   - 0.01168f * cosf(3.0f * x);
+            break;
+        case FT8AF_WIN_RECT:
+        default: // unknown types read as "no window"
+            w[i] = 1.0f;
+            break;
+        }
+    }
+}
+
+void ft8af_window_apply(const float* w, const float* in, float* out, int n)
+{
+    for (int i = 0; i < n; ++i)
+        out[i] = in[i] * w[i];
+}
+
+void ft8af_mag_ema(float* acc, const float* mag, int n, float alpha)
+{
+    for (int i = 0; i < n; ++i)
+        acc[i] = alpha * mag[i] + (1.0f - alpha) * acc[i];
 }

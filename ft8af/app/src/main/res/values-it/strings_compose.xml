@@ -552,4 +552,24 @@
     <string name="tune_stopped_timeout">Tune fermato dopo %1$d s</string>
     <string name="tune_blocked_tx">Ferma il CQ/QSO prima di usare Tune</string>
     <string name="tune_unavailable_route">Tune non è ancora disponibile su questo percorso audio</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / CASCATA (SVILUPPATORE)</string>
+    <string name="settings_fft_window">Funzione finestra FFT</string>
+    <string name="settings_fft_window_desc">Finestra pre-FFT per la visualizzazione spettro/cascata; Hann riduce la dispersione spettrale</string>
+    <string name="settings_fft_window_rect">Rettangolare (nessuna)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">Media dei fotogrammi</string>
+    <string name="settings_fft_averaging_desc">Attenua la visualizzazione tra fotogrammi FFT; Off mostra ogni fotogramma senza modifiche</string>
+    <string name="settings_fft_avg_off">Off</string>
+    <string name="settings_fft_avg_light">Leggera (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">Forte (EMA 0.25)</string>
+    <string name="settings_bin_agg">Combinazione dei bin dello spettro</string>
+    <string name="settings_bin_agg_desc">Come i bin FFT adiacenti si combinano in una barra dello spettro</string>
+    <string name="settings_bin_agg_max">Massimo</string>
+    <string name="settings_bin_agg_avg">Media</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

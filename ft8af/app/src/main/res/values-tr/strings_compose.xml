@@ -552,4 +552,24 @@
     <string name="tune_stopped_timeout">Tune %1$d s sonra durduruldu</string>
     <string name="tune_blocked_tx">Tune kullanmadan önce CQ/QSO\'yu durdurun</string>
     <string name="tune_unavailable_route">Tune bu ses yolunda henüz desteklenmiyor</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / ŞELALE (GELİŞTİRİCİ)</string>
+    <string name="settings_fft_window">FFT pencere fonksiyonu</string>
+    <string name="settings_fft_window_desc">Spektrum/şelale görüntüsü için FFT öncesi pencere; Hann spektral sızıntıyı azaltır</string>
+    <string name="settings_fft_window_rect">Dikdörtgen (yok)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">Kare ortalaması</string>
+    <string name="settings_fft_averaging_desc">Görüntüyü FFT kareleri arasında yumuşatır; Kapalı her kareyi olduğu gibi gösterir</string>
+    <string name="settings_fft_avg_off">Kapalı</string>
+    <string name="settings_fft_avg_light">Hafif (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">Güçlü (EMA 0.25)</string>
+    <string name="settings_bin_agg">Spektrum bin birleştirme</string>
+    <string name="settings_bin_agg_desc">Bitişik FFT binlerinin tek spektrum çubuğuna birleştirilme yöntemi</string>
+    <string name="settings_bin_agg_max">Maksimum</string>
+    <string name="settings_bin_agg_avg">Ortalama</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

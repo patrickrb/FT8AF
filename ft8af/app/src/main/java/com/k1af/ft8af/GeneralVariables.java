@@ -407,6 +407,14 @@ public class GeneralVariables {
     private static int spectrumWidth = 3500;//Spectrum display width in Hz
     public static MutableLiveData<Integer> mutableSpectrumWidth = new MutableLiveData<>();
 
+    // FFT display developer knobs (issue #428). Wire values shared with the
+    // native side (SpectrumFragment.setFFTDisplayParams) and the config DB;
+    // read fresh every display frame, so no LiveData needed (same pattern as
+    // pttDelay). Display-only — the decoder's FFT is unaffected.
+    private static int fftWindowType = 1;//0=Rect 1=Hann(default, matches desktop/iOS) 2=Hamming 3=Blackman 4=Blackman-Harris
+    private static int fftAveragingMode = 0;//0=Off(default) 1=EMA a=0.5 (light) 2=EMA a=0.25 (heavy)
+    private static int spectrumBinAggregation = 0;//Spectrum-strip bin combine: 0=Max(default, legacy) 1=Average 2=RMS
+
     public static String cloudlogServerAddress = "";//Cloudlog server address
     public static String cloudlogApiKey = "";//Cloudlog API key
     public static String cloudlogStationID = "";//Cloudlog station ID
@@ -619,6 +627,33 @@ public class GeneralVariables {
     public static void setSpectrumWidth(int width) {
         mutableSpectrumWidth.postValue(width);
         GeneralVariables.spectrumWidth = width;
+    }
+
+    public static int getFftWindowType() {
+        return fftWindowType;
+    }
+
+    /** Out-of-range values clamp to the default (1 = Hann). */
+    public static void setFftWindowType(int type) {
+        fftWindowType = (type >= 0 && type <= 4) ? type : 1;
+    }
+
+    public static int getFftAveragingMode() {
+        return fftAveragingMode;
+    }
+
+    /** Out-of-range values clamp to the default (0 = off). */
+    public static void setFftAveragingMode(int mode) {
+        fftAveragingMode = (mode >= 0 && mode <= 2) ? mode : 0;
+    }
+
+    public static int getSpectrumBinAggregation() {
+        return spectrumBinAggregation;
+    }
+
+    /** Out-of-range values clamp to the default (0 = max, the legacy combine). */
+    public static void setSpectrumBinAggregation(int mode) {
+        spectrumBinAggregation = (mode >= 0 && mode <= 2) ? mode : 0;
     }
 
     public static String getCloudlogServerAddress() {
