@@ -57,6 +57,59 @@ public class FunctionListSnapshotTest {
     }
 
     @Test
+    public void markCurrentOrder_flagsOnlyTheMatchingEntry() {
+        ArrayList<FunctionOfTransmit> live = new ArrayList<>();
+        for (int i = 1; i <= 3; i++) {
+            live.add(fun(i));
+        }
+
+        FT8TransmitSignal.markCurrentOrder(live, 2);
+
+        assertThat(live.get(0).isCurrentOrder()).isFalse();
+        assertThat(live.get(1).isCurrentOrder()).isTrue();
+        assertThat(live.get(2).isCurrentOrder()).isFalse();
+    }
+
+    @Test
+    public void markCurrentOrder_onEmptyList_isNoOp() {
+        ArrayList<FunctionOfTransmit> live = new ArrayList<>();
+        FT8TransmitSignal.markCurrentOrder(live, 2);
+        assertThat(live).isEmpty();
+    }
+
+    @Test
+    public void markCurrentOrder_isSafeAgainstConcurrentRebuild() throws Exception {
+        // The Copilot-flagged race: a TxSelector tap marks the current order
+        // while the auto-sequencer rebuilds the list. Both sides hold the list's
+        // monitor now, so the index iteration can never see a size from before a
+        // clear() — no IndexOutOfBoundsException, no torn iteration.
+        final ArrayList<FunctionOfTransmit> live = new ArrayList<>();
+        for (int i = 1; i <= 5; i++) {
+            live.add(fun(i));
+        }
+        final int rounds = 2000;
+        Thread sequencer = new Thread(() -> {
+            for (int n = 0; n < rounds; n++) {
+                synchronized (live) {
+                    live.clear();
+                    for (int i = 1; i <= 5; i++) {
+                        live.add(fun(i));
+                    }
+                }
+            }
+        });
+        sequencer.start();
+        try {
+            for (int n = 0; n < rounds; n++) {
+                FT8TransmitSignal.markCurrentOrder(live, (n % 5) + 1);
+            }
+        } finally {
+            sequencer.join(10000);
+        }
+        assertThat(sequencer.isAlive()).isFalse();
+    }
+
+    @Test
     public void snapshot_isSafeAgainstConcurrentRebuild() throws Exception {
         // Rebuilds hold the list's own monitor (generateFun does the same), so a
         // snapshot taken mid-rebuild must neither throw nor observe a torn list:

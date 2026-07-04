@@ -504,6 +504,23 @@ public class FT8TransmitSignal {
     }
 
     /**
+     * Mark the entry matching {@code order} as current, under the list's own
+     * monitor. setCurrentFunctionOrder() is called from the UI (TxSelector tap)
+     * while the auto-sequencer may be mid-rebuild in {@link #generateFun()};
+     * an unguarded index iteration can read a size from before the rebuild's
+     * clear() and then get(i) past the shrunken list — IndexOutOfBoundsException.
+     * The LiveData publication stays outside the lock (callers post a
+     * {@link #snapshotForUi} copy afterwards). Package-visible for testing.
+     */
+    static void markCurrentOrder(ArrayList<FunctionOfTransmit> live, int order) {
+        synchronized (live) {
+            for (int i = 0; i < live.size(); i++) {
+                live.get(i).setCurrentOrder(order);
+            }
+        }
+    }
+
+    /**
      * Scale a slice of the generated waveform by the TX volume, returning a new
      * buffer of exactly {@code playLength} samples.
      *
@@ -1010,9 +1027,7 @@ public class FT8TransmitSignal {
      */
     public void setCurrentFunctionOrder(int order) {
         functionOrder = order;
-        for (int i = 0; i < functionList.size(); i++) {
-            functionList.get(i).setCurrentOrder(order);
-        }
+        markCurrentOrder(functionList, order);
         if (order == 1) {
             resetTargetReport();// reset signal reports
         }
