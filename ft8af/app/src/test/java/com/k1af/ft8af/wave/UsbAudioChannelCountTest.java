@@ -9,12 +9,13 @@ import org.junit.Test;
  * implied by an isochronous endpoint's wMaxPacketSize at a given sample rate.
  *
  * <p>Background (issue #400): the old guess divided wMaxPacketSize by a hard-coded
- * 48 kHz frame size (96 bytes per channel-ms) with integer truncation, so a 44.1 kHz
- * stereo endpoint (~180-byte packets, 88.2 bytes per channel-ms) counted as mono —
- * 180 / 192-per-stereo-frame truncates to 1 — and the capture loop de-interleaved
- * garbage on exactly the 44.1 kHz device class issue #364 exists to support. The
- * helper is now rate-aware and rounds (a 44.1 kHz endpoint alternates 44/45 samples
- * per frame, so packets are not an exact multiple of the per-channel rate).
+ * 48 kHz per-channel frame size (mps / (48 * 2), i.e. mps / 96) with integer
+ * truncation, so a 44.1 kHz stereo endpoint (~180-byte packets, 88.2 bytes per
+ * channel-ms) counted as mono — 180 / 96 == 1.875 truncates to 1 — and the capture
+ * loop de-interleaved garbage on exactly the 44.1 kHz device class issue #364 exists
+ * to support. The helper is now rate-aware and rounds (a 44.1 kHz endpoint alternates
+ * 44/45 samples per frame, so packets are not an exact multiple of the per-channel
+ * rate).
  */
 public class UsbAudioChannelCountTest {
 
@@ -92,5 +93,18 @@ public class UsbAudioChannelCountTest {
     public void nonPositiveRate_fallsBackToMono() {
         assertThat(UsbAudioDevice.channelsForMaxPacketSize(192, 0)).isEqualTo(1);
         assertThat(UsbAudioDevice.channelsForMaxPacketSize(192, -1)).isEqualTo(1);
+    }
+
+    @Test
+    public void implausibleRate_failsSafeToMono() {
+        // A positive but garbage rate (malformed descriptor data) would make the
+        // per-channel divisor tiny and round any packet size up to "stereo";
+        // outside the plausible 8-768 kHz UAC range we fail safe to mono instead.
+        assertThat(UsbAudioDevice.channelsForMaxPacketSize(192, 5)).isEqualTo(1);
+        assertThat(UsbAudioDevice.channelsForMaxPacketSize(192, 7999)).isEqualTo(1);
+        assertThat(UsbAudioDevice.channelsForMaxPacketSize(192, 10_000_000)).isEqualTo(1);
+        // The plausible-range floor itself still computes normally.
+        assertThat(UsbAudioDevice.channelsForMaxPacketSize(16, 8000)).isEqualTo(1);
+        assertThat(UsbAudioDevice.channelsForMaxPacketSize(32, 8000)).isEqualTo(2);
     }
 }

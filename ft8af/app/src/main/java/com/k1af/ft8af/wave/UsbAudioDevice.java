@@ -209,10 +209,14 @@ public class UsbAudioDevice {
      * endpoint carries 44/45 samples per frame, so its packet size is not an exact multiple
      * of the per-channel byte rate. Clamped to [1, 2] — this pipeline handles mono/stereo.
      *
+     * <p>An implausible rate (see {@link #isPlausibleRate}: outside the 8-768 kHz UAC
+     * hardware range, e.g. from garbage descriptor data) fails safe to mono rather than
+     * letting a tiny divisor round up to "stereo".
+     *
      * <p>Package-visible for tests.
      */
     static int channelsForMaxPacketSize(int maxPacketSize, int sampleRateHz) {
-        if (sampleRateHz <= 0) return 1;
+        if (!isPlausibleRate(sampleRateHz)) return 1;
         double bytesPerFramePerChannel = (sampleRateHz / 1000.0) * 2.0;
         int channels = (int) Math.round(maxPacketSize / bytesPerFramePerChannel);
         if (channels < 1) return 1;
