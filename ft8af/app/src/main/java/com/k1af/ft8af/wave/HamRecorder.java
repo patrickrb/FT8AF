@@ -261,6 +261,14 @@ public class HamRecorder {
         //produced no decode.
         private final java.util.concurrent.atomic.AtomicBoolean completed =
                 new java.util.concurrent.atomic.AtomicBoolean(false);
+        //Orders the capture thread's voiceData writes / dataCount increments against
+        //the watchdog thread's reads (issue #404). The capture thread copies each
+        //chunk under this lock; the watchdog takes it before inspecting dataCount and
+        //claiming delivery, so it (a) waits out an in-flight chunk copy rather than
+        //snapshotting a half-written buffer and (b) gets a happens-before on all
+        //samples written so far — an unlocked read could see a stale count and
+        //deliver a short/zero-tailed buffer while the final samples were landing.
+        private final Object bufferLock = new Object();
 
         //onHamRecord is the callback triggered when the recorder has data; it fills the voiceData buffer, and when the buffer is full, triggers the OnGetVoiceDataDone callback.
         public OnHamRecord onHamRecord;
@@ -270,7 +278,9 @@ public class HamRecorder {
 
         /** Samples collected so far (test/diagnostic visibility). */
         int collectedSamples() {
-            return dataCount;
+            synchronized (bufferLock) {
+                return dataCount;
+            }
         }
 
         /**
@@ -286,12 +296,22 @@ public class HamRecorder {
             if (!oneShot) {
                 return false;
             }
-            if (dataCount >= voiceData.length) {
-                return false; // filled; normal path delivered (or is delivering) it
+            synchronized (bufferLock) {
+                //Decide the winner under the lock, BEFORE the buffer is handed out:
+                //this waits for any in-flight chunk copy to finish and reads the
+                //capture thread's true progress, so a fill that completed (or is one
+                //chunk from completing) isn't clobbered by a stale-count delivery.
+                if (dataCount >= voiceData.length) {
+                    return false; // filled; normal path delivered (or is delivering) it
+                }
+                if (!completed.compareAndSet(false, true)) {
+                    return false;
+                }
             }
-            if (!completed.compareAndSet(false, true)) {
-                return false;
-            }
+            //completed is now set, and every subsequent chunk checks it under
+            //bufferLock before writing — the buffer can no longer change, so it is
+            //safe to deliver outside the lock (the decode handoff shouldn't stall
+            //the capture thread's next chunk).
             doneCallback.onGetDone(voiceData);
             if (recorder != null) {
                 recorder.deleteVoiceDataMonitor(voiceDataMonitor);
@@ -326,20 +346,27 @@ public class HamRecorder {
             onHamRecord = new OnHamRecord() {
                 @Override
                 public void OnReceiveData(float[] data, int size) {
-                    //Once a one-shot buffer has been delivered (normally or by the
-                    //stall watchdog), late-arriving audio must not keep mutating it
-                    //behind the consumer's back.
-                    if (afterDoneRemove && completed.get()) {
-                        return;
-                    }
-                    int remainingSize = size+dataCount-voiceData.length;//if greater than 0, this is the remaining data amount
+                    int remainingSize;
+                    boolean filled;
+                    synchronized (bufferLock) {
+                        //Once a one-shot buffer has been delivered (normally or by the
+                        //stall watchdog), late-arriving audio must not keep mutating it
+                        //behind the consumer's back. Checked under the lock, so a
+                        //watchdog that just claimed delivery can't interleave with this
+                        //chunk's copy (issue #404).
+                        if (afterDoneRemove && completed.get()) {
+                            return;
+                        }
+                        remainingSize = size+dataCount-voiceData.length;//if greater than 0, this is the remaining data amount
 
-                    for (int i = 0; (i < size) && (dataCount < voiceData.length); i++) {
-                            voiceData[dataCount] = data[i];//copy data from recording buffer to this monitor
-                            dataCount++;
+                        for (int i = 0; (i < size) && (dataCount < voiceData.length); i++) {
+                                voiceData[dataCount] = data[i];//copy data from recording buffer to this monitor
+                                dataCount++;
+                        }
+                        filled = dataCount >= voiceData.length;
                     }
 
-                    if (dataCount >= (voiceData.length)) {//when data amount reaches the required amount, trigger callback
+                    if (filled) {//when data amount reaches the required amount, trigger callback
                         if (afterDoneRemove) {//if this is a one-shot data acquisition, remove this monitor callback from the recorder's listener list
                             //guard against the stall watchdog racing a late normal fill
                             if (completed.compareAndSet(false, true)) {
@@ -350,7 +377,9 @@ public class HamRecorder {
                             }
                         } else {
                             onGetVoiceDataDone.onGetDone(voiceData);
-                            dataCount = 0;//if looping recording, reset the counter
+                            synchronized (bufferLock) {
+                                dataCount = 0;//if looping recording, reset the counter
+                            }
                             if (remainingSize>0) {//forward remaining data to subsequent events
                                 float[] remainingData = new float[remainingSize];
                                 System.arraycopy(data, size - remainingSize, remainingData, 0, remainingSize);
