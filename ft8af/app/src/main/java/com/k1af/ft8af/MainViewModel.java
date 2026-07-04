@@ -111,7 +111,6 @@ import com.k1af.ft8af.spectrum.SpectrumListener;
 import com.k1af.ft8af.timer.OnUtcTimer;
 import com.k1af.ft8af.timer.UtcTimer;
 import com.k1af.ft8af.ui.ToastMessage;
-import com.k1af.ft8af.ui.WaterfallLabelMessages;
 import com.k1af.ft8af.wave.HamRecorder;
 import com.k1af.ft8af.wave.OnGetVoiceDataDone;
 import com.k1af.ft8af.x6100.X6100Radio;
@@ -163,7 +162,9 @@ public class MainViewModel extends ViewModel {
 
 
     public MutableLiveData<Integer> mutable_Decoded_Counter = new MutableLiveData<>();//total decoded count
-    public int currentDecodeCount = 0;//number of decoded items in this cycle
+    // Per-cycle decode state (label overlay + decode count). Synchronized: slot N's
+    // late/deep pass and slot N+1's early pass call afterDecode concurrently (#398).
+    private final DecodeCycleState decodeCycleState = new DecodeCycleState();
     public MutableLiveData<ArrayList<Ft8Message>> mutableFt8MessageList = new MutableLiveData<>();//message list
     // Needed-DX alerts: posts sound+vibrate notifications for new DXCC/state CQ stations.
     public final com.k1af.ft8af.alert.DxAlertNotifier dxAlertNotifier =
@@ -177,7 +178,20 @@ public class MainViewModel extends ViewModel {
     public MutableLiveData<Float> mutableTimerOffset = new MutableLiveData<>();//time delay of this cycle
     public MutableLiveData<Boolean> mutableIsDecoding = new MutableLiveData<>();//triggers marker action in spectrum display
     public MutableLiveData<Integer> mutableOperatingMode = new MutableLiveData<>(GeneralVariables.operatingMode);//current mode (FT8/FT4) for Compose observers
-    public ArrayList<Ft8Message> currentMessages = null;//decoded messages in this cycle (used for drawing on spectrum)
+    /** Decoded messages in this cycle (used for drawing on spectrum). */
+    public ArrayList<Ft8Message> getCurrentMessages() {
+        return decodeCycleState.getMessages();
+    }
+
+    /** Number of decoded items in this cycle. */
+    public int getCurrentDecodeCount() {
+        return decodeCycleState.getDecodeCount();
+    }
+
+    /** Clear the waterfall label overlay (spectrum views call this when they (re)attach). */
+    public void clearCurrentMessages() {
+        decodeCycleState.clearMessages();
+    }
 
     public MutableLiveData<Boolean> mutableIsFlexRadio = new MutableLiveData<>();//whether it's a Flex radio
     public MutableLiveData<Boolean> mutableIsXieguRadio = new MutableLiveData<>();//whether it's a XieGu radio
@@ -503,7 +517,7 @@ public class MainViewModel extends ViewModel {
                     synchronized (ft8Messages) {
                         ft8Messages.clear();
                     }
-                    currentDecodeCount = 0;
+                    decodeCycleState.resetCount();
                     mutable_Decoded_Counter.postValue(0);
                     publishFt8MessageList();
                 }
@@ -522,8 +536,7 @@ public class MainViewModel extends ViewModel {
                     // clear the previous slot's labels so they aren't re-stamped onto the
                     // waterfall every cycle (worst on the fast FT4/FT2 slots). A silent deep
                     // pass keeps the normal pass's labels. See WaterfallLabelMessages.
-                    currentMessages = WaterfallLabelMessages.afterPass(
-                            currentMessages, new ArrayList<>(), isDeep);
+                    decodeCycleState.labelsAfterPass(new ArrayList<>(), isDeep);
                     mutableIsDecoding.postValue(decodingMarkerAfterPass(0, 0));
                     return;//no messages decoded, don't trigger action
                 }
@@ -550,8 +563,7 @@ public class MainViewModel extends ViewModel {
                     // Same overlay refresh as the no-decode case: an all-filtered slot is
                     // visually silent, so clear the previous slot's labels (normal pass)
                     // rather than leaving them to be re-stamped.
-                    currentMessages = WaterfallLabelMessages.afterPass(
-                            currentMessages, new ArrayList<>(), isDeep);
+                    decodeCycleState.labelsAfterPass(new ArrayList<>(), isDeep);
                     mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), 0));
                     return;
                 }
@@ -622,13 +634,11 @@ public class MainViewModel extends ViewModel {
                     }
                 }
 
-                currentMessages = WaterfallLabelMessages.afterPass(currentMessages, messages, isDeep);
+                decodeCycleState.labelsAfterPass(messages, isDeep);
 
-                if (isDeep) {
-                    currentDecodeCount += messages.size();
-                } else {
-                    currentDecodeCount = messages.size();
-                }
+                // Take the count from the same atomic update we made, not a re-read of
+                // shared state a concurrently-delivering pass may have advanced since.
+                int decodeCountAfterPass = decodeCycleState.countAfterPass(messages.size(), isDeep);
 
                 //decode state, triggers marker action in spectrum display
                 mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), messages.size()));
@@ -639,7 +649,7 @@ public class MainViewModel extends ViewModel {
 
                 //this variable also notifies message list changes
                 mutable_Decoded_Counter.postValue(
-                        currentDecodeCount);//notify the UI of the total message count
+                        decodeCountAfterPass);//notify the UI of the total message count
 
                 if (GeneralVariables.saveSWLMessage) {
                     databaseOpr.writeMessage(messages);//write SWL messages to database
@@ -894,7 +904,7 @@ public class MainViewModel extends ViewModel {
         synchronized (ft8Messages) {
             ft8Messages.clear();
         }
-        currentDecodeCount = 0;
+        decodeCycleState.resetCount();
         mutable_Decoded_Counter.postValue(0);
         publishFt8MessageList();
     }
