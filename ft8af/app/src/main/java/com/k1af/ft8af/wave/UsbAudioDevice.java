@@ -536,7 +536,8 @@ public class UsbAudioDevice {
                         public void onCaptureStopped(int code) {
                             com.k1af.ft8af.GeneralVariables.fileLog(
                                     "UsbAudioDevice: libusb capture stopped, "
-                                            + "code=" + code);
+                                            + "code=" + code + " ("
+                                            + describeCaptureStopCode(code) + ")");
                             nativeCaptureHandle = 0;
                             capturing = false;
                             if (javaCb != null) javaCb.onCaptureStopped();
@@ -972,6 +973,55 @@ public class UsbAudioDevice {
      *
      * <p>Package-visible for testing.
      */
+    /**
+     * Decodes the {@code onCaptureStopped(code)} reason set by the native capture
+     * event loop ({@code usb_audio_capture.cpp}, see {@code recordStopReason}) into
+     * a human-readable phrase for {@code debug.log}. This is the diagnostic that
+     * pins down why isochronous capture retires on a given host+adapter combo,
+     * which the native {@code ft8af_usb_capture} logcat tag does not reliably
+     * surface in the field. Encoding:
+     *
+     * <ul>
+     *   <li>{@code 0} — clean stop (an explicit {@code nativeStop})</li>
+     *   <li>{@code 1} — all transfers retired with no terminal cause recorded</li>
+     *   <li>{@code 1000+status} — a transfer completed with terminal
+     *       {@code libusb_transfer_status} (e.g. {@code 1005} = NO_DEVICE)</li>
+     *   <li>{@code 2000+(-err)} — {@code libusb_submit_transfer} refused to
+     *       re-arm a transfer (e.g. {@code 2004} = NO_DEVICE)</li>
+     *   <li>{@code 3000+(-err)} — {@code libusb_handle_events} failed</li>
+     * </ul>
+     *
+     * <p>Package-visible for testing.
+     */
+    static String describeCaptureStopCode(int code) {
+        if (code == 0) return "clean stop (nativeStop)";
+        if (code == 1) return "all transfers retired (no terminal cause)";
+        if (code >= 1000 && code < 2000) {
+            return "transfer terminal status " + transferStatusName(code - 1000);
+        }
+        if (code >= 2000 && code < 3000) {
+            return "resubmit failed: " + describeLibusbWriteError(-(code - 2000));
+        }
+        if (code >= 3000 && code < 4000) {
+            return "handle_events failed: " + describeLibusbWriteError(-(code - 3000));
+        }
+        return "unknown code";
+    }
+
+    /** {@code libusb_transfer_status} name. Package-visible for testing. */
+    static String transferStatusName(int status) {
+        switch (status) {
+            case 0:  return "COMPLETED";
+            case 1:  return "ERROR";
+            case 2:  return "TIMED_OUT";
+            case 3:  return "CANCELLED";
+            case 4:  return "STALL";
+            case 5:  return "NO_DEVICE";
+            case 6:  return "OVERFLOW";
+            default: return "UNKNOWN(" + status + ")";
+        }
+    }
+
     static String describeLibusbWriteError(int rc) {
         String name;
         switch (rc) {
