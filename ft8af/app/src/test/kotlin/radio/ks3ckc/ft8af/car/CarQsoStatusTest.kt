@@ -25,7 +25,7 @@ class CarQsoStatusTest {
         bandName: String = "20m",
         modeName: String = "FT8",
         huntEnabled: Boolean = false,
-        huntCallsCq: Boolean = false,
+        huntCallsCQ: Boolean = false,
     ) = buildCarQsoStatus(
         isActivated = isActivated,
         isTransmitting = isTransmitting,
@@ -40,7 +40,7 @@ class CarQsoStatusTest {
         bandName = bandName,
         modeName = modeName,
         huntEnabled = huntEnabled,
-        huntCallsCq = huntCallsCq,
+        huntCallsCQ = huntCallsCQ,
     )
 
     @Test
@@ -69,7 +69,7 @@ class CarQsoStatusTest {
                 isActivated = true,
                 toCallsign = callsign,
                 huntEnabled = true,
-                huntCallsCq = false,
+                huntCallsCQ = false,
             )
             assertThat(status.headline.resId).isEqualTo(R.string.qsopanel_hunting)
         }
@@ -82,7 +82,7 @@ class CarQsoStatusTest {
             isActivated = true,
             toCallsign = null,
             huntEnabled = true,
-            huntCallsCq = true,
+            huntCallsCQ = true,
         )
         assertThat(status.headline.resId).isEqualTo(R.string.qsopanel_calling_cq)
     }

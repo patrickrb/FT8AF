@@ -112,7 +112,7 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
             bandName = currentBandName(),
             modeName = mode.displayName,
             huntEnabled = GeneralVariables.autoFollowCQ,
-            huntCallsCq = GeneralVariables.huntCallsCQ,
+            huntCallsCQ = GeneralVariables.huntCallsCQ,
         )
 
         val headline = resolve(status.headline) +

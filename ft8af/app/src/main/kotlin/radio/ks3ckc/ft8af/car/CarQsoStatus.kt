@@ -48,11 +48,11 @@ internal fun buildCarQsoStatus(
     bandName: String,
     modeName: String,
     huntEnabled: Boolean = false,
-    huntCallsCq: Boolean = false,
+    huntCallsCQ: Boolean = false,
 ): CarQsoStatus {
     val target = toCallsign?.takeIf { it.isNotEmpty() && it != "CQ" }
     val headline = when {
-        isActivated && target == null && huntEnabled && !huntCallsCq ->
+        isActivated && target == null && huntEnabled && !huntCallsCQ ->
             CarStringSpec(R.string.qsopanel_hunting)
         isActivated && target == null -> CarStringSpec(R.string.qsopanel_calling_cq)
         target == null -> CarStringSpec(R.string.car_monitoring)
