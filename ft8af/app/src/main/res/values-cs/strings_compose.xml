@@ -134,6 +134,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">Volání CQ</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">Hledání...</string>
     <string name="qsopanel_qsoing_with">QSO s %1$s</string>
     <string name="qsopanel_waiting_for">Čekání na %1$s</string>
@@ -555,4 +556,39 @@
     <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
+    <string name="tx_audio_dropped">Selhalo TX audio — v tomto cyklu nebyl vyslán žádný signál (chyba USB audia)</string>
+    <string name="cq_offset_moved">Offset CQ přesunut na volné místo: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Automaticky volný TX offset</string>
+    <string name="settings_auto_clear_tx_desc">Při volání CQ vybere volné místo podle nedávné aktivity v pásmu a uhne, pokud se obsadí</string>
+    <string name="tune_content_description">Tune: spustí tuner rádia nebo vysílá souvislou nosnou pro ladění antény</string>
+    <string name="tune_stopped_timeout">Tune zastaven po %1$d s</string>
+    <string name="tune_blocked_tx">Před použitím Tune zastavte CQ/QSO</string>
+    <string name="tune_unavailable_route">Tune zatím není na této zvukové cestě podporován</string>
+    <string name="tune_atu_started">Anténní tuner rádia spuštěn</string>
+    <string name="tune_atu_unavailable">Tuner není k dispozici — připojte CAT rádio s interním tunerem</string>
+    <string name="settings_tune_method">Metoda Tune</string>
+    <string name="settings_tune_method_desc">Automaticky spustí interní tuner rádia přes CAT, je-li k dispozici, jinak přehraje tón s nízkým výkonem</string>
+    <string name="tune_method_automatic">Automaticky</string>
+    <string name="tune_method_internal">Interní tuner</string>
+    <string name="tune_method_tone">Tón s nízkým výkonem</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / VODOPÁD (VÝVOJÁŘ)</string>
+    <string name="settings_fft_window">Okénková funkce FFT</string>
+    <string name="settings_fft_window_desc">Okno před FFT pro zobrazení spektra/vodopádu; Hann omezuje spektrální únik</string>
+    <string name="settings_fft_window_rect">Obdélníkové (žádné)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">Průměrování snímků</string>
+    <string name="settings_fft_averaging_desc">Vyhlazuje zobrazení mezi snímky FFT; Vypnuto zobrazuje každý snímek beze změny</string>
+    <string name="settings_fft_avg_off">Vypnuto</string>
+    <string name="settings_fft_avg_light">Lehké (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">Silné (EMA 0.25)</string>
+    <string name="settings_bin_agg">Slučování binů spektra</string>
+    <string name="settings_bin_agg_desc">Jak se sousední biny FFT slučují do jednoho sloupce spektra</string>
+    <string name="settings_bin_agg_max">Maximum</string>
+    <string name="settings_bin_agg_avg">Průměr</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

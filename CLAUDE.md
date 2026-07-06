@@ -1,5 +1,36 @@
 # FT8AF Project Instructions
 
+> **Placeholders.** This file is written for any contributor's machine.
+> Substitute your own values wherever you see `<…>`. The recurring ones:
+> `<windows-checkout>` / `<mac-checkout>` — your local clone of this repo;
+> `<jdk17-home>` — the home directory of a JDK 17 install;
+> `<phone-serial>` — your phone's serial from `adb devices`;
+> `<android-sdk>` — your Android SDK root.
+> Machine-specific notes (your paths, device serials, rig quirks) belong in an
+> untracked `CLAUDE.local.md`, not here.
+
+## Development environments
+
+Contributors work from two kinds of checkout; the commands differ, so figure
+out which one you're on first (`uname` / the primary working directory) and
+follow the matching path throughout:
+
+- **Windows** (`<windows-checkout>`, possibly driven from WSL) — uses the
+  `cmd.exe /c "gradlew.bat …"` wrapper, which picks up the Android Studio JBR.
+- **macOS** (`<mac-checkout>`) — builds and runs unit tests natively
+  (`./gradlew …`, needs JDK 17).
+
+Either kind of machine can build, test, install, and drive a real device when
+an Android phone is attached over USB debugging (an emulator is often attached
+alongside it). The gradle invocation is the main difference (`gradlew.bat`
+wrapper vs. `./gradlew` with JDK 17); where a section below gives a command for
+one, the other's equivalent is called out inline.
+
+On some devices `screencap` can come back all-black during the splash
+animation or when a hardware overlay is active; wait for the app to settle and
+retry, and use the accessibility tree only as a fallback (`uiautomator dump`
+often can't reach idle because the UI animates continuously).
+
 ## Workflow
 
 **Every work item requires a pull request — no direct commits to `dev` or
@@ -11,22 +42,26 @@ open a pull request against `dev` (do the work on a feature branch, then
 `gh pr create --base dev`). Don't merge straight to `main`.
 
 **Use a git worktree for every separate line of work.** Don't switch branches in
-the primary checkout (`C:\Users\burns\Projects\NEXT-FT8CN`) — branch-switching
-there collides with anything else in flight (a running build, an `adb install`, a
-different task). Instead spin up an isolated worktree per task:
+your primary checkout — branch-switching there collides with anything else in
+flight (a running build, an `adb install`, a different task). Instead spin up an
+isolated worktree per task:
 
 ```
-git worktree add ../NEXT-FT8CN-<short-task-name> -b feat/<task>
+git worktree add ../<checkout-dir-name>-<short-task-name> -b feat/<task>
 ```
 
 Notes for a fresh worktree:
 
 - The `ft8af/app/src/main/cpp/` native sources (`ft8_lib`, `ft8af_glue`) are
   **tracked** in git, so a fresh worktree builds with no manual copying.
-- Build/install still uses the Windows wrapper from inside the worktree's `ft8af`
-  dir (`cmd.exe /c "gradlew.bat installDebug"`).
+- Build/install from inside the worktree's `ft8af` dir: Windows uses the wrapper
+  (`cmd.exe /c "gradlew.bat installDebug"`); macOS uses `./gradlew` (see Build &
+  Deploy for the JDK 17 requirement). Both can install to an attached device.
 
 Remove the worktree when the branch is merged: `git worktree remove <path>`.
+
+When nothing else is in flight in your checkout, a feature branch in place is
+fine, but a worktree per task is still the recommended default.
 
 ## Testing
 
@@ -45,7 +80,9 @@ Tests live in `ft8af/app/src/test/` (Kotlin under `.../kotlin`, Java under
 Android/Play-Services types (e.g. anything reaching `MaidenheadGrid`,
 `GeneralVariables`, `LatLng`). Pure math/logic needs no runner.
 
-Run from the worktree's `ft8af` dir:
+Run from the `ft8af` dir.
+
+**Windows:**
 
 ```
 cmd.exe /c "gradlew.bat testDebugUnitTest"
@@ -53,26 +90,55 @@ cmd.exe /c "gradlew.bat testDebugUnitTest"
 cmd.exe /c "gradlew.bat testDebugUnitTest --tests <fully.qualified.ClassName>"
 ```
 
+**macOS** (needs JDK 17 — see Build & Deploy):
+
+```
+export JAVA_HOME=<jdk17-home>
+./gradlew testDebugUnitTest
+# or a single class:
+./gradlew testDebugUnitTest --tests <fully.qualified.ClassName>
+```
+
 ## Build & Deploy
 
-After making code changes, always build and install on the connected device.
+After making code changes, always build and install on the connected device
+when one is attached.
 
-The WSL shell has no Linux JDK, so `./gradlew` fails with `JAVA_HOME is not set`.
-Use the Windows wrapper instead — it picks up the Android Studio JBR automatically:
+**Windows:** A WSL shell typically has no Linux JDK, so `./gradlew` fails with
+`JAVA_HOME is not set`. Use the Windows wrapper instead — it picks up the Android
+Studio JBR automatically:
 
 ```
 cd ft8af && cmd.exe /c "gradlew.bat installDebug"
 ```
 
-The user's phone is a Pixel 8 (transport_id changes; identify by `adb devices -l`
-model `Pixel_8`). An Android emulator is usually also attached — Gradle's install
-step will print `TimeoutException`/`Unknown API Level` warnings for the emulator
-and still successfully install on the phone. `Installed on 1 device.` near the end
-of the output means the phone got the APK; ignore the emulator noise.
+**macOS:** AGP 8.7.3 / Gradle 8.9 need **JDK 17**; if your system JDK is older,
+builds fail without pointing `JAVA_HOME` at a 17. A user-local install (e.g. a
+Temurin 17 archive unpacked under your home directory — no sudo needed, unlike
+the Homebrew cask) works fine; wherever it lives is your `<jdk17-home>`. The
+`installDebug` task installs to *every* attached device (including the
+emulator); to target only the phone, build the APK and push it with an explicit
+serial:
 
-When multiple devices are attached, target the phone explicitly with `-s` and the
-phone's serial (from `adb devices`). adb itself lives at
-`/mnt/c/Users/burns/AppData/Local/Android/Sdk/platform-tools/adb.exe`.
+```
+cd ft8af && JAVA_HOME=<jdk17-home> ./gradlew assembleDebug
+adb -s <phone-serial> install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+To drive the UI: `adb -s <phone-serial> exec-out screencap -p > shot.png` and
+tap with `adb -s <phone-serial> shell input tap <x> <y>` (coordinates in the
+device's real pixel space — check it with `adb -s <phone-serial> shell wm size`).
+
+When an emulator is attached alongside the phone, Gradle's install step prints
+`TimeoutException`/`Unknown API Level` warnings for the emulator and still
+installs on the phone; `Installed on 1 device.` means the phone got the APK, so
+ignore the emulator noise.
+
+When multiple devices are attached, target the phone explicitly with `-s` and
+its serial (from `adb devices`). If `adb` isn't on your PATH, it lives at
+`<android-sdk>/platform-tools/adb` (on Windows
+`<android-sdk>\platform-tools\adb.exe`; Homebrew installs on macOS put it at
+`/opt/homebrew/bin/adb`).
 
 ## Debug logs
 
@@ -89,9 +155,10 @@ adb -s <phone-serial> pull /sdcard/Android/data/radio.ks3ckc.ft8af/files/debug.l
 For runtime detail not in `debug.log` (audio recording loop, system USB events,
 crashes), use `adb logcat`. Useful tags: `FT8SignalListener`, `MicRecorder`,
 `UsbAudioDevice`, `CableConnector`, `CableSerialPort`, `UsbHostManager`,
-`UsbAlsaManager`. The app's `applicationId` is `radio.ks3ckc.ft8af` — pid-filter
-with `--pid=$(adb shell pidof radio.ks3ckc.ft8af)` when you only want app-internal
-lines.
+`UsbAlsaManager`. The app's `applicationId` is `radio.ks3ckc.ft8af` (the same
+for every contributor — it's set in `ft8af/app/build.gradle`) — pid-filter with
+`adb -s <phone-serial> logcat --pid=$(adb -s <phone-serial> shell pidof radio.ks3ckc.ft8af)`
+when you only want app-internal lines.
 
 ## FT8 TX audio pipeline
 

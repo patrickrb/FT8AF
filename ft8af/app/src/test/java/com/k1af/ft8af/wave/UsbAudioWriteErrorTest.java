@@ -6,16 +6,23 @@ import org.junit.Test;
 
 /**
  * Tests {@link UsbAudioDevice#describeLibusbWriteError(int)} — the human-readable
- * label attached to a failed {@code nativeWrite} in the debug log.
+ * label attached to a failed {@code nativeWrite} in the debug log — and
+ * {@link UsbAudioDevice#shouldFallbackToUsbRequest(int, long)} — whether a failed
+ * native write may be retried through the UsbRequest loop.
  *
  * <p>Background: when the libusb native TX write fails, the bare {@code rc=-4}
  * in the log gave no clue whether the device vanished, the endpoint claim was
  * stale, or it was a transient I/O error — all of which present as the rig
- * keying up and transmitting silence. Naming the libusb_error code makes the
- * dropped cycle diagnosable. {@code nativeWrite} returns 0 or a (negative)
- * libusb_error code, so anything else is reported as UNKNOWN rather than guessed.
+ * keying up and transmitting silence. {@code nativeWrite} returns 0, a negative
+ * {@code libusb_error} (setup failure), or a positive
+ * {@code libusb_transfer_status} when a transfer dies after streaming started —
+ * the field failure mode from the 2026-07-03 POTA log was {@code rc=5}
+ * TRANSFER_NO_DEVICE (device fell off the bus mid-TX, RF into the USB link),
+ * which used to be logged as UNKNOWN.
  */
 public class UsbAudioWriteErrorTest {
+
+    // ---- describeLibusbWriteError -------------------------------------------
 
     @Test
     public void ioError_named() {
@@ -47,17 +54,148 @@ public class UsbAudioWriteErrorTest {
     }
 
     @Test
-    public void unexpectedPositiveCode_isUnknownNotGuessed() {
-        // nativeWrite on this branch never returns a positive code; if a
-        // differently-built lib ever does, label it honestly rather than
-        // pretending to know what it means.
+    public void transferNoDevice_named() {
+        // The real-world drop: onOutputComplete stores the transfer's status
+        // (positive libusb_transfer_status) as firstError when the device
+        // leaves the bus mid-write.
         assertThat(UsbAudioDevice.describeLibusbWriteError(5))
-                .isEqualTo("rc=5 UNKNOWN");
+                .isEqualTo("rc=5 TRANSFER_NO_DEVICE");
+    }
+
+    @Test
+    public void transferError_named() {
+        assertThat(UsbAudioDevice.describeLibusbWriteError(1))
+                .isEqualTo("rc=1 TRANSFER_ERROR");
+    }
+
+    @Test
+    public void transferCancelled_named() {
+        assertThat(UsbAudioDevice.describeLibusbWriteError(3))
+                .isEqualTo("rc=3 TRANSFER_CANCELLED");
+    }
+
+    @Test
+    public void transferStall_named() {
+        assertThat(UsbAudioDevice.describeLibusbWriteError(4))
+                .isEqualTo("rc=4 TRANSFER_STALL");
+    }
+
+    @Test
+    public void unmappedPositiveCode_isUnknown() {
+        assertThat(UsbAudioDevice.describeLibusbWriteError(7))
+                .isEqualTo("rc=7 UNKNOWN");
     }
 
     @Test
     public void unmappedNegativeCode_isUnknown() {
         assertThat(UsbAudioDevice.describeLibusbWriteError(-42))
                 .isEqualTo("rc=-42 UNKNOWN");
+    }
+
+    // ---- shouldFallbackToUsbRequest -----------------------------------------
+    // The UsbRequest fallback restarts the message from byte 0, so it is only
+    // allowed for failures that happened before anything went to air.
+
+    @Test
+    public void fallback_immediateSetupFailure_allowed() {
+        // The fallback's original purpose: libusb can't run on this kernel and
+        // fails instantly — Android's own iso path may still work.
+        assertThat(UsbAudioDevice.shouldFallbackToUsbRequest(-99, 20)).isTrue();
+        assertThat(UsbAudioDevice.shouldFallbackToUsbRequest(-12, 0)).isTrue();
+    }
+
+    @Test
+    public void fallback_midStreamFailure_denied() {
+        // 6.5s into a 12.6s message (the field case): part of the audio already
+        // transmitted; a restart-from-zero would send an undecodable overlap.
+        assertThat(UsbAudioDevice.shouldFallbackToUsbRequest(1, 6_500)).isFalse();
+    }
+
+    @Test
+    public void fallback_justPastThreshold_denied() {
+        assertThat(UsbAudioDevice.shouldFallbackToUsbRequest(
+                -1, UsbAudioDevice.MAX_FALLBACK_ELAPSED_MS + 1)).isFalse();
+    }
+
+    @Test
+    public void fallback_atThreshold_allowed() {
+        assertThat(UsbAudioDevice.shouldFallbackToUsbRequest(
+                -1, UsbAudioDevice.MAX_FALLBACK_ELAPSED_MS)).isTrue();
+    }
+
+    @Test
+    public void fallback_deviceGone_deniedRegardlessOfTiming() {
+        // Device off the bus: the fallback would fail too (and a fast NO_DEVICE
+        // must not slip under the elapsed-time threshold).
+        assertThat(UsbAudioDevice.shouldFallbackToUsbRequest(5, 10)).isFalse();
+        assertThat(UsbAudioDevice.shouldFallbackToUsbRequest(-4, 10)).isFalse();
+    }
+
+    @Test
+    public void fallback_userCancelled_denied() {
+        // STOP pressed: not a fault, nothing to retry.
+        assertThat(UsbAudioDevice.shouldFallbackToUsbRequest(3, 10)).isFalse();
+    }
+
+    @Test
+    public void fallback_success_neverFallsBack() {
+        assertThat(UsbAudioDevice.shouldFallbackToUsbRequest(0, 10)).isFalse();
+    }
+
+    // ---- describeCaptureStopCode --------------------------------------------
+    // The reason the native capture event loop ended, surfaced to debug.log so
+    // the iso-retire failure mode is diagnosable in the field.
+
+    @Test
+    public void captureStop_cleanStop() {
+        assertThat(UsbAudioDevice.describeCaptureStopCode(0))
+                .isEqualTo("clean stop (nativeStop)");
+    }
+
+    @Test
+    public void captureStop_retiredNoCause() {
+        assertThat(UsbAudioDevice.describeCaptureStopCode(1))
+                .isEqualTo("all transfers retired (no terminal cause)");
+    }
+
+    @Test
+    public void captureStop_transferTerminalNoDevice() {
+        // 1000 + libusb_transfer_status(5=NO_DEVICE)
+        assertThat(UsbAudioDevice.describeCaptureStopCode(1005))
+                .isEqualTo("transfer terminal status NO_DEVICE");
+    }
+
+    @Test
+    public void captureStop_transferTerminalStall() {
+        assertThat(UsbAudioDevice.describeCaptureStopCode(1004))
+                .isEqualTo("transfer terminal status STALL");
+    }
+
+    @Test
+    public void captureStop_resubmitFailedNoDevice() {
+        // 2000 + (-LIBUSB_ERROR_NO_DEVICE=-(-4)=4)
+        assertThat(UsbAudioDevice.describeCaptureStopCode(2004))
+                .isEqualTo("resubmit failed: rc=-4 NO_DEVICE");
+    }
+
+    @Test
+    public void captureStop_handleEventsFailedIo() {
+        // 3000 + (-LIBUSB_ERROR_IO=-(-1)=1)
+        assertThat(UsbAudioDevice.describeCaptureStopCode(3001))
+                .isEqualTo("handle_events failed: rc=-1 IO");
+    }
+
+    @Test
+    public void captureStop_unknownCode() {
+        assertThat(UsbAudioDevice.describeCaptureStopCode(42))
+                .isEqualTo("unknown code");
+    }
+
+    @Test
+    public void transferStatusName_maps() {
+        assertThat(UsbAudioDevice.transferStatusName(0)).isEqualTo("COMPLETED");
+        assertThat(UsbAudioDevice.transferStatusName(5)).isEqualTo("NO_DEVICE");
+        assertThat(UsbAudioDevice.transferStatusName(6)).isEqualTo("OVERFLOW");
+        assertThat(UsbAudioDevice.transferStatusName(9)).isEqualTo("UNKNOWN(9)");
     }
 }

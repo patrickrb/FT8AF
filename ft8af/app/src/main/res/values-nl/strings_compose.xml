@@ -134,6 +134,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">CQ roepen</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">Zoeken...</string>
     <string name="qsopanel_qsoing_with">QSO met %1$s</string>
     <string name="qsopanel_waiting_for">Wachten op %1$s</string>
@@ -555,4 +556,39 @@
     <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
+    <string name="tx_audio_dropped">TX-audio mislukt — geen signaal verzonden deze cyclus (USB-audiofout)</string>
+    <string name="cq_offset_moved">CQ-offset verplaatst naar een vrije plek: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Automatisch vrije TX-offset</string>
+    <string name="settings_auto_clear_tx_desc">Kiest bij het roepen van CQ een vrije plek op basis van recente bandactiviteit en wijkt uit als die bezet raakt</string>
+    <string name="tune_content_description">Tune: start de tuner van de radio of zendt een continue draaggolf uit voor antenne-afstemming</string>
+    <string name="tune_stopped_timeout">Tune gestopt na %1$d s</string>
+    <string name="tune_blocked_tx">Stop de CQ/QSO voordat je Tune gebruikt</string>
+    <string name="tune_unavailable_route">Tune is nog niet beschikbaar op deze audioroute</string>
+    <string name="tune_atu_started">Antennetuner van de radio gestart</string>
+    <string name="tune_atu_unavailable">Tuner niet beschikbaar — sluit een CAT-radio met interne tuner aan</string>
+    <string name="settings_tune_method">Tune-methode</string>
+    <string name="settings_tune_method_desc">Automatisch start de interne tuner van de radio via CAT indien beschikbaar, anders klinkt de toon met laag vermogen</string>
+    <string name="tune_method_automatic">Automatisch</string>
+    <string name="tune_method_internal">Interne tuner</string>
+    <string name="tune_method_tone">Toon met laag vermogen</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / WATERVAL (ONTWIKKELAAR)</string>
+    <string name="settings_fft_window">FFT-vensterfunctie</string>
+    <string name="settings_fft_window_desc">Venster vóór de FFT voor de spectrum-/watervalweergave; Hann vermindert spectrale lekkage</string>
+    <string name="settings_fft_window_rect">Rechthoekig (geen)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">Frame-middeling</string>
+    <string name="settings_fft_averaging_desc">Maakt de weergave vloeiender over FFT-frames; Uit toont elk frame ongewijzigd</string>
+    <string name="settings_fft_avg_off">Uit</string>
+    <string name="settings_fft_avg_light">Licht (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">Sterk (EMA 0.25)</string>
+    <string name="settings_bin_agg">Spectrum-bin-combinatie</string>
+    <string name="settings_bin_agg_desc">Hoe aangrenzende FFT-bins samenvoegen tot één spectrumbalk</string>
+    <string name="settings_bin_agg_max">Maximum</string>
+    <string name="settings_bin_agg_avg">Gemiddelde</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

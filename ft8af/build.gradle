@@ -14,9 +14,12 @@ plugins {
     id 'org.jetbrains.kotlin.android' version '2.0.21' apply false
     id 'org.jetbrains.kotlin.plugin.compose' version '2.0.21' apply false
     // Static analysis (issue #63). Applied in app/build.gradle; declared here
-    // with apply false so the versions resolve once for the whole build.
-    // detekt 1.23.7+ and ktlint 1.3.x are the first releases that parse Kotlin 2.0
-    // source without the embedded-compiler mismatch that fails the build.
+    // with apply false so the versions resolve once for the whole build. These
+    // are the Gradle *plugin* versions: detekt 1.23.8 and the ktlint plugin
+    // 12.1.2 are the first releases that run against a Kotlin 2.0 build without
+    // the embedded-compiler mismatch that fails the build. The ktlint *engine*
+    // itself stays pinned to 1.2.1 in app/build.gradle — it parses the Kotlin
+    // 2.0 sources cleanly, so no engine bump is needed.
     id 'io.gitlab.arturbosch.detekt' version '1.23.8' apply false
     id 'org.jlleitschuh.gradle.ktlint' version '12.1.2' apply false
 }

@@ -59,6 +59,8 @@ import com.k1af.ft8af.ui.ToastMessage
 import com.k1af.ft8af.x6100.X6100Radio
 import com.k1af.ft8af.x6100.XieguRadioFactory
 import radio.ks3ckc.ft8af.theme.*
+import radio.ks3ckc.ft8af.ui.components.CredentialFieldRole
+import radio.ks3ckc.ft8af.ui.components.autofill
 
 // ─────────────────────────────────────────────────────────────────────
 // Shared helpers
@@ -622,7 +624,13 @@ fun IcomLoginDialog(
                 label = { Text(stringResource(R.string.icom_user_name)) },
                 singleLine = true,
                 colors = fieldColors,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .autofill(CredentialFieldRole.USERNAME) {
+                        username = it
+                        GeneralVariables.icomUserName = it.trim()
+                        mainViewModel.databaseOpr.writeConfig("icomUserName", it.trim(), null)
+                    },
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -653,7 +661,13 @@ fun IcomLoginDialog(
                     }
                 },
                 colors = fieldColors,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .autofill(CredentialFieldRole.PASSWORD) {
+                        password = it
+                        GeneralVariables.icomPassword = it
+                        mainViewModel.databaseOpr.writeConfig("icomPassword", it, null)
+                    },
             )
 
             Spacer(modifier = Modifier.height(20.dp))

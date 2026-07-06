@@ -20,8 +20,13 @@ public class VoiceDataMonitorStallTest {
     private static class RecordingCallback implements OnGetVoiceDataDone {
         final ArrayList<float[]> deliveries = new ArrayList<>();
 
+        // synchronized: the race tests below invoke this from either the
+        // capture thread or the watchdog thread. If a regression ever produced
+        // two near-simultaneous deliveries, the harness must record both and
+        // fail the hasSize(1) assertion cleanly — not corrupt an unsynchronized
+        // ArrayList and die with a confusing secondary error.
         @Override
-        public void onGetDone(float[] data) {
+        public synchronized void onGetDone(float[] data) {
             deliveries.add(data);
         }
     }
@@ -116,5 +121,119 @@ public class VoiceDataMonitorStallTest {
         feed(m, 1200, 0.5f);
         feed(m, 1200, 0.5f);
         assertThat(cb.deliveries).hasSize(2);
+    }
+
+    // ---- capture-thread vs watchdog-thread races (issue #404) ----------------
+    // forceCompleteAfterStall used to read dataCount/voiceData with no
+    // happens-before against the capture thread's writes. Both sides now
+    // synchronize on the monitor's buffer lock: the watchdog waits out an
+    // in-flight chunk copy and decides the winner on the true count before the
+    // buffer is handed out.
+
+    @Test
+    public void concurrentFillAndWatchdog_exactlyOneDelivery_neverTorn() throws Exception {
+        // Race a chunked fill (capture thread) against the watchdog firing at an
+        // arbitrary point. Whatever the interleaving: exactly one delivery, and the
+        // delivered buffer is a clean prefix of real samples followed by zeros —
+        // never a zero hole inside the collected prefix.
+        for (int round = 0; round < 200; round++) {
+            RecordingCallback cb = new RecordingCallback();
+            HamRecorder.VoiceDataMonitor m = newMonitor(true, cb);
+
+            java.util.concurrent.CountDownLatch go = new java.util.concurrent.CountDownLatch(1);
+            Thread capture = new Thread(() -> {
+                try {
+                    go.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                for (int fed = 0; fed < 1200; fed += 100) {
+                    feed(m, 100, 0.25f); // 12 chunks of 100 samples
+                }
+            });
+            Thread watchdog = new Thread(() -> {
+                try {
+                    go.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                m.forceCompleteAfterStall(null);
+            });
+            capture.start();
+            watchdog.start();
+            go.countDown();
+            capture.join();
+            watchdog.join();
+
+            assertThat(cb.deliveries).hasSize(1);
+            float[] delivered = cb.deliveries.get(0);
+            // Find the end of the real-sample prefix; everything after must be zero.
+            int prefixEnd = delivered.length;
+            while (prefixEnd > 0 && delivered[prefixEnd - 1] == 0f) {
+                prefixEnd--;
+            }
+            for (int i = 0; i < prefixEnd; i++) {
+                assertThat(delivered[i]).isEqualTo(0.25f);
+            }
+            // The prefix must be whole chunks: the watchdog may not snapshot a
+            // half-copied chunk.
+            assertThat(prefixEnd % 100).isEqualTo(0);
+        }
+    }
+
+    @Test
+    public void watchdogRacingFinalChunk_fullBufferIsNeverDeliveredShort() throws Exception {
+        // The issue's exact scenario: the buffer is one chunk from full when the
+        // watchdog fires. If the fill wins the lock, the watchdog must observe the
+        // completed count (not a stale one) and stand down; if the watchdog wins,
+        // the final chunk must not mutate the delivered buffer afterwards.
+        for (int round = 0; round < 200; round++) {
+            RecordingCallback cb = new RecordingCallback();
+            HamRecorder.VoiceDataMonitor m = newMonitor(true, cb);
+            feed(m, 1100, 0.25f); // all but the final 100 samples
+
+            java.util.concurrent.CountDownLatch go = new java.util.concurrent.CountDownLatch(1);
+            Thread capture = new Thread(() -> {
+                try {
+                    go.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                feed(m, 100, 0.25f); // the final chunk
+            });
+            Thread watchdog = new Thread(() -> {
+                try {
+                    go.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                m.forceCompleteAfterStall(null);
+            });
+            capture.start();
+            watchdog.start();
+            go.countDown();
+            capture.join();
+            watchdog.join();
+
+            assertThat(cb.deliveries).hasSize(1);
+            float[] delivered = cb.deliveries.get(0);
+            // Either outcome is legal, but the collected prefix must be intact and
+            // stable: at least the pre-fed 1100 samples...
+            for (int i = 0; i < 1100; i++) {
+                assertThat(delivered[i]).isEqualTo(0.25f);
+            }
+            // ...and the final chunk must be all-or-nothing: every sample real
+            // (fill won the lock) or every sample zero (watchdog won). A torn
+            // half-copied chunk — some real samples then zeros — is exactly the
+            // failure the buffer lock exists to prevent.
+            boolean fullDelivery = delivered[1100] == 0.25f;
+            for (int i = 1100; i < 1200; i++) {
+                assertThat(delivered[i]).isEqualTo(fullDelivery ? 0.25f : 0f);
+            }
+        }
     }
 }

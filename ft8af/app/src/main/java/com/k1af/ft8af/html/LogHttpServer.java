@@ -593,7 +593,7 @@ public class LogHttpServer extends NanoHTTPD {
 
         HtmlContext.tableKeyRow(result, true
                 , GeneralVariables.getStringFromResource(R.string.html_decodes_in_this_cycle)
-                , String.format("%d", mainViewModel.currentDecodeCount));
+                , String.format("%d", mainViewModel.getCurrentDecodeCount()));
 
         HtmlContext.tableKeyRow(result, false
                 , GeneralVariables.getStringFromResource(R.string.decode_mode_text)
@@ -1716,8 +1716,9 @@ public class LogHttpServer extends NanoHTTPD {
         HtmlContext.tableRowEnd(result).append("\n");
 
         int order = 0;
-        if (mainViewModel.currentMessages != null) {
-            for (Ft8Message message : mainViewModel.currentMessages) {
+        ArrayList<Ft8Message> currentMessages = mainViewModel.getCurrentMessages();
+        if (currentMessages != null) {
+            for (Ft8Message message : currentMessages) {
                 HtmlContext.tableRowBegin(result, true, order % 2 != 0)
                         .append("\n").append(message.toHtml());
                 HtmlContext.tableRowEnd(result).append("\n");

@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.k1af.ft8af.R
+import com.k1af.ft8af.spectrum.AudioInputLevel
 import com.k1af.ft8af.wave.InputAudioLevel
 import radio.ks3ckc.ft8af.theme.BgSurface3
 import radio.ks3ckc.ft8af.theme.GeistMonoFamily
@@ -32,30 +33,18 @@ import radio.ks3ckc.ft8af.theme.TextMuted
 import kotlin.math.roundToInt
 
 /**
- * RX input-level classification (issue #356). Thresholds are on the window
- * PEAK as a fraction of full scale:
- *  - below [INPUT_LEVEL_LOW] .................. too low
- *  - [INPUT_LEVEL_LOW]..[INPUT_LEVEL_HIGH] .... just right
- *  - above [INPUT_LEVEL_HIGH] ................. too high
- *  - at/above [INPUT_LEVEL_CLIP] .............. clipping (full-scale hit)
+ * Classify a metering-window snapshot into the color-coded status shown next
+ * to the meter. Delegates to [AudioInputLevel], the app's single RX
+ * level classifier (issue #405): this strip and the legacy spectrum meter now
+ * judge the same audio with the same peak/RMS dBFS thresholds, so the two UIs
+ * can never disagree and the healthy-gain window is tuned in one place.
  */
-internal const val INPUT_LEVEL_LOW = 0.25f
-internal const val INPUT_LEVEL_HIGH = 0.75f
-internal const val INPUT_LEVEL_CLIP = 0.99f
-
-internal enum class InputLevelStatus { TOO_LOW, JUST_RIGHT, TOO_HIGH, CLIPPING }
-
-/**
- * Classify a metering-window peak (1.0 = full scale) into the color-coded
- * status shown next to the meter. Boundary values 25% and 75% both count as
- * "just right" so the advertised 25–75% window is inclusive.
- */
-internal fun classifyInputLevel(peak: Float): InputLevelStatus = when {
-    peak >= INPUT_LEVEL_CLIP -> InputLevelStatus.CLIPPING
-    peak > INPUT_LEVEL_HIGH -> InputLevelStatus.TOO_HIGH
-    peak < INPUT_LEVEL_LOW -> InputLevelStatus.TOO_LOW
-    else -> InputLevelStatus.JUST_RIGHT
-}
+internal fun classifyInputLevel(levels: InputAudioLevel.Levels?): AudioInputLevel.Status =
+    if (levels == null) {
+        AudioInputLevel.Status.SILENT
+    } else {
+        AudioInputLevel.fromPeakRms(levels.peak, levels.rms).status
+    }
 
 /** Meter-bar fill fraction for a sample level, clamped to 0..1. */
 internal fun inputLevelFraction(level: Float): Float = level.coerceIn(0f, 1f)
@@ -77,16 +66,9 @@ internal fun InputLevelIndicator(
 ) {
     val peak = levels?.peak ?: 0f
     val rms = levels?.rms ?: 0f
-    val status = classifyInputLevel(peak)
+    val status = classifyInputLevel(levels)
     val color = inputLevelColor(status)
-    val statusText = stringResource(
-        when (status) {
-            InputLevelStatus.TOO_LOW -> R.string.input_level_too_low
-            InputLevelStatus.JUST_RIGHT -> R.string.input_level_good
-            InputLevelStatus.TOO_HIGH -> R.string.input_level_too_high
-            InputLevelStatus.CLIPPING -> R.string.input_level_clipping
-        },
-    )
+    val statusText = stringResource(inputLevelStatusText(status))
 
     Row(
         modifier = modifier,
@@ -147,10 +129,28 @@ internal fun InputLevelIndicator(
     }
 }
 
-/** Status color: blue = too low, green = good, yellow = hot, red = clipping. */
-internal fun inputLevelColor(status: InputLevelStatus): Color = when (status) {
-    InputLevelStatus.TOO_LOW -> StatusWorked
-    InputLevelStatus.JUST_RIGHT -> StatusConfirmed
-    InputLevelStatus.TOO_HIGH -> StatusWarn
-    InputLevelStatus.CLIPPING -> StatusBad
+/**
+ * Status color: grey = no input, blue = too low, green = good, yellow = hot,
+ * red = clipping. Same semantics as the legacy meter's AudioLevelDisplay
+ * palette, in this theme's colors.
+ */
+internal fun inputLevelColor(status: AudioInputLevel.Status): Color = when (status) {
+    AudioInputLevel.Status.SILENT -> TextMuted
+    AudioInputLevel.Status.LOW -> StatusWorked
+    AudioInputLevel.Status.GOOD -> StatusConfirmed
+    AudioInputLevel.Status.HIGH -> StatusWarn
+    AudioInputLevel.Status.CLIPPING -> StatusBad
+}
+
+/**
+ * Status word resource. SILENT reuses the "too low" wording — the actionable
+ * advice (turn the input up / check the cable) is the same, and the muted
+ * color already distinguishes a dead input from a merely-quiet one.
+ */
+internal fun inputLevelStatusText(status: AudioInputLevel.Status): Int = when (status) {
+    AudioInputLevel.Status.SILENT,
+    AudioInputLevel.Status.LOW -> R.string.input_level_too_low
+    AudioInputLevel.Status.GOOD -> R.string.input_level_good
+    AudioInputLevel.Status.HIGH -> R.string.input_level_too_high
+    AudioInputLevel.Status.CLIPPING -> R.string.input_level_clipping
 }

@@ -117,6 +117,18 @@ public class YaesuDX10Rig extends BaseRig {
     }
 
     @Override
+    public boolean supportsAtuTune() {
+        return true;
+    }
+
+    @Override
+    public void startAtuTune() {
+        if (getConnector() != null) {
+            getConnector().sendData(Yaesu3RigConstant.startAtuTune());
+        }
+    }
+
+    @Override
     public void setUsbModeToRig() {
         if (getConnector() != null) {
             getConnector().sendData(Yaesu3RigConstant.setOperationDATA_U_Mode());

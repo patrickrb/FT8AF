@@ -24,6 +24,8 @@ package com.k1af.ft8af;
 
 import static com.k1af.ft8af.GeneralVariables.getStringFromResource;
 
+import com.k1af.ft8af.concurrent.SafeExecutor;
+
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.PendingIntent;
@@ -44,6 +46,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
+import androidx.annotation.Nullable;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 import androidx.lifecycle.ViewModelProvider;
@@ -73,6 +76,7 @@ import com.k1af.ft8af.ft8transmit.FT8TransmitSignal;
 import com.k1af.ft8af.ft8transmit.MeterProtectionController;
 import com.k1af.ft8af.ft8transmit.OnDoTransmitted;
 import com.k1af.ft8af.ft8transmit.OnTransmitSuccess;
+import com.k1af.ft8af.ft8transmit.TuneMethod;
 import com.k1af.ft8af.html.LogHttpServer;
 import com.k1af.ft8af.icom.WifiRig;
 import com.k1af.ft8af.log.QSLCallsignRecord;
@@ -111,7 +115,6 @@ import com.k1af.ft8af.spectrum.SpectrumListener;
 import com.k1af.ft8af.timer.OnUtcTimer;
 import com.k1af.ft8af.timer.UtcTimer;
 import com.k1af.ft8af.ui.ToastMessage;
-import com.k1af.ft8af.ui.WaterfallLabelMessages;
 import com.k1af.ft8af.wave.HamRecorder;
 import com.k1af.ft8af.wave.OnGetVoiceDataDone;
 import com.k1af.ft8af.x6100.X6100Radio;
@@ -163,7 +166,9 @@ public class MainViewModel extends ViewModel {
 
 
     public MutableLiveData<Integer> mutable_Decoded_Counter = new MutableLiveData<>();//total decoded count
-    public int currentDecodeCount = 0;//number of decoded items in this cycle
+    // Per-cycle decode state (label overlay + decode count). Synchronized: slot N's
+    // late/deep pass and slot N+1's early pass call afterDecode concurrently (#398).
+    private final DecodeCycleState decodeCycleState = new DecodeCycleState();
     public MutableLiveData<ArrayList<Ft8Message>> mutableFt8MessageList = new MutableLiveData<>();//message list
     // Needed-DX alerts: posts sound+vibrate notifications for new DXCC/state CQ stations.
     public final com.k1af.ft8af.alert.DxAlertNotifier dxAlertNotifier =
@@ -177,7 +182,20 @@ public class MainViewModel extends ViewModel {
     public MutableLiveData<Float> mutableTimerOffset = new MutableLiveData<>();//time delay of this cycle
     public MutableLiveData<Boolean> mutableIsDecoding = new MutableLiveData<>();//triggers marker action in spectrum display
     public MutableLiveData<Integer> mutableOperatingMode = new MutableLiveData<>(GeneralVariables.operatingMode);//current mode (FT8/FT4) for Compose observers
-    public ArrayList<Ft8Message> currentMessages = null;//decoded messages in this cycle (used for drawing on spectrum)
+    /** Decoded messages in this cycle (used for drawing on spectrum). */
+    public ArrayList<Ft8Message> getCurrentMessages() {
+        return decodeCycleState.getMessages();
+    }
+
+    /** Number of decoded items in this cycle. */
+    public int getCurrentDecodeCount() {
+        return decodeCycleState.getDecodeCount();
+    }
+
+    /** Clear the waterfall label overlay (spectrum views call this when they (re)attach). */
+    public void clearCurrentMessages() {
+        decodeCycleState.clearMessages();
+    }
 
     public MutableLiveData<Boolean> mutableIsFlexRadio = new MutableLiveData<>();//whether it's a Flex radio
     public MutableLiveData<Boolean> mutableIsXieguRadio = new MutableLiveData<>();//whether it's a XieGu radio
@@ -211,6 +229,8 @@ public class MainViewModel extends ViewModel {
     public HamRecorder hamRecorder;//recording object
     public FT8SignalListener ft8SignalListener;//object for listening to and decoding FT8 signals
     public FT8TransmitSignal ft8TransmitSignal;//object for transmitting signals
+    // Deep-pass decodes that arrived mid-TX, replayed to the sequencer after key-up
+    private final PendingSequencerDecodes pendingSequencerDecodes = new PendingSequencerDecodes();
     public MeterProtectionController meterProtectionController;//ALC auto-volume + SWR halt
     public SpectrumListener spectrumListener;//object for drawing the spectrum
     public boolean markMessage = true;//whether to mark messages toggle
@@ -299,6 +319,12 @@ public class MainViewModel extends ViewModel {
             GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(freq);
             GeneralVariables.mutableBandChange.postValue(GeneralVariables.bandListIndex);
             String newWaveLength = BaseRigOperation.getMeterFromFreq(freq);
+
+            // A real band hop invalidates the clear-CQ-slot occupancy history —
+            // the recorded offsets belong to the old band's activity (issue #418).
+            if (ft8TransmitSignal != null && !newWaveLength.equals(oldWaveLength)) {
+                ft8TransmitSignal.clearBandActivity();
+            }
 
             // The rig reported a band change (e.g. the operator turned the dial) —
             // optionally clear the stale decodes + reset the TX target.
@@ -425,6 +451,17 @@ public class MainViewModel extends ViewModel {
     }
 
     /**
+     * Nullable peek at the singleton for observers that must never boot the engine —
+     * only ComposeMainActivity may create the instance. The Android Auto screens use
+     * this: null means the phone UI hasn't run yet this process, and the car display
+     * shows an "open the app on your phone" message instead.
+     */
+    @Nullable
+    public static MainViewModel peekInstance() {
+        return viewModel;
+    }
+
+    /**
      * The value afterDecode() must post to mutableIsDecoding (the spectrum-display
      * "decoding" marker) once a decode pass finishes. beforeListen() turns the marker
      * on at the start of every cycle, so every pass must turn it back off when done —
@@ -484,7 +521,14 @@ public class MainViewModel extends ViewModel {
         //synchronize time. Microsoft's NTP server
         UtcTimer.syncTime(null);
 
-        mutableFt8MessageList.setValue(ft8Messages);
+        // Seed with a snapshot, never the live ft8Messages instance. observeAsState
+        // compares structurally, and every later snapshot published from
+        // publishFt8MessageList() is content-equal to the live list it was copied
+        // from — so a UI seeded with the live list stays pinned to it forever
+        // (equal values are skipped, the state keeps the old reference) and Compose
+        // ends up iterating the very list the decode thread mutates:
+        // ConcurrentModificationException in buildQsoLog during recomposition.
+        mutableFt8MessageList.setValue(uiSeedSnapshot(ft8Messages));
 
         //create listener object; callback actions handle decoding, transmitting, adding to followed callsign list, etc.
         ft8SignalListener = new FT8SignalListener(databaseOpr, new OnFt8Listen() {
@@ -501,7 +545,7 @@ public class MainViewModel extends ViewModel {
                     synchronized (ft8Messages) {
                         ft8Messages.clear();
                     }
-                    currentDecodeCount = 0;
+                    decodeCycleState.resetCount();
                     mutable_Decoded_Counter.postValue(0);
                     publishFt8MessageList();
                 }
@@ -520,8 +564,7 @@ public class MainViewModel extends ViewModel {
                     // clear the previous slot's labels so they aren't re-stamped onto the
                     // waterfall every cycle (worst on the fast FT4/FT2 slots). A silent deep
                     // pass keeps the normal pass's labels. See WaterfallLabelMessages.
-                    currentMessages = WaterfallLabelMessages.afterPass(
-                            currentMessages, new ArrayList<>(), isDeep);
+                    decodeCycleState.labelsAfterPass(new ArrayList<>(), isDeep);
                     mutableIsDecoding.postValue(decodingMarkerAfterPass(0, 0));
                     return;//no messages decoded, don't trigger action
                 }
@@ -548,8 +591,7 @@ public class MainViewModel extends ViewModel {
                     // Same overlay refresh as the no-decode case: an all-filtered slot is
                     // visually silent, so clear the previous slot's labels (normal pass)
                     // rather than leaving them to be re-stamped.
-                    currentMessages = WaterfallLabelMessages.afterPass(
-                            currentMessages, new ArrayList<>(), isDeep);
+                    decodeCycleState.labelsAfterPass(new ArrayList<>(), isDeep);
                     mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), 0));
                     return;
                 }
@@ -569,10 +611,13 @@ public class MainViewModel extends ViewModel {
 
                 synchronized (ft8Messages) {
                     // "Clear every cycle" mode does its wipe in beforeListen (start of the
-                    // cycle), so by here the list is already fresh — just append.
+                    // cycle), so by here the list is already fresh — just append. The
+                    // excess-trim must hold the same lock: it removes from the list, and
+                    // an unguarded removal can race the snapshot copy in
+                    // publishFt8MessageList().
                     ft8Messages.addAll(messages);//add messages to list
+                    GeneralVariables.deleteArrayListMore(ft8Messages);//remove excess messages; FT8CN limits the total displayable messages
                 }
-                GeneralVariables.deleteArrayListMore(ft8Messages);//remove excess messages; FT8CN limits the total displayable messages
 
                 publishFt8MessageList();//post an immutable snapshot so the UI recomposes immediately
                 mutableTimerOffset.postValue(time_sec);//this cycle's time offset
@@ -580,36 +625,72 @@ public class MainViewModel extends ViewModel {
 
                 findIncludedCallsigns(messages);//find matching messages and add to the call list
 
+                // Clear-CQ-slot occupancy (issue #418): every kept decode (all
+                // passes — deep passes see signals the fast pass missed) feeds
+                // the history; a CQ idling on a now-occupied offset relocates
+                // from inside this call, hold-down-paced.
+                ft8TransmitSignal.recordBandActivity(messages);
+
                 //check transmit procedure. Parse transmit procedure from message list
                 //if exceeded cycle by 2 seconds, should not parse
                 int autoReplyBudgetMs = Math.max(2000, GeneralVariables.lateStartTolerance);
                 if (!ft8TransmitSignal.isTransmitting()
-                        && !isDeep//block deep decode from activating auto procedure
-                        //deep decode list should be added to the new message list without deep decode
+                        && !isDeep//deep passes go through the evidence-only path below
                         && (ft8SignalListener.timeSec
                         + GeneralVariables.pttDelay
                         + GeneralVariables.transmitDelay <= autoReplyBudgetMs)) {//budget scales with late-start tolerance
                     ft8TransmitSignal.parseMessageToFunction(messages);//parse messages and process
                 }
 
-                currentMessages = WaterfallLabelMessages.afterPass(currentMessages, messages, isDeep);
-
+                // Deep/subtraction/late passes routinely find replies the fast
+                // pass missed; feed them to the sequencer as positive evidence
+                // (advance/RR73/complete/enqueue — never no-reply counting, see
+                // parseMessageToFunction(list, true)). When they land before TX
+                // keys (~:29.0-:29.8 vs key-up ~:29.9) this upgrades the very
+                // next transmission; when TX is already playing they are
+                // stashed and replayed after key-up so the evidence still
+                // advances the next cycle instead of being dropped.
                 if (isDeep) {
-                    currentDecodeCount += messages.size();
-                } else {
-                    currentDecodeCount = messages.size();
+                    if (ft8TransmitSignal.isTransmitting()) {
+                        // UtcTimer.getSystemTime(), not System.currentTimeMillis():
+                        // Ft8Message.utcTime is in the NTP/GPS-corrected time base,
+                        // and the stash ages entries against it — mixing bases would
+                        // shift eviction by the (possibly large) clock correction.
+                        pendingSequencerDecodes.stash(messages, UtcTimer.getSystemTime());
+                    } else {
+                        ft8TransmitSignal.parseMessageToFunction(messages, true);
+                    }
                 }
+                // First delivery with TX idle (typically the own-slot fast pass
+                // ~1s after key-up): replay anything stashed mid-TX.
+                if (!ft8TransmitSignal.isTransmitting() && !pendingSequencerDecodes.isEmpty()) {
+                    ArrayList<Ft8Message> stashed =
+                            pendingSequencerDecodes.drain(UtcTimer.getSystemTime());
+                    if (!stashed.isEmpty()) {
+                        ft8TransmitSignal.parseMessageToFunction(stashed, true);
+                    }
+                }
+
+                decodeCycleState.labelsAfterPass(messages, isDeep);
+
+                // Take the count from the same atomic update we made, not a re-read of
+                // shared state a concurrently-delivering pass may have advanced since.
+                int decodeCountAfterPass = decodeCycleState.countAfterPass(messages.size(), isDeep);
 
                 //decode state, triggers marker action in spectrum display
                 mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), messages.size()));
 
 
                 getQTHRunnable.messages = messages;
-                getQTHThreadPool.execute(getQTHRunnable);//query location via thread pool
+                // Guard against the ViewModel-teardown race: a late deep-decode
+                // pass can deliver here after onCleared() shut the pool down,
+                // and a raw execute() on a terminated pool throws
+                // RejectedExecutionException on this decode thread (crash).
+                SafeExecutor.tryExecute(getQTHThreadPool, getQTHRunnable);//query location via thread pool
 
                 //this variable also notifies message list changes
                 mutable_Decoded_Counter.postValue(
-                        currentDecodeCount);//notify the UI of the total message count
+                        decodeCountAfterPass);//notify the UI of the total message count
 
                 if (GeneralVariables.saveSWLMessage) {
                     databaseOpr.writeMessage(messages);//write SWL messages to database
@@ -658,8 +739,13 @@ public class MainViewModel extends ViewModel {
                         baseRig != null && baseRig.supportWaveOverCAT());
             }
 
-            @Override
-            public void onBeforeTransmit(Ft8Message message, int functionOder) {
+            /**
+             * Assert PTT (+ pause SCO) through the configured control path. Shared
+             * by the FT8 TX path and the tune carrier (issue #408) so the
+             * CAT/RTS/DTR branching lives in one place; with no control path
+             * (VOX), this is a no-op and the audio itself keys the rig.
+             */
+            private void beginKeying() {
                 if (GeneralVariables.controlMode == ControlMode.CAT
                         || GeneralVariables.controlMode == ControlMode.RTS
                         || GeneralVariables.controlMode == ControlMode.DTR) {
@@ -669,15 +755,10 @@ public class MainViewModel extends ViewModel {
                         baseRig.setPTT(true);
                     }
                 }
-                if (ft8TransmitSignal.isActivated()) {
-                    GeneralVariables.transmitMessages.add(message);
-                    //mutableTransmitMessages.postValue(GeneralVariables.transmitMessages);
-                    mutableTransmitMessagesCount.postValue(1);
-                }
             }
 
-            @Override
-            public void onAfterTransmit(Ft8Message message, int functionOder) {
+            /** Release PTT (+ restore SCO); counterpart of {@link #beginKeying()}. */
+            private void endKeying() {
                 if (GeneralVariables.controlMode == ControlMode.CAT
                         || GeneralVariables.controlMode == ControlMode.RTS
                         || GeneralVariables.controlMode == ControlMode.DTR) {
@@ -690,6 +771,31 @@ public class MainViewModel extends ViewModel {
             }
 
             @Override
+            public void onBeforeTransmit(Ft8Message message, int functionOder) {
+                beginKeying();
+                if (ft8TransmitSignal.isActivated()) {
+                    GeneralVariables.transmitMessages.add(message);
+                    //mutableTransmitMessages.postValue(GeneralVariables.transmitMessages);
+                    mutableTransmitMessagesCount.postValue(1);
+                }
+            }
+
+            @Override
+            public void onAfterTransmit(Ft8Message message, int functionOder) {
+                endKeying();
+            }
+
+            @Override
+            public void onTuneKeyDown() {
+                beginKeying();
+            }
+
+            @Override
+            public void onTuneKeyUp() {
+                endKeying();
+            }
+
+            @Override
             public void onTransmitByWifi(Ft8Message msg) {
                 if (GeneralVariables.connectMode == ConnectMode.NETWORK) {
                     if (baseRig != null) {
@@ -697,7 +803,7 @@ public class MainViewModel extends ViewModel {
                             sendWaveDataRunnable.baseRig = baseRig;
                             sendWaveDataRunnable.message = msg;
                             //send network data packets via thread pool
-                            sendWaveDataThreadPool.execute(sendWaveDataRunnable);
+                            SafeExecutor.tryExecute(sendWaveDataThreadPool, sendWaveDataRunnable);
                         }
                     }
                 }
@@ -725,7 +831,7 @@ public class MainViewModel extends ViewModel {
                 }
                 sendWaveDataRunnable.baseRig = baseRig;
                 sendWaveDataRunnable.message = msg;
-                sendWaveDataThreadPool.execute(sendWaveDataRunnable);
+                SafeExecutor.tryExecute(sendWaveDataThreadPool, sendWaveDataRunnable);
             }
 
         }, new OnTransmitSuccess() {//when QSO is successful
@@ -864,7 +970,7 @@ public class MainViewModel extends ViewModel {
         synchronized (ft8Messages) {
             ft8Messages.clear();
         }
-        currentDecodeCount = 0;
+        decodeCycleState.resetCount();
         mutable_Decoded_Counter.postValue(0);
         publishFt8MessageList();
     }
@@ -880,6 +986,19 @@ public class MainViewModel extends ViewModel {
      */
     public static boolean shouldClearOnBandChange(boolean enabled, String oldWaveLength, String newWaveLength) {
         return enabled && !java.util.Objects.equals(oldWaveLength, newWaveLength);
+    }
+
+    /**
+     * Copy used to seed {@code mutableFt8MessageList} — the UI must never be
+     * handed the live {@code ft8Messages} instance. Because observeAsState
+     * compares structurally and every snapshot published later is content-equal
+     * to the live list it was copied from, a UI seeded with the live list keeps
+     * that reference forever (equal writes are skipped) and Compose iterates the
+     * very list the decode thread mutates — ConcurrentModificationException
+     * during recomposition. Package-visible for testing.
+     */
+    static ArrayList<Ft8Message> uiSeedSnapshot(ArrayList<Ft8Message> live) {
+        return new ArrayList<>(live);
     }
 
     /**
@@ -1055,6 +1174,33 @@ public class MainViewModel extends ViewModel {
 
 
     /**
+     * Handle a TUNE tap according to the tune-method setting (issue #425).
+     * Returns true when the tap was handled here — either the rig's internal
+     * ATU was started (it keys its own carrier and stops by itself) or the
+     * operator chose Internal but no capable rig is connected (toast, no
+     * surprise carrier). Returns false when the caller should run the normal
+     * low-power carrier tune.
+     */
+    public boolean tryStartTuneViaAtu() {
+        boolean atuAvailable = baseRig != null && baseRig.isConnected()
+                && baseRig.supportsAtuTune() && !baseRig.isPttOn();
+        int action = TuneMethod.decide(GeneralVariables.tuneMethod, atuAvailable);
+        if (action == TuneMethod.ACTION_RIG_ATU) {
+            fileLog("tune: starting rig ATU (method=" + GeneralVariables.tuneMethod
+                    + ", rig=" + baseRig.getName() + ")");
+            baseRig.startAtuTune();
+            ToastMessage.show(getStringFromResource(R.string.tune_atu_started));
+            return true;
+        }
+        if (action == TuneMethod.ACTION_UNAVAILABLE) {
+            fileLog("tune: method=INTERNAL but no ATU-capable rig connected");
+            ToastMessage.show(getStringFromResource(R.string.tune_atu_unavailable));
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * Set the operating carrier frequency. Only operates if the rig is connected.
      */
     public void setOperationBand() {
@@ -1121,6 +1267,9 @@ public class MainViewModel extends ViewModel {
         }
         if (ft8TransmitSignal != null) {
             ft8TransmitSignal.rebuildTimer(mode);
+            // Mode switch changes the slot length and usually the dial: the
+            // clear-CQ-slot occupancy history no longer applies (issue #418).
+            ft8TransmitSignal.clearBandActivity();
         }
 
         // Retune within the SAME band to the new mode's dial (see safety note above).

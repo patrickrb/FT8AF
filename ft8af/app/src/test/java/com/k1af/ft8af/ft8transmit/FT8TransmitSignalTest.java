@@ -395,4 +395,143 @@ public class FT8TransmitSignalTest {
         // The one-shot flag without an active free-text message can't trigger a stop.
         assertThat(FT8TransmitSignal.shouldStopAfterOneShot(false, true)).isFalse();
     }
+
+    // ---- isCallsignReadyToTransmit -------------------------------------------
+    // The guard setTransmitting/transmitNow apply before keying. sendFreeTextOnce
+    // must apply the SAME predicate before arming its one-shot (issue #401), or a
+    // blocked transmission leaves the free text armed to leak into the next over.
+
+    @Test
+    public void callsignReady_realCalls_ready() {
+        assertThat(FT8TransmitSignal.isCallsignReadyToTransmit("K1AF")).isTrue();
+        assertThat(FT8TransmitSignal.isCallsignReadyToTransmit("2E0ABC")).isTrue();
+        // Exactly the 3-character minimum the keying guard enforces.
+        assertThat(FT8TransmitSignal.isCallsignReadyToTransmit("K1A")).isTrue();
+    }
+
+    @Test
+    public void callsignReady_shortOrMissing_notReady() {
+        assertThat(FT8TransmitSignal.isCallsignReadyToTransmit("K1")).isFalse();
+        assertThat(FT8TransmitSignal.isCallsignReadyToTransmit("")).isFalse();
+        assertThat(FT8TransmitSignal.isCallsignReadyToTransmit(null)).isFalse();
+    }
+
+    // ---- tuneBlockReason (issue #408) ----------------------------------------
+    // The gate for starting the tune carrier. Ordered by severity: TX beats the
+    // protections, protections beat route support — and tune must never become
+    // a backdoor around a TX inhibit (SWR lockout, WSPR blacklist).
+
+    @Test
+    public void tune_allClear_mayStart() {
+        assertThat(FT8TransmitSignal.tuneBlockReason(
+                false, false, false, false, false, false))
+                .isEqualTo(FT8TransmitSignal.TuneBlockReason.NONE);
+    }
+
+    @Test
+    public void tune_txActiveOrArmed_blocks() {
+        assertThat(FT8TransmitSignal.tuneBlockReason(
+                true, false, false, false, false, false))
+                .isEqualTo(FT8TransmitSignal.TuneBlockReason.TX_ACTIVE);
+        // TX outranks every other reason.
+        assertThat(FT8TransmitSignal.tuneBlockReason(
+                true, true, true, true, true, true))
+                .isEqualTo(FT8TransmitSignal.TuneBlockReason.TX_ACTIVE);
+    }
+
+    @Test
+    public void tune_swrLockout_blocks() {
+        assertThat(FT8TransmitSignal.tuneBlockReason(
+                false, true, false, false, false, false))
+                .isEqualTo(FT8TransmitSignal.TuneBlockReason.SWR_LOCKED);
+    }
+
+    @Test
+    public void tune_wsprFrequency_blocks() {
+        // The WSPR sub-band TX inhibit applies to tune too.
+        assertThat(FT8TransmitSignal.tuneBlockReason(
+                false, false, true, false, false, false))
+                .isEqualTo(FT8TransmitSignal.TuneBlockReason.WSPR_FREQUENCY);
+    }
+
+    @Test
+    public void tune_unsupportedRoutes_block() {
+        // MVP: AudioTrack sink only; CAT-audio (truSDX), network rigs, and the
+        // USB-direct path are Phase-2 follow-ups.
+        assertThat(FT8TransmitSignal.tuneBlockReason(
+                false, false, false, true, false, false))
+                .isEqualTo(FT8TransmitSignal.TuneBlockReason.UNSUPPORTED_ROUTE);
+        assertThat(FT8TransmitSignal.tuneBlockReason(
+                false, false, false, false, true, false))
+                .isEqualTo(FT8TransmitSignal.TuneBlockReason.UNSUPPORTED_ROUTE);
+        assertThat(FT8TransmitSignal.tuneBlockReason(
+                false, false, false, false, false, true))
+                .isEqualTo(FT8TransmitSignal.TuneBlockReason.UNSUPPORTED_ROUTE);
+    }
+
+    // ---- shouldCompleteQso ---------------------------------------------------
+    // Completion decision for the QSO state machine. The evidenceOnly flag marks
+    // deep/late-pass parses: positive evidence (partner sent 73, partner moved
+    // on) completes from any pass, but silence-based completions belong to the
+    // fast pass alone — a deep pass that found nothing new is not "no reply".
+
+    @Test
+    public void complete_partner73_completesOnAnyPass() {
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                /*evidenceOnly*/ false, /*order*/ 5, /*newOrder*/ 5, 0, 3, false)).isTrue();
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                /*evidenceOnly*/ true, /*order*/ 5, /*newOrder*/ 5, 0, 3, false)).isTrue();
+    }
+
+    @Test
+    public void complete_targetCallingOthers_completesOnAnyPass() {
+        // RR73 deadlock breaker: the partner started calling someone else.
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                false, 4, -1, 0, 3, /*targetCallingOthers*/ true)).isTrue();
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                true, 4, -1, 0, 3, /*targetCallingOthers*/ true)).isTrue();
+    }
+
+    @Test
+    public void complete_at73WithNoReply_fastPassOnly() {
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                false, 5, -1, 0, 3, false)).isTrue();
+        // A deep pass finding nothing must not conclude the partner went silent.
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                true, 5, -1, 0, 3, false)).isFalse();
+    }
+
+    @Test
+    public void complete_rr73NoReplyCapWithLimit_fastPassOnly() {
+        // order 4, limit 3: cap is noReplyCount > 6.
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                false, 4, -1, /*noReplyCount*/ 7, /*noReplyLimit*/ 3, false)).isTrue();
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                true, 4, -1, 7, 3, false)).isFalse();
+    }
+
+    @Test
+    public void complete_rr73NoReplyCapWithLimit_belowThresholdKeepsGoing() {
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                false, 4, -1, /*noReplyCount*/ 6, /*noReplyLimit*/ 3, false)).isFalse();
+    }
+
+    @Test
+    public void complete_rr73GiveupWhenLimitIgnored_fastPassOnly() {
+        // noReplyLimit 0 ("ignore"): RR73 still resets after RR73_GIVEUP_CYCLES (3).
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                false, 4, -1, /*noReplyCount*/ 4, /*noReplyLimit*/ 0, false)).isTrue();
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                true, 4, -1, 4, 0, false)).isFalse();
+    }
+
+    @Test
+    public void complete_midQsoWithReply_neverCompletes() {
+        // A normal advance (partner sent R-report while we're at order 2) is not
+        // a completion on either pass.
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                false, 2, 3, 0, 3, false)).isFalse();
+        assertThat(FT8TransmitSignal.shouldCompleteQso(
+                true, 2, 3, 0, 3, false)).isFalse();
+    }
 }

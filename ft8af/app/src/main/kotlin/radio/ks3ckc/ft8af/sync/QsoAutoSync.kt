@@ -32,21 +32,21 @@ internal class QsoSyncGate(private val minIntervalMs: Long = 15_000L) {
     private var inFlight = false
     private var lastStartedMs = Long.MIN_VALUE
 
-    /** True when a run is allowed to start right now. Does not mutate state. */
+    /**
+     * Atomically check the guards and, if a run is allowed, mark it started — all under
+     * one lock, so two racing triggers can never both pass (check-then-act done as two
+     * separate synchronized calls would let both see `inFlight == false`). Returns true
+     * when the caller owns the run and must eventually call [markFinished].
+     */
     @Synchronized
-    fun shouldRun(now: Long, anyServiceEnabled: Boolean): Boolean {
+    fun tryStart(now: Long, anyServiceEnabled: Boolean): Boolean {
         if (!anyServiceEnabled) return false
         if (inFlight) return false
         // Long.MIN_VALUE first-run sentinel: `now - MIN_VALUE` overflows, so special-case it.
         if (lastStartedMs != Long.MIN_VALUE && now - lastStartedMs < minIntervalMs) return false
-        return true
-    }
-
-    /** Mark a run as begun; subsequent [shouldRun] calls are gated until [markFinished]. */
-    @Synchronized
-    fun markStarted(now: Long) {
         inFlight = true
         lastStartedMs = now
+        return true
     }
 
     /** Mark the in-flight run complete, re-opening the single-flight guard. */
@@ -127,11 +127,10 @@ class QsoAutoSync(private val appContext: Context) {
         // interval; the gate compares deltas, never wall-clock dates.)
         val now = SystemClock.elapsedRealtime()
         val anyEnabled = GeneralVariables.enableCloudlog || GeneralVariables.enableQRZ
-        if (!gate.shouldRun(now, anyEnabled)) {
+        if (!gate.tryStart(now, anyEnabled)) {
             log("skip ($reason): enabled=$anyEnabled")
             return
         }
-        gate.markStarted(now)
         Thread {
             try {
                 // Pass our application Context (and the same db name MainViewModel

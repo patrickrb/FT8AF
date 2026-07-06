@@ -116,6 +116,11 @@
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_cq_options">CQ message options (modifier, free text, Field Day)</string>
 
+    <!-- ===== CQ options sheet (free text / saved custom CQ) ===== -->
+    <string name="cq_directed_too_long">CQ + text + call doesn\'t fit in one FT8 message (max 13 chars, limited character set)</string>
+    <string name="cq_saved_label">Saved</string>
+    <string name="cq_saved_remove">Remove saved CQ</string>
+
     <!-- ===== Hound (DXpedition) setup ===== -->
     <string name="hound_title">Work a DXpedition (Hound)</string>
     <string name="hound_help">Tune the rig to the Fox\'s published dial frequency first. You call high (1000–4000 Hz); the app auto-QSYs you down to where the Fox answers and replies with your report.</string>
@@ -138,6 +143,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">Calling CQ</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">Searching...</string>
     <string name="qsopanel_qsoing_with">QSOing with %1$s</string>
     <string name="qsopanel_waiting_for">Waiting for %1$s</string>
@@ -380,6 +386,26 @@
     <string name="settings_section_language">LANGUAGE</string>
     <string name="settings_section_appearance">APPEARANCE</string>
     <string name="settings_section_backup">BACKUP &amp; RESTORE</string>
+    <string name="settings_section_fft_waterfall">FFT / WATERFALL (DEVELOPER)</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_fft_window">FFT window function</string>
+    <string name="settings_fft_window_desc">Pre-FFT window for the spectrum/waterfall display; Hann reduces spectral leakage</string>
+    <string name="settings_fft_window_rect">Rectangular (none)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">Frame averaging</string>
+    <string name="settings_fft_averaging_desc">Smooth the display across FFT frames; Off shows each frame as-is</string>
+    <string name="settings_fft_avg_off">Off</string>
+    <string name="settings_fft_avg_light">Light (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">Heavy (EMA 0.25)</string>
+    <string name="settings_bin_agg">Spectrum bin combining</string>
+    <string name="settings_bin_agg_desc">How adjacent FFT bins merge into one spectrum bar</string>
+    <string name="settings_bin_agg_max">Maximum</string>
+    <string name="settings_bin_agg_avg">Average</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 
     <!-- ===== Settings: backup / restore (export & import config) ===== -->
     <string name="settings_export">Export settings</string>
@@ -578,6 +604,7 @@
     <string name="settings_built_by">Built by</string>
     <string name="settings_author_k1af" translatable="false">K1AF — Patrick Burns (QRZ)</string>
     <string name="settings_author_n0rc" translatable="false">N0RC — Reid (QRZ)</string>
+    <string name="about_font_attribution">UI font: Inter by Rasmus Andersson (SIL OFL 1.1)</string>
 
     <!-- ===== Settings: dialogs ===== -->
     <string name="settings_block_exact_title">Block Exact Callsigns</string>
@@ -651,4 +678,32 @@
     <string name="language_name_uk" translatable="false">Українська</string>
     <string name="language_name_ar" translatable="false">العربية</string>
 
+    <string name="tx_audio_dropped">TX audio failed — no signal was sent this cycle (USB audio error)</string>
+    <string name="cq_offset_moved">CQ offset moved to a clear spot: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Auto clear TX offset</string>
+    <string name="settings_auto_clear_tx_desc">When calling CQ, pick a clear spot from recent band activity and move away if it becomes occupied</string>
+    <string name="tune_button" translatable="false">TUNE</string>
+    <string name="tune_content_description">Tune — start the rig\'s tuner or transmit a steady carrier for antenna tuning</string>
+    <string name="tune_stopped_timeout">Tune stopped after %1$d s</string>
+    <string name="tune_blocked_tx">Stop the CQ/QSO before tuning</string>
+    <string name="tune_unavailable_route">Tune is not yet supported on this audio route</string>
+    <string name="tune_atu_started">Rig antenna tuner started</string>
+    <string name="tune_atu_unavailable">Rig tuner unavailable — connect a CAT radio with an internal tuner</string>
+    <string name="settings_tune_method">Tune method</string>
+    <string name="settings_tune_method_desc">Automatic starts the rig\'s internal tuner over CAT when available, otherwise plays the low power tone</string>
+    <string name="tune_method_automatic">Automatic</string>
+    <string name="tune_method_internal">Internal tuner</string>
+    <string name="tune_method_tone">Low power tone</string>
+
+    <!-- Android Auto status screens (read-only). Headlines reuse the qsopanel_* strings. -->
+    <string name="car_screen_title" translatable="false">FT8AF</string>
+    <string name="car_open_phone">Open FT8AF on your phone to start the FT8 engine</string>
+    <string name="car_monitoring">Monitoring — TX off</string>
+    <string name="car_no_tx">No transmission queued</string>
+    <string name="car_seq_step">Step %1$s (%2$d/%3$d)</string>
+    <string name="car_slot_tx">TX slot · %1$d s</string>
+    <string name="car_slot_rx">RX slot · %1$d s</string>
+    <string name="car_decodes_action">Decodes</string>
+    <string name="car_decodes_title">Recent decodes</string>
+    <string name="car_no_decodes">No decodes yet</string>
 </resources>

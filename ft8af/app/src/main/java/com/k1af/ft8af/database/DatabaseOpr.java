@@ -743,6 +743,23 @@ public class DatabaseOpr extends SQLiteOpenHelper {
     }
 
     /**
+     * Parses a config-table int value, falling back when the stored string is
+     * empty or not a number (a hand-edited or stale backup must not crash
+     * startup hydration). Range clamping is the caller's (setter's) job.
+     * Package-private static so it is unit-testable without a database.
+     */
+    static int parseConfigInt(String value, int fallback) {
+        if (value == null || value.isEmpty()) {
+            return fallback;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    /**
      * Read every config key/value pair synchronously into an insertion-ordered map.
      * Backs the settings-export feature (issue #357). Must be called off the main
      * thread (it touches SQLite directly).
@@ -2385,6 +2402,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("toModifier")) {
                     GeneralVariables.toModifier = result;
                 }
+                if (name.equalsIgnoreCase("cqFreeText")) {
+                    if (result != null) {
+                        GeneralVariables.cqFreeText = result;
+                    }
+                }
                 if (name.equalsIgnoreCase("fieldDayMode")) {
                     GeneralVariables.fieldDayMode = result.equals("1");
                 }
@@ -2595,6 +2617,46 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("perBandOutputLevels")) {//Per-band TX output levels ("20m=60,40m=85")
                     GeneralVariables.perBandOutputLevels = result == null ? "" : result;
                 }
+                if (name.equalsIgnoreCase("autoClearTxFreq")) {//Auto-select clear CQ offset (issue #418)
+                    GeneralVariables.autoClearTxFreq = "1".equals(result);
+                }
+                if (name.equalsIgnoreCase("tuneMaxOnSeconds")) {//Tune carrier hard cap (issue #408)
+                    //Defensive parse: settings import (#382) can feed anything here.
+                    //Null/non-numeric keeps the default; TuneController clamps the range.
+                    if (result != null) {
+                        try {
+                            GeneralVariables.tuneMaxOnSeconds =
+                                    com.k1af.ft8af.ft8transmit.TuneController.clampMaxOnSeconds(
+                                            Integer.parseInt(result.trim()));
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
+                if (name.equalsIgnoreCase("tuneLevelIndependent")) {//Tune level decoupled from TX drive
+                    GeneralVariables.tuneLevelIndependent = "1".equals(result);
+                }
+                if (name.equalsIgnoreCase("tuneLevel")) {//Global independent tune level (0..100)
+                    if (result != null) {
+                        try {
+                            GeneralVariables.tuneLevel =
+                                    Math.max(0, Math.min(100, Integer.parseInt(result.trim())));
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
+                if (name.equalsIgnoreCase("perBandTuneLevels")) {//Per-band independent tune levels
+                    GeneralVariables.perBandTuneLevels = result == null ? "" : result;
+                }
+                if (name.equalsIgnoreCase("tuneMethod")) {//Tune method: rig ATU vs carrier (issue #425)
+                    if (result != null) {
+                        try {
+                            GeneralVariables.tuneMethod =
+                                    com.k1af.ft8af.ft8transmit.TuneMethod.clamp(
+                                            Integer.parseInt(result.trim()));
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
                 if (name.equalsIgnoreCase("excludedCallsigns")) {//Blocklist: callsign prefixes
                     GeneralVariables.addExcludedCallsigns(result);
                 }
@@ -2749,6 +2811,19 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("spectrumWidth")) {
                     GeneralVariables.setSpectrumWidth(result.equals("") ? 3500 : Integer.parseInt(result));
+                }
+                // FFT display developer knobs (issue #428). Parsed defensively:
+                // these are expected to survive hand-edited/stale backups, so a
+                // non-numeric value must fall back to the default instead of
+                // crashing hydration; the setters then clamp the range.
+                if (name.equalsIgnoreCase("fftWindowType")) {
+                    GeneralVariables.setFftWindowType(parseConfigInt(result, 1));
+                }
+                if (name.equalsIgnoreCase("fftAveragingMode")) {
+                    GeneralVariables.setFftAveragingMode(parseConfigInt(result, 0));
+                }
+                if (name.equalsIgnoreCase("spectrumBinAggregation")) {
+                    GeneralVariables.setSpectrumBinAggregation(parseConfigInt(result, 0));
                 }
 
                 if (name.equalsIgnoreCase("highlightNewDxcc")) {

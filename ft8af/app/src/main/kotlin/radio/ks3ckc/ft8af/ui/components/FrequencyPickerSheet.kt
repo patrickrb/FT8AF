@@ -54,6 +54,10 @@ fun selectBandIndex(mainViewModel: MainViewModel, context: Context, index: Int) 
     // Notify observers (TxStrip pill, Settings band picker) so the UI updates
     // without waiting for a rig onFreqChanged round-trip.
     GeneralVariables.mutableBandChange.postValue(index)
+    // A real band hop invalidates the clear-CQ-slot occupancy history (issue #418).
+    if (newWaveLength != oldWaveLength) {
+        mainViewModel.ft8TransmitSignal.clearBandActivity()
+    }
     // The operator picked a new band — optionally clear the stale decodes + reset
     // the TX target so the decode screen reflects the new band (tester request).
     if (MainViewModel.shouldClearOnBandChange(

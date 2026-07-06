@@ -106,6 +106,44 @@ internal fun currentLanguageNameRes(currentTags: String): Int =
         ?: R.string.settings_language_system
 
 /**
+ * FFT display developer knobs (issue #428): label resources indexed by the
+ * wire value stored in GeneralVariables / the config DB. Out-of-range values
+ * fall back to each knob's default, mirroring the clamping setters. Pure
+ * logic, unit-tested.
+ */
+internal val FFT_WINDOW_NAME_RES: List<Int> = listOf(
+    R.string.settings_fft_window_rect,           // 0
+    R.string.settings_fft_window_hann,           // 1 (default)
+    R.string.settings_fft_window_hamming,        // 2
+    R.string.settings_fft_window_blackman,       // 3
+    R.string.settings_fft_window_blackman_harris, // 4
+)
+
+@StringRes
+internal fun fftWindowLabelRes(mode: Int): Int =
+    FFT_WINDOW_NAME_RES.getOrElse(mode) { FFT_WINDOW_NAME_RES[1] }
+
+internal val FFT_AVERAGING_NAME_RES: List<Int> = listOf(
+    R.string.settings_fft_avg_off,   // 0 (default)
+    R.string.settings_fft_avg_light, // 1: EMA a=0.5
+    R.string.settings_fft_avg_heavy, // 2: EMA a=0.25
+)
+
+@StringRes
+internal fun fftAveragingLabelRes(mode: Int): Int =
+    FFT_AVERAGING_NAME_RES.getOrElse(mode) { FFT_AVERAGING_NAME_RES[0] }
+
+internal val BIN_AGGREGATION_NAME_RES: List<Int> = listOf(
+    R.string.settings_bin_agg_max, // 0 (default, legacy behavior)
+    R.string.settings_bin_agg_avg, // 1
+    R.string.settings_bin_agg_rms, // 2
+)
+
+@StringRes
+internal fun binAggregationLabelRes(mode: Int): Int =
+    BIN_AGGREGATION_NAME_RES.getOrElse(mode) { BIN_AGGREGATION_NAME_RES[0] }
+
+/**
  * Advanced settings: PTT/TX timing delays, late-start tolerance, and the
  * in-app language picker.
  */
@@ -126,6 +164,14 @@ fun AdvancedSettings(
     var showLateStart by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
     var showThemePicker by remember { mutableStateOf(false) }
+
+    // FFT display developer knobs (issue #428)
+    var fftWindow by remember { mutableIntStateOf(GeneralVariables.getFftWindowType()) }
+    var fftAveraging by remember { mutableIntStateOf(GeneralVariables.getFftAveragingMode()) }
+    var binAggregation by remember { mutableIntStateOf(GeneralVariables.getSpectrumBinAggregation()) }
+    var showFftWindowPicker by remember { mutableStateOf(false) }
+    var showFftAveragingPicker by remember { mutableStateOf(false) }
+    var showBinAggregationPicker by remember { mutableStateOf(false) }
 
     // -- Backup & restore (issue #357) --
     val scope = rememberCoroutineScope()
@@ -320,6 +366,66 @@ fun AdvancedSettings(
         )
     }
 
+    // -- FFT Window Picker (issue #428) --
+    if (showFftWindowPicker) {
+        val labels = ArrayList<String>(FFT_WINDOW_NAME_RES.size)
+        for (res in FFT_WINDOW_NAME_RES) {
+            labels.add(stringResource(res))
+        }
+        ListPickerDialog(
+            title = stringResource(R.string.settings_fft_window),
+            items = labels,
+            selectedIndex = fftWindow.coerceIn(0, FFT_WINDOW_NAME_RES.size - 1),
+            onDismiss = { showFftWindowPicker = false },
+            onSelect = { index ->
+                showFftWindowPicker = false
+                GeneralVariables.setFftWindowType(index)
+                fftWindow = GeneralVariables.getFftWindowType()
+                mainViewModel.databaseOpr.writeConfig("fftWindowType", index.toString(), null)
+            },
+        )
+    }
+
+    // -- FFT Frame Averaging Picker (issue #428) --
+    if (showFftAveragingPicker) {
+        val labels = ArrayList<String>(FFT_AVERAGING_NAME_RES.size)
+        for (res in FFT_AVERAGING_NAME_RES) {
+            labels.add(stringResource(res))
+        }
+        ListPickerDialog(
+            title = stringResource(R.string.settings_fft_averaging),
+            items = labels,
+            selectedIndex = fftAveraging.coerceIn(0, FFT_AVERAGING_NAME_RES.size - 1),
+            onDismiss = { showFftAveragingPicker = false },
+            onSelect = { index ->
+                showFftAveragingPicker = false
+                GeneralVariables.setFftAveragingMode(index)
+                fftAveraging = GeneralVariables.getFftAveragingMode()
+                mainViewModel.databaseOpr.writeConfig("fftAveragingMode", index.toString(), null)
+            },
+        )
+    }
+
+    // -- Spectrum Bin Aggregation Picker (issue #428) --
+    if (showBinAggregationPicker) {
+        val labels = ArrayList<String>(BIN_AGGREGATION_NAME_RES.size)
+        for (res in BIN_AGGREGATION_NAME_RES) {
+            labels.add(stringResource(res))
+        }
+        ListPickerDialog(
+            title = stringResource(R.string.settings_bin_agg),
+            items = labels,
+            selectedIndex = binAggregation.coerceIn(0, BIN_AGGREGATION_NAME_RES.size - 1),
+            onDismiss = { showBinAggregationPicker = false },
+            onSelect = { index ->
+                showBinAggregationPicker = false
+                GeneralVariables.setSpectrumBinAggregation(index)
+                binAggregation = GeneralVariables.getSpectrumBinAggregation()
+                mainViewModel.databaseOpr.writeConfig("spectrumBinAggregation", index.toString(), null)
+            },
+        )
+    }
+
     // -- Language Picker --
     // Index 0 = "System default" (empty locale list → follow system). Selecting a
     // language calls AppCompatDelegate.setApplicationLocales, which persists the
@@ -412,6 +518,39 @@ fun AdvancedSettings(
                         value = stringResource(R.string.settings_milliseconds_format, lateStartMs),
                         showChevron = true,
                         onClick = { showLateStart = true },
+                    )
+                }
+            }
+        }
+
+        // =====================================================================
+        // FFT / WATERFALL (developer knobs, issue #428)
+        // =====================================================================
+        SettingsSection(title = stringResource(R.string.settings_section_fft_waterfall)) {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    SettingsRow(
+                        label = stringResource(R.string.settings_fft_window),
+                        description = stringResource(R.string.settings_fft_window_desc),
+                        value = stringResource(fftWindowLabelRes(fftWindow)),
+                        showChevron = true,
+                        onClick = { showFftWindowPicker = true },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_fft_averaging),
+                        description = stringResource(R.string.settings_fft_averaging_desc),
+                        value = stringResource(fftAveragingLabelRes(fftAveraging)),
+                        showChevron = true,
+                        onClick = { showFftAveragingPicker = true },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_bin_agg),
+                        description = stringResource(R.string.settings_bin_agg_desc),
+                        value = stringResource(binAggregationLabelRes(binAggregation)),
+                        showChevron = true,
+                        onClick = { showBinAggregationPicker = true },
                     )
                 }
             }

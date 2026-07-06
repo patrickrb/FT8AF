@@ -43,8 +43,14 @@ public class Yaesu3RigConstant {
     private static final String TX_ON = "TX1;";//for FT450 PTT
     private static final String TX_OFF = "TX0;";//for FT450 PTT
 
+    // Start the internal antenna tuner (FT-991/FTDX10/FT-710 AC command,
+    // P3=2 = tune start). The rig keys its own carrier and stops by itself;
+    // rigs without an ATU answer "?;" and do nothing.
+    private static final String START_ATU_TUNE = "AC002;";
 
-
+    public static byte[] startAtuTune() {
+        return START_ATU_TUNE.getBytes();
+    }
 
 
 

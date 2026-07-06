@@ -28,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
@@ -70,6 +72,32 @@ internal fun isValidFreeText(text: String): Boolean {
     return text.length <= 13 && text.all { it in allowed }
 }
 
+/**
+ * Assemble the on-air directed-CQ message: `CQ <text> <call>`, trimmed with
+ * runs of whitespace collapsed to single spaces (so an empty text yields a plain
+ * `CQ <call>` rather than `CQ  <call>`).
+ */
+internal fun buildDirectedCq(freeText: String, callsign: String): String =
+    "CQ ${freeText.trim()} ${callsign.trim()}".trim().replace(Regex("\\s+"), " ")
+
+/**
+ * Whether the assembled `CQ <text> <call>` fits one FT8 free-text frame. The raw
+ * field only bounds the user's text; this bounds the whole transmitted string
+ * (13 chars + FT8 charset), which is what actually has to fit on the air.
+ */
+internal fun directedCqFits(freeText: String, callsign: String): Boolean =
+    isValidFreeText(buildDirectedCq(freeText, callsign))
+
+/**
+ * Whether the custom CQ free text should be persisted to config on an explicit
+ * action (sheet dismiss / Call CQ). We persist only a non-blank value that
+ * actually differs from what's already saved: this keeps each edit from writing
+ * a DELETE+INSERT per keystroke, never clobbers a saved value with a blank
+ * (clearing is the explicit ✕ path), and skips a redundant write when unchanged.
+ */
+internal fun shouldPersistFreeText(current: String, saved: String): Boolean =
+    current.isNotBlank() && current != saved
+
 internal fun sanitizeModifier(input: String): String =
     input.uppercase().filter { it.isLetter() }.take(4)
 
@@ -86,6 +114,8 @@ fun CqOptionsSheet(
     currentModifier: String,
     isFreeTextMode: Boolean,
     freeText: String,
+    callsign: String,
+    savedFreeText: String,
     fieldDayEnabled: Boolean,
     fieldDayClass: String,
     fieldDayNumTx: Int,
@@ -94,6 +124,8 @@ fun CqOptionsSheet(
     onSelectPreset: (String) -> Unit,
     onCustomModifier: (String) -> Unit,
     onFreeTextChange: (String) -> Unit,
+    onArmSavedCq: () -> Unit,
+    onRemoveSavedCq: () -> Unit,
     onFieldDayToggle: (Boolean) -> Unit,
     onFieldDayClassChange: (String) -> Unit,
     onFieldDayNumTxChange: (Int) -> Unit,
@@ -385,12 +417,23 @@ fun CqOptionsSheet(
                     fontFamily = GeistMonoFamily,
                 ),
                 supportingText = {
-                    Text(
-                        text = "${freeText.length}/13",
-                        color = if (freeText.length >= 13) StatusBad else TextMuted,
-                        fontSize = 11.sp,
-                        fontFamily = GeistMonoFamily,
-                    )
+                    // Validate the *assembled* on-air string (CQ + text + call),
+                    // not just the raw field — that's what has to fit 13 chars.
+                    if (freeText.isNotBlank() && !directedCqFits(freeText, callsign)) {
+                        Text(
+                            text = stringResource(R.string.cq_directed_too_long),
+                            color = StatusBad,
+                            fontSize = 11.sp,
+                            fontFamily = GeistMonoFamily,
+                        )
+                    } else {
+                        Text(
+                            text = "${freeText.length}/13",
+                            color = if (freeText.length >= 13) StatusBad else TextMuted,
+                            fontSize = 11.sp,
+                            fontFamily = GeistMonoFamily,
+                        )
+                    }
                 },
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.Characters,
@@ -401,6 +444,67 @@ fun CqOptionsSheet(
                     cursorColor = Accent,
                 ),
             )
+
+            // Saved custom-CQ quick-select chip (only when one is persisted).
+            // Tapping the label re-arms it; the X clears the saved value.
+            if (savedFreeText.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.cq_saved_label),
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = GeistMonoFamily,
+                        letterSpacing = 0.04.sp,
+                    )
+                    val savedSelected = isFreeTextMode && freeText == savedFreeText
+                    val bgColor = if (savedSelected) AccentSoft else BgSurface2
+                    val borderColor = if (savedSelected) BorderAmber else Border
+                    val textColor = if (savedSelected) Accent else TextMuted
+
+                    Row(
+                        modifier = Modifier
+                            .height(32.dp)
+                            .clip(chipShape)
+                            .background(bgColor, chipShape)
+                            .border(1.dp, borderColor, chipShape)
+                            .clickable { onArmSavedCq() }
+                            .padding(start = 14.dp, end = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = savedFreeText,
+                            color = textColor,
+                            fontSize = 12.sp,
+                            fontWeight = if (savedSelected) FontWeight.SemiBold else FontWeight.Medium,
+                            fontFamily = GeistMonoFamily,
+                            letterSpacing = 0.02.sp,
+                        )
+                        val removeLabel = stringResource(R.string.cq_saved_remove)
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(chipShape)
+                                .clickable(onClickLabel = removeLabel) { onRemoveSavedCq() }
+                                .semantics { contentDescription = removeLabel },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "✕",
+                                color = TextMuted,
+                                fontSize = 12.sp,
+                                fontFamily = GeistMonoFamily,
+                            )
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 

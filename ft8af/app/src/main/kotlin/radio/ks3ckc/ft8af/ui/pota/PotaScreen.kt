@@ -93,6 +93,8 @@ import radio.ks3ckc.ft8af.theme.BorderStrong
 import radio.ks3ckc.ft8af.theme.StatusConfirmed
 import radio.ks3ckc.ft8af.theme.TextMuted
 import radio.ks3ckc.ft8af.theme.TextPrimary
+import radio.ks3ckc.ft8af.ui.components.CredentialFieldRole
+import radio.ks3ckc.ft8af.ui.components.autofill
 
 private enum class PotaSubTab(@StringRes val labelRes: Int) {
     ACTIVATE(R.string.pota_tab_activate),
@@ -768,7 +770,11 @@ private fun PotaLoginDialog(
                     enabled = !submitting,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     colors = textFieldColors(),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .autofill(CredentialFieldRole.EMAIL) {
+                            email = it.trim()
+                        },
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -780,7 +786,11 @@ private fun PotaLoginDialog(
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     colors = textFieldColors(),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .autofill(CredentialFieldRole.PASSWORD) {
+                            password = it
+                        },
                 )
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
