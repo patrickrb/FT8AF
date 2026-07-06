@@ -65,6 +65,12 @@ struct CaptureSession {
     std::thread                   eventThread;
     std::atomic<bool>             running{false};
     std::atomic<int>              inFlight{0};
+    // Why the capture session ended, surfaced to Java via onCaptureStopped(code)
+    // and logged to debug.log. 0 = clean stop (nativeStop). Otherwise the first
+    // cause recorded wins (see recordStopReason / kStopReason* below): this is
+    // the diagnostic that pins down why iso capture retires ~100ms in on some
+    // host+adapter combos, which logcat's native tag doesn't reliably surface.
+    std::atomic<int>              stopReason{0};
 
     // Anti-aliasing decimator: a windowed-sinc FIR low-pass + integer decimation, replacing
     // the old box-filter average. Configured with the real ratio in nativeStart. `monoScratch`
@@ -147,6 +153,29 @@ void emitStopped(CaptureSession* s, int code) {
 // and feed them into the decimation accumulator. When the accumulator has
 // enough samples for a 12kHz block we emit a callback to Java.
 
+// Stop-reason encoding, decoded by UsbAudioDevice.describeCaptureStopCode() on
+// the Java side and written to debug.log. The bases keep the three failure
+// families distinguishable while still carrying the underlying code:
+//   1000 + libusb_transfer_status  — a transfer completed with a terminal
+//          status and was not resubmitted (e.g. 1005 = NO_DEVICE, 1003 =
+//          CANCELLED, 1001 = ERROR).
+//   2000 + (-libusb_error)         — libusb_submit_transfer() refused to
+//          re-arm a transfer (e.g. 2005 = NO_DEVICE, 2001 = IO).
+//   3000 + (-libusb_error)         — libusb_handle_events() itself failed.
+//   1                              — all transfers retired with no specific
+//          terminal cause recorded (transient errors that stopped resubmitting).
+constexpr int kStopReasonRetiredUnknown       = 1;
+constexpr int kStopReasonBaseTransferStatus   = 1000;
+constexpr int kStopReasonBaseResubmit         = 2000;
+constexpr int kStopReasonBaseHandleEvents     = 3000;
+
+// Record why capture is ending — first cause wins, so the originating failure
+// isn't overwritten by the teardown it triggers.
+inline void recordStopReason(CaptureSession* s, int code) {
+    int expected = 0;
+    s->stopReason.compare_exchange_strong(expected, code);
+}
+
 void LIBUSB_CALL onTransferComplete(libusb_transfer* xfer) {
     auto* s = static_cast<CaptureSession*>(xfer->user_data);
 
@@ -162,6 +191,7 @@ void LIBUSB_CALL onTransferComplete(libusb_transfer* xfer) {
         // pumping; isochronous is best-effort by spec.
         if (xfer->status == LIBUSB_TRANSFER_NO_DEVICE
                 || xfer->status == LIBUSB_TRANSFER_CANCELLED) {
+            recordStopReason(s, kStopReasonBaseTransferStatus + xfer->status);
             s->running.store(false, std::memory_order_release);
             s->inFlight.fetch_sub(1, std::memory_order_acq_rel);
             return;
@@ -218,6 +248,7 @@ void LIBUSB_CALL onTransferComplete(libusb_transfer* xfer) {
     int rc = libusb_submit_transfer(xfer);
     if (rc != 0) {
         LOGW("libusb_submit_transfer failed: %s", libusb_error_name(rc));
+        recordStopReason(s, kStopReasonBaseResubmit + (-rc));
         s->running.store(false, std::memory_order_release);
         s->inFlight.fetch_sub(1, std::memory_order_acq_rel);
     }
@@ -234,12 +265,15 @@ void eventLoop(CaptureSession* s) {
         int rc = libusb_handle_events_timeout_completed(s->ctx, &tv, nullptr);
         if (rc != 0 && rc != LIBUSB_ERROR_INTERRUPTED) {
             LOGW("libusb_handle_events failed: %s", libusb_error_name(rc));
+            recordStopReason(s, kStopReasonBaseHandleEvents + (-rc));
             break;
         }
         if (s->inFlight.load(std::memory_order_acquire) == 0) {
             // All transfers retired without being re-submitted (e.g., device
-            // gone). Exit cleanly so Java can fall back to mic.
-            LOGW("all transfers retired; ending capture");
+            // gone). Exit cleanly so Java can decide whether to re-arm.
+            recordStopReason(s, kStopReasonRetiredUnknown);
+            LOGW("all transfers retired; ending capture (stopReason=%d)",
+                 s->stopReason.load());
             break;
         }
     }
@@ -256,7 +290,9 @@ void eventLoop(CaptureSession* s) {
         libusb_handle_events_timeout_completed(s->ctx, &tv, nullptr);
     }
 
-    emitStopped(s, 0);
+    // Report why capture ended. 0 means running was cleared externally
+    // (nativeStop) with no transfer-level failure — a clean, requested stop.
+    emitStopped(s, s->stopReason.load());
 }
 
 }  // namespace
