@@ -604,6 +604,7 @@
     <string name="settings_built_by">Built by</string>
     <string name="settings_author_k1af" translatable="false">K1AF — Patrick Burns (QRZ)</string>
     <string name="settings_author_n0rc" translatable="false">N0RC — Reid (QRZ)</string>
+    <string name="about_font_attribution">UI font: Inter by Rasmus Andersson (SIL OFL 1.1)</string>
 
     <!-- ===== Settings: dialogs ===== -->
     <string name="settings_block_exact_title">Block Exact Callsigns</string>
