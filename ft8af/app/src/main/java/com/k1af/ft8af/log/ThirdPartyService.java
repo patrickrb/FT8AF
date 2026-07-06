@@ -95,6 +95,124 @@ public class ThirdPartyService {
         return stations;
     }
 
+    /**
+     * Creates a new station profile ("station location") on a Wavelog server and
+     * returns its {@code station_profile_id}, or null on failure. Mirrors
+     * {@link #FetchCloudlogStations}: the API key is a path segment
+     * ({@code POST api/create_station/[key]}) and the station fields are the JSON body.
+     *
+     * <p><b>Provisional wire shape.</b> We could not verify the exact live
+     * request/response against a running server, so the request-building and
+     * response-parsing are isolated into the pure, unit-tested helpers
+     * {@link #buildCreateStationRequestJson} and {@link #parseCreateStationResponse}.
+     * The field names ({@code station_gridsquare, station_callsign, station_city,
+     * station_dxcc, link_active_logbook}) and endpoint follow the Wavelog API docs
+     * and must be confirmed against a live Wavelog &ge; 2.1.2 server before this is
+     * wired into any live path.
+     *
+     * <p><b>Not yet called from any live path</b> — foundation only for issue #437,
+     * gated by {@code GeneralVariables.perLocationStationEnabled} (default false).
+     */
+    public static String createCloudlogStation(String address, String apiKey,
+                                               String gridsquare, String callsign,
+                                               String city, String dxcc,
+                                               boolean linkActiveLogbook) {
+        if (address == null || address.isEmpty() || apiKey == null || apiKey.isEmpty()) {
+            return null;
+        }
+        if (!address.endsWith("/")) {
+            address += "/";
+        }
+        try {
+            String body = buildCreateStationRequestJson(
+                    gridsquare, callsign, city, dxcc, linkActiveLogbook);
+            String url = address + "api/create_station/" + apiKey;
+            String result = sendPostRequest(url, body);
+            String id = parseCreateStationResponse(result);
+            Log.d(TAG, "createCloudlogStation " + (id != null ? "created id" : "failed/no id"));
+            return id;
+        } catch (Exception e) {
+            Log.d(TAG, "createCloudlogStation error: " + e.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    /**
+     * Builds the JSON request body for {@link #createCloudlogStation}. Pure and
+     * network-free so it can be unit-tested against captured/example payloads.
+     *
+     * <p>Field set is provisional (see {@link #createCloudlogStation}). Null field
+     * values are emitted as empty strings; {@code link_active_logbook} is emitted as
+     * {@code "1"}/{@code "0"} (Wavelog treats the API booleans as string flags).
+     */
+    static String buildCreateStationRequestJson(String gridsquare, String callsign,
+                                                String city, String dxcc,
+                                                boolean linkActiveLogbook) {
+        JSONStringer js = new JSONStringer();
+        try {
+            return js.object()
+                    .key("station_gridsquare").value(nullToEmpty(gridsquare))
+                    .key("station_callsign").value(nullToEmpty(callsign))
+                    .key("station_city").value(nullToEmpty(city))
+                    .key("station_dxcc").value(nullToEmpty(dxcc))
+                    .key("link_active_logbook").value(linkActiveLogbook ? "1" : "0")
+                    .endObject()
+                    .toString();
+        } catch (Exception e) {
+            Log.d(TAG, "buildCreateStationRequestJson error: " + e.getClass().getSimpleName());
+            return "{}";
+        }
+    }
+
+    private static String nullToEmpty(String s) {
+        return s == null ? "" : s;
+    }
+
+    /**
+     * Extracts the newly-created {@code station_profile_id} from a create_station
+     * response, or null if the response is null/empty/unparseable or carries no id.
+     * Pure and network-free for unit testing.
+     *
+     * <p><b>Provisional.</b> The exact response envelope is unconfirmed, so this
+     * probes the id under several plausible keys — top-level {@code station_profile_id}
+     * / {@code station_id} / {@code id}, and the same keys nested under a {@code data}
+     * or {@code station} object — and returns the first non-empty one found.
+     */
+    static String parseCreateStationResponse(String json) {
+        if (json == null || json.isEmpty()) {
+            return null;
+        }
+        try {
+            JSONObject obj = new JSONObject(json);
+            String top = idFromObject(obj);
+            if (top != null) {
+                return top;
+            }
+            for (String nestKey : new String[]{"data", "station", "result"}) {
+                JSONObject nested = obj.optJSONObject(nestKey);
+                if (nested != null) {
+                    String id = idFromObject(nested);
+                    if (id != null) {
+                        return id;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.d(TAG, "parseCreateStationResponse error: " + e.getClass().getSimpleName());
+        }
+        return null;
+    }
+
+    private static String idFromObject(JSONObject obj) {
+        for (String key : new String[]{"station_profile_id", "station_id", "id"}) {
+            String v = obj.optString(key, "");
+            if (v != null && !v.isEmpty()) {
+                return v;
+            }
+        }
+        return null;
+    }
+
     private static String QSLRecordToADIF(QSLRecord qslRecord, ServiceType serv){
         StringBuilder logStr = new StringBuilder();
         logStr.append(AdifFormat.callField(qslRecord.getToCallsign()));
