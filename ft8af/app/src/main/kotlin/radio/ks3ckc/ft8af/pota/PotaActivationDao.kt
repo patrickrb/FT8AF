@@ -5,10 +5,6 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.database.DatabaseOpr
 import radio.ks3ckc.ft8af.pota.model.PotaActivation
 import radio.ks3ckc.ft8af.pota.model.PotaQso
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
 
 /**
  * Thin DAO over the pota_activation SQLite table. Single-threaded callers from the
@@ -99,19 +95,20 @@ internal object PotaActivationDao {
      * activations at the same park don't bleed into each other.
      */
     fun getActivationQsos(activation: PotaActivation): List<PotaQso> {
-        val fmt = SimpleDateFormat("yyyyMMddHHmmss", Locale.US).apply {
-            timeZone = TimeZone.getTimeZone("GMT")
-        }
-        val startStamp = fmt.format(Date(activation.startedAtMs))
-        val endStamp = activation.endedAtMs?.let { fmt.format(Date(it)) } ?: "99991231235959"
+        // Shared window logic with PotaAdifExporter (via PotaQsoWindow) so the
+        // in-app contacts list and the exported/uploaded ADIF always agree on
+        // which QSOs belong to this activation. ROW_STAMP normalizes the
+        // variable-width time_on before the range compare.
+        val startStamp = PotaQsoWindow.stamp(activation.startedAtMs)
+        val endStamp = activation.endedAtMs?.let { PotaQsoWindow.stamp(it) } ?: PotaQsoWindow.OPEN_END
         val cursor = db().rawQuery(
             """
             SELECT id, call, gridsquare, band, mode, rst_sent, rst_rcvd,
                    qso_date, time_on, sig, sig_info, my_gridsquare
               FROM QSLTable
              WHERE my_sig = 'POTA' AND my_sig_info = ?
-               AND (qso_date || time_on) >= ?
-               AND (qso_date || time_on) <= ?
+               AND ${PotaQsoWindow.ROW_STAMP} >= ?
+               AND ${PotaQsoWindow.ROW_STAMP} <= ?
              ORDER BY qso_date DESC, time_on DESC
             """.trimIndent(),
             arrayOf(activation.parkRef, startStamp, endStamp),
