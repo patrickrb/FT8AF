@@ -7,11 +7,18 @@ plugins {
     // via the linker's -Wl,-z,max-page-size=16384 flag (see app/src/main/cpp/CMakeLists.txt).
     id 'com.android.application' version '8.7.3' apply false
     id 'com.android.library' version '8.7.3' apply false
-    id 'org.jetbrains.kotlin.android' version '1.9.22' apply false
+    // Kotlin 2.0 / K2 (issue #440). Compose 1.8 requires the compiler that ships
+    // inside Kotlin 2.x, so the standalone kotlinCompilerExtensionVersion is gone
+    // and the Compose compiler is now the org.jetbrains.kotlin.plugin.compose
+    // plugin, whose version MUST track the Kotlin version below.
+    id 'org.jetbrains.kotlin.android' version '2.0.21' apply false
+    id 'org.jetbrains.kotlin.plugin.compose' version '2.0.21' apply false
     // Static analysis (issue #63). Applied in app/build.gradle; declared here
     // with apply false so the versions resolve once for the whole build.
-    id 'io.gitlab.arturbosch.detekt' version '1.23.6' apply false
-    id 'org.jlleitschuh.gradle.ktlint' version '12.1.1' apply false
+    // detekt 1.23.7+ and ktlint 1.3.x are the first releases that parse Kotlin 2.0
+    // source without the embedded-compiler mismatch that fails the build.
+    id 'io.gitlab.arturbosch.detekt' version '1.23.8' apply false
+    id 'org.jlleitschuh.gradle.ktlint' version '12.1.2' apply false
 }
 task clean(type: Delete) {
     delete rootProject.buildDir
