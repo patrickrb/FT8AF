@@ -94,6 +94,7 @@
 
     <!-- ===== 进行中 QSO 面板 ===== -->
     <string name="qsopanel_calling_cq">正在呼叫 CQ</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">正在搜索...</string>
     <string name="qsopanel_qsoing_with">正在与 %1$s 通联</string>
     <string name="qsopanel_waiting_for">正在等待 %1$s</string>

@@ -94,6 +94,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">Даём CQ</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">Поиск...</string>
     <string name="qsopanel_qsoing_with">QSO с %1$s</string>
     <string name="qsopanel_waiting_for">Ожидание %1$s</string>

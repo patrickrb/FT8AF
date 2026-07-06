@@ -94,6 +94,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">CQ 送信中</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">検索中...</string>
     <string name="qsopanel_qsoing_with">%1$s と QSO 中</string>
     <string name="qsopanel_waiting_for">%1$s を待機中</string>

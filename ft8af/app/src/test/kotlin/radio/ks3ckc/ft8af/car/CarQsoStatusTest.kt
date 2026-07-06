@@ -24,6 +24,8 @@ class CarQsoStatusTest {
         freqHz: Long = 14_074_000L,
         bandName: String = "20m",
         modeName: String = "FT8",
+        huntEnabled: Boolean = false,
+        huntCallsCq: Boolean = false,
     ) = buildCarQsoStatus(
         isActivated = isActivated,
         isTransmitting = isTransmitting,
@@ -37,6 +39,8 @@ class CarQsoStatusTest {
         freqHz = freqHz,
         bandName = bandName,
         modeName = modeName,
+        huntEnabled = huntEnabled,
+        huntCallsCq = huntCallsCq,
     )
 
     @Test
@@ -54,6 +58,33 @@ class CarQsoStatusTest {
             assertThat(status.headline.resId).isEqualTo(R.string.qsopanel_calling_cq)
             assertThat(status.snrLabel).isNull()
         }
+    }
+
+    @Test
+    fun activatedWithoutTarget_huntListening_headlineIsHunting() {
+        // Pure hunt (autoFollowCQ, not the CQ hybrid) is silently listening for
+        // someone else's CQ, so the headline must read "Listening for CQ".
+        for (callsign in listOf(null, "", "CQ")) {
+            val status = build(
+                isActivated = true,
+                toCallsign = callsign,
+                huntEnabled = true,
+                huntCallsCq = false,
+            )
+            assertThat(status.headline.resId).isEqualTo(R.string.qsopanel_hunting)
+        }
+    }
+
+    @Test
+    fun activatedWithoutTarget_huntCqHybrid_headlineStaysCallingCq() {
+        // Hunt+CQ hybrid does transmit CQ when idle, so "Calling CQ" is correct.
+        val status = build(
+            isActivated = true,
+            toCallsign = null,
+            huntEnabled = true,
+            huntCallsCq = true,
+        )
+        assertThat(status.headline.resId).isEqualTo(R.string.qsopanel_calling_cq)
     }
 
     @Test

@@ -205,6 +205,10 @@ fun ActiveQsoPanel(
     val displayCallsign = liveCallsign.takeIf { it != "CQ" && it.isNotEmpty() }
     val hasTarget = displayCallsign != null
     val isCallingCq = isActivated && !hasTarget
+    // Hunt mode listens for someone else's CQ (silent) rather than transmitting
+    // CQ. The Hunt+CQ hybrid (huntCallsCQ) does transmit CQ, so "Calling CQ" is
+    // correct there; only the pure autoFollowCQ case is a listening/hunting state.
+    val isHunting = isCallingCq && GeneralVariables.autoFollowCQ && !GeneralVariables.huntCallsCQ
 
     // Synthesized TX log: append the message we're currently transmitting the moment TX
     // begins, so the operator sees it without waiting for the loopback decode (15–30s) to
@@ -302,6 +306,7 @@ fun ActiveQsoPanel(
             // minimized it, the header acts as the "reopen" affordance.
             StationHeader(
                 targetCallsign = when {
+                    isHunting -> stringResource(R.string.qsopanel_hunting)
                     isCallingCq -> stringResource(R.string.qsopanel_calling_cq)
                     displayCallsign == null -> stringResource(R.string.qsopanel_searching)
                     isTransmitting -> stringResource(R.string.qsopanel_qsoing_with, displayCallsign)

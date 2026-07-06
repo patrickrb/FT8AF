@@ -134,6 +134,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">نداء CQ</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">جارٍ البحث...</string>
     <string name="qsopanel_qsoing_with">إجراء QSO مع %1$s</string>
     <string name="qsopanel_waiting_for">في انتظار %1$s</string>
