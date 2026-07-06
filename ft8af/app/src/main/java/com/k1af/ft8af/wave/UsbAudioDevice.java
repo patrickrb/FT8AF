@@ -960,20 +960,6 @@ public class UsbAudioDevice {
     }
 
     /**
-     * Maps a {@link UsbAudioNative#nativeWrite} return code to a readable label
-     * for the debug log. {@code nativeWrite} returns 0 on success, a libusb
-     * {@code libusb_error} code (negative) for setup failures, or — when a
-     * transfer dies after streaming started — the failing transfer's
-     * {@code libusb_transfer_status} (positive, stored by
-     * {@code onOutputComplete} in {@code usb_audio_capture.cpp}). The positive
-     * statuses were previously logged as {@code UNKNOWN}, which hid the actual
-     * field failure mode: {@code rc=5 TRANSFER_NO_DEVICE}, the device falling
-     * off the bus mid-transmission (typically RF into the USB link at TX
-     * power). Naming the code makes a dropped TX cycle diagnosable.
-     *
-     * <p>Package-visible for testing.
-     */
-    /**
      * Decodes the {@code onCaptureStopped(code)} reason set by the native capture
      * event loop ({@code usb_audio_capture.cpp}, see {@code recordStopReason}) into
      * a human-readable phrase for {@code debug.log}. This is the diagnostic that
@@ -1022,6 +1008,20 @@ public class UsbAudioDevice {
         }
     }
 
+    /**
+     * Maps a {@link UsbAudioNative#nativeWrite} return code to a readable label
+     * for the debug log. {@code nativeWrite} returns 0 on success, a libusb
+     * {@code libusb_error} code (negative) for setup failures, or — when a
+     * transfer dies after streaming started — the failing transfer's
+     * {@code libusb_transfer_status} (positive, stored by
+     * {@code onOutputComplete} in {@code usb_audio_capture.cpp}). The positive
+     * statuses were previously logged as {@code UNKNOWN}, which hid the actual
+     * field failure mode: {@code rc=5 TRANSFER_NO_DEVICE}, the device falling
+     * off the bus mid-transmission (typically RF into the USB link at TX
+     * power). Naming the code makes a dropped TX cycle diagnosable.
+     *
+     * <p>Package-visible for testing.
+     */
     static String describeLibusbWriteError(int rc) {
         String name;
         switch (rc) {

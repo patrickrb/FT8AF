@@ -15,6 +15,7 @@ import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
 import android.os.Build;
+import android.os.SystemClock;
 import android.util.Log;
 
 import com.k1af.ft8af.GeneralVariables;
@@ -68,7 +69,10 @@ public class MicRecorder {
     private int consecutiveUsbFailures = 0;
     private volatile boolean usbAudioSawData = false;
     // When the current USB capture session started, to measure how long it
-    // stayed alive (System.currentTimeMillis; 0 = no session started yet).
+    // stayed alive. SystemClock.elapsedRealtime() (monotonic) — not wall clock:
+    // a duration must be immune to NTP/user time jumps, which would otherwise
+    // yield a negative/huge aliveMs and misclassify the session. 0 = no session
+    // started yet.
     private volatile long usbCaptureStartMs = 0;
     private static final long MIN_REINIT_INTERVAL_MS = 2000;
     static final int FALLBACK_BUFFER_SIZE = 4096;
@@ -237,7 +241,7 @@ public class MicRecorder {
     private void startUsbCapture() {
         final MicRecorder self = this;
         usbAudioSawData = false;
-        usbCaptureStartMs = System.currentTimeMillis();
+        usbCaptureStartMs = SystemClock.elapsedRealtime();
         usbAudioDevice.startCapture(sampleRateInHz, new UsbAudioDevice.AudioInputCallback() {
             @Override
             public void onAudioData(float[] data, int length) {
@@ -269,7 +273,7 @@ public class MicRecorder {
                 // and churned a fresh libusb_init/exit every 2s forever — the
                 // waterfall freeze, and the churn that raced libusb into a
                 // native SIGSEGV.
-                long now = System.currentTimeMillis();
+                long now = SystemClock.elapsedRealtime();
                 long aliveMs = now - usbCaptureStartMs;
                 boolean failure = UsbCaptureRetryPolicy.isFailure(usbAudioSawData, aliveMs);
                 if (failure) {
