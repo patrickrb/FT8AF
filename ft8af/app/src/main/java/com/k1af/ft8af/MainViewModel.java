@@ -356,6 +356,9 @@ public class MainViewModel extends ViewModel {
     private Timer catLivenessTimer;
     private volatile long lastRigResponseMs = 0;
     private volatile boolean sawRigResponseSinceConnect = false;
+    // Transmit state observed on the previous tick, used to detect the TX->RX edge so we can
+    // re-arm lastRigResponseMs (which freezes during TX) before judging staleness.
+    private volatile boolean wasTransmittingLastTick = false;
 
     /** Record that the rig just demonstrably responded (called from onRigResponded). */
     private void markRigResponded() {
@@ -367,6 +370,7 @@ public class MainViewModel extends ViewModel {
         stopCatLivenessWatchdog();
         lastRigResponseMs = System.currentTimeMillis();
         sawRigResponseSinceConnect = false;
+        wasTransmittingLastTick = false;
         catLivenessTimer = new Timer("cat-liveness");
         catLivenessTimer.schedule(new TimerTask() {
             @Override
@@ -396,6 +400,13 @@ public class MainViewModel extends ViewModel {
             if (CatLiveness.shouldProbe(connected, transmitting) && baseRig != null) {
                 baseRig.readFreqFromRig();
             }
+            // Transmit freezes lastRigResponseMs (we don't probe while keyed). On the TX->RX
+            // edge, restart the quiet window from now so the just-sent probe has time to reply
+            // before we judge staleness — otherwise a >8s FT8 over falsely trips ERROR.
+            if (CatLiveness.shouldRearmAfterTx(wasTransmittingLastTick, transmitting)) {
+                lastRigResponseMs = System.currentTimeMillis();
+            }
+            wasTransmittingLastTick = transmitting;
             if (CatLiveness.isRigStale(connected, transmitting, sawRigResponseSinceConnect,
                     System.currentTimeMillis(), lastRigResponseMs, CatLiveness.DEFAULT_TIMEOUT_MS)) {
                 stopCatLivenessWatchdog();
