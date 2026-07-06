@@ -208,6 +208,37 @@ class BuildActivationAdifTest {
     }
 
     @Test
+    fun variableWidthTimeOn_isNormalizedForTheWindowCompare() {
+        // time_on is stored variable-width: app-logged rows are HHMMSS, but
+        // imported/edited ADIF rows may be HHMM or drop a leading zero ("815" =
+        // 08:15). A naive `qso_date || time_on` compare would misplace those; the
+        // shared PotaQsoWindow.ROW_STAMP normalizes to 6 digits first. Window
+        // below is 08:00:00–09:00:00 UTC on 2024-06-01.
+        val window = PotaActivation(
+            id = 1L,
+            parkRef = "K-1234",
+            operator = "K1ABC",
+            startedAtMs = 1_717_228_800_000L, // 2024-06-01 08:00:00 UTC
+            endedAtMs = 1_717_232_400_000L, // 2024-06-01 09:00:00 UTC
+            qsoCount = 0,
+            notes = null,
+        )
+        insertQso("ODD", "20240601", "815", mySigInfo = "K-1234") // 08:15, dropped leading zero
+        insertQso("HHMM", "20240601", "0830", mySigInfo = "K-1234") // 08:30, HHMM (no seconds)
+        insertQso("FULL", "20240601", "084500", mySigInfo = "K-1234") // 08:45, HHMMSS
+        insertQso("LATEODD", "20240601", "930", mySigInfo = "K-1234") // 09:30, after window
+
+        val content = PotaAdifExporter.buildActivationAdif(db, window).single().content
+
+        assertThat(content).contains("ODD")
+        assertThat(content).contains("HHMM")
+        assertThat(content).contains("FULL")
+        // 09:30 is past the 09:00 end — must be excluded despite the short width.
+        assertThat(content).doesNotContain("LATEODD")
+        assertThat(content.split("<EOR>").size - 1).isEqualTo(3)
+    }
+
+    @Test
     fun openActivation_includesQsosAfterStart_withNoEndBound() {
         // An activation still in progress has endedAtMs == null. QSOs logged
         // after the start must still export; the far-future upper bound lets them.
