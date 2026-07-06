@@ -234,6 +234,18 @@ private fun AboutDialog(
                     .clickable { uriHandler.openUri("https://www.qrz.com/db/N0RC") },
             )
 
+            // Font attribution — Inter is licensed under the SIL Open Font
+            // License 1.1 (see app/licenses/OFL_Inter.txt). Proper names, so kept
+            // untranslated.
+            Text(
+                text = "Inter font by Rasmus Andersson (OFL-1.1)",
+                color = TextMuted,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { uriHandler.openUri("https://github.com/rsms/inter") },
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,

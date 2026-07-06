@@ -2,10 +2,12 @@ package radio.ks3ckc.ft8af.theme
 
 import android.app.Activity
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -130,6 +132,17 @@ fun FT8AFTheme(content: @Composable () -> Unit) {
         colorScheme = colorScheme,
         typography = FT8AFTypography,
         shapes = FT8AFShapes,
-        content = content,
-    )
+    ) {
+        // Carry the slashed-zero OpenType feature on the ambient text style so
+        // every Text — including the ~130 inline GeistMono data sites, which have
+        // no fontFeatureSettings param and inherit it from LocalTextStyle — renders
+        // `0` slashed (issue #438) without touching those call sites. GeistMono
+        // keeps tabular alignment; if it lacks a `zero` glyph the data columns are
+        // simply unchanged while the Inter-based UI text shows slashed zeros.
+        CompositionLocalProvider(
+            LocalTextStyle provides slashedZero(LocalTextStyle.current),
+        ) {
+            content()
+        }
+    }
 }
