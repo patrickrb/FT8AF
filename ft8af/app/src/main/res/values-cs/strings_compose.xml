@@ -134,6 +134,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">Volání CQ</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">Hledání...</string>
     <string name="qsopanel_qsoing_with">QSO s %1$s</string>
     <string name="qsopanel_waiting_for">Čekání na %1$s</string>

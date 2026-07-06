@@ -123,6 +123,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">Chiamata CQ</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">Ricerca...</string>
     <string name="qsopanel_qsoing_with">QSO con %1$s</string>
     <string name="qsopanel_waiting_for">In attesa di %1$s</string>

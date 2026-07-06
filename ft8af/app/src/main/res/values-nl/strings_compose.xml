@@ -134,6 +134,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">CQ roepen</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">Zoeken...</string>
     <string name="qsopanel_qsoing_with">QSO met %1$s</string>
     <string name="qsopanel_waiting_for">Wachten op %1$s</string>
