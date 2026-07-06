@@ -147,6 +147,35 @@ class CqOptionsLogicTest {
         assertThat(directedCqFits("TEST", "k1abc")).isFalse()
     }
 
+    // ---- shouldPersistFreeText ----
+
+    @Test
+    fun shouldPersistFreeText_newValue_true() {
+        assertThat(shouldPersistFreeText("POTA HI", "")).isTrue()
+    }
+
+    @Test
+    fun shouldPersistFreeText_changedValue_true() {
+        assertThat(shouldPersistFreeText("POTA THERE", "POTA HI")).isTrue()
+    }
+
+    @Test
+    fun shouldPersistFreeText_unchangedValue_false() {
+        // No redundant write when the field matches what's already saved.
+        assertThat(shouldPersistFreeText("POTA HI", "POTA HI")).isFalse()
+    }
+
+    @Test
+    fun shouldPersistFreeText_blankOverSaved_false() {
+        // Never clobber a saved value with a blank — clearing is the explicit ✕.
+        assertThat(shouldPersistFreeText("", "POTA HI")).isFalse()
+    }
+
+    @Test
+    fun shouldPersistFreeText_blankOverBlank_false() {
+        assertThat(shouldPersistFreeText("", "")).isFalse()
+    }
+
     // ---- sanitizeModifier ----
 
     @Test

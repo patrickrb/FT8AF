@@ -45,6 +45,7 @@ import radio.ks3ckc.ft8af.ui.components.ActiveQsoPanel
 import radio.ks3ckc.ft8af.ui.components.shouldShowCatChip
 import radio.ks3ckc.ft8af.ui.components.CqOptionsSheet
 import radio.ks3ckc.ft8af.ui.components.canEnableFieldDay
+import radio.ks3ckc.ft8af.ui.components.shouldPersistFreeText
 import radio.ks3ckc.ft8af.ui.components.shouldPersistSection
 import radio.ks3ckc.ft8af.ui.components.FT8AFTab
 import radio.ks3ckc.ft8af.ui.components.FrequencyPickerSheet
@@ -578,7 +579,19 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             fieldDayClass = fieldDayClass,
             fieldDayNumTx = fieldDayNumTx,
             fieldDaySection = fieldDaySection,
-            onDismiss = { showCqOptions = false },
+            onDismiss = {
+                showCqOptions = false
+                // Persist the custom CQ once, on sheet dismiss (which also fires
+                // right after Call CQ and preset selection), instead of writing on
+                // every keystroke — that enqueued a DELETE+INSERT AsyncTask per
+                // character. Blank is never persisted over a saved value here;
+                // clearing stays the explicit ✕ path (onRemoveSavedCq).
+                if (shouldPersistFreeText(freeTextMessage, savedCqFreeText)) {
+                    savedCqFreeText = freeTextMessage
+                    GeneralVariables.cqFreeText = freeTextMessage
+                    mainViewModel.databaseOpr.writeConfig("cqFreeText", freeTextMessage, null)
+                }
+            },
             onSelectPreset = { preset ->
                 cqModifier = preset
                 isFreeTextMode = false
@@ -607,11 +620,10 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                     cqModifier = ""
                     GeneralVariables.fieldDayMode = false
                     GeneralVariables.toModifier = ""
-                    // Persist the custom CQ so it survives restarts and can be
-                    // re-armed from the saved chip. Clearing is explicit (the X).
-                    savedCqFreeText = text
+                    // In-memory only — no SQLite write per keystroke. The value is
+                    // persisted (and the saved chip updated) on sheet dismiss /
+                    // Call CQ via shouldPersistFreeText in onDismiss above.
                     GeneralVariables.cqFreeText = text
-                    mainViewModel.databaseOpr.writeConfig("cqFreeText", text, null)
                 }
             },
             onArmSavedCq = {

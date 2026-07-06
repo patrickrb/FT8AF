@@ -557,8 +557,6 @@
     <string name="cq_or_divider">or</string>
     <string name="cq_free_text_title">FREE TEXT</string>
     <string name="cq_free_text_hint">13 characters max</string>
-    <string name="cq_directed_too_long">CQ + text + call is too long for one FT8 message (max 13 chars)</string>
-    <string name="cq_saved_label">Saved</string>
     <string name="cq_call_cq">Call CQ</string>
     <string name="cq_send_free_text">Send Free Text</string>
     <string name="cq_field_day_title">FIELD DAY</string>

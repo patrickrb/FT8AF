@@ -28,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
@@ -85,6 +87,16 @@ internal fun buildDirectedCq(freeText: String, callsign: String): String =
  */
 internal fun directedCqFits(freeText: String, callsign: String): Boolean =
     isValidFreeText(buildDirectedCq(freeText, callsign))
+
+/**
+ * Whether the custom CQ free text should be persisted to config on an explicit
+ * action (sheet dismiss / Call CQ). We persist only a non-blank value that
+ * actually differs from what's already saved: this keeps each edit from writing
+ * a DELETE+INSERT per keystroke, never clobbers a saved value with a blank
+ * (clearing is the explicit ✕ path), and skips a redundant write when unchanged.
+ */
+internal fun shouldPersistFreeText(current: String, saved: String): Boolean =
+    current.isNotBlank() && current != saved
 
 internal fun sanitizeModifier(input: String): String =
     input.uppercase().filter { it.isLetter() }.take(4)
@@ -474,11 +486,13 @@ fun CqOptionsSheet(
                             fontFamily = GeistMonoFamily,
                             letterSpacing = 0.02.sp,
                         )
+                        val removeLabel = stringResource(R.string.cq_saved_remove)
                         Box(
                             modifier = Modifier
                                 .size(20.dp)
                                 .clip(chipShape)
-                                .clickable { onRemoveSavedCq() },
+                                .clickable(onClickLabel = removeLabel) { onRemoveSavedCq() }
+                                .semantics { contentDescription = removeLabel },
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
