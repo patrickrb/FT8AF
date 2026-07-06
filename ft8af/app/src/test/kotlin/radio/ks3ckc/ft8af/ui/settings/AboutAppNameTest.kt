@@ -10,7 +10,7 @@ import com.k1af.ft8af.R
 /**
  * Guards the app-name label shown on the Settings > About screen.
  *
- * The original implementation had a hardcoded "FT8US" typo at AboutSettings.kt:91.
+ * The original implementation had a hardcoded "FT8US" typo in AboutSettings.
  * This test verifies that the string resource used for that label resolves to the
  * correct app name "FT8AF", so a future accidental rename or resource-ID swap will
  * be caught before it ships.
