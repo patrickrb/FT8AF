@@ -152,7 +152,10 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     var showCqOptions by remember { mutableStateOf(false) }
     var cqModifier by remember { mutableStateOf(GeneralVariables.toModifier ?: "") }
     var isFreeTextMode by remember { mutableStateOf(false) }
-    var freeTextMessage by remember { mutableStateOf("") }
+    // Seed the live free-text field and the saved custom-CQ from persisted config
+    // (config loads async, so these are re-synced in the configLoaded effect below).
+    var freeTextMessage by remember { mutableStateOf(GeneralVariables.cqFreeText ?: "") }
+    var savedCqFreeText by remember { mutableStateOf(GeneralVariables.cqFreeText ?: "") }
     var fieldDayEnabled by remember { mutableStateOf(GeneralVariables.fieldDayMode) }
     var fieldDayClass by remember { mutableStateOf(GeneralVariables.fieldDayClass ?: "A") }
     var fieldDayNumTx by remember { mutableIntStateOf(GeneralVariables.fieldDayNumTx.coerceIn(1, 16)) }
@@ -180,6 +183,12 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             // chip reflects the correct state even when arming is skipped
             // (e.g. callsign not yet configured).
             huntEnabled = GeneralVariables.autoFollowCQ
+            // Config (incl. the saved custom CQ) loads after first composition, so
+            // pull it in once it's ready and seed the field if untouched.
+            savedCqFreeText = GeneralVariables.cqFreeText ?: ""
+            if (freeTextMessage.isBlank()) {
+                freeTextMessage = savedCqFreeText
+            }
             if (shouldArmHuntOnStartup(
                     GeneralVariables.autoFollowCQ, GeneralVariables.myCallsign)) {
                 mainViewModel.ft8TransmitSignal.armForHunt()
@@ -563,6 +572,8 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             currentModifier = cqModifier,
             isFreeTextMode = isFreeTextMode,
             freeText = freeTextMessage,
+            callsign = GeneralVariables.myCallsign ?: "",
+            savedFreeText = savedCqFreeText,
             fieldDayEnabled = fieldDayEnabled,
             fieldDayClass = fieldDayClass,
             fieldDayNumTx = fieldDayNumTx,
@@ -596,7 +607,29 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                     cqModifier = ""
                     GeneralVariables.fieldDayMode = false
                     GeneralVariables.toModifier = ""
+                    // Persist the custom CQ so it survives restarts and can be
+                    // re-armed from the saved chip. Clearing is explicit (the X).
+                    savedCqFreeText = text
+                    GeneralVariables.cqFreeText = text
+                    mainViewModel.databaseOpr.writeConfig("cqFreeText", text, null)
                 }
+            },
+            onArmSavedCq = {
+                freeTextMessage = savedCqFreeText
+                isFreeTextMode = savedCqFreeText.isNotBlank()
+                if (savedCqFreeText.isNotBlank()) {
+                    fieldDayEnabled = false
+                    cqModifier = ""
+                    GeneralVariables.fieldDayMode = false
+                    GeneralVariables.toModifier = ""
+                }
+            },
+            onRemoveSavedCq = {
+                savedCqFreeText = ""
+                freeTextMessage = ""
+                isFreeTextMode = false
+                GeneralVariables.cqFreeText = ""
+                mainViewModel.databaseOpr.writeConfig("cqFreeText", "", null)
             },
             onFieldDayToggle = { enabled ->
                 if (enabled && !canEnableFieldDay(fieldDaySection)) {

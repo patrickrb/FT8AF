@@ -2402,6 +2402,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("toModifier")) {
                     GeneralVariables.toModifier = result;
                 }
+                if (name.equalsIgnoreCase("cqFreeText")) {
+                    if (result != null) {
+                        GeneralVariables.cqFreeText = result;
+                    }
+                }
                 if (name.equalsIgnoreCase("fieldDayMode")) {
                     GeneralVariables.fieldDayMode = result.equals("1");
                 }

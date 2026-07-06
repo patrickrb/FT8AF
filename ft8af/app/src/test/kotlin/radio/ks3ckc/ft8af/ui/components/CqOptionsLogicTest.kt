@@ -103,6 +103,50 @@ class CqOptionsLogicTest {
         assertThat(isValidFreeText("")).isTrue()
     }
 
+    // ---- buildDirectedCq ----
+
+    @Test
+    fun buildDirectedCq_assemblesTextAndCall() {
+        assertThat(buildDirectedCq("POTA", "K1ABC")).isEqualTo("CQ POTA K1ABC")
+    }
+
+    @Test
+    fun buildDirectedCq_trimsAndCollapsesSpaces() {
+        assertThat(buildDirectedCq("  PO   TA ", "  K1ABC  ")).isEqualTo("CQ PO TA K1ABC")
+    }
+
+    @Test
+    fun buildDirectedCq_emptyText_yieldsPlainCq() {
+        // No double space where the text would go.
+        assertThat(buildDirectedCq("", "K1ABC")).isEqualTo("CQ K1ABC")
+    }
+
+    // ---- directedCqFits ----
+
+    @Test
+    fun directedCqFits_shortTextAndCall_true() {
+        // "CQ POTA K1ABC" == 13 chars exactly (boundary).
+        assertThat(directedCqFits("POTA", "K1ABC")).isTrue()
+    }
+
+    @Test
+    fun directedCqFits_overThirteen_false() {
+        // "CQ POTA W1AW/P" == 14 chars.
+        assertThat(directedCqFits("POTA", "W1AW/P")).isFalse()
+    }
+
+    @Test
+    fun directedCqFits_emptyTextShortCall_true() {
+        // "CQ K1ABC" == 8 chars.
+        assertThat(directedCqFits("", "K1ABC")).isTrue()
+    }
+
+    @Test
+    fun directedCqFits_invalidChar_false() {
+        // The lowercase call fails the FT8 charset even though it's short.
+        assertThat(directedCqFits("TEST", "k1abc")).isFalse()
+    }
+
     // ---- sanitizeModifier ----
 
     @Test
