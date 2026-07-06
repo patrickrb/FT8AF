@@ -88,4 +88,49 @@ public class ThirdPartyServiceCreateStationTest {
         assertThat(ThirdPartyService.createCloudlogStation(
                 "https://example.org/", "", "FN42", "K1AF", "Albany", "291", true)).isNull();
     }
+
+    @Test
+    public void buildRequest_returnsParseableObjectNotEmptySentinel() throws Exception {
+        // Fail-fast contract: a valid build must yield a real object, never a "{}" or
+        // null sentinel that the caller would blindly POST.
+        String json = ThirdPartyService.buildCreateStationRequestJson(
+                "FN42", "K1AF", "Albany", "291", true);
+        assertThat(json).isNotNull();
+        assertThat(json).isNotEqualTo("{}");
+        assertThat(new JSONObject(json).length()).isGreaterThan(0);
+    }
+
+    @Test
+    public void redactUrlApiKey_hidesCreateStationKey() {
+        String key = "s3cr3t-api-key-value";
+        String url = "https://example.org/api/create_station/" + key;
+        String redacted = ThirdPartyService.redactUrlApiKey(url);
+        assertThat(redacted).doesNotContain(key);
+        assertThat(redacted).isEqualTo("https://example.org/api/create_station/***");
+    }
+
+    @Test
+    public void redactUrlApiKey_hidesStationInfoAndAuthKeys() {
+        String key = "ABC123DEF456";
+        assertThat(ThirdPartyService.redactUrlApiKey(
+                "https://example.org/api/station_info/" + key))
+                .doesNotContain(key);
+        assertThat(ThirdPartyService.redactUrlApiKey(
+                "https://example.org/api/auth/" + key))
+                .doesNotContain(key);
+    }
+
+    @Test
+    public void redactUrlApiKey_keepsTrailingPathAndQueryButHidesKey() {
+        String key = "topsecret";
+        String redacted = ThirdPartyService.redactUrlApiKey(
+                "https://example.org/api/create_station/" + key + "?x=1");
+        assertThat(redacted).doesNotContain(key);
+        assertThat(redacted).isEqualTo("https://example.org/api/create_station/***?x=1");
+    }
+
+    @Test
+    public void redactUrlApiKey_nullPassesThrough() {
+        assertThat(ThirdPartyService.redactUrlApiKey(null)).isNull();
+    }
 }

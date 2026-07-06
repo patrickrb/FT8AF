@@ -1,6 +1,7 @@
 package com.k1af.ft8af.log;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
@@ -51,8 +52,11 @@ public final class LocationSignature {
         }
     }
 
-    /** All location fields enabled (the finest-grained default). */
-    public static final Set<Field> ALL_FIELDS = EnumSet.allOf(Field.class);
+    /** All location fields enabled (the finest-grained default). Unmodifiable so a
+     *  caller can't mutate this shared constant; take {@code EnumSet.copyOf(ALL_FIELDS)}
+     *  if you need a mutable copy. */
+    public static final Set<Field> ALL_FIELDS =
+            Collections.unmodifiableSet(EnumSet.allOf(Field.class));
 
     private final String gridsquare;
     private final String state;
@@ -63,6 +67,10 @@ public final class LocationSignature {
     private final String ituZone;
     private final String potaRef;
     private final EnumSet<Field> enabledFields;
+    /** Canonical signature computed once at construction (the type is immutable) so
+     *  the repeated {@link #signature()}/{@link #equals}/{@link #hashCode} calls made
+     *  when this is used as a map key don't re-run the regex whitespace collapse. */
+    private final String signature;
 
     private LocationSignature(Builder b) {
         this.gridsquare = b.gridsquare;
@@ -77,6 +85,7 @@ public final class LocationSignature {
         this.enabledFields = b.enabledFields.isEmpty()
                 ? EnumSet.noneOf(Field.class)
                 : EnumSet.copyOf(b.enabledFields);
+        this.signature = computeSignature();
     }
 
     /**
@@ -132,6 +141,11 @@ public final class LocationSignature {
      * string.
      */
     public String signature() {
+        return signature;
+    }
+
+    /** Computes the canonical signature string; called once from the constructor. */
+    private String computeSignature() {
         List<String> parts = new ArrayList<>();
         // Iterate the enum (not the set) so ordering is always the declaration order
         // regardless of how the caller built their EnumSet.

@@ -126,6 +126,12 @@ public class ThirdPartyService {
         try {
             String body = buildCreateStationRequestJson(
                     gridsquare, callsign, city, dxcc, linkActiveLogbook);
+            if (body == null) {
+                // Fail fast: never POST an empty/malformed body, which could create a
+                // blank station profile on the server.
+                Log.d(TAG, "createCloudlogStation aborted: could not build request body");
+                return null;
+            }
             String url = address + "api/create_station/" + apiKey;
             String result = sendPostRequest(url, body);
             String id = parseCreateStationResponse(result);
@@ -144,6 +150,9 @@ public class ThirdPartyService {
      * <p>Field set is provisional (see {@link #createCloudlogStation}). Null field
      * values are emitted as empty strings; {@code link_active_logbook} is emitted as
      * {@code "1"}/{@code "0"} (Wavelog treats the API booleans as string flags).
+     *
+     * <p>Returns {@code null} if the body cannot be built, so the caller can fail fast
+     * rather than POST an empty/malformed body that might create a blank station.
      */
     static String buildCreateStationRequestJson(String gridsquare, String callsign,
                                                 String city, String dxcc,
@@ -160,7 +169,7 @@ public class ThirdPartyService {
                     .toString();
         } catch (Exception e) {
             Log.d(TAG, "buildCreateStationRequestJson error: " + e.getClass().getSimpleName());
-            return "{}";
+            return null;
         }
     }
 
@@ -630,6 +639,20 @@ public class ThirdPartyService {
         }
     }
 
+    /**
+     * Redacts a Cloudlog/Wavelog API key from a URL before it is logged. The key is a
+     * path segment following {@code create_station/}, {@code station_info/}, or
+     * {@code auth/}; this replaces that segment with {@code ***} so the credential never
+     * reaches logcat. Only the LOGGED string is redacted — the real request URL is
+     * unchanged. Returns null unchanged.
+     */
+    static String redactUrlApiKey(String url) {
+        if (url == null) {
+            return null;
+        }
+        return url.replaceAll("(create_station/|station_info/|auth/)[^/?#\\s]+", "$1***");
+    }
+
     public static String sendPostRequest(String url, String json) throws IOException {
         // HttpURLConnection does not auto-follow 30x on a POST. Walk redirects manually
         // (capped) so deployments that rewrite trailing slashes, http→https, or move
@@ -668,14 +691,14 @@ public class ThirdPartyService {
                         || responseCode == 308) {
                     String loc = conn.getHeaderField("Location");
                     if (loc == null || loc.isEmpty()) {
-                        Log.d(TAG, "POST " + currentUrl + " -> HTTP " + responseCode
-                                + " (no Location header)");
+                        Log.d(TAG, "POST " + redactUrlApiKey(currentUrl) + " -> HTTP "
+                                + responseCode + " (no Location header)");
                         return null;
                     }
                     // Resolve relative redirect against the previous URL.
                     URL resolved = new URL(urlObj, loc);
-                    Log.d(TAG, "POST " + currentUrl + " -> HTTP " + responseCode
-                            + " redirect to " + resolved);
+                    Log.d(TAG, "POST " + redactUrlApiKey(currentUrl) + " -> HTTP " + responseCode
+                            + " redirect to " + redactUrlApiKey(resolved.toString()));
                     currentUrl = resolved.toString();
                     continue;
                 }
@@ -695,7 +718,7 @@ public class ThirdPartyService {
                         eread.close();
                     }
                 } catch (Exception ignored) {}
-                Log.d(TAG, "POST " + currentUrl + " -> HTTP " + responseCode
+                Log.d(TAG, "POST " + redactUrlApiKey(currentUrl) + " -> HTTP " + responseCode
                         + (err.length() > 0 ? " body=" + err : ""));
                 return null;
             } finally {
@@ -707,7 +730,7 @@ public class ThirdPartyService {
                 }
             }
         }
-        Log.d(TAG, "POST " + url + " exceeded redirect limit");
+        Log.d(TAG, "POST " + redactUrlApiKey(url) + " exceeded redirect limit");
         return null;
     }
     public static String sendPostFormRequest(String url, String formBody) throws IOException {
