@@ -32,6 +32,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,8 +45,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import radio.ks3ckc.ft8af.theme.*
+import radio.ks3ckc.ft8af.ui.components.CredentialFieldRole
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 import radio.ks3ckc.ft8af.ui.components.SettingsRow
+import radio.ks3ckc.ft8af.ui.components.autofill
 
 /**
  * Logging & awards settings: SWL logging, PSKReporter, QRZ.com logging + profile
@@ -691,7 +694,12 @@ private fun QrzCredsDialog(
                 singleLine = true,
                 colors = fieldColors,
                 textStyle = TextStyle(fontSize = 14.sp),
-                modifier = Modifier.fillMaxWidth(),
+                // QRZ usernames are callsigns, so advertise Username (not EmailAddress).
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .autofill(CredentialFieldRole.USERNAME) {
+                        userInput = TextFieldValue(it, selection = TextRange(it.length)); testResult = null
+                    },
             )
 
             OutlinedTextField(
@@ -703,7 +711,11 @@ private fun QrzCredsDialog(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 colors = fieldColors,
                 textStyle = TextStyle(fontSize = 14.sp),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .autofill(CredentialFieldRole.PASSWORD) {
+                        passInput = TextFieldValue(it, selection = TextRange(it.length)); testResult = null
+                    },
             )
 
             // Test Connection
