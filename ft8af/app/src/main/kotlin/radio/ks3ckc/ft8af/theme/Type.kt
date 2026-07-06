@@ -16,9 +16,9 @@ import com.k1af.ft8af.R
  * frequencies (issue #438). Inter exposes this as its `zero` stylistic feature;
  * providing it on the ambient [androidx.compose.material3.LocalTextStyle] at the
  * theme root makes every inline data `Text(...)` site inherit it without editing
- * the ~130 call sites individually.
+ * the many call sites individually.
  */
-internal const val DATA_FONT_FEATURES = "zero"
+internal const val SLASHED_ZERO_FEATURE = "zero"
 
 /**
  * Returns [style] with the slashed-zero OpenType feature enabled, preserving all
@@ -26,7 +26,7 @@ internal const val DATA_FONT_FEATURES = "zero"
  * unit-tested without a running Compose environment.
  */
 internal fun slashedZero(style: TextStyle): TextStyle =
-    style.copy(fontFeatureSettings = DATA_FONT_FEATURES)
+    style.copy(fontFeatureSettings = SLASHED_ZERO_FEATURE)
 
 /**
  * Inter is a single variable TTF; we pin each Compose [FontWeight] to the matching
@@ -81,98 +81,98 @@ val FT8AFTypography = Typography(
         fontWeight = FontWeight.SemiBold,
         fontSize = 32.sp,
         letterSpacing = (-0.02).sp,
-        fontFeatureSettings = DATA_FONT_FEATURES,
+        fontFeatureSettings = SLASHED_ZERO_FEATURE,
     ),
     displayMedium = TextStyle(
         fontFamily = InterFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 28.sp,
         letterSpacing = (-0.02).sp,
-        fontFeatureSettings = DATA_FONT_FEATURES,
+        fontFeatureSettings = SLASHED_ZERO_FEATURE,
     ),
     displaySmall = TextStyle(
         fontFamily = InterFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 24.sp,
         letterSpacing = (-0.01).sp,
-        fontFeatureSettings = DATA_FONT_FEATURES,
+        fontFeatureSettings = SLASHED_ZERO_FEATURE,
     ),
     headlineLarge = TextStyle(
         fontFamily = InterFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 22.sp,
         letterSpacing = (-0.01).sp,
-        fontFeatureSettings = DATA_FONT_FEATURES,
+        fontFeatureSettings = SLASHED_ZERO_FEATURE,
     ),
     headlineMedium = TextStyle(
         fontFamily = InterFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 18.sp,
-        fontFeatureSettings = DATA_FONT_FEATURES,
+        fontFeatureSettings = SLASHED_ZERO_FEATURE,
     ),
     headlineSmall = TextStyle(
         fontFamily = InterFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 16.sp,
-        fontFeatureSettings = DATA_FONT_FEATURES,
+        fontFeatureSettings = SLASHED_ZERO_FEATURE,
     ),
     titleLarge = TextStyle(
         fontFamily = InterFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 18.sp,
-        fontFeatureSettings = DATA_FONT_FEATURES,
+        fontFeatureSettings = SLASHED_ZERO_FEATURE,
     ),
     titleMedium = TextStyle(
         fontFamily = InterFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 15.sp,
         letterSpacing = 0.02.sp,
-        fontFeatureSettings = DATA_FONT_FEATURES,
+        fontFeatureSettings = SLASHED_ZERO_FEATURE,
     ),
     titleSmall = TextStyle(
         fontFamily = InterFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 13.sp,
         letterSpacing = 0.02.sp,
-        fontFeatureSettings = DATA_FONT_FEATURES,
+        fontFeatureSettings = SLASHED_ZERO_FEATURE,
     ),
     bodyLarge = TextStyle(
         fontFamily = InterFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 15.sp,
-        fontFeatureSettings = DATA_FONT_FEATURES,
+        fontFeatureSettings = SLASHED_ZERO_FEATURE,
     ),
     bodyMedium = TextStyle(
         fontFamily = InterFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 13.sp,
-        fontFeatureSettings = DATA_FONT_FEATURES,
+        fontFeatureSettings = SLASHED_ZERO_FEATURE,
     ),
     bodySmall = TextStyle(
         fontFamily = InterFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 11.sp,
-        fontFeatureSettings = DATA_FONT_FEATURES,
+        fontFeatureSettings = SLASHED_ZERO_FEATURE,
     ),
     labelLarge = TextStyle(
         fontFamily = InterFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 13.sp,
         letterSpacing = 0.04.sp,
-        fontFeatureSettings = DATA_FONT_FEATURES,
+        fontFeatureSettings = SLASHED_ZERO_FEATURE,
     ),
     labelMedium = TextStyle(
         fontFamily = InterFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 11.sp,
         letterSpacing = 0.04.sp,
-        fontFeatureSettings = DATA_FONT_FEATURES,
+        fontFeatureSettings = SLASHED_ZERO_FEATURE,
     ),
     labelSmall = TextStyle(
         fontFamily = InterFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 10.sp,
         letterSpacing = 0.06.sp,
-        fontFeatureSettings = DATA_FONT_FEATURES,
+        fontFeatureSettings = SLASHED_ZERO_FEATURE,
     ),
 )

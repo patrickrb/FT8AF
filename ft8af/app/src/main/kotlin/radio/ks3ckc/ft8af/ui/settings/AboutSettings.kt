@@ -235,10 +235,9 @@ private fun AboutDialog(
             )
 
             // Font attribution — Inter is licensed under the SIL Open Font
-            // License 1.1 (see app/licenses/OFL_Inter.txt). Proper names, so kept
-            // untranslated.
+            // License 1.1 (see app/licenses/OFL_Inter.txt).
             Text(
-                text = "Inter font by Rasmus Andersson (OFL-1.1)",
+                text = stringResource(R.string.about_font_attribution),
                 color = TextMuted,
                 fontSize = 12.sp,
                 modifier = Modifier

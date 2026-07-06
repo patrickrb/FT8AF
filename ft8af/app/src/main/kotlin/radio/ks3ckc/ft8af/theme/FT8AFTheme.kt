@@ -134,7 +134,7 @@ fun FT8AFTheme(content: @Composable () -> Unit) {
         shapes = FT8AFShapes,
     ) {
         // Carry the slashed-zero OpenType feature on the ambient text style so
-        // every Text — including the ~130 inline GeistMono data sites, which have
+        // every Text — including the many inline GeistMono data sites, which have
         // no fontFeatureSettings param and inherit it from LocalTextStyle — renders
         // `0` slashed (issue #438) without touching those call sites. GeistMono
         // keeps tabular alignment; if it lacks a `zero` glyph the data columns are

@@ -9,7 +9,7 @@ import org.junit.Test
 /**
  * Guards the slashed-zero wiring (issue #438): [slashedZero] must enable the
  * `zero` OpenType feature while preserving every other field, and the shared
- * [DATA_FONT_FEATURES] tag must be the value the theme root provides on the
+ * [SLASHED_ZERO_FEATURE] tag must be the value the theme root provides on the
  * ambient text style.
  *
  * Pure — [TextStyle] and [slashedZero] touch no Android runtime, so no
@@ -19,7 +19,7 @@ class TypographyFeaturesTest {
 
     @Test
     fun `feature tag is zero`() {
-        assertThat(DATA_FONT_FEATURES).isEqualTo("zero")
+        assertThat(SLASHED_ZERO_FEATURE).isEqualTo("zero")
     }
 
     @Test
