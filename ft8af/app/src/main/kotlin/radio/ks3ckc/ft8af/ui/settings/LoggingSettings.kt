@@ -32,6 +32,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -697,7 +698,7 @@ private fun QrzCredsDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .autofill(CredentialFieldRole.USERNAME) {
-                        userInput = TextFieldValue(it); testResult = null
+                        userInput = TextFieldValue(it, selection = TextRange(it.length)); testResult = null
                     },
             )
 
@@ -713,7 +714,7 @@ private fun QrzCredsDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .autofill(CredentialFieldRole.PASSWORD) {
-                        passInput = TextFieldValue(it); testResult = null
+                        passInput = TextFieldValue(it, selection = TextRange(it.length)); testResult = null
                     },
             )
 

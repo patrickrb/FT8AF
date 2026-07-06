@@ -1,6 +1,10 @@
 package radio.ks3ckc.ft8af.ui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.AutofillNode
@@ -59,6 +63,11 @@ internal fun credentialAutofillTypes(role: CredentialFieldRole): List<AutofillTy
  * the field gains / loses focus. Once the BOM is bumped to ~1.8+ (issue #440) this
  * can be replaced by the declarative `Modifier.semantics { contentType = … }`.
  *
+ * The node is [remember]ed (not recreated per recomposition) and a [DisposableEffect]
+ * removes it from the tree when the field leaves composition, so recompositions don't
+ * leak orphaned nodes into [LocalAutofillTree]. [onFill] is captured through
+ * [rememberUpdatedState] so the stable node always invokes the latest lambda.
+ *
  * @param role which credential this field holds; maps to the advertised hint(s) via
  *   [credentialAutofillTypes].
  * @param onFill invoked with the value the autofill service supplied; push it into
@@ -71,8 +80,18 @@ fun Modifier.autofill(
     onFill: (String) -> Unit,
 ): Modifier {
     val autofill = LocalAutofill.current
-    val node = AutofillNode(autofillTypes = credentialAutofillTypes(role), onFill = onFill)
-    LocalAutofillTree.current += node
+    val autofillTree = LocalAutofillTree.current
+    val currentOnFill by rememberUpdatedState(onFill)
+    val node = remember(role) {
+        AutofillNode(
+            autofillTypes = credentialAutofillTypes(role),
+            onFill = { currentOnFill(it) },
+        )
+    }
+    DisposableEffect(autofillTree, node) {
+        autofillTree += node
+        onDispose { autofillTree.children.remove(node.id) }
+    }
     return this
         .onGloballyPositioned { node.boundingBox = it.boundsInWindow() }
         .onFocusChanged { state ->
