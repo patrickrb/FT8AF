@@ -57,7 +57,9 @@ class BuildActivationAdifTest {
     /**
      * Insert one POTA QSO. [mySigInfo] is the value stored in the DB's
      * my_sig_info column — the WHERE key, which for a two-fer is the full
-     * comma-separated park string.
+     * comma-separated park string. [timeOn] is HHMMSS (how app-logged QSOs
+     * store it) so the exporter's `qso_date || time_on` window filter lines up
+     * with the 14-char yyyyMMddHHmmss activation stamps.
      */
     private fun insertQso(
         call: String,
@@ -86,20 +88,22 @@ class BuildActivationAdifTest {
         })
     }
 
+    // One-hour window: [2024-06-01 12:34:00, 13:34:00] UTC. QSOs in the tests
+    // below are logged inside this window; the exporter scopes to it.
     private fun activation(parkRef: String) = PotaActivation(
         id = 1L,
         parkRef = parkRef,
         operator = "K1ABC",
         startedAtMs = startedAtMs,
-        endedAtMs = startedAtMs + 60_000L,
+        endedAtMs = startedAtMs + 3_600_000L,
         qsoCount = 0,
         notes = null,
     )
 
     @Test
     fun singlePark_emitsOneDocumentWithHeaderAndDeterministicName() {
-        insertQso("W1AW", "20240601", "1230", mySigInfo = "K-1234")
-        insertQso("K9XYZ", "20240601", "1231", mySigInfo = "K-1234")
+        insertQso("W1AW", "20240601", "123500", mySigInfo = "K-1234")
+        insertQso("K9XYZ", "20240601", "123600", mySigInfo = "K-1234")
 
         val docs = PotaAdifExporter.buildActivationAdif(db, activation("K-1234"))
 
@@ -119,7 +123,7 @@ class BuildActivationAdifTest {
 
     @Test
     fun singlePark_overridesMySigInfoToTheParkRef() {
-        insertQso("W1AW", "20240601", "1230", mySigInfo = "K-1234")
+        insertQso("W1AW", "20240601", "123500", mySigInfo = "K-1234")
 
         val doc = PotaAdifExporter.buildActivationAdif(db, activation("K-1234")).single()
 
@@ -131,8 +135,9 @@ class BuildActivationAdifTest {
     @Test
     fun rowsAreOrderedByDateThenTime() {
         // Insert out of order; the query's ORDER BY qso_date, time_on must sort them.
-        insertQso("LATER", "20240601", "1300", mySigInfo = "K-1234")
-        insertQso("EARLY", "20240601", "1200", mySigInfo = "K-1234")
+        // Both times are inside the activation window (12:34–13:34).
+        insertQso("LATER", "20240601", "130000", mySigInfo = "K-1234")
+        insertQso("EARLY", "20240601", "123500", mySigInfo = "K-1234")
 
         val content = PotaAdifExporter.buildActivationAdif(db, activation("K-1234")).single().content
 
@@ -142,8 +147,8 @@ class BuildActivationAdifTest {
     @Test
     fun twoFer_emitsOneDocumentPerPark_sameQsosDifferentMySigInfo() {
         // A two-fer stores the full comma string in my_sig_info (the WHERE key).
-        insertQso("W1AW", "20240601", "1230", mySigInfo = "K-1234,K-5678")
-        insertQso("K9XYZ", "20240601", "1231", mySigInfo = "K-1234,K-5678")
+        insertQso("W1AW", "20240601", "123500", mySigInfo = "K-1234,K-5678")
+        insertQso("K9XYZ", "20240601", "123600", mySigInfo = "K-1234,K-5678")
 
         val docs = PotaAdifExporter.buildActivationAdif(db, activation("K-1234,K-5678"))
 
@@ -168,7 +173,7 @@ class BuildActivationAdifTest {
     @Test
     fun noMatchingQsos_returnsEmptyList_notHeaderOnlyDocs() {
         // A row exists, but for a different park — so this activation has no QSOs.
-        insertQso("OTHER", "20240601", "1230", mySigInfo = "K-9999")
+        insertQso("OTHER", "20240601", "123500", mySigInfo = "K-9999")
 
         val docs = PotaAdifExporter.buildActivationAdif(db, activation("K-1234"))
 
@@ -184,10 +189,41 @@ class BuildActivationAdifTest {
     }
 
     @Test
+    fun onlyQsosInsideTheActivationWindowAreIncluded() {
+        // Three QSOs at the SAME park, but from three different sessions:
+        // one before the window, one inside it, one after. Only the in-window
+        // QSO belongs to this activation — the export must not lump the others
+        // in (the reported bug: every activation at a park bled together).
+        insertQso("BEFORE", "20240601", "120000", mySigInfo = "K-1234") // 12:00:00 < 12:34
+        insertQso("INSIDE", "20240601", "130000", mySigInfo = "K-1234") // 13:00:00 in window
+        insertQso("AFTER", "20240601", "140000", mySigInfo = "K-1234") // 14:00:00 > 13:34
+
+        val content = PotaAdifExporter.buildActivationAdif(db, activation("K-1234")).single().content
+
+        assertThat(content).contains("INSIDE")
+        assertThat(content).doesNotContain("BEFORE")
+        assertThat(content).doesNotContain("AFTER")
+        // Exactly the one in-window QSO.
+        assertThat(content.split("<EOR>").size - 1).isEqualTo(1)
+    }
+
+    @Test
+    fun openActivation_includesQsosAfterStart_withNoEndBound() {
+        // An activation still in progress has endedAtMs == null. QSOs logged
+        // after the start must still export; the far-future upper bound lets them.
+        insertQso("LIVE", "20240601", "130000", mySigInfo = "K-1234")
+        val open = activation("K-1234").copy(endedAtMs = null)
+
+        val content = PotaAdifExporter.buildActivationAdif(db, open).single().content
+
+        assertThat(content).contains("LIVE")
+    }
+
+    @Test
     fun onlyPotaRowsMatchingTheParkAreIncluded() {
-        insertQso("INPARK", "20240601", "1230", mySigInfo = "K-1234")
+        insertQso("INPARK", "20240601", "123500", mySigInfo = "K-1234")
         // Different park — must not bleed into K-1234's document.
-        insertQso("OTHER", "20240601", "1230", mySigInfo = "K-9999")
+        insertQso("OTHER", "20240601", "123500", mySigInfo = "K-9999")
 
         val content = PotaAdifExporter.buildActivationAdif(db, activation("K-1234")).single().content
 

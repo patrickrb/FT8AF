@@ -14,6 +14,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 /**
  * Writes ADIF files for a POTA activation and shares them via system intent.
@@ -43,10 +44,23 @@ object PotaAdifExporter {
     fun buildActivationAdif(db: SQLiteDatabase, activation: PotaActivation): List<NamedAdif> {
         // The DB stores the full comma-separated park string in my_sig_info, so we
         // match on that, then split into per-park files below.
+        //
+        // Scope to the activation's time window (same logic as
+        // PotaActivationDao.getActivationQsos) so repeat activations at the same
+        // park don't all get lumped into one export. App-logged QSOs store
+        // qso_date as yyyyMMdd and time_on as HHMMSS, so `qso_date || time_on`
+        // compares directly against a yyyyMMddHHmmss GMT stamp. An open (still
+        // active) activation has no end, so we use a far-future upper bound.
+        val fmt = SimpleDateFormat("yyyyMMddHHmmss", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("GMT")
+        }
+        val startStamp = fmt.format(Date(activation.startedAtMs))
+        val endStamp = activation.endedAtMs?.let { fmt.format(Date(it)) } ?: "99991231235959"
         val cursor = db.rawQuery(
             "SELECT * FROM QSLTable WHERE my_sig = 'POTA' AND my_sig_info = ? " +
+                "AND (qso_date || time_on) >= ? AND (qso_date || time_on) <= ? " +
                 "ORDER BY qso_date, time_on",
-            arrayOf(activation.parkRef),
+            arrayOf(activation.parkRef, startStamp, endStamp),
         )
 
         data class QsoRow(
