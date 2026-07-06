@@ -24,6 +24,8 @@ package com.k1af.ft8af;
 
 import static com.k1af.ft8af.GeneralVariables.getStringFromResource;
 
+import com.k1af.ft8af.concurrent.SafeExecutor;
+
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.PendingIntent;
@@ -680,7 +682,11 @@ public class MainViewModel extends ViewModel {
 
 
                 getQTHRunnable.messages = messages;
-                getQTHThreadPool.execute(getQTHRunnable);//query location via thread pool
+                // Guard against the ViewModel-teardown race: a late deep-decode
+                // pass can deliver here after onCleared() shut the pool down,
+                // and a raw execute() on a terminated pool throws
+                // RejectedExecutionException on this decode thread (crash).
+                SafeExecutor.tryExecute(getQTHThreadPool, getQTHRunnable);//query location via thread pool
 
                 //this variable also notifies message list changes
                 mutable_Decoded_Counter.postValue(
@@ -797,7 +803,7 @@ public class MainViewModel extends ViewModel {
                             sendWaveDataRunnable.baseRig = baseRig;
                             sendWaveDataRunnable.message = msg;
                             //send network data packets via thread pool
-                            sendWaveDataThreadPool.execute(sendWaveDataRunnable);
+                            SafeExecutor.tryExecute(sendWaveDataThreadPool, sendWaveDataRunnable);
                         }
                     }
                 }
@@ -825,7 +831,7 @@ public class MainViewModel extends ViewModel {
                 }
                 sendWaveDataRunnable.baseRig = baseRig;
                 sendWaveDataRunnable.message = msg;
-                sendWaveDataThreadPool.execute(sendWaveDataRunnable);
+                SafeExecutor.tryExecute(sendWaveDataThreadPool, sendWaveDataRunnable);
             }
 
         }, new OnTransmitSuccess() {//when QSO is successful
