@@ -45,6 +45,7 @@ import radio.ks3ckc.ft8af.ui.components.ActiveQsoPanel
 import radio.ks3ckc.ft8af.ui.components.shouldShowCatChip
 import radio.ks3ckc.ft8af.ui.components.CqOptionsSheet
 import radio.ks3ckc.ft8af.ui.components.canEnableFieldDay
+import radio.ks3ckc.ft8af.ui.components.shouldPersistFreeText
 import radio.ks3ckc.ft8af.ui.components.shouldPersistSection
 import radio.ks3ckc.ft8af.ui.components.FT8AFTab
 import radio.ks3ckc.ft8af.ui.components.FrequencyPickerSheet
@@ -152,7 +153,10 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     var showCqOptions by remember { mutableStateOf(false) }
     var cqModifier by remember { mutableStateOf(GeneralVariables.toModifier ?: "") }
     var isFreeTextMode by remember { mutableStateOf(false) }
-    var freeTextMessage by remember { mutableStateOf("") }
+    // Seed the live free-text field and the saved custom-CQ from persisted config
+    // (config loads async, so these are re-synced in the configLoaded effect below).
+    var freeTextMessage by remember { mutableStateOf(GeneralVariables.cqFreeText ?: "") }
+    var savedCqFreeText by remember { mutableStateOf(GeneralVariables.cqFreeText ?: "") }
     var fieldDayEnabled by remember { mutableStateOf(GeneralVariables.fieldDayMode) }
     var fieldDayClass by remember { mutableStateOf(GeneralVariables.fieldDayClass ?: "A") }
     var fieldDayNumTx by remember { mutableIntStateOf(GeneralVariables.fieldDayNumTx.coerceIn(1, 16)) }
@@ -180,6 +184,12 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             // chip reflects the correct state even when arming is skipped
             // (e.g. callsign not yet configured).
             huntEnabled = GeneralVariables.autoFollowCQ
+            // Config (incl. the saved custom CQ) loads after first composition, so
+            // pull it in once it's ready and seed the field if untouched.
+            savedCqFreeText = GeneralVariables.cqFreeText ?: ""
+            if (freeTextMessage.isBlank()) {
+                freeTextMessage = savedCqFreeText
+            }
             if (shouldArmHuntOnStartup(
                     GeneralVariables.autoFollowCQ, GeneralVariables.myCallsign)) {
                 mainViewModel.ft8TransmitSignal.armForHunt()
@@ -563,11 +573,25 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             currentModifier = cqModifier,
             isFreeTextMode = isFreeTextMode,
             freeText = freeTextMessage,
+            callsign = GeneralVariables.myCallsign ?: "",
+            savedFreeText = savedCqFreeText,
             fieldDayEnabled = fieldDayEnabled,
             fieldDayClass = fieldDayClass,
             fieldDayNumTx = fieldDayNumTx,
             fieldDaySection = fieldDaySection,
-            onDismiss = { showCqOptions = false },
+            onDismiss = {
+                showCqOptions = false
+                // Persist the custom CQ once, on sheet dismiss (which also fires
+                // right after Call CQ and preset selection), instead of writing on
+                // every keystroke — that enqueued a DELETE+INSERT AsyncTask per
+                // character. Blank is never persisted over a saved value here;
+                // clearing stays the explicit ✕ path (onRemoveSavedCq).
+                if (shouldPersistFreeText(freeTextMessage, savedCqFreeText)) {
+                    savedCqFreeText = freeTextMessage
+                    GeneralVariables.cqFreeText = freeTextMessage
+                    mainViewModel.databaseOpr.writeConfig("cqFreeText", freeTextMessage, null)
+                }
+            },
             onSelectPreset = { preset ->
                 cqModifier = preset
                 isFreeTextMode = false
@@ -596,7 +620,28 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                     cqModifier = ""
                     GeneralVariables.fieldDayMode = false
                     GeneralVariables.toModifier = ""
+                    // In-memory only — no SQLite write per keystroke. The value is
+                    // persisted (and the saved chip updated) on sheet dismiss /
+                    // Call CQ via shouldPersistFreeText in onDismiss above.
+                    GeneralVariables.cqFreeText = text
                 }
+            },
+            onArmSavedCq = {
+                freeTextMessage = savedCqFreeText
+                isFreeTextMode = savedCqFreeText.isNotBlank()
+                if (savedCqFreeText.isNotBlank()) {
+                    fieldDayEnabled = false
+                    cqModifier = ""
+                    GeneralVariables.fieldDayMode = false
+                    GeneralVariables.toModifier = ""
+                }
+            },
+            onRemoveSavedCq = {
+                savedCqFreeText = ""
+                freeTextMessage = ""
+                isFreeTextMode = false
+                GeneralVariables.cqFreeText = ""
+                mainViewModel.databaseOpr.writeConfig("cqFreeText", "", null)
             },
             onFieldDayToggle = { enabled ->
                 if (enabled && !canEnableFieldDay(fieldDaySection)) {

@@ -103,6 +103,79 @@ class CqOptionsLogicTest {
         assertThat(isValidFreeText("")).isTrue()
     }
 
+    // ---- buildDirectedCq ----
+
+    @Test
+    fun buildDirectedCq_assemblesTextAndCall() {
+        assertThat(buildDirectedCq("POTA", "K1ABC")).isEqualTo("CQ POTA K1ABC")
+    }
+
+    @Test
+    fun buildDirectedCq_trimsAndCollapsesSpaces() {
+        assertThat(buildDirectedCq("  PO   TA ", "  K1ABC  ")).isEqualTo("CQ PO TA K1ABC")
+    }
+
+    @Test
+    fun buildDirectedCq_emptyText_yieldsPlainCq() {
+        // No double space where the text would go.
+        assertThat(buildDirectedCq("", "K1ABC")).isEqualTo("CQ K1ABC")
+    }
+
+    // ---- directedCqFits ----
+
+    @Test
+    fun directedCqFits_shortTextAndCall_true() {
+        // "CQ POTA K1ABC" == 13 chars exactly (boundary).
+        assertThat(directedCqFits("POTA", "K1ABC")).isTrue()
+    }
+
+    @Test
+    fun directedCqFits_overThirteen_false() {
+        // "CQ POTA W1AW/P" == 14 chars.
+        assertThat(directedCqFits("POTA", "W1AW/P")).isFalse()
+    }
+
+    @Test
+    fun directedCqFits_emptyTextShortCall_true() {
+        // "CQ K1ABC" == 8 chars.
+        assertThat(directedCqFits("", "K1ABC")).isTrue()
+    }
+
+    @Test
+    fun directedCqFits_invalidChar_false() {
+        // The lowercase call fails the FT8 charset even though it's short.
+        assertThat(directedCqFits("TEST", "k1abc")).isFalse()
+    }
+
+    // ---- shouldPersistFreeText ----
+
+    @Test
+    fun shouldPersistFreeText_newValue_true() {
+        assertThat(shouldPersistFreeText("POTA HI", "")).isTrue()
+    }
+
+    @Test
+    fun shouldPersistFreeText_changedValue_true() {
+        assertThat(shouldPersistFreeText("POTA THERE", "POTA HI")).isTrue()
+    }
+
+    @Test
+    fun shouldPersistFreeText_unchangedValue_false() {
+        // No redundant write when the field matches what's already saved.
+        assertThat(shouldPersistFreeText("POTA HI", "POTA HI")).isFalse()
+    }
+
+    @Test
+    fun shouldPersistFreeText_blankOverSaved_false() {
+        // Never clobber a saved value with a blank — clearing is the explicit ✕.
+        assertThat(shouldPersistFreeText("", "POTA HI")).isFalse()
+    }
+
+    @Test
+    fun shouldPersistFreeText_blankOverBlank_false() {
+        assertThat(shouldPersistFreeText("", "")).isFalse()
+    }
+
     // ---- sanitizeModifier ----
 
     @Test

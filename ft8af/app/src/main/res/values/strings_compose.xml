@@ -116,6 +116,11 @@
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_cq_options">CQ message options (modifier, free text, Field Day)</string>
 
+    <!-- ===== CQ options sheet (free text / saved custom CQ) ===== -->
+    <string name="cq_directed_too_long">CQ + text + call doesn\'t fit in one FT8 message (max 13 chars, limited character set)</string>
+    <string name="cq_saved_label">Saved</string>
+    <string name="cq_saved_remove">Remove saved CQ</string>
+
     <!-- ===== Hound (DXpedition) setup ===== -->
     <string name="hound_title">Work a DXpedition (Hound)</string>
     <string name="hound_help">Tune the rig to the Fox\'s published dial frequency first. You call high (1000–4000 Hz); the app auto-QSYs you down to where the Fox answers and replies with your report.</string>
