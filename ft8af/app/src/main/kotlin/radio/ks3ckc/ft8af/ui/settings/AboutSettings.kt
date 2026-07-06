@@ -88,7 +88,7 @@ fun AboutSettings(
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     SettingsRow(
-                        label = "FT8US",
+                        label = stringResource(R.string.app_name),
                         description = stringResource(
                             R.string.settings_build_date_format,
                             GeneralVariables.BUILD_DATE,
