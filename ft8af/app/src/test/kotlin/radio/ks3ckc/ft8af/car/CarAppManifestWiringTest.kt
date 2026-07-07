@@ -22,7 +22,7 @@ class CarAppManifestWiringTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
     @Test
-    fun carAppService_isDeclaredExported_withIotAndPoiCategories() {
+    fun carAppService_isDeclaredExported_withIotCategory() {
         val intent = Intent("androidx.car.app.CarAppService").setPackage(context.packageName)
         val services = context.packageManager.queryIntentServices(
             intent,
@@ -33,7 +33,6 @@ class CarAppManifestWiringTest {
         assertThat(resolved.serviceInfo.name).isEqualTo("radio.ks3ckc.ft8af.car.FT8AFCarAppService")
         assertThat(resolved.serviceInfo.exported).isTrue()
         assertThat(resolved.filter.hasCategory("androidx.car.app.category.IOT")).isTrue()
-        assertThat(resolved.filter.hasCategory("androidx.car.app.category.POI")).isTrue()
     }
 
     @Test

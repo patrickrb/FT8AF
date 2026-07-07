@@ -29,9 +29,6 @@
          (Android 14 mutes background mic without a microphone-typed foreground service). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <!-- Android Auto surface-based map rendering (MapWithContentTemplate). -->
-    <uses-permission android:name="androidx.car.app.MAP_TEMPLATES" />
-    <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
 
     <application
         android:allowBackup="false"
@@ -115,9 +112,9 @@
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
-        <!-- Level 1 = backward compat floor. MapWithContentTemplate needs API 5+;
-             QsoStatusScreen checks at runtime and falls back to PaneTemplate on
-             older hosts. -->
+        <!-- Level 1 = every templates-capable Android Auto host; the IOT category
+             keeps the app usable while driving (POI/NAV categories add driving
+             restrictions that block the screen). -->
         <meta-data
             android:name="androidx.car.app.minCarApiLevel"
             android:value="1" />
@@ -128,7 +125,6 @@
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
                 <category android:name="androidx.car.app.category.IOT" />
-                <category android:name="androidx.car.app.category.POI" />
             </intent-filter>
         </service>
 
