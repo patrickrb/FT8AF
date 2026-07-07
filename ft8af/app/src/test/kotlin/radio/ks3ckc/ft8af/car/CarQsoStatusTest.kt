@@ -248,4 +248,24 @@ class CarQsoStatusTest {
         assertThat(buildCarPotaLine("K-9999", null))
             .isEqualTo("POTA K-9999 \u00B7 0 QSOs")
     }
+
+    // -- pskSpotsToMarkers ("who heard me" rings) --
+
+    @Test
+    fun pskSpotsToMarkers_mapsCoordsAndColor_skipsZeroZero() {
+        val spots = listOf(
+            radio.ks3ckc.ft8af.pskreporter.PskReporterSpot(
+                "VE3XYZ", "FN03", 43.0, -79.0, 14_074_000L, -10, "FT8", 0L,
+            ),
+            // Gridless report at 0,0 \u2014 should be dropped, not plotted off Africa.
+            radio.ks3ckc.ft8af.pskreporter.PskReporterSpot(
+                "BADXYZ", "", 0.0, 0.0, 14_074_000L, -10, "FT8", 0L,
+            ),
+        )
+        val markers = pskSpotsToMarkers(spots)
+        assertThat(markers).hasSize(1)
+        assertThat(markers[0].lat).isEqualTo(43.0)
+        assertThat(markers[0].lon).isEqualTo(-79.0)
+        assertThat(markers[0].colorInt).isEqualTo(PSK_MARKER_COLOR)
+    }
 }

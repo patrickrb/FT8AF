@@ -203,6 +203,10 @@ dependencies {
 
     // Android Auto (phone projection): surface-based map + status screen.
     implementation 'androidx.car.app:app:1.7.0'
+    // DEBUG-ONLY: lets the same CarAppService render on an Android Automotive OS
+    // emulator (CarAppActivity host) so the car map can be tested without a phone
+    // + DHU. Never ships in release. Paired with src/debug/AndroidManifest.xml.
+    debugImplementation 'androidx.car.app:app-automotive:1.7.0'
 
     // Image loading for QRZ profile avatars
     implementation 'io.coil-kt:coil-compose:2.6.0'

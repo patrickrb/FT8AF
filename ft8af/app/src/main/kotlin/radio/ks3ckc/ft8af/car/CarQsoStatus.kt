@@ -154,3 +154,18 @@ internal fun buildCarPotaLine(parkRefsDisplay: String?, qsoCount: Int?): String?
     val count = qsoCount ?: 0
     return "POTA $parkRefsDisplay \u00B7 $count QSOs"
 }
+
+/** ARGB colour for "who heard me" PSK markers \u2014 a distinct green from the decode dots. */
+internal const val PSK_MARKER_COLOR = 0xFF66BB6A.toInt()
+
+/**
+ * Maps PSKReporter "who heard me" spots to car map markers (drawn as hollow rings
+ * by [CarMapSurfaceRenderer]). Skips spots with no usable coordinates (0/0), which
+ * PSKReporter occasionally returns for gridless reports.
+ */
+internal fun pskSpotsToMarkers(
+    spots: List<radio.ks3ckc.ft8af.pskreporter.PskReporterSpot>,
+): List<CarStationMarker> =
+    spots
+        .filterNot { it.lat == 0.0 && it.lon == 0.0 }
+        .map { CarStationMarker(it.lat, it.lon, PSK_MARKER_COLOR) }

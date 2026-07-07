@@ -30,6 +30,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
+    <!-- Android Auto: NAVIGATION-category car app that draws its QSO map on the
+         car Surface (see QsoStatusScreen/CarMapSurfaceRenderer). -->
+    <uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
+    <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
+
     <application
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -112,9 +117,8 @@
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
-        <!-- Level 1 = every templates-capable Android Auto host; the IOT category
-             keeps the app usable while driving (POI/NAV categories add driving
-             restrictions that block the screen). -->
+        <!-- Level 1 = backward-compat floor. The surface map (MapWithContentTemplate)
+             needs API level 5+; older hosts fall back to a text PaneTemplate. -->
         <meta-data
             android:name="androidx.car.app.minCarApiLevel"
             android:value="1" />
@@ -124,7 +128,10 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
-                <category android:name="androidx.car.app.category.IOT" />
+                <!-- NAVIGATION (not IOT/POI) so the full-bleed QSO map surface stays
+                     visible while the vehicle is moving — the point of mobile FT8.
+                     POI/IOT map surfaces are blanked or disallowed while driving. -->
+                <category android:name="androidx.car.app.category.NAVIGATION" />
             </intent-filter>
         </service>
 
