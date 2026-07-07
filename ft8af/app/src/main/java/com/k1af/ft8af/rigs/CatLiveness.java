@@ -19,6 +19,14 @@ package com.k1af.ft8af.rigs;
  *       reply, so a rig that never answers a frequency read (or a transport that doesn't
  *       support it) can't be falsely marked dead.</li>
  * </ul>
+ *
+ * <p>A third guard handles the transmit→receive edge (see {@link #shouldRearmAfterTx}). We
+ * don't probe during TX, so the last-response timestamp freezes for the whole transmit
+ * window. An FT8 over is 12.64&nbsp;s — longer than {@link #DEFAULT_TIMEOUT_MS} — so the very
+ * first tick after TX would otherwise judge the (pre-TX) timestamp as stale and flip the chip
+ * red even though the rig is perfectly responsive. On the TX→RX edge the caller re-arms the
+ * timestamp so the quiet timer restarts from the moment transmit ends, giving the freshly-sent
+ * probe time to get a reply.
  */
 public final class CatLiveness {
 
@@ -33,6 +41,24 @@ public final class CatLiveness {
      */
     public static boolean shouldProbe(boolean connected, boolean transmitting) {
         return connected && !transmitting;
+    }
+
+    /**
+     * Whether the last-response timestamp should be re-armed this tick because transmit just
+     * ended. True only on the falling edge (was transmitting last tick, not transmitting now).
+     *
+     * <p>Probing is suppressed during TX, so {@code lastResponseMs} is frozen for the whole
+     * over. FT8 transmits for 12.64&nbsp;s — longer than {@link #DEFAULT_TIMEOUT_MS} — so
+     * without this re-arm the first post-TX tick sees a &gt;8&nbsp;s-old timestamp and
+     * {@link #isRigStale} fires a false positive. Re-arming to "now" on the TX→RX edge restarts
+     * the quiet window from the end of transmit, so the probe sent this same tick has time to
+     * reply before any staleness judgement.
+     *
+     * @param wasTransmitting whether we were transmitting on the previous tick
+     * @param transmitting    whether we are transmitting now
+     */
+    public static boolean shouldRearmAfterTx(boolean wasTransmitting, boolean transmitting) {
+        return wasTransmitting && !transmitting;
     }
 
     /**

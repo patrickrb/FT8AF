@@ -21,6 +21,36 @@ public class CatLivenessTest {
         assertThat(CatLiveness.shouldProbe(false, true)).isFalse();
     }
 
+    // ---- shouldRearmAfterTx -------------------------------------------------
+
+    @Test
+    public void rearm_onlyOnTxToRxEdge() {
+        // Falling edge: was transmitting last tick, no longer transmitting -> re-arm.
+        assertThat(CatLiveness.shouldRearmAfterTx(true, false)).isTrue();
+        // Still transmitting -> nothing to re-arm yet.
+        assertThat(CatLiveness.shouldRearmAfterTx(true, true)).isFalse();
+        // Steady receive (never transmitting) -> no edge.
+        assertThat(CatLiveness.shouldRearmAfterTx(false, false)).isFalse();
+        // Rising edge (RX->TX) -> not our concern; only the falling edge re-arms.
+        assertThat(CatLiveness.shouldRearmAfterTx(false, true)).isFalse();
+    }
+
+    @Test
+    public void rearm_preventsFalseStaleAfterLongTransmit() {
+        // Reproduces the FT8 red-chip bug: an over is 12.64s, longer than the 8s timeout, so
+        // lastResponseMs is frozen ~13s in the past when TX ends. Without a re-arm the first
+        // post-TX tick would judge the rig stale...
+        long now = 100_000;
+        long frozenDuringTx = now - 13_000;
+        assertThat(CatLiveness.isRigStale(true, false, true, now, frozenDuringTx, TIMEOUT))
+                .isTrue();
+        // ...but on the TX->RX edge we re-arm the timestamp to "now", after which the same tick
+        // no longer sees the rig as stale.
+        assertThat(CatLiveness.shouldRearmAfterTx(true, false)).isTrue();
+        long rearmed = now; // re-arm sets lastResponseMs = now
+        assertThat(CatLiveness.isRigStale(true, false, true, now, rearmed, TIMEOUT)).isFalse();
+    }
+
     // ---- isRigStale ---------------------------------------------------------
 
     @Test
