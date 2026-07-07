@@ -50,6 +50,33 @@ public class AdifFormatTest {
     }
 
     @Test
+    public void mfskSubmode_ft4AndFt2AreMfskSubmodes() {
+        // The bug: exporting a bare <mode>FT2 — pota.app rejects it. FT4/FT2 are
+        // ADIF submodes of MFSK, so the caller must emit MODE=MFSK + SUBMODE.
+        assertThat(AdifFormat.mfskSubmode("FT2")).isEqualTo("FT2");
+        assertThat(AdifFormat.mfskSubmode("FT4")).isEqualTo("FT4");
+    }
+
+    @Test
+    public void mfskSubmode_standaloneModesReturnNull() {
+        // FT8 is a first-class ADIF MODE; these pass through verbatim (null result).
+        assertThat(AdifFormat.mfskSubmode("FT8")).isNull();
+        assertThat(AdifFormat.mfskSubmode("SSB")).isNull();
+        assertThat(AdifFormat.mfskSubmode("CW")).isNull();
+    }
+
+    @Test
+    public void mfskSubmode_isCaseInsensitiveAndTrimmedAndUpperCased() {
+        assertThat(AdifFormat.mfskSubmode(" ft2 ")).isEqualTo("FT2");
+        assertThat(AdifFormat.mfskSubmode("Ft4")).isEqualTo("FT4");
+    }
+
+    @Test
+    public void mfskSubmode_nullReturnsNull() {
+        assertThat(AdifFormat.mfskSubmode(null)).isNull();
+    }
+
+    @Test
     public void formatReport_alwaysSignedAndTwoDigits() {
         // The bug: bare String.valueOf(int) gave "5"/"-5"/"0" — no sign on positives, no padding.
         assertThat(AdifFormat.formatReport(5)).isEqualTo("+05");
