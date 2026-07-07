@@ -7,12 +7,14 @@ import androidx.car.app.Screen
 import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
+import androidx.car.app.model.CarIcon
 import androidx.car.app.model.MessageTemplate
 import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.car.app.versioning.CarAppApiLevels
+import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.Observer
@@ -148,8 +150,20 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
             rows.add(Row.Builder().setTitle(potaLine).build())
         }
 
+        // QSO map image: operator position → partner station line
+        val opGrid = GeneralVariables.getMyMaidenheadGrid()
+        val partnerCall = toCallsign?.callsign
+        val partnerGrid = partnerCall?.let { call ->
+            vm.mutableFt8MessageList.value?.firstOrNull {
+                it.callsignFrom == call
+            }?.maidenGrid
+        }
+        val mapBitmap = CarQsoMapImage.render(carContext, opGrid, partnerCall, partnerGrid)
+        val mapIcon = CarIcon.Builder(IconCompat.createWithBitmap(mapBitmap)).build()
+
         val pane = Pane.Builder().apply {
             rows.take(paneRowLimit(carContext)).forEach { addRow(it) }
+            setImage(mapIcon)
         }.build()
         return PaneTemplate.Builder(pane)
             .setTitle(carContext.getString(R.string.car_screen_title))
