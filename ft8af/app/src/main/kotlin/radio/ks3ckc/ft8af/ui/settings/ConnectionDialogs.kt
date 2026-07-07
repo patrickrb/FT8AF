@@ -1,7 +1,6 @@
 package radio.ks3ckc.ft8af.ui.settings
 
 import android.annotation.SuppressLint
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -37,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +61,7 @@ import com.k1af.ft8af.x6100.XieguRadioFactory
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.CredentialFieldRole
 import radio.ks3ckc.ft8af.ui.components.autofill
+import radio.ks3ckc.ft8af.util.bluetoothAdapter
 
 // ─────────────────────────────────────────────────────────────────────
 // Shared helpers
@@ -122,9 +123,10 @@ fun BluetoothPickerDialog(
     mainViewModel: MainViewModel,
     onDismiss: () -> Unit,
 ) {
-    val devices = remember {
+    val context = LocalContext.current
+    val devices = remember(context) {
         val list = mutableListOf<BtDeviceInfo>()
-        val adapter = BluetoothAdapter.getDefaultAdapter()
+        val adapter = bluetoothAdapter(context)
         if (adapter != null) {
             for (device in adapter.bondedDevices) {
                 val spp = BluetoothConstants.checkIsSpp(device)
