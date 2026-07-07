@@ -7,7 +7,8 @@ import android.content.Context
 /**
  * Returns the device's [BluetoothAdapter], obtained via the [BluetoothManager] system
  * service. This is the non-deprecated replacement for `BluetoothAdapter.getDefaultAdapter()`,
- * which is deprecated on API 18+ (issue #454).
+ * which was deprecated in Android 12 (API 31); the [BluetoothManager] route has been the
+ * recommended way to obtain the adapter since API 18 (issue #454).
  *
  * Returns `null` on devices without Bluetooth — either the `BLUETOOTH_SERVICE` is absent
  * or the manager reports no adapter — mirroring the null contract of the old API so call
