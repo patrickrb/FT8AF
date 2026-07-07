@@ -155,10 +155,18 @@ public class ShareLogs {
                             , cursor.getString(cursor.getColumnIndex("gridsquare"))).getBytes());
                 }
 
-                if (cursor.getString(cursor.getColumnIndex("mode")) != null) {
-                    fileOutputStream.write(String.format("<mode:%d>%s "
-                            , cursor.getString(cursor.getColumnIndex("mode")).length()
-                            , cursor.getString(cursor.getColumnIndex("mode"))).getBytes());
+                String mode = cursor.getString(cursor.getColumnIndex("mode"));
+                if (mode != null) {
+                    // FT4/FT2 are ADIF submodes of MFSK, not standalone modes — a bare
+                    // <mode>FT2 is rejected as invalid by pota.app and other ADIF consumers.
+                    String submode = AdifFormat.mfskSubmode(mode);
+                    if (submode != null) {
+                        fileOutputStream.write(String.format("<mode:4>MFSK <submode:%d>%s "
+                                , submode.length(), submode).getBytes());
+                    } else {
+                        fileOutputStream.write(String.format("<mode:%d>%s "
+                                , mode.length(), mode).getBytes());
+                    }
                 }
 
                 if (cursor.getString(cursor.getColumnIndex("rst_sent")) != null) {

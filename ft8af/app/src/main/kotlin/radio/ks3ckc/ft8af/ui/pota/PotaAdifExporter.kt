@@ -5,6 +5,7 @@ import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import androidx.core.content.FileProvider
 import com.k1af.ft8af.MainViewModel
+import com.k1af.ft8af.log.AdifFormat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -118,7 +119,7 @@ object PotaAdifExporter {
             for (r in rows) {
                 adifField(sb, "CALL", r.call)
                 adifField(sb, "GRIDSQUARE", r.grid)
-                adifField(sb, "MODE", r.mode)
+                adifMode(sb, r.mode)
                 adifField(sb, "BAND", r.band)
                 adifField(sb, "FREQ", r.freq)
                 adifField(sb, "RST_SENT", r.rstSent)
@@ -195,6 +196,26 @@ object PotaAdifExporter {
                 e.printStackTrace()
                 onResult(false)
             }
+        }
+    }
+
+    /**
+     * Emit the ADIF MODE (and SUBMODE where required) for a stored mode string.
+     *
+     * FT8 is a standalone ADIF mode, but FT4 and FT2 are submodes of MFSK — a bare
+     * `<MODE:3>FT2` is what pota.app rejects as invalid. For those, emit MODE=MFSK
+     * plus SUBMODE=FT2/FT4 (per POTA support's guidance); every other mode passes
+     * through as MODE unchanged. The MFSK classification is shared with the general
+     * logbook export via [AdifFormat.mfskSubmode].
+     */
+    @androidx.annotation.VisibleForTesting
+    internal fun adifMode(sb: StringBuilder, mode: String?) {
+        val submode = AdifFormat.mfskSubmode(mode)
+        if (submode != null) {
+            adifField(sb, "MODE", "MFSK")
+            adifField(sb, "SUBMODE", submode)
+        } else {
+            adifField(sb, "MODE", mode)
         }
     }
 
