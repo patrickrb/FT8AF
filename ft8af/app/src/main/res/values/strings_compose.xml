@@ -706,4 +706,5 @@
     <string name="car_decodes_action">Decodes</string>
     <string name="car_decodes_title">Recent decodes</string>
     <string name="car_no_decodes">No decodes yet</string>
+    <string name="car_pota_line">POTA %1$s · %2$d QSOs</string>
 </resources>
