@@ -143,3 +143,14 @@ internal fun carDecodeSecondary(utcTimeMs: Long, snrLabel: String?): String {
  * actually changed, so a jittery handler can't spam the host with no-op renders.
  */
 internal fun shouldInvalidateForTick(lastSecond: Int, newSecond: Int): Boolean = newSecond != lastSecond
+
+/**
+ * Formats the POTA activation line for the car surface/pane:
+ * "POTA K-1234 · 3 QSOs" (or "POTA K-1234 + K-5678 · 3 QSOs" for multi-park).
+ * Returns null when there is no active activation.
+ */
+internal fun buildCarPotaLine(parkRefsDisplay: String?, qsoCount: Int?): String? {
+    if (parkRefsDisplay.isNullOrBlank()) return null
+    val count = qsoCount ?: 0
+    return "POTA $parkRefsDisplay \u00B7 $count QSOs"
+}

@@ -215,4 +215,37 @@ class CarQsoStatusTest {
         assertThat(shouldInvalidateForTick(lastSecond = 7, newSecond = 6)).isTrue()
         assertThat(shouldInvalidateForTick(lastSecond = -1, newSecond = 15)).isTrue()
     }
+
+    // -- buildCarPotaLine --
+
+    @Test
+    fun buildCarPotaLine_nullWhenNoActivation() {
+        assertThat(buildCarPotaLine(null, null)).isNull()
+        assertThat(buildCarPotaLine("", null)).isNull()
+        assertThat(buildCarPotaLine("  ", null)).isNull()
+    }
+
+    @Test
+    fun buildCarPotaLine_formatsSingleParkWithCount() {
+        assertThat(buildCarPotaLine("K-1234", 3))
+            .isEqualTo("POTA K-1234 \u00B7 3 QSOs")
+    }
+
+    @Test
+    fun buildCarPotaLine_formatsMultiParkDisplay() {
+        assertThat(buildCarPotaLine("K-1234 + K-5678", 12))
+            .isEqualTo("POTA K-1234 + K-5678 \u00B7 12 QSOs")
+    }
+
+    @Test
+    fun buildCarPotaLine_zeroCount() {
+        assertThat(buildCarPotaLine("K-0001", 0))
+            .isEqualTo("POTA K-0001 \u00B7 0 QSOs")
+    }
+
+    @Test
+    fun buildCarPotaLine_nullCountTreatedAsZero() {
+        assertThat(buildCarPotaLine("K-9999", null))
+            .isEqualTo("POTA K-9999 \u00B7 0 QSOs")
+    }
 }
