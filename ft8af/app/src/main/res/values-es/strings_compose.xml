@@ -94,6 +94,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">Llamando CQ</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">Buscando...</string>
     <string name="qsopanel_qsoing_with">QSO con %1$s</string>
     <string name="qsopanel_waiting_for">Esperando a %1$s</string>
@@ -512,4 +513,39 @@
     <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
+    <string name="tx_audio_dropped">Falló el audio de TX — no se transmitió señal en este ciclo (error de audio USB)</string>
+    <string name="cq_offset_moved">Desplazamiento de CQ movido a un hueco libre: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Offset de TX libre automático</string>
+    <string name="settings_auto_clear_tx_desc">Al llamar CQ, elige un hueco libre según la actividad reciente de la banda y se aparta si se ocupa</string>
+    <string name="tune_content_description">Tune: inicia el sintonizador del equipo o transmite una portadora continua para ajustar la antena</string>
+    <string name="tune_stopped_timeout">Tune detenido tras %1$d s</string>
+    <string name="tune_blocked_tx">Detén el CQ/QSO antes de usar Tune</string>
+    <string name="tune_unavailable_route">Tune aún no está disponible en esta ruta de audio</string>
+    <string name="tune_atu_started">Sintonizador de antena del equipo iniciado</string>
+    <string name="tune_atu_unavailable">Sintonizador no disponible — conecta un equipo CAT con sintonizador interno</string>
+    <string name="settings_tune_method">Método de Tune</string>
+    <string name="settings_tune_method_desc">Automático inicia el sintonizador interno del equipo por CAT cuando está disponible; si no, reproduce el tono de baja potencia</string>
+    <string name="tune_method_automatic">Automático</string>
+    <string name="tune_method_internal">Sintonizador interno</string>
+    <string name="tune_method_tone">Tono de baja potencia</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / CASCADA (DESARROLLADOR)</string>
+    <string name="settings_fft_window">Función de ventana FFT</string>
+    <string name="settings_fft_window_desc">Ventana previa a la FFT para el espectro/cascada; Hann reduce la fuga espectral</string>
+    <string name="settings_fft_window_rect">Rectangular (ninguna)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">Promediado de cuadros</string>
+    <string name="settings_fft_averaging_desc">Suaviza la pantalla entre cuadros FFT; Desactivado muestra cada cuadro tal cual</string>
+    <string name="settings_fft_avg_off">Desactivado</string>
+    <string name="settings_fft_avg_light">Ligero (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">Fuerte (EMA 0.25)</string>
+    <string name="settings_bin_agg">Combinación de bins del espectro</string>
+    <string name="settings_bin_agg_desc">Cómo se combinan bins FFT adyacentes en una barra del espectro</string>
+    <string name="settings_bin_agg_max">Máximo</string>
+    <string name="settings_bin_agg_avg">Promedio</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

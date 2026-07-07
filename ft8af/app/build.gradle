@@ -4,6 +4,10 @@ import java.text.SimpleDateFormat
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    // Kotlin 2.0 Compose compiler plugin (issue #440). Replaces the standalone
+    // composeOptions.kotlinCompilerExtensionVersion, which the Kotlin 1.9
+    // toolchain used and which topped out at Compose 1.7.
+    id 'org.jetbrains.kotlin.plugin.compose'
     id 'jacoco'
     // Static analysis (issue #63).
     id 'io.gitlab.arturbosch.detekt'
@@ -124,9 +128,9 @@ android {
         dataBinding true
         buildConfig true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion '1.5.8'
-    }
+    // composeOptions.kotlinCompilerExtensionVersion is intentionally gone: with
+    // Kotlin 2.0 the Compose compiler is the org.jetbrains.kotlin.plugin.compose
+    // plugin (applied above, versioned to match Kotlin in the root build.gradle).
     testOptions {
         unitTests {
             // Robolectric needs the merged manifest + resources to bring up an
@@ -180,20 +184,26 @@ dependencies {
     implementation files('src/libs/nanohttpd-2.2.0.jar')
     implementation files('src/libs/osmdroid-android-6.1.14.aar')//Map widget
 
-    // Compose BOM
-    def composeBom = platform('androidx.compose:compose-bom:2024.02.00')
+    // Compose BOM — 2025.04.01 maps to Compose 1.8.0 (issue #440). activity- and
+    // navigation-compose are versioned outside the BOM, so they are bumped to the
+    // releases that align with Compose 1.8 / Kotlin 2.0.
+    def composeBom = platform('androidx.compose:compose-bom:2025.04.01')
     implementation composeBom
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-graphics'
     implementation 'androidx.compose.ui:ui-tooling-preview'
     implementation 'androidx.compose.material3:material3'
     implementation 'androidx.compose.material:material-icons-extended'
-    implementation 'androidx.activity:activity-compose:1.8.2'
-    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0'
-    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.7.0'
-    implementation 'androidx.navigation:navigation-compose:2.7.7'
+    implementation 'androidx.activity:activity-compose:1.10.1'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.7'
+    implementation 'androidx.navigation:navigation-compose:2.8.9'
     implementation 'androidx.compose.runtime:runtime-livedata'
     debugImplementation 'androidx.compose.ui:ui-tooling'
+
+    // Android Auto (phone projection) templated status screen. 1.4.0 is the last
+    // stable line compatible with AGP 8.7.3; its minSdk (23) matches ours.
+    implementation 'androidx.car.app:app:1.4.0'
 
     // Image loading for QRZ profile avatars
     implementation 'io.coil-kt:coil-compose:2.6.0'

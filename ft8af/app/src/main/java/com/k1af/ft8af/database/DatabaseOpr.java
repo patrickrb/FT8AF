@@ -58,7 +58,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
     public static synchronized DatabaseOpr getInstance(@Nullable Context context, @Nullable String databaseName) {
         if (instance == null) {
-            instance = new DatabaseOpr(context, databaseName, null, 18);
+            instance = new DatabaseOpr(context, databaseName, null, 19);
         }
         return instance;
     }
@@ -103,6 +103,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         //Create POTA activation history table
         createPotaTables(sqLiteDatabase);
 
+        //Create per-location Wavelog station cache table (issue #437)
+        createLocationStationTables(sqLiteDatabase);
+
         //Create indexes
         createIndex(sqLiteDatabase);
 
@@ -130,6 +133,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
         //Create POTA activation history table
         createPotaTables(sqLiteDatabase);
+
+        //Create per-location Wavelog station cache table (issue #437)
+        createLocationStationTables(sqLiteDatabase);
 
         //Create indexes
         createIndex(sqLiteDatabase);
@@ -488,6 +494,96 @@ public class DatabaseOpr extends SQLiteOpenHelper {
     }
 
     /**
+     * Create the per-location Wavelog station cache table (issue #437). Maps a
+     * canonical {@link com.k1af.ft8af.log.LocationSignature} string to the
+     * {@code station_profile_id} that covers that location, so revisiting a place
+     * reuses its station profile instead of creating a duplicate. Persisted across
+     * sessions. Idempotent (guarded by {@link #checkTableExists}) so it is safe to
+     * call from both onCreate and onUpgrade.
+     */
+    private void createLocationStationTables(SQLiteDatabase sqLiteDatabase) {
+        if (!checkTableExists(sqLiteDatabase, "location_station_cache")) {
+            sqLiteDatabase.execSQL("CREATE TABLE location_station_cache (\n" +
+                    "signature TEXT PRIMARY KEY,\n" +
+                    "station_profile_id TEXT NOT NULL,\n" +
+                    "updated_at INTEGER NOT NULL)");//epoch millis
+        }
+    }
+
+    /**
+     * Upsert a {@code signature -> station_profile_id} mapping. Thin DAO wrapper;
+     * the signature must already be canonicalized by
+     * {@link com.k1af.ft8af.log.LocationSignature#signature()}. No-op on null args.
+     * Part of the dark issue-#437 foundation — not yet called from any live path.
+     */
+    public void putStationForSignature(String signature, String profileId) {
+        if (db == null || signature == null || profileId == null) {
+            return;
+        }
+        try {
+            db.execSQL("INSERT OR REPLACE INTO location_station_cache "
+                            + "(signature, station_profile_id, updated_at) VALUES (?,?,?)",
+                    new Object[]{signature, profileId, System.currentTimeMillis()});
+        } catch (Exception e) {
+            Log.w(TAG, "putStationForSignature failed: " + e.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * Look up the cached {@code station_profile_id} for a canonical signature, or
+     * null when there is no mapping (or on error / null input).
+     */
+    public String getStationForSignature(String signature) {
+        if (db == null || signature == null) {
+            return null;
+        }
+        try (Cursor cursor = db.rawQuery(
+                "SELECT station_profile_id FROM location_station_cache WHERE signature = ?",
+                new String[]{signature})) {
+            if (cursor.moveToFirst()) {
+                return cursor.getString(0);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "getStationForSignature failed: " + e.getClass().getSimpleName());
+        }
+        return null;
+    }
+
+    /**
+     * Every cached {@code signature -> station_profile_id} mapping, ordered by
+     * signature for a deterministic read-back. Primarily for inspection/testing.
+     */
+    public java.util.List<com.k1af.ft8af.log.LocationStationCacheEntry> getAllStationSignatures() {
+        java.util.List<com.k1af.ft8af.log.LocationStationCacheEntry> out = new ArrayList<>();
+        if (db == null) {
+            return out;
+        }
+        try (Cursor cursor = db.rawQuery(
+                "SELECT signature, station_profile_id FROM location_station_cache "
+                        + "ORDER BY signature", null)) {
+            while (cursor.moveToNext()) {
+                out.add(new com.k1af.ft8af.log.LocationStationCacheEntry(
+                        cursor.getString(0), cursor.getString(1)));
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "getAllStationSignatures failed: " + e.getClass().getSimpleName());
+        }
+        return out;
+    }
+
+    /** Drop every cached signature mapping (e.g. on server/logbook switch). */
+    public void clearLocationStationCache() {
+        if (db == null) {
+            return;
+        }
+        try {
+            db.execSQL("DELETE FROM location_station_cache");
+        } catch (Exception e) {
+            Log.w(TAG, "clearLocationStationCache failed: " + e.getClass().getSimpleName());
+        }
+    }
+
+    /**
      * Create indexes to improve import speed
      * @param sqLiteDatabase database
      */
@@ -740,6 +836,23 @@ public class DatabaseOpr extends SQLiteOpenHelper {
     //Get all configuration parameters
     public void getAllConfigParameter(OnAfterQueryConfig onAfterQueryConfig) {
         new GetAllConfigParameter(db, onAfterQueryConfig).execute();
+    }
+
+    /**
+     * Parses a config-table int value, falling back when the stored string is
+     * empty or not a number (a hand-edited or stale backup must not crash
+     * startup hydration). Range clamping is the caller's (setter's) job.
+     * Package-private static so it is unit-testable without a database.
+     */
+    static int parseConfigInt(String value, int fallback) {
+        if (value == null || value.isEmpty()) {
+            return fallback;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
     }
 
     /**
@@ -2385,6 +2498,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("toModifier")) {
                     GeneralVariables.toModifier = result;
                 }
+                if (name.equalsIgnoreCase("cqFreeText")) {
+                    if (result != null) {
+                        GeneralVariables.cqFreeText = result;
+                    }
+                }
                 if (name.equalsIgnoreCase("fieldDayMode")) {
                     GeneralVariables.fieldDayMode = result.equals("1");
                 }
@@ -2595,6 +2713,46 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("perBandOutputLevels")) {//Per-band TX output levels ("20m=60,40m=85")
                     GeneralVariables.perBandOutputLevels = result == null ? "" : result;
                 }
+                if (name.equalsIgnoreCase("autoClearTxFreq")) {//Auto-select clear CQ offset (issue #418)
+                    GeneralVariables.autoClearTxFreq = "1".equals(result);
+                }
+                if (name.equalsIgnoreCase("tuneMaxOnSeconds")) {//Tune carrier hard cap (issue #408)
+                    //Defensive parse: settings import (#382) can feed anything here.
+                    //Null/non-numeric keeps the default; TuneController clamps the range.
+                    if (result != null) {
+                        try {
+                            GeneralVariables.tuneMaxOnSeconds =
+                                    com.k1af.ft8af.ft8transmit.TuneController.clampMaxOnSeconds(
+                                            Integer.parseInt(result.trim()));
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
+                if (name.equalsIgnoreCase("tuneLevelIndependent")) {//Tune level decoupled from TX drive
+                    GeneralVariables.tuneLevelIndependent = "1".equals(result);
+                }
+                if (name.equalsIgnoreCase("tuneLevel")) {//Global independent tune level (0..100)
+                    if (result != null) {
+                        try {
+                            GeneralVariables.tuneLevel =
+                                    Math.max(0, Math.min(100, Integer.parseInt(result.trim())));
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
+                if (name.equalsIgnoreCase("perBandTuneLevels")) {//Per-band independent tune levels
+                    GeneralVariables.perBandTuneLevels = result == null ? "" : result;
+                }
+                if (name.equalsIgnoreCase("tuneMethod")) {//Tune method: rig ATU vs carrier (issue #425)
+                    if (result != null) {
+                        try {
+                            GeneralVariables.tuneMethod =
+                                    com.k1af.ft8af.ft8transmit.TuneMethod.clamp(
+                                            Integer.parseInt(result.trim()));
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
                 if (name.equalsIgnoreCase("excludedCallsigns")) {//Blocklist: callsign prefixes
                     GeneralVariables.addExcludedCallsigns(result);
                 }
@@ -2749,6 +2907,19 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("spectrumWidth")) {
                     GeneralVariables.setSpectrumWidth(result.equals("") ? 3500 : Integer.parseInt(result));
+                }
+                // FFT display developer knobs (issue #428). Parsed defensively:
+                // these are expected to survive hand-edited/stale backups, so a
+                // non-numeric value must fall back to the default instead of
+                // crashing hydration; the setters then clamp the range.
+                if (name.equalsIgnoreCase("fftWindowType")) {
+                    GeneralVariables.setFftWindowType(parseConfigInt(result, 1));
+                }
+                if (name.equalsIgnoreCase("fftAveragingMode")) {
+                    GeneralVariables.setFftAveragingMode(parseConfigInt(result, 0));
+                }
+                if (name.equalsIgnoreCase("spectrumBinAggregation")) {
+                    GeneralVariables.setSpectrumBinAggregation(parseConfigInt(result, 0));
                 }
 
                 if (name.equalsIgnoreCase("highlightNewDxcc")) {

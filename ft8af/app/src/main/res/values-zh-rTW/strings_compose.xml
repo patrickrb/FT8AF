@@ -94,6 +94,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">正在呼叫 CQ</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">搜尋中…</string>
     <string name="qsopanel_qsoing_with">正在與 %1$s 通聯</string>
     <string name="qsopanel_waiting_for">等待 %1$s 中</string>
@@ -512,4 +513,39 @@
     <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
+    <string name="tx_audio_dropped">發射音訊失敗 — 本週期未發出訊號（USB 音訊錯誤）</string>
+    <string name="cq_offset_moved">CQ頻偏已移至空閒位置：%1$d Hz</string>
+    <string name="settings_auto_clear_tx">自動選擇空閒TX頻偏</string>
+    <string name="settings_auto_clear_tx_desc">呼叫CQ時根據近期頻段活動選擇空閒位置，被佔用時自動移開</string>
+    <string name="tune_content_description">Tune：啟動電台調諧器或發射連續載波用於天線調諧</string>
+    <string name="tune_stopped_timeout">Tune已在%1$d秒後停止</string>
+    <string name="tune_blocked_tx">使用Tune前請先停止CQ/QSO</string>
+    <string name="tune_unavailable_route">此音訊路徑暫不支援Tune</string>
+    <string name="tune_atu_started">已啟動電台天線調諧器</string>
+    <string name="tune_atu_unavailable">調諧器不可用 — 請連接具有內建調諧器的CAT電台</string>
+    <string name="settings_tune_method">Tune方式</string>
+    <string name="settings_tune_method_desc">自動：可用時透過CAT啟動電台內建調諧器，否則發射低功率音頻</string>
+    <string name="tune_method_automatic">自動</string>
+    <string name="tune_method_internal">內建調諧器</string>
+    <string name="tune_method_tone">低功率音頻</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / 瀑布圖（開發者）</string>
+    <string name="settings_fft_window">FFT 視窗函數</string>
+    <string name="settings_fft_window_desc">頻譜/瀑布圖顯示的 FFT 前加窗；Hann 窗可減少頻譜洩漏</string>
+    <string name="settings_fft_window_rect">矩形（無窗）</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">幀平均</string>
+    <string name="settings_fft_averaging_desc">在 FFT 幀之間平滑顯示；關閉時按原樣顯示每一幀</string>
+    <string name="settings_fft_avg_off">關閉</string>
+    <string name="settings_fft_avg_light">輕度 (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">重度 (EMA 0.25)</string>
+    <string name="settings_bin_agg">頻譜柱合併</string>
+    <string name="settings_bin_agg_desc">相鄰 FFT 頻點如何合併為一根頻譜柱</string>
+    <string name="settings_bin_agg_max">最大值</string>
+    <string name="settings_bin_agg_avg">平均值</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

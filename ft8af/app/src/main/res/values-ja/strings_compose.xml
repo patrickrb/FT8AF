@@ -94,6 +94,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">CQ 送信中</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">検索中...</string>
     <string name="qsopanel_qsoing_with">%1$s と QSO 中</string>
     <string name="qsopanel_waiting_for">%1$s を待機中</string>
@@ -512,4 +513,39 @@
     <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
+    <string name="tx_audio_dropped">TX音声に失敗 — このサイクルでは信号が送信されませんでした（USBオーディオエラー）</string>
+    <string name="cq_offset_moved">CQオフセットを空いている周波数へ移動：%1$d Hz</string>
+    <string name="settings_auto_clear_tx">空きTXオフセット自動選択</string>
+    <string name="settings_auto_clear_tx_desc">CQ呼び出し時に直近のバンド活動から空き周波数を選び、占有されたら移動します</string>
+    <string name="tune_content_description">Tune：無線機のチューナーを開始、またはアンテナ調整用の連続キャリアを送信します</string>
+    <string name="tune_stopped_timeout">Tuneは%1$d秒後に停止しました</string>
+    <string name="tune_blocked_tx">Tuneの前にCQ/QSOを停止してください</string>
+    <string name="tune_unavailable_route">このオーディオ経路ではTuneはまだ利用できません</string>
+    <string name="tune_atu_started">無線機のアンテナチューナーを開始しました</string>
+    <string name="tune_atu_unavailable">チューナーを使用できません — 内蔵チューナー付きのCAT無線機を接続してください</string>
+    <string name="settings_tune_method">Tune方式</string>
+    <string name="settings_tune_method_desc">自動は利用可能な場合CAT経由で無線機の内蔵チューナーを開始し、そうでなければ低出力トーンを送信します</string>
+    <string name="tune_method_automatic">自動</string>
+    <string name="tune_method_internal">内蔵チューナー</string>
+    <string name="tune_method_tone">低出力トーン</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT／ウォーターフォール（開発者向け）</string>
+    <string name="settings_fft_window">FFT窓関数</string>
+    <string name="settings_fft_window_desc">スペクトラム／ウォーターフォール表示のFFT前窓関数。Hannはスペクトル漏れを低減します</string>
+    <string name="settings_fft_window_rect">矩形（なし）</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">フレーム平均化</string>
+    <string name="settings_fft_averaging_desc">FFTフレーム間で表示を平滑化します。オフは各フレームをそのまま表示します</string>
+    <string name="settings_fft_avg_off">オフ</string>
+    <string name="settings_fft_avg_light">弱（EMA 0.5）</string>
+    <string name="settings_fft_avg_heavy">強（EMA 0.25）</string>
+    <string name="settings_bin_agg">スペクトラムのビン結合</string>
+    <string name="settings_bin_agg_desc">隣接するFFTビンを1本のバーにまとめる方法</string>
+    <string name="settings_bin_agg_max">最大値</string>
+    <string name="settings_bin_agg_avg">平均</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

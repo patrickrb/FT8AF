@@ -123,6 +123,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">Виклик CQ</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">Пошук...</string>
     <string name="qsopanel_qsoing_with">QSO з %1$s</string>
     <string name="qsopanel_waiting_for">Очікування %1$s</string>
@@ -544,4 +545,39 @@
     <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
+    <string name="tx_audio_dropped">Збій TX-аудіо — у цьому циклі сигнал не передано (помилка USB-аудіо)</string>
+    <string name="cq_offset_moved">Зсув CQ перенесено на вільне місце: %1$d Гц</string>
+    <string name="settings_auto_clear_tx">Автовибір вільного зсуву TX</string>
+    <string name="settings_auto_clear_tx_desc">Під час виклику CQ обирає вільне місце за нещодавньою активністю діапазону і зміщується, якщо воно займається</string>
+    <string name="tune_content_description">Tune: запускає тюнер трансивера або передає безперервну несучу для налаштування антени</string>
+    <string name="tune_stopped_timeout">Tune зупинено через %1$d с</string>
+    <string name="tune_blocked_tx">Зупиніть CQ/QSO перед використанням Tune</string>
+    <string name="tune_unavailable_route">Tune поки не підтримується на цьому аудіотракті</string>
+    <string name="tune_atu_started">Антенний тюнер трансивера запущено</string>
+    <string name="tune_atu_unavailable">Тюнер недоступний — підключіть CAT-трансивер із вбудованим тюнером</string>
+    <string name="settings_tune_method">Метод Tune</string>
+    <string name="settings_tune_method_desc">Автоматично запускає вбудований тюнер трансивера через CAT, якщо доступний, інакше передає малопотужний тон</string>
+    <string name="tune_method_automatic">Автоматично</string>
+    <string name="tune_method_internal">Вбудований тюнер</string>
+    <string name="tune_method_tone">Малопотужний тон</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / ВОДОСПАД (ДЛЯ РОЗРОБНИКІВ)</string>
+    <string name="settings_fft_window">Віконна функція ШПФ</string>
+    <string name="settings_fft_window_desc">Вікно перед ШПФ для відображення спектра/водоспаду; вікно Ганна зменшує розтікання спектра</string>
+    <string name="settings_fft_window_rect">Прямокутне (немає)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">Усереднення кадрів</string>
+    <string name="settings_fft_averaging_desc">Згладжує відображення між кадрами ШПФ; «Вимк.» показує кожен кадр як є</string>
+    <string name="settings_fft_avg_off">Вимк.</string>
+    <string name="settings_fft_avg_light">Легке (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">Сильне (EMA 0.25)</string>
+    <string name="settings_bin_agg">Об\'єднання бінів спектра</string>
+    <string name="settings_bin_agg_desc">Як сусідні біни ШПФ об\'єднуються в один стовпець спектра</string>
+    <string name="settings_bin_agg_max">Максимум</string>
+    <string name="settings_bin_agg_avg">Середнє</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

@@ -62,7 +62,7 @@ public class SpectrumFragment extends Fragment {
         setMarkMessageSwitchState();
 
         binding.rulerFrequencyView.setFreq(Math.round(GeneralVariables.getBaseFrequency()));
-        mainViewModel.currentMessages=null;
+        mainViewModel.clearCurrentMessages();
 
 
         //Raw spectrum switch
@@ -71,7 +71,7 @@ public class SpectrumFragment extends Fragment {
             public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
                 mainViewModel.deNoise = b;
                 setDeNoiseSwitchState();
-                mainViewModel.currentMessages=null;
+                mainViewModel.clearCurrentMessages();
             }
         });
         //Mark message switch
@@ -194,7 +194,7 @@ public class SpectrumFragment extends Fragment {
         }
         binding.columnarView.setWaveData(fft);
         if (mainViewModel.markMessage) {//Whether to mark messages
-            binding.waterfallView.setWaveData(fft, mainViewModel.currentMessages);
+            binding.waterfallView.setWaveData(fft, mainViewModel.getCurrentMessages());
         } else {
             binding.waterfallView.setWaveData(fft, null);
         }
@@ -223,5 +223,15 @@ public class SpectrumFragment extends Fragment {
 
     public native void getFFTDataRaw(int[] data, int fftData[]);
     public native void getFFTDataRawFloat(float[] data,int fftData[]);
+
+    /**
+     * Sets the display FFT window function and cross-frame averaging mode
+     * (issue #428). Values are the wire format shared with the native side:
+     * window 0=Rect 1=Hann 2=Hamming 3=Blackman 4=Blackman-Harris;
+     * averaging 0=off 1=EMA(0.5) 2=EMA(0.25). Affects the waterfall/spectrum
+     * display only, never decoding. Must be called on the same thread as the
+     * getFFTData* methods (both run on the main-thread LiveData observer).
+     */
+    public static native void setFFTDisplayParams(int windowType, int averagingMode);
 
 }

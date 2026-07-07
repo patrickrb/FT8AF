@@ -92,6 +92,18 @@ public class XieGu6100Rig extends BaseRig {
     }
 
     @Override
+    public boolean supportsAtuTune() {
+        return true;
+    }
+
+    @Override
+    public void startAtuTune() {
+        if (getConnector() != null) {
+            getConnector().sendData(IcomRigConstant.startAtuTune(ctrAddress, getCivAddress()));
+        }
+    }
+
+    @Override
     public void setUsbModeToRig() {
         if (getConnector() != null) {
 //            getConnector().sendData(IcomRigConstant.setOperationMode(ctrAddress

@@ -15,4 +15,11 @@ public interface OnDoTransmitted {
     //2023-08-16 Modification submitted by DS1UFX (based on v0.9), adding (tr)uSDX audio over CAT support.
     boolean supportTransmitOverCAT();
     void onTransmitOverCAT(Ft8Message message);
+
+    //Tune (issue #408): key/unkey the rig for the tune carrier without an
+    //Ft8Message. Default no-ops so existing implementers compile unchanged;
+    //MainViewModel routes these through the same CAT/RTS/DTR PTT + SCO logic
+    //as onBeforeTransmit/onAfterTransmit (VOX rigs key on the audio itself).
+    default void onTuneKeyDown() {}
+    default void onTuneKeyUp() {}
 }

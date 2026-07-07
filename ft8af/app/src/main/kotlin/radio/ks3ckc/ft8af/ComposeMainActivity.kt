@@ -106,6 +106,13 @@ class ComposeMainActivity : AppCompatActivity() {
         mainViewModel = MainViewModel.getInstance(this)
         ToastMessage.getInstance()
 
+        // The notification's Exit button routes here so it runs the same shutdown as the
+        // in-app exit; cleared in onDestroy so a destroyed activity isn't leaked. Registered
+        // BEFORE the service starts so there's no window where the notification can appear
+        // and be tapped before the handler exists (which would fall back to a bare
+        // stopSelf()/System.exit(0) that skips rig disconnect and RX teardown).
+        RxForegroundService.setExitHandler { closeApp() }
+
         // Keep RX alive in the background (no-op until RECORD_AUDIO is granted; the
         // permission-result callback re-invokes this once the user grants it).
         startRxServiceIfPermitted()
@@ -601,7 +608,21 @@ class ComposeMainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStop() {
+        // A tune carrier must never outlive the operator's attention (issue
+        // #408): backgrounding or swiping the app away mid-tune force-stops the
+        // tone and drops PTT. Normal FT8 TX is left alone — it is cycle-bounded
+        // and self-terminates.
+        try {
+            mainViewModel.ft8TransmitSignal.stopTune()
+        } catch (e: Exception) {
+            fileLog("onStop: stopTune threw: ${e.message}")
+        }
+        super.onStop()
+    }
+
     override fun onDestroy() {
+        RxForegroundService.setExitHandler(null)
         unregisterBluetoothReceiver()
         unregisterUsbDetachReceiver()
         qsoAutoSync?.unregister()

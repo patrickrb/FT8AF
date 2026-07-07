@@ -499,6 +499,14 @@ private object FFTBridge {
 
     fun compute(audioData: FloatArray, fftOut: IntArray, deNoise: Boolean) {
         try {
+            // Push the current display knobs (issue #428) before each frame:
+            // two int stores per 160 ms, and a settings change takes effect on
+            // the next frame with no lifecycle wiring. Safe without locking —
+            // this observer and the native reads run on the main thread only.
+            SpectrumFragment.setFFTDisplayParams(
+                GeneralVariables.getFftWindowType(),
+                GeneralVariables.getFftAveragingMode(),
+            )
             if (deNoise) {
                 fragment.getFFTDataFloat(audioData, fftOut)
             } else {

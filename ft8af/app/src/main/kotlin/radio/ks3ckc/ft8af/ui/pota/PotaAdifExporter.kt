@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import radio.ks3ckc.ft8af.pota.PotaQsoWindow
 import radio.ks3ckc.ft8af.pota.model.PotaActivation
 import java.io.File
 import java.text.SimpleDateFormat
@@ -43,10 +44,21 @@ object PotaAdifExporter {
     fun buildActivationAdif(db: SQLiteDatabase, activation: PotaActivation): List<NamedAdif> {
         // The DB stores the full comma-separated park string in my_sig_info, so we
         // match on that, then split into per-park files below.
+        //
+        // Scope to the activation's time window (via the shared PotaQsoWindow, the
+        // same logic PotaActivationDao.getActivationQsos uses) so repeat
+        // activations at the same park don't all get lumped into one export.
+        // PotaQsoWindow.ROW_STAMP normalizes the variable-width time_on to a
+        // 14-char yyyyMMddHHmmss stamp so the comparison holds even for imported
+        // rows with HHMM / dropped-leading-zero times. An open (still active)
+        // activation has no end, so it uses a far-future upper bound.
+        val startStamp = PotaQsoWindow.stamp(activation.startedAtMs)
+        val endStamp = activation.endedAtMs?.let { PotaQsoWindow.stamp(it) } ?: PotaQsoWindow.OPEN_END
         val cursor = db.rawQuery(
             "SELECT * FROM QSLTable WHERE my_sig = 'POTA' AND my_sig_info = ? " +
+                "AND ${PotaQsoWindow.ROW_STAMP} >= ? AND ${PotaQsoWindow.ROW_STAMP} <= ? " +
                 "ORDER BY qso_date, time_on",
-            arrayOf(activation.parkRef),
+            arrayOf(activation.parkRef, startStamp, endStamp),
         )
 
         data class QsoRow(

@@ -1,0 +1,74 @@
+package com.k1af.ft8af.wave;
+
+/**
+ * Decides how {@link MicRecorder} reacts when a libusb-direct USB audio capture
+ * session ends unexpectedly. Pure logic, no Android types — unit-tested.
+ *
+ * <p>Answers two questions:
+ *
+ * <ol>
+ *   <li><b>Was the session a failure?</b> A session that dies before it can
+ *       carry even a fraction of a 15&nbsp;s FT8 cycle is useless <em>even if a
+ *       handful of samples arrived first</em>. That is the field failure mode on
+ *       a Pixel&nbsp;8 + C-Media adapter (VID:PID {@code 0D8C:0012}): every
+ *       libusb session delivered ~100&nbsp;ms of audio and then retired all its
+ *       isochronous transfers ({@code code=0}). The old rule counted only
+ *       "saw <em>no</em> data at all" as a failure, so that case never tripped
+ *       the failure tally and churned a fresh {@code libusb_init}/{@code
+ *       libusb_exit} every 2&nbsp;s forever — the waterfall freeze, and the
+ *       repeated init/exit that raced libusb into a native SIGSEGV.</li>
+ *   <li><b>How long to wait before the next attempt?</b> Exponential backoff so
+ *       a persistently-failing device stops hammering the bus (and libusb global
+ *       state), capped so a device that recovers is still picked back up. We
+ *       never fall back to the phone's built-in microphone: an operator wants
+ *       radio audio or none.</li>
+ * </ol>
+ */
+public final class UsbCaptureRetryPolicy {
+
+    private UsbCaptureRetryPolicy() {}
+
+    /**
+     * A session alive for less than this was too short to be useful — under a
+     * third of a 15&nbsp;s FT8 cycle, so it cannot have carried a decodable
+     * transmission no matter how many samples it briefly delivered.
+     */
+    static final long MIN_USEFUL_SESSION_MS = 5_000;
+
+    /** First backoff step. */
+    static final long BASE_BACKOFF_MS = 2_000;
+
+    /**
+     * Backoff ceiling. A persistently-dead adapter is still retried this often,
+     * in case it comes back (cable resettled, RF-desense cleared), without
+     * spinning the bus.
+     */
+    static final long MAX_BACKOFF_MS = 60_000;
+
+    /**
+     * Whether a finished capture session should count against the
+     * consecutive-failure tally.
+     *
+     * @param sawData whether any audio arrived during the session
+     * @param aliveMs how long the session ran before it stopped
+     */
+    static boolean isFailure(boolean sawData, long aliveMs) {
+        if (!sawData) return true;
+        return aliveMs < MIN_USEFUL_SESSION_MS;
+    }
+
+    /**
+     * Delay before the next USB reinit, given how many consecutive failures have
+     * occurred so far ({@code 1} = the first failure). Exponential
+     * (2&nbsp;s, 4&nbsp;s, 8&nbsp;s, …) capped at {@link #MAX_BACKOFF_MS}. A
+     * non-positive count (a healthy session just reset the tally) yields no wait.
+     */
+    static long backoffMs(int consecutiveFailures) {
+        if (consecutiveFailures <= 0) return 0;
+        // Cap the shift so the left-shift can't overflow before we clamp.
+        int shift = Math.min(consecutiveFailures - 1, 20);
+        long delay = BASE_BACKOFF_MS << shift;
+        if (delay <= 0 || delay > MAX_BACKOFF_MS) return MAX_BACKOFF_MS;
+        return delay;
+    }
+}

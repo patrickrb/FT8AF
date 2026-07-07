@@ -206,8 +206,9 @@ public class GridTrackerMainActivity extends AppCompatActivity {
             @SuppressLint("NotifyDataSetChanged")
             @Override
             public void onChanged(ArrayList<Ft8Message> messages) {
-                if (mainViewModel.currentMessages == null) return;
-                ArrayList<Ft8Message> tempMsg = new ArrayList<>(mainViewModel.currentMessages);
+                ArrayList<Ft8Message> currentMessages = mainViewModel.getCurrentMessages();
+                if (currentMessages == null) return;
+                ArrayList<Ft8Message> tempMsg = new ArrayList<>(currentMessages);
                 callingListAdapter.notifyDataSetChanged();
                 if (callMessagesRecyclerView.computeVerticalScrollRange()
                         - callMessagesRecyclerView.computeVerticalScrollExtent()
@@ -218,7 +219,7 @@ public class GridTrackerMainActivity extends AppCompatActivity {
                 binding.gridMessageTextView.setText(String.format("%s %s"
                         , String.format(GeneralVariables.getStringFromResource(
                                         R.string.tracker_decoded_new)
-                                , mainViewModel.currentDecodeCount), String.format(
+                                , mainViewModel.getCurrentDecodeCount()), String.format(
                                 getString(R.string.decoding_takes_milliseconds)
                                 , mainViewModel.ft8SignalListener.decodeTimeSec.getValue())));
 

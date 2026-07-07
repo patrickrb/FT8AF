@@ -134,6 +134,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">Memanggil CQ</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">Mencari...</string>
     <string name="qsopanel_qsoing_with">QSO dengan %1$s</string>
     <string name="qsopanel_waiting_for">Menunggu %1$s</string>
@@ -555,4 +556,39 @@
     <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
+    <string name="tx_audio_dropped">Audio TX gagal — tidak ada sinyal terkirim pada siklus ini (kesalahan audio USB)</string>
+    <string name="cq_offset_moved">Offset CQ dipindahkan ke tempat kosong: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Offset TX kosong otomatis</string>
+    <string name="settings_auto_clear_tx_desc">Saat memanggil CQ, memilih tempat kosong dari aktivitas band terkini dan berpindah jika terisi</string>
+    <string name="tune_content_description">Tune: memulai tuner radio atau memancarkan gelombang pembawa kontinu untuk penalaan antena</string>
+    <string name="tune_stopped_timeout">Tune dihentikan setelah %1$d dtk</string>
+    <string name="tune_blocked_tx">Hentikan CQ/QSO sebelum menggunakan Tune</string>
+    <string name="tune_unavailable_route">Tune belum didukung pada jalur audio ini</string>
+    <string name="tune_atu_started">Tuner antena radio dimulai</string>
+    <string name="tune_atu_unavailable">Tuner tidak tersedia — hubungkan radio CAT dengan tuner internal</string>
+    <string name="settings_tune_method">Metode Tune</string>
+    <string name="settings_tune_method_desc">Otomatis memulai tuner internal radio lewat CAT bila tersedia, jika tidak memainkan nada daya rendah</string>
+    <string name="tune_method_automatic">Otomatis</string>
+    <string name="tune_method_internal">Tuner internal</string>
+    <string name="tune_method_tone">Nada daya rendah</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / WATERFALL (PENGEMBANG)</string>
+    <string name="settings_fft_window">Fungsi jendela FFT</string>
+    <string name="settings_fft_window_desc">Jendela pra-FFT untuk tampilan spektrum/waterfall; Hann mengurangi kebocoran spektral</string>
+    <string name="settings_fft_window_rect">Persegi (tanpa jendela)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">Rata-rata frame</string>
+    <string name="settings_fft_averaging_desc">Menghaluskan tampilan antar frame FFT; Nonaktif menampilkan setiap frame apa adanya</string>
+    <string name="settings_fft_avg_off">Nonaktif</string>
+    <string name="settings_fft_avg_light">Ringan (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">Kuat (EMA 0.25)</string>
+    <string name="settings_bin_agg">Penggabungan bin spektrum</string>
+    <string name="settings_bin_agg_desc">Cara bin FFT yang berdekatan digabung menjadi satu batang spektrum</string>
+    <string name="settings_bin_agg_max">Maksimum</string>
+    <string name="settings_bin_agg_avg">Rata-rata</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

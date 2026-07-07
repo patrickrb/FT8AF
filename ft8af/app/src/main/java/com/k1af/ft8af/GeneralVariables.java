@@ -42,6 +42,10 @@ public class GeneralVariables {
     public static boolean enableCloudlog = false;//Whether Cloudlog auto-sync is enabled
     public static boolean enableQRZ = false;//Whether QRZ auto-sync is enabled
     public static boolean enablePskReporter = true;//Whether PSKReporter spot upload is enabled
+    // Dark feature flag for issue #437 (auto per-location Wavelog station profiles).
+    // Default false and NOT branched into any live upload path yet — this increment
+    // only lands the pure LocationSignature/resolver/create_station/cache foundation.
+    public static boolean perLocationStationEnabled = false;
 
     public static boolean distanceInMiles = true;//Display distances in miles (true) or kilometers (false)
 
@@ -107,6 +111,26 @@ public class GeneralVariables {
     public static volatile boolean savePerBandOutputLevel = false;
     //Serialized band=level CSV ("20m=60,40m=85"); parsed/updated in PerBandOutputLevel.kt.
     public static volatile String perBandOutputLevels = "";
+
+    //Auto-select a clear TX offset when calling CQ (issue #418), defaults off.
+    //volatile: written from the config-load thread + Settings toggle, read from
+    //the decode-delivery thread inside recordBandActivity.
+    public static volatile boolean autoClearTxFreq = false;
+
+    //Tune button (issue #408): hard cap on a single tune carrier in seconds
+    //(clamped by TuneController), whether the tune level is independent of the
+    //FT8 drive, the global independent level (0..100), and the per-band
+    //independent levels (same CSV format as perBandOutputLevels; gated on the
+    //same savePerBandOutputLevel toggle, separate backing store — see
+    //TuneLevel.kt). volatile: written from the config-load thread + Settings,
+    //read from the tune audio worker per chunk.
+    public static volatile int tuneMaxOnSeconds = 10;
+    public static volatile boolean tuneLevelIndependent = false;
+    public static volatile int tuneLevel = 25;
+    public static volatile String perBandTuneLevels = "";
+    //Tune method (issue #425): TuneMethod.AUTOMATIC/INTERNAL/TONE — whether the
+    //TUNE chip starts the rig's internal ATU over CAT or plays the carrier tone.
+    public static volatile int tuneMethod = 0;
 
     public static int flexMaxRfPower = 10;//Flex radio max transmit power
     public static int flexMaxTunePower = 10;//Flex radio max tune power
@@ -361,6 +385,7 @@ public class GeneralVariables {
     public static String myRigName = "";  // Set by MainViewModel.connectRig(); used in PSKReporter software string
     public static int myPowerWatts = 0;    // 0 = not set, displays as "--"
     public static String toModifier = "";//Call modifier
+    public static String cqFreeText = "";//Persisted custom/directed CQ free text
 
     // Field Day mode settings (persisted via writeConfig)
     public static boolean fieldDayMode = false;
@@ -389,6 +414,14 @@ public class GeneralVariables {
 
     private static int spectrumWidth = 3500;//Spectrum display width in Hz
     public static MutableLiveData<Integer> mutableSpectrumWidth = new MutableLiveData<>();
+
+    // FFT display developer knobs (issue #428). Wire values shared with the
+    // native side (SpectrumFragment.setFFTDisplayParams) and the config DB;
+    // read fresh every display frame, so no LiveData needed (same pattern as
+    // pttDelay). Display-only — the decoder's FFT is unaffected.
+    private static int fftWindowType = 1;//0=Rect 1=Hann(default, matches desktop/iOS) 2=Hamming 3=Blackman 4=Blackman-Harris
+    private static int fftAveragingMode = 0;//0=Off(default) 1=EMA a=0.5 (light) 2=EMA a=0.25 (heavy)
+    private static int spectrumBinAggregation = 0;//Spectrum-strip bin combine: 0=Max(default, legacy) 1=Average 2=RMS
 
     public static String cloudlogServerAddress = "";//Cloudlog server address
     public static String cloudlogApiKey = "";//Cloudlog API key
@@ -602,6 +635,33 @@ public class GeneralVariables {
     public static void setSpectrumWidth(int width) {
         mutableSpectrumWidth.postValue(width);
         GeneralVariables.spectrumWidth = width;
+    }
+
+    public static int getFftWindowType() {
+        return fftWindowType;
+    }
+
+    /** Out-of-range values clamp to the default (1 = Hann). */
+    public static void setFftWindowType(int type) {
+        fftWindowType = (type >= 0 && type <= 4) ? type : 1;
+    }
+
+    public static int getFftAveragingMode() {
+        return fftAveragingMode;
+    }
+
+    /** Out-of-range values clamp to the default (0 = off). */
+    public static void setFftAveragingMode(int mode) {
+        fftAveragingMode = (mode >= 0 && mode <= 2) ? mode : 0;
+    }
+
+    public static int getSpectrumBinAggregation() {
+        return spectrumBinAggregation;
+    }
+
+    /** Out-of-range values clamp to the default (0 = max, the legacy combine). */
+    public static void setSpectrumBinAggregation(int mode) {
+        spectrumBinAggregation = (mode >= 0 && mode <= 2) ? mode : 0;
     }
 
     public static String getCloudlogServerAddress() {
