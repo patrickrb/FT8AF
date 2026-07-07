@@ -2038,9 +2038,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 "order by ID ";
         Cursor cursor = db.rawQuery(querySQL, null);
         try {
+            int callsignIdx = cursor.getColumnIndex("callsign");
+            int gridIdx = cursor.getColumnIndex("grid");
             while (cursor.moveToNext()) {
-                GeneralVariables.addCallsignAndGrid(cursor.getString(cursor.getColumnIndex("callsign"))
-                        , cursor.getString(cursor.getColumnIndex("grid")));
+                GeneralVariables.addCallsignAndGrid(cursor.getString(callsignIdx), cursor.getString(gridIdx));
             }
         } finally {
             cursor.close();
