@@ -517,7 +517,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         //load the callsign-to-grid mapping from historical successful QSOs
-        new DatabaseOpr.GetCallsignMapGrid(mainViewModel.databaseOpr.getDb()).execute();
+        DatabaseOpr.loadCallsignMapGridAsync(mainViewModel.databaseOpr.getDb());
 
         mainViewModel.getFollowCallsignsFromDataBase();
     }

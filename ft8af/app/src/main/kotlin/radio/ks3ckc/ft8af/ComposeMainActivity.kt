@@ -440,7 +440,7 @@ class ComposeMainActivity : AppCompatActivity() {
             }
         })
 
-        DatabaseOpr.GetCallsignMapGrid(mainViewModel.databaseOpr.db).execute()
+        DatabaseOpr.loadCallsignMapGridAsync(mainViewModel.databaseOpr.db)
         mainViewModel.getFollowCallsignsFromDataBase()
     }
 
