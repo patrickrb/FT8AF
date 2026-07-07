@@ -75,7 +75,7 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
     private var attachedVm: MainViewModel? = null
     private var lastRenderedSecond = -1
 
-    /** True when the host supports MapWithContentTemplate + surface rendering. */
+    /** True when the host supports NavigationTemplate + surface rendering. */
     private val useSurface: Boolean =
         carContext.carAppApiLevel >= SURFACE_MIN_API
 
@@ -285,7 +285,7 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
         // POTA activation line (only when running an activation)
         val activation = PotaSessionManager.currentActivation.value
         buildCarPotaLine(activation?.parkRefsDisplay, activation?.qsoCount)?.let {
-            rows.add(Row.Builder().setTitle(it).build())
+            rows.add(Row.Builder().setTitle(resolve(it)).build())
         }
         return Pane.Builder().apply {
             rows.take(paneRowLimit(carContext)).forEach { addRow(it) }
@@ -305,26 +305,28 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
         val r = renderer ?: return
         val vm = attachedVm ?: return
         val state = buildSurfaceState(vm)
-        val rings = landRings ?: try {
-            WorldOutlines.load(carContext).also { landRings = it }
+        // Cache the result of each load — success OR the empty fallback — so a
+        // missing/corrupt asset doesn't re-throw the parse on every frame.
+        val rings = landRings ?: (try {
+            WorldOutlines.load(carContext)
         } catch (_: Exception) {
             emptyList()
-        }
-        val countries = countryRings ?: try {
-            WorldCountryOutlines.load(carContext).also { countryRings = it }
+        }).also { landRings = it }
+        val countries = countryRings ?: (try {
+            WorldCountryOutlines.load(carContext)
         } catch (_: Exception) {
             emptyList()
-        }
-        val states = stateRings ?: try {
-            UsStateOutlines.load(carContext).also { stateRings = it }
+        }).also { countryRings = it }
+        val states = stateRings ?: (try {
+            UsStateOutlines.load(carContext)
         } catch (_: Exception) {
             emptyList()
-        }
-        val labels = stateLabels ?: try {
-            UsStateLabels.load(carContext).also { stateLabels = it }
+        }).also { stateRings = it }
+        val labels = stateLabels ?: (try {
+            UsStateLabels.load(carContext)
         } catch (_: Exception) {
             emptyList()
-        }
+        }).also { stateLabels = it }
         val (statusInset, navInset) = systemBarInsets()
         r.drawFrame(state, rings, countries, states, labels, statusInset, navInset)
     }
@@ -383,7 +385,9 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
 
         // Current QSO partner: draw a line from the operator to their grid.
         val partnerCall = toCallsign?.callsign
-        val partnerMsg = partnerCall?.let { call -> messages.firstOrNull { it.callsignFrom == call } }
+        // Match on the normalized callsign (getCallsignFrom strips the < > that a
+        // hashed decode carries in the raw callsignFrom field).
+        val partnerMsg = partnerCall?.let { call -> messages.firstOrNull { it.callsignFrom != null && it.getCallsignFrom() == call } }
         val partnerLatLng = partnerMsg?.maidenGrid?.let { grid -> safeGrid(grid) }
         val partnerLocation = resolvePartnerLocation(
             partnerCall,
@@ -403,7 +407,7 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
             headlineText = resolve(status.headline) + (status.snrLabel?.let { " · $it" } ?: ""),
             slotText = resolve(status.slotLine) + (partnerLocation?.let { " · $it" } ?: ""),
             bandText = status.bandLine,
-            potaText = buildCarPotaLine(activation?.parkRefsDisplay, activation?.qsoCount),
+            potaText = buildCarPotaLine(activation?.parkRefsDisplay, activation?.qsoCount)?.let { resolve(it) },
         )
     }
 
@@ -444,8 +448,10 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
         val seen = mutableSetOf<String>()
         val result = mutableListOf<CarStationMarker>()
         for (msg in messages) {
-            val call = msg.callsignFrom ?: continue
-            if (call in seen) continue
+            // Normalize via getCallsignFrom() so hashed decodes (raw "<CALL>")
+            // dedupe against their expanded form instead of adding a second marker.
+            val call = msg.getCallsignFrom()
+            if (call.isEmpty() || call in seen) continue
             seen.add(call)
 
             val grid = msg.maidenGrid ?: continue
@@ -453,7 +459,8 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
 
             val isToMe = GeneralVariables.checkIsMyCallsign(msg.callsignTo ?: "")
             val isWorked = msg.isQSL_Callsign
-            val isCQ = msg.checkIsCQ()
+            // checkIsCQ() dereferences callsignTo without a null guard, so gate it.
+            val isCQ = msg.callsignTo != null && msg.checkIsCQ()
 
             val colorInt = when {
                 isToMe -> COLOR_SIGNAL

@@ -14,9 +14,9 @@ import radio.ks3ckc.ft8af.ui.map.StateLabel
  * caller's thread (main thread from the 1 Hz tick); the surface lock serialises
  * access.
  *
- * The map is the full-bleed background of a MapWithContentTemplate; the status
- * text is rendered by the host in the content card, so nothing but the map is
- * drawn here. Because drawing bypasses the template system, visual updates (e.g.
+ * The map is the full-bleed background of a NavigationTemplate, which has no host
+ * content card, so the status text is drawn here as translucent banners on top of
+ * the map. Because drawing bypasses the template system, visual updates (e.g.
  * a new decode) never trigger `invalidate()` → `onGetTemplate()`, which
  * eliminates the dimming/flashing caused by full template rebuilds.
  */

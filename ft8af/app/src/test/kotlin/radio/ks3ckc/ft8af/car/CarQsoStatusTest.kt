@@ -227,26 +227,30 @@ class CarQsoStatusTest {
 
     @Test
     fun buildCarPotaLine_formatsSingleParkWithCount() {
-        assertThat(buildCarPotaLine("K-1234", 3))
-            .isEqualTo("POTA K-1234 \u00B7 3 QSOs")
+        val spec = buildCarPotaLine("K-1234", 3)
+        assertThat(spec?.resId).isEqualTo(R.string.car_pota_line)
+        assertThat(spec?.args).containsExactly("K-1234", 3).inOrder()
     }
 
     @Test
     fun buildCarPotaLine_formatsMultiParkDisplay() {
-        assertThat(buildCarPotaLine("K-1234 + K-5678", 12))
-            .isEqualTo("POTA K-1234 + K-5678 \u00B7 12 QSOs")
+        val spec = buildCarPotaLine("K-1234 + K-5678", 12)
+        assertThat(spec?.resId).isEqualTo(R.string.car_pota_line)
+        assertThat(spec?.args).containsExactly("K-1234 + K-5678", 12).inOrder()
     }
 
     @Test
     fun buildCarPotaLine_zeroCount() {
-        assertThat(buildCarPotaLine("K-0001", 0))
-            .isEqualTo("POTA K-0001 \u00B7 0 QSOs")
+        val spec = buildCarPotaLine("K-0001", 0)
+        assertThat(spec?.resId).isEqualTo(R.string.car_pota_line)
+        assertThat(spec?.args).containsExactly("K-0001", 0).inOrder()
     }
 
     @Test
     fun buildCarPotaLine_nullCountTreatedAsZero() {
-        assertThat(buildCarPotaLine("K-9999", null))
-            .isEqualTo("POTA K-9999 \u00B7 0 QSOs")
+        val spec = buildCarPotaLine("K-9999", null)
+        assertThat(spec?.resId).isEqualTo(R.string.car_pota_line)
+        assertThat(spec?.args).containsExactly("K-9999", 0).inOrder()
     }
 
     // -- pskSpotsToMarkers ("who heard me" rings) --

@@ -147,12 +147,13 @@ internal fun shouldInvalidateForTick(lastSecond: Int, newSecond: Int): Boolean =
 /**
  * Formats the POTA activation line for the car surface/pane:
  * "POTA K-1234 · 3 QSOs" (or "POTA K-1234 + K-5678 · 3 QSOs" for multi-park).
- * Returns null when there is no active activation.
+ * Returns a [CarStringSpec] the Screen resolves against [R.string.car_pota_line]
+ * (so the line is localizable), or null when there is no active activation.
  */
-internal fun buildCarPotaLine(parkRefsDisplay: String?, qsoCount: Int?): String? {
+internal fun buildCarPotaLine(parkRefsDisplay: String?, qsoCount: Int?): CarStringSpec? {
     if (parkRefsDisplay.isNullOrBlank()) return null
     val count = qsoCount ?: 0
-    return "POTA $parkRefsDisplay \u00B7 $count QSOs"
+    return CarStringSpec(R.string.car_pota_line, listOf(parkRefsDisplay, count))
 }
 
 /** ARGB colour for "who heard me" PSK markers \u2014 a distinct green from the decode dots. */

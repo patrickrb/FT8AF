@@ -17,8 +17,9 @@ internal data class CarStationMarker(
  * map frame. Built on the main thread by [QsoStatusScreen], then handed to the
  * renderer which reads it on whatever thread holds the surface lock.
  *
- * Only map geometry lives here — the status text (headline, slot, band, POTA) is
- * shown in the MapWithContentTemplate content card, not drawn on the surface.
+ * The status text (headline, slot, band, POTA) is carried here too and drawn as
+ * banners directly on the surface by [CarMapSurfaceRenderer] — the NavigationTemplate
+ * has no host content card, so nothing is host-rendered.
  */
 internal data class CarSurfaceState(
     /** Operator's latitude (from grid), or NaN when unknown. */
