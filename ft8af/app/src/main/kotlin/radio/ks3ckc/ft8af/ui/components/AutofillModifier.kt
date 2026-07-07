@@ -1,23 +1,17 @@
 package radio.ks3ckc.ft8af.ui.components
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.autofill.AutofillNode
-import androidx.compose.ui.autofill.AutofillType
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalAutofill
-import androidx.compose.ui.platform.LocalAutofillTree
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.semantics.contentType
+import androidx.compose.ui.semantics.onAutofillText
+import androidx.compose.ui.semantics.semantics
 
 /**
  * The credential fields we advertise to the Android Autofill framework. Each role
- * maps to a standard [AutofillType] so password managers (1Password, Bitwarden,
+ * maps to a standard [ContentType] so password managers (1Password, Bitwarden,
  * Google Password Manager, …) can classify the field and offer fill / save.
  *
  * API-key / single-secret fields (QRZ Logbook, Cloudlog) are intentionally absent:
@@ -37,67 +31,45 @@ enum class CredentialFieldRole {
 
 /**
  * Pure mapping from a credential field's [role][CredentialFieldRole] to the
- * autofill hint(s) it should advertise. Extracted so the decision is unit-testable
- * without touching the experimental Compose autofill glue below.
- *
- * [AutofillType] carries an error-level experimental opt-in, so this — and any test
- * that inspects the result — must opt in; keeping the type inside this function (the
- * public [autofill] modifier takes a plain [CredentialFieldRole]) stops that opt-in
- * from spreading into every dialog call site.
+ * [ContentType] it should advertise. Extracted so the decision is unit-testable
+ * without touching the Compose autofill glue below.
  */
-@OptIn(ExperimentalComposeUiApi::class)
-internal fun credentialAutofillTypes(role: CredentialFieldRole): List<AutofillType> =
+internal fun credentialContentType(role: CredentialFieldRole): ContentType =
     when (role) {
-        CredentialFieldRole.USERNAME -> listOf(AutofillType.Username)
-        CredentialFieldRole.EMAIL -> listOf(AutofillType.EmailAddress)
-        CredentialFieldRole.PASSWORD -> listOf(AutofillType.Password)
+        CredentialFieldRole.USERNAME -> ContentType.Username
+        CredentialFieldRole.EMAIL -> ContentType.EmailAddress
+        CredentialFieldRole.PASSWORD -> ContentType.Password
     }
 
 /**
  * Attaches Android autofill metadata to a text field so the OS autofill service can
  * classify it and offer to fill / save credentials.
  *
- * On the current Compose toolchain (BOM 2024.02.00, Compose UI ~1.6) the autofill
- * API is experimental: we register an [AutofillNode] in [LocalAutofillTree], track
- * its on-screen bounds via [onGloballyPositioned], and request / cancel autofill as
- * the field gains / loses focus. Once the BOM is bumped to ~1.8+ (issue #440) this
- * can be replaced by the declarative `Modifier.semantics { contentType = … }`.
+ * On Compose UI 1.8+ (BOM 2025.04.01, issue #440) autofill is declarative: we tag the
+ * field's semantics with its [ContentType] so the framework classifies it, and register
+ * an [onAutofillText] handler that pushes any filled value into the field's existing
+ * state. This replaces the old imperative `AutofillNode` / `LocalAutofillTree` glue
+ * (which tracked on-screen bounds and requested / cancelled autofill on focus by hand).
  *
- * The node is [remember]ed (not recreated per recomposition) and a [DisposableEffect]
- * removes it from the tree when the field leaves composition, so recompositions don't
- * leak orphaned nodes into [LocalAutofillTree]. [onFill] is captured through
- * [rememberUpdatedState] so the stable node always invokes the latest lambda.
+ * [onFill] is captured through [rememberUpdatedState] so the stable semantics handler
+ * always invokes the latest lambda.
  *
- * @param role which credential this field holds; maps to the advertised hint(s) via
- *   [credentialAutofillTypes].
+ * @param role which credential this field holds; maps to the advertised [ContentType]
+ *   via [credentialContentType].
  * @param onFill invoked with the value the autofill service supplied; push it into
  *   the field's existing state exactly as `onValueChange` would.
  */
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun Modifier.autofill(
     role: CredentialFieldRole,
     onFill: (String) -> Unit,
 ): Modifier {
-    val autofill = LocalAutofill.current
-    val autofillTree = LocalAutofillTree.current
     val currentOnFill by rememberUpdatedState(onFill)
-    val node = remember(role) {
-        AutofillNode(
-            autofillTypes = credentialAutofillTypes(role),
-            onFill = { currentOnFill(it) },
-        )
-    }
-    DisposableEffect(autofillTree, node) {
-        autofillTree += node
-        onDispose { autofillTree.children.remove(node.id) }
-    }
-    return this
-        .onGloballyPositioned { node.boundingBox = it.boundsInWindow() }
-        .onFocusChanged { state ->
-            autofill?.run {
-                if (state.isFocused) requestAutofillForNode(node)
-                else cancelAutofillForNode(node)
-            }
+    return this.semantics {
+        contentType = credentialContentType(role)
+        onAutofillText { text ->
+            currentOnFill(text.text)
+            true
         }
+    }
 }
