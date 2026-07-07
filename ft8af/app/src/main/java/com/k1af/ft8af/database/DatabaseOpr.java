@@ -1185,9 +1185,17 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             }
 
             if (cursor.getString(cursor.getColumnIndex("mode")) != null) {
-                logStr.append(String.format("<mode:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("mode")).length()
-                        , cursor.getString(cursor.getColumnIndex("mode"))));
+                // FT4/FT2 are ADIF submodes of MFSK, not standalone modes — a bare
+                // <mode>FT2 is rejected as invalid by pota.app and other ADIF consumers.
+                String mode = cursor.getString(cursor.getColumnIndex("mode"));
+                String submode = AdifFormat.mfskSubmode(mode);
+                if (submode != null) {
+                    logStr.append(String.format("<mode:4>MFSK <submode:%d>%s "
+                            , submode.length(), submode));
+                } else {
+                    logStr.append(String.format("<mode:%d>%s "
+                            , mode.length(), mode));
+                }
             }
 
             if (cursor.getString(cursor.getColumnIndex("rst_sent")) != null) {

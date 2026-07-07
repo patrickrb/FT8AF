@@ -222,7 +222,8 @@ public class ThirdPartyService {
         return null;
     }
 
-    private static String QSLRecordToADIF(QSLRecord qslRecord, ServiceType serv){
+    // Package-private (not private) so the ADIF payload can be unit-tested directly.
+    static String QSLRecordToADIF(QSLRecord qslRecord, ServiceType serv){
         StringBuilder logStr = new StringBuilder();
         logStr.append(AdifFormat.callField(qslRecord.getToCallsign()));
 
@@ -233,9 +234,17 @@ public class ThirdPartyService {
         }
 
         if (qslRecord.getMode() != null) {
-            logStr.append(String.format("<mode:%d>%s "
-                    , qslRecord.getMode().length()
-                    , qslRecord.getMode()));
+            // FT4/FT2 are ADIF submodes of MFSK, not standalone modes — a bare
+            // <mode>FT2 is rejected as invalid by QRZ/Cloudlog and other ADIF consumers.
+            String submode = AdifFormat.mfskSubmode(qslRecord.getMode());
+            if (submode != null) {
+                logStr.append(String.format("<mode:4>MFSK <submode:%d>%s "
+                        , submode.length(), submode));
+            } else {
+                logStr.append(String.format("<mode:%d>%s "
+                        , qslRecord.getMode().length()
+                        , qslRecord.getMode()));
+            }
         }
 
         String rstSent = AdifFormat.formatReport(qslRecord.getSendReport());
