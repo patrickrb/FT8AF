@@ -391,6 +391,9 @@ public class MainViewModel extends ViewModel {
     /** One watchdog tick: probe the rig, then declare it dead if it's gone quiet too long. */
     private void catLivenessTick() {
         try {
+            // Sample the wall clock once per tick so the re-arm and staleness check reason
+            // about the same instant — a clock change mid-tick can't skew the comparison.
+            long nowMs = System.currentTimeMillis();
             boolean connected = isRigConnected();
             boolean transmitting = ft8TransmitSignal != null && ft8TransmitSignal.isTransmitting();
             // Actively probe (a frequency read); the reply lands in onRigResponded ->
@@ -404,11 +407,11 @@ public class MainViewModel extends ViewModel {
             // edge, restart the quiet window from now so the just-sent probe has time to reply
             // before we judge staleness — otherwise a >8s FT8 over falsely trips ERROR.
             if (CatLiveness.shouldRearmAfterTx(wasTransmittingLastTick, transmitting)) {
-                lastRigResponseMs = System.currentTimeMillis();
+                lastRigResponseMs = nowMs;
             }
             wasTransmittingLastTick = transmitting;
             if (CatLiveness.isRigStale(connected, transmitting, sawRigResponseSinceConnect,
-                    System.currentTimeMillis(), lastRigResponseMs, CatLiveness.DEFAULT_TIMEOUT_MS)) {
+                    nowMs, lastRigResponseMs, CatLiveness.DEFAULT_TIMEOUT_MS)) {
                 stopCatLivenessWatchdog();
                 setCatConnectionState(CatConnectionState.ERROR);
                 ToastMessage.show(String.format(
