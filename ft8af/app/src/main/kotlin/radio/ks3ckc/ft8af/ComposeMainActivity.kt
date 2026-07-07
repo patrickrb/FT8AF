@@ -615,7 +615,8 @@ class ComposeMainActivity : AppCompatActivity() {
         // and self-terminates.
         try {
             mainViewModel.ft8TransmitSignal.stopTune()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            fileLog("onStop: stopTune threw: ${e.message}")
         }
         super.onStop()
     }
