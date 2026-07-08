@@ -66,7 +66,10 @@ class CrashReportingTest {
 
     @Test
     fun isAvailable_reflectsCompiledInDsn() {
-        // Test builds compile in no DSN, so reporting is never offerable here.
+        // isAvailable() must exactly track whether a DSN was compiled in — regardless
+        // of whether this particular build has one. SENTRY_DSN comes from a Gradle
+        // prop / env var, so it may be blank (typical) or present (local/CI); either
+        // way isAvailable() equals SENTRY_DSN.isNotBlank().
         assertThat(CrashReporting.isAvailable()).isEqualTo(BuildConfig.SENTRY_DSN.isNotBlank())
     }
 

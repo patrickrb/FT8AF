@@ -253,7 +253,13 @@ class ComposeMainActivity : AppCompatActivity() {
             com.k1af.ft8af.alert.DxAlertNotifier.EXTRA_CALLSIGN,
         ) ?: return
         if (callsign.isBlank()) return
-        fileLog("handleAlertIntent: preselect $callsign")
+        // The full callsign goes to the local debug.log, but a callsign is PII in
+        // this app, so the Sentry breadcrumb is redacted (see fileLog / the
+        // "callsign is never sent" promise).
+        fileLog(
+            "handleAlertIntent: preselect $callsign",
+            breadcrumbMsg = "handleAlertIntent: preselect <redacted>",
+        )
         mainViewModel.mutablePreselectCallsign.postValue(callsign)
     }
 
@@ -699,13 +705,20 @@ class ComposeMainActivity : AppCompatActivity() {
         }
     }
 
-    /** Write a line to /sdcard/Android/data/com.k1af.ft8af/files/debug.log */
-    private fun fileLog(msg: String) {
-        // Mirror every debug.log line into Sentry as a breadcrumb so a crash
+    /**
+     * Write a line to /sdcard/Android/data/com.k1af.ft8af/files/debug.log.
+     *
+     * The full [msg] always goes to the on-device debug.log and logcat, but only
+     * [breadcrumbMsg] is mirrored into Sentry — pass a redacted string (or null) for
+     * lines carrying PII (callsign, grid, location) so it never rides along with a
+     * crash report, keeping the "callsign/location are never sent" promise.
+     */
+    private fun fileLog(msg: String, breadcrumbMsg: String? = msg) {
+        // Mirror the (possibly redacted) line into Sentry as a breadcrumb so a crash
         // report carries the same event trail (CAT sends, band changes, USB
         // attach…). No-op unless crash reporting is enabled. First, so it fires
         // even when the external dir is unavailable and the file write is skipped.
-        CrashReporting.breadcrumb(msg)
+        breadcrumbMsg?.let { CrashReporting.breadcrumb(it) }
         try {
             val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
             val dir = getExternalFilesDir(null) ?: return

@@ -85,12 +85,20 @@ object CrashReporting {
     /** Bring the SDK up. Idempotent — a second call while already running is ignored. */
     private fun start(context: Context) {
         if (Sentry.isEnabled()) return
-        SentryAndroid.init(context) { options ->
+        // Always init with the application context: setEnabled() can be called from
+        // a Settings Activity, and the SDK holds the context for its lifetime, so an
+        // Activity/Service context would leak.
+        SentryAndroid.init(context.applicationContext) { options ->
             options.dsn = BuildConfig.SENTRY_DSN
             // Callsign + GPS live in this app; never let the SDK attach IP / user
             // identifiers on its own. Only breadcrumbs we choose are sent.
             options.isSendDefaultPii = false
-            options.release = "${BuildConfig.APPLICATION_ID}@${BuildConfig.VERSION_NAME}"
+            // Include versionCode so the runtime release matches the Sentry Gradle
+            // plugin's default (<applicationId>@<versionName>+<versionCode>) that the
+            // mapping.txt upload is tagged with — otherwise release-scoped views and
+            // release health can't line the two up.
+            options.release =
+                "${BuildConfig.APPLICATION_ID}@${BuildConfig.VERSION_NAME}+${BuildConfig.VERSION_CODE}"
             options.environment = if (BuildConfig.DEBUG) "debug" else "release"
             options.isDebug = BuildConfig.DEBUG
         }
