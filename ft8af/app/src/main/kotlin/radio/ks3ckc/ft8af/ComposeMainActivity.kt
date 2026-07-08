@@ -37,6 +37,7 @@ import androidx.lifecycle.Observer
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
+import radio.ks3ckc.ft8af.crash.CrashReporting
 import radio.ks3ckc.ft8af.sync.QsoAutoSync
 import radio.ks3ckc.ft8af.util.bluetoothAdapter
 import com.k1af.ft8af.service.RxForegroundService
@@ -700,6 +701,11 @@ class ComposeMainActivity : AppCompatActivity() {
 
     /** Write a line to /sdcard/Android/data/com.k1af.ft8af/files/debug.log */
     private fun fileLog(msg: String) {
+        // Mirror every debug.log line into Sentry as a breadcrumb so a crash
+        // report carries the same event trail (CAT sends, band changes, USB
+        // attach…). No-op unless crash reporting is enabled. First, so it fires
+        // even when the external dir is unavailable and the file write is skipped.
+        CrashReporting.breadcrumb(msg)
         try {
             val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
             val dir = getExternalFilesDir(null) ?: return

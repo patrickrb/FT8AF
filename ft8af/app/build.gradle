@@ -12,6 +12,9 @@ plugins {
     // Static analysis (issue #63).
     id 'io.gitlab.arturbosch.detekt'
     id 'org.jlleitschuh.gradle.ktlint'
+    // Sentry crash reporting: applied only for R8 mapping-file upload (see the
+    // sentry { } block below). The SDK is initialised manually in Kotlin.
+    id 'io.sentry.android.gradle'
 }
 
 def currentTime = getCurrentTime()
@@ -58,6 +61,13 @@ android {
         def ciVersionName = project.findProperty('VERSION_NAME_OVERRIDE')
         versionName ciVersionName ?: '1.1.0'
 
+        // Sentry DSN, supplied out-of-band so it never lives in committed source:
+        // a -PSENTRY_DSN=… flag, a SENTRY_DSN line in ~/.gradle/gradle.properties,
+        // or a SENTRY_DSN env var (CI). Absent → empty string → crash reporting
+        // stays disabled at runtime regardless of the user's opt-in toggle, so a
+        // fresh clone / contributor build never reports into anyone's project.
+        def sentryDsn = project.findProperty('SENTRY_DSN') ?: System.getenv('SENTRY_DSN') ?: ''
+        buildConfigField "String", "SENTRY_DSN", "\"${sentryDsn}\""
 
         externalNativeBuild {
             cmake {
@@ -165,6 +175,30 @@ android {
     namespace 'com.k1af.ft8af'
 }
 
+// Sentry Gradle plugin — used ONLY to upload the R8 mapping file so obfuscated
+// release stack traces deobfuscate in Sentry (same mapping.txt already sent to
+// Play Console). Everything else the plugin can do is turned off:
+//   * autoInstallation off — we declare io.sentry:sentry-android explicitly and
+//     initialise it by hand (opt-in gated), so the plugin must not add its own
+//     copy or a version we didn't choose.
+//   * tracingInstrumentation off — no performance tracing (crashes + ANRs +
+//     breadcrumbs only).
+// The upload only runs on a release (minified) build AND only when CI supplies
+// SENTRY_AUTH_TOKEN (+ SENTRY_ORG / SENTRY_PROJECT, which the plugin reads from
+// the environment). A local or token-less release build still embeds the
+// mapping UUID but skips the network upload, so it never fails for want of a
+// token.
+sentry {
+    autoInstallation {
+        enabled = false
+    }
+    tracingInstrumentation {
+        enabled = false
+    }
+    includeProguardMapping = true
+    autoUploadProguardMapping = System.getenv('SENTRY_AUTH_TOKEN') != null
+}
+
 dependencies {
 
     implementation 'androidx.appcompat:appcompat:1.6.1'
@@ -220,6 +254,11 @@ dependencies {
     // Keystore-backed EncryptedSharedPreferences for the POTA refresh token —
     // a long-lived credential that must not sit in plaintext app storage.
     implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+
+    // Sentry crash reporting (opt-in). Initialised manually in
+    // crash/CrashReporting.kt — the Gradle plugin's auto-installation is turned
+    // off (see the sentry { } block) so this is the single source of the SDK.
+    implementation 'io.sentry:sentry-android:8.16.0'
 
     // --- JVM unit + Robolectric tests ---
     testImplementation 'junit:junit:4.13.2'

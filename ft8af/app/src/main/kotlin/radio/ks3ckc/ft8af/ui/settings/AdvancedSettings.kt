@@ -40,6 +40,7 @@ import com.k1af.ft8af.database.OnAfterQueryConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import radio.ks3ckc.ft8af.crash.CrashReporting
 import radio.ks3ckc.ft8af.theme.Accent
 import radio.ks3ckc.ft8af.theme.BgSurface2
 import radio.ks3ckc.ft8af.theme.TextMuted
@@ -158,6 +159,9 @@ fun AdvancedSettings(
     var txDelay by remember { mutableIntStateOf(GeneralVariables.transmitDelay) }
     var lateStartMs by remember { mutableIntStateOf(GeneralVariables.lateStartTolerance) }
     var currentTheme by remember { mutableStateOf(loadTheme(context)) }
+
+    // Opt-in crash reporting (Sentry). Only surfaced when a DSN was compiled in.
+    var crashReportingEnabled by remember { mutableStateOf(CrashReporting.isOptedIn(context)) }
 
     var showPttDelay by remember { mutableStateOf(false) }
     var showTxDelay by remember { mutableStateOf(false) }
@@ -606,6 +610,27 @@ fun AdvancedSettings(
                         description = stringResource(R.string.settings_import_desc),
                         showChevron = true,
                         onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                    )
+                }
+            }
+        }
+
+        // =====================================================================
+        // DIAGNOSTICS (opt-in crash reporting)
+        // =====================================================================
+        // Only shown when a Sentry DSN was compiled in — a contributor build with
+        // no DSN has nowhere to report, so the toggle would be dead weight.
+        if (CrashReporting.isAvailable()) {
+            SettingsSection(title = stringResource(R.string.settings_section_diagnostics)) {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    SettingsRow(
+                        label = stringResource(R.string.settings_crash_reporting),
+                        description = stringResource(R.string.settings_crash_reporting_desc),
+                        toggle = crashReportingEnabled,
+                        onToggleChange = { enabled ->
+                            crashReportingEnabled = enabled
+                            CrashReporting.setEnabled(context, enabled)
+                        },
                     )
                 }
             }
