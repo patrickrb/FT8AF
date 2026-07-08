@@ -58,8 +58,9 @@ npm run tauri dev      # starts Vite + builds the Rust app + opens the window
 ### Rig control: Hamlib (bundled)
 
 Hamlib is the default rig backend and is **bundled with the app on Windows** — the
-LGPL Hamlib DLLs live in `src-tauri/hamlib/` and `build.rs` copies them next to
-the built exe, so rig support works out of the box with no separate install.
+LGPL Hamlib DLLs live in `src-tauri/hamlib/<arch>/` (`x64/` for 64-bit, `x86/`
+for 32-bit) and `build.rs` copies the set matching the build target next to the
+built exe, so rig support works out of the box with no separate install.
 Settings → Rig control → **Hamlib** shows a dropdown of every radio Hamlib
 supports (~300+); pick yours, choose **Connection: Serial** (COM port + baud) or
 **Network** (host:port), and Connect. Hamlib handles the model-specific CAT
@@ -72,12 +73,13 @@ SmartSDR API). Note DAX is *audio* (set as the audio device), separate from CAT.
 
 The backend dynamically loads the library at runtime (`libloading`), so there's
 no build-time Hamlib dependency. To update Hamlib, replace the DLLs in
-`src-tauri/hamlib/` (from a hamlib-w64 release). On Linux/macOS, install the
-system `hamlib`/`libhamlib` package; if the library isn't found the rig list is
-empty and you get a clean message rather than a crash.
+`src-tauri/hamlib/x64/` (from a hamlib-w64 release) — and `src-tauri/hamlib/x86/`
+from a hamlib-w32 release for the 32-bit build (see that dir's `README.txt`). On
+Linux/macOS, install the system `hamlib`/`libhamlib` package; if the library
+isn't found the rig list is empty and you get a clean message rather than a crash.
 
-> If you later enable Tauri bundling (`bundle.active`), add `hamlib/*.dll` to the
-> bundle `resources` so they ship in the installer too.
+> If you later enable Tauri bundling (`bundle.active`), add `hamlib/<arch>/*.dll`
+> to the bundle `resources` so they ship in the installer too.
 
 ## Build / test
 
@@ -88,6 +90,37 @@ cargo build --release # optimized binary (loads the bundled frontend in ../dist)
 ```
 
 The frontend builds independently with `npm run build` (emits to `desktop/dist`).
+
+### 32-bit Windows (i686) build
+
+The desktop app also ships a **32-bit (x86 / `i686`) Windows** installer for
+users still on 32-bit Windows, built alongside the 64-bit one. CI cross-compiles
+it on the `windows-latest` runner as a second Windows matrix leg and attaches the
+resulting `FT8AF_<ver>_x86_en-US.msi` (plus the NSIS `..._x86-setup.exe`) to the
+same desktop release as the x64 installers — Tauri's WiX bundler tags the MSI
+filename with the arch, so the two never collide.
+
+To build it locally on a 64-bit Windows host (from `desktop/`):
+
+```
+rustup target add i686-pc-windows-msvc
+npm ci
+# compile check (no installer):
+npm run tauri build -- --no-bundle --target i686-pc-windows-msvc
+# full MSI/NSIS installers:
+npm run tauri build -- --config "{\"bundle\":{\"active\":true}}" --target i686-pc-windows-msvc
+```
+
+What makes the 32-bit build work:
+
+- **C DSP core** — `build.rs` passes `--target=i686-pc-windows-msvc` to
+  `clang-cl` so `ft8core` is compiled as 32-bit objects (clang-cl otherwise
+  defaults to the host x64 arch). See `src-tauri/src/build_support.rs`.
+- **Hamlib DLLs** — the vendored win64 DLLs can't load into a 32-bit process, so
+  `build.rs` copies the arch-matching set from `src-tauri/hamlib/x86/` instead of
+  `x64/`. Drop the win32 Hamlib release DLLs into `src-tauri/hamlib/x86/` (see
+  its `README.txt`); if that dir is empty the build still succeeds and rig
+  control degrades cleanly to "Hamlib unavailable".
 
 ## How it works
 
