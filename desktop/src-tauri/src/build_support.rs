@@ -11,16 +11,21 @@
 //   * whether clang-cl must be told to emit 32-bit objects for the C DSP core.
 
 /// The `hamlib/` sub-directory whose DLLs match `target`'s process architecture,
-/// or `None` when `target` isn't Windows (no DLLs are bundled on macOS/Linux).
+/// or `None` when no matching DLL set should be bundled.
 ///
-/// 32-bit x86 (`i686`/`i586`/`i386`) → `"x86"`; every other Windows target
-/// (`x86_64`, `aarch64`) → `"x64"`.
+/// 32-bit x86 (`i686`/`i586`/`i386`) → `"x86"`; 64-bit x86 (`x86_64`) → `"x64"`.
+/// Non-Windows targets return `None` (no DLLs bundled on macOS/Linux), and so
+/// does ARM64 Windows (`aarch64`): a native ARM64 process can't load the x64
+/// DLLs, and no ARM64 Hamlib set is vendored, so we bundle nothing and rely on a
+/// system Hamlib install (which `load_hamlib()` degrades to cleanly).
 pub fn hamlib_arch_subdir(target: &str) -> Option<&'static str> {
     if !target.contains("windows") {
         return None;
     }
     if is_x86_32(target) {
         Some("x86")
+    } else if target.starts_with("aarch64") {
+        None
     } else {
         Some("x64")
     }
@@ -29,10 +34,12 @@ pub fn hamlib_arch_subdir(target: &str) -> Option<&'static str> {
 /// The extra `--target=<triple>` flag clang-cl needs so the C core compiles for
 /// the same architecture as the Rust build. clang-cl defaults to the host arch,
 /// which is wrong when cross-compiling x64→x86, so the triple is forced for
-/// 32-bit x86 targets. `None` means "leave clang-cl on its host default" — the
-/// existing (correct) behavior for x86_64 and every non-Windows target.
+/// 32-bit x86 Windows targets. `None` means "leave clang-cl on its host
+/// default" — the existing (correct) behavior for x86_64 and every non-Windows
+/// target (this helper is only consulted from `build.rs`'s `windows-msvc` path,
+/// and the explicit `windows` check keeps it matching that documented contract).
 pub fn clang_cl_target_flag(target: &str) -> Option<String> {
-    if is_x86_32(target) {
+    if target.contains("windows") && is_x86_32(target) {
         Some(format!("--target={target}"))
     } else {
         None
@@ -57,8 +64,13 @@ mod tests {
     #[test]
     fn subdir_for_64bit_windows() {
         assert_eq!(hamlib_arch_subdir("x86_64-pc-windows-msvc"), Some("x64"));
-        // A non-x86 Windows arch still gets the 64-bit set (best available).
-        assert_eq!(hamlib_arch_subdir("aarch64-pc-windows-msvc"), Some("x64"));
+    }
+
+    #[test]
+    fn no_subdir_for_arm64_windows() {
+        // ARM64 can't load the vendored x64 DLLs and no ARM64 set ships, so bundle
+        // nothing and rely on a system Hamlib install.
+        assert_eq!(hamlib_arch_subdir("aarch64-pc-windows-msvc"), None);
     }
 
     #[test]
@@ -69,12 +81,15 @@ mod tests {
     }
 
     #[test]
-    fn clang_flag_only_for_32bit() {
+    fn clang_flag_only_for_32bit_windows() {
         assert_eq!(
             clang_cl_target_flag("i686-pc-windows-msvc").as_deref(),
             Some("--target=i686-pc-windows-msvc")
         );
         assert_eq!(clang_cl_target_flag("x86_64-pc-windows-msvc"), None);
         assert_eq!(clang_cl_target_flag("x86_64-unknown-linux-gnu"), None);
+        // A 32-bit *non-Windows* target must not get the flag (matches the doc
+        // contract; this helper only runs from the Windows clang-cl path).
+        assert_eq!(clang_cl_target_flag("i686-unknown-linux-gnu"), None);
     }
 }
