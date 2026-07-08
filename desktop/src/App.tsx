@@ -5,6 +5,7 @@ import {
   type AudioDevice,
   type BandInfo,
   type ClockSyncEvent,
+  type CustomBand,
   type CycleTick,
   type EngineEvent,
   type HamlibRig,
@@ -234,6 +235,7 @@ export default function App() {
               setRigLabel(v);
               api.setConfig("rig_label", v);
             }}
+            onBandsChanged={setBands}
           />
         )}
       </div>
@@ -294,8 +296,8 @@ function TopBar(props: {
       </span>
       <select value={dialHz} onChange={(e) => onBand(parseInt(e.target.value, 10))}>
         {bands.map((b) => (
-          <option key={b.name} value={b.dial_hz}>
-            {b.name} · {(b.dial_hz / 1e6).toFixed(3)}
+          <option key={b.dial_hz} value={b.dial_hz}>
+            {b.custom ? "★ " : ""}{b.name} · {(b.dial_hz / 1e6).toFixed(3)}
           </option>
         ))}
       </select>
@@ -612,12 +614,125 @@ const WF_WINDOW_LABELS: Record<WfWindow, string> = {
 const WF_FFT_SIZES = [512, 1024, 2048, 4096, 8192];
 const WF_AVG_OPTIONS = [1, 2, 3, 4, 6, 8, 12, 16];
 
+// Add/edit/delete operator-defined dial frequencies (issue #470). Custom dials
+// persist in the config store and are merged into the band picker (shown with a
+// ★). Editing is re-adding at the same dial frequency; the backend upserts.
+function CustomBandsPanel(props: {
+  onStatus: (s: string) => void;
+  onBandsChanged: (bands: BandInfo[]) => void;
+}) {
+  const { onStatus, onBandsChanged } = props;
+  const [custom, setCustom] = useState<CustomBand[]>([]);
+  const [name, setName] = useState("");
+  const [freq, setFreq] = useState("");
+  const [error, setError] = useState("");
+
+  function refresh() {
+    api.listCustomBands().then(setCustom);
+  }
+  useEffect(refresh, []);
+
+  async function add() {
+    setError("");
+    try {
+      const merged = await api.addCustomBand(freq, name);
+      onBandsChanged(merged);
+      refresh();
+      onStatus(`Custom band saved: ${name || "(band)"} ${freq} Hz`);
+      setName("");
+      setFreq("");
+    } catch (e) {
+      // The Rust command rejects bad input (non-numeric / out of range) with a
+      // human-readable message; show it inline rather than as a toast.
+      setError(String(e));
+    }
+  }
+
+  async function edit(b: CustomBand) {
+    setName(b.name);
+    setFreq(String(b.dial_hz));
+    setError("");
+  }
+
+  async function remove(dialHz: number) {
+    const merged = await api.deleteCustomBand(dialHz);
+    onBandsChanged(merged);
+    refresh();
+  }
+
+  return (
+    <div className="panel">
+      <h3>Custom dial frequencies</h3>
+      <div className="col">
+        <div className="muted">
+          Add off-plan dials (e.g. DXpedition frequencies) in whole Hz. They
+          appear in the band picker marked with a ★ and persist across restarts.
+        </div>
+        <div className="row">
+          <div className="field">
+            <label>Label (optional)</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. 3B9 DX"
+              style={{ width: 120 }}
+            />
+          </div>
+          <div className="field">
+            <label>Dial frequency (Hz)</label>
+            <input
+              value={freq}
+              onChange={(e) => setFreq(e.target.value)}
+              placeholder="e.g. 14090000"
+              style={{ width: 130 }}
+            />
+          </div>
+          <button className="primary" onClick={add}>Add / update</button>
+        </div>
+        {error && <span style={{ color: "var(--tx)" }}>⚠ {error}</span>}
+        {custom.length === 0 ? (
+          <span className="muted">No custom dials yet.</span>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Label</th>
+                <th>Dial (MHz)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {custom.map((b) => (
+                <tr key={b.dial_hz}>
+                  <td>{b.name}</td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {(b.dial_hz / 1e6).toFixed(6)}
+                  </td>
+                  <td>
+                    <button onClick={() => edit(b)} title="Load into the form to edit">
+                      ✎
+                    </button>
+                    <button onClick={() => remove(b.dial_hz)} title="Delete">
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SettingsScreen(props: {
   onStatus: (s: string) => void;
   clock: ClockSyncEvent | null;
   onRigLabel: (v: string) => void;
+  onBandsChanged: (bands: BandInfo[]) => void;
 }) {
-  const { onStatus, clock, onRigLabel } = props;
+  const { onStatus, clock, onRigLabel, onBandsChanged } = props;
   const [call, setCall] = useState("");
   const [rigLabel, setRigLabel] = useState("");
   const [grid, setGrid] = useState("");
@@ -1070,6 +1185,8 @@ function SettingsScreen(props: {
           </button>
         </div>
       </div>
+
+      <CustomBandsPanel onStatus={onStatus} onBandsChanged={onBandsChanged} />
 
       <div className="panel">
         <h3>Developer — waterfall FFT</h3>

@@ -2,14 +2,18 @@ package com.k1af.ft8af.database;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.res.AssetManager;
 import android.util.Log;
 
+import com.k1af.ft8af.FT8Common;
+import com.k1af.ft8af.ModeProfile;
 import com.k1af.ft8af.rigs.BaseRigOperation;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Reads the list of available carrier bands, stored in assets/bands.txt
@@ -90,7 +94,9 @@ public class OperationBand {
         return result;
     }
     /**
-     * Reads the FT8 signal list from the bands.txt file.
+     * Reads the FT8 signal list from the bands.txt file, then appends the
+     * operator's persisted custom dial frequencies (issue #470) so they show up
+     * in the pickers alongside the built-in band plan.
      */
     public void getBandsFromFile(){
         AssetManager assetManager = context.getAssets();
@@ -104,6 +110,175 @@ public class OperationBand {
             e.printStackTrace();
             Log.e(TAG, "Error extracting data from band list file: "+e.getMessage() );
         }
+        // Merge user-defined dials last so bands.txt reloads never wipe them
+        // (they live in SharedPreferences, not the read-only asset).
+        appendCustomBands(bandList, loadCustomBands());
+    }
+
+    // --- custom (user-defined) dial frequencies (issue #470) ----------------
+
+    private static final String CUSTOM_PREFS = "ft8af_custom_bands";
+    private static final String CUSTOM_KEY = "customBands";
+
+    /**
+     * Accepted dial-frequency range (Hz) for a custom entry. The lower bound
+     * screens out obvious typos; the upper bound comfortably covers the
+     * microwave dials in the shipped plan (QO-100 3cm ~10.489 GHz).
+     */
+    static final long MIN_CUSTOM_FREQ = 1_000L;
+    static final long MAX_CUSTOM_FREQ = 30_000_000_000L;
+
+    /**
+     * Parse an operator-entered dial frequency in whole Hz. Returns -1 for a
+     * blank / non-numeric value so the caller can show a clear error rather than
+     * throwing out of {@code Long.parseLong}.
+     */
+    static long parseCustomFreq(String input) {
+        if (input == null) return -1;
+        String t = input.trim();
+        if (t.isEmpty()) return -1;
+        try {
+            return Long.parseLong(t);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    /** Whether {@code hz} is inside the accepted custom-dial range. */
+    static boolean isValidCustomFreq(long hz) {
+        return hz >= MIN_CUSTOM_FREQ && hz <= MAX_CUSTOM_FREQ;
+    }
+
+    /**
+     * Serialize one custom band to a bands.txt-style storage line
+     * ({@code marked:freq:waveLength[:mode]}) so it round-trips through the same
+     * {@link #parseBandLines} the asset loader uses. Non-FT8 entries carry a
+     * mode tag; FT8 (the default) omits it.
+     */
+    static String toCustomLine(Band b) {
+        String line = (b.marked ? "*" : " ") + ":" + b.band + ":" + b.waveLength;
+        if (b.mode != FT8Common.FT8_MODE) {
+            line += ":" + ModeProfile.fromId(b.mode).displayName;
+        }
+        return line;
+    }
+
+    /** Serialize a list of custom bands to a newline-joined blob for storage. */
+    static String serializeCustomBands(List<Band> bands) {
+        StringBuilder sb = new StringBuilder();
+        for (Band b : bands) {
+            if (sb.length() > 0) sb.append('\n');
+            sb.append(toCustomLine(b));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Parse a stored custom-band blob back into {@link Band}s, flagging each as
+     * custom. Reuses {@link #parseBandLines} so a malformed line is skipped, not
+     * fatal.
+     */
+    static ArrayList<Band> parseCustomBands(String stored) {
+        ArrayList<Band> out = parseBandLines(stored == null ? null : stored.split("\n"));
+        for (Band b : out) {
+            b.custom = true;
+        }
+        return out;
+    }
+
+    /**
+     * Append custom bands to {@code target}, skipping any whose freq+mode already
+     * matches a built-in entry so a custom dial on a stock frequency doesn't
+     * appear twice.
+     */
+    static void appendCustomBands(List<Band> target, List<Band> customs) {
+        for (Band c : customs) {
+            boolean dup = false;
+            for (Band b : target) {
+                if (b.band == c.band && b.mode == c.mode) {
+                    dup = true;
+                    break;
+                }
+            }
+            if (!dup) target.add(c);
+        }
+    }
+
+    private SharedPreferences customPrefs() {
+        return context.getSharedPreferences(CUSTOM_PREFS, Context.MODE_PRIVATE);
+    }
+
+    /** Load the persisted custom dials (empty list if none / unavailable). */
+    public ArrayList<Band> loadCustomBands() {
+        return parseCustomBands(customPrefs().getString(CUSTOM_KEY, ""));
+    }
+
+    private void persistCustomBands(List<Band> bands) {
+        customPrefs().edit().putString(CUSTOM_KEY, serializeCustomBands(bands)).apply();
+    }
+
+    /**
+     * Add — or, when one already exists at this freq+mode, relabel — a custom
+     * dial, then rebuild {@link #bandList} so the pickers pick it up immediately.
+     * Returns null on success or a human-readable error for invalid input.
+     *
+     * @param freqInput raw frequency text (whole Hz)
+     * @param label     optional label; blank falls back to the derived band name
+     * @param mode      operating mode this dial belongs to (FT8Common.*_MODE)
+     */
+    public String addCustomBand(String freqInput, String label, int mode) {
+        long hz = parseCustomFreq(freqInput);
+        if (hz < 0) {
+            return "Enter a whole number of Hz (e.g. 14090000).";
+        }
+        if (!isValidCustomFreq(hz)) {
+            return "Frequency out of range (" + MIN_CUSTOM_FREQ + "–" + MAX_CUSTOM_FREQ + " Hz).";
+        }
+        // Labels share the ':' delimiter with the storage format, so strip it.
+        String cleanLabel = label == null ? "" : label.trim().replace(':', ' ').trim();
+        if (cleanLabel.isEmpty()) {
+            cleanLabel = BaseRigOperation.getMeterFromFreq(hz);
+        }
+        ArrayList<Band> customs = loadCustomBands();
+        Band existing = null;
+        for (Band b : customs) {
+            if (b.band == hz && b.mode == mode) {
+                existing = b;
+                break;
+            }
+        }
+        if (existing != null) {
+            existing.waveLength = cleanLabel;
+        } else {
+            Band nb = new Band(hz, cleanLabel);
+            nb.mode = mode;
+            nb.custom = true;
+            customs.add(nb);
+        }
+        persistCustomBands(customs);
+        getBandsFromFile();
+        return null;
+    }
+
+    /**
+     * Delete the custom dial at {@code freq}+{@code mode}, then rebuild
+     * {@link #bandList}. Returns true if an entry was removed.
+     */
+    public boolean removeCustomBand(long freq, int mode) {
+        ArrayList<Band> customs = loadCustomBands();
+        boolean removed = false;
+        for (int i = customs.size() - 1; i >= 0; i--) {
+            Band b = customs.get(i);
+            if (b.band == freq && b.mode == mode) {
+                customs.remove(i);
+                removed = true;
+            }
+        }
+        if (removed) {
+            persistCustomBands(customs);
+            getBandsFromFile();
+        }
+        return removed;
     }
 
     /**
@@ -234,6 +409,8 @@ public class OperationBand {
         public String waveLength;
         public boolean marked=false;
         public int mode = com.k1af.ft8af.FT8Common.FT8_MODE;//FT8 unless tagged otherwise in bands.txt
+        //True for operator-defined dials (issue #470); built-in bands.txt entries are false.
+        public boolean custom=false;
 
         public Band(long band, String waveLength) {
             this.band = band;
@@ -260,10 +437,12 @@ public class OperationBand {
         }
         @SuppressLint("DefaultLocale")
         public String getBandInfo(){
-                return String.format("%s %.3f MHz (%s)"
+                String info = String.format("%s %.3f MHz (%s)"
                         ,marked?"*":" "
                         ,(float)(band/1000000f)
                         ,waveLength);
+                // Mark operator-defined dials so they're distinguishable in the picker.
+                return custom ? info + " ★" : info;
         }
     }
 

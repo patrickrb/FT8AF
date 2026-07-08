@@ -372,4 +372,119 @@ public class OperationBandTest {
     public void parseBandLines_nullInput_returnsEmpty() {
         assertThat(OperationBand.parseBandLines(null)).isEmpty();
     }
+
+    // ---- custom (user-defined) dial frequencies (issue #470) ----------------
+    // Operators can add off-plan dials (e.g. DXpedition frequencies); the
+    // parse/validate/serialize/merge logic is pure and covered here. Persistence
+    // (SharedPreferences) is covered by OperationBandCustomBandsTest.
+
+    @Test
+    public void parseCustomFreq_acceptsWholeHz() {
+        assertThat(OperationBand.parseCustomFreq("14090000")).isEqualTo(14_090_000L);
+        assertThat(OperationBand.parseCustomFreq("  7090000 ")).isEqualTo(7_090_000L);
+    }
+
+    @Test
+    public void parseCustomFreq_rejectsBlankAndNonNumeric() {
+        assertThat(OperationBand.parseCustomFreq(null)).isEqualTo(-1L);
+        assertThat(OperationBand.parseCustomFreq("")).isEqualTo(-1L);
+        assertThat(OperationBand.parseCustomFreq("   ")).isEqualTo(-1L);
+        assertThat(OperationBand.parseCustomFreq("14.090")).isEqualTo(-1L); // not whole Hz
+        assertThat(OperationBand.parseCustomFreq("abc")).isEqualTo(-1L);
+    }
+
+    @Test
+    public void isValidCustomFreq_enforcesRange() {
+        assertThat(OperationBand.isValidCustomFreq(OperationBand.MIN_CUSTOM_FREQ)).isTrue();
+        assertThat(OperationBand.isValidCustomFreq(OperationBand.MAX_CUSTOM_FREQ)).isTrue();
+        assertThat(OperationBand.isValidCustomFreq(14_090_000L)).isTrue();
+        assertThat(OperationBand.isValidCustomFreq(OperationBand.MIN_CUSTOM_FREQ - 1)).isFalse();
+        assertThat(OperationBand.isValidCustomFreq(OperationBand.MAX_CUSTOM_FREQ + 1)).isFalse();
+    }
+
+    @Test
+    public void toCustomLine_ft8OmitsModeTag_nonFt8IncludesIt() {
+        OperationBand.Band ft8 = new OperationBand.Band(14_090_000L, "3B9 DX");
+        assertThat(OperationBand.toCustomLine(ft8)).isEqualTo(" :14090000:3B9 DX");
+
+        OperationBand.Band ft4 = new OperationBand.Band(14_090_000L, "3B9 DX");
+        ft4.mode = com.k1af.ft8af.FT8Common.FT4_MODE;
+        assertThat(OperationBand.toCustomLine(ft4)).isEqualTo(" :14090000:3B9 DX:FT4");
+    }
+
+    @Test
+    public void customBands_serializeParseRoundTrip() {
+        OperationBand.Band a = new OperationBand.Band(14_090_000L, "3B9 DX");
+        OperationBand.Band b = new OperationBand.Band(7_090_000L, "40m DX");
+        b.mode = com.k1af.ft8af.FT8Common.FT4_MODE;
+        String blob = OperationBand.serializeCustomBands(java.util.Arrays.asList(a, b));
+
+        ArrayList<OperationBand.Band> parsed = OperationBand.parseCustomBands(blob);
+        assertThat(parsed).hasSize(2);
+        assertThat(parsed.get(0).band).isEqualTo(14_090_000L);
+        assertThat(parsed.get(0).waveLength).isEqualTo("3B9 DX");
+        assertThat(parsed.get(0).mode).isEqualTo(com.k1af.ft8af.FT8Common.FT8_MODE);
+        assertThat(parsed.get(0).custom).isTrue();
+        assertThat(parsed.get(1).band).isEqualTo(7_090_000L);
+        assertThat(parsed.get(1).mode).isEqualTo(com.k1af.ft8af.FT8Common.FT4_MODE);
+        assertThat(parsed.get(1).custom).isTrue();
+    }
+
+    @Test
+    public void parseCustomBands_emptyOrNull_returnsEmpty() {
+        assertThat(OperationBand.parseCustomBands("")).isEmpty();
+        assertThat(OperationBand.parseCustomBands(null)).isEmpty();
+    }
+
+    @Test
+    public void appendCustomBands_appendsNonDuplicatesFlaggedCustom() {
+        ArrayList<OperationBand.Band> target = new ArrayList<>();
+        target.add(new OperationBand.Band(14_074_000L, "20m")); // built-in
+
+        ArrayList<OperationBand.Band> customs = new ArrayList<>();
+        OperationBand.Band dx = new OperationBand.Band(14_090_000L, "3B9 DX");
+        dx.custom = true;
+        customs.add(dx);
+
+        OperationBand.appendCustomBands(target, customs);
+        assertThat(target).hasSize(2);
+        assertThat(target.get(1).band).isEqualTo(14_090_000L);
+        assertThat(target.get(1).custom).isTrue();
+    }
+
+    @Test
+    public void appendCustomBands_skipsDuplicateFreqAndModeOfBuiltin() {
+        ArrayList<OperationBand.Band> target = new ArrayList<>();
+        target.add(new OperationBand.Band(14_074_000L, "20m")); // built-in FT8 20m
+
+        ArrayList<OperationBand.Band> customs = new ArrayList<>();
+        OperationBand.Band dup = new OperationBand.Band(14_074_000L, "dup"); // same freq+mode
+        dup.custom = true;
+        customs.add(dup);
+
+        OperationBand.appendCustomBands(target, customs);
+        assertThat(target).hasSize(1); // duplicate skipped
+    }
+
+    @Test
+    public void appendCustomBands_sameFreqDifferentModeIsNotDuplicate() {
+        ArrayList<OperationBand.Band> target = new ArrayList<>();
+        target.add(new OperationBand.Band(14_074_000L, "20m")); // FT8
+
+        ArrayList<OperationBand.Band> customs = new ArrayList<>();
+        OperationBand.Band ft4 = new OperationBand.Band(14_074_000L, "20m FT4");
+        ft4.mode = com.k1af.ft8af.FT8Common.FT4_MODE;
+        ft4.custom = true;
+        customs.add(ft4);
+
+        OperationBand.appendCustomBands(target, customs);
+        assertThat(target).hasSize(2); // different mode -> kept
+    }
+
+    @Test
+    public void getBandInfo_customBand_appendsStarMarker() {
+        OperationBand.Band b = new OperationBand.Band(14_090_000L, "3B9 DX");
+        b.custom = true;
+        assertThat(b.getBandInfo()).isEqualTo("  14.090 MHz (3B9 DX) ★");
+    }
 }

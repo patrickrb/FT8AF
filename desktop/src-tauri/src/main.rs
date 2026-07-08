@@ -4,11 +4,10 @@
 
 use std::sync::Arc;
 
-use serde::Serialize;
 use tauri::{Emitter, State};
 
 use ft8af::audio::{self, AudioDevice};
-use ft8af::bands;
+use ft8af::bands::{self, BandEntry, CustomBand};
 use ft8af::db::{Db, QsoRecord};
 use ft8af::engine::{self, AnswerArgs, EngineCommand, EngineHandle};
 use ft8af::rig::{self, HamlibRig, RigConfig, SerialPortInfo};
@@ -17,12 +16,6 @@ use ft8af::wf::WfConfig;
 struct AppState {
     engine: EngineHandle,
     db: Arc<Db>,
-}
-
-#[derive(Serialize)]
-struct BandInfo {
-    name: String,
-    dial_hz: u64,
 }
 
 // --- device / port / band enumeration --------------------------------------
@@ -47,12 +40,49 @@ fn list_hamlib_rigs() -> Vec<HamlibRig> {
     rig::list_hamlib_rigs()
 }
 
+/// Read + parse the persisted custom-band list from the config store.
+fn load_custom_bands(db: &Db) -> Vec<CustomBand> {
+    bands::parse_custom_bands(&db.get_config(bands::CUSTOM_BANDS_KEY).unwrap_or_default())
+}
+
 #[tauri::command]
-fn list_bands() -> Vec<BandInfo> {
-    bands::FT8_BANDS
-        .iter()
-        .map(|b| BandInfo { name: b.name.to_string(), dial_hz: b.dial_hz })
-        .collect()
+fn list_bands(state: State<AppState>) -> Vec<BandEntry> {
+    bands::merged_bands(&load_custom_bands(&state.db))
+}
+
+#[tauri::command]
+fn list_custom_bands(state: State<AppState>) -> Vec<CustomBand> {
+    load_custom_bands(&state.db)
+}
+
+/// Add (or rename, if the dial already exists) a custom band. `freq` is the raw
+/// operator input, validated here so a clear error surfaces in the UI. Returns
+/// the merged band list on success.
+#[tauri::command]
+fn add_custom_band(
+    state: State<AppState>,
+    freq: String,
+    name: String,
+) -> Result<Vec<BandEntry>, String> {
+    let dial_hz = bands::parse_dial_hz(&freq)?;
+    let mut custom = load_custom_bands(&state.db);
+    bands::upsert_custom_band(&mut custom, &name, dial_hz);
+    state
+        .db
+        .set_config(bands::CUSTOM_BANDS_KEY, &bands::serialize_custom_bands(&custom))
+        .map_err(|e| e.to_string())?;
+    Ok(bands::merged_bands(&custom))
+}
+
+#[tauri::command]
+fn delete_custom_band(state: State<AppState>, dial_hz: u64) -> Result<Vec<BandEntry>, String> {
+    let mut custom = load_custom_bands(&state.db);
+    bands::remove_custom_band(&mut custom, dial_hz);
+    state
+        .db
+        .set_config(bands::CUSTOM_BANDS_KEY, &bands::serialize_custom_bands(&custom))
+        .map_err(|e| e.to_string())?;
+    Ok(bands::merged_bands(&custom))
 }
 
 // --- engine control ---------------------------------------------------------
@@ -242,6 +272,9 @@ fn main() {
             list_serial_ports,
             list_hamlib_rigs,
             list_bands,
+            list_custom_bands,
+            add_custom_band,
+            delete_custom_band,
             start_decode,
             stop_decode,
             set_station,
