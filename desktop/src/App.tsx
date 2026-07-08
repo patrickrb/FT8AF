@@ -19,6 +19,7 @@ import {
   type WaterfallConfig,
   type WfWindow,
 } from "./ipc";
+import { applySelection, configToSelection, rigName, rigOptions } from "./rig";
 
 type Tab = "decode" | "log" | "settings";
 type Filter = "all" | "cq" | "tome";
@@ -751,12 +752,9 @@ function SettingsScreen(props: {
     avg: 6,
   });
   const [rigCfg, setRigCfg] = useState<RigConfig>({
-    backend: "hamlib",
-    model: "none",
+    backend: "none",
     port: "",
     baud: 38400,
-    ptt: "cat",
-    civ_address: 0x94,
     flrig_host: "127.0.0.1",
     flrig_port: 12345,
     hamlib_model: 1,
@@ -777,7 +775,12 @@ function SettingsScreen(props: {
     api.getConfig("rig_config").then((v) => {
       if (v) {
         try {
-          setRigCfg(JSON.parse(v));
+          // Normalize the persisted config through the selector mapping so a
+          // legacy/removed backend (e.g. "serial") falls back to "none" while
+          // keeping the connection fields — otherwise it would reach the Rust
+          // side (serde error) and render "Connecting undefined".
+          const parsed = JSON.parse(v) as RigConfig;
+          setRigCfg(applySelection(parsed, configToSelection(parsed)));
         } catch {
           /* ignore malformed saved config */
         }
@@ -810,15 +813,12 @@ function SettingsScreen(props: {
 
   const refreshPorts = () => api.listSerialPorts().then(setPorts);
 
-  // Re-enumerate serial ports whenever a port-list backend becomes visible.
-  // Ports were previously read only once at mount, so a rig attached after
-  // launch — or Hamlib selected first, before its serial port was chosen —
-  // showed an empty/stale list. Switching to Hamlib (serial) or Direct serial
-  // now re-scans, so /dev/ttyACM0 (a QMX/QDX) appears without the
-  // select-Direct-then-Hamlib workaround.
-  const showsPortList =
-    rigCfg.backend === "serial" ||
-    (rigCfg.backend === "hamlib" && !rigCfg.hamlib_network);
+  // Re-enumerate serial ports whenever the serial-connection fields become
+  // visible. Ports were previously read only once at mount, so a rig attached
+  // after launch — or a Hamlib radio picked before its serial port was chosen —
+  // showed an empty/stale list. Selecting a serial-connected Hamlib radio now
+  // re-scans, so /dev/ttyACM0 (a QMX/QDX) appears without a workaround.
+  const showsPortList = rigCfg.backend === "hamlib" && !rigCfg.hamlib_network;
   useEffect(() => {
     if (showsPortList) refreshPorts();
   }, [showsPortList]);
@@ -956,46 +956,29 @@ function SettingsScreen(props: {
             </span>
           </div>
           <div className="field">
-            <label>Backend</label>
+            <label>Rig {hamlibRigs.length > 0 ? `(${hamlibRigs.length} radios)` : ""}</label>
             <select
-              value={rigCfg.backend}
-              onChange={(e) => setRigCfg({ ...rigCfg, backend: e.target.value as RigConfig["backend"] })}
+              value={configToSelection(rigCfg)}
+              onChange={(e) => setRigCfg(applySelection(rigCfg, e.target.value))}
             >
-              <option value="hamlib">Hamlib (embedded library)</option>
-              <option value="flrig">FLrig (XML-RPC)</option>
-              <option value="serial">Direct serial CAT</option>
-              <option value="none">None (manual tuning)</option>
+              {rigOptions(hamlibRigs).map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </select>
+            {hamlibRigs.length === 0 && (
+              <span className="muted" style={{ display: "block", marginTop: 4 }}>
+                Only None and FLrig are listed — the Hamlib library didn't load, so
+                no radios could be enumerated. Install Hamlib and put{" "}
+                <code>hamlib-4.dll</code> / <code>libhamlib</code> next to the app or
+                on PATH, then reopen.
+              </span>
+            )}
           </div>
 
           {rigCfg.backend === "hamlib" && (
             <>
-              <div className="field">
-                <label>Radio {hamlibRigs.length > 0 ? `(${hamlibRigs.length} supported)` : ""}</label>
-                {hamlibRigs.length > 0 ? (
-                  <select
-                    value={rigCfg.hamlib_model}
-                    onChange={(e) =>
-                      setRigCfg({ ...rigCfg, hamlib_model: parseInt(e.target.value, 10) })
-                    }
-                  >
-                    {hamlibRigs.map((r) => (
-                      <option key={r.model} value={r.model}>
-                        {r.name} — #{r.model}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    value={rigCfg.hamlib_model}
-                    onChange={(e) =>
-                      setRigCfg({ ...rigCfg, hamlib_model: parseInt(e.target.value, 10) || 1 })
-                    }
-                    placeholder="model # (rigctl -l)"
-                    style={{ width: 120 }}
-                  />
-                )}
-              </div>
               <div className="field">
                 <label>Connection</label>
                 <select
@@ -1054,12 +1037,6 @@ function SettingsScreen(props: {
                   </div>
                 </div>
               )}
-              {hamlibRigs.length === 0 && (
-                <span className="muted">
-                  Hamlib library not found — install Hamlib and put <code>hamlib-4.dll</code> next
-                  to the app or on PATH, then reopen. (1 = Dummy, no hardware.)
-                </span>
-              )}
             </>
           )}
 
@@ -1086,91 +1063,17 @@ function SettingsScreen(props: {
             </div>
           )}
 
-          {rigCfg.backend === "serial" && (
-            <>
-              <div className="field">
-                <label>Model</label>
-                <select
-                  value={rigCfg.model}
-                  onChange={(e) => setRigCfg({ ...rigCfg, model: e.target.value as RigConfig["model"] })}
-                >
-                  <option value="none">— select —</option>
-                  <option value="yaesu">Yaesu (CAT)</option>
-                  <option value="kenwood">Kenwood</option>
-                  <option value="icom">Icom (CI-V)</option>
-                </select>
-              </div>
-              <div className="field">
-                <label>Serial port</label>
-                <div className="row">
-                  <select value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
-                    <option value="">— select —</option>
-                    {ports.map((p) => (
-                      <option key={p.name} value={p.name}>
-                        {p.name} ({p.kind})
-                      </option>
-                    ))}
-                  </select>
-                  <button type="button" title="Re-scan serial ports" onClick={refreshPorts}>
-                    ↻
-                  </button>
-                </div>
-              </div>
-              <div className="row">
-                <div className="field">
-                  <label>Baud</label>
-                  <select
-                    value={rigCfg.baud}
-                    onChange={(e) => setRigCfg({ ...rigCfg, baud: parseInt(e.target.value, 10) })}
-                  >
-                    {[4800, 9600, 19200, 38400, 57600, 115200].map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label>PTT</label>
-                  <select
-                    value={rigCfg.ptt}
-                    onChange={(e) => setRigCfg({ ...rigCfg, ptt: e.target.value as RigConfig["ptt"] })}
-                  >
-                    <option value="cat">CAT</option>
-                    <option value="rts">RTS</option>
-                    <option value="dtr">DTR</option>
-                    <option value="none">None / VOX</option>
-                  </select>
-                </div>
-                {rigCfg.model === "icom" && (
-                  <div className="field">
-                    <label>CI-V addr (hex)</label>
-                    <input
-                      value={rigCfg.civ_address.toString(16)}
-                      onChange={(e) =>
-                        setRigCfg({ ...rigCfg, civ_address: parseInt(e.target.value, 16) || 0x94 })
-                      }
-                      style={{ width: 60 }}
-                    />
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
           <button
             className="primary"
             onClick={() => {
               api.selectRig(rigCfg);
-              const where =
+              const detail =
                 rigCfg.backend === "flrig"
-                  ? `${rigCfg.flrig_host}:${rigCfg.flrig_port}`
-                  : rigCfg.backend === "serial"
-                  ? `${rigCfg.model} on ${rigCfg.port || "(no port)"}`
+                  ? ` (${rigCfg.flrig_host}:${rigCfg.flrig_port})`
                   : rigCfg.backend === "hamlib"
-                  ? `model ${rigCfg.hamlib_model} on ${
-                      rigCfg.hamlib_network ? rigCfg.hamlib_address : rigCfg.port || "(no port)"
-                    }`
-                  : "manual";
-              onStatus(`Connecting rig (${rigCfg.backend}): ${where}`);
+                  ? ` (${rigCfg.hamlib_network ? rigCfg.hamlib_address : rigCfg.port || "no port"})`
+                  : "";
+              onStatus(`Connecting ${rigName(rigCfg, hamlibRigs)}${detail}`);
             }}
           >
             Connect rig

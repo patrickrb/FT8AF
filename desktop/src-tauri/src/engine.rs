@@ -888,8 +888,9 @@ impl Engine {
         match RigConnection::connect(&cfg) {
             Ok(mut rig) => {
                 let _ = rig.set_frequency(self.dial_hz);
+                let name = rig.name();
                 self.rig = Some(rig);
-                self.emit(EngineEvent::Info(format!("rig connected: {:?}", cfg.model)));
+                self.emit(EngineEvent::Info(format!("rig connected: {name}")));
             }
             Err(e) => {
                 self.rig = None;
