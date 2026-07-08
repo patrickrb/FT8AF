@@ -588,7 +588,8 @@
     <string name="settings_tx_delay">TX Delay</string>
     <string name="settings_tx_delay_desc">Delay before transmit to allow prior-cycle decode</string>
     <string name="settings_late_start_tolerance">Late-start Tolerance</string>
-    <string name="settings_late_start_tolerance_desc">Allow starting TX up to N ms into a cycle; leading audio is clipped so TX ends on the cycle boundary</string>
+    <string name="settings_late_start_tolerance_desc">Extra leading audio (ms) a late manual TX may clip so it still goes out this cycle instead of waiting for the next slot</string>
+    <string name="late_start_deferred">Too late this cycle (need %d ms clip) — waiting for next slot</string>
 
     <!-- ===== Settings: about ===== -->
     <string name="settings_faq_support">FAQ &amp; Support</string>

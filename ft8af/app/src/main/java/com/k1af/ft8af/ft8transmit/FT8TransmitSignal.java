@@ -258,6 +258,65 @@ public class FT8TransmitSignal {
         utcTimer.start();
     }
 
+    /** Upper clamp for {@link GeneralVariables#lateStartTolerance} (matches the settings UI range). */
+    static final int MAX_LATE_START_TOLERANCE_MS = 4000;
+
+    /**
+     * The pure decision for a manual {@link #transmitNow()}: given how far into the
+     * current slot the operator tapped, decide whether we still key up <em>this</em>
+     * cycle and, if so, how much leading audio must be clipped so the waveform still
+     * ends on the slot boundary.
+     *
+     * <p>Extracted from {@code transmitNow()} so the tolerance-boundary logic is
+     * unit-testable without JNI or a running timer.
+     */
+    static final class ManualTxGate {
+        /** Whether to key up this cycle (false == defer to the next matching slot). */
+        final boolean transmit;
+        /** Leading audio to clip, in ms, so TX still ends on the boundary (0 within slack). */
+        final int clipMs;
+
+        ManualTxGate(boolean transmit, int clipMs) {
+            this.transmit = transmit;
+            this.clipMs = clipMs;
+        }
+    }
+
+    /**
+     * Decide whether a manual TX tapped {@code msInCycle} into the slot goes out now.
+     *
+     * <p>The waveform occupies {@code slotMillis - audioSlackMillis} of the slot, so any
+     * start within the slack ({@code msInCycle <= audioSlackMillis}) fits with zero
+     * clipping. Past the slack we clip the excess leading audio — the identical
+     * {@code msLate} math the transmit runnable applies before playback. The tolerance
+     * bounds how much of that leading audio we are willing to clip: TX goes out iff the
+     * clip we would take is within tolerance.
+     *
+     * <p>This mirrors the clip path exactly, so the gate is never more restrictive than
+     * the transmit it guards. The old raw {@code msInCycle < tolerance} check rejected
+     * even before the free slack was used up (default tolerance 2000 ms &lt; FT8's 2360 ms
+     * slack), which is why the setting appeared to do nothing — see issue #467.
+     *
+     * @param msInCycle       ms elapsed since the current slot boundary (>= 0)
+     * @param audioSlackMillis {@link ModeProfile#audioSlackMillis} — free slack before clipping
+     * @param slotMillis       {@link ModeProfile#slotMillis} — cycle length
+     * @param lateStartTolerance configured tolerance (clamped to 0..{@link #MAX_LATE_START_TOLERANCE_MS})
+     */
+    static ManualTxGate decideManualTx(long msInCycle, int audioSlackMillis,
+                                       int slotMillis, int lateStartTolerance) {
+        int tolerance = lateStartTolerance;
+        if (tolerance < 0) tolerance = 0;
+        if (tolerance > MAX_LATE_START_TOLERANCE_MS) tolerance = MAX_LATE_START_TOLERANCE_MS;
+
+        // How much leading audio we'd have to clip to still end on the boundary.
+        long clip = msInCycle - audioSlackMillis;
+        if (clip < 0) clip = 0;
+
+        boolean transmit = clip <= tolerance;
+        if (clip > slotMillis - 1) clip = slotMillis - 1;
+        return new ManualTxGate(transmit, (int) clip);
+    }
+
     /**
      * Transmit immediately.
      */
@@ -274,13 +333,19 @@ public class FT8TransmitSignal {
         resetTargetReport();
 
         if (UtcTimer.getNowSequential() == sequential) {
-            long msInCycle = UtcTimer.getSystemTime() % GeneralVariables.currentMode().slotMillis;
-            int tolerance = GeneralVariables.lateStartTolerance;
-            if (tolerance < 0) tolerance = 0;
-            if (tolerance > 4000) tolerance = 4000;
-            if (msInCycle < tolerance) {
+            ModeProfile mode = GeneralVariables.currentMode();
+            long msInCycle = UtcTimer.getSystemTime() % mode.slotMillis;
+            ManualTxGate gate = decideManualTx(msInCycle, mode.audioSlackMillis,
+                    mode.slotMillis, GeneralVariables.lateStartTolerance);
+            if (gate.transmit) {
                 setTransmitting(false);
                 doTransmit();
+            } else {
+                // Too late for this cycle even with the configured tolerance. Give explicit
+                // feedback instead of silently falling through to wait for the next slot.
+                ToastMessage.show(String.format(
+                        GeneralVariables.getStringFromResource(R.string.late_start_deferred),
+                        gate.clipMs));
             }
         }
     }
