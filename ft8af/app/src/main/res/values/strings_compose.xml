@@ -570,6 +570,8 @@
     <string name="settings_save_swl_qsos_desc">Log QSOs detected between other stations</string>
     <string name="settings_pskreporter">PSKReporter</string>
     <string name="settings_pskreporter_desc">Upload decoded spots to pskreporter.info</string>
+    <string name="settings_adif_export">ADIF log file</string>
+    <string name="settings_adif_export_desc">Append each logged QSO to ft8af_log.adi for backup and desktop-logger (LOG4OM) monitor import</string>
     <string name="settings_qrz_com">QRZ.com</string>
     <string name="settings_qrz_com_desc">Auto-upload QSOs to QRZ Logbook (requires a Logbook API key)</string>
     <string name="settings_qrz_logbook">QRZ Logbook</string>

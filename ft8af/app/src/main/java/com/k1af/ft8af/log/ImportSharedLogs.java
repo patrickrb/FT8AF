@@ -155,7 +155,11 @@ public class ImportSharedLogs {
                     position++;
                     QSLRecord qslRecord = new QSLRecord(record);
 
-                    mainViewModel.databaseOpr.doInsertQSLData(qslRecord, null);
+                    // Bulk import: don't append to ft8af_log.adi. These records typically
+                    // originated elsewhere and re-appending would double-count them if the
+                    // same rows are later re-exported. (Real-time mirroring is for on-air /
+                    // web-logged QSOs only.)
+                    mainViewModel.databaseOpr.doInsertQSLData(qslRecord, null, false);
 
                     if (onShareLogEvents != null) {
                         if (!onShareLogEvents.onShareProgress(count, position

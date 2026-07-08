@@ -1446,6 +1446,13 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
     @SuppressLint("Range")
     public boolean doInsertQSLData(QSLRecord record,AfterInsertQSLData afterInsertQSLData) {
+        // On-air and web-logged QSOs mirror to the running ft8af_log.adi; bulk imports use the
+        // 3-arg overload with appendToAdifFile=false to avoid double-counting on re-export.
+        return doInsertQSLData(record, afterInsertQSLData, true);
+    }
+
+    public boolean doInsertQSLData(QSLRecord record, AfterInsertQSLData afterInsertQSLData,
+                                   boolean appendToAdifFile) {
         if (record.getToCallsign() == null) {
             if (afterInsertQSLData!=null){
                 afterInsertQSLData.doAfterInsert(true,true);//Invalid QSL
@@ -1537,6 +1544,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 db.execSQL("UPDATE pota_activation SET qso_count = qso_count + 1 "
                         + "WHERE park_ref = ? AND ended_at IS NULL"
                         , new Object[]{record.getMySigInfo()});
+            }
+            // Mirror this genuinely-new QSO to the running ADIF file. Wrapped so a full disk
+            // or missing SD can never break QSO logging (AdifLogFile.logQso itself never throws).
+            if (appendToAdifFile) {
+                com.k1af.ft8af.log.AdifLogFile.logQso(context, record);
             }
             if (afterInsertQSLData!=null){
                 afterInsertQSLData.doAfterInsert(false,true);//New QSL
@@ -2896,6 +2908,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("enablePskReporter")) {
                     GeneralVariables.enablePskReporter = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("enableAdifExport")) {//Running ft8af_log.adi export
+                    GeneralVariables.enableAdifExport = result.equals("1");
                 }
                 if (name.equalsIgnoreCase("qrzXmlUsername")) {
                     GeneralVariables.qrzXmlUsername = result;

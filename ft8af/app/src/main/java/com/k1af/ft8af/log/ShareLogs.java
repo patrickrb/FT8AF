@@ -121,7 +121,7 @@ public class ShareLogs {
         int position = 0;
         try {
             fileOutputStream = new FileOutputStream(adiFile, true);
-            fileOutputStream.write("FT8AF ADIF Export<eoh>\n".getBytes());
+            fileOutputStream.write(AdifRecord.HEADER.getBytes());
             cursor.moveToPosition(-1);
             while (cursor.moveToNext()) {
                 position++;
@@ -132,124 +132,9 @@ public class ShareLogs {
                        break;
                    };
                 }
-                String call = cursor.getString(cursor.getColumnIndex("call"));
-                fileOutputStream.write(AdifFormat.callField(call).getBytes());
-                if (!isSWL) {
-                    if (cursor.getInt(cursor.getColumnIndex("isLotW_QSL")) == 1) {
-                        fileOutputStream.write("<QSL_RCVD:1>Y ".getBytes());
-                    } else {
-                        fileOutputStream.write("<QSL_RCVD:1>N ".getBytes());
-                    }
-                    if (cursor.getInt(cursor.getColumnIndex("isQSL")) == 1) {
-                        fileOutputStream.write("<QSL_MANUAL:1>Y ".getBytes());
-                    } else {
-                        fileOutputStream.write("<QSL_MANUAL:1>N ".getBytes());
-                    }
-                } else {
-                    fileOutputStream.write("<swl:1>Y ".getBytes());
-                }
-
-                if (cursor.getString(cursor.getColumnIndex("gridsquare")) != null) {
-                    fileOutputStream.write(String.format("<gridsquare:%d>%s "
-                            , cursor.getString(cursor.getColumnIndex("gridsquare")).length()
-                            , cursor.getString(cursor.getColumnIndex("gridsquare"))).getBytes());
-                }
-
-                String mode = cursor.getString(cursor.getColumnIndex("mode"));
-                if (mode != null) {
-                    // FT4/FT2 are ADIF submodes of MFSK, not standalone modes — a bare
-                    // <mode>FT2 is rejected as invalid by pota.app and other ADIF consumers.
-                    String submode = AdifFormat.mfskSubmode(mode);
-                    if (submode != null) {
-                        fileOutputStream.write(String.format("<mode:4>MFSK <submode:%d>%s "
-                                , submode.length(), submode).getBytes());
-                    } else {
-                        fileOutputStream.write(String.format("<mode:%d>%s "
-                                , mode.length(), mode).getBytes());
-                    }
-                }
-
-                if (cursor.getString(cursor.getColumnIndex("rst_sent")) != null) {
-                    fileOutputStream.write(String.format("<rst_sent:%d>%s "
-                            , cursor.getString(cursor.getColumnIndex("rst_sent")).length()
-                            , cursor.getString(cursor.getColumnIndex("rst_sent"))).getBytes());
-                }
-
-                if (cursor.getString(cursor.getColumnIndex("rst_rcvd")) != null) {
-                    fileOutputStream.write(String.format("<rst_rcvd:%d>%s "
-                            , cursor.getString(cursor.getColumnIndex("rst_rcvd")).length()
-                            , cursor.getString(cursor.getColumnIndex("rst_rcvd"))).getBytes());
-                }
-
-                if (cursor.getString(cursor.getColumnIndex("qso_date")) != null) {
-                    fileOutputStream.write(String.format("<qso_date:%d>%s "
-                            , cursor.getString(cursor.getColumnIndex("qso_date")).length()
-                            , cursor.getString(cursor.getColumnIndex("qso_date"))).getBytes());
-                }
-
-                if (cursor.getString(cursor.getColumnIndex("time_on")) != null) {
-                    fileOutputStream.write(String.format("<time_on:%d>%s "
-                            , cursor.getString(cursor.getColumnIndex("time_on")).length()
-                            , cursor.getString(cursor.getColumnIndex("time_on"))).getBytes());
-                }
-
-                if (cursor.getString(cursor.getColumnIndex("qso_date_off")) != null) {
-                    fileOutputStream.write( String.format("<qso_date_off:%d>%s "
-                            , cursor.getString(cursor.getColumnIndex("qso_date_off")).length()
-                            , cursor.getString(cursor.getColumnIndex("qso_date_off"))).getBytes());
-                }
-
-                if (cursor.getString(cursor.getColumnIndex("time_off")) != null) {
-                    fileOutputStream.write(String.format("<time_off:%d>%s "
-                            , cursor.getString(cursor.getColumnIndex("time_off")).length()
-                            , cursor.getString(cursor.getColumnIndex("time_off"))).getBytes());
-                }
-
-                if (cursor.getString(cursor.getColumnIndex("band")) != null) {
-                    fileOutputStream.write(String.format("<band:%d>%s "
-                            , cursor.getString(cursor.getColumnIndex("band")).length()
-                            , cursor.getString(cursor.getColumnIndex("band"))).getBytes());
-                }
-
-                if (cursor.getString(cursor.getColumnIndex("freq")) != null) {
-                    fileOutputStream.write(String.format("<freq:%d>%s "
-                            , cursor.getString(cursor.getColumnIndex("freq")).length()
-                            , cursor.getString(cursor.getColumnIndex("freq"))).getBytes());
-                }
-
-                if (cursor.getString(cursor.getColumnIndex("station_callsign")) != null) {
-                    fileOutputStream.write(String.format("<station_callsign:%d>%s "
-                            , cursor.getString(cursor.getColumnIndex("station_callsign")).length()
-                            , cursor.getString(cursor.getColumnIndex("station_callsign"))).getBytes());
-                }
-
-                if (cursor.getString(cursor.getColumnIndex("my_gridsquare")) != null) {
-                    fileOutputStream.write(String.format("<my_gridsquare:%d>%s "
-                            , cursor.getString(cursor.getColumnIndex("my_gridsquare")).length()
-                            , cursor.getString(cursor.getColumnIndex("my_gridsquare"))).getBytes());
-                }
-
-                if (cursor.getColumnIndex("operator") != -1) {
-                    if (cursor.getString(cursor.getColumnIndex("operator")) != null) {
-                        fileOutputStream.write(String.format("<operator:%d>%s "
-                                , cursor.getString(cursor.getColumnIndex("operator")).length()
-                                , cursor.getString(cursor.getColumnIndex("operator"))).getBytes());
-                    }
-                }
-                // POTA fields. Only emit when populated so non-POTA QSOs stay
-                // byte-identical to the prior export format.
-                writePotaField(fileOutputStream, cursor, "my_sig", "MY_SIG");
-                writePotaField(fileOutputStream, cursor, "my_sig_info", "MY_SIG_INFO");
-                writePotaField(fileOutputStream, cursor, "sig", "SIG");
-                writePotaField(fileOutputStream, cursor, "sig_info", "SIG_INFO");
-                String comment = cursor.getString(cursor.getColumnIndex("comment"));
-                if (comment == null) comment = "";
-
-                //<comment:15>Distance: 99 km <eor>
-                //When writing to the database, be sure to append " km"
-                fileOutputStream.write(String.format("<comment:%d>%s <eor>\n"
-                        , comment.length()
-                        , comment).getBytes());
+                // Build the record through the shared AdifRecord emitter so the bulk export and
+                // the incremental ft8af_log.adi append (AdifLogFile) can never drift.
+                fileOutputStream.write(recordFromCursor(cursor, isSWL).toBytes());
             }
 
 
@@ -408,21 +293,52 @@ public class ShareLogs {
     }
 
     /**
-     * Emit a single ADIF field from a cursor column. Silently skips when the
-     * column doesn't exist (pre-migration DB) or the value is null/empty so
-     * POTA fields stay invisible for ordinary non-POTA contacts.
+     * Build the {@link AdifRecord} for the cursor's current row. Shared with the incremental
+     * {@code ft8af_log.adi} append so bulk export and real-time export emit identical records.
      */
-    private static void writePotaField(
-            FileOutputStream out, android.database.Cursor cursor,
-            String column, String adifName) throws IOException {
+    @SuppressLint("Range")
+    static AdifRecord recordFromCursor(android.database.Cursor cursor, boolean isSWL) {
+        AdifRecord record = new AdifRecord()
+                .call(col(cursor, "call"))
+                .swl(isSWL)
+                .gridsquare(col(cursor, "gridsquare"))
+                .mode(col(cursor, "mode"))
+                .rstSent(col(cursor, "rst_sent"))
+                .rstRcvd(col(cursor, "rst_rcvd"))
+                .qsoDate(col(cursor, "qso_date"))
+                .timeOn(col(cursor, "time_on"))
+                .qsoDateOff(col(cursor, "qso_date_off"))
+                .timeOff(col(cursor, "time_off"))
+                .band(col(cursor, "band"))
+                .freq(col(cursor, "freq"))
+                .stationCallsign(col(cursor, "station_callsign"))
+                .myGridsquare(col(cursor, "my_gridsquare"))
+                .operator(col(cursor, "operator"))
+                // POTA fields. Only emitted when populated so non-POTA QSOs stay clean.
+                .mySig(col(cursor, "my_sig"))
+                .mySigInfo(col(cursor, "my_sig_info"))
+                .sig(col(cursor, "sig"))
+                .sigInfo(col(cursor, "sig_info"))
+                // comment is always emitted (null renders as an empty field), as before.
+                .comment(col(cursor, "comment"));
+        if (!isSWL) {
+            record.lotwQsl(colInt(cursor, "isLotW_QSL") == 1)
+                    .manualQsl(colInt(cursor, "isQSL") == 1);
+        }
+        return record;
+    }
+
+    /** Cursor string value, or null when the column is absent (pre-migration DB) or null. */
+    private static String col(android.database.Cursor cursor, String column) {
         int idx = cursor.getColumnIndex(column);
-        if (idx < 0) return;
-        String value = cursor.getString(idx);
-        if (value == null || value.isEmpty()) return;
-        // ADIF length is in bytes; value.length() (UTF-16 code units) would mis-tag any
-        // non-ASCII content and misalign the following field.
-        byte[] valueBytes = value.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        out.write(String.format("<%s:%d>%s ", adifName, valueBytes.length, value)
-                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        if (idx < 0) return null;
+        return cursor.getString(idx);
+    }
+
+    /** Cursor int value, or 0 when the column is absent. */
+    private static int colInt(android.database.Cursor cursor, String column) {
+        int idx = cursor.getColumnIndex(column);
+        if (idx < 0) return 0;
+        return cursor.getInt(idx);
     }
 }
