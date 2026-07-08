@@ -114,6 +114,20 @@ export function formFromQso(r?: QsoRecord | null): QsoEditForm {
   };
 }
 
+/** Whether a search string or non-"all" confirmation filter is currently active. */
+export function isLogFiltered(search: string, filter: ConfirmFilter): boolean {
+  return (search ?? "").trim() !== "" || filter !== "all";
+}
+
+/**
+ * Header count label for the Logbook bar. With no filter active it's just the
+ * total log count; with a search/filter active it shows "shown of total" so the
+ * number can't disagree with the rows actually rendered in the table.
+ */
+export function qsoCountLabel(total: number, shown: number, filtered: boolean): string {
+  return filtered ? `${shown} of ${total}` : `${total}`;
+}
+
 /**
  * Client-side fallback filter (substring call match + confirmation), matching
  * the Rust `qso_matches` predicate. Used when filtering an already-loaded page

@@ -84,8 +84,11 @@ pub fn qso_matches(rec: &QsoRecord, callsign_query: &str, filter: ConfirmedFilte
 }
 
 /// Pure predicate: is an ADIF `YYYYMMDD` date within an optional inclusive
-/// `[start, end]` range? Empty/None bounds are open. Non-8-char dates that fall
-/// outside a bounded range are excluded; with no bounds everything passes.
+/// `[start, end]` range? Empty/None bounds are open; with no bounds everything
+/// passes. Under a bound, a value that isn't a real 8-digit `YYYYMMDD` date is
+/// excluded — lexicographic comparison is only meaningful for that fixed width,
+/// so e.g. `"BAD"` must not sneak past a start-only bound just because it sorts
+/// after the digits.
 pub fn date_in_range(qso_date: &str, start: Option<&str>, end: Option<&str>) -> bool {
     let start = start.map(str::trim).filter(|s| !s.is_empty());
     let end = end.map(str::trim).filter(|s| !s.is_empty());
@@ -93,6 +96,9 @@ pub fn date_in_range(qso_date: &str, start: Option<&str>, end: Option<&str>) -> 
         return true;
     }
     let d = qso_date.trim();
+    if !(d.len() == 8 && d.bytes().all(|b| b.is_ascii_digit())) {
+        return false;
+    }
     if let Some(s) = start {
         if d < s {
             return false;
@@ -261,8 +267,14 @@ impl Db {
     }
 
     /// Server-side search/filter mirroring the Android Logbook tab: substring
-    /// match on callsign plus the QSL confirmation filter, applied over the
-    /// most-recent-first log. Uses the pure [`qso_matches`] predicate.
+    /// match on callsign plus the QSL confirmation filter, most-recent-first.
+    ///
+    /// Filters and paginates at the DB layer (real `LIMIT`/`OFFSET`) instead of
+    /// loading the whole log and filtering in memory, so it stays fast as the log
+    /// grows. The callsign match is a case-insensitive (ASCII) `LIKE` substring
+    /// with the query's `LIKE` wildcards escaped so it behaves as a literal
+    /// substring — i.e. the same result set as the pure [`qso_matches`] predicate
+    /// (guarded by `search_qsos_matches_predicate` in the tests).
     pub fn search_qsos(
         &self,
         callsign_query: &str,
@@ -270,12 +282,32 @@ impl Db {
         limit: i64,
         offset: i64,
     ) -> Vec<QsoRecord> {
-        self.list_qsos(i64::MAX, 0)
-            .into_iter()
-            .filter(|r| qso_matches(r, callsign_query, filter))
-            .skip(offset.max(0) as usize)
-            .take(limit.max(0) as usize)
-            .collect()
+        let q = callsign_query.trim();
+        let like = format!(
+            "%{}%",
+            q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+        );
+        let confirm_clause = match filter {
+            ConfirmedFilter::All => "",
+            ConfirmedFilter::Confirmed => " AND qsl_rcvd = 1",
+            ConfirmedFilter::Unconfirmed => " AND qsl_rcvd = 0",
+        };
+        let sql = format!(
+            "SELECT id, call, gridsquare, mode, rst_sent, rst_rcvd, qso_date, time_on,
+                    qso_date_off, time_off, band, freq, station_callsign,
+                    my_gridsquare, comment, qsl_rcvd
+             FROM qso_log
+             WHERE call LIKE ?1 ESCAPE '\\'{confirm_clause}
+             ORDER BY id DESC LIMIT ?2 OFFSET ?3"
+        );
+        let conn = self.conn.lock();
+        let mut stmt = match conn.prepare(&sql) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        stmt.query_map(params![like, limit.max(0), offset.max(0)], row_to_qso)
+            .map(|it| it.filter_map(Result::ok).collect())
+            .unwrap_or_default()
     }
 
     /// Flag a QSO as synced to an online service so re-runs are idempotent.
@@ -503,6 +535,51 @@ mod tests {
     }
 
     #[test]
+    fn search_qsos_matches_predicate_and_paginates() {
+        let db = Db::open_in_memory().unwrap();
+        let recs = [
+            rec("K1ABC", "20260604", "120000", true),
+            rec("K1XYZ", "20260604", "130000", false),
+            rec("W1AW", "20260604", "140000", true),
+            rec("K1ABC/P", "20260604", "150000", false),
+        ];
+        for r in &recs {
+            db.insert_qso(r).unwrap();
+        }
+
+        // Parity: the SQL-level search returns exactly the rows the pure
+        // qso_matches predicate accepts, across query/filter combinations.
+        for (q, f) in [
+            ("", ConfirmedFilter::All),
+            ("k1", ConfirmedFilter::All),
+            ("k1", ConfirmedFilter::Confirmed),
+            ("w", ConfirmedFilter::Unconfirmed),
+            ("zzz", ConfirmedFilter::All),
+        ] {
+            let got: std::collections::BTreeSet<String> = db
+                .search_qsos(q, f, i64::MAX, 0)
+                .into_iter()
+                .map(|r| r.call)
+                .collect();
+            let want: std::collections::BTreeSet<String> = db
+                .list_qsos(i64::MAX, 0)
+                .into_iter()
+                .filter(|r| qso_matches(r, q, f))
+                .map(|r| r.call)
+                .collect();
+            assert_eq!(got, want, "query={q:?} filter={f:?}");
+        }
+
+        // LIMIT/OFFSET paginate at the DB layer, newest-first, with no overlap.
+        let page1 = db.search_qsos("", ConfirmedFilter::All, 2, 0);
+        let page2 = db.search_qsos("", ConfirmedFilter::All, 2, 2);
+        assert_eq!(page1.len(), 2);
+        assert_eq!(page2.len(), 2);
+        assert_eq!(page1[0].call, "K1ABC/P"); // last inserted -> highest id
+        assert!(page1.iter().all(|a| page2.iter().all(|b| a.call != b.call)));
+    }
+
+    #[test]
     fn qso_matches_predicate() {
         let confirmed = rec("K1ABC", "20260604", "120000", true);
         let unconfirmed = rec("W1AW", "20260604", "120000", false);
@@ -547,6 +624,14 @@ mod tests {
         assert!(!date_in_range("20260501", Some("20260601"), None));
         assert!(date_in_range("20260615", None, Some("20260615")));
         assert!(!date_in_range("20260616", None, Some("20260615")));
+
+        // Malformed dates must not sneak past a bound via lexicographic ordering.
+        assert!(!date_in_range("BAD", Some("20240101"), None));
+        assert!(!date_in_range("2026061", Some("20260101"), None)); // 7 digits
+        assert!(!date_in_range("2026-06-15", None, Some("20260630"))); // wrong shape
+        assert!(!date_in_range("", Some("20260101"), None));
+        // With no bounds the range is fully open, so even a malformed value passes.
+        assert!(date_in_range("BAD", None, None));
     }
 
     #[test]

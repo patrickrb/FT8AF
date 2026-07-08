@@ -6,6 +6,8 @@ import {
   dateInputToAdif,
   filterQsos,
   formFromQso,
+  isLogFiltered,
+  qsoCountLabel,
   type QsoEditForm,
 } from "./logbook";
 import type { QsoRecord } from "./ipc";
@@ -125,5 +127,21 @@ describe("filterQsos", () => {
 
   it("combines search and confirmation", () => {
     expect(filterQsos(rows, "k1", "confirmed").map((r) => r.id)).toEqual([1]);
+  });
+});
+
+describe("isLogFiltered / qsoCountLabel", () => {
+  it("detects an active search or non-all filter", () => {
+    expect(isLogFiltered("", "all")).toBe(false);
+    expect(isLogFiltered("   ", "all")).toBe(false);
+    expect(isLogFiltered("k1", "all")).toBe(true);
+    expect(isLogFiltered("", "confirmed")).toBe(true);
+    expect(isLogFiltered("", "unconfirmed")).toBe(true);
+  });
+
+  it("shows the plain total when unfiltered and 'shown of total' when filtered", () => {
+    expect(qsoCountLabel(42, 42, false)).toBe("42");
+    // Filtered: the label reflects the rows actually shown, not the full total.
+    expect(qsoCountLabel(42, 3, true)).toBe("3 of 42");
   });
 });

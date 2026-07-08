@@ -22,6 +22,8 @@ import {
   buildExportArgs,
   buildQsoRecord,
   formFromQso,
+  isLogFiltered,
+  qsoCountLabel,
   type ConfirmFilter,
   type QsoEditForm,
 } from "./logbook";
@@ -575,7 +577,8 @@ function LogScreen() {
   return (
     <>
       <div className="logbar">
-        <strong>{count}</strong> <span className="muted">QSOs</span>
+        <strong>{qsoCountLabel(count, rows.length, isLogFiltered(search, filter))}</strong>{" "}
+        <span className="muted">QSOs</span>
         <input
           className="search"
           placeholder="Search callsign…"
@@ -681,17 +684,25 @@ const EDIT_FIELDS: { key: keyof QsoEditForm; label: string }[] = [
 function EditQsoDialog(props: {
   record: QsoRecord | null;
   onCancel: () => void;
-  onSave: (r: QsoRecord) => void;
+  onSave: (r: QsoRecord) => void | Promise<void>;
 }) {
   const { record, onCancel, onSave } = props;
   const [form, setForm] = useState<QsoEditForm>(() => formFromQso(record));
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   function set<K extends keyof QsoEditForm>(key: K, value: QsoEditForm[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function save() {
-    onSave(buildQsoRecord(form, record?.id));
+  async function save() {
+    // onSave may be async (it calls the save_qso IPC); await it so a failed save
+    // surfaces here instead of becoming an unhandled promise rejection.
+    try {
+      setSaveError(null);
+      await onSave(buildQsoRecord(form, record?.id));
+    } catch (e) {
+      setSaveError(String(e));
+    }
   }
 
   return (
@@ -717,6 +728,7 @@ function EditQsoDialog(props: {
           />
           Confirmed (QSL received)
         </label>
+        {saveError && <div className="error" role="alert">Save failed: {saveError}</div>}
         <div className="actions">
           <button onClick={onCancel}>Cancel</button>
           <button className="primary" onClick={save}>Save</button>
