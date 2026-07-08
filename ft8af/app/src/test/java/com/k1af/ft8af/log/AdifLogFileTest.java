@@ -77,6 +77,25 @@ public class AdifLogFileTest {
     }
 
     @Test
+    public void preExistingEmptyFile_getsHeader() throws Exception {
+        // A file that exists but is 0 bytes (e.g. truncated, or re-created empty by append
+        // mode after a delete race) must still receive the header. appendRecord decides from
+        // the opened stream's channel size, so exists()==true with size 0 still emits it.
+        File f = new File(tmp.getRoot(), AdifLogFile.FILE_NAME);
+        //noinspection ResultOfMethodCallIgnored
+        f.createNewFile();
+        assertThat(f.exists()).isTrue();
+        assertThat(f.length()).isEqualTo(0);
+
+        AdifLogFile.appendRecord(f, record("W1AW"));
+
+        String text = read(f);
+        assertThat(text).startsWith(AdifRecord.HEADER);
+        assertThat(count(text, "<eoh>")).isEqualTo(1);
+        assertThat(count(text, "<eor>")).isEqualTo(1);
+    }
+
+    @Test
     public void fromQslRecord_formatsReportsAndStripsHashedCall() {
         QSLRecord r = new QSLRecord(0L, 15_000L, "K1ABC", "", "<DK4RH>", "",
                 5, -3, "FT8", 14_074_000L, 1500);

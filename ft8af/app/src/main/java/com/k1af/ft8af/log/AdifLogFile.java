@@ -60,8 +60,9 @@ public final class AdifLogFile {
             }
             appendRecord(new File(dir, FILE_NAME), fromQslRecord(record));
         } catch (Throwable t) {
-            // Never let ADIF mirroring break QSO logging.
-            Log.e(TAG, "logQso failed: " + t.getMessage());
+            // Never let ADIF mirroring break QSO logging. Log the full cause (throwable
+            // overload) so storage/IO issues are diagnosable in the field.
+            Log.e(TAG, "logQso failed", t);
         }
     }
 
@@ -102,10 +103,13 @@ public final class AdifLogFile {
      */
     public static void appendRecord(File file, AdifRecord record) throws IOException {
         synchronized (WRITE_LOCK) {
-            // File missing or empty (never written, or deleted out from under us) → (re)emit header.
-            boolean needHeader = !file.exists() || file.length() == 0;
             try (FileOutputStream out = new FileOutputStream(file, true)) {
-                if (needHeader) {
+                // Decide header emission from the size of the *opened* stream's file, not a
+                // pre-open File.length() check: the file could be deleted between that check
+                // and the open (append mode then silently re-creates an empty file), which
+                // would leave a headerless ADIF. The channel size reflects the real on-disk
+                // state we're about to append to (0 → new/empty/re-created → (re)emit header).
+                if (out.getChannel().size() == 0) {
                     out.write(AdifRecord.HEADER.getBytes(StandardCharsets.UTF_8));
                 }
                 out.write(record.toBytes());

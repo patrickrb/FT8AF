@@ -24,6 +24,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 
 public class ShareLogs {
@@ -121,7 +122,7 @@ public class ShareLogs {
         int position = 0;
         try {
             fileOutputStream = new FileOutputStream(adiFile, true);
-            fileOutputStream.write(AdifRecord.HEADER.getBytes());
+            fileOutputStream.write(AdifRecord.HEADER.getBytes(StandardCharsets.UTF_8));
             cursor.moveToPosition(-1);
             while (cursor.moveToNext()) {
                 position++;
