@@ -14,6 +14,7 @@ import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 import radio.ks3ckc.ft8af.ui.components.SettingsRow
+import radio.ks3ckc.ft8af.ui.decode.WorkedStationScope
 
 /**
  * Decode-list settings: highlight rules, callsign blocklist, display filters,
@@ -76,7 +77,8 @@ fun DecodeFilterSettings(
         stringResource(R.string.settings_worked_scope_from_list),
     )
     // FROM_LIST scope ordinal — the list editor row only appears for this scope.
-    val workedScopeFromList = 3
+    // Derived from the enum so it can't drift if the scope entries are reordered.
+    val workedScopeFromList = WorkedStationScope.FROM_LIST.ordinal
 
     var showBlockExactDialog by remember { mutableStateOf(false) }
     var showBlockPrefixDialog by remember { mutableStateOf(false) }

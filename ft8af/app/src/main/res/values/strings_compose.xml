@@ -530,7 +530,7 @@
     <string name="settings_worked_scope_desc">Which stations count as worked</string>
     <string name="settings_worked_scope_on_band">Worked on this band</string>
     <string name="settings_worked_scope_before">Worked before (any band)</string>
-    <string name="settings_worked_scope_today">Worked today</string>
+    <string name="settings_worked_scope_today">Worked today or yesterday</string>
     <string name="settings_worked_scope_from_list">In worked list</string>
     <string name="settings_worked_list_title">Worked List</string>
     <string name="settings_worked_list_desc">Callsigns to treat as worked (comma-separated)</string>

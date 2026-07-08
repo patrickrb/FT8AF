@@ -35,7 +35,7 @@ class WorkedStationPolicyTest {
         GeneralVariables.myCallsign = ""
         GeneralVariables.QSL_Callsign_list = arrayListOf()
         GeneralVariables.QSL_Callsign_list_other_band = arrayListOf()
-        GeneralVariables.QSL_Callsign_list_today = arrayListOf()
+        GeneralVariables.QSL_Callsign_list_today = hashSetOf()
         GeneralVariables.addWorkedStationList("")
     }
 
@@ -64,7 +64,7 @@ class WorkedStationPolicyTest {
     @Test
     fun todayScope_usesTodayList() {
         GeneralVariables.workedStationScope = 2 // TODAY
-        GeneralVariables.QSL_Callsign_list_today = arrayListOf("K4JKL")
+        GeneralVariables.QSL_Callsign_list_today = hashSetOf("K4JKL")
 
         assertThat(isWorkedStation(cq("K4JKL"))).isTrue()
         assertThat(isWorkedStation(cq("K1ABC"))).isFalse()

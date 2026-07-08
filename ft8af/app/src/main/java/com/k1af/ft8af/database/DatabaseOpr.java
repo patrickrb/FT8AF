@@ -2333,7 +2333,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             String yesterday = com.k1af.ft8af.timer.UtcTimer.getYYYYMMDD(nowUtc - 86400000L);
             querySQL = "select distinct [call] from QSLTable where qso_date>=?";
             cursor = db.rawQuery(querySQL, new String[]{yesterday});
-            ArrayList<String> today_callsigns = new ArrayList<>();
+            java.util.HashSet<String> today_callsigns = new java.util.HashSet<>();
             try {
                 while (cursor.moveToNext()) {
                     @SuppressLint("Range")

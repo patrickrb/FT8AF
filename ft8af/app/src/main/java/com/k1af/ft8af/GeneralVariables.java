@@ -496,7 +496,7 @@ public class GeneralVariables {
     public static MutableLiveData<Long> mutableGpsClockSync = new MutableLiveData<>();
     public static ArrayList<String> QSL_Callsign_list = new ArrayList<>();//Successfully QSL'd callsigns
     public static ArrayList<String> QSL_Callsign_list_other_band = new ArrayList<>();//Successfully QSL'd callsigns on other bands
-    public static ArrayList<String> QSL_Callsign_list_today = new ArrayList<>();//Callsigns worked today or yesterday (any band)
+    public static HashSet<String> QSL_Callsign_list_today = new HashSet<>();//Callsigns worked today or yesterday (any band); a set for O(1) membership checks
     public static HashSet<String> QSL_Grid_list = new HashSet<>();//Distinct worked 4-char Maidenhead grids (any band)
     public static HashSet<String> QSL_Pota_list = new HashSet<>();//Distinct hunted POTA park refs (UPPER), any band
 
@@ -773,7 +773,7 @@ public class GeneralVariables {
      */
     public static synchronized boolean checkWorkedListCallsign(String callsign) {
         if (callsign == null) return false;
-        return workedStationList.contains(callsign.toUpperCase());
+        return workedStationList.contains(callsign.toUpperCase(java.util.Locale.ROOT));
     }
 
     /**
