@@ -114,15 +114,12 @@ public class FreqDialog extends Dialog {
                 .setPositiveButton(R.string.save, (DialogInterface d, int w) -> {
                     String freqStr = freqEdit.getText().toString();
                     String label = labelEdit.getText().toString();
-                    // If the frequency of an existing entry changed, drop the old
-                    // one so we don't leave a stale duplicate behind.
-                    if (existing != null) {
-                        long newHz = OperationBand.parseCustomFreq(freqStr);
-                        if (newHz > 0 && newHz != existing.band) {
-                            operationBand.removeCustomBand(existing.band, existing.mode);
-                        }
-                    }
-                    String err = operationBand.addCustomBand(freqStr, label, mode);
+                    // For an edit, add the new dial first and only drop the old entry if
+                    // that succeeds (editCustomBand) — so an out-of-range change can't
+                    // delete the entry and leave nothing behind.
+                    String err = (existing != null)
+                            ? operationBand.editCustomBand(existing.band, existing.mode, freqStr, label, mode)
+                            : operationBand.addCustomBand(freqStr, label, mode);
                     if (err != null) {
                         Toast.makeText(getContext(), err, Toast.LENGTH_LONG).show();
                     } else if (freqAdapter != null) {

@@ -103,14 +103,67 @@ public class OperationBandCustomBandsTest {
 
     @Test
     public void removeCustomBand_deletesFromStoreAndBandList() {
-        ob.addCustomBand("14090000", "DX", FT8Common.FT8_MODE);
-        assertThat(ob.removeCustomBand(14_090_000L, FT8Common.FT8_MODE)).isTrue();
+        // Use an off-plan dial so the "absent after removal" check isn't masked by a
+        // same-frequency built-in entry from bands.txt.
+        ob.addCustomBand("14085500", "DX", FT8Common.FT8_MODE);
+        assertThat(ob.removeCustomBand(14_085_500L, FT8Common.FT8_MODE)).isTrue();
         assertThat(ob.loadCustomBands()).isEmpty();
-        assertThat(containsFreq(OperationBand.bandList, 14_090_000L)).isFalse();
+        assertThat(containsFreq(OperationBand.bandList, 14_085_500L)).isFalse();
     }
 
     @Test
     public void removeCustomBand_missing_returnsFalse() {
         assertThat(ob.removeCustomBand(99_999_999L, FT8Common.FT8_MODE)).isFalse();
+    }
+
+    @Test
+    public void editCustomBand_outOfRange_keepsOriginalEntry() {
+        ob.addCustomBand("14090000", "3B9 DX", FT8Common.FT8_MODE);
+        // Edit to an out-of-range frequency: must fail *and* leave the original intact.
+        String err = ob.editCustomBand(14_090_000L, FT8Common.FT8_MODE, "500", "3B9 DX",
+                FT8Common.FT8_MODE);
+        assertThat(err).isNotNull();
+        List<OperationBand.Band> customs = ob.loadCustomBands();
+        assertThat(customs).hasSize(1);
+        assertThat(customs.get(0).band).isEqualTo(14_090_000L);
+        assertThat(containsFreq(OperationBand.bandList, 14_090_000L)).isTrue();
+    }
+
+    @Test
+    public void editCustomBand_validFreqChange_movesEntry() {
+        // Off-plan dials so neither the old nor the new freq collides with a built-in.
+        ob.addCustomBand("14085500", "3B9 DX", FT8Common.FT8_MODE);
+        String err = ob.editCustomBand(14_085_500L, FT8Common.FT8_MODE, "14086500", "3B9 DX",
+                FT8Common.FT8_MODE);
+        assertThat(err).isNull();
+        List<OperationBand.Band> customs = ob.loadCustomBands();
+        assertThat(customs).hasSize(1);
+        assertThat(customs.get(0).band).isEqualTo(14_086_500L);
+        assertThat(containsFreq(OperationBand.bandList, 14_085_500L)).isFalse();
+        assertThat(containsFreq(OperationBand.bandList, 14_086_500L)).isTrue();
+    }
+
+    @Test
+    public void editCustomBand_labelOnly_relabelsInPlace() {
+        ob.addCustomBand("14090000", "old", FT8Common.FT8_MODE);
+        String err = ob.editCustomBand(14_090_000L, FT8Common.FT8_MODE, "14090000", "new",
+                FT8Common.FT8_MODE);
+        assertThat(err).isNull();
+        List<OperationBand.Band> customs = ob.loadCustomBands();
+        assertThat(customs).hasSize(1);
+        assertThat(customs.get(0).waveLength).isEqualTo("new");
+    }
+
+    @Test
+    public void addCustomBand_labelWithNewline_isSanitizedAndRoundTripsAsOneLine() {
+        // A pasted multi-line label must not split the stored blob into extra lines.
+        String err = ob.addCustomBand("14090000", "foo\nbar\r:baz", FT8Common.FT8_MODE);
+        assertThat(err).isNull();
+        List<OperationBand.Band> customs = ob.loadCustomBands();
+        assertThat(customs).hasSize(1);
+        String label = customs.get(0).waveLength;
+        assertThat(label).doesNotContain("\n");
+        assertThat(label).doesNotContain("\r");
+        assertThat(label).doesNotContain(":");
     }
 }

@@ -234,8 +234,11 @@ public class OperationBand {
         if (!isValidCustomFreq(hz)) {
             return "Frequency out of range (" + MIN_CUSTOM_FREQ + "–" + MAX_CUSTOM_FREQ + " Hz).";
         }
-        // Labels share the ':' delimiter with the storage format, so strip it.
-        String cleanLabel = label == null ? "" : label.trim().replace(':', ' ').trim();
+        // Labels share the ':' field delimiter and the '\n' record delimiter with the
+        // newline-joined storage format, and a stray '\r'/control char would split or
+        // corrupt the stored blob on reload — so replace all control chars and ':' with
+        // spaces (pasted multi-line text is the realistic source; the input is single-line).
+        String cleanLabel = label == null ? "" : label.trim().replaceAll("[\\p{Cntrl}:]", " ").trim();
         if (cleanLabel.isEmpty()) {
             cleanLabel = BaseRigOperation.getMeterFromFreq(hz);
         }
@@ -257,6 +260,33 @@ public class OperationBand {
         }
         persistCustomBands(customs);
         getBandsFromFile();
+        return null;
+    }
+
+    /**
+     * Edit an existing custom dial: (re)save it at the new frequency/label, and only
+     * once that succeeds drop the stale entry if the frequency actually changed. Adding
+     * the new dial <em>before</em> removing the old one means an invalid edit (e.g. an
+     * out-of-range frequency) leaves the original entry untouched instead of deleting it
+     * and losing the dial. Returns null on success or a human-readable error.
+     *
+     * @param oldFreq      frequency (Hz) of the entry being edited
+     * @param oldMode      mode of the entry being edited
+     * @param newFreqInput raw new frequency text (whole Hz)
+     * @param label        optional label; blank falls back to the derived band name
+     * @param mode         operating mode the edited dial belongs to
+     */
+    public String editCustomBand(long oldFreq, int oldMode, String newFreqInput, String label, int mode) {
+        String err = addCustomBand(newFreqInput, label, mode);
+        if (err != null) {
+            return err; // add failed — the original entry is left intact
+        }
+        long newHz = parseCustomFreq(newFreqInput);
+        // If freq (or mode) changed, addCustomBand created a new entry, so drop the old
+        // one. If nothing changed, addCustomBand just relabeled in place — nothing to drop.
+        if (newHz > 0 && (newHz != oldFreq || mode != oldMode)) {
+            removeCustomBand(oldFreq, oldMode);
+        }
         return null;
     }
 
