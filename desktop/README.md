@@ -55,6 +55,21 @@ npm run tauri dev      # starts Vite + builds the Rust app + opens the window
 > runtime `LoadLibrary` (for Hamlib via `libloading`). Sign the binaries, or test
 > on a machine without Smart App Control. The app itself is unaffected.
 
+> **macOS location service (grid auto-fill, [#471]):** using the OS location
+> service needs no extra build prerequisite — CoreLocation ships in the base
+> macOS SDK, so the default `clang` + Rust + Node above are enough to *compile*
+> it. Two things are required for it to *work* at runtime, though:
+> - **`Info.plist` usage-description key.** macOS denies location without
+>   `NSLocationWhenInUseUsageDescription`. Set it via `tauri.conf.json`
+>   (`bundle.macOS`); the string is shown to the user in the permission prompt.
+> - **Run as a signed, bundled `.app`.** CoreLocation won't grant location to
+>   the bare `target/release/ft8af` binary, to `npm run tauri dev` / `cargo run`,
+>   or to an unsigned/ad-hoc build. Test the feature from the packaged, signed
+>   `FT8AF.app` — the permission prompt never appears otherwise. (Same class of
+>   caveat as the Windows Smart App Control note above.)
+
+[#471]: https://github.com/patrickrb/FT8AF/issues/471
+
 ### Rig control: Hamlib (bundled)
 
 Hamlib is the default rig backend and is **bundled with the app on Windows** — the
