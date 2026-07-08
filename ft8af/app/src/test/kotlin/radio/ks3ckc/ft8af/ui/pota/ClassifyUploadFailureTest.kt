@@ -15,9 +15,21 @@ import java.net.UnknownHostException
 class ClassifyUploadFailureTest {
 
     @Test
-    fun `5xx from POTA is a server rejection`() {
+    fun `gateway statuses are transient busy errors`() {
+        // 502/503/504 = POTA's gateway couldn't reach the upstream — retried then
+        // surfaced as BUSY ("try again shortly"), not a log rejection.
         assertThat(classifyUploadFailure(PotaUploadException(502, "Internal server error")))
-            .isEqualTo(UploadFailureKind.SERVER)
+            .isEqualTo(UploadFailureKind.BUSY)
+        assertThat(classifyUploadFailure(PotaUploadException(503, "")))
+            .isEqualTo(UploadFailureKind.BUSY)
+        assertThat(classifyUploadFailure(PotaUploadException(504, "")))
+            .isEqualTo(UploadFailureKind.BUSY)
+    }
+
+    @Test
+    fun `other 5xx is a server rejection`() {
+        // A plain 500 (or other non-gateway 5xx) means POTA processed the request
+        // and rejected the log — point the user at their park ref / callsign.
         assertThat(classifyUploadFailure(PotaUploadException(500, "")))
             .isEqualTo(UploadFailureKind.SERVER)
         assertThat(classifyUploadFailure(PotaUploadException(599, "")))

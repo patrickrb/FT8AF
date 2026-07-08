@@ -98,6 +98,18 @@ public class KenwoodTS2000Rig extends BaseRig {
     }
 
     @Override
+    public boolean supportsAtuTune() {
+        return true;
+    }
+
+    @Override
+    public void startAtuTune() {
+        if (getConnector() != null) {
+            getConnector().sendData(KenwoodTK90RigConstant.startAtuTune());
+        }
+    }
+
+    @Override
     public void setUsbModeToRig() {
         if (getConnector() != null) {
             getConnector().sendData(KenwoodTK90RigConstant.setTS590OperationUSBMode());

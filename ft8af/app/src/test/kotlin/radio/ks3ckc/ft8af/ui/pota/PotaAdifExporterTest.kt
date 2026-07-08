@@ -48,4 +48,34 @@ class PotaAdifExporterTest {
         PotaAdifExporter.adifField(sb, "MODE", "FT8")
         assertThat(sb.toString()).isEqualTo("<CALL:4>W1AW <MODE:3>FT8 ")
     }
+
+    @Test
+    fun adifMode_ft8PassesThroughAsMode() {
+        val sb = StringBuilder()
+        PotaAdifExporter.adifMode(sb, "FT8")
+        assertThat(sb.toString()).isEqualTo("<MODE:3>FT8 ")
+    }
+
+    @Test
+    fun adifMode_ft2EmitsMfskModeWithSubmode() {
+        // The reported bug: a bare <MODE:3>FT2 is rejected by pota.app. FT2 is a
+        // submode of MFSK, so we must emit MODE=MFSK + SUBMODE=FT2.
+        val sb = StringBuilder()
+        PotaAdifExporter.adifMode(sb, "FT2")
+        assertThat(sb.toString()).isEqualTo("<MODE:4>MFSK <SUBMODE:3>FT2 ")
+    }
+
+    @Test
+    fun adifMode_ft4EmitsMfskModeWithSubmode() {
+        val sb = StringBuilder()
+        PotaAdifExporter.adifMode(sb, "FT4")
+        assertThat(sb.toString()).isEqualTo("<MODE:4>MFSK <SUBMODE:3>FT4 ")
+    }
+
+    @Test
+    fun adifMode_nullEmitsNothing() {
+        val sb = StringBuilder()
+        PotaAdifExporter.adifMode(sb, null)
+        assertThat(sb.toString()).isEmpty()
+    }
 }

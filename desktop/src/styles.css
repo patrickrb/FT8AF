@@ -63,6 +63,8 @@ select, input {
 .cycle-bar { width: 160px; height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
 .cycle-bar > div { height: 100%; background: var(--accent); transition: width 0.2s linear; }
 .seq { color: var(--muted); }
+.tx-level { display: inline-flex; align-items: center; gap: 6px; }
+.tx-level input[type="range"] { margin: 0; }
 
 .tabs { display: flex; gap: 4px; padding: 8px 14px 0; background: var(--panel); }
 .tabs button { border-bottom: none; border-radius: 6px 6px 0 0; }

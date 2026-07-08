@@ -4,6 +4,10 @@ import java.text.SimpleDateFormat
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    // Kotlin 2.0 Compose compiler plugin (issue #440). Replaces the standalone
+    // composeOptions.kotlinCompilerExtensionVersion, which the Kotlin 1.9
+    // toolchain used and which topped out at Compose 1.7.
+    id 'org.jetbrains.kotlin.plugin.compose'
     id 'jacoco'
     // Static analysis (issue #63).
     id 'io.gitlab.arturbosch.detekt'
@@ -34,35 +38,42 @@ android {
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         // CI builds derive versionCode from GITHUB_RUN_NUMBER + offset, so each
         // run gets a unique, monotonically increasing value Play Console will
-        // accept. Offset clears the manual-upload history (current max in
-        // internal track is 4). Local builds without the env var keep the
-        // static fallback so debug/release builds run unchanged from a dev
-        // machine.
+        // accept. Local builds without the env var keep the static fallback so
+        // debug/release builds run unchanged from a dev machine.
+        //
+        // GITHUB_RUN_NUMBER is PER-WORKFLOW-FILE, so it resets when the workflow
+        // is renamed/split. The original build-release.yml reached run ~680
+        // (versionCode ~780 on the Play internal track) before CI was split into
+        // per-project workflows; the replacement android.yml started its own
+        // counter back near 1, so the old +100 offset produced a versionCode
+        // BELOW 780 and Play rejected the rollout ("does not allow any existing
+        // users to upgrade to the newly added APKs"). The +1000 offset clears
+        // that historical max with margin. If the workflow is ever split/renamed
+        // again (resetting the counter), bump this offset past the last
+        // published versionCode once more.
         def ciRunNumber = System.getenv("GITHUB_RUN_NUMBER")
-        versionCode ciRunNumber ? (ciRunNumber.toInteger() + 100) : 5
+        versionCode ciRunNumber ? (ciRunNumber.toInteger() + 1000) : 5
         // CI passes -PVERSION_NAME_OVERRIDE derived from the git tag (v1.1.0 ->
         // "1.1.0", dev-42 -> "1.1.0-dev.42"). Local builds use the fallback.
         def ciVersionName = project.findProperty('VERSION_NAME_OVERRIDE')
         versionName ciVersionName ?: '1.1.0'
 
 
-        dataBinding{
-            enabled true
-        }
-
         externalNativeBuild {
             cmake {
-                // No extra cppFlags — the upstream FT8CN's '-JENABLE_XOM=false' was
-                // a typo (likely intended -D, not -J) that clang rejects when an
-                // actual native build is wired up. It had no effect before because
-                // the legacy libft8cn.so is shipped prebuilt via jniLibs.
+                // No extra cppFlags — all native code (the FT8 DSP core plus the
+                // USB audio glue) builds from source via src/main/cpp/CMakeLists.txt
+                // into libft8af.so, and that build needs nothing beyond the
+                // defaults. The upstream FT8CN's '-JENABLE_XOM=false' was a typo
+                // (likely intended -D, not -J) that clang rejects, so it stays out.
                 cppFlags ''
             }
         }
 
-        // The legacy libft8cn.so binaries in app/libs/<abi>/ stay packaged via
-        // jniLibs.srcDirs; this filter just keeps NDK builds focused on the
-        // four ABIs we ship and prevents an unexpected ABI slipping in.
+        // Native code is built from source (see src/main/cpp/CMakeLists.txt) into
+        // libft8af.so; there are no prebuilt jniLibs. This filter just limits the
+        // NDK build to the four ABIs we ship and prevents an unexpected ABI
+        // slipping in.
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
         }
@@ -117,9 +128,9 @@ android {
         dataBinding true
         buildConfig true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion '1.5.8'
-    }
+    // composeOptions.kotlinCompilerExtensionVersion is intentionally gone: with
+    // Kotlin 2.0 the Compose compiler is the org.jetbrains.kotlin.plugin.compose
+    // plugin (applied above, versioned to match Kotlin in the root build.gradle).
     testOptions {
         unitTests {
             // Robolectric needs the merged manifest + resources to bring up an
@@ -173,20 +184,29 @@ dependencies {
     implementation files('src/libs/nanohttpd-2.2.0.jar')
     implementation files('src/libs/osmdroid-android-6.1.14.aar')//Map widget
 
-    // Compose BOM
-    def composeBom = platform('androidx.compose:compose-bom:2024.02.00')
+    // Compose BOM — 2025.04.01 maps to Compose 1.8.0 (issue #440). activity- and
+    // navigation-compose are versioned outside the BOM, so they are bumped to the
+    // releases that align with Compose 1.8 / Kotlin 2.0.
+    def composeBom = platform('androidx.compose:compose-bom:2025.04.01')
     implementation composeBom
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-graphics'
     implementation 'androidx.compose.ui:ui-tooling-preview'
     implementation 'androidx.compose.material3:material3'
     implementation 'androidx.compose.material:material-icons-extended'
-    implementation 'androidx.activity:activity-compose:1.8.2'
-    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0'
-    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.7.0'
-    implementation 'androidx.navigation:navigation-compose:2.7.7'
+    implementation 'androidx.activity:activity-compose:1.10.1'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.7'
+    implementation 'androidx.navigation:navigation-compose:2.8.9'
     implementation 'androidx.compose.runtime:runtime-livedata'
     debugImplementation 'androidx.compose.ui:ui-tooling'
+
+    // Android Auto (phone projection): surface-based map + status screen.
+    implementation 'androidx.car.app:app:1.7.0'
+    // DEBUG-ONLY: lets the same CarAppService render on an Android Automotive OS
+    // emulator (CarAppActivity host) so the car map can be tested without a phone
+    // + DHU. Never ships in release. Paired with src/debug/AndroidManifest.xml.
+    debugImplementation 'androidx.car.app:app-automotive:1.7.0'
 
     // Image loading for QRZ profile avatars
     implementation 'io.coil-kt:coil-compose:2.6.0'
@@ -304,11 +324,11 @@ tasks.register('jacocoTestReport', JacocoReport) {
     ]
 
     classDirectories.setFrom(files(
-            fileTree(dir: "$buildDir/intermediates/javac/debug/classes", excludes: excludes),
-            fileTree(dir: "$buildDir/tmp/kotlin-classes/debug", excludes: excludes)
+            fileTree(dir: layout.buildDirectory.dir('intermediates/javac/debug/classes').get().asFile, excludes: excludes),
+            fileTree(dir: layout.buildDirectory.dir('tmp/kotlin-classes/debug').get().asFile, excludes: excludes)
     ))
     sourceDirectories.setFrom(files('src/main/java', 'src/main/kotlin'))
-    executionData.setFrom(fileTree(dir: "$buildDir", includes: [
+    executionData.setFrom(fileTree(dir: layout.buildDirectory.get().asFile, includes: [
             'jacoco/testDebugUnitTest.exec',
             'outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec'
     ]))

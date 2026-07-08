@@ -33,6 +33,8 @@ extern "C" {
 int ft8_snr(const waterfall_t* wf, const candidate_t* candidate);
 }
 
+#include "ft8_call_hash.h"
+
 // ---------------------------------------------------------------------------
 // 22-bit WSJT-X callsign hash (copy of jni_ft8af.cpp's compute_n22, kept local so
 // this wrapper doesn't depend on the prebuilt's translation unit). Matches
@@ -397,6 +399,35 @@ FT2JNI(jboolean, DecoderFt2Analysis)(JNIEnv* env, jobject, jint idx, jlong handl
             ft2_set_string(env, ft8Message, FF.maidenGrid, extra);
         ft2_set_call_hashes(env, ft8Message, call_to, FF.callToHash10, FF.callToHash12, FF.callToHash22);
         ft2_set_call_hashes(env, ft8Message, call_de, FF.callFromHash10, FF.callFromHash12, FF.callFromHash22);
+    }
+
+    // Post-decode hash-recovery pass, for EVERY message type (issue #402):
+    // recover the raw hash of an unresolved compound call ("<...>", or a
+    // contest frame whose calls never surface as callsign fields) straight
+    // from the frame so Java's seeded MessageHashMap can resolve it (issue
+    // #392) — keyed on the type's field layout in ft8af_call_hash22; see the
+    // matching block in ft8_decode_jni.cpp for the full rationale.
+    if (ok)
+    {
+        if (type == FTX_MESSAGE_TYPE_NONSTD_CALL)
+        {
+            uint32_t n12 = 0;
+            bool is_to = false;
+            if (ft8af_nonstd_hash12(&message, &n12, &is_to))
+                env->SetLongField(ft8Message,
+                                  is_to ? FF.callToHash12 : FF.callFromHash12,
+                                  (jlong)n12);
+        }
+        else
+        {
+            uint32_t n22 = 0;
+            if ((call_to[0] == '\0' || call_to[0] == '<')
+                    && ft8af_call_hash22(&message, 0, &n22))
+                env->SetLongField(ft8Message, FF.callToHash22, (jlong)n22);
+            if ((call_de[0] == '\0' || call_de[0] == '<')
+                    && ft8af_call_hash22(&message, 1, &n22))
+                env->SetLongField(ft8Message, FF.callFromHash22, (jlong)n22);
+        }
     }
 
     env->SetBooleanField(ft8Message, FF.isValid, ok ? JNI_TRUE : JNI_FALSE);

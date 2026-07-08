@@ -384,6 +384,111 @@ public class FT8Package {
         return c6;
     }
 
+    /**
+     * 86-entry ARRL/RAC section table for Field Day messages,
+     * matching the exact order used by WSJT-X (packjt77.f90 csec array).
+     */
+    public static final String[] ARRL_SECTIONS = {
+        "AB","AK","AL","AR","AZ","BC","CO","CT","DE","EB",
+        "EMA","ENY","EPA","EWA","GA","GH","IA","ID","IL","IN",
+        "KS","KY","LA","LAX","NS","MB","MDC","ME","MI","MN",
+        "MO","MS","MT","NC","ND","NE","NFL","NH","NL","NLI",
+        "NM","NNJ","NNY","TER","NTX","NV","OH","OK","ONE","ONN",
+        "ONS","OR","ORG","PAC","PR","QC","RI","SB","SC","SCV",
+        "SD","SDG","SF","SFL","SJV","SK","SNJ","STX","SV","TN",
+        "UT","VA","VI","VT","WCF","WI","WMA","WNY","WPA","WTX",
+        "WV","WWA","WY","DX","PE","NB"
+    };
+
+    /**
+     * Look up the 0-based index of an ARRL/RAC section code.
+     * @return 0-85 on match, -1 if unknown
+     */
+    public static int sectionIndex(String section) {
+        for (int i = 0; i < ARRL_SECTIONS.length; i++) {
+            if (ARRL_SECTIONS[i].equals(section)) return i;
+        }
+        return -1;
+    }
+
+    /**
+     * Generate a 77-bit data packet for Field Day messages (i3=0, n3=3 or n3=4).
+     * Bit layout: c28 c28 R1 n4 k3 S7 n3 i3 = 77 bits packed into 10 bytes.
+     *
+     * Unlike i1 messages, the two c28 fields are directly adjacent (no r1/p1
+     * suffix bit between them). R1 sits at bit 56, followed by the FD-specific
+     * payload fields.
+     *
+     * @param msg the Ft8Message with FD fields populated:
+     *            callsignTo, callsignFrom, r_flag (0 or 1),
+     *            eu_serial (transmitter count 1-16), arrl_class ("A"-"F"),
+     *            arrl_rac (section code), n3 (3 or 4)
+     * @return 10-byte packed payload (77 bits, padded to byte boundary)
+     */
+    public static byte[] generatePack77_fd(Ft8Message msg) {
+        String toCall = msg.callsignTo.replace("<", "").replace(">", "");
+        String fromCall = msg.callsignFrom.replace("<", "").replace(">", "");
+
+        if (msg.checkIsCQ() && msg.modifier != null && msg.modifier.length() > 0) {
+            toCall = toCall + " " + msg.modifier;
+        }
+
+        long n28a = pack_c28(toCall) & 0x0fffffffL;
+        long n28b = pack_c28(fromCall) & 0x0fffffffL;
+        int R1 = msg.r_flag & 1;
+        int n4 = ((msg.eu_serial - 1) & 0x0F);  // 1-16 → 0-15 (clamp to 4 bits)
+        int k3 = 0;
+        if (msg.arrl_class != null && msg.arrl_class.length() > 0) {
+            k3 = (msg.arrl_class.charAt(0) - 'A') & 0x07;  // A=0..F=5
+        }
+        int S7 = 0;
+        if (msg.arrl_rac != null) {
+            int idx = sectionIndex(msg.arrl_rac);
+            S7 = (idx >= 0 ? idx : 0) & 0x7F;
+        }
+        int n3 = msg.n3 & 0x07;  // 3 or 4
+        int i3 = 0;              // Field Day is always i3=0
+
+        // Pack 77 bits into 10 bytes:
+        // bits  0-27:  n28a (c28 for callsignTo)
+        // bits 28-55:  n28b (c28 for callsignFrom)
+        // bit  56:     R1
+        // bits 57-60:  n4   (4 bits)
+        // bits 61-63:  k3   (3 bits)
+        // bits 64-70:  S7   (7 bits)
+        // bits 71-73:  n3   (3 bits)
+        // bits 74-76:  i3   (3 bits)
+        // bits 77-79:  padding (zeros)
+
+        // Assemble as a single 80-bit value using longs for the upper and lower halves.
+        // Upper 48 bits = n28a(28) + top 20 of n28b(28)
+        // Lower 32 bits = bottom 8 of n28b + R1(1) + n4(4) + k3(3) + S7(7) + n3(3) + i3(3) + pad(3)
+
+        byte[] data = new byte[10];
+
+        // Byte 0-3: n28a (28 bits) + top 4 bits of n28b
+        data[0] = (byte) ((n28a >> 20) & 0xFF);
+        data[1] = (byte) ((n28a >> 12) & 0xFF);
+        data[2] = (byte) ((n28a >> 4) & 0xFF);
+        data[3] = (byte) (((n28a & 0x0F) << 4) | ((n28b >> 24) & 0x0F));
+
+        // Byte 4-6: middle 24 bits of n28b
+        data[4] = (byte) ((n28b >> 16) & 0xFF);
+        data[5] = (byte) ((n28b >> 8) & 0xFF);
+        data[6] = (byte) (n28b & 0xFF);
+
+        // Byte 7: R1(1) + n4(4) + k3(3) = 8 bits
+        data[7] = (byte) ((R1 << 7) | (n4 << 3) | k3);
+
+        // Byte 8: S7(7) + n3 top bit(1) = 8 bits
+        data[8] = (byte) ((S7 << 1) | ((n3 >> 2) & 0x01));
+
+        // Byte 9: n3 bottom 2 bits(2) + i3(3) + padding(3) = 8 bits
+        data[9] = (byte) (((n3 & 0x03) << 6) | (i3 << 3));
+
+        return data;
+    }
+
     public static native int getHash12(String callsign);
 
 

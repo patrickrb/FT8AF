@@ -94,6 +94,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">Даём CQ</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">Поиск...</string>
     <string name="qsopanel_qsoing_with">QSO с %1$s</string>
     <string name="qsopanel_waiting_for">Ожидание %1$s</string>
@@ -457,6 +458,13 @@
     <string name="settings_enabled_bands_dialog_desc">Скрытые диапазоны не появятся в выборе частоты.</string>
     <string name="settings_select_serial_port">Выберите последовательный порт</string>
     <string name="settings_tx_volume_advice">Регулируйте вживую — следующая передача использует этот уровень. Следите за ALC трансивера и убавляйте, пока он лишь слегка касается линии.</string>
+    <string name="settings_input_volume">Громкость входа</string>
+    <string name="settings_input_volume_desc" formatted="false">Усиление принимаемого звука перед декодированием (100% = без изменений)</string>
+    <string name="settings_input_volume_advice">Применяется к входящему звуку перед декодированием. Следите за индикатором уровня RX на водопаде и держитесь зелёной зоны; красный означает клиппинг.</string>
+    <string name="input_level_too_low">Низкий</string>
+    <string name="input_level_good">Норма</string>
+    <string name="input_level_too_high">Высокий</string>
+    <string name="input_level_clipping">Клип</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Язык</string>
@@ -505,4 +513,39 @@
     <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
+    <string name="tx_audio_dropped">Сбой TX-аудио — в этом цикле сигнал не передан (ошибка USB-аудио)</string>
+    <string name="cq_offset_moved">Смещение CQ перенесено на свободное место: %1$d Гц</string>
+    <string name="settings_auto_clear_tx">Автовыбор свободного смещения TX</string>
+    <string name="settings_auto_clear_tx_desc">При вызове CQ выбирает свободное место по недавней активности диапазона и уходит, если оно занимается</string>
+    <string name="tune_content_description">Tune: запускает тюнер трансивера или передаёт непрерывную несущую для настройки антенны</string>
+    <string name="tune_stopped_timeout">Tune остановлен через %1$d с</string>
+    <string name="tune_blocked_tx">Остановите CQ/QSO перед использованием Tune</string>
+    <string name="tune_unavailable_route">Tune пока не поддерживается на этом аудиотракте</string>
+    <string name="tune_atu_started">Антенный тюнер трансивера запущен</string>
+    <string name="tune_atu_unavailable">Тюнер недоступен — подключите CAT-трансивер со встроенным тюнером</string>
+    <string name="settings_tune_method">Метод Tune</string>
+    <string name="settings_tune_method_desc">Автоматически запускает встроенный тюнер трансивера через CAT, если доступен, иначе передаёт маломощный тон</string>
+    <string name="tune_method_automatic">Автоматически</string>
+    <string name="tune_method_internal">Встроенный тюнер</string>
+    <string name="tune_method_tone">Маломощный тон</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / ВОДОПАД (ДЛЯ РАЗРАБОТЧИКОВ)</string>
+    <string name="settings_fft_window">Оконная функция БПФ</string>
+    <string name="settings_fft_window_desc">Окно перед БПФ для отображения спектра/водопада; окно Ханна уменьшает растекание спектра</string>
+    <string name="settings_fft_window_rect">Прямоугольное (нет)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">Усреднение кадров</string>
+    <string name="settings_fft_averaging_desc">Сглаживает отображение между кадрами БПФ; «Выкл.» показывает каждый кадр как есть</string>
+    <string name="settings_fft_avg_off">Выкл.</string>
+    <string name="settings_fft_avg_light">Лёгкое (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">Сильное (EMA 0.25)</string>
+    <string name="settings_bin_agg">Объединение бинов спектра</string>
+    <string name="settings_bin_agg_desc">Как соседние бины БПФ объединяются в один столбец спектра</string>
+    <string name="settings_bin_agg_max">Максимум</string>
+    <string name="settings_bin_agg_avg">Среднее</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

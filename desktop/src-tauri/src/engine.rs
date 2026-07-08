@@ -8,8 +8,6 @@ use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::sync::Arc;
 use std::time::Duration;
 
-use rustfft::num_complex::Complex;
-use rustfft::{Fft, FftPlanner};
 use serde::{Deserialize, Serialize};
 
 use crate::audio::{output, AudioInput, SlotAccumulator};
@@ -19,6 +17,7 @@ use crate::dsp::{DecodedMessage, Decoder, SAMPLE_RATE};
 use crate::qso::{QsoEngine, QsoOutcome, QsoStatus};
 use crate::rig::{RigConfig, RigConnection};
 use crate::util;
+use crate::wf::{WfConfig, WfProcessor, WfWindow};
 
 const CYCLE_MS: i64 = 15_000;
 const TX_SLACK_MS: i64 = 2_360; // 12.64 s audio in a 15 s slot
@@ -27,13 +26,56 @@ const PTT_DELAY_MS: u64 = 100;
 // waveform (plus the PTT lead) land before the next slot boundary. Start later
 // than this and the leading Costas array gets clipped — audible but undecodable.
 const TX_LATEST_MS: i64 = TX_SLACK_MS - PTT_DELAY_MS as i64;
+// Point in the (rx-corrected) cycle at which we hand the slot to the decoder.
+// The FT8 waveform is complete at 12.64 s, so decoding ~0.6 s later returns
+// results around the 15 s boundary even on a slow CPU — early enough that the
+// operator's reply lands in the very next slot instead of skipping a cycle.
+// The rx-offset calibration aligns this clock to the real signal timing, and
+// any positive capture latency only pushes the real trigger later (safer), so
+// 13.2 s keeps a comfortable margin above the 12.64 s waveform end.
+const DECODE_AT_MS: i64 = 13_200;
 const DEFAULT_TX_AUDIO_HZ: i32 = 1_500;
-const WF_FFT_SIZE: usize = 2048; // ~5.86 Hz/bin at 12 kHz
-const WF_AVG: usize = 6; // averaged FFT segments per row (Welch) to smooth the noise floor
-const WF_STEP: usize = WF_FFT_SIZE / 2; // 50% overlap between averaged segments
-const WF_MAX_HZ: f32 = 3_500.0; // displayed top of the audio band (matches decoder f_max)
-const WF_SPAN_DB: f32 = 26.0; // dB above the black point that maps to full brightness
-const WF_BLACK_OFFSET_DB: f32 = 4.0; // push the black point above the noise floor so noise stays dark
+// Default TX output level (0.0–1.0). Slightly below full scale so a fresh
+// install doesn't overdrive the soundcard/ALC before the operator sets it.
+const DEFAULT_TX_GAIN: f32 = 0.9;
+
+/// Clamp a requested TX gain into the valid 0.0–1.0 range (full scale).
+fn clamp_tx_gain(g: f32) -> f32 {
+    g.clamp(0.0, 1.0)
+}
+// Live-waterfall FFT parameters (window/size/averaging + display constants)
+// live in `crate::wf` and are runtime-configurable via SetWaterfallConfig.
+// Input RMS at/below this (dBFS) counts as silence — no audio reaching the app.
+// Real RX audio through a soundcard/DAX sits well above this even on a quiet band;
+// a fully-routed-but-silent virtual device floors near -100 dBFS.
+const SILENCE_DBFS: f32 = -75.0;
+
+/// RMS level of a mono buffer in dBFS (0 dB = full scale). Empty or all-zero
+/// input returns a large negative number rather than -inf, so the meter and the
+/// silence test stay finite.
+fn rms_dbfs(samples: &[f32]) -> f32 {
+    if samples.is_empty() {
+        return -120.0;
+    }
+    let sum_sq: f64 = samples.iter().map(|&s| (s as f64) * (s as f64)).sum();
+    let rms = (sum_sq / samples.len() as f64).sqrt();
+    (20.0 * (rms.max(1e-12)).log10()).max(-120.0) as f32
+}
+
+/// True once per cycle, on the first waterfall row at/after a 15 s boundary on
+/// the rx-corrected clock, advancing `last_slot`. The live waterfall draws audio
+/// on real time while the decoder measures DT on the rx-corrected clock (shifted
+/// by capture latency), so the spectrum reads ahead of the DT; marking the cycle
+/// grid on the corrected clock gives both the same time reference.
+fn wf_boundary_row(corrected_now_ms: i64, last_slot: &mut i64) -> bool {
+    let slot = corrected_now_ms.div_euclid(CYCLE_MS);
+    if slot != *last_slot {
+        *last_slot = slot;
+        true
+    } else {
+        false
+    }
+}
 
 // --- messages crossing the channel boundary --------------------------------
 
@@ -53,9 +95,14 @@ pub enum EngineCommand {
     SetStation { call: String, grid: String },
     SetBand(u64),
     SetBaseFreq(i32),
+    /// TX output level, 0.0–1.0 (drive into the soundcard/USB audio path).
+    SetTxGain(f32),
     SetInputDevice(Option<String>),
     SetOutputDevice(Option<String>),
     SelectRig(RigConfig),
+    /// Drop the live rig connection for this session (CAT/PTT released). Leaves
+    /// the saved rig config intact so Connect — or the next launch — reconnects.
+    DisconnectRig,
     StartCq,
     Answer(AnswerArgs),
     /// Operator manually selects which QSO message to transmit next.
@@ -69,6 +116,8 @@ pub enum EngineCommand {
     SetClockOffset(i64),
     /// Kick off an immediate one-shot NTP re-sync (manual "Resync" button).
     ResyncTime,
+    /// Apply new live-waterfall FFT parameters (developer knobs, issue #428).
+    SetWaterfallConfig(WfConfig),
     Shutdown,
 }
 
@@ -134,6 +183,10 @@ pub struct WaterfallFrame {
 pub struct WaterfallRow {
     pub bins: Vec<u8>,
     pub hz_per_col: f32,
+    /// True on the first row at/after a 15 s cycle boundary (on the rx-corrected
+    /// clock the decoder measures DT against). The UI draws a grid line there so
+    /// the spectrum lines up with decode DT instead of reading ahead of it.
+    pub boundary: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -147,8 +200,21 @@ pub enum EngineEvent {
     QsoCompleted(QsoRecord),
     Waterfall(WaterfallFrame),
     WaterfallRow(WaterfallRow),
+    /// Periodic RX input level (~1/s while decoding) so the UI can show a meter
+    /// and warn when the captured audio is silent (e.g. the source/DAX channel
+    /// isn't routed) instead of leaving a mysteriously blank waterfall.
+    InputLevel(InputLevelEvent),
     Info(String),
     Error(String),
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InputLevelEvent {
+    /// RMS level of the recent capture in dBFS (≈ -100 for digital silence).
+    pub db: f32,
+    /// True when the level is at/below the silence floor while decoding — the
+    /// "no audio reaching the app" condition.
+    pub silent: bool,
 }
 
 /// Thread-safe handle for sending commands to the engine. Wraps the `Sender` in
@@ -197,7 +263,11 @@ struct Engine {
     decoding: bool,
     dial_hz: u64,
     tx_audio_hz: i32,
-    last_rx_slot_id: i64,
+    /// TX output level (0.0–1.0) applied to the waveform before playback.
+    tx_gain: f32,
+    /// Slot id (rx-corrected clock) most recently handed to the decode worker.
+    /// Guards the once-per-slot early decode trigger in the run loop.
+    last_decoded_slot: i64,
     /// Audio-capture latency compensation (ms). The RX decode window is sliced
     /// this much later than the UTC cycle boundary so that buffered/late-arriving
     /// input audio lands aligned — drives decoded DT toward 0. Auto-calibrated
@@ -211,10 +281,13 @@ struct Engine {
     /// results back into this loop.
     cmd_tx: Sender<EngineCommand>,
     ptt: bool,
-    // live waterfall FFT
-    fft: Arc<dyn Fft<f32>>,
-    hann: Vec<f32>,
-    wf_floor_db: f32, // smoothed noise-floor estimate for auto color scaling
+    /// In-flight TX playback, if any. Held on this thread (the cpal stream is
+    /// `!Send`); polled each loop tick so completion drops PTT, and dropped to
+    /// stop audio immediately on Stop TX.
+    tx_playback: Option<output::PreparedTx>,
+    // live waterfall FFT (plan + window table + floor state; rebuilt on config change)
+    wf: WfProcessor,
+    last_wf_slot: i64, // last cycle slot marked on the live waterfall (rx-corrected)
 }
 
 impl Engine {
@@ -232,6 +305,11 @@ impl Engine {
             .get_config("base_freq")
             .and_then(|s| s.parse().ok())
             .unwrap_or(DEFAULT_TX_AUDIO_HZ);
+        let tx_gain = db
+            .get_config("tx_gain")
+            .and_then(|s| s.parse::<f32>().ok())
+            .map(clamp_tx_gain)
+            .unwrap_or(DEFAULT_TX_GAIN);
         // Restore the last NTP offset so DT is roughly right immediately, before
         // the first fresh sync of this session lands. Treated as already-synced.
         let saved_offset: Option<i64> = db.get_config("clock_offset_ms").and_then(|s| s.parse().ok());
@@ -243,12 +321,25 @@ impl Engine {
         qso.band = bands::band_for_freq_hz(dial_hz).to_string();
         qso.freq_mhz = bands::freq_mhz_string(dial_hz);
 
-        let fft = FftPlanner::<f32>::new().plan_fft_forward(WF_FFT_SIZE);
-        let hann: Vec<f32> = (0..WF_FFT_SIZE)
-            .map(|i| {
-                0.5 - 0.5 * (2.0 * std::f32::consts::PI * i as f32 / WF_FFT_SIZE as f32).cos()
-            })
-            .collect();
+        // Restore persisted waterfall FFT knobs (issue #428); defaults match
+        // the historical hard-coded pipeline (Hann, 2048, 6-segment Welch).
+        let wf_defaults = WfConfig::default();
+        let wf_cfg = WfConfig {
+            window: db
+                .get_config("wf_window")
+                .map(|s| WfWindow::parse(&s))
+                .unwrap_or(wf_defaults.window),
+            fft_size: db
+                .get_config("wf_fft_size")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(wf_defaults.fft_size),
+            avg: db
+                .get_config("wf_avg")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(wf_defaults.avg),
+        }
+        .sanitize();
+        let wf = WfProcessor::new(wf_cfg);
 
         // Decode worker: owns the (!Send) Decoder on its own thread so the heavy
         // per-slot DSP never blocks the engine loop (which drives the live
@@ -283,7 +374,8 @@ impl Engine {
             decoding: false,
             dial_hz,
             tx_audio_hz,
-            last_rx_slot_id: -1,
+            tx_gain,
+            last_decoded_slot: -1,
             rx_offset_ms,
             last_tick_ms: 0,
             tx_parity: None,
@@ -291,9 +383,9 @@ impl Engine {
             time_synced: saved_offset.is_some(),
             cmd_tx,
             ptt: false,
-            fft,
-            hann,
-            wf_floor_db: -60.0,
+            tx_playback: None,
+            wf,
+            last_wf_slot: -1,
         }
     }
 
@@ -333,15 +425,36 @@ impl Engine {
                     sequential: slot_id.rem_euclid(2),
                     ms_into_cycle: ms_into,
                 }));
+                // RX input level + silence warning, once we're capturing. Surfaces
+                // a dead source (e.g. DAX channel not routed) that otherwise looks
+                // like a broken waterfall.
+                if self.decoding {
+                    let recent = self.accum.peek_recent(SAMPLE_RATE as usize / 2); // ~0.5 s
+                    let db = rms_dbfs(&recent);
+                    self.emit(EngineEvent::InputLevel(InputLevelEvent {
+                        db,
+                        silent: db <= SILENCE_DBFS,
+                    }));
+                }
             }
 
-            // RX window boundary runs on a clock shifted later by the capture-latency
-            // compensation, so the sliced 15 s slot aligns with the audio that has
+            // Decode runs on a clock shifted later by the capture-latency
+            // compensation, so the sliced slot aligns with the audio that has
             // actually arrived in the buffer (UTC display + TX still use real `now`).
-            let rx_slot_id = (now - self.rx_offset_ms).div_euclid(CYCLE_MS);
-            if rx_slot_id != self.last_rx_slot_id {
-                self.last_rx_slot_id = rx_slot_id;
-                self.on_slot_boundary(rx_slot_id);
+            // We fire once per slot as soon as the 12.64 s waveform is captured
+            // (~13.2 s in) rather than at the 15 s boundary, so decodes land a slot
+            // earlier and the operator can reply on the next cycle (not skip one).
+            let corrected = now - self.rx_offset_ms;
+            let rx_slot_id = corrected.div_euclid(CYCLE_MS);
+            let into_rx_cycle = corrected.rem_euclid(CYCLE_MS);
+            if self.decoding && rx_slot_id != self.last_decoded_slot && into_rx_cycle >= DECODE_AT_MS
+            {
+                self.last_decoded_slot = rx_slot_id;
+                // The slot's audio so far = the most recent `into_rx_cycle` of it,
+                // front-aligned (signal at sample 0) with the tail zero-padded.
+                let elapsed = (into_rx_cycle * SAMPLE_RATE as i64 / 1000) as usize;
+                let slot = self.accum.take_slot_from_start(elapsed);
+                let _ = self.slot_tx.send(slot);
             }
 
             // Act on any decodes the worker has finished (off-loop DSP). This is
@@ -350,6 +463,16 @@ impl Engine {
             // on an operator tap is handled separately, in the command handlers.
             while let Ok(msgs) = self.dec_rx.try_recv() {
                 self.handle_decoded(msgs, slot_id);
+            }
+
+            // Drop PTT as soon as the TX waveform finishes clocking out (or a
+            // stalled device trips the deadline). Polling here — rather than
+            // blocking inside `transmit` — is what lets Stop TX take effect
+            // mid-transmission instead of at the end of the cycle.
+            if let Some(pb) = self.tx_playback.as_ref() {
+                if pb.is_done() || pb.timed_out() {
+                    self.finalize_tx();
+                }
             }
 
             // Live scrolling waterfall: one spectrum row per ~100 ms tick.
@@ -388,21 +511,12 @@ impl Engine {
             return;
         }
         self.rx_offset_ms = new_offset;
-        // Re-anchor so the offset change doesn't re-trigger a boundary for this cycle.
-        self.last_rx_slot_id = (self.now() - self.rx_offset_ms).div_euclid(CYCLE_MS);
+        // No re-anchor needed: the decode trigger requires `into_rx_cycle >=
+        // DECODE_AT_MS`, and offset changes land early in the cycle (right after a
+        // decode is delivered), far below that threshold — so a shifted slot id
+        // can't spuriously re-fire the decode this cycle.
         let _ = self.db.set_config("rx_offset_ms", &new_offset.to_string());
         self.publish_clock_sync();
-    }
-
-    fn on_slot_boundary(&mut self, _entering_slot: i64) {
-        // Hand the slot that just ended to the decode worker; decoding happens
-        // off this loop, so the waterfall + clock keep updating. The worker's
-        // results are consumed in the run loop (see handle_decoded), which then
-        // drives QSO sequencing + TX for the slot we're now in.
-        if self.decoding {
-            let slot = self.accum.take_slot();
-            let _ = self.slot_tx.send(slot);
-        }
     }
 
     /// Handle one slot's decodes (from the worker): publish them, advance the QSO
@@ -420,7 +534,7 @@ impl Engine {
             }
         }
         self.maybe_transmit(slot_id);
-        self.publish_tx_state(false);
+        self.publish_tx_state();
     }
 
     /// Key up this slot's QSO message if we're armed, it's our turn, and the
@@ -450,7 +564,7 @@ impl Engine {
         self.tx_parity = Some(parity);
         self.txed_slot = slot_id;
         if let Some(msg) = self.qso.tx_message().map(|s| s.to_string()) {
-            self.transmit(&msg);
+            self.start_transmit(&msg);
         }
     }
 
@@ -464,7 +578,15 @@ impl Engine {
         self.cur_slot().rem_euclid(2)
     }
 
-    fn transmit(&mut self, message: &str) {
+    /// Begin transmitting `message`, returning immediately. Playback runs off the
+    /// loop (in `tx_playback`) so the engine keeps draining commands — that's what
+    /// makes Stop TX able to interrupt mid-transmission. PTT is dropped later, when
+    /// the run loop sees the playback finish (or on Stop TX).
+    fn start_transmit(&mut self, message: &str) {
+        // Never key a second transmission over a live one.
+        if self.tx_playback.is_some() {
+            return;
+        }
         let signal = match crate::dsp::encode::generate_ft8(message, self.tx_audio_hz as f32, SAMPLE_RATE) {
             Some(s) => s,
             None => {
@@ -473,22 +595,45 @@ impl Engine {
             }
         };
 
+        // Do the slow work — device open + full-buffer resample — BEFORE keying
+        // the rig, so PTT isn't held through it. On a weak CPU this resample is
+        // hundreds of ms; running it after PTT is what produced the long
+        // keyed-but-silent gap reported on the Inovato Quadra.
+        let mut prepared = match output::prepare(self.output_device.as_deref(), &signal, self.tx_gain) {
+            Ok(p) => p,
+            Err(e) => {
+                self.emit(EngineEvent::Error(format!("playback failed: {e}")));
+                return;
+            }
+        };
+
+        // Key up, let the rig's T/R relay settle, then start clocking samples.
         self.set_ptt(true);
-        self.publish_tx_state(true);
         std::thread::sleep(Duration::from_millis(PTT_DELAY_MS));
 
         // Clip leading audio only if we'd overrun the cycle (CLAUDE.md gotcha:
-        // ms_late = max(0, into_cycle - 2360), NOT into_cycle % 15000).
+        // ms_late = max(0, into_cycle - 2360), NOT into_cycle % 15000). Computed
+        // here, right before audio starts, so it reflects the real lateness after
+        // the PTT settle — `maybe_transmit`'s window check keeps this at 0 in
+        // normal operation.
         let into_cycle = self.now().rem_euclid(CYCLE_MS);
         let ms_late = (into_cycle - TX_SLACK_MS).max(0);
-        let skip = (ms_late * SAMPLE_RATE as i64 / 1000) as usize;
-        let clipped = if skip < signal.len() { &signal[skip..] } else { &[] };
-
-        if let Err(e) = output::play_blocking(self.output_device.as_deref(), clipped, 0.9) {
+        if let Err(e) = prepared.start(ms_late) {
             self.emit(EngineEvent::Error(format!("playback failed: {e}")));
+            self.set_ptt(false);
+            return;
         }
+        self.tx_playback = Some(prepared);
+        self.publish_tx_state();
+    }
 
-        self.set_ptt(false);
+    /// Stop the in-flight transmission (if any): dropping the handle halts the
+    /// cpal stream immediately, then PTT goes down. Safe to call when not TXing.
+    fn finalize_tx(&mut self) {
+        if self.tx_playback.take().is_some() {
+            self.set_ptt(false);
+            self.publish_tx_state();
+        }
     }
 
     fn set_ptt(&mut self, on: bool) {
@@ -505,55 +650,14 @@ impl Engine {
     /// it for the scrolling waterfall. Color is auto-scaled relative to a smoothed
     /// noise-floor estimate so the floor stays blue regardless of input gain.
     fn emit_waterfall_row(&mut self) {
-        // Average WF_AVG overlapping FFTs (Welch) to cut the per-bin variance of
-        // a single FFT, so the noise floor reads as a smooth blue instead of
-        // speckled yellow.
-        let need = WF_FFT_SIZE + (WF_AVG - 1) * WF_STEP;
-        let samples = self.accum.peek_recent(need);
-        if samples.len() < need {
+        let samples = self.accum.peek_recent(self.wf.samples_needed());
+        let Some((bins, hz_per_col)) = self.wf.process_row(&samples, SAMPLE_RATE as f32) else {
             return; // still warming up
-        }
-
-        let bin_hz = SAMPLE_RATE as f32 / WF_FFT_SIZE as f32;
-        let cols = ((WF_MAX_HZ / bin_hz) as usize).min(WF_FFT_SIZE / 2).max(1);
-
-        let mut power = vec![0f32; cols];
-        let mut buf: Vec<Complex<f32>> = vec![Complex { re: 0.0, im: 0.0 }; WF_FFT_SIZE];
-        for seg in 0..WF_AVG {
-            let off = seg * WF_STEP;
-            for i in 0..WF_FFT_SIZE {
-                buf[i] = Complex { re: samples[off + i] * self.hann[i], im: 0.0 };
-            }
-            self.fft.process(&mut buf);
-            for (i, p) in power.iter_mut().enumerate() {
-                *p += buf[i].re * buf[i].re + buf[i].im * buf[i].im;
-            }
-        }
-
-        // Averaged power -> dB magnitude per bin.
-        let mut dbs = vec![0f32; cols];
-        for (i, &p) in power.iter().enumerate() {
-            let avg = p / WF_AVG as f32;
-            let mag = (avg.sqrt() * 2.0) / WF_FFT_SIZE as f32;
-            dbs[i] = 20.0 * (mag + 1e-12).log10();
-        }
-
-        // Estimate the noise floor from the 30th-percentile dB (robust even on a
-        // busy band where signals fill much of the spectrum), smoothed over time.
-        let mut sorted = dbs.clone();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        let pct = sorted[((cols as f32 * 0.30) as usize).min(cols - 1)];
-        self.wf_floor_db = self.wf_floor_db * 0.9 + pct * 0.1;
-
-        // Black point sits a few dB above the floor so the noise renders dark and
-        // only signals above it take on color.
-        let black_point = self.wf_floor_db + WF_BLACK_OFFSET_DB;
-        let mut bins = vec![0u8; cols];
-        for (i, &db) in dbs.iter().enumerate() {
-            let t = ((db - black_point) / WF_SPAN_DB).clamp(0.0, 1.0);
-            bins[i] = (t * 255.0) as u8;
-        }
-        self.emit(EngineEvent::WaterfallRow(WaterfallRow { bins, hz_per_col: bin_hz }));
+        };
+        // Mark this row if it's the first at/after a cycle boundary on the same
+        // rx-corrected clock the decoder uses, so the grid line aligns with DT.
+        let boundary = wf_boundary_row(self.now() - self.rx_offset_ms, &mut self.last_wf_slot);
+        self.emit(EngineEvent::WaterfallRow(WaterfallRow { bins, hz_per_col, boundary }));
     }
 
     fn publish_decodes(&self, decoded: &[DecodedMessage]) {
@@ -582,9 +686,11 @@ impl Engine {
         self.emit(EngineEvent::Decoded(ui));
     }
 
-    fn publish_tx_state(&self, transmitting: bool) {
+    fn publish_tx_state(&self) {
         self.emit(EngineEvent::TxState(TxStateEvent {
-            transmitting,
+            // Derived from the live playback handle so the badge can't get stuck:
+            // it's TX exactly while a transmission is clocking out.
+            transmitting: self.tx_playback.is_some(),
             message: self.qso.tx_message().map(|s| s.to_string()),
             status: self.qso.status(),
         }));
@@ -643,6 +749,25 @@ impl Engine {
                 self.tx_audio_hz = hz.clamp(200, 3000);
                 let _ = self.db.set_config("base_freq", &self.tx_audio_hz.to_string());
             }
+            EngineCommand::SetTxGain(g) => {
+                self.tx_gain = clamp_tx_gain(g);
+                let _ = self.db.set_config("tx_gain", &self.tx_gain.to_string());
+            }
+            EngineCommand::SetWaterfallConfig(cfg) => {
+                let cfg = cfg.sanitize();
+                let _ = self.db.set_config("wf_window", cfg.window.as_str());
+                let _ = self.db.set_config("wf_fft_size", &cfg.fft_size.to_string());
+                let _ = self.db.set_config("wf_avg", &cfg.avg.to_string());
+                // Rebuild plan + window table; the noise-floor EMA restarts and
+                // reconverges within a couple of seconds.
+                self.wf = WfProcessor::new(cfg);
+                self.emit(EngineEvent::Info(format!(
+                    "waterfall: {} {} avg {}",
+                    cfg.window.as_str(),
+                    cfg.fft_size,
+                    cfg.avg
+                )));
+            }
             EngineCommand::SetInputDevice(name) => {
                 self.input_device = name.clone();
                 let _ = self.db.set_config("input_device", name.as_deref().unwrap_or(""));
@@ -660,13 +785,30 @@ impl Engine {
                 }
                 self.select_rig(cfg);
             }
+            EngineCommand::DisconnectRig => {
+                // Stop any in-flight TX and drop PTT *before* dropping the rig:
+                // set_ptt() only sends the CAT un-key when the rig is still
+                // connected, so tearing the transport down first could leave the
+                // radio keyed. Also stop CQ/QSO so we don't try to re-key a
+                // disconnected rig on the next slot.
+                self.qso.stop();
+                self.tx_parity = None;
+                self.finalize_tx();
+                self.publish_tx_state();
+                // Now drop the connection (runs the rig's close/cleanup); keep the
+                // saved config so reconnecting is one click away.
+                self.rig = None;
+                self.ptt = false;
+                self.emit(EngineEvent::Info("rig disconnected".into()));
+                self.publish_rig_status();
+            }
             EngineCommand::StartCq => {
                 self.tx_parity = None;
                 self.qso.start_cq();
                 // Start CQ this very slot if we're still inside the window;
                 // otherwise the first transmission lands at the next free slot.
                 self.maybe_transmit(self.cur_slot());
-                self.publish_tx_state(false);
+                self.publish_tx_state();
             }
             EngineCommand::Answer(args) => {
                 let msg = DecodedMessage {
@@ -681,28 +823,30 @@ impl Engine {
                 self.tx_parity = Some(self.cur_parity());
                 self.qso.answer(&msg);
                 self.maybe_transmit(self.cur_slot());
-                self.publish_tx_state(false);
+                self.publish_tx_state();
             }
             EngineCommand::SetStage(stage) => {
                 self.tx_parity = None;
                 self.qso.set_stage(stage);
                 self.maybe_transmit(self.cur_slot());
-                self.publish_tx_state(false);
+                self.publish_tx_state();
             }
             EngineCommand::StopTx => {
                 self.qso.stop();
                 self.tx_parity = None;
-                self.publish_tx_state(false);
+                // Halt audio + drop PTT now, not at the end of the cycle.
+                self.finalize_tx();
+                self.publish_tx_state();
             }
             EngineCommand::FreeText(text) => {
                 self.tx_parity = None;
                 self.qso.set_free_text(&text);
                 self.maybe_transmit(self.cur_slot());
-                self.publish_tx_state(false);
+                self.publish_tx_state();
             }
             EngineCommand::RefreshStatus => {
                 self.publish_rig_status();
-                self.publish_tx_state(self.ptt);
+                self.publish_tx_state();
                 self.publish_clock_sync();
             }
             EngineCommand::SetClockOffset(offset_ms) => {
@@ -753,5 +897,50 @@ impl Engine {
             }
         }
         self.publish_rig_status();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{clamp_tx_gain, rms_dbfs, wf_boundary_row, CYCLE_MS, SILENCE_DBFS};
+
+    #[test]
+    fn rms_dbfs_flags_silence_and_signal() {
+        // Digital silence floors well below the silence threshold (not -inf).
+        let silence = vec![0.0f32; 6000];
+        let db_silent = rms_dbfs(&silence);
+        assert!(db_silent.is_finite());
+        assert!(db_silent <= SILENCE_DBFS, "silence {db_silent} should be ≤ {SILENCE_DBFS}");
+
+        // Empty buffer is treated as silence, never a panic or -inf.
+        assert!(rms_dbfs(&[]) <= SILENCE_DBFS);
+
+        // A half-scale full-amplitude square wave is ~ -6 dBFS — clearly "audio".
+        let signal = vec![0.5f32; 6000];
+        let db_signal = rms_dbfs(&signal);
+        assert!((db_signal - -6.02).abs() < 0.1, "0.5 RMS should be ~-6 dBFS, got {db_signal}");
+        assert!(db_signal > SILENCE_DBFS);
+    }
+
+    #[test]
+    fn tx_gain_clamps_to_unit_range() {
+        assert_eq!(clamp_tx_gain(0.5), 0.5); // in range, untouched
+        assert_eq!(clamp_tx_gain(1.4), 1.0); // never overdrives past full scale
+        assert_eq!(clamp_tx_gain(-0.2), 0.0); // never negative (phase flip / garbage)
+    }
+
+    #[test]
+    fn wf_boundary_fires_once_per_cycle() {
+        let mut last = -1;
+        // First call always marks (initial slot differs from the -1 sentinel).
+        assert!(wf_boundary_row(0, &mut last));
+        // Subsequent rows within the same 15 s slot do not re-mark.
+        assert!(!wf_boundary_row(100, &mut last));
+        assert!(!wf_boundary_row(CYCLE_MS - 1, &mut last));
+        // Crossing into the next slot marks exactly once.
+        assert!(wf_boundary_row(CYCLE_MS, &mut last));
+        assert!(!wf_boundary_row(CYCLE_MS + 500, &mut last));
+        // And again at the following boundary.
+        assert!(wf_boundary_row(2 * CYCLE_MS + 10, &mut last));
     }
 }

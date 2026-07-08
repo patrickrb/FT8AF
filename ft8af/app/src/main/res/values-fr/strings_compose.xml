@@ -94,6 +94,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">Appel CQ</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">Recherche...</string>
     <string name="qsopanel_qsoing_with">QSO avec %1$s</string>
     <string name="qsopanel_waiting_for">En attente de %1$s</string>
@@ -457,6 +458,13 @@
     <string name="settings_enabled_bands_dialog_desc">Les bandes masquées n\'apparaîtront pas dans les sélecteurs de fréquence.</string>
     <string name="settings_select_serial_port">Sélectionner le port série</string>
     <string name="settings_tx_volume_advice">Ajustez en direct — votre prochain TX utilise ce niveau. Surveillez l\'ALC de votre radio et réduisez jusqu\'à ce qu\'il effleure tout juste la ligne.</string>
+    <string name="settings_input_volume">Volume d\'entrée</string>
+    <string name="settings_input_volume_desc" formatted="false">Gain audio RX appliqué avant le décodage (100 % = inchangé)</string>
+    <string name="settings_input_volume_advice">Appliqué à l\'audio entrant avant le décodage. Surveillez l\'indicateur de niveau RX sur la cascade et visez la zone verte ; le rouge signale l\'écrêtage.</string>
+    <string name="input_level_too_low">Faible</string>
+    <string name="input_level_good">Bon</string>
+    <string name="input_level_too_high">Élevé</string>
+    <string name="input_level_clipping">Clip</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Langue</string>
@@ -505,4 +513,39 @@
     <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
+    <string name="tx_audio_dropped">Échec audio TX — aucun signal émis ce cycle (erreur audio USB)</string>
+    <string name="cq_offset_moved">Décalage CQ déplacé vers un créneau libre : %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Décalage TX libre automatique</string>
+    <string name="settings_auto_clear_tx_desc">En appelant CQ, choisit un créneau libre selon l\'activité récente de la bande et se déplace s\'il devient occupé</string>
+    <string name="tune_content_description">Tune : démarre le coupleur de la radio ou émet une porteuse continue pour l\'accord d\'antenne</string>
+    <string name="tune_stopped_timeout">Tune arrêté après %1$d s</string>
+    <string name="tune_blocked_tx">Arrêtez le CQ/QSO avant d\'utiliser Tune</string>
+    <string name="tune_unavailable_route">Tune n\'est pas encore disponible sur cette voie audio</string>
+    <string name="tune_atu_started">Coupleur d\'antenne de la radio démarré</string>
+    <string name="tune_atu_unavailable">Coupleur indisponible — connectez une radio CAT avec coupleur interne</string>
+    <string name="settings_tune_method">Méthode de Tune</string>
+    <string name="settings_tune_method_desc">Automatique démarre le coupleur interne de la radio via CAT s\'il est disponible, sinon émet la tonalité à faible puissance</string>
+    <string name="tune_method_automatic">Automatique</string>
+    <string name="tune_method_internal">Coupleur interne</string>
+    <string name="tune_method_tone">Tonalité à faible puissance</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / CASCADE (DÉVELOPPEUR)</string>
+    <string name="settings_fft_window">Fonction de fenêtrage FFT</string>
+    <string name="settings_fft_window_desc">Fenêtre appliquée avant la FFT pour l\'affichage spectre/cascade ; Hann réduit les fuites spectrales</string>
+    <string name="settings_fft_window_rect">Rectangulaire (aucune)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">Moyennage des trames</string>
+    <string name="settings_fft_averaging_desc">Lisse l\'affichage entre les trames FFT ; Désactivé affiche chaque trame telle quelle</string>
+    <string name="settings_fft_avg_off">Désactivé</string>
+    <string name="settings_fft_avg_light">Léger (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">Fort (EMA 0.25)</string>
+    <string name="settings_bin_agg">Combinaison des bins du spectre</string>
+    <string name="settings_bin_agg_desc">Comment les bins FFT adjacents fusionnent en une barre du spectre</string>
+    <string name="settings_bin_agg_max">Maximum</string>
+    <string name="settings_bin_agg_avg">Moyenne</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

@@ -26,6 +26,9 @@
 #include <thread>
 #include <vector>
 
+#include "fir_decimator.h"
+#include "rational_resampler.h"
+
 #define TAG "ft8af_usb_capture"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN,  TAG, __VA_ARGS__)
@@ -62,11 +65,29 @@ struct CaptureSession {
     std::thread                   eventThread;
     std::atomic<bool>             running{false};
     std::atomic<int>              inFlight{0};
+    // Why the capture session ended, surfaced to Java via onCaptureStopped(code)
+    // and logged to debug.log. 0 = clean stop (nativeStop). Otherwise the first
+    // cause recorded wins (see recordStopReason / kStopReason* below): this is
+    // the diagnostic that pins down why iso capture retires ~100ms in on some
+    // host+adapter combos, which logcat's native tag doesn't reliably surface.
+    std::atomic<int>              stopReason{0};
 
-    // Sample accumulator for downsampling. We average `decimationRatio`
-    // consecutive input samples per output sample (cheap box-filter
-    // anti-aliasing); the decoder only needs 12kHz so this is plenty.
-    std::vector<float> accumulator;
+    // Anti-aliasing decimator: a windowed-sinc FIR low-pass + integer decimation, replacing
+    // the old box-filter average. Configured with the real ratio in nativeStart. `monoScratch`
+    // holds one transfer's worth of mono samples to hand to it; `outScratch` holds the decimated
+    // result. Both are reused across iso callbacks (which fire every ~8ms) so the hot capture
+    // path does no per-transfer heap allocation.
+    FirDecimator        decimator{4};
+    // True rational resampling for devices whose rate is not an integer multiple
+    // of the target (issue #364): 44.1 kHz -> 12 kHz used to be floored to /3,
+    // producing 14.7 kHz audio labeled 12 kHz — every FT8 tone off the 6.25 Hz
+    // grid, zero decodes. When `useRational` is set, `resampler` (polyphase
+    // L/M, e.g. 40/147) replaces `decimator`; the 48 kHz integer fast path is
+    // untouched.
+    RationalResampler   resampler;
+    bool                useRational = false;
+    std::vector<float>  monoScratch;
+    std::vector<float>  outScratch;
 };
 
 // ----------------------------------------------------------------------------
@@ -132,6 +153,29 @@ void emitStopped(CaptureSession* s, int code) {
 // and feed them into the decimation accumulator. When the accumulator has
 // enough samples for a 12kHz block we emit a callback to Java.
 
+// Stop-reason encoding, decoded by UsbAudioDevice.describeCaptureStopCode() on
+// the Java side and written to debug.log. The bases keep the three failure
+// families distinguishable while still carrying the underlying code:
+//   1000 + libusb_transfer_status  — a transfer completed with a terminal
+//          status and was not resubmitted (e.g. 1005 = NO_DEVICE, 1003 =
+//          CANCELLED, 1001 = ERROR).
+//   2000 + (-libusb_error)         — libusb_submit_transfer() refused to
+//          re-arm a transfer (e.g. 2005 = NO_DEVICE, 2001 = IO).
+//   3000 + (-libusb_error)         — libusb_handle_events() itself failed.
+//   1                              — all transfers retired with no specific
+//          terminal cause recorded (transient errors that stopped resubmitting).
+constexpr int kStopReasonRetiredUnknown       = 1;
+constexpr int kStopReasonBaseTransferStatus   = 1000;
+constexpr int kStopReasonBaseResubmit         = 2000;
+constexpr int kStopReasonBaseHandleEvents     = 3000;
+
+// Record why capture is ending — first cause wins, so the originating failure
+// isn't overwritten by the teardown it triggers.
+inline void recordStopReason(CaptureSession* s, int code) {
+    int expected = 0;
+    s->stopReason.compare_exchange_strong(expected, code);
+}
+
 void LIBUSB_CALL onTransferComplete(libusb_transfer* xfer) {
     auto* s = static_cast<CaptureSession*>(xfer->user_data);
 
@@ -147,12 +191,14 @@ void LIBUSB_CALL onTransferComplete(libusb_transfer* xfer) {
         // pumping; isochronous is best-effort by spec.
         if (xfer->status == LIBUSB_TRANSFER_NO_DEVICE
                 || xfer->status == LIBUSB_TRANSFER_CANCELLED) {
+            recordStopReason(s, kStopReasonBaseTransferStatus + xfer->status);
             s->running.store(false, std::memory_order_release);
             s->inFlight.fetch_sub(1, std::memory_order_acq_rel);
             return;
         }
     }
 
+    s->monoScratch.clear();
     for (int p = 0; p < xfer->num_iso_packets; ++p) {
         libusb_iso_packet_descriptor& pkt = xfer->iso_packet_desc[p];
         if (pkt.status != LIBUSB_TRANSFER_COMPLETED) continue;
@@ -176,34 +222,33 @@ void LIBUSB_CALL onTransferComplete(libusb_transfer* xfer) {
             } else {
                 sample = (float)l / 32768.0f;
             }
-            s->accumulator.push_back(sample);
+            s->monoScratch.push_back(sample);
         }
     }
 
-    // Drain accumulator into target-rate float blocks.
-    if (s->decimationRatio > 0
-            && (int)s->accumulator.size() >= s->decimationRatio) {
-        int outSamples = (int)s->accumulator.size() / s->decimationRatio;
-        std::vector<float> out(outSamples);
-        for (int i = 0; i < outSamples; ++i) {
-            float sum = 0.0f;
-            int base = i * s->decimationRatio;
-            for (int j = 0; j < s->decimationRatio; ++j) {
-                sum += s->accumulator[base + j];
-            }
-            out[i] = sum / (float)s->decimationRatio;
+    // Anti-alias + resample to the target rate. Both stages carry state across transfers, so
+    // partial input is fine — they just emit ~frames*L/M output samples per call.
+    if (!s->monoScratch.empty()) {
+        // Reused buffer: clear() keeps the capacity from prior callbacks, so process()'s
+        // push_backs don't reallocate on the hot path.
+        s->outScratch.clear();
+        if (s->useRational) {
+            s->resampler.process(s->monoScratch.data(),
+                                 (int)s->monoScratch.size(), s->outScratch);
+        } else {
+            s->decimator.process(s->monoScratch.data(),
+                                 (int)s->monoScratch.size(), s->outScratch);
         }
-        int consumed = outSamples * s->decimationRatio;
-        s->accumulator.erase(
-                s->accumulator.begin(),
-                s->accumulator.begin() + consumed);
-        emitAudioData(s, out.data(), outSamples);
+        if (!s->outScratch.empty()) {
+            emitAudioData(s, s->outScratch.data(), (int)s->outScratch.size());
+        }
     }
 
     // Re-submit this transfer.
     int rc = libusb_submit_transfer(xfer);
     if (rc != 0) {
         LOGW("libusb_submit_transfer failed: %s", libusb_error_name(rc));
+        recordStopReason(s, kStopReasonBaseResubmit + (-rc));
         s->running.store(false, std::memory_order_release);
         s->inFlight.fetch_sub(1, std::memory_order_acq_rel);
     }
@@ -220,12 +265,15 @@ void eventLoop(CaptureSession* s) {
         int rc = libusb_handle_events_timeout_completed(s->ctx, &tv, nullptr);
         if (rc != 0 && rc != LIBUSB_ERROR_INTERRUPTED) {
             LOGW("libusb_handle_events failed: %s", libusb_error_name(rc));
+            recordStopReason(s, kStopReasonBaseHandleEvents + (-rc));
             break;
         }
         if (s->inFlight.load(std::memory_order_acquire) == 0) {
             // All transfers retired without being re-submitted (e.g., device
-            // gone). Exit cleanly so Java can fall back to mic.
-            LOGW("all transfers retired; ending capture");
+            // gone). Exit cleanly so Java can decide whether to re-arm.
+            recordStopReason(s, kStopReasonRetiredUnknown);
+            LOGW("all transfers retired; ending capture (stopReason=%d)",
+                 s->stopReason.load());
             break;
         }
     }
@@ -242,7 +290,9 @@ void eventLoop(CaptureSession* s) {
         libusb_handle_events_timeout_completed(s->ctx, &tv, nullptr);
     }
 
-    emitStopped(s, 0);
+    // Report why capture ended. 0 means running was cleared externally
+    // (nativeStop) with no transfer-level failure — a clean, requested stop.
+    emitStopped(s, s->stopReason.load());
 }
 
 }  // namespace
@@ -297,8 +347,37 @@ Java_com_k1af_ft8af_wave_UsbAudioNative_nativeStart(
     s->inputChannels       = inputChannels > 0 ? inputChannels : 2;
     s->inputBytesPerSample = inputBytesPerSample > 0 ? inputBytesPerSample : 2;
     s->targetRate          = targetSampleRate;
-    s->decimationRatio     = inputSampleRate / targetSampleRate;
-    s->accumulator.reserve(inputSampleRate);  // 1s of headroom
+    // Integer decimation ratio (e.g. 48k/12k = 4), computed defensively so a bad
+    // rate pair can't divide-by-zero or mis-rate the decoder. Warn on the
+    // degenerate cases the helper folds into a pass-through ratio of 1. A rate
+    // pair that isn't an integer multiple (e.g. a 44.1 kHz-only codec) gets the
+    // exact polyphase rational resampler instead of a floored ratio, which used
+    // to mislabel 14.7 kHz audio as 12 kHz and shift every FT8 tone off the
+    // 6.25 Hz grid (issue #364).
+    const int ratio = decimationRatioFor(inputSampleRate, targetSampleRate);
+    if (targetSampleRate <= 0 || inputSampleRate < targetSampleRate) {
+        LOGE("invalid sample rates input=%d target=%d; disabling decimation "
+             "(ratio=1, audio passed through unchanged)",
+             inputSampleRate, targetSampleRate);
+    } else if (inputSampleRate % targetSampleRate != 0) {
+        s->useRational = true;
+    }
+    s->decimationRatio     = ratio;
+    if (s->useRational) {
+        const RationalRatio lm = rationalRatioFor(inputSampleRate, targetSampleRate);
+        s->resampler.configure(lm.L, lm.M);
+        LOGI("input rate %d is not an integer multiple of target %d; using rational "
+             "polyphase resampler L/M=%d/%d (exact output rate %d)",
+             inputSampleRate, targetSampleRate, lm.L, lm.M,
+             (int)((int64_t)inputSampleRate * lm.L / lm.M));
+    } else {
+        // Build the anti-aliasing FIR for the actual integer ratio.
+        s->decimator.configure(ratio);
+    }
+    s->monoScratch.reserve(inputSampleRate / 100);  // ~10ms of input headroom
+    s->outScratch.reserve(targetSampleRate > 0
+            ? targetSampleRate / 100 + 2
+            : inputSampleRate / 100 + 2);           // resampled headroom
 
     jclass cbClass = env->GetObjectClass(callback);
     s->onData    = env->GetMethodID(cbClass, "onAudioData",       "([FI)V");
@@ -359,9 +438,12 @@ Java_com_k1af_ft8af_wave_UsbAudioNative_nativeStart(
     }
 
     LOGI("started capture: fd=%d ep=0x%02x maxPkt=%d inputRate=%d ch=%d targetRate=%d "
-         "decim=%d transfers=%zu packets/xfer=%d",
+         "L/M=%d/%d transfers=%zu packets/xfer=%d",
          fd, s->endpoint, s->maxPacketSize, s->inputRate, s->inputChannels,
-         s->targetRate, s->decimationRatio, s->transfers.size(), kPacketsPerTransfer);
+         s->targetRate,
+         s->useRational ? s->resampler.interpolation() : 1,
+         s->useRational ? s->resampler.decimation() : s->decimationRatio,
+         s->transfers.size(), kPacketsPerTransfer);
 
     s->eventThread = std::thread(eventLoop, s);
     return reinterpret_cast<jlong>(s);

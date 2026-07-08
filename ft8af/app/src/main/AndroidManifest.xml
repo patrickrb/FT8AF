@@ -20,9 +20,20 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Observe connectivity so offline-logged QSOs auto-upload when the network returns. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Needed-DX alerts: post notifications (Android 13+) and vibrate. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Foreground RX service: keep FT8 decode + mic capture alive in the background
+         (Android 14 mutes background mic without a microphone-typed foreground service). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
+    <!-- Android Auto: NAVIGATION-category car app that draws its QSO map on the
+         car Surface (see QsoStatusScreen/CarMapSurfaceRenderer). -->
+    <uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
+    <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
 
     <application
         android:allowBackup="false"
@@ -81,6 +92,13 @@
             android:name=".bluetooth.BluetoothSerialService"
             android:exported="false" />
 
+        <!-- Keeps RX decode + audio capture running when the app is backgrounded or
+             screen-off so CQ-reply / QSO-complete alerts keep firing. -->
+        <service
+            android:name="com.k1af.ft8af.service.RxForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
         <!-- Persists the user's per-app language choice (AppCompatDelegate
              .setApplicationLocales) on Android 12 and below. On Android 13+
              the framework LocaleManager stores it; this is the AndroidX backport. -->
@@ -91,6 +109,30 @@
             <meta-data
                 android:name="autoStoreLocales"
                 android:value="true" />
+        </service>
+
+        <!-- Android Auto (phone projection): read-only QSO status screens rendered
+             with car-app-library templates. Exported so the Android Auto host can
+             bind; access is gated by FT8AFCarAppService's HostValidator. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+        <!-- Level 1 = backward-compat floor. The surface map (NavigationTemplate)
+             needs API level 5+; older hosts fall back to a text PaneTemplate. -->
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1" />
+
+        <service
+            android:name="radio.ks3ckc.ft8af.car.FT8AFCarAppService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <!-- NAVIGATION (not IOT/POI) so the full-bleed QSO map surface stays
+                     visible while the vehicle is moving — the point of mobile FT8.
+                     POI/IOT map surfaces are blanked or disallowed while driving. -->
+                <category android:name="androidx.car.app.category.NAVIGATION" />
+            </intent-filter>
         </service>
 
         <provider

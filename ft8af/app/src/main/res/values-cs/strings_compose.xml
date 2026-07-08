@@ -134,6 +134,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">Volání CQ</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">Hledání...</string>
     <string name="qsopanel_qsoing_with">QSO s %1$s</string>
     <string name="qsopanel_waiting_for">Čekání na %1$s</string>
@@ -282,6 +283,7 @@
     <string name="pota_upload_success">Nahráno %1$d deníků parků do POTA</string>
     <string name="pota_upload_failed">Nahrání selhalo: %1$s</string>
     <string name="pota_upload_server_error">POTA nemohlo zpracovat nahrání. Zkontrolujte, že reference parku je platná a vaše volací značka je registrována v POTA, a zkuste to znovu.</string>
+    <string name="pota_upload_busy">Servery POTA jsou dočasně nedostupné. Několikrát jsme to zkusili bez úspěchu — zkuste to prosím znovu za pár minut.</string>
     <string name="pota_upload_network_error">Nepodařilo se spojit s POTA. Zkontrolujte připojení k internetu a zkuste to znovu.</string>
     <string name="pota_login_title">Přihlásit se do POTA</string>
     <string name="pota_login_desc">Použijte e-mail a heslo svého účtu pota.app.</string>
@@ -534,6 +536,13 @@
     <string name="settings_enabled_bands_dialog_desc">Skrytá pásma se neobjeví ve výběru frekvencí.</string>
     <string name="settings_select_serial_port">Vyberte sériový port</string>
     <string name="settings_tx_volume_advice">Upravujte naživo — vaše příští TX použije tuto úroveň. Sledujte ALC svého rádia a stahujte, dokud se právě nedotýká čáry.</string>
+    <string name="settings_input_volume">Vstupní hlasitost</string>
+    <string name="settings_input_volume_desc" formatted="false">Zesílení přijímaného zvuku před dekódováním (100 % = beze změny)</string>
+    <string name="settings_input_volume_advice">Použije se na příchozí zvuk před dekódováním. Sledujte měřič úrovně RX na vodopádu a mířte do zelené zóny; červená znamená ořezávání.</string>
+    <string name="input_level_too_low">Nízká</string>
+    <string name="input_level_good">Dobrá</string>
+    <string name="input_level_too_high">Vysoká</string>
+    <string name="input_level_clipping">Ořez</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Jazyk</string>
@@ -547,4 +556,39 @@
     <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
+    <string name="tx_audio_dropped">Selhalo TX audio — v tomto cyklu nebyl vyslán žádný signál (chyba USB audia)</string>
+    <string name="cq_offset_moved">Offset CQ přesunut na volné místo: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Automaticky volný TX offset</string>
+    <string name="settings_auto_clear_tx_desc">Při volání CQ vybere volné místo podle nedávné aktivity v pásmu a uhne, pokud se obsadí</string>
+    <string name="tune_content_description">Tune: spustí tuner rádia nebo vysílá souvislou nosnou pro ladění antény</string>
+    <string name="tune_stopped_timeout">Tune zastaven po %1$d s</string>
+    <string name="tune_blocked_tx">Před použitím Tune zastavte CQ/QSO</string>
+    <string name="tune_unavailable_route">Tune zatím není na této zvukové cestě podporován</string>
+    <string name="tune_atu_started">Anténní tuner rádia spuštěn</string>
+    <string name="tune_atu_unavailable">Tuner není k dispozici — připojte CAT rádio s interním tunerem</string>
+    <string name="settings_tune_method">Metoda Tune</string>
+    <string name="settings_tune_method_desc">Automaticky spustí interní tuner rádia přes CAT, je-li k dispozici, jinak přehraje tón s nízkým výkonem</string>
+    <string name="tune_method_automatic">Automaticky</string>
+    <string name="tune_method_internal">Interní tuner</string>
+    <string name="tune_method_tone">Tón s nízkým výkonem</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / VODOPÁD (VÝVOJÁŘ)</string>
+    <string name="settings_fft_window">Okénková funkce FFT</string>
+    <string name="settings_fft_window_desc">Okno před FFT pro zobrazení spektra/vodopádu; Hann omezuje spektrální únik</string>
+    <string name="settings_fft_window_rect">Obdélníkové (žádné)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">Průměrování snímků</string>
+    <string name="settings_fft_averaging_desc">Vyhlazuje zobrazení mezi snímky FFT; Vypnuto zobrazuje každý snímek beze změny</string>
+    <string name="settings_fft_avg_off">Vypnuto</string>
+    <string name="settings_fft_avg_light">Lehké (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">Silné (EMA 0.25)</string>
+    <string name="settings_bin_agg">Slučování binů spektra</string>
+    <string name="settings_bin_agg_desc">Jak se sousední biny FFT slučují do jednoho sloupce spektra</string>
+    <string name="settings_bin_agg_max">Maximum</string>
+    <string name="settings_bin_agg_avg">Průměr</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

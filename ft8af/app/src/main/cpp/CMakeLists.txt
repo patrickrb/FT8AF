@@ -71,6 +71,7 @@ add_library(ft8af_dsp STATIC
         ${FT8LIB_ROOT}/ft8/encode.c
         ${FT8LIB_ROOT}/ft8/decode.c
         ${FT8LIB_ROOT}/ft8/ldpc.c
+        ${FT8LIB_ROOT}/ft8/osd.c
         ${FT8LIB_ROOT}/ft8/crc.c
         ${FT8LIB_ROOT}/ft8/message.c
         ${FT8LIB_ROOT}/ft8/pack.c
@@ -109,6 +110,12 @@ add_library(ft8af SHARED
         ft8af_glue/ft8_resample_jni.cpp
         # JNI wrappers — FT8 decoder (replaces prebuilt)
         ft8af_glue/ft8_decode_jni.cpp
+        # Deep-decode signal subtraction (shared with host bench + desktop)
+        ft8af_glue/ft8_subtract.c
+        # Fine-sync coherent demod retry (shared with host bench)
+        ft8af_glue/ft8_fine.c
+        # Cross-slot decoding: LLR accumulation + message-history retry
+        ft8af_glue/ft8_xslot.c
         # JNI wrappers — FT2/FT4 decoder (from-source, was in ft8af_usb)
         ft8af_glue/ft2_decode_jni.cpp
 )

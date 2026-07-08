@@ -7,14 +7,16 @@ name: iOS CI
 # Developer cert + provisioning profile, which aren't wired up yet.
 #
 # PATH-FILTERED: only runs when ios/** or the shared native C core
-# (ft8af/app/src/main/cpp/**) changes, or this workflow file. Pushes to main
-# always verify. The always-run `ios-gate` job is the required status check.
+# (ft8af/app/src/main/cpp/**) changes, or this workflow file. Pushes to
+# staging/main always verify. The always-run `ios-gate` job is the required
+# status check. iOS has no release artifact yet (CI build/test only), so the
+# staging/main split only affects when the verify runs.
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, staging, dev]
   pull_request:
-    branches: [main, dev]
+    branches: [main, staging, dev]
 
 concurrency:
   group: ios-${{ github.event.pull_request.number || github.ref }}
@@ -46,9 +48,9 @@ jobs:
           CHANGED: ${{ steps.filter.outputs.ios }}
         run: |
           set -euo pipefail
-          # main pushes always verify; otherwise only when iOS-relevant files
-          # (or the shared C core) changed.
-          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
+          # staging/main pushes always verify; otherwise only when iOS-relevant
+          # files (or the shared C core) changed.
+          if [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/heads/staging" ) ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif [[ "$CHANGED" == "true" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -78,7 +80,44 @@ jobs:
       # header-search-path / non-modular-include caveats if any regress.
       - name: Run FT8AFKit tests
         working-directory: ios/FT8AFKit
-        run: swift test
+        run: swift test --enable-code-coverage
+
+      # Export the SwiftPM coverage run to lcov. swift test writes a merged
+      # default.profdata plus the combined *PackageTests.xctest bundle under the
+      # build bin dir; llvm-cov turns those into lcov for Codecov. .build (vendored
+      # SwiftPM checkouts) is excluded so the ios flag reflects our own sources.
+      - name: Export iOS coverage to lcov
+        # Non-fatal: a coverage-export hiccup must never fail the required
+        # ios-gate (mirrors the native/desktop coverage guards). If this or the
+        # upload below no-ops, the simulator build still gates the PR.
+        continue-on-error: true
+        working-directory: ios/FT8AFKit
+        run: |
+          set -euo pipefail
+          bin="$(swift build --show-bin-path)"
+          prof="$bin/codecov/default.profdata"
+          # Collect every test bundle's executable (usually one merged bundle).
+          objs=()
+          while IFS= read -r xctest; do
+            objs+=("$xctest/Contents/MacOS/$(basename "${xctest%.xctest}")")
+          done < <(find "$bin" -maxdepth 1 -name '*.xctest')
+          if [[ ${#objs[@]} -eq 0 ]]; then
+            echo "::error::No .xctest bundle found under $bin"; exit 1
+          fi
+          args=("${objs[0]}")
+          for o in "${objs[@]:1}"; do args+=("-object" "$o"); done
+          xcrun llvm-cov export -format=lcov -instr-profile "$prof" \
+            --ignore-filename-regex='\.build/' \
+            "${args[@]}" > ios.lcov
+          echo "Wrote $(wc -l < ios.lcov) lines of lcov."
+
+      - name: Upload iOS coverage to Codecov
+        continue-on-error: true
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ios/FT8AFKit/ios.lcov
+          flags: ios
 
       # The app's .xcodeproj is generated from project.yml via XcodeGen and no
       # shared scheme is committed, so regenerate it to get a buildable scheme.

@@ -16,6 +16,9 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.os.AsyncTask;
+
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import android.util.Log;
 
 import com.k1af.ft8af.FT8Common;
@@ -26,6 +29,7 @@ import com.k1af.ft8af.callsign.CallsignDatabase;
 import com.k1af.ft8af.callsign.CallsignInfo;
 import com.k1af.ft8af.connector.ConnectMode;
 import com.k1af.ft8af.ft8signal.FT8Package;
+import com.k1af.ft8af.log.AdifFormat;
 import com.k1af.ft8af.log.OnQueryQSLCallsign;
 import com.k1af.ft8af.log.OnQueryQSLRecordCallsign;
 import com.k1af.ft8af.log.QSLCallsignRecord;
@@ -33,6 +37,7 @@ import com.k1af.ft8af.log.QSLRecord;
 import com.k1af.ft8af.log.QSLRecordStr;
 import com.k1af.ft8af.rigs.BaseRigOperation;
 import com.k1af.ft8af.timer.UtcTimer;
+import com.k1af.ft8af.wave.InputAudioLevel;
 
 import org.jetbrains.annotations.Nullable;
 import org.json.JSONArray;
@@ -56,7 +61,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
     public static synchronized DatabaseOpr getInstance(@Nullable Context context, @Nullable String databaseName) {
         if (instance == null) {
-            instance = new DatabaseOpr(context, databaseName, null, 18);
+            instance = new DatabaseOpr(context, databaseName, null, 19);
         }
         return instance;
     }
@@ -101,6 +106,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         //Create POTA activation history table
         createPotaTables(sqLiteDatabase);
 
+        //Create per-location Wavelog station cache table (issue #437)
+        createLocationStationTables(sqLiteDatabase);
+
         //Create indexes
         createIndex(sqLiteDatabase);
 
@@ -128,6 +136,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
         //Create POTA activation history table
         createPotaTables(sqLiteDatabase);
+
+        //Create per-location Wavelog station cache table (issue #437)
+        createLocationStationTables(sqLiteDatabase);
 
         //Create indexes
         createIndex(sqLiteDatabase);
@@ -486,6 +497,96 @@ public class DatabaseOpr extends SQLiteOpenHelper {
     }
 
     /**
+     * Create the per-location Wavelog station cache table (issue #437). Maps a
+     * canonical {@link com.k1af.ft8af.log.LocationSignature} string to the
+     * {@code station_profile_id} that covers that location, so revisiting a place
+     * reuses its station profile instead of creating a duplicate. Persisted across
+     * sessions. Idempotent (guarded by {@link #checkTableExists}) so it is safe to
+     * call from both onCreate and onUpgrade.
+     */
+    private void createLocationStationTables(SQLiteDatabase sqLiteDatabase) {
+        if (!checkTableExists(sqLiteDatabase, "location_station_cache")) {
+            sqLiteDatabase.execSQL("CREATE TABLE location_station_cache (\n" +
+                    "signature TEXT PRIMARY KEY,\n" +
+                    "station_profile_id TEXT NOT NULL,\n" +
+                    "updated_at INTEGER NOT NULL)");//epoch millis
+        }
+    }
+
+    /**
+     * Upsert a {@code signature -> station_profile_id} mapping. Thin DAO wrapper;
+     * the signature must already be canonicalized by
+     * {@link com.k1af.ft8af.log.LocationSignature#signature()}. No-op on null args.
+     * Part of the dark issue-#437 foundation — not yet called from any live path.
+     */
+    public void putStationForSignature(String signature, String profileId) {
+        if (db == null || signature == null || profileId == null) {
+            return;
+        }
+        try {
+            db.execSQL("INSERT OR REPLACE INTO location_station_cache "
+                            + "(signature, station_profile_id, updated_at) VALUES (?,?,?)",
+                    new Object[]{signature, profileId, System.currentTimeMillis()});
+        } catch (Exception e) {
+            Log.w(TAG, "putStationForSignature failed: " + e.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * Look up the cached {@code station_profile_id} for a canonical signature, or
+     * null when there is no mapping (or on error / null input).
+     */
+    public String getStationForSignature(String signature) {
+        if (db == null || signature == null) {
+            return null;
+        }
+        try (Cursor cursor = db.rawQuery(
+                "SELECT station_profile_id FROM location_station_cache WHERE signature = ?",
+                new String[]{signature})) {
+            if (cursor.moveToFirst()) {
+                return cursor.getString(0);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "getStationForSignature failed: " + e.getClass().getSimpleName());
+        }
+        return null;
+    }
+
+    /**
+     * Every cached {@code signature -> station_profile_id} mapping, ordered by
+     * signature for a deterministic read-back. Primarily for inspection/testing.
+     */
+    public java.util.List<com.k1af.ft8af.log.LocationStationCacheEntry> getAllStationSignatures() {
+        java.util.List<com.k1af.ft8af.log.LocationStationCacheEntry> out = new ArrayList<>();
+        if (db == null) {
+            return out;
+        }
+        try (Cursor cursor = db.rawQuery(
+                "SELECT signature, station_profile_id FROM location_station_cache "
+                        + "ORDER BY signature", null)) {
+            while (cursor.moveToNext()) {
+                out.add(new com.k1af.ft8af.log.LocationStationCacheEntry(
+                        cursor.getString(0), cursor.getString(1)));
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "getAllStationSignatures failed: " + e.getClass().getSimpleName());
+        }
+        return out;
+    }
+
+    /** Drop every cached signature mapping (e.g. on server/logbook switch). */
+    public void clearLocationStationCache() {
+        if (db == null) {
+            return;
+        }
+        try {
+            db.execSQL("DELETE FROM location_station_cache");
+        } catch (Exception e) {
+            Log.w(TAG, "clearLocationStationCache failed: " + e.getClass().getSimpleName());
+        }
+    }
+
+    /**
      * Create indexes to improve import speed
      * @param sqLiteDatabase database
      */
@@ -738,6 +839,72 @@ public class DatabaseOpr extends SQLiteOpenHelper {
     //Get all configuration parameters
     public void getAllConfigParameter(OnAfterQueryConfig onAfterQueryConfig) {
         new GetAllConfigParameter(db, onAfterQueryConfig).execute();
+    }
+
+    /**
+     * Parses a config-table int value, falling back when the stored string is
+     * empty or not a number (a hand-edited or stale backup must not crash
+     * startup hydration). Range clamping is the caller's (setter's) job.
+     * Package-private static so it is unit-testable without a database.
+     */
+    static int parseConfigInt(String value, int fallback) {
+        if (value == null || value.isEmpty()) {
+            return fallback;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    /**
+     * Read every config key/value pair synchronously into an insertion-ordered map.
+     * Backs the settings-export feature (issue #357). Must be called off the main
+     * thread (it touches SQLite directly).
+     */
+    public java.util.LinkedHashMap<String, String> getAllConfigSync() {
+        java.util.LinkedHashMap<String, String> map = new java.util.LinkedHashMap<>();
+        // ORDER BY: SQLite guarantees no row order without it, so the map's insertion
+        // order (which this method promises) would otherwise be nondeterministic.
+        Cursor cursor = db.rawQuery("select KeyName,Value from config order by KeyName", null);
+        try {
+            int keyIdx = cursor.getColumnIndexOrThrow("KeyName");
+            int valueIdx = cursor.getColumnIndexOrThrow("Value");
+            while (cursor.moveToNext()) {
+                // The schema allows NULL Value; coerce to "" so a backup export keeps the
+                // key (JSONObject.put(key, null) drops it) and matches writeConfigSync's
+                // null->"" import semantics.
+                String value = cursor.isNull(valueIdx) ? "" : cursor.getString(valueIdx);
+                map.put(cursor.getString(keyIdx), value);
+            }
+        } finally {
+            cursor.close();
+        }
+        return map;
+    }
+
+    /**
+     * Upsert every entry of {@code config} synchronously (same delete-then-insert as
+     * {@link WriteConfig}). Backs the settings-import feature (issue #357). Must be
+     * called off the main thread. After calling, run {@link #getAllConfigParameter}
+     * to re-hydrate {@link GeneralVariables} from the freshly written values.
+     */
+    public void writeConfigSync(java.util.Map<String, String> config) {
+        // One transaction: an interrupted import can't leave the table half-updated,
+        // and batching the statements is much faster than autocommitting each one.
+        db.beginTransaction();
+        try {
+            for (java.util.Map.Entry<String, String> entry : config.entrySet()) {
+                String value = entry.getValue() == null ? "" : entry.getValue();
+                db.execSQL("DELETE FROM config where KeyName =?", new String[]{entry.getKey()});
+                db.execSQL("INSERT INTO config (KeyName,Value)Values(?,?)",
+                        new String[]{entry.getKey(), value});
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
     }
 
     /**
@@ -1021,9 +1188,17 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             }
 
             if (cursor.getString(cursor.getColumnIndex("mode")) != null) {
-                logStr.append(String.format("<mode:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("mode")).length()
-                        , cursor.getString(cursor.getColumnIndex("mode"))));
+                // FT4/FT2 are ADIF submodes of MFSK, not standalone modes — a bare
+                // <mode>FT2 is rejected as invalid by pota.app and other ADIF consumers.
+                String mode = cursor.getString(cursor.getColumnIndex("mode"));
+                String submode = AdifFormat.mfskSubmode(mode);
+                if (submode != null) {
+                    logStr.append(String.format("<mode:4>MFSK <submode:%d>%s "
+                            , submode.length(), submode));
+                } else {
+                    logStr.append(String.format("<mode:%d>%s "
+                            , mode.length(), mode));
+                }
             }
 
             if (cursor.getString(cursor.getColumnIndex("rst_sent")) != null) {
@@ -1341,8 +1516,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     , String.valueOf(record.isLotW_QSL ? 1 : 0)
                     , record.getToMaidenGrid()
                     , record.getMode()
-                    , String.valueOf(record.getSendReport())
-                    , String.valueOf(record.getReceivedReport())
+                    , AdifFormat.formatReport(record.getSendReport())
+                    , AdifFormat.formatReport(record.getReceivedReport())
                     , record.getQso_date()
                     , record.getTime_on()
 
@@ -1411,7 +1586,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             if (record.getSendReport() > -100) {
                 db.execSQL("UPDATE  QSLTable  SET rst_sent=? " +
                                 " WHERE (call=?) and (qso_date=?) and(time_on=?) and(mode=?)"
-                        , new Object[]{record.getSendReport(), record.getToCallsign()
+                        , new Object[]{AdifFormat.formatReport(record.getSendReport()), record.getToCallsign()
                                 , record.getQso_date()
                                 , record.getTime_on()
                                 , record.getMode()});
@@ -1419,7 +1594,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             if (record.getReceivedReport() > -100) {
                 db.execSQL("UPDATE  QSLTable  SET rst_rcvd=? " +
                                 " WHERE (call=?) and (qso_date=?) and(time_on=?) and(mode=?)"
-                        , new Object[]{record.getReceivedReport(), record.getToCallsign()
+                        , new Object[]{AdifFormat.formatReport(record.getReceivedReport()), record.getToCallsign()
                                 , record.getQso_date()
                                 , record.getTime_on()
                                 , record.getMode()});
@@ -1647,8 +1822,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             databaseOpr.db.execSQL(querySQL, new String[]{qslRecord.getToCallsign()
                     , qslRecord.getToMaidenGrid()
                     , qslRecord.getMode()
-                    , String.valueOf(qslRecord.getSendReport())
-                    , String.valueOf(qslRecord.getReceivedReport())
+                    , AdifFormat.formatReport(qslRecord.getSendReport())
+                    , AdifFormat.formatReport(qslRecord.getReceivedReport())
                     , qslRecord.getQso_date()
                     , qslRecord.getTime_on()
 
@@ -1850,31 +2025,44 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         }
     }
 
-    public static class GetCallsignMapGrid extends AsyncTask<Void, Void, Void> {
-        SQLiteDatabase db;
+    /**
+     * Single-thread executor backing {@link #loadCallsignMapGridAsync(SQLiteDatabase)}.
+     * Replaces the deprecated {@code GetCallsignMapGrid} AsyncTask (issue #455).
+     */
+    private static final Executor CALLSIGN_MAP_GRID_EXECUTOR =
+            Executors.newSingleThreadExecutor();
 
-        public GetCallsignMapGrid(SQLiteDatabase db) {
-            this.db = db;
-        }
-
-        @SuppressLint("Range")
-        @Override
-        protected Void doInBackground(Void... voids) {
-
-            String querySQL = "select DISTINCT callsign,grid from QslCallsigns qc \n" +
-                    "where LENGTH(grid)>3\n" +
-                    "order by ID ";
-            Cursor cursor = db.rawQuery(querySQL, null);
-            try {
-                while (cursor.moveToNext()) {
-                    GeneralVariables.addCallsignAndGrid(cursor.getString(cursor.getColumnIndex("callsign"))
-                            , cursor.getString(cursor.getColumnIndex("grid")));
-                }
-            } finally {
-                cursor.close();
+    /**
+     * Loads the callsign→grid map from the {@code QslCallsigns} table into
+     * {@link GeneralVariables#addCallsignAndGrid} synchronously on the caller's thread.
+     * Extracted from the old {@code GetCallsignMapGrid} AsyncTask so the query logic is
+     * directly unit-testable; production callers should use
+     * {@link #loadCallsignMapGridAsync(SQLiteDatabase)} to stay off the main thread.
+     */
+    @SuppressLint("Range")
+    public static void loadCallsignMapGrid(SQLiteDatabase db) {
+        String querySQL = "select DISTINCT callsign,grid from QslCallsigns qc \n" +
+                "where LENGTH(grid)>3\n" +
+                "order by ID ";
+        Cursor cursor = db.rawQuery(querySQL, null);
+        try {
+            int callsignIdx = cursor.getColumnIndex("callsign");
+            int gridIdx = cursor.getColumnIndex("grid");
+            while (cursor.moveToNext()) {
+                GeneralVariables.addCallsignAndGrid(cursor.getString(callsignIdx), cursor.getString(gridIdx));
             }
-            return null;
+        } finally {
+            cursor.close();
         }
+    }
+
+    /**
+     * Runs {@link #loadCallsignMapGrid(SQLiteDatabase)} on a background executor. This
+     * is the non-deprecated replacement for the old
+     * {@code new GetCallsignMapGrid(db).execute()} AsyncTask call (issue #455).
+     */
+    public static void loadCallsignMapGridAsync(SQLiteDatabase db) {
+        CALLSIGN_MAP_GRID_EXECUTOR.execute(() -> loadCallsignMapGrid(db));
     }
 
     public interface OnGetQsoGrids {
@@ -2334,6 +2522,32 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("toModifier")) {
                     GeneralVariables.toModifier = result;
                 }
+                if (name.equalsIgnoreCase("cqFreeText")) {
+                    if (result != null) {
+                        GeneralVariables.cqFreeText = result;
+                    }
+                }
+                if (name.equalsIgnoreCase("fieldDayMode")) {
+                    GeneralVariables.fieldDayMode = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("fieldDayClass")) {
+                    if (result != null && result.length() > 0) {
+                        GeneralVariables.fieldDayClass = result;
+                    }
+                }
+                if (name.equalsIgnoreCase("fieldDayNumTx")) {
+                    try {
+                        int v = result.equals("") ? 1 : Integer.parseInt(result);
+                        GeneralVariables.fieldDayNumTx = Math.max(1, Math.min(16, v));
+                    } catch (NumberFormatException e) {
+                        GeneralVariables.fieldDayNumTx = 1;
+                    }
+                }
+                if (name.equalsIgnoreCase("fieldDaySection")) {
+                    if (result != null) {
+                        GeneralVariables.fieldDaySection = result;
+                    }
+                }
                 if (name.equalsIgnoreCase("antenna")) {
                     GeneralVariables.myAntenna = result;
                 }
@@ -2356,6 +2570,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("synFreq")) {
                     GeneralVariables.synFrequency = !(result.equals("") || result.equals("0"));
+                }
+                if (name.equalsIgnoreCase("holdTxFreq")) {
+                    // Parse like synFreq above: any non-empty, non-"0" value is true,
+                    // so the two boolean configs handle stored values consistently.
+                    GeneralVariables.holdTxFreq = !(result.equals("") || result.equals("0"));
                 }
                 if (name.equalsIgnoreCase("transDelay")) {
                     if (result.matches("^\\d{1,4}$")) {//Regex: 1-4 digit number
@@ -2409,6 +2628,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.clearDecodesEveryCycle = result.equals("1");
                 }
 
+                if (name.equalsIgnoreCase("clearOnBandModeChange")) {
+                    GeneralVariables.clearOnBandModeChange = result.equals("1");
+                }
+
                 if (name.equalsIgnoreCase("ctrMode")) {
                     GeneralVariables.controlMode = result.equals("") ? ControlMode.VOX : Integer.parseInt(result);
                 }
@@ -2442,6 +2665,13 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("autoGridFromGPS")) {//Auto-update grid from GPS
                     GeneralVariables.autoUpdateGridFromGPS = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("disciplineClockFromGPS")) {//Discipline clock from GPS (issue #373)
+                    GeneralVariables.disciplineClockFromGPS = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("gpsClockIntervalMin")) {//GPS discipline update interval (minutes)
+                    GeneralVariables.gpsClockIntervalMinutes =
+                            com.k1af.ft8af.location.GpsClockUpdater.parseIntervalMinutes(result);
                 }
                 if (name.equalsIgnoreCase("pttDelay")) {//PTT delay setting
                     GeneralVariables.pttDelay = result.equals("") ? 100 : Integer.parseInt(result);
@@ -2490,9 +2720,62 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.volumePercent = result.equals("") ? 1.0f : Float.parseFloat(result) / 100f;
                     GeneralVariables.mutableVolumePercent.postValue(GeneralVariables.volumePercent);
                 }
+                if (name.equalsIgnoreCase("inputVolume")) {//RX input gain (percent, 100 = unity)
+                    //Defensive parse + clamp: the config value is a free-form
+                    //string and settings import (#382) can feed a corrupted or
+                    //out-of-range value through here at startup. Non-numeric
+                    //falls back to unity; numeric clamps to 0..200%.
+                    GeneralVariables.inputGainPercent = InputAudioLevel.parseGainPercent(result);
+                }
                 if (name.equalsIgnoreCase("showTxVolumeSlider")) {//Inline TX volume slider visibility
                     GeneralVariables.showTxVolumeSlider = !result.equals("0");
                     GeneralVariables.mutableShowTxVolumeSlider.postValue(GeneralVariables.showTxVolumeSlider);
+                }
+                if (name.equalsIgnoreCase("perBandOutputLevel")) {//Save TX output level per band, defaults off
+                    GeneralVariables.savePerBandOutputLevel = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("perBandOutputLevels")) {//Per-band TX output levels ("20m=60,40m=85")
+                    GeneralVariables.perBandOutputLevels = result == null ? "" : result;
+                }
+                if (name.equalsIgnoreCase("autoClearTxFreq")) {//Auto-select clear CQ offset (issue #418)
+                    GeneralVariables.autoClearTxFreq = "1".equals(result);
+                }
+                if (name.equalsIgnoreCase("tuneMaxOnSeconds")) {//Tune carrier hard cap (issue #408)
+                    //Defensive parse: settings import (#382) can feed anything here.
+                    //Null/non-numeric keeps the default; TuneController clamps the range.
+                    if (result != null) {
+                        try {
+                            GeneralVariables.tuneMaxOnSeconds =
+                                    com.k1af.ft8af.ft8transmit.TuneController.clampMaxOnSeconds(
+                                            Integer.parseInt(result.trim()));
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
+                if (name.equalsIgnoreCase("tuneLevelIndependent")) {//Tune level decoupled from TX drive
+                    GeneralVariables.tuneLevelIndependent = "1".equals(result);
+                }
+                if (name.equalsIgnoreCase("tuneLevel")) {//Global independent tune level (0..100)
+                    if (result != null) {
+                        try {
+                            GeneralVariables.tuneLevel =
+                                    Math.max(0, Math.min(100, Integer.parseInt(result.trim())));
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
+                if (name.equalsIgnoreCase("perBandTuneLevels")) {//Per-band independent tune levels
+                    GeneralVariables.perBandTuneLevels = result == null ? "" : result;
+                }
+                if (name.equalsIgnoreCase("tuneMethod")) {//Tune method: rig ATU vs carrier (issue #425)
+                    if (result != null) {
+                        try {
+                            GeneralVariables.tuneMethod =
+                                    com.k1af.ft8af.ft8transmit.TuneMethod.clamp(
+                                            Integer.parseInt(result.trim()));
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
                 }
                 if (name.equalsIgnoreCase("excludedCallsigns")) {//Blocklist: callsign prefixes
                     GeneralVariables.addExcludedCallsigns(result);
@@ -2531,6 +2814,12 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("alertNewState")) {//Needed-DX alert: new US state
                     GeneralVariables.alertNewState = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("alertOnCqReply")) {//Alert when someone replies to my CQ
+                    GeneralVariables.alertOnCqReply = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("alertOnQsoComplete")) {//Alert when a QSO completes
+                    GeneralVariables.alertOnQsoComplete = result.equals("1");
                 }
                 if (name.equalsIgnoreCase("flexMaxRfPower")) {//Flex max RF power
                     GeneralVariables.flexMaxRfPower = result.equals("") ? 10 : Integer.parseInt(result);
@@ -2642,6 +2931,19 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("spectrumWidth")) {
                     GeneralVariables.setSpectrumWidth(result.equals("") ? 3500 : Integer.parseInt(result));
+                }
+                // FFT display developer knobs (issue #428). Parsed defensively:
+                // these are expected to survive hand-edited/stale backups, so a
+                // non-numeric value must fall back to the default instead of
+                // crashing hydration; the setters then clamp the range.
+                if (name.equalsIgnoreCase("fftWindowType")) {
+                    GeneralVariables.setFftWindowType(parseConfigInt(result, 1));
+                }
+                if (name.equalsIgnoreCase("fftAveragingMode")) {
+                    GeneralVariables.setFftAveragingMode(parseConfigInt(result, 0));
+                }
+                if (name.equalsIgnoreCase("spectrumBinAggregation")) {
+                    GeneralVariables.setSpectrumBinAggregation(parseConfigInt(result, 0));
                 }
 
                 if (name.equalsIgnoreCase("highlightNewDxcc")) {

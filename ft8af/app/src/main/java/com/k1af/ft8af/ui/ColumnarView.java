@@ -125,7 +125,7 @@ public class ColumnarView extends View {
             } else {
                 colRect.left = i * getWidth() / binsToShow;
             }
-            int val = (i + 1 < data.length) ? Math.max(data[i], data[i + 1]) : data[i];
+            int val = BinAggregation.combine(data, i, GeneralVariables.getSpectrumBinAggregation());
             colRect.top = getHeight() - Math.round(val * rateHeight);
             // Guarantee at least a 1px-wide bar. With a wide spectrum span the
             // bin count can exceed the pixel width (e.g. 560 bins across ~1080px

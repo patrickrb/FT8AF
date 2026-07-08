@@ -49,6 +49,14 @@ cd ft8af
 
 ---
 
+## Native code
+
+The FT8 DSP core is a vendored copy of [kgoba's ft8_lib](https://github.com/kgoba/ft8_lib), pinned to a specific upstream commit — see [`ft8af/app/src/main/cpp/ft8_lib/FT8_LIB_PIN.txt`](ft8af/app/src/main/cpp/ft8_lib/FT8_LIB_PIN.txt) for the exact hash. App-specific JNI glue lives alongside it in `ft8af/app/src/main/cpp/ft8af_glue/`. All of it is built from source by the NDK/CMake toolchain into a single `libft8af.so`, so a fresh clone or worktree builds with no manual copying.
+
+Historical note: the app formerly shipped a closed prebuilt `libft8cn.so` — a JNI wrapper around kgoba ft8_lib @ `6f528128`. It is no longer used and no longer present in the repository; the from-source build replaced it entirely.
+
+---
+
 ## Thanks
 
 Massive thanks to **BG7YOZ**, the original author of FT8CN, and **N0BOY**, who hosts the original repository and did the early translation work. None of this exists without their work — this fork stands entirely on their shoulders.

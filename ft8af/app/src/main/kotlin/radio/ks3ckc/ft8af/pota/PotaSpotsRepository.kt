@@ -67,7 +67,7 @@ object PotaSpotsRepository {
     /** Lookup helper used by QSO save path + decode-row enrichment. */
     @JvmStatic
     fun parkRefFor(callsign: String?): String? {
-        val key = callsign?.uppercase() ?: return null
+        val key = spotLookupKey(callsign) ?: return null
         return _spotsByCall.value[key]?.reference?.takeIf { it.isNotEmpty() }
     }
 
@@ -82,3 +82,13 @@ object PotaSpotsRepository {
         }
     }
 }
+
+/**
+ * Normalizes a decoded callsign into the spot-cache key. Hashed/non-standard
+ * callsigns come out of Ft8Message.callsignFrom wrapped in angle brackets
+ * (`<K1ABC/P>`, or `<...>` when unresolved), while pota.app spots key by the
+ * plain activator call — strip the brackets so a spotted activator with a
+ * non-standard call still matches.
+ */
+internal fun spotLookupKey(callsign: String?): String? =
+    callsign?.replace("<", "")?.replace(">", "")?.trim()?.uppercase()?.takeIf { it.isNotEmpty() }

@@ -2,41 +2,52 @@ name: Android CI & Release
 
 # Android pipeline for the ft8af/ app: unit tests + coverage, instrumented
 # emulator tests, static analysis (lint/detekt/ktlint), and the signed
-# APK/AAB build + GitHub Release + Play internal publish.
+# APK/AAB build + GitHub Release + Play publish (internal track on staging,
+# production track on main / android-v* tags — see the Release lifecycle below).
+#
+# Release lifecycle (see docs/release-pipeline.md):
+#   PR to dev/staging/main -> build-only (unsigned), tests
+#   push to dev            -> build-only sanity, NO release (dev builds never
+#                             reach the Releases page)
+#   push to staging        -> android-dev.<run#> PRERELEASE + Play internal
+#   push to main           -> android-v<auto-bump> release + Play production
+#   android-v* tag push    -> release + Play production
+# Feature work lands on dev; the dev build is cut only when dev -> staging
+# merges, and production only when staging -> main merges.
 #
 # PATH-FILTERED: on pull requests and dev pushes this whole pipeline only runs
 # when Android-relevant files change (ft8af/** — which includes the shared
 # native C core at ft8af/app/src/main/cpp/ — or this workflow file). Pushes to
-# main and v* tags always build (a full per-version release snapshot,
+# staging/main and android-v* tags always build (a full release snapshot,
 # regardless of what changed). The always-run `android-gate` job is the single
 # required status check so branch protection never gets stuck "pending" when the
 # build jobs are path-skipped.
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, staging, dev]
     tags:
-      - 'v*'
+      - 'android-v*'
   pull_request:
-    branches: [main, dev]
+    branches: [main, staging, dev]
 
 permissions:
   contents: write
 
 # Google Play allows only one active "edit" per app, so two release builds
 # publishing at once make the second fail with "This edit has expired, please
-# create a new Edit." Serialize the release-publishing runs (pushes to dev/main
-# and v* tags) into a single queue so they never overlap on the Play API.
-# cancel-in-progress is false so an in-flight publish finishes rather than being
-# killed mid-upload. Pull request runs get a unique group keyed to run id, so
-# they never queue and CI stays fast.
+# create a new Edit." Serialize the release-publishing runs (pushes to
+# staging/main and android-v* tags) into a single queue so they never overlap on
+# the Play API. cancel-in-progress is false so an in-flight publish finishes
+# rather than being killed mid-upload. Other runs (PRs, dev pushes) get a unique
+# group keyed to run id, so they never queue and CI stays fast.
 concurrency:
   group: >-
     ${{
       (github.event_name == 'push'
         && (github.ref == 'refs/heads/main'
-          || github.ref == 'refs/heads/dev'
-          || startsWith(github.ref, 'refs/tags/v')))
+          || github.ref == 'refs/heads/staging'
+          || startsWith(github.ref, 'refs/tags/android-v')))
       && 'play-publish'
       || format('build-{0}', github.run_id)
     }}
@@ -67,9 +78,10 @@ jobs:
           CHANGED: ${{ steps.filter.outputs.android }}
         run: |
           set -euo pipefail
-          # main pushes and v* tags always build the full release; otherwise
-          # build only when Android-relevant files changed.
-          if [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == refs/tags/v* ) ]]; then
+          # staging/main pushes and android-v* tags always build the full
+          # release snapshot; otherwise (dev push, PRs) build only when
+          # Android-relevant files changed.
+          if [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/heads/staging" || "$GITHUB_REF" == refs/tags/android-v* ) ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif [[ "$CHANGED" == "true" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -80,7 +92,7 @@ jobs:
   test:
     name: Unit tests & coverage
     needs: detect
-    if: ${{ needs.detect.outputs.run == 'true' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
+    if: ${{ needs.detect.outputs.run == 'true' && (github.event_name == 'pull_request' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'))) }}
     runs-on: ubuntu-latest
 
     steps:
@@ -142,6 +154,9 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ft8af/app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
+          # Tag this upload so Codecov reports the Android JVM suite as its own
+          # component instead of merging it into one undifferentiated total.
+          flags: android
 
       - name: Upload test reports on failure
         if: steps.codecov.outcome == 'failure'
@@ -162,7 +177,7 @@ jobs:
     # checks while it stabilises (issue #60) — a flaky emulator must never block
     # a release.
     needs: detect
-    if: ${{ needs.detect.outputs.run == 'true' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
+    if: ${{ needs.detect.outputs.run == 'true' && (github.event_name == 'pull_request' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'))) }}
     runs-on: ubuntu-latest
 
     steps:
@@ -334,8 +349,9 @@ jobs:
   build:
     name: Build APK
     needs: [detect, test]
-    # Run when Android is in scope (detect.run) AND tests passed (PR/main push) or
-    # were skipped (push to dev/tags). Block only on actual test failure/cancel.
+    # Run when Android is in scope (detect.run) AND tests passed (PR / staging /
+    # main push) or were skipped (dev push, tags). Block only on actual test
+    # failure/cancel.
     if: ${{ always() && needs.detect.outputs.run == 'true' && needs.test.result != 'failure' && needs.test.result != 'cancelled' }}
     runs-on: ubuntu-latest
 
@@ -352,56 +368,72 @@ jobs:
         id: tag
         run: |
           set -euo pipefail
-          # Three release lanes (everything else is build-only):
-          #   v* tag push  -> production-named release, NOT prerelease
-          #   push to main -> auto-bumped v* tag, NOT prerelease
-          #   push to dev  -> dev-<run_number> tag, PRERELEASE
-          # Prereleases are still uploaded to Play internal but with a
-          # distinct releaseName so they're easy to tell apart from the
-          # v*-named candidates we'd actually promote to production.
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+          # Release lanes (everything else — dev push, PRs — is build-only):
+          #   android-v* tag push -> production release, Play production
+          #   push to main        -> auto-bumped android-v* tag, Play production
+          #   push to staging     -> android-dev.<run#> tag, PRERELEASE, Play internal
+          # The dev build is cut on staging, NOT on dev: dev pushes never reach
+          # this release path. The android- prefix keeps these tags separate from
+          # the desktop-v* lane on the Releases page (issue: per-platform tags).
+          # Bumps seed from a legacy bare v* tag when no android-v* exists yet so
+          # the version sequence stays continuous with pre-split releases.
+          if [[ "${GITHUB_REF}" == refs/tags/android-v* ]]; then
             echo "release_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-            echo "version_name=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "version_name=${GITHUB_REF_NAME#android-v}" >> "$GITHUB_OUTPUT"
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "play_track=production" >> "$GITHUB_OUTPUT"
           elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            # Auto-bump patch from latest v* tag.
-            latest=$(git tag --list 'v*' --sort=-v:refname | head -n1)
-            if [[ -z "$latest" ]]; then
-              new_tag="v0.1"
+            # Auto-bump the last component from the latest android-v* tag (or a
+            # legacy v* tag for continuity), e.g. android-v1.2 -> android-v1.3.
+            latest=$(git tag --list 'android-v*' --sort=-v:refname | head -n1)
+            base="${latest#android-v}"
+            if [[ -z "$base" ]]; then
+              legacy=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+              base="${legacy#v}"
+            fi
+            if [[ -z "$base" ]]; then
+              new_ver="0.1"
             else
-              version="${latest#v}"
-              IFS='.' read -ra parts <<< "$version"
+              IFS='.' read -ra parts <<< "$base"
               last_idx=$((${#parts[@]} - 1))
               parts[$last_idx]=$((parts[$last_idx] + 1))
-              new_tag="v$(IFS=.; echo "${parts[*]}")"
+              new_ver="$(IFS=.; echo "${parts[*]}")"
             fi
-            echo "Latest tag: ${latest:-<none>} -> new tag: $new_tag"
+            new_tag="android-v$new_ver"
+            echo "Latest android tag: ${latest:-<none>} -> new tag: $new_tag"
             echo "release_tag=$new_tag" >> "$GITHUB_OUTPUT"
-            echo "version_name=${new_tag#v}" >> "$GITHUB_OUTPUT"
+            echo "version_name=$new_ver" >> "$GITHUB_OUTPUT"
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/dev" ]]; then
-            # dev pushes get a run-numbered tag and are flagged as prereleases.
-            # Distinct prefix so they sort separately from v* in GitHub releases
-            # and so the Play Console releaseName disambiguates them from
-            # main-branch release candidates.
-            new_tag="dev-${GITHUB_RUN_NUMBER}"
-            # Derive the base semver from the latest v* tag so the APK version
-            # reads e.g. "1.1.0-dev.42" instead of a bare run number.
-            latest=$(git tag --list 'v*' --sort=-v:refname | head -n1)
-            base_ver="${latest:+${latest#v}}"
+            echo "play_track=production" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/staging" ]]; then
+            # staging pushes (a dev -> staging merge) cut a run-numbered
+            # PRERELEASE, published to the Play internal track. Distinct prefix so
+            # it sorts separately from android-v* and so the Play releaseName
+            # disambiguates it from production candidates.
+            new_tag="android-dev.${GITHUB_RUN_NUMBER}"
+            # Derive the base semver from the latest android-v* (or legacy v*) so
+            # the APK reads e.g. "1.1.0-dev.42" instead of a bare run number.
+            latest=$(git tag --list 'android-v*' --sort=-v:refname | head -n1)
+            base_ver="${latest#android-v}"
+            if [[ -z "$base_ver" ]]; then
+              legacy=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+              base_ver="${legacy#v}"
+            fi
             base_ver="${base_ver:-0.0.0}"
             echo "release_tag=$new_tag" >> "$GITHUB_OUTPUT"
             echo "version_name=${base_ver}-dev.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "play_track=internal" >> "$GITHUB_OUTPUT"
           else
-            # PR or other branch push — build only, no release
+            # dev push, PR, or other branch — build only, no release
             echo "release_tag=" >> "$GITHUB_OUTPUT"
             echo "version_name=" >> "$GITHUB_OUTPUT"
             echo "should_release=false" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "play_track=" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up JDK 17
@@ -537,11 +569,18 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
+          name: ${{ steps.tag.outputs.release_tag }}
+          # Without this, a not-yet-existing tag (the android-dev.* / auto-bumped
+          # android-v* lanes) is created by the release API from the repo's
+          # DEFAULT branch (main), not the commit that was built — so staging
+          # releases got tagged on main's HEAD and sorted under its old date on
+          # the Releases page.
+          target_commitish: ${{ github.sha }}
           files: ft8af/app/build/outputs/apk/release/FT8AF-*.apk
           generate_release_notes: true
-          # dev-* releases are flagged as prerelease so they sort under the
-          # latest v* and don't get picked up by downstream tooling that
-          # looks for "latest release".
+          # android-dev.* releases are flagged as prerelease so they sort under
+          # the latest android-v* and don't get picked up by downstream tooling
+          # that looks for "latest release".
           prerelease: ${{ steps.tag.outputs.is_prerelease == 'true' }}
           append_body: true
           body: |
@@ -561,7 +600,7 @@ jobs:
       # the dev→main PR. So continue-on-error here (mirroring the Codecov upload
       # above) and surface a warning in the next step instead. A genuinely
       # broken build fails earlier, in "Build APK & AAB".
-      - name: Publish AAB to Play Internal track
+      - name: Publish AAB to Play
         id: play_publish
         if: steps.tag.outputs.should_release == 'true'
         continue-on-error: true
@@ -573,7 +612,8 @@ jobs:
           # R8 deobfuscation mapping — clears the Play Console "no deobfuscation
           # file" warning and makes crash/ANR stack traces readable.
           mappingFile: ft8af/app/build/outputs/mapping/release/mapping.txt
-          track: internal
+          # staging -> internal track; main / android-v* tag -> production track.
+          track: ${{ steps.tag.outputs.play_track }}
           status: completed
           releaseName: ${{ steps.tag.outputs.release_tag }}
 
@@ -582,7 +622,7 @@ jobs:
       - name: Warn if Play publish failed
         if: steps.tag.outputs.should_release == 'true' && steps.play_publish.outcome == 'failure'
         run: |
-          echo "::warning::Play Internal publish failed for ${{ steps.tag.outputs.release_tag }} (non-blocking). The signed AAB built and the GitHub Release was created; only the Play upload did not complete. Check the 'Publish AAB to Play Internal track' step log — common causes are an upgrade-path rejection or an expired Play edit."
+          echo "::warning::Play publish (track=${{ steps.tag.outputs.play_track }}) failed for ${{ steps.tag.outputs.release_tag }} (non-blocking). The signed AAB built and the GitHub Release was created; only the Play upload did not complete. Check the 'Publish AAB to Play' step log — common causes are an upgrade-path rejection or an expired Play edit."
 
   android-gate:
     name: android-gate

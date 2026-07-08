@@ -20,6 +20,25 @@ data class PotaPark(
     val reference: String,
     val name: String,
     val locationDesc: String,
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val grid: String = "",
+    val activations: Int = 0,
+    val qsos: Int = 0,
+)
+
+/** A POTA location code (e.g. US-PA) with its center coordinates. */
+data class PotaLocation(
+    val locationDesc: String,
+    val locationName: String,
+    val latitude: Double,
+    val longitude: Double,
+)
+
+/** A park paired with its distance from the user's position. */
+data class PotaParkWithDistance(
+    val park: PotaPark,
+    val distanceKm: Double,
 )
 
 /** A single QSO row for the activation contacts list. */

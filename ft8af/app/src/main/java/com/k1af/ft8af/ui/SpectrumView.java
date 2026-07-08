@@ -69,7 +69,7 @@ public class SpectrumView extends ConstraintLayout {
         setMarkMessageSwitchState();
 
         rulerFrequencyView.setFreq(Math.round(GeneralVariables.getBaseFrequency()));
-        mainViewModel.currentMessages=null;
+        mainViewModel.clearCurrentMessages();
 
 
         //Raw spectrum switch
@@ -78,7 +78,7 @@ public class SpectrumView extends ConstraintLayout {
             public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
                 mainViewModel.deNoise = b;
                 setDeNoiseSwitchState();
-                mainViewModel.currentMessages=null;
+                mainViewModel.clearCurrentMessages();
             }
         });
         //Mark message switch
@@ -190,7 +190,7 @@ public class SpectrumView extends ConstraintLayout {
         }
         columnarView.setWaveData(fft);
         if (mainViewModel.markMessage) {//Whether to mark messages
-            waterfallView.setWaveData(fft, mainViewModel.currentMessages);
+            waterfallView.setWaveData(fft, mainViewModel.getCurrentMessages());
         } else {
             waterfallView.setWaveData(fft, null);
         }

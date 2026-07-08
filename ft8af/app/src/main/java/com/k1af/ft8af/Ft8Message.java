@@ -54,9 +54,9 @@ public class Ft8Message {
     public String maidenGrid = null;
 
     public String rtty_state =null;//RTTY RU (i3=3 type) state name, two-letter code e.g.: CA, AL
-    public int r_flag=0;//RTTY RU, EU VHF (i3=3, i3=5 type) R flag
-    public int rtty_tu;//RTTY RU (i3=3 type) TU; flag
-    public int eu_serial;//EU VHF i3=5 serial number
+    public int r_flag=0;//RTTY RU, WWROF (i3=3, i3=5 type) R flag
+    public int rtty_tu;//RTTY RU, WWROF (i3=3, i3=5 type) TU; flag
+    public int eu_serial;//Field Day num_tx, or serial number
     public String arrl_rac;//Field day message, ARRL RAC
     public String arrl_class;//Field day transmit class
     public String dx_call_to2;//DXpedition message second receiving callsign
@@ -158,14 +158,17 @@ public class Ft8Message {
 
             messageHash = message.messageHash;
 
-            if (message.callsignFrom.equals("<...>")) {//look up in the hash list
-                callsignFrom = hashList.getCallsign(new long[]{message.callFromHash10, message.callFromHash12, message.callFromHash22});
+            //Look up "<...>" in the hash list, widest hash first: a 22-bit match
+            //identifies one callsign, while the 10-bit hash has only 1024 buckets
+            //and could hit an entry belonging to a different callsign.
+            if (message.callsignFrom.equals("<...>")) {
+                callsignFrom = hashList.getCallsign(new long[]{message.callFromHash22, message.callFromHash12, message.callFromHash10});
             } else {
                 callsignFrom = message.callsignFrom;
             }
 
-            if (message.callsignTo.equals("<...>")) {//look up in the hash list
-                callsignTo = hashList.getCallsign(new long[]{message.callToHash10, message.callToHash12, message.callToHash22});
+            if (message.callsignTo.equals("<...>")) {
+                callsignTo = hashList.getCallsign(new long[]{message.callToHash22, message.callToHash12, message.callToHash10});
             } else {
                 callsignTo = message.callsignTo;
             }
@@ -280,13 +283,14 @@ public class Ft8Message {
                     ,rtty_state);
         }
 
-        if (i3 == 5){//this is EU VHF <G4ABC> <PA9XYZ> R 570007 JO22DB
-            return String.format("%s %s %s%d%04d %s"
+        if (i3 == 5){//this is WWROF contest
+            return String.format("%s%s %s %s%s%d %s"
+                    , rtty_tu == 0 ? "" : "TU; "
                     , callsignTo
                     , callsignFrom
-                    , r_flag == 0?"":"R "
+                    , r_flag == 0 ? "" : "R"
+                    , report >= 0 ? "+" : ""
                     , report
-                    , eu_serial
                     , maidenGrid
                     ).trim();
         }

@@ -5,24 +5,26 @@ name: Desktop CI & Release
 # Windows + macOS + Linux. On main pushes and desktop-v* tags it builds native
 # bundles on all three OSes and publishes them to a per-platform GitHub Release.
 #
-# Release scheme is namespaced so it sits separately from the Android v* / dev-N
-# releases on the Releases page:
+# Release scheme is namespaced so it sits separately from the Android
+# android-v* / android-dev.N releases on the Releases page:
 #   desktop-v* tag  -> production desktop release
 #   push to main    -> auto-bumped desktop-v* release
-#   push to dev     -> desktop-dev-<run_number> PRERELEASE
+#   push to staging -> desktop-dev.<run_number> PRERELEASE
+#   push to dev     -> compile-check only, NO release
+# The dev build is cut on staging (a dev -> staging merge), never on dev itself.
 #
 # PATH-FILTERED: PRs and dev pushes only build when desktop/** or the shared
 # native C core (ft8af/app/src/main/cpp/**) changes, or this workflow file.
-# main pushes and desktop-v* tags always build. The always-run `desktop-gate`
-# job is the required status check.
+# staging/main pushes and desktop-v* tags always build. The always-run
+# `desktop-gate` job is the required status check.
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, staging, dev]
     tags:
       - 'desktop-v*'
   pull_request:
-    branches: [main, dev]
+    branches: [main, staging, dev]
 
 permissions:
   contents: write
@@ -32,7 +34,7 @@ concurrency:
     ${{
       (github.event_name == 'push'
         && (github.ref == 'refs/heads/main'
-          || github.ref == 'refs/heads/dev'
+          || github.ref == 'refs/heads/staging'
           || startsWith(github.ref, 'refs/tags/desktop-v')))
       && 'desktop-release'
       || format('desktop-{0}', github.run_id)
@@ -65,9 +67,10 @@ jobs:
           CHANGED: ${{ steps.filter.outputs.desktop }}
         run: |
           set -euo pipefail
-          # main pushes and desktop-v* tags always build the full release;
-          # otherwise build only when desktop-relevant files changed.
-          if [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == refs/tags/desktop-v* ) ]]; then
+          # staging/main pushes and desktop-v* tags always build the full
+          # release; otherwise (dev push, PRs) build only when desktop-relevant
+          # files changed.
+          if [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/heads/staging" || "$GITHUB_REF" == refs/tags/desktop-v* ) ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif [[ "$CHANGED" == "true" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -122,8 +125,9 @@ jobs:
             echo "version_name=${new_tag#desktop-v}" >> "$GITHUB_OUTPUT"
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/dev" ]]; then
-            new_tag="desktop-dev-${GITHUB_RUN_NUMBER}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/staging" ]]; then
+            # staging push (a dev -> staging merge) cuts the desktop dev build.
+            new_tag="desktop-dev.${GITHUB_RUN_NUMBER}"
             latest=$(git tag --list 'desktop-v*' --sort=-v:refname | head -n1)
             base_ver="${latest:+${latest#desktop-v}}"
             base_ver="${base_ver:-0.1.0}"
@@ -132,7 +136,7 @@ jobs:
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
           else
-            # PR or other branch push — compile-check only, no release.
+            # dev push, PR, or other branch — compile-check only, no release.
             echo "release_tag=" >> "$GITHUB_OUTPUT"
             echo "version_name=" >> "$GITHUB_OUTPUT"
             echo "should_release=false" >> "$GITHUB_OUTPUT"
@@ -237,6 +241,78 @@ jobs:
           releaseBody: 'FT8AF desktop build ${{ needs.version.outputs.version_name }}.'
           prerelease: ${{ needs.version.outputs.is_prerelease == 'true' }}
           args: --config '{"bundle":{"active":true}}'
+
+  coverage:
+    name: Rust coverage
+    # Best-effort, NON-GATING desktop coverage: runs the src-tauri crate's unit
+    # tests (src/*.rs #[cfg(test)] modules) under cargo-llvm-cov and uploads to
+    # Codecov under the `desktop` flag. Path-gated via `detect` (skips on unrelated
+    # PRs) and intentionally left OUT of `desktop-gate` — a coverage flake must
+    # never block a merge or a release. Linux-only; reuses the same system deps the
+    # build leg needs to link serialport(libudev) + alsa.
+    needs: detect
+    if: ${{ needs.detect.outputs.run == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Install Linux dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update -o DPkg::Lock::Timeout=600
+          sudo apt-get install -y --no-install-recommends \
+            -o DPkg::Lock::Timeout=600 \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libayatana-appindicator3-dev \
+            libudev-dev \
+            libasound2-dev
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # cargo llvm-cov runs `cargo test`, which compiles build.rs ->
+      # tauri_build::build(). tauri.conf.json's frontendDist ("../dist") must
+      # exist at compile time, and cargo — unlike `tauri build` — does NOT run the
+      # configured beforeBuildCommand, so build the Vite frontend (outDir: dist)
+      # here first. Without this the crate fails to compile on a missing dist.
+      - name: Build frontend (produces desktop/dist for tauri-build)
+        working-directory: desktop
+        run: |
+          npm ci
+          npm run build
+
+      - name: Run tests with coverage
+        working-directory: desktop/src-tauri
+        run: cargo llvm-cov --lcov --output-path desktop.lcov
+
+      - name: Upload desktop coverage to Codecov
+        continue-on-error: true
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: desktop/src-tauri/desktop.lcov
+          flags: desktop
 
   desktop-gate:
     name: desktop-gate

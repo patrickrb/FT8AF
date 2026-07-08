@@ -80,6 +80,9 @@ public class BaseRigOperation {
         else if (freq >= 24890000 && freq <= 24990000) {
             return "12m";
         }  //  12m
+        else if (freq >= 26965000 && freq <= 27405000) {
+            return "11m";
+        }  //  11m (CB/freeband; emergent FT8 activity around 27.265 MHz)
         else if (freq >= 28000000 && freq <= 29700000) {
             return "10m";
         }  //  10m

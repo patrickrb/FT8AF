@@ -20,7 +20,6 @@ import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.activity.compose.setContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -38,13 +37,19 @@ import androidx.lifecycle.Observer
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
+import radio.ks3ckc.ft8af.sync.QsoAutoSync
+import radio.ks3ckc.ft8af.util.bluetoothAdapter
+import com.k1af.ft8af.service.RxForegroundService
+import com.k1af.ft8af.service.RxServiceController
 import com.k1af.ft8af.bluetooth.BluetoothStateBroadcastReceive
+import com.k1af.ft8af.bluetooth.ScoPolicy
 import com.k1af.ft8af.connector.CableSerialPort
 import com.k1af.ft8af.connector.ConnectMode
 import com.k1af.ft8af.callsign.CallsignDatabase
 import com.k1af.ft8af.database.DatabaseOpr
 import com.k1af.ft8af.database.OnAfterQueryConfig
 import com.k1af.ft8af.database.OperationBand
+import com.k1af.ft8af.location.GpsClockUpdater
 import com.k1af.ft8af.location.GridLocationUpdater
 import com.k1af.ft8af.log.ImportSharedLogs
 import com.k1af.ft8af.wave.UsbAudioNative
@@ -53,6 +58,8 @@ import com.k1af.ft8af.maidenhead.MaidenheadGrid
 import com.k1af.ft8af.ui.ToastMessage
 import radio.ks3ckc.ft8af.pota.PotaSessionManager
 import radio.ks3ckc.ft8af.theme.FT8AFTheme
+import radio.ks3ckc.ft8af.theme.applyTheme
+import radio.ks3ckc.ft8af.theme.loadTheme
 import radio.ks3ckc.ft8af.ui.components.ExitConfirmDialog
 import java.io.File
 import java.io.IOException
@@ -64,6 +71,7 @@ class ComposeMainActivity : AppCompatActivity() {
 
     private var bluetoothReceiver: BluetoothStateBroadcastReceive? = null
     private var usbDetachReceiver: BroadcastReceiver? = null
+    private var qsoAutoSync: QsoAutoSync? = null
     private lateinit var mainViewModel: MainViewModel
     private val showExitConfirm: MutableState<Boolean> = mutableStateOf(false)
 
@@ -73,9 +81,11 @@ class ComposeMainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Force night mode so the DayNight theme resolves to dark immediately,
-        // preventing any light-mode surface colors from flashing before Compose loads.
-        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+        // Apply the saved theme synchronously before setContent: swap the live
+        // Compose palette and set the matching night mode so neither the
+        // pre-Compose native window background nor the first Compose frame
+        // flashes the wrong shade. Defaults to dark when nothing is saved.
+        applyTheme(loadTheme(this))
 
         // Build permissions list
         val permissions = buildPermissionsList()
@@ -96,6 +106,17 @@ class ComposeMainActivity : AppCompatActivity() {
         GeneralVariables.getInstance().setMainContext(applicationContext)
         mainViewModel = MainViewModel.getInstance(this)
         ToastMessage.getInstance()
+
+        // The notification's Exit button routes here so it runs the same shutdown as the
+        // in-app exit; cleared in onDestroy so a destroyed activity isn't leaked. Registered
+        // BEFORE the service starts so there's no window where the notification can appear
+        // and be tapped before the handler exists (which would fall back to a bare
+        // stopSelf()/System.exit(0) that skips rig disconnect and RX teardown).
+        RxForegroundService.setExitHandler { closeApp() }
+
+        // Keep RX alive in the background (no-op until RECORD_AUDIO is granted; the
+        // permission-result callback re-invokes this once the user grants it).
+        startRxServiceIfPermitted()
 
         // Forward every TX-volume change to the native USB-direct write loop so a
         // slider move (or hardware-button / ALC auto-volume change) attenuates the
@@ -137,17 +158,25 @@ class ComposeMainActivity : AppCompatActivity() {
             }
         })
 
-        // Register Bluetooth state broadcast receiver
+        // Register Bluetooth state broadcast receiver. The launch-time
+        // headset/SCO decision happens in initData's config-loaded callback:
+        // it needs the persisted connectMode, which isn't in memory yet here.
         registerBluetoothReceiver()
-        if (mainViewModel.isBTConnected()) {
-            mainViewModel.setBlueToothOn()
-        }
 
         // Register USB detach receiver — without this, a cable yank leaves the
         // recorder waiting on a dead handle and TX still pointing at a closed
         // UsbDeviceConnection. We tear down those handles here so the next
         // ATTACH event can rebind cleanly.
         registerUsbDetachReceiver()
+
+        // Auto-upload QSOs that failed to reach QRZ/Cloudlog while offline: listen for
+        // connectivity returning and flush the unsynced rows, and flush once on start
+        // (covers a QSO logged offline before the app was last closed). No-op unless a
+        // service is enabled and rows are actually pending.
+        qsoAutoSync = QsoAutoSync(applicationContext).apply {
+            register()
+            syncNow("app-start")
+        }
 
         // Set Compose UI — splash plays once per cold start, then crossfades into the app.
         setContent {
@@ -256,6 +285,21 @@ class ComposeMainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Start the foreground RX service so decode keeps running when backgrounded / screen-off.
+     * Gated on RECORD_AUDIO: starting a microphone-typed foreground service without it throws
+     * on Android 14, so this is a no-op until the permission is granted (re-invoked from
+     * onRequestPermissionsResult once the user grants it). RX is always-on, so rxActive=true.
+     */
+    private fun startRxServiceIfPermitted() {
+        val micGranted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.RECORD_AUDIO,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (RxServiceController.shouldRunService(true, micGranted)) {
+            RxForegroundService.start(this)
+        }
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -263,6 +307,13 @@ class ComposeMainActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         // Proceed regardless; same behavior as original.
+
+        // RECORD_AUDIO just granted (first launch): start the background RX service now so
+        // it begins in this session instead of only after the next app launch.
+        val micIdx = permissions.indexOf(Manifest.permission.RECORD_AUDIO)
+        if (micIdx >= 0 && grantResults.getOrNull(micIdx) == PackageManager.PERMISSION_GRANTED) {
+            startRxServiceIfPermitted()
+        }
 
         // GPS grid auto-update: the toggle in Settings (and the cold-start path)
         // requests ACCESS_FINE_LOCATION *asynchronously* and then immediately calls
@@ -280,6 +331,15 @@ class ComposeMainActivity : AppCompatActivity() {
                 mainViewModel.databaseOpr.writeConfig("grid", grid, null)
             }
             GridLocationUpdater.refresh(applicationContext, mainViewModel)
+        }
+
+        // Same first-grant race for GPS clock discipline (issue #373): if the user just
+        // granted location while the toggle is on, start disciplining in this session.
+        if (locationGrantedIn(permissions, grantResults)
+            && GeneralVariables.disciplineClockFromGPS
+        ) {
+            fileLog("onRequestPermissionsResult: location granted, starting GPS clock discipline")
+            GpsClockUpdater.refresh(applicationContext)
         }
 
         // On Android 12+ the BT auto-connect at config-load time may have bailed with
@@ -330,6 +390,9 @@ class ComposeMainActivity : AppCompatActivity() {
                     }
                     GridLocationUpdater.refresh(applicationContext, mainViewModel)
                 }
+                if (GeneralVariables.disciplineClockFromGPS) {
+                    GpsClockUpdater.refresh(applicationContext)
+                }
                 mainViewModel.ft8TransmitSignal.setTimer_sec(GeneralVariables.transmitDelay)
 
                 // The cycle timers were built (for FT8) before config loaded; now that the
@@ -345,6 +408,19 @@ class ComposeMainActivity : AppCompatActivity() {
                 val ports = mainViewModel.mutableSerialPorts.value
                 fileLog("initData: found ${ports?.size ?: 0} serial port(s)")
                 mainViewModel.reinitializeAudioInput()
+
+                // Bring up headset/SCO for Bluetooth-rig users now that the persisted
+                // connectMode is known. Gating this at onCreate time would read the
+                // USB_CABLE default and skip SCO for every Bluetooth rig (PR #377
+                // review); gating on connect mode at all keeps a car/headphones paired
+                // for music from being yanked out of A2DP (the original bug).
+                Handler(Looper.getMainLooper()).post {
+                    if (ScoPolicy.shouldEnterHeadsetMode(
+                            GeneralVariables.connectMode, mainViewModel.isBTConnected())
+                    ) {
+                        mainViewModel.setBlueToothOn()
+                    }
+                }
 
                 // USB auto-connect is driven by the mutableSerialPorts observer; Bluetooth has
                 // no such device-arrival event, so re-open the remembered SPP/CAT link here now
@@ -365,7 +441,7 @@ class ComposeMainActivity : AppCompatActivity() {
             }
         })
 
-        DatabaseOpr.GetCallsignMapGrid(mainViewModel.databaseOpr.db).execute()
+        DatabaseOpr.loadCallsignMapGridAsync(mainViewModel.databaseOpr.db)
         mainViewModel.getFollowCallsignsFromDataBase()
     }
 
@@ -533,9 +609,24 @@ class ComposeMainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStop() {
+        // A tune carrier must never outlive the operator's attention (issue
+        // #408): backgrounding or swiping the app away mid-tune force-stops the
+        // tone and drops PTT. Normal FT8 TX is left alone — it is cycle-bounded
+        // and self-terminates.
+        try {
+            mainViewModel.ft8TransmitSignal.stopTune()
+        } catch (e: Exception) {
+            fileLog("onStop: stopTune threw: ${e.message}")
+        }
+        super.onStop()
+    }
+
     override fun onDestroy() {
+        RxForegroundService.setExitHandler(null)
         unregisterBluetoothReceiver()
         unregisterUsbDetachReceiver()
+        qsoAutoSync?.unregister()
         super.onDestroy()
     }
 
@@ -576,7 +667,7 @@ class ComposeMainActivity : AppCompatActivity() {
      * so it is unit-testable; this method only collects Android state and acts on CONNECT.
      */
     private fun autoConnectBluetoothIfNeeded() {
-        val adapter = BluetoothAdapter.getDefaultAdapter()
+        val adapter = bluetoothAdapter(this)
         val addr = GeneralVariables.bluetoothDeviceAddress
         // A corrupted/legacy persisted value would make getRemoteDevice() throw
         // IllegalArgumentException and crash startup, so validate the MAC up front (PR #227 review).
@@ -626,9 +717,12 @@ class ComposeMainActivity : AppCompatActivity() {
                 val newVol = (GeneralVariables.volumePercent + delta).coerceIn(0.0f, 1.0f)
                 GeneralVariables.volumePercent = newVol
                 GeneralVariables.mutableVolumePercent.postValue(newVol)
-                val intVal = (newVol * 100).toInt()
+                // Math.round via the shared helper (not toInt/floor) so this
+                // producer agrees with the per-band restore/compare logic.
+                val intVal = outputLevelFromVolumePercent(newVol)
                 mainViewModel.databaseOpr.writeConfig("volumeValue", intVal.toString(), null)
                 mainViewModel.baseRig?.connector?.setRFVolume(intVal)
+                saveOutputLevelForCurrentBand(mainViewModel.databaseOpr, intVal)
 
                 // Also adjust system music stream so audio is actually audible
                 val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -653,6 +747,7 @@ class ComposeMainActivity : AppCompatActivity() {
         mainViewModel.ft8SignalListener.stopListen()
         mainViewModel.hamRecorder?.stopRecord()
         mainViewModel.utcTimer?.delete()
+        RxForegroundService.stop(this)
         System.exit(0)
     }
 }

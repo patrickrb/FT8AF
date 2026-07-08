@@ -31,6 +31,7 @@ import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import com.k1af.ft8af.database.ControlMode
 import com.k1af.ft8af.database.OperationBand
+import com.k1af.ft8af.rigs.BaseRigOperation
 import radio.ks3ckc.ft8af.theme.*
 
 /**
@@ -41,8 +42,11 @@ import radio.ks3ckc.ft8af.theme.*
  * Shared between the Settings band picker and the TxStrip frequency picker.
  */
 fun selectBandIndex(mainViewModel: MainViewModel, context: Context, index: Int) {
+    // Compare the meter (wavelength) band, not the index — see shouldClearOnBandChange.
+    val oldWaveLength = BaseRigOperation.getMeterFromFreq(GeneralVariables.band)
     GeneralVariables.bandListIndex = index
     GeneralVariables.band = OperationBand.getBandFreq(index)
+    val newWaveLength = BaseRigOperation.getMeterFromFreq(GeneralVariables.band)
     mainViewModel.databaseOpr.writeConfig(
         "bandFreq", GeneralVariables.band.toString(), null,
     )
@@ -50,6 +54,35 @@ fun selectBandIndex(mainViewModel: MainViewModel, context: Context, index: Int) 
     // Notify observers (TxStrip pill, Settings band picker) so the UI updates
     // without waiting for a rig onFreqChanged round-trip.
     GeneralVariables.mutableBandChange.postValue(index)
+    // A real band hop invalidates the clear-CQ-slot occupancy history (issue #418).
+    if (newWaveLength != oldWaveLength) {
+        mainViewModel.ft8TransmitSignal.clearBandActivity()
+    }
+    // The operator picked a new band — optionally clear the stale decodes + reset
+    // the TX target so the decode screen reflects the new band (tester request).
+    if (MainViewModel.shouldClearOnBandChange(
+            GeneralVariables.clearOnBandModeChange, oldWaveLength, newWaveLength,
+        )
+    ) {
+        mainViewModel.clearDecodesAndTarget()
+    }
+
+    // Per-band output level (issue #355): when enabled and this band has a
+    // saved level that differs from the current one, restore it and tell the
+    // operator where the change came from. Bands with no saved value keep the
+    // current (global) level.
+    val restoredLevel = radio.ks3ckc.ft8af.restoredOutputLevelForBand(newWaveLength)
+    if (restoredLevel != null) {
+        GeneralVariables.volumePercent = restoredLevel / 100f
+        GeneralVariables.mutableVolumePercent.postValue(restoredLevel / 100f)
+        mainViewModel.databaseOpr.writeConfig("volumeValue", restoredLevel.toString(), null)
+        mainViewModel.baseRig?.connector?.setRFVolume(restoredLevel)
+        android.widget.Toast.makeText(
+            context,
+            context.getString(R.string.per_band_volume_restored, restoredLevel, newWaveLength),
+            android.widget.Toast.LENGTH_SHORT,
+        ).show()
+    }
 
     val cm = GeneralVariables.controlMode
     val connected = mainViewModel.isRigConnected()

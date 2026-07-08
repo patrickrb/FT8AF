@@ -66,6 +66,20 @@ public enum ModeProfile {
     }
 
     /**
+     * Wall-clock budget for the deep-decode subtract-and-redecode loop, in milliseconds.
+     *
+     * <p>The loop keeps subtracting decoded signals and re-decoding until no new message
+     * appears; this caps how long it may run so it can't spill into the next cycle's decode.
+     * It scales with the slot (0.75x) instead of a flat 7s: the old constant was ~2x FT2's
+     * entire 3.75s slot (never bounding fast modes) yet left FT8 well short of its 15s cycle,
+     * cutting off weak-signal passes WSJT-X would still run. The 2.5s floor keeps the fastest
+     * mode from starving on slow phones.
+     */
+    public int deepDecodeBudgetMillis() {
+        return Math.max(2500, Math.round(slotMillis * 0.75f));
+    }
+
+    /**
      * Resolve a descriptor from a mode id. Unknown ids (e.g. a config value persisted by a
      * future build before this one knows the mode) fall back to FT8 for forward-compat.
      */
@@ -79,14 +93,13 @@ public enum ModeProfile {
     }
 
     /**
-     * Whether receive uses the from-source ft8_lib decoder (compiled into libft8af_usb.so)
-     * rather than the prebuilt libft8cn.so.
+     * Whether receive uses the FT2/FT4 decoder entry points ({@code *Ft2} natives,
+     * ft2_decode_jni.cpp) rather than the FT8 ones (ft8_decode_jni.cpp).
      *
-     * <p>FT2 must, because the closed prebuilt's protocol enum has no FT2. FT4 also does now:
-     * the prebuilt decodes FT4 but reports its SNR ~15 dB low (its FT4 SNR path was never
-     * calibrated), whereas the from-source build has a corrected protocol-aware {@code
-     * ft8_snr}. The from-source decoder is pinned at the same kgoba commit the prebuilt was
-     * built from, so FT4 decoding matches; only the SNR differs. FT8 stays on the prebuilt.
+     * <p>Historical name: this flag used to select "from-source ft8_lib" vs "the prebuilt
+     * libft8cn.so". The prebuilt is gone — both paths are now compiled from the in-tree
+     * kgoba ft8_lib into libft8af.so — so today it only selects which JNI entry-point
+     * family (and thus which protocol family: FT2/FT4 vs FT8) the decode loop calls.
      */
     public boolean usesFromSourceDecoder() {
         return id == FT8Common.FT2_MODE || id == FT8Common.FT4_MODE;

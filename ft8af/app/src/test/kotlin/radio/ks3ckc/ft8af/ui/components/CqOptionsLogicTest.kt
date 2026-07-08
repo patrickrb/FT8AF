@@ -1,0 +1,284 @@
+package radio.ks3ckc.ft8af.ui.components
+
+import com.google.common.truth.Truth.assertThat
+import org.junit.Test
+
+class CqOptionsLogicTest {
+
+    // ---- presetLabel ----
+
+    @Test
+    fun presetLabel_emptyModifier_returnsCQ() {
+        assertThat(presetLabel("")).isEqualTo("CQ")
+    }
+
+    @Test
+    fun presetLabel_dx_returnsCQDX() {
+        assertThat(presetLabel("DX")).isEqualTo("CQ DX")
+    }
+
+    @Test
+    fun presetLabel_pota_returnsCQPOTA() {
+        assertThat(presetLabel("POTA")).isEqualTo("CQ POTA")
+    }
+
+    // ---- isValidModifier ----
+
+    @Test
+    fun isValidModifier_empty_valid() {
+        assertThat(isValidModifier("")).isTrue()
+    }
+
+    @Test
+    fun isValidModifier_dx_valid() {
+        assertThat(isValidModifier("DX")).isTrue()
+    }
+
+    @Test
+    fun isValidModifier_pota_valid() {
+        assertThat(isValidModifier("POTA")).isTrue()
+    }
+
+    @Test
+    fun isValidModifier_threeDigits_invalid() {
+        // The custom-modifier field is letters-only (sanitizeModifier strips
+        // digits), so a 3-digit modifier can never be produced by the UI.
+        assertThat(isValidModifier("599")).isFalse()
+    }
+
+    @Test
+    fun isValidModifier_fiveLetters_invalid() {
+        assertThat(isValidModifier("ABCDE")).isFalse()
+    }
+
+    @Test
+    fun isValidModifier_lowercase_invalid() {
+        assertThat(isValidModifier("dx")).isFalse()
+    }
+
+    @Test
+    fun isValidModifier_twoDigits_invalid() {
+        assertThat(isValidModifier("12")).isFalse()
+    }
+
+    @Test
+    fun isValidModifier_singleLetter_valid() {
+        assertThat(isValidModifier("A")).isTrue()
+    }
+
+    // ---- isValidFreeText ----
+
+    @Test
+    fun isValidFreeText_allFt8Chars_valid() {
+        assertThat(isValidFreeText("HELLO WORLD")).isTrue()
+    }
+
+    @Test
+    fun isValidFreeText_numbersAndSymbols_valid() {
+        assertThat(isValidFreeText("73 +-./?")).isTrue()
+    }
+
+    @Test
+    fun isValidFreeText_exactlyThirteen_valid() {
+        assertThat(isValidFreeText("1234567890ABC")).isTrue()
+    }
+
+    @Test
+    fun isValidFreeText_overThirteen_invalid() {
+        assertThat(isValidFreeText("12345678901234")).isFalse()
+    }
+
+    @Test
+    fun isValidFreeText_lowercase_invalid() {
+        assertThat(isValidFreeText("hello")).isFalse()
+    }
+
+    @Test
+    fun isValidFreeText_invalidChars_invalid() {
+        assertThat(isValidFreeText("@#\$")).isFalse()
+    }
+
+    @Test
+    fun isValidFreeText_empty_valid() {
+        assertThat(isValidFreeText("")).isTrue()
+    }
+
+    // ---- buildDirectedCq ----
+
+    @Test
+    fun buildDirectedCq_assemblesTextAndCall() {
+        assertThat(buildDirectedCq("POTA", "K1ABC")).isEqualTo("CQ POTA K1ABC")
+    }
+
+    @Test
+    fun buildDirectedCq_trimsAndCollapsesSpaces() {
+        assertThat(buildDirectedCq("  PO   TA ", "  K1ABC  ")).isEqualTo("CQ PO TA K1ABC")
+    }
+
+    @Test
+    fun buildDirectedCq_emptyText_yieldsPlainCq() {
+        // No double space where the text would go.
+        assertThat(buildDirectedCq("", "K1ABC")).isEqualTo("CQ K1ABC")
+    }
+
+    // ---- directedCqFits ----
+
+    @Test
+    fun directedCqFits_shortTextAndCall_true() {
+        // "CQ POTA K1ABC" == 13 chars exactly (boundary).
+        assertThat(directedCqFits("POTA", "K1ABC")).isTrue()
+    }
+
+    @Test
+    fun directedCqFits_overThirteen_false() {
+        // "CQ POTA W1AW/P" == 14 chars.
+        assertThat(directedCqFits("POTA", "W1AW/P")).isFalse()
+    }
+
+    @Test
+    fun directedCqFits_emptyTextShortCall_true() {
+        // "CQ K1ABC" == 8 chars.
+        assertThat(directedCqFits("", "K1ABC")).isTrue()
+    }
+
+    @Test
+    fun directedCqFits_invalidChar_false() {
+        // The lowercase call fails the FT8 charset even though it's short.
+        assertThat(directedCqFits("TEST", "k1abc")).isFalse()
+    }
+
+    // ---- shouldPersistFreeText ----
+
+    @Test
+    fun shouldPersistFreeText_newValue_true() {
+        assertThat(shouldPersistFreeText("POTA HI", "")).isTrue()
+    }
+
+    @Test
+    fun shouldPersistFreeText_changedValue_true() {
+        assertThat(shouldPersistFreeText("POTA THERE", "POTA HI")).isTrue()
+    }
+
+    @Test
+    fun shouldPersistFreeText_unchangedValue_false() {
+        // No redundant write when the field matches what's already saved.
+        assertThat(shouldPersistFreeText("POTA HI", "POTA HI")).isFalse()
+    }
+
+    @Test
+    fun shouldPersistFreeText_blankOverSaved_false() {
+        // Never clobber a saved value with a blank — clearing is the explicit ✕.
+        assertThat(shouldPersistFreeText("", "POTA HI")).isFalse()
+    }
+
+    @Test
+    fun shouldPersistFreeText_blankOverBlank_false() {
+        assertThat(shouldPersistFreeText("", "")).isFalse()
+    }
+
+    // ---- sanitizeModifier ----
+
+    @Test
+    fun sanitizeModifier_uppercases() {
+        assertThat(sanitizeModifier("dx")).isEqualTo("DX")
+    }
+
+    @Test
+    fun sanitizeModifier_stripsSpecialChars() {
+        assertThat(sanitizeModifier("P@O#T\$A")).isEqualTo("POTA")
+    }
+
+    @Test
+    fun sanitizeModifier_truncatesTo4() {
+        assertThat(sanitizeModifier("ABCDEFG")).isEqualTo("ABCD")
+    }
+
+    @Test
+    fun sanitizeModifier_stripsDigits() {
+        assertThat(sanitizeModifier("599")).isEqualTo("")
+    }
+
+    @Test
+    fun sanitizeModifier_empty_returnsEmpty() {
+        assertThat(sanitizeModifier("")).isEqualTo("")
+    }
+
+    // ---- sanitizeFreeText ----
+
+    @Test
+    fun sanitizeFreeText_uppercases() {
+        assertThat(sanitizeFreeText("hello")).isEqualTo("HELLO")
+    }
+
+    @Test
+    fun sanitizeFreeText_keepsFt8Chars() {
+        assertThat(sanitizeFreeText("73 +-./?")).isEqualTo("73 +-./?")
+    }
+
+    @Test
+    fun sanitizeFreeText_stripsInvalidChars() {
+        assertThat(sanitizeFreeText("HI@THERE#")).isEqualTo("HITHERE")
+    }
+
+    @Test
+    fun sanitizeFreeText_truncatesTo13() {
+        assertThat(sanitizeFreeText("ABCDEFGHIJKLMNOP")).isEqualTo("ABCDEFGHIJKLM")
+    }
+
+    @Test
+    fun sanitizeFreeText_empty_returnsEmpty() {
+        assertThat(sanitizeFreeText("")).isEqualTo("")
+    }
+
+    @Test
+    fun sanitizeFreeText_preservesSpaces() {
+        assertThat(sanitizeFreeText("A B C")).isEqualTo("A B C")
+    }
+
+    // ---- CQ_PRESETS ----
+
+    @Test
+    fun cqPresets_containsExpectedEntries() {
+        assertThat(CQ_PRESETS).containsExactly("", "DX", "NA", "EU", "SA", "AS", "OC", "AF")
+            .inOrder()
+    }
+
+    // ---- canEnableFieldDay ----
+
+    @Test
+    fun canEnableFieldDay_knownSection_true() {
+        assertThat(canEnableFieldDay("EMA")).isTrue()
+    }
+
+    @Test
+    fun canEnableFieldDay_unknownSection_false() {
+        assertThat(canEnableFieldDay("ZZ")).isFalse()
+    }
+
+    @Test
+    fun canEnableFieldDay_blank_false() {
+        assertThat(canEnableFieldDay("")).isFalse()
+    }
+
+    // ---- shouldPersistSection ----
+
+    @Test
+    fun shouldPersistSection_knownSection_true() {
+        assertThat(shouldPersistSection("WI", fieldDayEnabled = true)).isTrue()
+    }
+
+    @Test
+    fun shouldPersistSection_unknownSection_false() {
+        assertThat(shouldPersistSection("ZZ", fieldDayEnabled = false)).isFalse()
+    }
+
+    @Test
+    fun shouldPersistSection_clearWhileDisabled_true() {
+        assertThat(shouldPersistSection("", fieldDayEnabled = false)).isTrue()
+    }
+
+    @Test
+    fun shouldPersistSection_clearWhileEnabled_false() {
+        assertThat(shouldPersistSection("", fieldDayEnabled = true)).isFalse()
+    }
+}

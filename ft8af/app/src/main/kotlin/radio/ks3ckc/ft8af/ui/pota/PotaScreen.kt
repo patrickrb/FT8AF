@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,6 +51,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -91,11 +93,12 @@ import radio.ks3ckc.ft8af.theme.BorderStrong
 import radio.ks3ckc.ft8af.theme.StatusConfirmed
 import radio.ks3ckc.ft8af.theme.TextMuted
 import radio.ks3ckc.ft8af.theme.TextPrimary
+import radio.ks3ckc.ft8af.ui.components.CredentialFieldRole
+import radio.ks3ckc.ft8af.ui.components.autofill
 
 private enum class PotaSubTab(@StringRes val labelRes: Int) {
     ACTIVATE(R.string.pota_tab_activate),
     HUNT(R.string.pota_tab_hunt),
-    HISTORY(R.string.pota_tab_history),
 }
 
 @Composable
@@ -133,9 +136,8 @@ fun PotaScreen(mainViewModel: MainViewModel) {
         PotaTabHeader(subTab = subTab, onTabSelected = { subTab = it })
         Spacer(Modifier.height(10.dp))
         when (subTab) {
-            PotaSubTab.ACTIVATE -> ActivateTab()
+            PotaSubTab.ACTIVATE -> ActivateTab(onOpenActivation = { selectedActivation = it })
             PotaSubTab.HUNT -> HuntTab(mainViewModel)
-            PotaSubTab.HISTORY -> HistoryTab(onOpenActivation = { selectedActivation = it })
         }
     }
 }
@@ -183,174 +185,252 @@ private fun PotaTabHeader(subTab: PotaSubTab, onTabSelected: (PotaSubTab) -> Uni
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun ActivateTab() {
+private fun ActivateTab(onOpenActivation: (PotaActivation) -> Unit) {
     val activation by PotaSessionManager.currentActivation.collectAsStateWithLifecycle()
     val contacts by PotaSessionManager.activationQsos.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val parkRefs = remember { mutableStateListOf("") }
+
+    // Past activations, surfaced inline below the Start Activation form so the
+    // per-park ADIF export (reached by tapping a row) is one tap from this
+    // landing tab instead of buried in a separate History tab. Reload whenever
+    // an activation starts/ends so a just-finished session appears immediately.
+    var history by remember { mutableStateOf<List<PotaActivation>>(emptyList()) }
+    LaunchedEffect(activation?.id, activation?.endedAtMs) {
+        history = withContext(Dispatchers.IO) { PotaSessionManager.history() }
+    }
+    val recent = remember(history) { historyForDisplay(history) }
+    val parkRefs = rememberSaveable(
+        saver = listSaver(
+            save = { it.toList() },
+            restore = { mutableStateListOf(*it.toTypedArray()) },
+        ),
+    ) { mutableStateListOf("") }
     var notes by rememberSaveable { mutableStateOf("") }
     var refreshKey by remember { mutableIntStateOf(0) }
 
+    // Park picker sheet state
+    var showPicker by remember { mutableStateOf(false) }
+    var pickerTargetIndex by remember { mutableIntStateOf(-1) }
+
     // Refresh the activation's QSO counter periodically while one is running so
-    // the on-screen tally reflects QSOs added by the TX/RX path.
+    // the on-screen tally reflects QSOs added by the TX/RX path. The first
+    // refresh is immediate (no delay) so QSOs logged while on another tab are
+    // visible as soon as the user switches back to the POTA tab.
     LaunchedEffect(activation?.id, refreshKey) {
         if (activation != null) {
-            kotlinx.coroutines.delay(3000)
-            PotaSessionManager.refreshCounter()
+            if (refreshKey > 0) kotlinx.coroutines.delay(3000)
+            // refreshCounter() does blocking SQLite (reload + QSO list); keep it
+            // off the main dispatcher so the immediate first poll (and every 3s
+            // poll after) can't jank the UI / trigger an ANR.
+            withContext(Dispatchers.IO) { PotaSessionManager.refreshCounter() }
             refreshKey++
         }
     }
 
-    if (activation == null) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Card {
-                SectionTitle(stringResource(R.string.pota_start_activation))
-                Spacer(Modifier.height(8.dp))
-                parkRefs.forEachIndexed { index, ref ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        OutlinedTextField(
-                            value = ref,
-                            onValueChange = { parkRefs[index] = it.uppercase().take(10) },
-                            label = { Text(stringResource(R.string.pota_park_reference_label)) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
-                            colors = textFieldColors(),
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (parkRefs.size > 1) {
-                            IconButton(onClick = { parkRefs.removeAt(index) }) {
-                                Icon(
-                                    Icons.Filled.Close,
-                                    contentDescription = stringResource(R.string.pota_remove_park),
-                                    tint = TextMuted,
-                                    modifier = Modifier.size(18.dp),
+    // Box host so ParkPickerSheet (a fillMaxSize scrim + sheet) overlays the tab
+    // content. Without it the sheet is a trailing sibling of the fillMaxSize
+    // Activate content in PotaScreen's Column, so it lays out into 0 leftover
+    // height and the picker is invisible (tap does nothing). Mirrors how
+    // FrequencyPickerSheet is hosted as a sibling overlay in FT8AFApp.
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (activation == null) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                item(key = "start-card") {
+                    Card {
+                        SectionTitle(stringResource(R.string.pota_start_activation))
+                        Spacer(Modifier.height(8.dp))
+                        parkRefs.forEachIndexed { index, ref ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                OutlinedTextField(
+                                    value = ref,
+                                    onValueChange = { parkRefs[index] = it.uppercase().take(10) },
+                                    label = { Text(stringResource(R.string.pota_park_reference_label)) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+                                    trailingIcon = {
+                                        IconButton(onClick = {
+                                            pickerTargetIndex = index
+                                            showPicker = true
+                                        }) {
+                                            Icon(
+                                                Icons.Filled.Search,
+                                                contentDescription = stringResource(R.string.pota_search_parks),
+                                                tint = TextMuted,
+                                                modifier = Modifier.size(18.dp),
+                                            )
+                                        }
+                                    },
+                                    colors = textFieldColors(),
+                                    modifier = Modifier.weight(1f),
                                 )
+                                if (parkRefs.size > 1) {
+                                    IconButton(onClick = { parkRefs.removeAt(index) }) {
+                                        Icon(
+                                            Icons.Filled.Close,
+                                            contentDescription = stringResource(R.string.pota_remove_park),
+                                            tint = TextMuted,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                }
                             }
+                            if (index < parkRefs.lastIndex) Spacer(Modifier.height(4.dp))
                         }
+                        if (parkRefs.size < 10) {
+                            Spacer(Modifier.height(4.dp))
+                            OutlinedButton(
+                                onClick = { parkRefs.add("") },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(R.string.pota_add_park), color = TextPrimary, fontSize = 13.sp)
+                            }
+                        } else {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                stringResource(R.string.pota_max_parks_reached),
+                                color = TextMuted,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(start = 4.dp),
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = notes,
+                            onValueChange = { notes = it.take(120) },
+                            label = { Text(stringResource(R.string.pota_notes_optional_label)) },
+                            singleLine = true,
+                            colors = textFieldColors(),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                val started = PotaSessionManager.start(parkRefs, notes.ifBlank { null })
+                                if (started == null) {
+                                    Toast.makeText(context, context.getString(R.string.pota_enter_park_reference_first), Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, context.getString(R.string.pota_activating, started.parkRefsDisplay), Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BgApp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(stringResource(R.string.pota_start_activation), fontWeight = FontWeight.SemiBold) }
                     }
-                    if (index < parkRefs.lastIndex) Spacer(Modifier.height(4.dp))
                 }
-                if (parkRefs.size < 10) {
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedButton(
-                        onClick = { parkRefs.add("") },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.pota_add_park), color = TextPrimary, fontSize = 13.sp)
-                    }
-                } else {
-                    Spacer(Modifier.height(4.dp))
+                item(key = "recent-header") {
                     Text(
-                        stringResource(R.string.pota_max_parks_reached),
+                        stringResource(R.string.pota_tab_history),
                         color = TextMuted,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         modifier = Modifier.padding(start = 4.dp),
                     )
                 }
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = { notes = it.take(120) },
-                    label = { Text(stringResource(R.string.pota_notes_optional_label)) },
-                    singleLine = true,
-                    colors = textFieldColors(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(12.dp))
-                Button(
-                    onClick = {
-                        val started = PotaSessionManager.start(parkRefs, notes.ifBlank { null })
-                        if (started == null) {
-                            Toast.makeText(context, context.getString(R.string.pota_enter_park_reference_first), Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(context, context.getString(R.string.pota_activating, started.parkRefsDisplay), Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = BgApp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(stringResource(R.string.pota_start_activation), fontWeight = FontWeight.SemiBold) }
+                if (recent.isEmpty()) {
+                    item(key = "recent-empty") {
+                        Text(
+                            stringResource(R.string.pota_no_past_activations),
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 4.dp),
+                        )
+                    }
+                } else {
+                    items(recent, key = { it.id }) { row ->
+                        HistoryRow(row = row, onClick = { onOpenActivation(row) })
+                    }
+                }
             }
-        }
-    } else {
-        // Frame the operator + plottable contacts; null when nothing has a grid yet.
-        val mapData = remember(contacts) {
-            buildActivationMapData(contacts, GeneralVariables.getMyMaidenhead4Grid())
-        }
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            item(key = "activation-card") {
-                ActiveActivationCard(
-                    activation = activation!!,
-                    onStop = {
-                        PotaSessionManager.end()
-                        Toast.makeText(context, context.getString(R.string.pota_activation_ended), Toast.LENGTH_SHORT).show()
-                    },
-                    onSelfSpot = {
-                        val myCall = GeneralVariables.myCallsign ?: ""
-                        if (myCall.isBlank()) {
-                            Toast.makeText(context, context.getString(R.string.pota_set_callsign_first), Toast.LENGTH_SHORT).show()
-                        } else {
-                            val refs = activation!!.parkRefs
-                            scope.launch {
-                                var successCount = 0
-                                for (ref in refs) {
-                                    val ok = PotaClient.selfSpot(
-                                        activator = myCall,
-                                        spotter = myCall,
-                                        frequencyKhz = potaSpotFrequencyKhz(GeneralVariables.band),
-                                        mode = GeneralVariables.currentMode().displayName,
-                                        reference = ref,
-                                        comments = "CQ POTA via FT8AF",
-                                    )
-                                    if (ok) successCount++
+        } else {
+            // Frame the operator + plottable contacts; null when nothing has a grid yet.
+            val mapData = remember(contacts) {
+                buildActivationMapData(contacts, GeneralVariables.getMyMaidenhead4Grid())
+            }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                item(key = "activation-card") {
+                    ActiveActivationCard(
+                        activation = activation!!,
+                        onStop = {
+                            PotaSessionManager.end()
+                            Toast.makeText(context, context.getString(R.string.pota_activation_ended), Toast.LENGTH_SHORT).show()
+                        },
+                        onSelfSpot = {
+                            val myCall = GeneralVariables.myCallsign ?: ""
+                            if (myCall.isBlank()) {
+                                Toast.makeText(context, context.getString(R.string.pota_set_callsign_first), Toast.LENGTH_SHORT).show()
+                            } else {
+                                val refs = activation!!.parkRefs
+                                scope.launch {
+                                    var successCount = 0
+                                    for (ref in refs) {
+                                        val ok = PotaClient.selfSpot(
+                                            activator = myCall,
+                                            spotter = myCall,
+                                            frequencyKhz = potaSpotFrequencyKhz(GeneralVariables.band),
+                                            mode = GeneralVariables.currentMode().displayName,
+                                            reference = ref,
+                                            comments = "CQ POTA via FT8AF",
+                                        )
+                                        if (ok) successCount++
+                                    }
+                                    val msg = if (successCount == refs.size) {
+                                        if (refs.size == 1) context.getString(R.string.pota_self_spot_posted)
+                                        else context.getString(R.string.pota_spotted_n_parks, successCount)
+                                    } else {
+                                        context.getString(R.string.pota_self_spot_failed)
+                                    }
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                 }
-                                val msg = if (successCount == refs.size) {
-                                    if (refs.size == 1) context.getString(R.string.pota_self_spot_posted)
-                                    else context.getString(R.string.pota_spotted_n_parks, successCount)
-                                } else {
-                                    context.getString(R.string.pota_self_spot_failed)
-                                }
-                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             }
-                        }
-                    },
-                )
-            }
-            if (mapData != null) {
-                item(key = "activation-map") {
-                    Spacer(Modifier.height(2.dp))
-                    PotaActivationMap(
-                        operatorLat = mapData.operatorLat,
-                        operatorLon = mapData.operatorLon,
-                        contacts = mapData.contacts,
+                        },
                     )
                 }
-            }
-            if (contacts.isNotEmpty()) {
-                item(key = "contacts-header") {
-                    Text(
-                        stringResource(R.string.pota_qsos),
-                        color = TextMuted,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(start = 4.dp, top = 4.dp),
-                    )
+                if (mapData != null) {
+                    item(key = "activation-map") {
+                        Spacer(Modifier.height(2.dp))
+                        PotaActivationMap(
+                            operatorLat = mapData.operatorLat,
+                            operatorLon = mapData.operatorLon,
+                            contacts = mapData.contacts,
+                        )
+                    }
                 }
-                items(contacts, key = { it.id }) { qso ->
-                    PotaContactRow(qso)
+                if (contacts.isNotEmpty()) {
+                    item(key = "contacts-header") {
+                        Text(
+                            stringResource(R.string.pota_qsos),
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+                        )
+                    }
+                    items(contacts, key = { it.id }) { qso ->
+                        PotaContactRow(qso)
+                    }
                 }
             }
         }
+
+        ParkPickerSheet(
+            visible = showPicker,
+            onDismiss = { showPicker = false },
+            onParkSelected = { ref ->
+                if (pickerTargetIndex in parkRefs.indices) {
+                    parkRefs[pickerTargetIndex] = ref
+                }
+            },
+        )
     }
 }
 
@@ -589,37 +669,17 @@ private fun SpotRow(spot: PotaSpot, onClick: () -> Unit) {
 }
 
 // ---------------------------------------------------------------------------
-// History tab
+// History
 // ---------------------------------------------------------------------------
 
-@Composable
-private fun HistoryTab(onOpenActivation: (PotaActivation) -> Unit) {
-    var history by remember { mutableStateOf<List<PotaActivation>>(emptyList()) }
-    val activation by PotaSessionManager.currentActivation.collectAsStateWithLifecycle()
-
-    // Reload whenever activation state changes (start/end will appear here).
-    LaunchedEffect(activation?.id, activation?.endedAtMs) {
-        history = PotaSessionManager.history()
-    }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        if (history.isEmpty()) {
-            Text(
-                stringResource(R.string.pota_no_past_activations),
-                color = TextMuted,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(8.dp),
-            )
-        }
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            items(history, key = { it.id }) { row ->
-                HistoryRow(row = row, onClick = { onOpenActivation(row) })
-            }
-        }
-    }
-}
+/**
+ * Past activations to list (newest first) below the Start Activation form.
+ * Drops any still-active row so the in-progress activation is never shown as
+ * "past", and sorts by start time so the ordering is deterministic regardless
+ * of how the DAO returned the rows.
+ */
+internal fun historyForDisplay(all: List<PotaActivation>): List<PotaActivation> =
+    all.filterNot { it.isActive }.sortedByDescending { it.startedAtMs }
 
 /** No usable ID token (never logged in, or the stored refresh token was revoked). */
 private class NotSignedInException : Exception("not signed in")
@@ -657,15 +717,22 @@ private suspend fun uploadActivation(
 }
 
 /** How an upload failed, mapped to a user-facing message in [startUpload]. */
-internal enum class UploadFailureKind { SERVER, NETWORK, OTHER }
+internal enum class UploadFailureKind { BUSY, SERVER, NETWORK, OTHER }
 
 /**
- * Classify an upload failure so the UI can explain it. A 5xx is POTA's backend
- * rejecting the log (almost always a bad park ref or a callsign not registered to
- * the account); an [java.io.IOException] is a connectivity problem; anything else
- * falls back to the raw message.
+ * Classify an upload failure so the UI can explain it.
+ *
+ *  - [BUSY]: a gateway status (502/503/504) — POTA's backend was transiently down.
+ *    [PotaClient.uploadAdif] already retried with backoff, so by the time this
+ *    surfaces it's still flapping; tell the user to try again shortly, *not* to
+ *    go check their park ref.
+ *  - [SERVER]: any other 5xx — POTA accepted the request but rejected the log,
+ *    almost always a bad park ref or a callsign not registered to the account.
+ *  - [NETWORK]: an [java.io.IOException] — a connectivity problem on our side.
+ *  - [OTHER]: anything else, surfaced with its raw message.
  */
 internal fun classifyUploadFailure(error: Throwable?): UploadFailureKind = when {
+    error is PotaUploadException && error.httpCode in setOf(502, 503, 504) -> UploadFailureKind.BUSY
     error is PotaUploadException && error.httpCode in 500..599 -> UploadFailureKind.SERVER
     error is java.io.IOException -> UploadFailureKind.NETWORK
     else -> UploadFailureKind.OTHER
@@ -703,7 +770,11 @@ private fun PotaLoginDialog(
                     enabled = !submitting,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     colors = textFieldColors(),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .autofill(CredentialFieldRole.EMAIL) {
+                            email = it.trim()
+                        },
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -715,7 +786,11 @@ private fun PotaLoginDialog(
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     colors = textFieldColors(),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .autofill(CredentialFieldRole.PASSWORD) {
+                            password = it
+                        },
                 )
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -873,6 +948,7 @@ private fun ActivationDetailScreen(
                     loginPending = true
                 } else {
                     val msg = when (classifyUploadFailure(e)) {
+                        UploadFailureKind.BUSY -> context.getString(R.string.pota_upload_busy)
                         UploadFailureKind.SERVER -> context.getString(R.string.pota_upload_server_error)
                         UploadFailureKind.NETWORK -> context.getString(R.string.pota_upload_network_error)
                         UploadFailureKind.OTHER -> context.getString(R.string.pota_upload_failed, e.message ?: "?")

@@ -43,6 +43,10 @@ import com.k1af.ft8af.rigs.BaseRigOperation
 import radio.ks3ckc.ft8af.theme.BgApp
 import radio.ks3ckc.ft8af.ui.components.ActiveQsoPanel
 import radio.ks3ckc.ft8af.ui.components.shouldShowCatChip
+import radio.ks3ckc.ft8af.ui.components.CqOptionsSheet
+import radio.ks3ckc.ft8af.ui.components.canEnableFieldDay
+import radio.ks3ckc.ft8af.ui.components.shouldPersistFreeText
+import radio.ks3ckc.ft8af.ui.components.shouldPersistSection
 import radio.ks3ckc.ft8af.ui.components.FT8AFTab
 import radio.ks3ckc.ft8af.ui.components.FrequencyPickerSheet
 import radio.ks3ckc.ft8af.ui.components.HoundSetupSheet
@@ -89,6 +93,8 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     // Observe transmit state
     val isTransmitting by mainViewModel.ft8TransmitSignal.mutableIsTransmitting.observeAsState(false)
     val isActivated by mainViewModel.ft8TransmitSignal.mutableIsActivated.observeAsState(false)
+    val isTuning by mainViewModel.ft8TransmitSignal.mutableIsTuning.observeAsState(false)
+    val tuneRemainingSec by mainViewModel.ft8TransmitSignal.mutableTuneRemainingSec.observeAsState(0)
     val txSlot by mainViewModel.ft8TransmitSignal.mutableSequential.observeAsState(mainViewModel.ft8TransmitSignal.sequential)
     val qsoCompletedAt by mainViewModel.ft8TransmitSignal.mutableQsoCompletedAt.observeAsState()
     // CAT connection status for the TX-strip chip. Hidden for VOX / audio-only
@@ -143,6 +149,19 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     var dxEnabled by remember { mutableStateOf(GeneralVariables.houndMode) }
     var showHoundSetup by remember { mutableStateOf(false) }
 
+    // CQ Options sheet state — long-press the CQ button to open.
+    var showCqOptions by remember { mutableStateOf(false) }
+    var cqModifier by remember { mutableStateOf(GeneralVariables.toModifier ?: "") }
+    var isFreeTextMode by remember { mutableStateOf(false) }
+    // Seed the live free-text field and the saved custom-CQ from persisted config
+    // (config loads async, so these are re-synced in the configLoaded effect below).
+    var freeTextMessage by remember { mutableStateOf(GeneralVariables.cqFreeText ?: "") }
+    var savedCqFreeText by remember { mutableStateOf(GeneralVariables.cqFreeText ?: "") }
+    var fieldDayEnabled by remember { mutableStateOf(GeneralVariables.fieldDayMode) }
+    var fieldDayClass by remember { mutableStateOf(GeneralVariables.fieldDayClass ?: "A") }
+    var fieldDayNumTx by remember { mutableIntStateOf(GeneralVariables.fieldDayNumTx.coerceIn(1, 16)) }
+    var fieldDaySection by remember { mutableStateOf(GeneralVariables.fieldDaySection ?: "") }
+
     // Frequency picker sheet state
     var showFrequencyPicker by rememberSaveable { mutableStateOf(false) }
 
@@ -165,6 +184,12 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             // chip reflects the correct state even when arming is skipped
             // (e.g. callsign not yet configured).
             huntEnabled = GeneralVariables.autoFollowCQ
+            // Config (incl. the saved custom CQ) loads after first composition, so
+            // pull it in once it's ready and seed the field if untouched.
+            savedCqFreeText = GeneralVariables.cqFreeText ?: ""
+            if (freeTextMessage.isBlank()) {
+                freeTextMessage = savedCqFreeText
+            }
             if (shouldArmHuntOnStartup(
                     GeneralVariables.autoFollowCQ, GeneralVariables.myCallsign)) {
                 mainViewModel.ft8TransmitSignal.armForHunt()
@@ -347,6 +372,22 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 expanded = qsoPanelExpanded,
                 txVolume = txVolume,
                 showVolumeSlider = showVolumeSlider,
+                cqModifier = cqModifier,
+                isFreeTextMode = isFreeTextMode,
+                fieldDayEnabled = fieldDayEnabled,
+                isTuning = isTuning,
+                tuneRemainingSec = tuneRemainingSec,
+                onToggleTune = {
+                    // Toggle (WSJT-X style latching Tune): tap to key the carrier,
+                    // tap again to stop. startTune() toasts the reason when blocked.
+                    // Per the tune-method setting the tap may instead fire the rig's
+                    // internal ATU (issue #425) — a one-shot command, nothing to latch.
+                    if (isTuning) {
+                        mainViewModel.ft8TransmitSignal.stopTune()
+                    } else if (!mainViewModel.tryStartTuneViaAtu()) {
+                        mainViewModel.ft8TransmitSignal.startTune()
+                    }
+                },
                 onVolumeChange = { newVolume ->
                     txVolume = newVolume
                     GeneralVariables.volumePercent = newVolume / 100f
@@ -355,11 +396,21 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 onVolumeChangeFinished = {
                     mainViewModel.databaseOpr.writeConfig("volumeValue", txVolume.toString(), null)
                     mainViewModel.baseRig?.connector?.setRFVolume(txVolume)
+                    saveOutputLevelForCurrentBand(mainViewModel.databaseOpr, txVolume)
                 },
                 onCallCQ = {
                     if (GeneralVariables.myCallsign.isNullOrEmpty()) {
                         Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
+                    } else if (isFreeTextMode && freeTextMessage.isNotBlank()) {
+                        // Free text is a one-shot (WSJT-X Tx5 style): send it once,
+                        // immediately, then the engine auto-stops — it is an alternative
+                        // to a 73, not a repeating CQ. Consume the armed free text so the
+                        // next tap calls a normal CQ instead of re-sending it.
+                        mainViewModel.ft8TransmitSignal.sendFreeTextOnce(freeTextMessage)
+                        isFreeTextMode = false
+                        freeTextMessage = ""
                     } else {
+                        mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
                         mainViewModel.ft8TransmitSignal.userResetToCQ()
                         mainViewModel.ft8TransmitSignal.setActivated(true)
                         GeneralVariables.resetLaunchSupervision()
@@ -381,7 +432,20 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                             mainViewModel.databaseOpr.writeConfig("autoFollowCQ", "0", null)
                         }
                     }
+                    // Clear free text and Field Day mode on stop
+                    isFreeTextMode = false
+                    freeTextMessage = ""
+                    mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
+                    if (fieldDayEnabled) {
+                        fieldDayEnabled = false
+                        GeneralVariables.fieldDayMode = false
+                        mainViewModel.databaseOpr.writeConfig("fieldDayMode", "0", null)
+                        cqModifier = ""
+                        GeneralVariables.toModifier = ""
+                        mainViewModel.databaseOpr.writeConfig("toModifier", "", null)
+                    }
                 },
+                onLongPressCQ = { showCqOptions = true },
                 onToggleDx = {
                     if (dxEnabled || GeneralVariables.houndMode) {
                         mainViewModel.stopHoundMode()
@@ -466,7 +530,9 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
 
         // Transmit breathing border — sibling overlay so its per-frame invalidations
         // don't bubble into the waterfall composable. Pointer events pass through.
-        TransmitGlow(isTransmitting = isTransmitting)
+        // The tune carrier is a real transmission too (issue #408): the operator
+        // must never be unsure whether the rig is keyed.
+        TransmitGlow(isTransmitting = isTransmitting || isTuning)
 
         // One-shot particle burst when a QSO completes.
         QsoCelebration(triggerAt = qsoCompletedAt)
@@ -497,6 +563,145 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                     dxEnabled = true
                     huntEnabled = false
                     showHoundSetup = false
+                }
+            },
+        )
+
+        // CQ Options — modifier presets, free text, and Field Day configuration.
+        CqOptionsSheet(
+            visible = showCqOptions,
+            currentModifier = cqModifier,
+            isFreeTextMode = isFreeTextMode,
+            freeText = freeTextMessage,
+            callsign = GeneralVariables.myCallsign ?: "",
+            savedFreeText = savedCqFreeText,
+            fieldDayEnabled = fieldDayEnabled,
+            fieldDayClass = fieldDayClass,
+            fieldDayNumTx = fieldDayNumTx,
+            fieldDaySection = fieldDaySection,
+            onDismiss = {
+                showCqOptions = false
+                // Persist the custom CQ once, on sheet dismiss (which also fires
+                // right after Call CQ and preset selection), instead of writing on
+                // every keystroke — that enqueued a DELETE+INSERT AsyncTask per
+                // character. Blank is never persisted over a saved value here;
+                // clearing stays the explicit ✕ path (onRemoveSavedCq).
+                if (shouldPersistFreeText(freeTextMessage, savedCqFreeText)) {
+                    savedCqFreeText = freeTextMessage
+                    GeneralVariables.cqFreeText = freeTextMessage
+                    mainViewModel.databaseOpr.writeConfig("cqFreeText", freeTextMessage, null)
+                }
+            },
+            onSelectPreset = { preset ->
+                cqModifier = preset
+                isFreeTextMode = false
+                freeTextMessage = ""
+                fieldDayEnabled = false
+                GeneralVariables.toModifier = preset
+                GeneralVariables.fieldDayMode = false
+                mainViewModel.databaseOpr.writeConfig("toModifier", preset, null)
+                mainViewModel.databaseOpr.writeConfig("fieldDayMode", "0", null)
+            },
+            onCustomModifier = { mod ->
+                cqModifier = mod
+                isFreeTextMode = false
+                freeTextMessage = ""
+                fieldDayEnabled = false
+                GeneralVariables.toModifier = mod
+                GeneralVariables.fieldDayMode = false
+                mainViewModel.databaseOpr.writeConfig("toModifier", mod, null)
+                mainViewModel.databaseOpr.writeConfig("fieldDayMode", "0", null)
+            },
+            onFreeTextChange = { text ->
+                freeTextMessage = text
+                isFreeTextMode = text.isNotBlank()
+                if (text.isNotBlank()) {
+                    fieldDayEnabled = false
+                    cqModifier = ""
+                    GeneralVariables.fieldDayMode = false
+                    GeneralVariables.toModifier = ""
+                    // In-memory only — no SQLite write per keystroke. The value is
+                    // persisted (and the saved chip updated) on sheet dismiss /
+                    // Call CQ via shouldPersistFreeText in onDismiss above.
+                    GeneralVariables.cqFreeText = text
+                }
+            },
+            onArmSavedCq = {
+                freeTextMessage = savedCqFreeText
+                isFreeTextMode = savedCqFreeText.isNotBlank()
+                if (savedCqFreeText.isNotBlank()) {
+                    fieldDayEnabled = false
+                    cqModifier = ""
+                    GeneralVariables.fieldDayMode = false
+                    GeneralVariables.toModifier = ""
+                }
+            },
+            onRemoveSavedCq = {
+                savedCqFreeText = ""
+                freeTextMessage = ""
+                isFreeTextMode = false
+                GeneralVariables.cqFreeText = ""
+                mainViewModel.databaseOpr.writeConfig("cqFreeText", "", null)
+            },
+            onFieldDayToggle = { enabled ->
+                if (enabled && !canEnableFieldDay(fieldDaySection)) {
+                    // Refuse to enable FD without a valid section — otherwise the
+                    // packer would silently transmit "AB" (section index 0).
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.cq_fd_section_required),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                } else {
+                    fieldDayEnabled = enabled
+                    GeneralVariables.fieldDayMode = enabled
+                    mainViewModel.databaseOpr.writeConfig("fieldDayMode", if (enabled) "1" else "0", null)
+                    if (enabled) {
+                        isFreeTextMode = false
+                        freeTextMessage = ""
+                        cqModifier = "FD"
+                        GeneralVariables.toModifier = "FD"
+                        mainViewModel.databaseOpr.writeConfig("toModifier", "FD", null)
+                    } else {
+                        cqModifier = ""
+                        GeneralVariables.toModifier = ""
+                        mainViewModel.databaseOpr.writeConfig("toModifier", "", null)
+                    }
+                }
+            },
+            onFieldDayClassChange = { cls ->
+                fieldDayClass = cls
+                GeneralVariables.fieldDayClass = cls
+                mainViewModel.databaseOpr.writeConfig("fieldDayClass", cls, null)
+            },
+            onFieldDayNumTxChange = { num ->
+                val clamped = num.coerceIn(1, 16)
+                fieldDayNumTx = clamped
+                GeneralVariables.fieldDayNumTx = clamped
+                mainViewModel.databaseOpr.writeConfig("fieldDayNumTx", clamped.toString(), null)
+            },
+            onFieldDaySectionChange = { section ->
+                fieldDaySection = section
+                GeneralVariables.fieldDaySection = section
+                // Only persist a recognized section (or an explicit clear while FD
+                // is off) so a blank/unknown value can't restore as "AB" later.
+                if (shouldPersistSection(section, fieldDayEnabled)) {
+                    mainViewModel.databaseOpr.writeConfig("fieldDaySection", section, null)
+                }
+            },
+            onCallCQ = {
+                if (GeneralVariables.myCallsign.isNullOrEmpty()) {
+                    Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
+                } else {
+                    if (isFreeTextMode && freeTextMessage.isNotBlank()) {
+                        mainViewModel.ft8TransmitSignal.setFreeText(freeTextMessage)
+                        mainViewModel.ft8TransmitSignal.setTransmitFreeText(true)
+                    } else {
+                        mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
+                    }
+                    mainViewModel.ft8TransmitSignal.userResetToCQ()
+                    mainViewModel.ft8TransmitSignal.setActivated(true)
+                    GeneralVariables.resetLaunchSupervision()
                 }
             },
         )

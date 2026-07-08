@@ -3,15 +3,15 @@ name: Native FT8 tests
 # Gate on the native FT8 encode/hash golden vectors (issue #61). These guard the
 # from-source reconstruction of libft8cn.so: a regression in pack77 / ft8_encode
 # / the callsign hash would otherwise ship silently. The build is host-only C
-# (seconds), so it runs on every PR to dev/main without a path filter — keeping
-# it a reliable required status check (a path-filtered check that doesn't run
-# would leave branch protection stuck "pending").
+# (seconds), so it runs on every PR to dev/staging/main without a path filter —
+# keeping it a reliable required status check (a path-filtered check that doesn't
+# run would leave branch protection stuck "pending").
 
 on:
   pull_request:
-    branches: [main, dev]
+    branches: [main, staging, dev]
   push:
-    branches: [main, dev]
+    branches: [main, staging, dev]
 
 # A new push to the same PR/branch cancels the prior in-flight run.
 concurrency:
@@ -31,3 +31,57 @@ jobs:
 
       - name: Build & run golden tests
         run: bash ft8af/app/src/main/cpp/ft8af_glue/run_host_tests.sh
+
+      # --- Coverage: best-effort, NON-GATING. Rebuilds the golden + dev625 suites
+      # with clang source-based coverage and uploads to Codecov under the `native`
+      # flag. Deliberately separate from the gate above and every step here is
+      # continue-on-error, so a coverage hiccup (tool mismatch, apt flake) can never
+      # fail the required golden-vector check. The source lists mirror the golden
+      # and dev625 builds in run_host_tests.sh — keep them in sync when that changes.
+      # DEBIAN_FRONTEND=noninteractive + DPkg::Lock::Timeout guard against the two
+      # ways apt hangs forever on hosted runners (a debconf prompt that -y doesn't
+      # suppress, and the dpkg lock held by a background apt-daily job) — this step
+      # is best-effort, but a hang would still stall the required golden-encode job.
+      - name: Install LLVM coverage tools
+        continue-on-error: true
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update -o DPkg::Lock::Timeout=600
+          sudo apt-get install -y --no-install-recommends \
+            -o DPkg::Lock::Timeout=600 llvm
+
+      - name: Build & run suites with coverage
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          glue=ft8af/app/src/main/cpp/ft8af_glue
+          ft8=ft8af/app/src/main/cpp/ft8_lib
+          core=("$ft8/ft8/pack.c" "$ft8/ft8/encode.c" "$ft8/ft8/crc.c" \
+                "$ft8/ft8/constants.c" "$ft8/ft8/text.c" "$ft8/ft8/message.c")
+          decode=("$ft8/ft8/decode.c" "$ft8/ft8/ldpc.c" "$ft8/ft8/osd.c" "$ft8/ft8/unpack.c")
+          covflags="-fprofile-instr-generate -fcoverage-mapping"
+          mkdir -p cov
+          clang -std=c11 -O1 -D_GNU_SOURCE $covflags \
+            -Wno-deprecated-non-prototype -Wno-unused-function -I "$ft8" \
+            "$glue/test_golden_encode.c" "${core[@]}" -lm -o cov/golden
+          clang -std=c11 -O1 -D_GNU_SOURCE $covflags \
+            -Wno-deprecated-non-prototype -Wno-unused-function -I "$ft8" \
+            "$glue/test_dev625_fixes.c" "${core[@]}" "${decode[@]}" \
+            "$glue/fft_display.c" -lm -o cov/dev625
+          LLVM_PROFILE_FILE=cov/golden.profraw ./cov/golden
+          LLVM_PROFILE_FILE=cov/dev625.profraw ./cov/dev625
+          llvm-profdata merge -sparse cov/*.profraw -o cov/merged.profdata
+          # Exclude the test harnesses themselves so the flag reflects core coverage.
+          llvm-cov export -format=lcov -instr-profile cov/merged.profdata \
+            --ignore-filename-regex='ft8af_glue/(test_|fft_display)' \
+            cov/golden -object cov/dev625 > native.lcov
+          echo "Wrote $(wc -l < native.lcov) lines of lcov."
+
+      - name: Upload native coverage to Codecov
+        continue-on-error: true
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: native.lcov
+          flags: native

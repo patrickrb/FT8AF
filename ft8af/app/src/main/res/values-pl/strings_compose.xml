@@ -123,6 +123,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">Wywoływanie CQ</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">Szukanie...</string>
     <string name="qsopanel_qsoing_with">QSO z %1$s</string>
     <string name="qsopanel_waiting_for">Oczekiwanie na %1$s</string>
@@ -271,6 +272,7 @@
     <string name="pota_upload_success">Wysłano %1$d dziennik(ów) parków do POTA</string>
     <string name="pota_upload_failed">Wysyłanie nieudane: %1$s</string>
     <string name="pota_upload_server_error">POTA nie mogło przetworzyć przesyłki. Sprawdź, czy identyfikator parku jest poprawny i czy Twój znak jest zarejestrowany w POTA, a następnie spróbuj ponownie.</string>
+    <string name="pota_upload_busy">Serwery POTA są tymczasowo niedostępne. Spróbowaliśmy kilka razy bez powodzenia — spróbuj ponownie za kilka minut.</string>
     <string name="pota_upload_network_error">Nie udało się połączyć z POTA. Sprawdź połączenie z internetem i spróbuj ponownie.</string>
     <string name="pota_login_title">Zaloguj się do POTA</string>
     <string name="pota_login_desc">Użyj e-maila i hasła swojego konta pota.app.</string>
@@ -523,6 +525,13 @@
     <string name="settings_enabled_bands_dialog_desc">Ukryte pasma nie pojawią się w wyborze częstotliwości.</string>
     <string name="settings_select_serial_port">Wybierz port szeregowy</string>
     <string name="settings_tx_volume_advice">Dostosuj na żywo — następne TX użyje tego poziomu. Obserwuj ALC radia i zmniejszaj, aż ledwo dotyka linii.</string>
+    <string name="settings_input_volume">Głośność wejścia</string>
+    <string name="settings_input_volume_desc" formatted="false">Wzmocnienie audio RX stosowane przed dekodowaniem (100% = bez zmian)</string>
+    <string name="settings_input_volume_advice">Stosowane do przychodzącego dźwięku przed dekodowaniem. Obserwuj miernik poziomu RX na wodospadzie i celuj w zieloną strefę; czerwony oznacza przesterowanie.</string>
+    <string name="input_level_too_low">Niski</string>
+    <string name="input_level_good">Dobry</string>
+    <string name="input_level_too_high">Wysoki</string>
+    <string name="input_level_clipping">Przester</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Język</string>
@@ -536,4 +545,39 @@
     <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
+    <string name="tx_audio_dropped">Błąd audio TX — w tym cyklu nie wysłano sygnału (błąd audio USB)</string>
+    <string name="cq_offset_moved">Offset CQ przeniesiony w wolne miejsce: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Automatyczny wolny offset TX</string>
+    <string name="settings_auto_clear_tx_desc">Przy wołaniu CQ wybiera wolne miejsce na podstawie ostatniej aktywności pasma i przenosi się, gdy zostanie zajęte</string>
+    <string name="tune_content_description">Tune: uruchamia tuner radia lub nadaje ciągłą nośną do strojenia anteny</string>
+    <string name="tune_stopped_timeout">Tune zatrzymany po %1$d s</string>
+    <string name="tune_blocked_tx">Zatrzymaj CQ/QSO przed użyciem Tune</string>
+    <string name="tune_unavailable_route">Tune nie jest jeszcze dostępny na tej ścieżce audio</string>
+    <string name="tune_atu_started">Uruchomiono tuner antenowy radia</string>
+    <string name="tune_atu_unavailable">Tuner niedostępny — podłącz radio CAT z wewnętrznym tunerem</string>
+    <string name="settings_tune_method">Metoda Tune</string>
+    <string name="settings_tune_method_desc">Automatycznie uruchamia wewnętrzny tuner radia przez CAT, gdy jest dostępny, w przeciwnym razie nadaje ton małej mocy</string>
+    <string name="tune_method_automatic">Automatycznie</string>
+    <string name="tune_method_internal">Tuner wewnętrzny</string>
+    <string name="tune_method_tone">Ton małej mocy</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / WODOSPAD (DEWELOPER)</string>
+    <string name="settings_fft_window">Funkcja okna FFT</string>
+    <string name="settings_fft_window_desc">Okno przed FFT dla wyświetlania widma/wodospadu; Hann ogranicza przeciek widmowy</string>
+    <string name="settings_fft_window_rect">Prostokątne (brak)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">Uśrednianie ramek</string>
+    <string name="settings_fft_averaging_desc">Wygładza wyświetlanie między ramkami FFT; Wył. pokazuje każdą ramkę bez zmian</string>
+    <string name="settings_fft_avg_off">Wył.</string>
+    <string name="settings_fft_avg_light">Lekkie (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">Mocne (EMA 0.25)</string>
+    <string name="settings_bin_agg">Łączenie binów widma</string>
+    <string name="settings_bin_agg_desc">Jak sąsiednie biny FFT łączą się w jeden słupek widma</string>
+    <string name="settings_bin_agg_max">Maksimum</string>
+    <string name="settings_bin_agg_avg">Średnia</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

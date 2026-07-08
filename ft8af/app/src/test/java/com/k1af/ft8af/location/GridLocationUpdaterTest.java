@@ -2,6 +2,11 @@ package com.k1af.ft8af.location;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import android.content.Context;
+
+import androidx.test.core.app.ApplicationProvider;
+
+import com.k1af.ft8af.GeneralVariables;
 import com.k1af.ft8af.maidenhead.MaidenheadGrid;
 import com.google.android.gms.maps.model.LatLng;
 
@@ -11,9 +16,10 @@ import org.robolectric.RobolectricTestRunner;
 
 /**
  * Covers {@link GridLocationUpdater#gridUpdateFor} — the GPS-grid update
- * decision extracted from {@code applyGridFromLatLng} (issue #59). Robolectric
- * is required because the method reaches Play-Services {@link LatLng} via
- * {@link MaidenheadGrid#getGridSquare}.
+ * decision extracted from {@code applyGridFromLatLng} (issue #59) — plus the
+ * toggle/permission gating the class wires into {@link LocationSubscriber}
+ * (issue #380). Robolectric is required because the method reaches
+ * Play-Services {@link LatLng} via {@link MaidenheadGrid#getGridSquare}.
  */
 @RunWith(RobolectricTestRunner.class)
 public class GridLocationUpdaterTest {
@@ -60,5 +66,29 @@ public class GridLocationUpdaterTest {
         assertThat(GridLocationUpdater.gridUpdateFor(BOSTON_LAT, BOSTON_LON, startGrid)).isNull();
         // After the boundary crossing => update to the new square.
         assertThat(GridLocationUpdater.gridUpdateFor(euLat, euLon, startGrid)).isEqualTo(endGrid);
+    }
+
+    // ---- LocationSubscriber wiring (issue #380): toggle + permission gates ----
+
+    @Test
+    public void refresh_toggleOff_leavesUpdaterStopped() {
+        Context ctx = ApplicationProvider.getApplicationContext();
+        GeneralVariables.autoUpdateGridFromGPS = false;
+        GridLocationUpdater.refresh(ctx, null);
+        assertThat(GridLocationUpdater.getInstance(ctx).isRunning()).isFalse();
+    }
+
+    @Test
+    public void refresh_toggleOn_withoutLocationPermission_doesNotStart() {
+        // Robolectric grants no runtime permissions by default, so the dual
+        // FINE/COARSE check must veto the start.
+        Context ctx = ApplicationProvider.getApplicationContext();
+        GeneralVariables.autoUpdateGridFromGPS = true;
+        try {
+            GridLocationUpdater.refresh(ctx, null);
+            assertThat(GridLocationUpdater.getInstance(ctx).isRunning()).isFalse();
+        } finally {
+            GeneralVariables.autoUpdateGridFromGPS = false;
+        }
     }
 }

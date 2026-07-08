@@ -2,9 +2,11 @@
 #include "constants.h"
 #include "crc.h"
 #include "ldpc.h"
+#include "osd.h"
 #include "unpack.h"
 
 #include <stdbool.h>
+#include <stddef.h> // NULL (not guaranteed by the headers above on glibc/macOS)
 #include <math.h>
 
 // #define LOG_LEVEL LOG_DEBUG
@@ -417,18 +419,14 @@ static void ftx_normalize_logl(float* log174)
     }
 }
 
-bool ft8_decode(const waterfall_t* wf, const candidate_t* cand, int max_iterations, ftx_message_t* message, decode_status_t* status)
+bool ftx_decode_llrs(ftx_protocol_t protocol, const float* llrs, int max_iterations,
+                     int osd_depth, int osd_err_gate, ftx_message_t* message, decode_status_t* status)
 {
-    float log174[FTX_LDPC_N]; // message bits encoded as likelihood
-    if (wf->protocol != FTX_PROTOCOL_FT8) // FT4 and FT2 share the 2-bit/symbol layout
-    {
-        ft4_extract_likelihood(wf, cand, log174);
-    }
-    else
-    {
-        ft8_extract_likelihood(wf, cand, log174);
-    }
-
+    // Work on a normalized copy: callers hand in raw log-likelihoods on
+    // whatever scale their demodulator produced.
+    float log174[FTX_LDPC_N];
+    for (int i = 0; i < FTX_LDPC_N; ++i)
+        log174[i] = llrs[i];
     ftx_normalize_logl(log174);
 
     uint8_t plain174[FTX_LDPC_N]; // message bits (0/1)
@@ -437,7 +435,20 @@ bool ft8_decode(const waterfall_t* wf, const candidate_t* cand, int max_iteratio
 
     if (status->ldpc_errors > 0)
     {
-        return false;
+        // OSD backstop: belief propagation failed, but a near-miss (few
+        // unsatisfied parity checks) is often recoverable by ordered
+        // statistics. The gate skips hopeless candidates (junk typically
+        // fails 40-80 checks) — cheap insurance for both CPU and precision.
+        if (osd_depth <= 0 || status->ldpc_errors > osd_err_gate)
+            return false;
+        if (!osd_decode(log174, osd_depth, plain174, NULL))
+            return false;
+        // plain174 now holds a valid codeword (zero unsatisfied parity checks
+        // by construction) that already passed OSD's CRC and plausibility
+        // gates: clear the BP error count so the success contract
+        // (ldpc_errors == 0) holds for callers, and fall through to the
+        // standard CRC/unpack path.
+        status->ldpc_errors = 0;
     }
 
     // Extract payload + CRC (first FTX_LDPC_K bits) packed into a byte array
@@ -459,7 +470,7 @@ bool ft8_decode(const waterfall_t* wf, const candidate_t* cand, int max_iteratio
     // Reuse CRC value as a hash for the message (TODO: 14 bits only, should perhaps use full 16 or 32 bits?)
     message->hash = status->crc_calculated;
 
-    if (wf->protocol != FTX_PROTOCOL_FT8) // FT4 and FT2 both XOR the payload (FT8 does not)
+    if (protocol != FTX_PROTOCOL_FT8) // FT4 and FT2 both XOR the payload (FT8 does not)
     {
         // '[..] for FT4 only, in order to avoid transmitting a long string of zeros when sending CQ messages,
         // the assembled 77-bit message is bitwise exclusive-OR’ed with [a] pseudorandom sequence before computing the CRC and FEC parity bits'
@@ -479,6 +490,27 @@ bool ft8_decode(const waterfall_t* wf, const candidate_t* cand, int max_iteratio
 
     // LOG(LOG_DEBUG, "Decoded message (CRC %04x), trying to unpack...\n", status->crc_extracted);
     return true;
+}
+
+bool ft8_decode_osd(const waterfall_t* wf, const candidate_t* cand, int max_iterations,
+                    int osd_depth, int osd_err_gate, ftx_message_t* message, decode_status_t* status)
+{
+    float log174[FTX_LDPC_N]; // message bits encoded as likelihood
+    if (wf->protocol != FTX_PROTOCOL_FT8) // FT4 and FT2 share the 2-bit/symbol layout
+    {
+        ft4_extract_likelihood(wf, cand, log174);
+    }
+    else
+    {
+        ft8_extract_likelihood(wf, cand, log174);
+    }
+
+    return ftx_decode_llrs(wf->protocol, log174, max_iterations, osd_depth, osd_err_gate, message, status);
+}
+
+bool ft8_decode(const waterfall_t* wf, const candidate_t* cand, int max_iterations, ftx_message_t* message, decode_status_t* status)
+{
+    return ft8_decode_osd(wf, cand, max_iterations, 0, 0, message, status);
 }
 
 static float max2(float a, float b)

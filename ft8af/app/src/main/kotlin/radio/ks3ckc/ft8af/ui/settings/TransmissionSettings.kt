@@ -23,6 +23,13 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import com.k1af.ft8af.ft8transmit.MeterProtectionController
+import com.k1af.ft8af.ft8transmit.TuneController
+import com.k1af.ft8af.ft8transmit.TuneMethod
+import radio.ks3ckc.ft8af.TUNE_LEVEL_INDEPENDENT_KEY
+import radio.ks3ckc.ft8af.TUNE_LEVEL_KEY
+import radio.ks3ckc.ft8af.TUNE_MAX_ON_SECONDS_KEY
+import radio.ks3ckc.ft8af.TUNE_METHOD_KEY
+import radio.ks3ckc.ft8af.saveTuneLevelForCurrentBand
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.FT8AFIconButton
 import radio.ks3ckc.ft8af.ui.components.FT8AFIcons
@@ -40,6 +47,8 @@ fun TransmissionSettings(
     onBack: () -> Unit,
 ) {
     var synFrequency by remember { mutableStateOf(GeneralVariables.synFrequency) }
+    var holdTxFreq by remember { mutableStateOf(GeneralVariables.holdTxFreq) }
+    var clearOnBandModeChange by remember { mutableStateOf(GeneralVariables.clearOnBandModeChange) }
     var watchdogMs by remember { mutableIntStateOf(GeneralVariables.launchSupervision) }
     var noReplyLimit by remember { mutableIntStateOf(GeneralVariables.noReplyLimit) }
 
@@ -50,7 +59,14 @@ fun TransmissionSettings(
     var alcTargetLow by remember { mutableIntStateOf(GeneralVariables.alcTargetLow) }
     var alcTargetHigh by remember { mutableIntStateOf(GeneralVariables.alcTargetHigh) }
 
+    // Tune state (issue #408)
+    var tuneMaxOnSeconds by remember { mutableIntStateOf(GeneralVariables.tuneMaxOnSeconds) }
+    var tuneLevelIndependent by remember { mutableStateOf(GeneralVariables.tuneLevelIndependent) }
+    var tuneLevel by remember { mutableIntStateOf(GeneralVariables.tuneLevel) }
+    var tuneMethod by remember { mutableIntStateOf(GeneralVariables.tuneMethod) }
+
     // Auto-sequence state
+    var autoClearTxFreq by remember { mutableStateOf(GeneralVariables.autoClearTxFreq) }
     var autoFollowCQ by remember { mutableStateOf(GeneralVariables.autoFollowCQ) }
     var huntCallsCQ by remember { mutableStateOf(GeneralVariables.huntCallsCQ) }
     var autoCallFollow by remember { mutableStateOf(GeneralVariables.autoCallFollow) }
@@ -59,6 +75,33 @@ fun TransmissionSettings(
 
     var showWatchdog by remember { mutableStateOf(false) }
     var showStopAfter by remember { mutableStateOf(false) }
+    var showTuneMethod by remember { mutableStateOf(false) }
+
+    // Index == TuneMethod.AUTOMATIC/INTERNAL/TONE
+    val tuneMethodOptions = listOf(
+        stringResource(R.string.tune_method_automatic),
+        stringResource(R.string.tune_method_internal),
+        stringResource(R.string.tune_method_tone),
+    )
+
+    // -- Tune Method Picker (issue #425) --
+    if (showTuneMethod) {
+        ListPickerDialog(
+            title = stringResource(R.string.settings_tune_method),
+            items = tuneMethodOptions,
+            selectedIndex = TuneMethod.clamp(tuneMethod),
+            onDismiss = { showTuneMethod = false },
+            onSelect = { index ->
+                showTuneMethod = false
+                val method = TuneMethod.clamp(index)
+                tuneMethod = method
+                GeneralVariables.tuneMethod = method
+                mainViewModel.databaseOpr.writeConfig(
+                    TUNE_METHOD_KEY, method.toString(), null,
+                )
+            },
+        )
+    }
 
     val watchdogMinutes = watchdogMs / 60000
     val watchdogStr = if (watchdogMinutes == 0) stringResource(R.string.common_off)
@@ -137,6 +180,32 @@ fun TransmissionSettings(
                             GeneralVariables.synFrequency = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "synFreq", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_hold_tx_freq),
+                        description = stringResource(R.string.settings_hold_tx_freq_desc),
+                        toggle = holdTxFreq,
+                        onToggleChange = { checked ->
+                            holdTxFreq = checked
+                            GeneralVariables.holdTxFreq = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "holdTxFreq", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_clear_on_change),
+                        description = stringResource(R.string.settings_clear_on_change_desc),
+                        toggle = clearOnBandModeChange,
+                        onToggleChange = { checked ->
+                            clearOnBandModeChange = checked
+                            GeneralVariables.clearOnBandModeChange = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "clearOnBandModeChange", if (checked) "1" else "0", null,
                             )
                         },
                     )
@@ -386,11 +455,125 @@ fun TransmissionSettings(
         }
 
         // =====================================================================
+        // TUNE (issue #408)
+        // =====================================================================
+        SettingsSection(title = "TUNE") {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    SettingsRow(
+                        label = stringResource(R.string.settings_tune_method),
+                        description = stringResource(R.string.settings_tune_method_desc),
+                        value = tuneMethodOptions[TuneMethod.clamp(tuneMethod)],
+                        showChevron = true,
+                        onClick = { showTuneMethod = true },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = "Tune timeout",
+                        description = "Hard cap on the tune carrier — it always stops by itself",
+                        value = "${tuneMaxOnSeconds}s",
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .padding(bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IntSlider(
+                            value = tuneMaxOnSeconds,
+                            onValueChange = { v ->
+                                val clamped = TuneController.clampMaxOnSeconds(v)
+                                tuneMaxOnSeconds = clamped
+                                GeneralVariables.tuneMaxOnSeconds = clamped
+                            },
+                            onValueChangeFinished = {
+                                mainViewModel.databaseOpr.writeConfig(
+                                    TUNE_MAX_ON_SECONDS_KEY, tuneMaxOnSeconds.toString(), null,
+                                )
+                            },
+                            valueRange = TuneController.MIN_MAX_ON_SECONDS.toFloat()..
+                                TuneController.MAX_MAX_ON_SECONDS.toFloat(),
+                            modifier = Modifier.weight(1f),
+                            thumbColor = Accent,
+                            activeTrackColor = Accent,
+                        )
+                    }
+                    SectionDivider()
+                    SettingsRow(
+                        label = "Independent tune level",
+                        description = "Tune at its own drive level (e.g. reduced power) without touching the TX drive",
+                        toggle = tuneLevelIndependent,
+                        onToggleChange = { checked ->
+                            tuneLevelIndependent = checked
+                            GeneralVariables.tuneLevelIndependent = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                TUNE_LEVEL_INDEPENDENT_KEY, if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    if (tuneLevelIndependent) {
+                        SectionDivider()
+                        SettingsRow(
+                            label = "Tune audio level",
+                            description = if (GeneralVariables.savePerBandOutputLevel)
+                                "Remembered per band (Save output level per band is on)"
+                            else "Single level for all bands",
+                            value = "$tuneLevel%",
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .padding(bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            IntSlider(
+                                value = tuneLevel,
+                                onValueChange = { v ->
+                                    val clamped = v.coerceIn(0, 100)
+                                    tuneLevel = clamped
+                                    GeneralVariables.tuneLevel = clamped
+                                },
+                                onValueChangeFinished = {
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        TUNE_LEVEL_KEY, tuneLevel.toString(), null,
+                                    )
+                                    // When per-band levels are on, the independent tune
+                                    // level is remembered for the current band too — in
+                                    // its own map, never the FT8 one (issue #408).
+                                    saveTuneLevelForCurrentBand(mainViewModel.databaseOpr, tuneLevel)
+                                },
+                                valueRange = 0f..100f,
+                                modifier = Modifier.weight(1f),
+                                thumbColor = Accent,
+                                activeTrackColor = Accent,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
         // AUTO-SEQUENCE
         // =====================================================================
         SettingsSection(title = stringResource(R.string.settings_section_auto_sequence)) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
+                    SettingsRow(
+                        label = stringResource(R.string.settings_auto_clear_tx),
+                        description = stringResource(R.string.settings_auto_clear_tx_desc),
+                        toggle = autoClearTxFreq,
+                        onToggleChange = { checked ->
+                            autoClearTxFreq = checked
+                            GeneralVariables.autoClearTxFreq = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "autoClearTxFreq", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
                     SettingsRow(
                         label = stringResource(R.string.settings_hunt),
                         description = stringResource(R.string.settings_hunt_desc),

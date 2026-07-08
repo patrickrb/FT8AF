@@ -123,6 +123,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">CQ çağrılıyor</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">Aranıyor...</string>
     <string name="qsopanel_qsoing_with">%1$s ile QSO yapılıyor</string>
     <string name="qsopanel_waiting_for">%1$s bekleniyor</string>
@@ -271,6 +272,7 @@
     <string name="pota_upload_success">%1$d park günlüğü POTA\'ya yüklendi</string>
     <string name="pota_upload_failed">Yükleme başarısız: %1$s</string>
     <string name="pota_upload_server_error">POTA yüklemeyi işleyemedi. Park referansının geçerli ve çağrı işaretinizin POTA\'ya kayıtlı olduğundan emin olup yeniden deneyin.</string>
+    <string name="pota_upload_busy">POTA sunucuları geçici olarak kullanılamıyor. Birkaç kez denedik ama başaramadık — lütfen birkaç dakika sonra tekrar deneyin.</string>
     <string name="pota_upload_network_error">POTA\'ya ulaşılamadı. İnternet bağlantınızı kontrol edip yeniden deneyin.</string>
     <string name="pota_login_title">POTA\'ya giriş yap</string>
     <string name="pota_login_desc">pota.app hesabınızın e-posta ve parolasını kullanın.</string>
@@ -523,6 +525,13 @@
     <string name="settings_enabled_bands_dialog_desc">Gizli bantlar frekans seçicilerde görünmez.</string>
     <string name="settings_select_serial_port">Seri Port Seç</string>
     <string name="settings_tx_volume_advice">Canlı ayarlayın — bir sonraki TX\'iniz bu düzeyi kullanır. Radyonuzun ALC\'sini izleyin ve çizgiye değecek kadar düşürün.</string>
+    <string name="settings_input_volume">Giriş Ses Düzeyi</string>
+    <string name="settings_input_volume_desc" formatted="false">Kod çözmeden önce uygulanan RX ses kazancı (%100 = değişmez)</string>
+    <string name="settings_input_volume_advice">Kod çözmeden önce gelen sese uygulanır. Şelaledeki RX seviye göstergesini izleyin ve yeşil bölgeyi hedefleyin; kırmızı kırpılma demektir.</string>
+    <string name="input_level_too_low">Düşük</string>
+    <string name="input_level_good">İyi</string>
+    <string name="input_level_too_high">Yüksek</string>
+    <string name="input_level_clipping">Kırpma</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Dil</string>
@@ -536,4 +545,39 @@
     <string name="settings_hunt_cq_desc">Call CQ when Hunt is idle (no stations heard). When a CQ is detected, automatically stop CQ and answer it.</string>
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
+    <string name="tx_audio_dropped">TX sesi başarısız — bu döngüde sinyal gönderilmedi (USB ses hatası)</string>
+    <string name="cq_offset_moved">CQ ofseti boş bir noktaya taşındı: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Otomatik boş TX ofseti</string>
+    <string name="settings_auto_clear_tx_desc">CQ çağrılırken son bant etkinliğine göre boş bir nokta seçer ve doldurulursa başka yere taşınır</string>
+    <string name="tune_content_description">Tune: telsizin tunerini başlatır veya anten ayarı için sürekli taşıyıcı gönderir</string>
+    <string name="tune_stopped_timeout">Tune %1$d s sonra durduruldu</string>
+    <string name="tune_blocked_tx">Tune kullanmadan önce CQ/QSO\'yu durdurun</string>
+    <string name="tune_unavailable_route">Tune bu ses yolunda henüz desteklenmiyor</string>
+    <string name="tune_atu_started">Telsizin anten tuneri başlatıldı</string>
+    <string name="tune_atu_unavailable">Tuner kullanılamıyor — dahili tunerli bir CAT telsizi bağlayın</string>
+    <string name="settings_tune_method">Tune yöntemi</string>
+    <string name="settings_tune_method_desc">Otomatik, mevcutsa telsizin dahili tunerini CAT üzerinden başlatır, aksi halde düşük güçlü ton çalar</string>
+    <string name="tune_method_automatic">Otomatik</string>
+    <string name="tune_method_internal">Dahili tuner</string>
+    <string name="tune_method_tone">Düşük güçlü ton</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_section_fft_waterfall">FFT / ŞELALE (GELİŞTİRİCİ)</string>
+    <string name="settings_fft_window">FFT pencere fonksiyonu</string>
+    <string name="settings_fft_window_desc">Spektrum/şelale görüntüsü için FFT öncesi pencere; Hann spektral sızıntıyı azaltır</string>
+    <string name="settings_fft_window_rect">Dikdörtgen (yok)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">Kare ortalaması</string>
+    <string name="settings_fft_averaging_desc">Görüntüyü FFT kareleri arasında yumuşatır; Kapalı her kareyi olduğu gibi gösterir</string>
+    <string name="settings_fft_avg_off">Kapalı</string>
+    <string name="settings_fft_avg_light">Hafif (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">Güçlü (EMA 0.25)</string>
+    <string name="settings_bin_agg">Spektrum bin birleştirme</string>
+    <string name="settings_bin_agg_desc">Bitişik FFT binlerinin tek spektrum çubuğuna birleştirilme yöntemi</string>
+    <string name="settings_bin_agg_max">Maksimum</string>
+    <string name="settings_bin_agg_avg">Ortalama</string>
+    <string name="settings_bin_agg_rms">RMS</string>
 </resources>

@@ -21,6 +21,7 @@
     <string name="common_none">None</string>
     <string name="common_off">Off</string>
     <string name="common_not_configured">Not configured</string>
+    <string name="common_configured">Configured</string>
     <string name="common_not_connected">Not connected</string>
     <string name="common_pass">Pass</string>
     <string name="common_fail">Fail</string>
@@ -113,6 +114,12 @@
     <string name="tx_stop">Stop</string>
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
+    <string name="tx_cq_options">CQ message options (modifier, free text, Field Day)</string>
+
+    <!-- ===== CQ options sheet (free text / saved custom CQ) ===== -->
+    <string name="cq_directed_too_long">CQ + text + call doesn\'t fit in one FT8 message (max 13 chars, limited character set)</string>
+    <string name="cq_saved_label">Saved</string>
+    <string name="cq_saved_remove">Remove saved CQ</string>
 
     <!-- ===== Hound (DXpedition) setup ===== -->
     <string name="hound_title">Work a DXpedition (Hound)</string>
@@ -136,6 +143,7 @@
 
     <!-- ===== Active QSO panel ===== -->
     <string name="qsopanel_calling_cq">Calling CQ</string>
+    <string name="qsopanel_hunting">Listening for CQ</string>
     <string name="qsopanel_searching">Searching...</string>
     <string name="qsopanel_qsoing_with">QSOing with %1$s</string>
     <string name="qsopanel_waiting_for">Waiting for %1$s</string>
@@ -284,6 +292,7 @@
     <string name="pota_upload_success">Uploaded %1$d park log(s) to POTA</string>
     <string name="pota_upload_failed">Upload failed: %1$s</string>
     <string name="pota_upload_server_error">POTA couldn\'t process the upload. Check that the park reference is valid and your callsign is registered with POTA, then try again.</string>
+    <string name="pota_upload_busy">POTA\'s servers are temporarily unavailable. We retried a few times without luck — please try again in a few minutes.</string>
     <string name="pota_upload_network_error">Couldn\'t reach POTA. Check your internet connection and try again.</string>
     <string name="pota_login_title">Sign in to POTA</string>
     <string name="pota_login_desc">Use your pota.app account email and password.</string>
@@ -300,6 +309,15 @@
     <string name="pota_max_parks_reached">Maximum of 10 parks reached</string>
     <string name="pota_spotted_n_parks">Spotted at %1$d parks</string>
     <string name="pota_parks_more">+%1$d more</string>
+    <string name="pota_search_parks">Search parks</string>
+    <string name="pota_search_parks_hint">Filter by name or reference</string>
+    <string name="pota_recent_parks">RECENT PARKS</string>
+    <string name="pota_nearby_parks">NEARBY PARKS</string>
+    <string name="pota_no_recent_parks">No recent activations</string>
+    <string name="pota_no_nearby_parks">No parks found nearby</string>
+    <string name="pota_loading_nearby">Loading nearby parks…</string>
+    <string name="pota_loading_recent">Loading recent parks…</string>
+    <string name="pota_location_unavailable">Location unavailable — enable GPS</string>
 
     <!-- ===== Debug log / Map / Waterfall ===== -->
     <string name="debug_title">Debug</string>
@@ -366,6 +384,51 @@
     <string name="settings_section_advanced">ADVANCED</string>
     <string name="settings_section_about">ABOUT</string>
     <string name="settings_section_language">LANGUAGE</string>
+    <string name="settings_section_appearance">APPEARANCE</string>
+    <string name="settings_section_backup">BACKUP &amp; RESTORE</string>
+    <string name="settings_section_fft_waterfall">FFT / WATERFALL (DEVELOPER)</string>
+
+    <!-- ===== Settings: FFT / waterfall developer knobs (issue #428) ===== -->
+    <string name="settings_fft_window">FFT window function</string>
+    <string name="settings_fft_window_desc">Pre-FFT window for the spectrum/waterfall display; Hann reduces spectral leakage</string>
+    <string name="settings_fft_window_rect">Rectangular (none)</string>
+    <string name="settings_fft_window_hann">Hann</string>
+    <string name="settings_fft_window_hamming">Hamming</string>
+    <string name="settings_fft_window_blackman">Blackman</string>
+    <string name="settings_fft_window_blackman_harris">Blackman-Harris</string>
+    <string name="settings_fft_averaging">Frame averaging</string>
+    <string name="settings_fft_averaging_desc">Smooth the display across FFT frames; Off shows each frame as-is</string>
+    <string name="settings_fft_avg_off">Off</string>
+    <string name="settings_fft_avg_light">Light (EMA 0.5)</string>
+    <string name="settings_fft_avg_heavy">Heavy (EMA 0.25)</string>
+    <string name="settings_bin_agg">Spectrum bin combining</string>
+    <string name="settings_bin_agg_desc">How adjacent FFT bins merge into one spectrum bar</string>
+    <string name="settings_bin_agg_max">Maximum</string>
+    <string name="settings_bin_agg_avg">Average</string>
+    <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- ===== Settings: backup / restore (export & import config) ===== -->
+    <string name="settings_export">Export settings</string>
+    <string name="settings_export_desc">Save all settings to a backup file</string>
+    <string name="settings_import">Import settings</string>
+    <string name="settings_import_desc">Restore settings from a backup file</string>
+    <string name="settings_export_dialog_title">Export settings</string>
+    <string name="settings_backup_include_sensitive">Include sensitive data</string>
+    <string name="settings_backup_include_sensitive_desc">API keys and passwords (Cloudlog, QRZ, rig login)</string>
+    <string name="action_export">Export</string>
+    <string name="action_import">Import</string>
+    <string name="settings_import_confirm_title">Import settings?</string>
+    <string name="settings_import_confirm_msg">This will overwrite %1$d setting(s) with values from the backup created %2$s.</string>
+    <string name="settings_export_success">Settings exported</string>
+    <string name="settings_export_failed">Export failed: %1$s</string>
+    <string name="settings_import_success">Settings imported — restart the app to apply all changes</string>
+    <string name="settings_import_failed">Import failed: %1$s</string>
+
+    <!-- ===== Settings: appearance / theme ===== -->
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_desc">App color theme</string>
+    <string name="theme_name_dark">Dark</string>
+    <string name="theme_name_light">Light</string>
 
     <!-- ===== Settings: drill-down category labels ===== -->
     <string name="settings_cat_radio_audio">Radio &amp; Audio</string>
@@ -386,6 +449,17 @@
     <string name="settings_time_suggest_none">No decodes yet — start receiving to get a suggestion.</string>
     <string name="settings_time_suggest_label">Recent average DT: %1$s</string>
     <string name="settings_time_suggest_apply">Apply suggested correction</string>
+    <string name="settings_time_correction_gps_locked">GPS clock discipline is controlling the clock — turn it off below to adjust manually.</string>
+
+    <!-- ===== Settings: Time Sync (GPS clock discipline, issue #373) ===== -->
+    <string name="settings_gps_clock_section">GPS Clock Discipline</string>
+    <string name="settings_gps_clock_toggle">Discipline clock from GPS</string>
+    <string name="settings_gps_clock_toggle_desc">Use satellite time to align the FT8 cycle to true UTC. Overrides the manual correction while on. Needs location permission and a GPS fix.</string>
+    <string name="settings_gps_clock_interval">Update interval</string>
+    <string name="settings_gps_clock_interval_value">%1$d min</string>
+    <string name="settings_gps_clock_waiting">Waiting for a GPS fix…</string>
+    <string name="settings_gps_clock_last_sync">Last GPS sync: %1$s UTC</string>
+    <string name="settings_gps_clock_offset">Applied offset: %1$s</string>
 
     <!-- ===== Settings: operator identity ===== -->
     <string name="settings_auto_update_grid">Auto-update Grid (GPS)</string>
@@ -408,10 +482,17 @@
     <string name="settings_tx_volume_desc" formatted="false">Transmit audio level (hardware buttons ±5%)</string>
     <string name="settings_show_volume_slider">Show Volume Slider</string>
     <string name="settings_show_volume_slider_desc">Display TX volume slider on main screen</string>
+    <string name="settings_per_band_volume">Save Output Level per Band</string>
+    <string name="settings_per_band_volume_desc">Remember the TX volume separately for each band and restore it on band change</string>
+    <string name="per_band_volume_restored">TX volume %1$d%% restored for %2$s</string>
 
     <!-- ===== Settings: transmission ===== -->
     <string name="settings_tx_rx_split">TX/RX Split</string>
     <string name="settings_tx_rx_split_desc">Transmit on a different frequency than receive</string>
+    <string name="settings_hold_tx_freq">Hold TX freq</string>
+    <string name="settings_hold_tx_freq_desc">Keep your TX offset when answering a station instead of moving it to theirs</string>
+    <string name="settings_clear_on_change">Clear decodes on band/mode change</string>
+    <string name="settings_clear_on_change_desc">Wipe the decode list and reset the TX target to CQ when you change band or mode</string>
     <string name="settings_tx_watchdog">TX Watchdog</string>
     <string name="settings_tx_watchdog_desc">Auto-stop transmit after timeout</string>
     <string name="settings_stop_after">Stop After</string>
@@ -471,6 +552,16 @@
     <string name="settings_alert_new_dxcc_desc">Sound + vibrate + notify when an unworked DXCC entity calls CQ</string>
     <string name="settings_alert_new_state">New US State</string>
     <string name="settings_alert_new_state_desc">Sound + vibrate + notify when a station from an unworked US state calls CQ (state from grid)</string>
+    <string name="settings_alert_cq_reply">CQ reply</string>
+    <string name="settings_alert_cq_reply_desc">Sound + vibrate + notify when a station calls you (any message addressed to your callsign)</string>
+    <string name="settings_alert_qso_complete">QSO complete</string>
+    <string name="settings_alert_qso_complete_desc">Sound + vibrate + notify when a QSO is logged</string>
+    <string name="alert_cq_reply_title">Calling you: %1$s</string>
+    <string name="alert_qso_complete_title">QSO complete</string>
+    <string name="rx_service_channel_name">Background receiving</string>
+    <string name="rx_service_channel_desc">Keeps FT8 decoding running while the app is in the background or the screen is off</string>
+    <string name="rx_service_title">FT8AF is receiving</string>
+    <string name="rx_service_text">Decoding in the background</string>
 
     <!-- ===== Settings: logging &amp; awards ===== -->
     <string name="settings_save_swl_decodes">Save SWL Decodes</string>
@@ -480,7 +571,10 @@
     <string name="settings_pskreporter">PSKReporter</string>
     <string name="settings_pskreporter_desc">Upload decoded spots to pskreporter.info</string>
     <string name="settings_qrz_com">QRZ.com</string>
-    <string name="settings_qrz_com_desc">Auto-upload QSOs to QRZ Logbook</string>
+    <string name="settings_qrz_com_desc">Auto-upload QSOs to QRZ Logbook (requires a Logbook API key)</string>
+    <string name="settings_qrz_logbook">QRZ Logbook</string>
+    <string name="settings_qrz_logbook_desc">Logbook API key from QRZ Logbook → Settings (not your account password).</string>
+    <string name="settings_qrz_api_key_hint">Your QRZ Logbook API key</string>
     <string name="settings_qrz_profile_lookup">QRZ Profile Lookup</string>
     <string name="settings_qrz_profile_lookup_desc">Username + password for QRZ XML API (avatars)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
@@ -510,6 +604,7 @@
     <string name="settings_built_by">Built by</string>
     <string name="settings_author_k1af" translatable="false">K1AF — Patrick Burns (QRZ)</string>
     <string name="settings_author_n0rc" translatable="false">N0RC — Reid (QRZ)</string>
+    <string name="about_font_attribution">UI font: Inter by Rasmus Andersson (SIL OFL 1.1)</string>
 
     <!-- ===== Settings: dialogs ===== -->
     <string name="settings_block_exact_title">Block Exact Callsigns</string>
@@ -551,6 +646,14 @@
     <string name="settings_enabled_bands_dialog_desc">Hidden bands won\'t appear in the frequency pickers.</string>
     <string name="settings_select_serial_port">Select Serial Port</string>
     <string name="settings_tx_volume_advice">Adjust live — your next TX uses this level. Watch your radio\'s ALC and dial down until it\'s just kissing the line.</string>
+    <string name="settings_input_volume">Input Volume</string>
+    <string name="settings_input_volume_desc" formatted="false">RX audio gain applied before decoding (100% = unchanged)</string>
+    <string name="settings_input_volume_advice">Applied to incoming audio before decoding. Watch the RX level meter on the waterfall and aim for the green zone; red means clipping.</string>
+    <string name="input_level_rx_label" translatable="false">RX</string>
+    <string name="input_level_too_low">Low</string>
+    <string name="input_level_good">Good</string>
+    <string name="input_level_too_high">High</string>
+    <string name="input_level_clipping">Clip</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Language</string>
@@ -575,4 +678,33 @@
     <string name="language_name_uk" translatable="false">Українська</string>
     <string name="language_name_ar" translatable="false">العربية</string>
 
+    <string name="tx_audio_dropped">TX audio failed — no signal was sent this cycle (USB audio error)</string>
+    <string name="cq_offset_moved">CQ offset moved to a clear spot: %1$d Hz</string>
+    <string name="settings_auto_clear_tx">Auto clear TX offset</string>
+    <string name="settings_auto_clear_tx_desc">When calling CQ, pick a clear spot from recent band activity and move away if it becomes occupied</string>
+    <string name="tune_button" translatable="false">TUNE</string>
+    <string name="tune_content_description">Tune — start the rig\'s tuner or transmit a steady carrier for antenna tuning</string>
+    <string name="tune_stopped_timeout">Tune stopped after %1$d s</string>
+    <string name="tune_blocked_tx">Stop the CQ/QSO before tuning</string>
+    <string name="tune_unavailable_route">Tune is not yet supported on this audio route</string>
+    <string name="tune_atu_started">Rig antenna tuner started</string>
+    <string name="tune_atu_unavailable">Rig tuner unavailable — connect a CAT radio with an internal tuner</string>
+    <string name="settings_tune_method">Tune method</string>
+    <string name="settings_tune_method_desc">Automatic starts the rig\'s internal tuner over CAT when available, otherwise plays the low power tone</string>
+    <string name="tune_method_automatic">Automatic</string>
+    <string name="tune_method_internal">Internal tuner</string>
+    <string name="tune_method_tone">Low power tone</string>
+
+    <!-- Android Auto status screens (read-only). Headlines reuse the qsopanel_* strings. -->
+    <string name="car_screen_title" translatable="false">FT8AF</string>
+    <string name="car_open_phone">Open FT8AF on your phone to start the FT8 engine</string>
+    <string name="car_monitoring">Monitoring — TX off</string>
+    <string name="car_no_tx">No transmission queued</string>
+    <string name="car_seq_step">Step %1$s (%2$d/%3$d)</string>
+    <string name="car_slot_tx">TX slot · %1$d s</string>
+    <string name="car_slot_rx">RX slot · %1$d s</string>
+    <string name="car_decodes_action">Decodes</string>
+    <string name="car_decodes_title">Recent decodes</string>
+    <string name="car_no_decodes">No decodes yet</string>
+    <string name="car_pota_line">POTA %1$s · %2$d QSOs</string>
 </resources>

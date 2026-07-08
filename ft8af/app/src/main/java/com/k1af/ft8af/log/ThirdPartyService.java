@@ -95,7 +95,135 @@ public class ThirdPartyService {
         return stations;
     }
 
-    private static String QSLRecordToADIF(QSLRecord qslRecord, ServiceType serv){
+    /**
+     * Creates a new station profile ("station location") on a Wavelog server and
+     * returns its {@code station_profile_id}, or null on failure. Mirrors
+     * {@link #FetchCloudlogStations}: the API key is a path segment
+     * ({@code POST api/create_station/[key]}) and the station fields are the JSON body.
+     *
+     * <p><b>Provisional wire shape.</b> We could not verify the exact live
+     * request/response against a running server, so the request-building and
+     * response-parsing are isolated into the pure, unit-tested helpers
+     * {@link #buildCreateStationRequestJson} and {@link #parseCreateStationResponse}.
+     * The field names ({@code station_gridsquare, station_callsign, station_city,
+     * station_dxcc, link_active_logbook}) and endpoint follow the Wavelog API docs
+     * and must be confirmed against a live Wavelog &ge; 2.1.2 server before this is
+     * wired into any live path.
+     *
+     * <p><b>Not yet called from any live path</b> — foundation only for issue #437,
+     * gated by {@code GeneralVariables.perLocationStationEnabled} (default false).
+     */
+    public static String createCloudlogStation(String address, String apiKey,
+                                               String gridsquare, String callsign,
+                                               String city, String dxcc,
+                                               boolean linkActiveLogbook) {
+        if (address == null || address.isEmpty() || apiKey == null || apiKey.isEmpty()) {
+            return null;
+        }
+        if (!address.endsWith("/")) {
+            address += "/";
+        }
+        try {
+            String body = buildCreateStationRequestJson(
+                    gridsquare, callsign, city, dxcc, linkActiveLogbook);
+            if (body == null) {
+                // Fail fast: never POST an empty/malformed body, which could create a
+                // blank station profile on the server.
+                Log.d(TAG, "createCloudlogStation aborted: could not build request body");
+                return null;
+            }
+            String url = address + "api/create_station/" + apiKey;
+            String result = sendPostRequest(url, body);
+            String id = parseCreateStationResponse(result);
+            Log.d(TAG, "createCloudlogStation " + (id != null ? "created id" : "failed/no id"));
+            return id;
+        } catch (Exception e) {
+            Log.d(TAG, "createCloudlogStation error: " + e.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    /**
+     * Builds the JSON request body for {@link #createCloudlogStation}. Pure and
+     * network-free so it can be unit-tested against captured/example payloads.
+     *
+     * <p>Field set is provisional (see {@link #createCloudlogStation}). Null field
+     * values are emitted as empty strings; {@code link_active_logbook} is emitted as
+     * {@code "1"}/{@code "0"} (Wavelog treats the API booleans as string flags).
+     *
+     * <p>Returns {@code null} if the body cannot be built, so the caller can fail fast
+     * rather than POST an empty/malformed body that might create a blank station.
+     */
+    static String buildCreateStationRequestJson(String gridsquare, String callsign,
+                                                String city, String dxcc,
+                                                boolean linkActiveLogbook) {
+        JSONStringer js = new JSONStringer();
+        try {
+            return js.object()
+                    .key("station_gridsquare").value(nullToEmpty(gridsquare))
+                    .key("station_callsign").value(nullToEmpty(callsign))
+                    .key("station_city").value(nullToEmpty(city))
+                    .key("station_dxcc").value(nullToEmpty(dxcc))
+                    .key("link_active_logbook").value(linkActiveLogbook ? "1" : "0")
+                    .endObject()
+                    .toString();
+        } catch (Exception e) {
+            Log.d(TAG, "buildCreateStationRequestJson error: " + e.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    private static String nullToEmpty(String s) {
+        return s == null ? "" : s;
+    }
+
+    /**
+     * Extracts the newly-created {@code station_profile_id} from a create_station
+     * response, or null if the response is null/empty/unparseable or carries no id.
+     * Pure and network-free for unit testing.
+     *
+     * <p><b>Provisional.</b> The exact response envelope is unconfirmed, so this
+     * probes the id under several plausible keys — top-level {@code station_profile_id}
+     * / {@code station_id} / {@code id}, and the same keys nested under a {@code data}
+     * or {@code station} object — and returns the first non-empty one found.
+     */
+    static String parseCreateStationResponse(String json) {
+        if (json == null || json.isEmpty()) {
+            return null;
+        }
+        try {
+            JSONObject obj = new JSONObject(json);
+            String top = idFromObject(obj);
+            if (top != null) {
+                return top;
+            }
+            for (String nestKey : new String[]{"data", "station", "result"}) {
+                JSONObject nested = obj.optJSONObject(nestKey);
+                if (nested != null) {
+                    String id = idFromObject(nested);
+                    if (id != null) {
+                        return id;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.d(TAG, "parseCreateStationResponse error: " + e.getClass().getSimpleName());
+        }
+        return null;
+    }
+
+    private static String idFromObject(JSONObject obj) {
+        for (String key : new String[]{"station_profile_id", "station_id", "id"}) {
+            String v = obj.optString(key, "");
+            if (v != null && !v.isEmpty()) {
+                return v;
+            }
+        }
+        return null;
+    }
+
+    // Package-private (not private) so the ADIF payload can be unit-tested directly.
+    static String QSLRecordToADIF(QSLRecord qslRecord, ServiceType serv){
         StringBuilder logStr = new StringBuilder();
         logStr.append(AdifFormat.callField(qslRecord.getToCallsign()));
 
@@ -106,22 +234,24 @@ public class ThirdPartyService {
         }
 
         if (qslRecord.getMode() != null) {
-            logStr.append(String.format("<mode:%d>%s "
-                    , qslRecord.getMode().length()
-                    , qslRecord.getMode()));
+            // FT4/FT2 are ADIF submodes of MFSK, not standalone modes — a bare
+            // <mode>FT2 is rejected as invalid by QRZ/Cloudlog and other ADIF consumers.
+            String submode = AdifFormat.mfskSubmode(qslRecord.getMode());
+            if (submode != null) {
+                logStr.append(String.format("<mode:4>MFSK <submode:%d>%s "
+                        , submode.length(), submode));
+            } else {
+                logStr.append(String.format("<mode:%d>%s "
+                        , qslRecord.getMode().length()
+                        , qslRecord.getMode()));
+            }
         }
 
-        if (String.valueOf(qslRecord.getSendReport()) != null) {
-            logStr.append(String.format("<rst_sent:%d>%s "
-                    , String.valueOf(qslRecord.getSendReport()).length()
-                    , String.valueOf(qslRecord.getSendReport())));
-        }
+        String rstSent = AdifFormat.formatReport(qslRecord.getSendReport());
+        logStr.append(String.format("<rst_sent:%d>%s ", rstSent.length(), rstSent));
 
-        if (String.valueOf(qslRecord.getReceivedReport()) != null) {
-            logStr.append(String.format("<rst_rcvd:%d>%s "
-                    , String.valueOf(qslRecord.getReceivedReport()).length()
-                    , String.valueOf(qslRecord.getReceivedReport())));
-        }
+        String rstRcvd = AdifFormat.formatReport(qslRecord.getReceivedReport());
+        logStr.append(String.format("<rst_rcvd:%d>%s ", rstRcvd.length(), rstRcvd));
 
         if (qslRecord.getQso_date() != null) {
             logStr.append(String.format("<qso_date:%d>%s "
@@ -257,14 +387,7 @@ public class ThirdPartyService {
                 Log.d(TAG, "QRZ connection failed: no response");
                 return false;
             }
-            String qrzResult = null;
-            for (String s : result.split("&")) {
-                String[] split = s.split("=", 2);
-                if (split.length > 1 && "RESULT".equals(split[0])) {
-                    qrzResult = split[1];
-                    break;
-                }
-            }
+            String qrzResult = parseQrzResult(result);
             Log.d(TAG, "QRZ status RESULT=" + qrzResult);
             return "OK".equals(qrzResult);
         }catch (Exception e){
@@ -296,19 +419,29 @@ public class ThirdPartyService {
             Log.d(TAG, "QRZ upload " + (result != null ? "succeeded" : "failed"));
             if (result == null) return false;
             // QRZ encodes status as RESULT=OK|FAIL|REPLACE within an &-separated body
-            String qrzResult = null;
-            for (String s : result.split("&")) {
-                String[] split = s.split("=", 2);
-                if (split.length > 1 && "RESULT".equals(split[0])) {
-                    qrzResult = split[1];
-                    break;
-                }
-            }
+            String qrzResult = parseQrzResult(result);
             return "OK".equals(qrzResult) || "REPLACE".equals(qrzResult);
         }catch (Exception k){
             Log.d(TAG, "QRZ upload error: " + k.getClass().getSimpleName());
             return false;
         }
+    }
+
+    /**
+     * Extracts the {@code RESULT} value from a QRZ logbook API response. QRZ
+     * replies with an {@code &}-separated body of {@code KEY=VALUE} pairs (e.g.
+     * {@code RESULT=OK&COUNT=1...}); this returns the value of the {@code RESULT}
+     * field, or {@code null} if the response is null/empty or has no such field.
+     */
+    static String parseQrzResult(String response) {
+        if (response == null || response.isEmpty()) return null;
+        for (String s : response.split("&")) {
+            String[] split = s.split("=", 2);
+            if (split.length > 1 && "RESULT".equals(split[0])) {
+                return split[1];
+            }
+        }
+        return null;
     }
 
     /**
@@ -336,6 +469,48 @@ public class ThirdPartyService {
     }
 
     /**
+     * The {@code WHERE} clause (with a leading space) selecting QSLTable rows that
+     * still need an upload to at least one enabled service. Returns an empty string
+     * when neither service is enabled (caller should not query in that case). Single
+     * source of truth shared by {@link #syncAllQSOs} and {@link #countUnsyncedQSOs}.
+     */
+    private static String unsyncedFilter(boolean cloudlog, boolean qrz) {
+        if (cloudlog && qrz) {
+            return " where synced_cloudlog = 0 or synced_qrz = 0";
+        } else if (cloudlog) {
+            return " where synced_cloudlog = 0";
+        } else if (qrz) {
+            return " where synced_qrz = 0";
+        }
+        return "";
+    }
+
+    /**
+     * Number of QSLTable rows still awaiting upload to an enabled service. Returns 0
+     * when neither Cloudlog nor QRZ is enabled (nothing to do). Lets the auto-sync
+     * skip spawning upload work when there's nothing pending. Uses the same filter as
+     * {@link #syncAllQSOs} so the count and the actual sync always agree.
+     */
+    public static int countUnsyncedQSOs(SQLiteDatabase db) {
+        boolean cl = GeneralVariables.enableCloudlog;
+        boolean qrz = GeneralVariables.enableQRZ;
+        if (db == null || (!cl && !qrz)) return 0;
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(
+                    "select count(*) from QSLTable" + unsyncedFilter(cl, qrz), null);
+            if (cursor.moveToFirst()) {
+                return cursor.getInt(0);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "countUnsyncedQSOs error: " + e.getClass().getSimpleName());
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+        return 0;
+    }
+
+    /**
      * Re-upload every QSO in QSLTable to whichever third-party services the user has
      * enabled. Services dedupe by callsign+date+time+mode so repeated calls are safe.
      *
@@ -355,15 +530,8 @@ public class ThirdPartyService {
             // Skip rows already accepted by every enabled service. The user can still
             // tell something happened via the dialog's row counts, and a re-press isn't
             // wasted on already-confirmed records.
-            String filter;
-            if (cl && qrz) {
-                filter = " where synced_cloudlog = 0 or synced_qrz = 0";
-            } else if (cl) {
-                filter = " where synced_cloudlog = 0";
-            } else {
-                filter = " where synced_qrz = 0";
-            }
-            cursor = db.rawQuery("select * from QSLTable" + filter + " order by id asc", null);
+            cursor = db.rawQuery(
+                    "select * from QSLTable" + unsyncedFilter(cl, qrz) + " order by id asc", null);
             total = cursor.getCount();
             if (progress != null) progress.onProgress(0, total, 0, 0);
             int idCol = cursor.getColumnIndex("id");
@@ -480,6 +648,20 @@ public class ThirdPartyService {
         }
     }
 
+    /**
+     * Redacts a Cloudlog/Wavelog API key from a URL before it is logged. The key is a
+     * path segment following {@code create_station/}, {@code station_info/}, or
+     * {@code auth/}; this replaces that segment with {@code ***} so the credential never
+     * reaches logcat. Only the LOGGED string is redacted — the real request URL is
+     * unchanged. Returns null unchanged.
+     */
+    static String redactUrlApiKey(String url) {
+        if (url == null) {
+            return null;
+        }
+        return url.replaceAll("(create_station/|station_info/|auth/)[^/?#\\s]+", "$1***");
+    }
+
     public static String sendPostRequest(String url, String json) throws IOException {
         // HttpURLConnection does not auto-follow 30x on a POST. Walk redirects manually
         // (capped) so deployments that rewrite trailing slashes, http→https, or move
@@ -518,14 +700,14 @@ public class ThirdPartyService {
                         || responseCode == 308) {
                     String loc = conn.getHeaderField("Location");
                     if (loc == null || loc.isEmpty()) {
-                        Log.d(TAG, "POST " + currentUrl + " -> HTTP " + responseCode
-                                + " (no Location header)");
+                        Log.d(TAG, "POST " + redactUrlApiKey(currentUrl) + " -> HTTP "
+                                + responseCode + " (no Location header)");
                         return null;
                     }
                     // Resolve relative redirect against the previous URL.
                     URL resolved = new URL(urlObj, loc);
-                    Log.d(TAG, "POST " + currentUrl + " -> HTTP " + responseCode
-                            + " redirect to " + resolved);
+                    Log.d(TAG, "POST " + redactUrlApiKey(currentUrl) + " -> HTTP " + responseCode
+                            + " redirect to " + redactUrlApiKey(resolved.toString()));
                     currentUrl = resolved.toString();
                     continue;
                 }
@@ -545,7 +727,7 @@ public class ThirdPartyService {
                         eread.close();
                     }
                 } catch (Exception ignored) {}
-                Log.d(TAG, "POST " + currentUrl + " -> HTTP " + responseCode
+                Log.d(TAG, "POST " + redactUrlApiKey(currentUrl) + " -> HTTP " + responseCode
                         + (err.length() > 0 ? " body=" + err : ""));
                 return null;
             } finally {
@@ -557,7 +739,7 @@ public class ThirdPartyService {
                 }
             }
         }
-        Log.d(TAG, "POST " + url + " exceeded redirect limit");
+        Log.d(TAG, "POST " + redactUrlApiKey(url) + " exceeded redirect limit");
         return null;
     }
     public static String sendPostFormRequest(String url, String formBody) throws IOException {

@@ -5,9 +5,6 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.database.DatabaseOpr
 import radio.ks3ckc.ft8af.pota.model.PotaActivation
 import radio.ks3ckc.ft8af.pota.model.PotaQso
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
  * Thin DAO over the pota_activation SQLite table. Single-threaded callers from the
@@ -61,6 +58,25 @@ internal object PotaActivationDao {
         return cursor.use { c -> if (c.moveToFirst()) c.toActivation() else null }
     }
 
+    /**
+     * Return distinct park references from past activations, most recent first.
+     * Comma-separated refs within a single activation are split and individually
+     * deduplicated while preserving most-recent-first order.
+     */
+    fun recentParkRefs(limit: Int = 20): List<String> {
+        val cursor = db().rawQuery(
+            "SELECT park_ref FROM pota_activation ORDER BY started_at DESC LIMIT ?",
+            arrayOf(limit.toString()),
+        )
+        val rawRefs = mutableListOf<String>()
+        cursor.use { c ->
+            while (c.moveToNext()) rawRefs.add(c.getString(0) ?: "")
+        }
+        // Reuse the shared, unit-tested splitter/deduplicator so the parsing
+        // rules stay consistent with the rest of the park-ref handling.
+        return deduplicateRefs(rawRefs)
+    }
+
     fun history(limit: Int = 50): List<PotaActivation> {
         val cursor = db().rawQuery(
             "SELECT * FROM pota_activation ORDER BY started_at DESC LIMIT ?",
@@ -79,17 +95,20 @@ internal object PotaActivationDao {
      * activations at the same park don't bleed into each other.
      */
     fun getActivationQsos(activation: PotaActivation): List<PotaQso> {
-        val fmt = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
-        val startStamp = fmt.format(Date(activation.startedAtMs))
-        val endStamp = activation.endedAtMs?.let { fmt.format(Date(it)) } ?: "99991231235959"
+        // Shared window logic with PotaAdifExporter (via PotaQsoWindow) so the
+        // in-app contacts list and the exported/uploaded ADIF always agree on
+        // which QSOs belong to this activation. ROW_STAMP normalizes the
+        // variable-width time_on before the range compare.
+        val startStamp = PotaQsoWindow.stamp(activation.startedAtMs)
+        val endStamp = activation.endedAtMs?.let { PotaQsoWindow.stamp(it) } ?: PotaQsoWindow.OPEN_END
         val cursor = db().rawQuery(
             """
             SELECT id, call, gridsquare, band, mode, rst_sent, rst_rcvd,
                    qso_date, time_on, sig, sig_info, my_gridsquare
               FROM QSLTable
              WHERE my_sig = 'POTA' AND my_sig_info = ?
-               AND (qso_date || time_on) >= ?
-               AND (qso_date || time_on) <= ?
+               AND ${PotaQsoWindow.ROW_STAMP} >= ?
+               AND ${PotaQsoWindow.ROW_STAMP} <= ?
              ORDER BY qso_date DESC, time_on DESC
             """.trimIndent(),
             arrayOf(activation.parkRef, startStamp, endStamp),

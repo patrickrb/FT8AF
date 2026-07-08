@@ -198,10 +198,10 @@ private fun SettingsLanding(
                 callsignState = trimmedCall
                 GeneralVariables.myCallsign = trimmedCall
                 mainViewModel.databaseOpr.writeConfig("callsign", trimmedCall, null)
-                if (trimmedCall.isNotEmpty()) {
-                    Ft8Message.hashList.addHash(FT8Package.getHash22(trimmedCall).toLong(), trimmedCall)
-                    Ft8Message.hashList.addHash(FT8Package.getHash12(trimmedCall).toLong(), trimmedCall)
-                    Ft8Message.hashList.addHash(FT8Package.getHash10(trimmedCall).toLong(), trimmedCall)
+                for (seedCall in ownCallsignsToSeed(trimmedCall)) {
+                    Ft8Message.hashList.addHash(FT8Package.getHash22(seedCall).toLong(), seedCall)
+                    Ft8Message.hashList.addHash(FT8Package.getHash12(seedCall).toLong(), seedCall)
+                    Ft8Message.hashList.addHash(FT8Package.getHash10(seedCall).toLong(), seedCall)
                 }
 
                 val formattedGrid = buildString {
@@ -457,5 +457,22 @@ private fun EditOperatorDialog(
                 }
             }
         }
+    }
+}
+
+/**
+ * Callsign strings whose hashes go into [Ft8Message.hashList] when the operator
+ * sets their callsign. A compound call (e.g. SV8/DM5HF) is seeded together with
+ * its base call, matching the seeding DatabaseOpr does at startup, so replies
+ * that arrive as a bare hash of either form resolve instead of showing "<...>".
+ */
+internal fun ownCallsignsToSeed(callsign: String): List<String> {
+    if (callsign.isEmpty()) return emptyList()
+    if (!callsign.contains("/")) return listOf(callsign)
+    val shortCall = GeneralVariables.getShortCallsign(callsign)
+    return if (shortCall.isNotEmpty() && shortCall != callsign) {
+        listOf(callsign, shortCall)
+    } else {
+        listOf(callsign)
     }
 }

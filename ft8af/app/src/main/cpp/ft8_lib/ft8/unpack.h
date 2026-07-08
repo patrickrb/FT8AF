@@ -13,6 +13,8 @@ typedef struct
     void (*hash22)(uint32_t n22, char* callsign);
     /// Called when a callsign is looked up by its 12 bit hash code
     void (*hash12)(uint32_t n12, char* callsign);
+    /// Called when a callsign is looked up by its 10 bit hash code (DXpedition fox call)
+    void (*hash10)(uint32_t n10, char* callsign);
     /// Called when a callsign should hashed and stored (both by its 22 and 12 bit hash code)
     void (*save_hash)(const char* callsign);
 } unpack_hash_interface_t;

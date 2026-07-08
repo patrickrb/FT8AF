@@ -158,7 +158,11 @@ public class GenerateFT8 {
 
 
 
-        if (msg.i3 != 0) {// currently only supports i3=1, i3=2, i3=4, i3=0 && n3=0
+        // Field Day messages (i3=0, n3=3 or n3=4) skip the callsign-format
+        // override logic below — they use their own dedicated packer.
+        boolean isFieldDay = (msg.i3 == 0 && (msg.n3 == 3 || msg.n3 == 4));
+
+        if (msg.i3 != 0 && !isFieldDay) {// supports i3=1, i3=2, i3=4, i3=0&&n3=0, i3=0&&n3=3/4 (FD)
             if (!checkIsStandardCallsign(msg.callsignFrom)
                     && (!checkIsReport(msg.extraInfo) || msg.checkIsCQ())) {
                 msg.i3 = 4;
@@ -175,6 +179,8 @@ public class GenerateFT8 {
             packed = FT8Package.generatePack77_i1(msg);
         } else if (msg.i3 == 4) {// non-standard callsign
             packed = FT8Package.generatePack77_i4(msg);
+        } else if (isFieldDay) {
+            packed = FT8Package.generatePack77_fd(msg);
         } else {
             packFreeTextTo77(msg.getMessageText(), packed);
         }

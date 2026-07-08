@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat;
 import com.k1af.ft8af.Ft8Message;
 import com.k1af.ft8af.GeneralVariables;
 import com.k1af.ft8af.R;
+import com.k1af.ft8af.log.QSLRecord;
 
 import java.util.Collections;
 import java.util.List;
@@ -24,45 +25,56 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Needed-DX alerts: plays a sound + vibrates and posts a notification when a station
- * calling CQ is a NEW (unworked) one in a user-enabled category — a new DXCC entity
- * ({@link GeneralVariables#alertNewDxcc}) or a new US state
- * ({@link GeneralVariables#alertNewState}).
+ * Sound + vibrate + notification alerts. Two independent channels:
  *
- * <p>Driven from {@code MainViewModel.GetQTHRunnable.run()} after
- * {@code CallsignDatabase.getMessagesLocation} has populated the {@code from*} flags,
- * so this just reads {@link Ft8Message#fromDxcc} / {@link Ft8Message#fromNewState}.
+ * <ul>
+ *   <li>{@code dx_alerts} — a station calling CQ that is a NEW (unworked) entity in a
+ *       user-enabled category: a new DXCC ({@link GeneralVariables#alertNewDxcc}) or US
+ *       state ({@link GeneralVariables#alertNewState}). Driven from
+ *       {@code MainViewModel.GetQTHRunnable.run()} once the {@code from*} flags are set.</li>
+ *   <li>{@code qso_alerts} — someone calling YOU
+ *       ({@link GeneralVariables#alertOnCqReply}, also driven from {@code processDecodes})
+ *       and a completed QSO ({@link GeneralVariables#alertOnQsoComplete}, fired from
+ *       {@code MainViewModel.doAfterTransmit} via {@link #notifyQsoComplete}).</li>
+ * </ul>
  *
- * <p>Sound + vibration are handled by a high-importance notification channel, so they
- * respect Do-Not-Disturb and the user's per-channel system settings. Alerts are
- * de-duplicated per (category + identifier) for the lifetime of the process, so a
- * station calling CQ every cycle — or several stations from the same needed entity —
- * only alert once.
+ * <p>Each channel is high-importance so sound + vibration respect Do-Not-Disturb and the
+ * user's per-channel system settings. Alerts are de-duplicated per key (see
+ * {@link AlertDecisions}) for the lifetime of the process so a station calling every cycle
+ * only alerts once.
  */
 public class DxAlertNotifier {
     private static final String CHANNEL_ID = "dx_alerts";
+    private static final String QSO_CHANNEL_ID = "qso_alerts";
     public static final String EXTRA_CALLSIGN = "alert_callsign";
     public static final String EXTRA_BAND = "alert_band";
 
     private final Context appContext;
-    // Already-alerted keys this session: "DXCC:<country>" / "STATE:<code>".
+    // Already-alerted keys this session (namespaced: "DXCC:"/"STATE:"/"CQREPLY:"/"QSO:").
     private final Set<String> alerted = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     public DxAlertNotifier(Context context) {
         this.appContext = context != null ? context.getApplicationContext() : null;
-        createChannel();
+        createChannels();
     }
 
-    private void createChannel() {
+    private void createChannels() {
         if (appContext == null) return;
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationManager nm = (NotificationManager)
                 appContext.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
-        if (nm.getNotificationChannel(CHANNEL_ID) != null) return;
+        createHighChannel(nm, CHANNEL_ID, "Needed-DX alerts",
+                "New DXCC / US state stations calling CQ");
+        createHighChannel(nm, QSO_CHANNEL_ID, "QSO & CQ alerts",
+                "Someone calling you, and completed-QSO alerts");
+    }
+
+    private void createHighChannel(NotificationManager nm, String id, String name, String desc) {
+        if (nm.getNotificationChannel(id) != null) return;
         NotificationChannel channel = new NotificationChannel(
-                CHANNEL_ID, "Needed-DX alerts", NotificationManager.IMPORTANCE_HIGH);
-        channel.setDescription("New DXCC / US state stations calling CQ");
+                id, name, NotificationManager.IMPORTANCE_HIGH);
+        channel.setDescription(desc);
         channel.enableVibration(true);
         channel.setVibrationPattern(new long[]{0, 250, 150, 250});
         Uri sound = android.media.RingtoneManager
@@ -77,38 +89,96 @@ public class DxAlertNotifier {
     }
 
     /**
-     * Inspect a freshly-decoded batch and fire alerts for newly-needed CQ stations.
+     * Inspect a freshly-decoded batch and fire alerts: newly-needed CQ stations
+     * (DXCC/state) and — when enabled — any message addressed to the user's callsign.
      */
     public void processDecodes(List<Ft8Message> messages) {
         if (appContext == null || messages == null) return;
-        if (!GeneralVariables.alertNewDxcc && !GeneralVariables.alertNewState) return;
+        if (!GeneralVariables.alertNewDxcc && !GeneralVariables.alertNewState
+                && !GeneralVariables.alertOnCqReply) {
+            return;
+        }
 
         for (Ft8Message msg : messages) {
-            if (msg == null || !msg.checkIsCQ()) continue;          // workable stations only
+            if (msg == null) continue;
             if (GeneralVariables.checkIsBlockedMessage(msg)) continue;
+
+            // CQ reply: any decoded message addressed to my callsign. The batch is already
+            // own-TX-echo filtered upstream, so a message to my call is another station
+            // calling me. Checked before the CQ-only gate below since a reply isn't a CQ.
+            boolean addressedToMe = GeneralVariables.checkIsMyCallsign(msg.getCallsignTo());
+            if (AlertDecisions.shouldAlertCqReply(
+                    GeneralVariables.alertOnCqReply, addressedToMe, false)) {
+                fire(AlertDecisions.cqReplyDedupKey(msg.getCallsignFrom(), msg.getMessageText()),
+                        QSO_CHANNEL_ID,
+                        appContext.getString(R.string.alert_cq_reply_title, msg.getCallsignFrom()),
+                        cqReplyBody(msg), msg.getCallsignFrom(), msg.band);
+            }
+
+            // Needed-DX alerts apply to CQ broadcasts only.
+            if (!msg.checkIsCQ()) continue;
 
             if (GeneralVariables.alertNewDxcc && msg.fromDxcc) {
                 String country = (msg.fromWhere == null || msg.fromWhere.isEmpty())
                         ? msg.getCallsignFrom() : msg.fromWhere;
-                fireOnce("DXCC:" + country, "New DXCC: " + country, msg);
+                fire("DXCC:" + country, CHANNEL_ID, "New DXCC: " + country,
+                        defaultBody(msg), msg.getCallsignFrom(), msg.band);
             }
             if (GeneralVariables.alertNewState && msg.fromNewState && msg.fromState != null) {
-                fireOnce("STATE:" + msg.fromState, "New state: " + msg.fromState, msg);
+                fire("STATE:" + msg.fromState, CHANNEL_ID, "New state: " + msg.fromState,
+                        defaultBody(msg), msg.getCallsignFrom(), msg.band);
             }
         }
     }
 
-    private void fireOnce(String dedupKey, String title, Ft8Message msg) {
-        if (!alerted.add(dedupKey)) return;                         // already alerted this session
+    /** Fire a notification when a QSO has just been logged, if the user enabled it. */
+    public void notifyQsoComplete(QSLRecord qslRecord) {
+        if (appContext == null || qslRecord == null) return;
+        if (!GeneralVariables.alertOnQsoComplete) return;
 
+        String call = qslRecord.getToCallsign();
+        StringBuilder body = new StringBuilder(call == null ? "" : call);
+        if (qslRecord.getToMaidenGrid() != null && !qslRecord.getToMaidenGrid().isEmpty()) {
+            body.append("  ").append(qslRecord.getToMaidenGrid());
+        }
+        if (qslRecord.getMode() != null && !qslRecord.getMode().isEmpty()) {
+            body.append("  ").append(qslRecord.getMode());
+        }
+        body.append("  R↑").append(qslRecord.getSendReport())
+            .append(" R↓").append(qslRecord.getReceivedReport());
+
+        fire(AlertDecisions.qsoCompleteDedupKey(call, qslRecord.getEndTime()),
+                QSO_CHANNEL_ID,
+                appContext.getString(R.string.alert_qso_complete_title),
+                body.toString(), call, qslRecord.getBandFreq());
+    }
+
+    private static String defaultBody(Ft8Message msg) {
         StringBuilder body = new StringBuilder(msg.getCallsignFrom());
         if (msg.maidenGrid != null && !msg.maidenGrid.isEmpty()) {
             body.append("  ").append(msg.maidenGrid);
         }
         body.append("  ").append(msg.snr).append(" dB");
+        return body.toString();
+    }
 
-        GeneralVariables.fileLog("DX_ALERT fire key=[" + dedupKey + "] "
-                + title + " call=" + msg.getCallsignFrom());
+    private static String cqReplyBody(Ft8Message msg) {
+        StringBuilder body = new StringBuilder(msg.getMessageText());
+        if (msg.snr != Ft8Message.SNR_UNKNOWN) {
+            body.append("  ").append(msg.snr).append(" dB");
+        }
+        return body.toString();
+    }
+
+    /**
+     * Post a notification once per dedup key. {@code callsignExtra}/{@code bandExtra} ride on
+     * the tap intent so the Decode screen can pre-select that station.
+     */
+    private void fire(String dedupKey, String channelId, String title, String body,
+                      String callsignExtra, long bandExtra) {
+        if (!alerted.add(dedupKey)) return;                         // already alerted this session
+
+        GeneralVariables.fileLog("ALERT fire key=[" + dedupKey + "] " + title);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                 && ContextCompat.checkSelfPermission(appContext,
@@ -122,8 +192,8 @@ public class DxAlertNotifier {
                 radio.ks3ckc.ft8af.ComposeMainActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP
                 | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        intent.putExtra(EXTRA_CALLSIGN, msg.getCallsignFrom());
-        intent.putExtra(EXTRA_BAND, msg.band);
+        if (callsignExtra != null) intent.putExtra(EXTRA_CALLSIGN, callsignExtra);
+        intent.putExtra(EXTRA_BAND, bandExtra);
 
         int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -131,10 +201,10 @@ public class DxAlertNotifier {
         }
         PendingIntent pi = PendingIntent.getActivity(appContext, id, intent, piFlags);
 
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(appContext, CHANNEL_ID)
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(appContext, channelId)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(title)
-                .setContentText(body.toString())
+                .setContentText(body)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_EVENT)
                 .setAutoCancel(true)

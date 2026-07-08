@@ -32,6 +32,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,8 +45,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import radio.ks3ckc.ft8af.theme.*
+import radio.ks3ckc.ft8af.ui.components.CredentialFieldRole
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 import radio.ks3ckc.ft8af.ui.components.SettingsRow
+import radio.ks3ckc.ft8af.ui.components.autofill
 
 /**
  * Logging & awards settings: SWL logging, PSKReporter, QRZ.com logging + profile
@@ -63,10 +66,26 @@ fun LoggingSettings(
     var enableCloudlog by remember { mutableStateOf(GeneralVariables.enableCloudlog) }
     var qrzXmlUser by remember { mutableStateOf(GeneralVariables.qrzXmlUsername.orEmpty()) }
     var qrzXmlPass by remember { mutableStateOf(GeneralVariables.qrzXmlPassword.orEmpty()) }
+    var qrzApiKey by remember { mutableStateOf(GeneralVariables.qrzApiKey.orEmpty()) }
     var cloudlogAddress by remember { mutableStateOf(GeneralVariables.cloudlogServerAddress.orEmpty()) }
 
+    var showQrzLogbook by remember { mutableStateOf(false) }
     var showQrzCreds by remember { mutableStateOf(false) }
     var showCloudlog by remember { mutableStateOf(false) }
+
+    // -- QRZ Logbook API Key Dialog (upload credential) --
+    if (showQrzLogbook) {
+        QrzLogbookDialog(
+            initialApiKey = qrzApiKey,
+            onDismiss = { showQrzLogbook = false },
+            onSave = { key ->
+                qrzApiKey = key
+                GeneralVariables.qrzApiKey = key
+                mainViewModel.databaseOpr.writeConfig("qrzApiKey", key, null)
+                showQrzLogbook = false
+            },
+        )
+    }
 
     // -- QRZ Credentials Dialog --
     if (showQrzCreds) {
@@ -159,6 +178,11 @@ fun LoggingSettings(
                     SettingsRow(
                         label = stringResource(R.string.settings_qrz_com),
                         description = stringResource(R.string.settings_qrz_com_desc),
+                        value = if (qrzApiKey.isNotEmpty()) {
+                            stringResource(R.string.common_configured)
+                        } else {
+                            stringResource(R.string.common_not_configured)
+                        },
                         toggle = enableQRZ,
                         onToggleChange = { checked ->
                             enableQRZ = checked
@@ -167,6 +191,8 @@ fun LoggingSettings(
                                 "enableQRZ", if (checked) "1" else "0", null,
                             )
                         },
+                        showChevron = true,
+                        onClick = { showQrzLogbook = true },
                     )
                     SectionDivider()
                     SettingsRow(
@@ -482,6 +508,139 @@ private fun CloudlogSettingsDialog(
     }
 }
 
+/**
+ * Dialog for configuring the QRZ Logbook API key — the credential QRZ QSO uploads
+ * require (distinct from the XML username/password used for avatar lookups). Includes
+ * a Test Connection button that calls [ThirdPartyService.CheckQRZConnection].
+ */
+@Composable
+private fun QrzLogbookDialog(
+    initialApiKey: String,
+    onDismiss: () -> Unit,
+    onSave: (apiKey: String) -> Unit,
+) {
+    var apiKeyInput by remember { mutableStateOf(TextFieldValue(initialApiKey)) }
+    var testResult by remember { mutableStateOf<Boolean?>(null) }
+    var isTesting by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // Test Connection writes the typed key into GeneralVariables.qrzApiKey so the
+    // STATUS call uses it. If the user dismisses without saving, that in-memory key
+    // would otherwise persist and could drive real uploads even though it was never
+    // committed. Restore the persisted value on every dismiss path (back/outside/Cancel).
+    val handleDismiss = {
+        GeneralVariables.qrzApiKey = initialApiKey
+        onDismiss()
+    }
+
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = TextPrimary,
+        unfocusedTextColor = TextPrimary,
+        cursorColor = Accent,
+        focusedBorderColor = Accent,
+        unfocusedBorderColor = BorderStrong,
+        focusedLabelColor = Accent,
+        unfocusedLabelColor = TextMuted,
+    )
+
+    Dialog(onDismissRequest = handleDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(BgSurface2)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.settings_qrz_logbook),
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 18.sp,
+            )
+            Text(
+                text = stringResource(R.string.settings_qrz_logbook_desc),
+                color = TextMuted,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+
+            OutlinedTextField(
+                value = apiKeyInput,
+                onValueChange = { apiKeyInput = it; testResult = null },
+                label = { Text(stringResource(R.string.settings_api_key)) },
+                placeholder = { Text(stringResource(R.string.settings_qrz_api_key_hint), color = TextFaint) },
+                singleLine = true,
+                colors = fieldColors,
+                textStyle = TextStyle(fontSize = 14.sp),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            // Test Connection
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                TextButton(
+                    onClick = {
+                        // Write the typed key so the STATUS test uses the current input.
+                        GeneralVariables.qrzApiKey = apiKeyInput.text.trim()
+                        isTesting = true
+                        testResult = null
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                ThirdPartyService.CheckQRZConnection()
+                            }
+                            testResult = result
+                            isTesting = false
+                        }
+                    },
+                    enabled = !isTesting,
+                ) {
+                    Text(
+                        text = stringResource(R.string.common_test_connection),
+                        color = if (isTesting) TextFaint else Accent,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                if (isTesting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .width(16.dp)
+                            .height(16.dp),
+                        strokeWidth = 2.dp,
+                        color = Accent,
+                    )
+                }
+                if (testResult != null) {
+                    Text(
+                        text = if (testResult == true) stringResource(R.string.common_pass)
+                        else stringResource(R.string.common_fail),
+                        color = if (testResult == true) StatusConfirmed else StatusBad,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = handleDismiss) {
+                    Text(stringResource(R.string.action_cancel), color = TextMuted)
+                }
+                TextButton(
+                    onClick = { onSave(apiKeyInput.text.trim()) },
+                ) {
+                    Text(stringResource(R.string.action_save), color = Accent, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun QrzCredsDialog(
     initialUsername: String,
@@ -535,7 +694,12 @@ private fun QrzCredsDialog(
                 singleLine = true,
                 colors = fieldColors,
                 textStyle = TextStyle(fontSize = 14.sp),
-                modifier = Modifier.fillMaxWidth(),
+                // QRZ usernames are callsigns, so advertise Username (not EmailAddress).
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .autofill(CredentialFieldRole.USERNAME) {
+                        userInput = TextFieldValue(it, selection = TextRange(it.length)); testResult = null
+                    },
             )
 
             OutlinedTextField(
@@ -547,7 +711,11 @@ private fun QrzCredsDialog(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 colors = fieldColors,
                 textStyle = TextStyle(fontSize = 14.sp),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .autofill(CredentialFieldRole.PASSWORD) {
+                        passInput = TextFieldValue(it, selection = TextRange(it.length)); testResult = null
+                    },
             )
 
             // Test Connection

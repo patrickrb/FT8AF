@@ -42,10 +42,19 @@ public class GeneralVariables {
     public static boolean enableCloudlog = false;//Whether Cloudlog auto-sync is enabled
     public static boolean enableQRZ = false;//Whether QRZ auto-sync is enabled
     public static boolean enablePskReporter = true;//Whether PSKReporter spot upload is enabled
+    // Dark feature flag for issue #437 (auto per-location Wavelog station profiles).
+    // Default false and NOT branched into any live upload path yet — this increment
+    // only lands the pure LocationSignature/resolver/create_station/cache foundation.
+    public static boolean perLocationStationEnabled = false;
 
     public static boolean distanceInMiles = true;//Display distances in miles (true) or kilometers (false)
 
-    public static boolean deepDecodeMode = false;//Whether deep decode mode is enabled
+    // Deep decode (subtract-and-redecode + extra LDPC iterations) is on by default so the app
+    // pulls weak signals out from under strong ones the way WSJT-X does at its default depth.
+    // A persisted "deepMode" config row still overrides this; only installs that never touched
+    // the setting pick up the new default. See ModeProfile#deepDecodeBudgetMillis for the loop
+    // time bound.
+    public static boolean deepDecodeMode = true;//Whether deep decode mode is enabled
 
     public static boolean audioOutput32Bit = true;//Audio output type: true=float, false=int16
     public static int audioSampleRate = 12000;//Transmit audio sample rate
@@ -83,8 +92,45 @@ public class GeneralVariables {
     public static MutableLiveData<Float> mutableVolumePercent = new MutableLiveData<>();
     public static float volumePercent = 0.8f;//Audio playback volume, as a percentage
 
+    // RX input gain (issue #356): multiplier applied to incoming audio samples
+    // before resampling/decoding. 1.0 = 100% = unchanged behavior. Persisted
+    // under the "inputVolume" config key as a percent (0..200).
+    public static volatile float inputGainPercent = 1.0f;
+    // Live RX input level (peak + short-term RMS of post-gain samples),
+    // published by HamRecorder once per metering window for the UI meter.
+    public static final MutableLiveData<com.k1af.ft8af.wave.InputAudioLevel.Levels>
+            mutableInputLevel = new MutableLiveData<>();
+
     public static boolean showTxVolumeSlider = true;//Show inline TX volume slider on main screen
     public static MutableLiveData<Boolean> mutableShowTxVolumeSlider = new MutableLiveData<>(true);
+
+    //Save TX output level per band (issue #355), defaults off (global level only).
+    // volatile: written from DatabaseOpr's background config-load thread and the
+    // Settings toggle, read from UI + MeterProtectionController threads (same
+    // convention as zoneMapReady/huntPotaOnly/perBandOutputLevels below).
+    public static volatile boolean savePerBandOutputLevel = false;
+    //Serialized band=level CSV ("20m=60,40m=85"); parsed/updated in PerBandOutputLevel.kt.
+    public static volatile String perBandOutputLevels = "";
+
+    //Auto-select a clear TX offset when calling CQ (issue #418), defaults off.
+    //volatile: written from the config-load thread + Settings toggle, read from
+    //the decode-delivery thread inside recordBandActivity.
+    public static volatile boolean autoClearTxFreq = false;
+
+    //Tune button (issue #408): hard cap on a single tune carrier in seconds
+    //(clamped by TuneController), whether the tune level is independent of the
+    //FT8 drive, the global independent level (0..100), and the per-band
+    //independent levels (same CSV format as perBandOutputLevels; gated on the
+    //same savePerBandOutputLevel toggle, separate backing store — see
+    //TuneLevel.kt). volatile: written from the config-load thread + Settings,
+    //read from the tune audio worker per chunk.
+    public static volatile int tuneMaxOnSeconds = 10;
+    public static volatile boolean tuneLevelIndependent = false;
+    public static volatile int tuneLevel = 25;
+    public static volatile String perBandTuneLevels = "";
+    //Tune method (issue #425): TuneMethod.AUTOMATIC/INTERNAL/TONE — whether the
+    //TUNE chip starts the rig's internal ATU over CAT or plays the carrier tone.
+    public static volatile int tuneMethod = 0;
 
     public static int flexMaxRfPower = 10;//Flex radio max transmit power
     public static int flexMaxTunePower = 10;//Flex radio max tune power
@@ -339,11 +385,20 @@ public class GeneralVariables {
     public static String myRigName = "";  // Set by MainViewModel.connectRig(); used in PSKReporter software string
     public static int myPowerWatts = 0;    // 0 = not set, displays as "--"
     public static String toModifier = "";//Call modifier
+    public static String cqFreeText = "";//Persisted custom/directed CQ free text
+
+    // Field Day mode settings (persisted via writeConfig)
+    public static boolean fieldDayMode = false;
+    public static String fieldDayClass = "A";     // A through F
+    public static int fieldDayNumTx = 1;          // 1-16
+    public static String fieldDaySection = "";    // ARRL/RAC section code
     private static float baseFrequency = 1000;//Audio frequency
 
     public static boolean simpleCallItemMode = false;//Compact message mode
 
     public static boolean clearDecodesEveryCycle = false;//Clear the decode list at the start of each cycle
+
+    public static boolean clearOnBandModeChange = true;//Clear the decode list + reset TX target to CQ when the band or mode changes (default on)
 
     public static boolean swr_switch_on = true;//SWR alarm switch
     public static boolean alc_switch_on = true;//ALC alarm switch
@@ -360,6 +415,14 @@ public class GeneralVariables {
     private static int spectrumWidth = 3500;//Spectrum display width in Hz
     public static MutableLiveData<Integer> mutableSpectrumWidth = new MutableLiveData<>();
 
+    // FFT display developer knobs (issue #428). Wire values shared with the
+    // native side (SpectrumFragment.setFFTDisplayParams) and the config DB;
+    // read fresh every display frame, so no LiveData needed (same pattern as
+    // pttDelay). Display-only — the decoder's FFT is unaffected.
+    private static int fftWindowType = 1;//0=Rect 1=Hann(default, matches desktop/iOS) 2=Hamming 3=Blackman 4=Blackman-Harris
+    private static int fftAveragingMode = 0;//0=Off(default) 1=EMA a=0.5 (light) 2=EMA a=0.25 (heavy)
+    private static int spectrumBinAggregation = 0;//Spectrum-strip bin combine: 0=Max(default, legacy) 1=Average 2=RMS
+
     public static String cloudlogServerAddress = "";//Cloudlog server address
     public static String cloudlogApiKey = "";//Cloudlog API key
     public static String cloudlogStationID = "";//Cloudlog station ID
@@ -368,6 +431,7 @@ public class GeneralVariables {
     public static String qrzXmlPassword = ""; //QRZ XML API password
     public static boolean pskOverlayEnabled = false; //PSK Reporter map overlay (issue #33)
     public static boolean synFrequency = false;//Same-frequency transmit
+    public static boolean holdTxFreq = false;//Hold TX freq: don't move the TX offset to a station you answer (WSJT-X "Hold Tx Freq")
     public static int transmitDelay = 500;//Transmit delay; also allows decoding time for the previous cycle
     public static int pttDelay = 100;//PTT response time; radios typically need some response time after PTT command, default 100ms
     public static int lateStartTolerance = 2000;//Max ms into a cycle that a manual TX may start; leading audio is clipped so TX still ends on the cycle boundary. 0-4000.
@@ -416,8 +480,20 @@ public class GeneralVariables {
 
     public static boolean autoFollowCQ = false;//Auto-follow CQ
     public static boolean huntCallsCQ = false;//Hunt+CQ hybrid: call CQ when idle, answer CQs when heard
+    // volatile: written from the Compose UI thread (DecodeScreen) and read from the
+    // transmit/decode processing thread (FT8TransmitSignal), like zoneMapReady above.
+    public static volatile boolean huntPotaOnly = false;//Mirror of the "CQ POTA" decode filter: Hunt only calls POTA CQs (issue #333)
     public static boolean autoCallFollow = true;//Auto-call followed callsigns
     public static boolean autoUpdateGridFromGPS = false;//Use device GPS to keep Maidenhead grid current
+    public static boolean disciplineClockFromGPS = false;//Discipline the app clock (UtcTimer.delay) from GPS satellite time (issue #373). Off by default — consensual.
+    public static int gpsClockIntervalMinutes = 5;//How often to re-read GPS time for clock discipline. Clamped 1-30 by GpsClockUpdater.
+    //Runtime status for the Time Sync UI (not persisted): the offset the last GPS fix applied
+    //to UtcTimer.delay. The last-sync *timestamp* is the retained value of mutableGpsClockSync
+    //below, so there's no separate field for it.
+    public static volatile int gpsClockOffsetMs = 0;
+    //Posted each time a GPS fix disciplines the clock, so the Time Sync screen can recompose
+    //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.
+    public static MutableLiveData<Long> mutableGpsClockSync = new MutableLiveData<>();
     public static ArrayList<String> QSL_Callsign_list = new ArrayList<>();//Successfully QSL'd callsigns
     public static ArrayList<String> QSL_Callsign_list_other_band = new ArrayList<>();//Successfully QSL'd callsigns on other bands
     public static HashSet<String> QSL_Grid_list = new HashSet<>();//Distinct worked 4-char Maidenhead grids (any band)
@@ -463,6 +539,13 @@ public class GeneralVariables {
     //   - alertNewState: alert on a new (unworked) US state       (uses Ft8Message.fromNewState)
     public static boolean alertNewDxcc = false;
     public static boolean alertNewState = false;
+
+    // QSO & CQ alerts (Settings → Needed-DX Alerts). Opt-in, default off.
+    //   - alertOnCqReply:     notify when any decoded message is addressed to my callsign
+    //                         (someone calling me). Own-TX echoes are already filtered out.
+    //   - alertOnQsoComplete: notify when a QSO is logged (DxAlertNotifier.notifyQsoComplete).
+    public static boolean alertOnCqReply = false;
+    public static boolean alertOnQsoComplete = false;
 
     // Geographic continent-directed CQ tokens — matched against myContinent.
     private static final java.util.Set<String> CONTINENT_CODES =
@@ -552,6 +635,33 @@ public class GeneralVariables {
     public static void setSpectrumWidth(int width) {
         mutableSpectrumWidth.postValue(width);
         GeneralVariables.spectrumWidth = width;
+    }
+
+    public static int getFftWindowType() {
+        return fftWindowType;
+    }
+
+    /** Out-of-range values clamp to the default (1 = Hann). */
+    public static void setFftWindowType(int type) {
+        fftWindowType = (type >= 0 && type <= 4) ? type : 1;
+    }
+
+    public static int getFftAveragingMode() {
+        return fftAveragingMode;
+    }
+
+    /** Out-of-range values clamp to the default (0 = off). */
+    public static void setFftAveragingMode(int mode) {
+        fftAveragingMode = (mode >= 0 && mode <= 2) ? mode : 0;
+    }
+
+    public static int getSpectrumBinAggregation() {
+        return spectrumBinAggregation;
+    }
+
+    /** Out-of-range values clamp to the default (0 = max, the legacy combine). */
+    public static void setSpectrumBinAggregation(int mode) {
+        spectrumBinAggregation = (mode >= 0 && mode <= 2) ? mode : 0;
     }
 
     public static String getCloudlogServerAddress() {
