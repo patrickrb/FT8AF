@@ -42,6 +42,7 @@ public class GeneralVariables {
     public static boolean enableCloudlog = false;//Whether Cloudlog auto-sync is enabled
     public static boolean enableQRZ = false;//Whether QRZ auto-sync is enabled
     public static boolean enablePskReporter = true;//Whether PSKReporter spot upload is enabled
+    public static boolean enableAdifExport = true;//Append each logged QSO to a running ft8af_log.adi (real-time ADIF mirror for backup + desktop-logger import)
     // Dark feature flag for issue #437 (auto per-location Wavelog station profiles).
     // Default false and NOT branched into any live upload path yet — this increment
     // only lands the pure LocationSignature/resolver/create_station/cache foundation.
