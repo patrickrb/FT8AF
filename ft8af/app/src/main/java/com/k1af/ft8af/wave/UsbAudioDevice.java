@@ -879,35 +879,72 @@ public class UsbAudioDevice {
             // suspend), initialize() returns false and queue()/requestWait()
             // throw IllegalStateException. Catching here turns a fatal process
             // crash into a clean TX abort that the caller already handles.
-            UsbRequest request = new UsbRequest();
-            try {
-                if (!request.initialize(connection, endpointOut)) {
-                    Log.e(TAG, "request.initialize returned false at offset " + offset
-                            + " (USB connection likely closed)");
-                    try { request.close(); } catch (Exception ignored) {}
+            //
+            // Per-packet retry: a single dropped/naked isochronous packet — the
+            // hallmark of RFI coupling into a marginal cable during TX — used to
+            // abort the whole over. Instead re-send just the failing packet a
+            // bounded number of times (UsbTransientErrorPolicy.MAX_PACKET_RETRIES)
+            // before giving up. FT8 has ~2.36s of cycle slack, so a handful of
+            // ~1ms packet retries never pushes audio off the WSJT-X grid. Only
+            // transient stalls (queue()==false, null requestWait()) are retried;
+            // a torn-down connection (initialize()==false / IllegalStateException)
+            // is fatal and drops the over immediately.
+            boolean packetSent = false;
+            for (int attempt = 0; !packetSent; attempt++) {
+                // STOP can arrive between retries too — honour it promptly.
+                if (UsbAudioNative.writeCancelled) {
+                    Log.d(TAG, "writeAudio cancelled during retry at offset " + offset);
                     return false;
                 }
+                UsbRequest request = new UsbRequest();
+                boolean transientFailure = false;
+                try {
+                    if (!request.initialize(connection, endpointOut)) {
+                        Log.e(TAG, "request.initialize returned false at offset " + offset
+                                + " (USB connection likely closed)");
+                        try { request.close(); } catch (Exception ignored) {}
+                        return false; // torn down — fatal, no point retrying
+                    }
 
-                boolean queued;
-                if (android.os.Build.VERSION.SDK_INT >= 26) {
-                    queued = request.queue(buf);
-                } else {
-                    queued = request.queue(buf, chunkSize);
-                }
-                if (!queued) {
-                    Log.e(TAG, "Failed to queue output URB at offset " + offset);
+                    buf.rewind();
+                    boolean queued;
+                    if (android.os.Build.VERSION.SDK_INT >= 26) {
+                        queued = request.queue(buf);
+                    } else {
+                        queued = request.queue(buf, chunkSize);
+                    }
+                    if (!queued) {
+                        transientFailure = true;
+                    } else {
+                        UsbRequest completed = connection.requestWait();
+                        if (completed == null) {
+                            // A null requestWait() is a recoverable stall, not a
+                            // completed packet — retry it rather than silently
+                            // skipping this chunk of the waveform.
+                            transientFailure = true;
+                        } else {
+                            try { completed.close(); } catch (Exception ignored) {}
+                            packetSent = true;
+                        }
+                    }
+                } catch (IllegalStateException | NullPointerException e) {
+                    Log.e(TAG, "writeAudio aborting at offset " + offset + ": " + e.getMessage());
                     try { request.close(); } catch (Exception ignored) {}
-                    return false;
+                    return false; // connection gone — fatal
                 }
-
-                UsbRequest completed = connection.requestWait();
-                if (completed != null) {
-                    try { completed.close(); } catch (Exception ignored) {}
-                }
-            } catch (IllegalStateException | NullPointerException e) {
-                Log.e(TAG, "writeAudio aborting at offset " + offset + ": " + e.getMessage());
                 try { request.close(); } catch (Exception ignored) {}
-                return false;
+
+                if (!packetSent) {
+                    UsbTransientErrorPolicy.Kind kind =
+                            UsbTransientErrorPolicy.classifyUsbRequestFailure(transientFailure);
+                    if (!UsbTransientErrorPolicy.shouldRetryPacket(kind, attempt)) {
+                        Log.e(TAG, "writeAudio giving up on packet at offset " + offset
+                                + " after " + (attempt + 1) + " attempt(s)");
+                        return false;
+                    }
+                    Log.w(TAG, "writeAudio retrying packet at offset " + offset
+                            + " (attempt " + (attempt + 1) + ")");
+                }
             }
 
             offset += chunkSize;

@@ -312,26 +312,40 @@ public class CableSerialPort {
      *
      * @param rts_on true: on, false: off
      */
-    public void setRTS_On(boolean rts_on) {
+    public boolean setRTS_On(boolean rts_on) {
+        if (usbSerialPort == null) {
+            fileLog("serial.setRTS: port not open!");
+            return false;
+        }
         try {
             EnumSet<UsbSerialPort.ControlLine> controlLines = usbSerialPort.getSupportedControlLines();
             if (controlLines.contains(UsbSerialPort.ControlLine.RTS)) {
                 usbSerialPort.setRTS(rts_on);
             }
+            return true;
         } catch (IOException e) {
             e.printStackTrace();
+            fileLog("serial.setRTS ERROR: " + e.getMessage());
+            return false;
         }
     }
 
-    public void setDTR_On(boolean dtr_on) {
+    public boolean setDTR_On(boolean dtr_on) {
+        if (usbSerialPort == null) {
+            fileLog("serial.setDTR: port not open!");
+            return false;
+        }
         try {
             EnumSet<UsbSerialPort.ControlLine> controlLines = usbSerialPort.getSupportedControlLines();
             if (controlLines.contains(UsbSerialPort.ControlLine.DTR)) {
                 usbSerialPort.setDTR(dtr_on);
             }
+            return true;
         } catch (IOException e) {
             e.printStackTrace();
             Log.d(TAG, "setDTR_On: " + e.getMessage());
+            fileLog("serial.setDTR ERROR: " + e.getMessage());
+            return false;
         }
     }
 

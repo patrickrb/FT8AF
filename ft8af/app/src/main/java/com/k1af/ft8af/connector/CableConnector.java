@@ -26,6 +26,13 @@ public class CableConnector extends BaseRigConnector {
     private final BaseRig cableConnectedRig;
     private OnCableDataReceived onCableDataReceived;
 
+    // Auto-reconnect state. A single serial glitch (marginal connector, RFI into
+    // the cable during TX) used to drop the whole session and strand the user on
+    // the manual "tap to retry" chip; instead we attempt a bounded, backed-off
+    // auto-reconnect first (CatReconnectPolicy).
+    private volatile boolean userDisconnected = false;
+    private volatile boolean reconnecting = false;
+
     public CableConnector(Context context, CableSerialPort.SerialPort serialPort, int baudRate
                           //, int controlMode) {
             , int controlMode, BaseRig cableConnectedRig) {
@@ -43,10 +50,76 @@ public class CableConnector extends BaseRigConnector {
             @Override
             public void onRunError(Exception e) {
                 Log.e(TAG, "CableConnector error: " + e.getMessage());
-                getOnConnectorStateChanged().onRunError("Lost connection to serial port: " + e.getMessage());
+                handleSerialError(e);
             }
         };
         //connect();
+    }
+
+    /**
+     * Reacts to a serial read-loop error. A transient glitch triggers a bounded,
+     * backed-off auto-reconnect (the device usually re-enumerates with the same
+     * VID/PID); a fatal error — or an exhausted reconnect budget — surfaces the
+     * manual retry state. Decision logic lives in {@link CatReconnectPolicy} so
+     * it can be unit-tested; this method is the thin wrapper.
+     */
+    private void handleSerialError(Exception e) {
+        CatReconnectPolicy.Kind kind = CatReconnectPolicy.classify(e);
+        if (userDisconnected
+                || kind == CatReconnectPolicy.Kind.FATAL
+                || !CatReconnectPolicy.shouldAutoReconnect(kind, 0)) {
+            surfaceLostConnection(e);
+            return;
+        }
+        startAutoReconnect(e);
+    }
+
+    private void surfaceLostConnection(Exception e) {
+        getOnConnectorStateChanged().onRunError(
+                "Lost connection to serial port: " + (e == null ? "" : e.getMessage()));
+    }
+
+    private synchronized void startAutoReconnect(final Exception firstError) {
+        if (reconnecting) return; // a burst is already being handled
+        reconnecting = true;
+        // Reflect an in-progress reconnect rather than an error so the UI doesn't
+        // flip to "tap to retry" for a glitch we're about to absorb.
+        getOnConnectorStateChanged().onConnecting();
+        new Thread(() -> {
+            try {
+                for (int attempt = 1;
+                     CatReconnectPolicy.shouldAutoReconnect(
+                             CatReconnectPolicy.Kind.TRANSIENT, attempt - 1);
+                     attempt++) {
+                    if (userDisconnected) {
+                        return;
+                    }
+                    long backoff = CatReconnectPolicy.backoffMs(attempt);
+                    Log.d(TAG, "CAT auto-reconnect attempt " + attempt
+                            + " in " + backoff + "ms");
+                    try {
+                        Thread.sleep(backoff);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                    if (userDisconnected) {
+                        return;
+                    }
+                    // The port already tore itself down (SerialInputOutputManager
+                    // calls disconnect() after onRunError); re-open it fresh.
+                    if (cableSerialPort.connect() && cableSerialPort.isConnected()) {
+                        Log.d(TAG, "CAT auto-reconnect succeeded on attempt " + attempt);
+                        return; // connect() already fired onConnected()
+                    }
+                }
+                // Budget exhausted — hand back to the manual retry state.
+                Log.e(TAG, "CAT auto-reconnect exhausted; surfacing manual retry");
+                surfaceLostConnection(firstError);
+            } finally {
+                reconnecting = false;
+            }
+        }, "CAT-Auto-Reconnect").start();
     }
 
     @Override
@@ -58,19 +131,37 @@ public class CableConnector extends BaseRigConnector {
     @Override
     public void setPttOn(boolean on) {
         //Only handle RTS and DTR
-        switch (getControlMode()) {
-            case ControlMode.DTR:
-                cableSerialPort.setDTR_On(on);//Toggle DTR on/off
-                break;
-            case ControlMode.RTS:
-                cableSerialPort.setRTS_On(on);//Toggle RTS on/off
-                break;
+        int mode = getControlMode();
+        if (mode != ControlMode.DTR && mode != ControlMode.RTS) {
+            return;
         }
+        boolean ok = toggleControlLine(mode, on);
+        // Fail-safe: a failed PTT-OFF write on a dropped port must never leave
+        // the rig keyed, so retry it a bounded number of times.
+        // See CatReconnectPolicy.shouldRetryPtt.
+        for (int attempt = 0; CatReconnectPolicy.shouldRetryPtt(on, ok, attempt); attempt++) {
+            ok = toggleControlLine(mode, on);
+        }
+        if (!on && !ok) {
+            Log.e(TAG, "PTT-off write failed after retries; port likely dropped");
+        }
+    }
+
+    private boolean toggleControlLine(int mode, boolean on) {
+        if (mode == ControlMode.DTR) {
+            return cableSerialPort.setDTR_On(on);//Toggle DTR on/off
+        }
+        return cableSerialPort.setRTS_On(on);//Toggle RTS on/off
     }
 
     @Override
     public void setPttOn(byte[] command) {
-        cableSerialPort.sendData(command);//Send PTT via CAT command
+        boolean ok = cableSerialPort.sendData(command);//Send PTT via CAT command
+        // CAT PTT commands are idempotent, so re-sending a failed write is safe
+        // and fail-safes PTT-off in particular (never leave the rig keyed).
+        for (int attempt = 0; CatReconnectPolicy.shouldRetryPtt(false, ok, attempt); attempt++) {
+            ok = cableSerialPort.sendData(command);
+        }
     }
 
 
@@ -105,6 +196,7 @@ public class CableConnector extends BaseRigConnector {
 
     @Override
     public void connect() {
+        userDisconnected = false;
         super.connect();
         getOnConnectorStateChanged().onConnecting();
         cableSerialPort.connect();
@@ -112,6 +204,8 @@ public class CableConnector extends BaseRigConnector {
 
     @Override
     public void disconnect() {
+        // A deliberate user disconnect must cancel any in-flight auto-reconnect.
+        userDisconnected = true;
         cableConnectedRig.onDisconnecting();
         super.disconnect();
         cableSerialPort.disconnect();
