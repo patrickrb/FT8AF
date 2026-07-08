@@ -110,3 +110,25 @@ tr.clickable:hover td { background: #1d2730; }
 .status-line { color: var(--muted); font-size: 12px; padding: 4px 14px; min-height: 20px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .muted { color: var(--muted); }
+
+/* Logbook tab: inline search/filter/export controls + edit dialog. */
+.logbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.logbar .search { min-width: 160px; }
+.logbar .date { width: 140px; }
+tr.confirmed td { color: #7ed492; }
+.confirm-dot { color: var(--ok); font-weight: 700; }
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center; z-index: 50;
+}
+.modal {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 16px; width: 520px; max-width: 92vw; max-height: 88vh; overflow: auto;
+}
+.modal h3 { margin: 0 0 12px; font-size: 14px; color: var(--accent); }
+.modal .grid2 { margin-bottom: 12px; }
+.modal .field input { width: 100%; }
+.modal .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.modal .check { display: flex; align-items: center; gap: 6px; }
+.modal .check input { width: auto; }

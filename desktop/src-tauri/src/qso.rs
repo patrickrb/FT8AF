@@ -302,6 +302,7 @@ impl QsoEngine {
             station_callsign: self.my_call.clone(),
             my_gridsquare: self.my_grid.clone(),
             comment: String::new(),
+            confirmed: false,
         };
 
         // Return to CQ or go idle.

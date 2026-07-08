@@ -9,7 +9,7 @@ use tauri::{Emitter, State};
 
 use ft8af::audio::{self, AudioDevice};
 use ft8af::bands;
-use ft8af::db::{Db, QsoRecord};
+use ft8af::db::{ConfirmedFilter, Db, QsoRecord};
 use ft8af::engine::{self, AnswerArgs, EngineCommand, EngineHandle};
 use ft8af::rig::{self, HamlibRig, RigConfig, SerialPortInfo};
 use ft8af::wf::WfConfig;
@@ -149,6 +149,24 @@ fn list_log(state: State<AppState>, limit: i64, offset: i64) -> Vec<QsoRecord> {
     state.db.list_qsos(limit, offset)
 }
 
+/// Server-side search/filter for the Logbook tab. `filter` is one of
+/// `"all"` / `"confirmed"` / `"unconfirmed"`; anything else is treated as All.
+#[tauri::command]
+fn search_log(
+    state: State<AppState>,
+    callsign: String,
+    filter: String,
+    limit: i64,
+    offset: i64,
+) -> Vec<QsoRecord> {
+    let filter = match filter.as_str() {
+        "confirmed" => ConfirmedFilter::Confirmed,
+        "unconfirmed" => ConfirmedFilter::Unconfirmed,
+        _ => ConfirmedFilter::All,
+    };
+    state.db.search_qsos(&callsign, filter, limit, offset)
+}
+
 #[tauri::command]
 fn log_count(state: State<AppState>) -> i64 {
     state.db.count()
@@ -164,9 +182,17 @@ fn save_qso(state: State<AppState>, record: QsoRecord) -> Result<i64, String> {
     state.db.insert_qso(&record).map_err(|e| e.to_string())
 }
 
+/// Export the log as ADIF, optionally restricted to an inclusive `[start, end]`
+/// `YYYYMMDD` date range. Empty strings / omitted args mean an open bound.
 #[tauri::command]
-fn export_adif(state: State<AppState>) -> String {
-    state.db.export_adif()
+fn export_adif(
+    state: State<AppState>,
+    start: Option<String>,
+    end: Option<String>,
+) -> String {
+    state
+        .db
+        .export_adif_range(start.as_deref(), end.as_deref())
 }
 
 #[tauri::command]
@@ -260,6 +286,7 @@ fn main() {
             stop_tx,
             free_text,
             list_log,
+            search_log,
             log_count,
             delete_qso,
             save_qso,
