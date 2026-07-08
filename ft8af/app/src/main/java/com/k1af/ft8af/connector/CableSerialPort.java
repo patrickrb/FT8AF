@@ -308,30 +308,64 @@ public class CableSerialPort {
 
 
     /**
+     * Whether a control-line toggle can actually be driven: the port must report
+     * the requested line as supported. Pure so the "unsupported line reports
+     * failure" decision (used by {@link #setRTS_On}/{@link #setDTR_On}) is
+     * unit-testable without a live USB device.
+     */
+    static boolean controlLineSupported(EnumSet<UsbSerialPort.ControlLine> supported,
+                                        UsbSerialPort.ControlLine line) {
+        return supported != null && supported.contains(line);
+    }
+
+    /**
      * Toggle RTS on and off
      *
      * @param rts_on true: on, false: off
      */
-    public void setRTS_On(boolean rts_on) {
+    public boolean setRTS_On(boolean rts_on) {
+        if (usbSerialPort == null) {
+            fileLog("serial.setRTS: port not open!");
+            return false;
+        }
         try {
-            EnumSet<UsbSerialPort.ControlLine> controlLines = usbSerialPort.getSupportedControlLines();
-            if (controlLines.contains(UsbSerialPort.ControlLine.RTS)) {
-                usbSerialPort.setRTS(rts_on);
+            if (!controlLineSupported(usbSerialPort.getSupportedControlLines(),
+                    UsbSerialPort.ControlLine.RTS)) {
+                // Report failure rather than a silent no-op: callers use the return
+                // value to decide whether a PTT toggle actually happened, so a port
+                // that can't drive RTS must not read as a successful toggle.
+                fileLog("serial.setRTS: RTS not supported by this port");
+                return false;
             }
+            usbSerialPort.setRTS(rts_on);
+            return true;
         } catch (IOException e) {
             e.printStackTrace();
+            fileLog("serial.setRTS ERROR: " + e.getMessage());
+            return false;
         }
     }
 
-    public void setDTR_On(boolean dtr_on) {
+    public boolean setDTR_On(boolean dtr_on) {
+        if (usbSerialPort == null) {
+            fileLog("serial.setDTR: port not open!");
+            return false;
+        }
         try {
-            EnumSet<UsbSerialPort.ControlLine> controlLines = usbSerialPort.getSupportedControlLines();
-            if (controlLines.contains(UsbSerialPort.ControlLine.DTR)) {
-                usbSerialPort.setDTR(dtr_on);
+            if (!controlLineSupported(usbSerialPort.getSupportedControlLines(),
+                    UsbSerialPort.ControlLine.DTR)) {
+                // Report failure rather than a silent no-op (see setRTS_On): a port
+                // that can't drive DTR must not read as a successful PTT toggle.
+                fileLog("serial.setDTR: DTR not supported by this port");
+                return false;
             }
+            usbSerialPort.setDTR(dtr_on);
+            return true;
         } catch (IOException e) {
             e.printStackTrace();
             Log.d(TAG, "setDTR_On: " + e.getMessage());
+            fileLog("serial.setDTR ERROR: " + e.getMessage());
+            return false;
         }
     }
 

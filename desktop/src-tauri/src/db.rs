@@ -678,4 +678,30 @@ mod tests {
         assert_eq!(rows[0].call, "K1ABC");
         assert!(!rows[0].confirmed); // defaults to unconfirmed
     }
+
+    #[test]
+    fn custom_bands_persist_via_config() {
+        // The custom dial list (issue #470) rides on the config store, so it must
+        // survive a reload the same way any other config value does.
+        use crate::bands;
+        let db = Db::open_in_memory().unwrap();
+
+        let mut custom =
+            bands::parse_custom_bands(&db.get_config(bands::CUSTOM_BANDS_KEY).unwrap_or_default());
+        assert!(custom.is_empty());
+
+        bands::upsert_custom_band(&mut custom, "3B9 DX", 14_090_000);
+        db.set_config(bands::CUSTOM_BANDS_KEY, &bands::serialize_custom_bands(&custom))
+            .unwrap();
+
+        // Reload from the store (as a fresh app launch would).
+        let reloaded =
+            bands::parse_custom_bands(&db.get_config(bands::CUSTOM_BANDS_KEY).unwrap());
+        assert_eq!(reloaded.len(), 1);
+        assert_eq!(reloaded[0].dial_hz, 14_090_000);
+        assert_eq!(reloaded[0].name, "3B9 DX");
+
+        let merged = bands::merged_bands(&reloaded);
+        assert!(merged.iter().any(|b| b.dial_hz == 14_090_000 && b.custom));
+    }
 }

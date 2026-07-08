@@ -534,4 +534,113 @@ public class FT8TransmitSignalTest {
         assertThat(FT8TransmitSignal.shouldCompleteQso(
                 true, 2, 3, 0, 3, false)).isFalse();
     }
+
+    // ---- decideManualTx (issue #467) ----------------------------------------
+    // The manual transmitNow() gate. FT8: 15000 ms slot, 12640 ms audio, so the
+    // free slack (last moment a full waveform still fits) is 2360 ms. The tolerance
+    // bounds how much *extra* leading audio we'll clip past that slack. The old
+    // gate compared raw msInCycle < tolerance, so the default 2000 ms rejected
+    // 360 ms *before* the slack was even used up — the setting appeared dead.
+
+    private static final int FT8_SLACK = 2360;   // ModeProfile.FT8.audioSlackMillis
+    private static final int FT8_SLOT = 15000;   // ModeProfile.FT8.slotMillis
+
+    @Test
+    public void manualTx_withinSlack_transmitsWithNoClip_evenAtZeroTolerance() {
+        // Anywhere inside the free slack the whole waveform fits, so TX must go out
+        // this cycle with zero clipping regardless of the tolerance setting — the
+        // exact case the old raw gate wrongly rejected once msInCycle passed 2000.
+        FT8TransmitSignal.ManualTxGate g =
+                FT8TransmitSignal.decideManualTx(2100, FT8_SLACK, FT8_SLOT, /*tolerance*/ 0);
+        assertThat(g.transmit).isTrue();
+        assertThat(g.clipMs).isEqualTo(0);
+    }
+
+    @Test
+    public void manualTx_onTimeStart_transmitsFullWaveform() {
+        // A normal on-time tap ~600 ms into the slot: full waveform, no clip.
+        FT8TransmitSignal.ManualTxGate g =
+                FT8TransmitSignal.decideManualTx(600, FT8_SLACK, FT8_SLOT, 2000);
+        assertThat(g.transmit).isTrue();
+        assertThat(g.clipMs).isEqualTo(0);
+    }
+
+    @Test
+    public void manualTx_defaultTolerance_transmitsIntoClipRegion() {
+        // The reported scenario: the decode surfaces ~2.5 s into the slot and the
+        // operator taps promptly. Under the default 2000 ms tolerance the effective
+        // budget is slack + tolerance = 4360 ms, so this now keys up (clipping the
+        // excess past the slack) instead of silently waiting ~30 s.
+        FT8TransmitSignal.ManualTxGate g =
+                FT8TransmitSignal.decideManualTx(2500, FT8_SLACK, FT8_SLOT, 2000);
+        assertThat(g.transmit).isTrue();
+        assertThat(g.clipMs).isEqualTo(2500 - FT8_SLACK); // 140 ms clipped
+    }
+
+    @Test
+    public void manualTx_atToleranceBoundary_transmits() {
+        // clip == tolerance is the last accepted point: msInCycle = slack + tolerance.
+        int msInCycle = FT8_SLACK + 2000; // clip would be exactly 2000
+        FT8TransmitSignal.ManualTxGate g =
+                FT8TransmitSignal.decideManualTx(msInCycle, FT8_SLACK, FT8_SLOT, 2000);
+        assertThat(g.transmit).isTrue();
+        assertThat(g.clipMs).isEqualTo(2000);
+    }
+
+    @Test
+    public void manualTx_pastToleranceBoundary_defers() {
+        // One ms past the boundary the clip exceeds the tolerance -> defer this cycle.
+        int msInCycle = FT8_SLACK + 2000 + 1; // clip 2001 > tolerance 2000
+        FT8TransmitSignal.ManualTxGate g =
+                FT8TransmitSignal.decideManualTx(msInCycle, FT8_SLACK, FT8_SLOT, 2000);
+        assertThat(g.transmit).isFalse();
+        assertThat(g.clipMs).isEqualTo(2001);
+    }
+
+    @Test
+    public void manualTx_gateNeverStricterThanClipPath() {
+        // Regression for the root cause: for every start offset the gate accepts,
+        // the clip it reports is within the tolerance, and it accepts at least the
+        // whole free-slack region (which the clip path always sends un-clipped).
+        int tolerance = 2000;
+        int lastAccepted = -1;
+        for (int ms = 0; ms < FT8_SLOT; ms++) {
+            FT8TransmitSignal.ManualTxGate g =
+                    FT8TransmitSignal.decideManualTx(ms, FT8_SLACK, FT8_SLOT, tolerance);
+            if (g.transmit) {
+                assertThat(g.clipMs).isAtMost(tolerance);
+                lastAccepted = ms;
+            }
+        }
+        // Accepts through slack + tolerance, i.e. strictly later than the old raw
+        // `msInCycle < tolerance` gate (which stopped at 1999 ms).
+        assertThat(lastAccepted).isEqualTo(FT8_SLACK + tolerance);
+    }
+
+    @Test
+    public void manualTx_toleranceClampedToRange() {
+        // Negative tolerance clamps to 0: only the free slack sends, nothing clipped.
+        FT8TransmitSignal.ManualTxGate low =
+                FT8TransmitSignal.decideManualTx(FT8_SLACK + 1, FT8_SLACK, FT8_SLOT, -500);
+        assertThat(low.transmit).isFalse();
+
+        // Above-max tolerance clamps to MAX (4000): start budget slack + 4000.
+        int justInside = FT8_SLACK + FT8TransmitSignal.MAX_LATE_START_TOLERANCE_MS;
+        FT8TransmitSignal.ManualTxGate hi =
+                FT8TransmitSignal.decideManualTx(justInside, FT8_SLACK, FT8_SLOT, 99999);
+        assertThat(hi.transmit).isTrue();
+        FT8TransmitSignal.ManualTxGate tooLate =
+                FT8TransmitSignal.decideManualTx(justInside + 1, FT8_SLACK, FT8_SLOT, 99999);
+        assertThat(tooLate.transmit).isFalse();
+    }
+
+    @Test
+    public void manualTx_clipClampedBelowSlot() {
+        // Defensive: an absurdly late offset never reports a clip >= the slot length
+        // (the transmit runnable clamps identically before trimming the buffer).
+        FT8TransmitSignal.ManualTxGate g =
+                FT8TransmitSignal.decideManualTx(FT8_SLOT + 5000, FT8_SLACK, FT8_SLOT, 4000);
+        assertThat(g.transmit).isFalse();
+        assertThat(g.clipMs).isEqualTo(FT8_SLOT - 1);
+    }
 }

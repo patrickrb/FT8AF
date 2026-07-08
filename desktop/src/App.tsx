@@ -5,6 +5,7 @@ import {
   type AudioDevice,
   type BandInfo,
   type ClockSyncEvent,
+  type CustomBand,
   type CycleTick,
   type EngineEvent,
   type HamlibRig,
@@ -27,6 +28,7 @@ import {
   type ConfirmFilter,
   type QsoEditForm,
 } from "./logbook";
+import { applySelection, configToSelection, rigName, rigOptions } from "./rig";
 
 type Tab = "decode" | "log" | "settings";
 type Filter = "all" | "cq" | "tome";
@@ -243,6 +245,7 @@ export default function App() {
               setRigLabel(v);
               api.setConfig("rig_label", v);
             }}
+            onBandsChanged={setBands}
           />
         )}
       </div>
@@ -303,8 +306,8 @@ function TopBar(props: {
       </span>
       <select value={dialHz} onChange={(e) => onBand(parseInt(e.target.value, 10))}>
         {bands.map((b) => (
-          <option key={b.name} value={b.dial_hz}>
-            {b.name} · {(b.dial_hz / 1e6).toFixed(3)}
+          <option key={b.dial_hz} value={b.dial_hz}>
+            {b.custom ? "★ " : ""}{b.name} · {(b.dial_hz / 1e6).toFixed(3)}
           </option>
         ))}
       </select>
@@ -753,12 +756,125 @@ const WF_WINDOW_LABELS: Record<WfWindow, string> = {
 const WF_FFT_SIZES = [512, 1024, 2048, 4096, 8192];
 const WF_AVG_OPTIONS = [1, 2, 3, 4, 6, 8, 12, 16];
 
+// Add/edit/delete operator-defined dial frequencies (issue #470). Custom dials
+// persist in the config store and are merged into the band picker (shown with a
+// ★). Editing is re-adding at the same dial frequency; the backend upserts.
+function CustomBandsPanel(props: {
+  onStatus: (s: string) => void;
+  onBandsChanged: (bands: BandInfo[]) => void;
+}) {
+  const { onStatus, onBandsChanged } = props;
+  const [custom, setCustom] = useState<CustomBand[]>([]);
+  const [name, setName] = useState("");
+  const [freq, setFreq] = useState("");
+  const [error, setError] = useState("");
+
+  function refresh() {
+    api.listCustomBands().then(setCustom);
+  }
+  useEffect(refresh, []);
+
+  async function add() {
+    setError("");
+    try {
+      const merged = await api.addCustomBand(freq, name);
+      onBandsChanged(merged);
+      refresh();
+      onStatus(`Custom band saved: ${name || "(band)"} ${freq} Hz`);
+      setName("");
+      setFreq("");
+    } catch (e) {
+      // The Rust command rejects bad input (non-numeric / out of range) with a
+      // human-readable message; show it inline rather than as a toast.
+      setError(String(e));
+    }
+  }
+
+  async function edit(b: CustomBand) {
+    setName(b.name);
+    setFreq(String(b.dial_hz));
+    setError("");
+  }
+
+  async function remove(dialHz: number) {
+    const merged = await api.deleteCustomBand(dialHz);
+    onBandsChanged(merged);
+    refresh();
+  }
+
+  return (
+    <div className="panel">
+      <h3>Custom dial frequencies</h3>
+      <div className="col">
+        <div className="muted">
+          Add off-plan dials (e.g. DXpedition frequencies) in whole Hz. They
+          appear in the band picker marked with a ★ and persist across restarts.
+        </div>
+        <div className="row">
+          <div className="field">
+            <label>Label (optional)</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. 3B9 DX"
+              style={{ width: 120 }}
+            />
+          </div>
+          <div className="field">
+            <label>Dial frequency (Hz)</label>
+            <input
+              value={freq}
+              onChange={(e) => setFreq(e.target.value)}
+              placeholder="e.g. 14090000"
+              style={{ width: 130 }}
+            />
+          </div>
+          <button className="primary" onClick={add}>Add / update</button>
+        </div>
+        {error && <span style={{ color: "var(--tx)" }}>⚠ {error}</span>}
+        {custom.length === 0 ? (
+          <span className="muted">No custom dials yet.</span>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Label</th>
+                <th>Dial (MHz)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {custom.map((b) => (
+                <tr key={b.dial_hz}>
+                  <td>{b.name}</td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {(b.dial_hz / 1e6).toFixed(6)}
+                  </td>
+                  <td>
+                    <button onClick={() => edit(b)} title="Load into the form to edit">
+                      ✎
+                    </button>
+                    <button onClick={() => remove(b.dial_hz)} title="Delete">
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SettingsScreen(props: {
   onStatus: (s: string) => void;
   clock: ClockSyncEvent | null;
   onRigLabel: (v: string) => void;
+  onBandsChanged: (bands: BandInfo[]) => void;
 }) {
-  const { onStatus, clock, onRigLabel } = props;
+  const { onStatus, clock, onRigLabel, onBandsChanged } = props;
   const [call, setCall] = useState("");
   const [rigLabel, setRigLabel] = useState("");
   const [grid, setGrid] = useState("");
@@ -777,12 +893,9 @@ function SettingsScreen(props: {
     avg: 6,
   });
   const [rigCfg, setRigCfg] = useState<RigConfig>({
-    backend: "hamlib",
-    model: "none",
+    backend: "none",
     port: "",
     baud: 38400,
-    ptt: "cat",
-    civ_address: 0x94,
     flrig_host: "127.0.0.1",
     flrig_port: 12345,
     hamlib_model: 1,
@@ -803,7 +916,12 @@ function SettingsScreen(props: {
     api.getConfig("rig_config").then((v) => {
       if (v) {
         try {
-          setRigCfg(JSON.parse(v));
+          // Normalize the persisted config through the selector mapping so a
+          // legacy/removed backend (e.g. "serial") falls back to "none" while
+          // keeping the connection fields — otherwise it would reach the Rust
+          // side (serde error) and render "Connecting undefined".
+          const parsed = JSON.parse(v) as RigConfig;
+          setRigCfg(applySelection(parsed, configToSelection(parsed)));
         } catch {
           /* ignore malformed saved config */
         }
@@ -836,15 +954,12 @@ function SettingsScreen(props: {
 
   const refreshPorts = () => api.listSerialPorts().then(setPorts);
 
-  // Re-enumerate serial ports whenever a port-list backend becomes visible.
-  // Ports were previously read only once at mount, so a rig attached after
-  // launch — or Hamlib selected first, before its serial port was chosen —
-  // showed an empty/stale list. Switching to Hamlib (serial) or Direct serial
-  // now re-scans, so /dev/ttyACM0 (a QMX/QDX) appears without the
-  // select-Direct-then-Hamlib workaround.
-  const showsPortList =
-    rigCfg.backend === "serial" ||
-    (rigCfg.backend === "hamlib" && !rigCfg.hamlib_network);
+  // Re-enumerate serial ports whenever the serial-connection fields become
+  // visible. Ports were previously read only once at mount, so a rig attached
+  // after launch — or a Hamlib radio picked before its serial port was chosen —
+  // showed an empty/stale list. Selecting a serial-connected Hamlib radio now
+  // re-scans, so /dev/ttyACM0 (a QMX/QDX) appears without a workaround.
+  const showsPortList = rigCfg.backend === "hamlib" && !rigCfg.hamlib_network;
   useEffect(() => {
     if (showsPortList) refreshPorts();
   }, [showsPortList]);
@@ -982,46 +1097,29 @@ function SettingsScreen(props: {
             </span>
           </div>
           <div className="field">
-            <label>Backend</label>
+            <label>Rig {hamlibRigs.length > 0 ? `(${hamlibRigs.length} radios)` : ""}</label>
             <select
-              value={rigCfg.backend}
-              onChange={(e) => setRigCfg({ ...rigCfg, backend: e.target.value as RigConfig["backend"] })}
+              value={configToSelection(rigCfg)}
+              onChange={(e) => setRigCfg(applySelection(rigCfg, e.target.value))}
             >
-              <option value="hamlib">Hamlib (embedded library)</option>
-              <option value="flrig">FLrig (XML-RPC)</option>
-              <option value="serial">Direct serial CAT</option>
-              <option value="none">None (manual tuning)</option>
+              {rigOptions(hamlibRigs).map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </select>
+            {hamlibRigs.length === 0 && (
+              <span className="muted" style={{ display: "block", marginTop: 4 }}>
+                Only None and FLrig are listed — the Hamlib library didn't load, so
+                no radios could be enumerated. Install Hamlib and put{" "}
+                <code>hamlib-4.dll</code> / <code>libhamlib</code> next to the app or
+                on PATH, then reopen.
+              </span>
+            )}
           </div>
 
           {rigCfg.backend === "hamlib" && (
             <>
-              <div className="field">
-                <label>Radio {hamlibRigs.length > 0 ? `(${hamlibRigs.length} supported)` : ""}</label>
-                {hamlibRigs.length > 0 ? (
-                  <select
-                    value={rigCfg.hamlib_model}
-                    onChange={(e) =>
-                      setRigCfg({ ...rigCfg, hamlib_model: parseInt(e.target.value, 10) })
-                    }
-                  >
-                    {hamlibRigs.map((r) => (
-                      <option key={r.model} value={r.model}>
-                        {r.name} — #{r.model}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    value={rigCfg.hamlib_model}
-                    onChange={(e) =>
-                      setRigCfg({ ...rigCfg, hamlib_model: parseInt(e.target.value, 10) || 1 })
-                    }
-                    placeholder="model # (rigctl -l)"
-                    style={{ width: 120 }}
-                  />
-                )}
-              </div>
               <div className="field">
                 <label>Connection</label>
                 <select
@@ -1080,12 +1178,6 @@ function SettingsScreen(props: {
                   </div>
                 </div>
               )}
-              {hamlibRigs.length === 0 && (
-                <span className="muted">
-                  Hamlib library not found — install Hamlib and put <code>hamlib-4.dll</code> next
-                  to the app or on PATH, then reopen. (1 = Dummy, no hardware.)
-                </span>
-              )}
             </>
           )}
 
@@ -1112,91 +1204,17 @@ function SettingsScreen(props: {
             </div>
           )}
 
-          {rigCfg.backend === "serial" && (
-            <>
-              <div className="field">
-                <label>Model</label>
-                <select
-                  value={rigCfg.model}
-                  onChange={(e) => setRigCfg({ ...rigCfg, model: e.target.value as RigConfig["model"] })}
-                >
-                  <option value="none">— select —</option>
-                  <option value="yaesu">Yaesu (CAT)</option>
-                  <option value="kenwood">Kenwood</option>
-                  <option value="icom">Icom (CI-V)</option>
-                </select>
-              </div>
-              <div className="field">
-                <label>Serial port</label>
-                <div className="row">
-                  <select value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
-                    <option value="">— select —</option>
-                    {ports.map((p) => (
-                      <option key={p.name} value={p.name}>
-                        {p.name} ({p.kind})
-                      </option>
-                    ))}
-                  </select>
-                  <button type="button" title="Re-scan serial ports" onClick={refreshPorts}>
-                    ↻
-                  </button>
-                </div>
-              </div>
-              <div className="row">
-                <div className="field">
-                  <label>Baud</label>
-                  <select
-                    value={rigCfg.baud}
-                    onChange={(e) => setRigCfg({ ...rigCfg, baud: parseInt(e.target.value, 10) })}
-                  >
-                    {[4800, 9600, 19200, 38400, 57600, 115200].map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label>PTT</label>
-                  <select
-                    value={rigCfg.ptt}
-                    onChange={(e) => setRigCfg({ ...rigCfg, ptt: e.target.value as RigConfig["ptt"] })}
-                  >
-                    <option value="cat">CAT</option>
-                    <option value="rts">RTS</option>
-                    <option value="dtr">DTR</option>
-                    <option value="none">None / VOX</option>
-                  </select>
-                </div>
-                {rigCfg.model === "icom" && (
-                  <div className="field">
-                    <label>CI-V addr (hex)</label>
-                    <input
-                      value={rigCfg.civ_address.toString(16)}
-                      onChange={(e) =>
-                        setRigCfg({ ...rigCfg, civ_address: parseInt(e.target.value, 16) || 0x94 })
-                      }
-                      style={{ width: 60 }}
-                    />
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
           <button
             className="primary"
             onClick={() => {
               api.selectRig(rigCfg);
-              const where =
+              const detail =
                 rigCfg.backend === "flrig"
-                  ? `${rigCfg.flrig_host}:${rigCfg.flrig_port}`
-                  : rigCfg.backend === "serial"
-                  ? `${rigCfg.model} on ${rigCfg.port || "(no port)"}`
+                  ? ` (${rigCfg.flrig_host}:${rigCfg.flrig_port})`
                   : rigCfg.backend === "hamlib"
-                  ? `model ${rigCfg.hamlib_model} on ${
-                      rigCfg.hamlib_network ? rigCfg.hamlib_address : rigCfg.port || "(no port)"
-                    }`
-                  : "manual";
-              onStatus(`Connecting rig (${rigCfg.backend}): ${where}`);
+                  ? ` (${rigCfg.hamlib_network ? rigCfg.hamlib_address : rigCfg.port || "no port"})`
+                  : "";
+              onStatus(`Connecting ${rigName(rigCfg, hamlibRigs)}${detail}`);
             }}
           >
             Connect rig
@@ -1211,6 +1229,8 @@ function SettingsScreen(props: {
           </button>
         </div>
       </div>
+
+      <CustomBandsPanel onStatus={onStatus} onBandsChanged={onBandsChanged} />
 
       <div className="panel">
         <h3>Developer — waterfall FFT</h3>

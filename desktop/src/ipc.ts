@@ -99,6 +99,14 @@ export interface HamlibRig {
 export interface BandInfo {
   name: string;
   dial_hz: number;
+  /** True for operator-defined dials (issue #470), false for the built-in plan. */
+  custom: boolean;
+}
+
+/** A user-defined dial frequency (issue #470). */
+export interface CustomBand {
+  name: string;
+  dial_hz: number;
 }
 
 /** Waterfall FFT window (developer setting, issue #428). */
@@ -111,17 +119,12 @@ export interface WaterfallConfig {
   avg: number;
 }
 
-export type RigBackend = "none" | "serial" | "flrig" | "hamlib";
-export type RigModel = "yaesu" | "kenwood" | "icom" | "none";
-export type PttMethod = "cat" | "rts" | "dtr" | "none";
+export type RigBackend = "none" | "flrig" | "hamlib";
 
 export interface RigConfig {
   backend: RigBackend;
-  model: RigModel;
   port: string;
   baud: number;
-  ptt: PttMethod;
-  civ_address: number;
   flrig_host: string;
   flrig_port: number;
   hamlib_model: number;
@@ -154,6 +157,12 @@ export const api = {
   listSerialPorts: () => invoke<SerialPortInfo[]>("list_serial_ports"),
   listHamlibRigs: () => invoke<HamlibRig[]>("list_hamlib_rigs"),
   listBands: () => invoke<BandInfo[]>("list_bands"),
+  listCustomBands: () => invoke<CustomBand[]>("list_custom_bands"),
+  /** Add/rename a custom dial. Rejects bad input with a message (Err string). */
+  addCustomBand: (freq: string, name: string) =>
+    invoke<BandInfo[]>("add_custom_band", { freq, name }),
+  deleteCustomBand: (dialHz: number) =>
+    invoke<BandInfo[]>("delete_custom_band", { dialHz }),
 
   startDecode: () => invoke("start_decode"),
   stopDecode: () => invoke("stop_decode"),

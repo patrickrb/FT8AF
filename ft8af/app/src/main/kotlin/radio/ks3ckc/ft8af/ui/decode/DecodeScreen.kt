@@ -457,6 +457,13 @@ internal fun filterMessages(
     if (GeneralVariables.filterDirectionalCQ) {
         base = base.filter { GeneralVariables.directionalCQIsForMe(it.callsignTo) }
     }
+    // WSJT-X-style "hide worked stations": when the worked-station mode is HIDE,
+    // drop stations that count as worked under the configured scope. Stations
+    // calling us are kept (see isHiddenAsWorked). Only walk the list at all in
+    // HIDE mode so the default/legacy path skips this pass entirely.
+    if (effectiveWorkedMode() == WorkedStationMode.HIDE) {
+        base = base.filterNot { isHiddenAsWorked(it) }
+    }
 
     return when (filter) {
         "CQ Calls" -> base.filter { it.checkIsCQ() }

@@ -62,6 +62,7 @@ fun LoggingSettings(
     var saveSWLMessage by remember { mutableStateOf(GeneralVariables.saveSWLMessage) }
     var saveSWL_QSO by remember { mutableStateOf(GeneralVariables.saveSWL_QSO) }
     var enablePskReporter by remember { mutableStateOf(GeneralVariables.enablePskReporter) }
+    var enableAdifExport by remember { mutableStateOf(GeneralVariables.enableAdifExport) }
     var enableQRZ by remember { mutableStateOf(GeneralVariables.enableQRZ) }
     var enableCloudlog by remember { mutableStateOf(GeneralVariables.enableCloudlog) }
     var qrzXmlUser by remember { mutableStateOf(GeneralVariables.qrzXmlUsername.orEmpty()) }
@@ -171,6 +172,19 @@ fun LoggingSettings(
                             GeneralVariables.enablePskReporter = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "enablePskReporter", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_adif_export),
+                        description = stringResource(R.string.settings_adif_export_desc),
+                        toggle = enableAdifExport,
+                        onToggleChange = { checked ->
+                            enableAdifExport = checked
+                            GeneralVariables.enableAdifExport = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "enableAdifExport", if (checked) "1" else "0", null,
                             )
                         },
                     )
