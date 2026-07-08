@@ -496,6 +496,7 @@ public class GeneralVariables {
     public static MutableLiveData<Long> mutableGpsClockSync = new MutableLiveData<>();
     public static ArrayList<String> QSL_Callsign_list = new ArrayList<>();//Successfully QSL'd callsigns
     public static ArrayList<String> QSL_Callsign_list_other_band = new ArrayList<>();//Successfully QSL'd callsigns on other bands
+    public static ArrayList<String> QSL_Callsign_list_today = new ArrayList<>();//Callsigns worked today or yesterday (any band)
     public static HashSet<String> QSL_Grid_list = new HashSet<>();//Distinct worked 4-char Maidenhead grids (any band)
     public static HashSet<String> QSL_Pota_list = new HashSet<>();//Distinct hunted POTA park refs (UPPER), any band
 
@@ -504,8 +505,26 @@ public class GeneralVariables {
     public static boolean highlightNewDxcc = true;//Highlight stations from an unworked DXCC entity
     public static boolean highlightNewGrid = false;//Off by default — most grids are "new", so it's noisy
     public static boolean highlightNewBand = true;//Highlight stations worked only on other bands
-    public static boolean highlightWorked = true;//Tag stations already worked
+    public static boolean highlightWorked = true;//Master enable for worked-station handling (see workedStationMode)
     public static boolean highlightPota = true;//Highlight spotted POTA activators (new parks stand out)
+
+    // Worked-station handling — modelled on WSJT-X/JTDX "worked before" highlighting,
+    // which lets you "hide, ignore, or highlight stations worked before on the current
+    // band, worked today, or those present in a list". When highlightWorked is enabled,
+    // workedStationMode selects what to do with a station that counts as "worked" under
+    // workedStationScope; when highlightWorked is off, no worked handling is applied.
+    //   mode  0=HIGHLIGHT (tag with the WORKED pill — the legacy behavior),
+    //         1=IGNORE    (leave visible but don't highlight),
+    //         2=HIDE      (drop from the decode list, unless the station is calling me).
+    //   scope 0=ON_BAND   (worked this band — the legacy basis),
+    //         1=BEFORE    (worked ever, any band),
+    //         2=TODAY     (worked today or yesterday, any band),
+    //         3=FROM_LIST (present in the user-maintained worked-station list).
+    public static int workedStationMode = 0;   // HIGHLIGHT — preserves legacy behavior
+    public static int workedStationScope = 0;   // ON_BAND — preserves legacy behavior
+    // User-maintained "worked" callsign list backing the FROM_LIST scope. Upper-cased
+    // whole-call tokens, same parse/join convention as the callsign blocklist.
+    private static final java.util.LinkedHashSet<String> workedStationList = new java.util.LinkedHashSet<>();
 
     // Decode-list display filters (Settings → Decode Filters). Persistent
     // "show only" filters applied to the decode list in DecodeScreen.filterMessages().
@@ -716,6 +735,45 @@ public class GeneralVariables {
      */
     public static boolean checkQSLCallsign_OtherBand(String callsign) {
         return QSL_Callsign_list_other_band.contains(callsign);
+    }
+
+    /**
+     * Check if a callsign has been contacted today or yesterday (any band). Backs
+     * the TODAY worked-station scope; the list is (re)loaded from the log by
+     * {@code GetAllQSLCallsign}.
+     *
+     * @param callsign callsign
+     * @return whether it exists
+     */
+    public static boolean checkQSLCallsignToday(String callsign) {
+        return QSL_Callsign_list_today.contains(callsign);
+    }
+
+    /**
+     * Replace the user-maintained worked-station list (FROM_LIST scope) from a
+     * user-entered comma/space/pipe-separated string.
+     */
+    public static synchronized void addWorkedStationList(String callsigns) {
+        parseBlockTokens(callsigns, workedStationList);
+    }
+
+    /**
+     * The worked-station list as the canonical comma-separated string (persistence
+     * and Settings display).
+     */
+    public static synchronized String getWorkedStationList() {
+        return joinBlockTokens(workedStationList);
+    }
+
+    /**
+     * Check whether a callsign is in the user-maintained worked-station list.
+     *
+     * @param callsign callsign
+     * @return whether it is present
+     */
+    public static synchronized boolean checkWorkedListCallsign(String callsign) {
+        if (callsign == null) return false;
+        return workedStationList.contains(callsign.toUpperCase());
     }
 
     /**

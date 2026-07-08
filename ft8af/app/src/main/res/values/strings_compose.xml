@@ -519,8 +519,21 @@
     <string name="settings_highlight_new_band_desc">Highlight stations worked only on other bands</string>
     <string name="settings_highlight_pota">POTA Activators</string>
     <string name="settings_highlight_pota_desc">Highlight spotted POTA activators; new parks stand out</string>
-    <string name="settings_highlight_worked">Worked Before</string>
-    <string name="settings_highlight_worked_desc">Tag stations already in your log</string>
+    <string name="settings_highlight_worked">Worked Stations</string>
+    <string name="settings_highlight_worked_desc">Handle stations already in your log (highlight, ignore, or hide)</string>
+    <string name="settings_worked_mode">Behavior</string>
+    <string name="settings_worked_mode_desc">What to do with worked stations</string>
+    <string name="settings_worked_mode_highlight">Highlight</string>
+    <string name="settings_worked_mode_ignore">Ignore</string>
+    <string name="settings_worked_mode_hide">Hide</string>
+    <string name="settings_worked_scope">Match by</string>
+    <string name="settings_worked_scope_desc">Which stations count as worked</string>
+    <string name="settings_worked_scope_on_band">Worked on this band</string>
+    <string name="settings_worked_scope_before">Worked before (any band)</string>
+    <string name="settings_worked_scope_today">Worked today</string>
+    <string name="settings_worked_scope_from_list">In worked list</string>
+    <string name="settings_worked_list_title">Worked List</string>
+    <string name="settings_worked_list_desc">Callsigns to treat as worked (comma-separated)</string>
     <string name="settings_distance_unit">Distance in Miles</string>
     <string name="settings_distance_unit_desc">Show distances in miles instead of kilometers</string>
 

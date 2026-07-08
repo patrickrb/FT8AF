@@ -29,6 +29,9 @@ fun DecodeFilterSettings(
     var highlightNewGrid by remember { mutableStateOf(GeneralVariables.highlightNewGrid) }
     var highlightNewBand by remember { mutableStateOf(GeneralVariables.highlightNewBand) }
     var highlightWorked by remember { mutableStateOf(GeneralVariables.highlightWorked) }
+    var workedStationMode by remember { mutableStateOf(GeneralVariables.workedStationMode) }
+    var workedStationScope by remember { mutableStateOf(GeneralVariables.workedStationScope) }
+    var workedStationList by remember { mutableStateOf(GeneralVariables.getWorkedStationList()) }
     var highlightPota by remember { mutableStateOf(GeneralVariables.highlightPota) }
     var distanceInMiles by remember { mutableStateOf(GeneralVariables.distanceInMiles) }
 
@@ -60,10 +63,28 @@ fun DecodeFilterSettings(
         stringResource(R.string.continent_an),
     )
 
+    // Worked-station handling labels, indexed by the persisted mode/scope ordinals.
+    val workedModeLabels = listOf(
+        stringResource(R.string.settings_worked_mode_highlight),
+        stringResource(R.string.settings_worked_mode_ignore),
+        stringResource(R.string.settings_worked_mode_hide),
+    )
+    val workedScopeLabels = listOf(
+        stringResource(R.string.settings_worked_scope_on_band),
+        stringResource(R.string.settings_worked_scope_before),
+        stringResource(R.string.settings_worked_scope_today),
+        stringResource(R.string.settings_worked_scope_from_list),
+    )
+    // FROM_LIST scope ordinal — the list editor row only appears for this scope.
+    val workedScopeFromList = 3
+
     var showBlockExactDialog by remember { mutableStateOf(false) }
     var showBlockPrefixDialog by remember { mutableStateOf(false) }
     var showBlockKeywordDialog by remember { mutableStateOf(false) }
     var showContinentPicker by remember { mutableStateOf(false) }
+    var showWorkedModePicker by remember { mutableStateOf(false) }
+    var showWorkedScopePicker by remember { mutableStateOf(false) }
+    var showWorkedListDialog by remember { mutableStateOf(false) }
 
     // -- Blocklist: exact whole-call dialog --
     if (showBlockExactDialog) {
@@ -127,6 +148,54 @@ fun DecodeFilterSettings(
                 filterContinent = code
                 GeneralVariables.filterContinent = code
                 mainViewModel.databaseOpr.writeConfig("filterContinent", code, null)
+            },
+        )
+    }
+
+    // -- Worked stations: behavior (highlight / ignore / hide) picker --
+    if (showWorkedModePicker) {
+        ListPickerDialog(
+            title = stringResource(R.string.settings_worked_mode),
+            items = workedModeLabels,
+            selectedIndex = workedStationMode.coerceIn(0, workedModeLabels.size - 1),
+            onDismiss = { showWorkedModePicker = false },
+            onSelect = { index ->
+                showWorkedModePicker = false
+                workedStationMode = index
+                GeneralVariables.workedStationMode = index
+                mainViewModel.databaseOpr.writeConfig("workedStationMode", index.toString(), null)
+            },
+        )
+    }
+
+    // -- Worked stations: scope (on band / before / today / from list) picker --
+    if (showWorkedScopePicker) {
+        ListPickerDialog(
+            title = stringResource(R.string.settings_worked_scope),
+            items = workedScopeLabels,
+            selectedIndex = workedStationScope.coerceIn(0, workedScopeLabels.size - 1),
+            onDismiss = { showWorkedScopePicker = false },
+            onSelect = { index ->
+                showWorkedScopePicker = false
+                workedStationScope = index
+                GeneralVariables.workedStationScope = index
+                mainViewModel.databaseOpr.writeConfig("workedStationScope", index.toString(), null)
+            },
+        )
+    }
+
+    // -- Worked stations: user-maintained "from list" callsigns --
+    if (showWorkedListDialog) {
+        TextListDialog(
+            title = stringResource(R.string.settings_worked_list_title),
+            description = stringResource(R.string.settings_worked_list_desc),
+            initialValue = workedStationList,
+            onDismiss = { showWorkedListDialog = false },
+            onSave = { text ->
+                GeneralVariables.addWorkedStationList(text)
+                workedStationList = GeneralVariables.getWorkedStationList()
+                mainViewModel.databaseOpr.writeConfig("workedStationList", workedStationList, null)
+                showWorkedListDialog = false
             },
         )
     }
@@ -205,6 +274,40 @@ fun DecodeFilterSettings(
                             )
                         },
                     )
+                    if (highlightWorked) {
+                        SectionDivider()
+                        SettingsRow(
+                            label = stringResource(R.string.settings_worked_mode),
+                            description = stringResource(R.string.settings_worked_mode_desc),
+                            value = workedModeLabels.getOrElse(workedStationMode) {
+                                workedModeLabels.first()
+                            },
+                            showChevron = true,
+                            onClick = { showWorkedModePicker = true },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = stringResource(R.string.settings_worked_scope),
+                            description = stringResource(R.string.settings_worked_scope_desc),
+                            value = workedScopeLabels.getOrElse(workedStationScope) {
+                                workedScopeLabels.first()
+                            },
+                            showChevron = true,
+                            onClick = { showWorkedScopePicker = true },
+                        )
+                        if (workedStationScope == workedScopeFromList) {
+                            SectionDivider()
+                            SettingsRow(
+                                label = stringResource(R.string.settings_worked_list_title),
+                                description = stringResource(R.string.settings_worked_list_desc),
+                                value = workedStationList.ifBlank {
+                                    stringResource(R.string.common_none)
+                                },
+                                showChevron = true,
+                                onClick = { showWorkedListDialog = true },
+                            )
+                        }
+                    }
                     SectionDivider()
                     SettingsRow(
                         label = stringResource(R.string.settings_distance_unit),

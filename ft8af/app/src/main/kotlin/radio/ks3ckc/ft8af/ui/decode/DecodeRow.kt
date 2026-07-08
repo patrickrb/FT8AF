@@ -375,6 +375,13 @@ internal fun resolveQsoStatus(message: Ft8Message): QsoStatus? {
 
     // Each worked-before category is gated by a user toggle (Settings → Decode
     // Highlights). A disabled category falls through to the next in priority.
+    //
+    // The WORKED pill is only shown when worked handling is enabled AND its mode
+    // is HIGHLIGHT (IGNORE leaves the station visible but unmarked; HIDE removes it
+    // upstream in filterMessages). "Worked" is resolved under the configured scope
+    // — see isWorkedStation / WorkedStations.kt. `isWorked` above keeps its narrow
+    // current-band meaning purely so NEW_BAND (worked only on other bands) stays
+    // independent of the (broader) worked-station scope.
     return when {
         isToMe -> QsoStatus.PENDING
         GeneralVariables.highlightPota && isPota ->
@@ -383,7 +390,8 @@ internal fun resolveQsoStatus(message: Ft8Message): QsoStatus? {
         GeneralVariables.highlightNewDxcc && message.fromDxcc -> QsoStatus.NEW
         GeneralVariables.highlightNewGrid && newGrid -> QsoStatus.NEW_GRID
         GeneralVariables.highlightNewBand && newBand -> QsoStatus.NEW_BAND
-        GeneralVariables.highlightWorked && isWorked -> QsoStatus.WORKED
+        effectiveWorkedMode() == WorkedStationMode.HIGHLIGHT &&
+            isWorkedStation(message) -> QsoStatus.WORKED
         isCQ -> QsoStatus.CQ
         else -> null
     }

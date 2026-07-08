@@ -2326,6 +2326,27 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             }
             GeneralVariables.QSL_Callsign_list_other_band = other_callsigns;
 
+            // Load distinct callsigns worked today or yesterday (any band) for the
+            // TODAY worked-station scope. Dates are ADIF YYYYMMDD (UTC), so a plain
+            // string >= yesterday comparison selects the last two UTC days.
+            long nowUtc = com.k1af.ft8af.timer.UtcTimer.getSystemTime();
+            String yesterday = com.k1af.ft8af.timer.UtcTimer.getYYYYMMDD(nowUtc - 86400000L);
+            querySQL = "select distinct [call] from QSLTable where qso_date>=?";
+            cursor = db.rawQuery(querySQL, new String[]{yesterday});
+            ArrayList<String> today_callsigns = new ArrayList<>();
+            try {
+                while (cursor.moveToNext()) {
+                    @SuppressLint("Range")
+                    String s = cursor.getString(cursor.getColumnIndex("call"));
+                    if (s != null) {
+                        today_callsigns.add(s);
+                    }
+                }
+            } finally {
+                cursor.close();
+            }
+            GeneralVariables.QSL_Callsign_list_today = today_callsigns;
+
             // Load distinct 4-char worked grids (any band) into in-memory set
             querySQL = "select distinct upper(substr(gridsquare,1,4)) as g from QSLTable" +
                     " where gridsquare is not null and length(gridsquare) >= 4";
@@ -2960,6 +2981,15 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("highlightPota")) {
                     GeneralVariables.highlightPota = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("workedStationMode")) {
+                    GeneralVariables.workedStationMode = parseConfigInt(result, 0);
+                }
+                if (name.equalsIgnoreCase("workedStationScope")) {
+                    GeneralVariables.workedStationScope = parseConfigInt(result, 0);
+                }
+                if (name.equalsIgnoreCase("workedStationList")) {
+                    GeneralVariables.addWorkedStationList(result);
                 }
 
                 if (name.equalsIgnoreCase("distanceInMiles")) {
