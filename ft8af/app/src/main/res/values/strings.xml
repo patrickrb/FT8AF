@@ -44,6 +44,12 @@
     <string name="VOX">VOX</string>
     <string name="CAT">CAT</string>
     <string name="operationBand">Frequency</string>
+    <!-- Custom dial frequencies (issue #470) -->
+    <string name="addCustomFreq">+ Add custom frequency</string>
+    <string name="customFreqTitle">Custom dial frequency</string>
+    <string name="customFreqLabelHint">Label (optional, e.g. 3B9 DX)</string>
+    <string name="customFreqHzHint">Dial frequency in Hz (e.g. 14090000)</string>
+    <string name="save">Save</string>
     <string name="civ_address">CI-V</string>
     <string name="pl_civ_address">CI-V address of the rig</string>
     <string name="serial_port">Serial port</string>
