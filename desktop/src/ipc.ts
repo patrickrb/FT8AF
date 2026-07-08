@@ -109,17 +109,12 @@ export interface WaterfallConfig {
   avg: number;
 }
 
-export type RigBackend = "none" | "serial" | "flrig" | "hamlib";
-export type RigModel = "yaesu" | "kenwood" | "icom" | "none";
-export type PttMethod = "cat" | "rts" | "dtr" | "none";
+export type RigBackend = "none" | "flrig" | "hamlib";
 
 export interface RigConfig {
   backend: RigBackend;
-  model: RigModel;
   port: string;
   baud: number;
-  ptt: PttMethod;
-  civ_address: number;
   flrig_host: string;
   flrig_port: number;
   hamlib_model: number;
