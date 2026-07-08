@@ -74,6 +74,8 @@ export interface QsoRecord {
   station_callsign: string;
   my_gridsquare: string;
   comment: string;
+  /** QSL confirmed status (drives the Logbook filter + ADIF QSL_RCVD). */
+  confirmed: boolean;
 }
 
 export interface AudioDevice {
@@ -184,10 +186,19 @@ export const api = {
 
   listLog: (limit: number, offset: number) =>
     invoke<QsoRecord[]>("list_log", { limit, offset }),
+  /** Server-side callsign search + confirmation filter. */
+  searchLog: (
+    callsign: string,
+    filter: "all" | "confirmed" | "unconfirmed",
+    limit: number,
+    offset: number,
+  ) => invoke<QsoRecord[]>("search_log", { callsign, filter, limit, offset }),
   logCount: () => invoke<number>("log_count"),
   deleteQso: (id: number) => invoke("delete_qso", { id }),
   saveQso: (record: QsoRecord) => invoke<number>("save_qso", { record }),
-  exportAdif: () => invoke<string>("export_adif"),
+  /** Export ADIF, optionally restricted to an inclusive YYYYMMDD date range. */
+  exportAdif: (start?: string, end?: string) =>
+    invoke<string>("export_adif", { start: start ?? null, end: end ?? null }),
 
   getConfig: (key: string) => invoke<string | null>("get_config", { key }),
   setConfig: (key: string, value: string) => invoke("set_config", { key, value }),

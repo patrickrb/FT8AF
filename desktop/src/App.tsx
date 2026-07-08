@@ -19,6 +19,15 @@ import {
   type WaterfallConfig,
   type WfWindow,
 } from "./ipc";
+import {
+  buildExportArgs,
+  buildQsoRecord,
+  formFromQso,
+  isLogFiltered,
+  qsoCountLabel,
+  type ConfirmFilter,
+  type QsoEditForm,
+} from "./logbook";
 import { applySelection, configToSelection, rigName, rigOptions } from "./rig";
 
 type Tab = "decode" | "log" | "settings";
@@ -529,15 +538,24 @@ function DecodeScreen(props: {
 function LogScreen() {
   const [rows, setRows] = useState<QsoRecord[]>([]);
   const [count, setCount] = useState(0);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<ConfirmFilter>("all");
+  // ADIF-export date-range pickers (empty = open bound).
+  const [rangeStart, setRangeStart] = useState("");
+  const [rangeEnd, setRangeEnd] = useState("");
+  // Edit-QSO dialog target: undefined = closed, null = new QSO, record = edit.
+  const [editing, setEditing] = useState<QsoRecord | null | undefined>(undefined);
 
   function refresh() {
-    api.listLog(500, 0).then(setRows);
+    api.searchLog(search, filter, 500, 0).then(setRows);
     api.logCount().then(setCount);
   }
-  useEffect(refresh, []);
+  // Re-query whenever the live search box or the confirmation filter changes.
+  useEffect(refresh, [search, filter]);
 
   async function exportAdif() {
-    const adif = await api.exportAdif();
+    const { start, end } = buildExportArgs(rangeStart, rangeEnd);
+    const adif = await api.exportAdif(start, end);
     const blob = new Blob([adif], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -553,12 +571,49 @@ function LogScreen() {
     refresh();
   }
 
+  async function saveEdit(record: QsoRecord) {
+    await api.saveQso(record);
+    setEditing(undefined);
+    refresh();
+  }
+
   return (
     <>
-      <div className="row" style={{ marginBottom: 10 }}>
-        <strong>{count}</strong> <span className="muted">QSOs</span>
+      <div className="logbar">
+        <strong>{qsoCountLabel(count, rows.length, isLogFiltered(search, filter))}</strong>{" "}
+        <span className="muted">QSOs</span>
+        <input
+          className="search"
+          placeholder="Search callsign…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select value={filter} onChange={(e) => setFilter(e.target.value as ConfirmFilter)}>
+          <option value="all">All</option>
+          <option value="confirmed">Confirmed (QSL)</option>
+          <option value="unconfirmed">Unconfirmed</option>
+        </select>
         <div className="spacer" style={{ flex: 1 }} />
+        <button onClick={() => setEditing(null)}>+ Add QSO</button>
         <button onClick={refresh}>Refresh</button>
+      </div>
+      <div className="logbar">
+        <span className="muted">Export range:</span>
+        <input
+          className="date"
+          type="date"
+          value={rangeStart}
+          onChange={(e) => setRangeStart(e.target.value)}
+          aria-label="Export start date"
+        />
+        <span className="muted">→</span>
+        <input
+          className="date"
+          type="date"
+          value={rangeEnd}
+          onChange={(e) => setRangeEnd(e.target.value)}
+          aria-label="Export end date"
+        />
         <button className="primary" onClick={exportAdif}>Export ADIF</button>
       </div>
       <table>
@@ -571,19 +626,23 @@ function LogScreen() {
             <th>Band</th>
             <th>Sent</th>
             <th>Rcvd</th>
+            <th>QSL</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.qso_date}</td>
-              <td>{r.time_on}</td>
-              <td>{r.call}</td>
-              <td>{r.gridsquare}</td>
-              <td>{r.band}</td>
-              <td>{r.rst_sent}</td>
-              <td>{r.rst_rcvd}</td>
+            <tr key={r.id} className={r.confirmed ? "confirmed clickable" : "clickable"}>
+              <td onClick={() => setEditing(r)}>{r.qso_date}</td>
+              <td onClick={() => setEditing(r)}>{r.time_on}</td>
+              <td onClick={() => setEditing(r)}>{r.call}</td>
+              <td onClick={() => setEditing(r)}>{r.gridsquare}</td>
+              <td onClick={() => setEditing(r)}>{r.band}</td>
+              <td onClick={() => setEditing(r)}>{r.rst_sent}</td>
+              <td onClick={() => setEditing(r)}>{r.rst_rcvd}</td>
+              <td onClick={() => setEditing(r)}>
+                {r.confirmed ? <span className="confirm-dot">✓</span> : ""}
+              </td>
               <td>
                 <button onClick={() => remove(r.id)}>✕</button>
               </td>
@@ -591,12 +650,94 @@ function LogScreen() {
           ))}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={8} className="muted">No QSOs logged yet.</td>
+              <td colSpan={9} className="muted">No QSOs logged yet.</td>
             </tr>
           )}
         </tbody>
       </table>
+      {editing !== undefined && (
+        <EditQsoDialog
+          record={editing}
+          onCancel={() => setEditing(undefined)}
+          onSave={saveEdit}
+        />
+      )}
     </>
+  );
+}
+
+// ADIF fields shown in the edit dialog, in two-column layout order.
+const EDIT_FIELDS: { key: keyof QsoEditForm; label: string }[] = [
+  { key: "call", label: "Call" },
+  { key: "gridsquare", label: "Grid" },
+  { key: "mode", label: "Mode" },
+  { key: "band", label: "Band" },
+  { key: "freq", label: "Freq (MHz)" },
+  { key: "rst_sent", label: "RST sent" },
+  { key: "rst_rcvd", label: "RST rcvd" },
+  { key: "qso_date", label: "Date on (YYYYMMDD)" },
+  { key: "time_on", label: "Time on (HHMMSS)" },
+  { key: "qso_date_off", label: "Date off" },
+  { key: "time_off", label: "Time off" },
+  { key: "station_callsign", label: "My call" },
+  { key: "my_gridsquare", label: "My grid" },
+  { key: "comment", label: "Comment" },
+];
+
+function EditQsoDialog(props: {
+  record: QsoRecord | null;
+  onCancel: () => void;
+  onSave: (r: QsoRecord) => void | Promise<void>;
+}) {
+  const { record, onCancel, onSave } = props;
+  const [form, setForm] = useState<QsoEditForm>(() => formFromQso(record));
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  function set<K extends keyof QsoEditForm>(key: K, value: QsoEditForm[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  async function save() {
+    // onSave may be async (it calls the save_qso IPC); await it so a failed save
+    // surfaces here instead of becoming an unhandled promise rejection.
+    try {
+      setSaveError(null);
+      await onSave(buildQsoRecord(form, record?.id));
+    } catch (e) {
+      setSaveError(String(e));
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>{record?.id ? "Edit QSO" : "Add QSO"}</h3>
+        <div className="grid2">
+          {EDIT_FIELDS.map((f) => (
+            <div className="field" key={f.key}>
+              <label>{f.label}</label>
+              <input
+                value={form[f.key] as string}
+                onChange={(e) => set(f.key, e.target.value as never)}
+              />
+            </div>
+          ))}
+        </div>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={form.confirmed}
+            onChange={(e) => set("confirmed", e.target.checked)}
+          />
+          Confirmed (QSL received)
+        </label>
+        {saveError && <div className="error" role="alert">Save failed: {saveError}</div>}
+        <div className="actions">
+          <button onClick={onCancel}>Cancel</button>
+          <button className="primary" onClick={save}>Save</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
