@@ -65,13 +65,18 @@ public class CableConnector extends BaseRigConnector {
      */
     private void handleSerialError(Exception e) {
         CatReconnectPolicy.Kind kind = CatReconnectPolicy.classify(e);
-        if (userDisconnected
-                || kind == CatReconnectPolicy.Kind.FATAL
-                || !CatReconnectPolicy.shouldAutoReconnect(kind, 0)) {
-            surfaceLostConnection(e);
-            return;
+        switch (CatReconnectPolicy.decide(userDisconnected, kind, 0)) {
+            case IGNORE:
+                // User asked to disconnect; closing the port interrupts the blocking
+                // read with an IOException we expect — don't surface "Lost connection".
+                return;
+            case RECONNECT:
+                startAutoReconnect(e);
+                return;
+            case SURFACE:
+            default:
+                surfaceLostConnection(e);
         }
-        startAutoReconnect(e);
     }
 
     private void surfaceLostConnection(Exception e) {
@@ -109,6 +114,13 @@ public class CableConnector extends BaseRigConnector {
                     // The port already tore itself down (SerialInputOutputManager
                     // calls disconnect() after onRunError); re-open it fresh.
                     if (cableSerialPort.connect() && cableSerialPort.isConnected()) {
+                        // The user may have disconnected during the connect() call
+                        // (which fires onConnected() internally); honor that intent
+                        // by tearing the just-opened port back down.
+                        if (userDisconnected) {
+                            cableSerialPort.disconnect();
+                            return;
+                        }
                         Log.d(TAG, "CAT auto-reconnect succeeded on attempt " + attempt);
                         return; // connect() already fired onConnected()
                     }

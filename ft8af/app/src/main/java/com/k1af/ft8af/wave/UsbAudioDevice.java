@@ -923,7 +923,12 @@ public class UsbAudioDevice {
                             // skipping this chunk of the waveform.
                             transientFailure = true;
                         } else {
-                            try { completed.close(); } catch (Exception ignored) {}
+                            // requestWait() normally returns the same request we
+                            // queued; only close it here if it's a different instance
+                            // — the shared request.close() below handles the common case.
+                            if (completed != request) {
+                                try { completed.close(); } catch (Exception ignored) {}
+                            }
                             packetSent = true;
                         }
                     }

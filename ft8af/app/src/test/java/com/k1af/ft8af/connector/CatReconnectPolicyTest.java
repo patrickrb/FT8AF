@@ -118,4 +118,35 @@ public class CatReconnectPolicyTest {
         // QSO sequencer.
         assertThat(CatReconnectPolicy.shouldRetryPtt(true, false, 0)).isFalse();
     }
+
+    // ---- decide (error → action) --------------------------------------------
+
+    @Test
+    public void decide_userDisconnected_isIgnored() {
+        // A deliberate user disconnect closes the port and unblocks the read with
+        // an expected IOException — it must not surface as a "Lost connection".
+        assertThat(CatReconnectPolicy.decide(true, Kind.TRANSIENT, 0))
+                .isEqualTo(CatReconnectPolicy.Action.IGNORE);
+        assertThat(CatReconnectPolicy.decide(true, Kind.FATAL, 0))
+                .isEqualTo(CatReconnectPolicy.Action.IGNORE);
+    }
+
+    @Test
+    public void decide_transientWithBudget_reconnects() {
+        assertThat(CatReconnectPolicy.decide(false, Kind.TRANSIENT, 0))
+                .isEqualTo(CatReconnectPolicy.Action.RECONNECT);
+    }
+
+    @Test
+    public void decide_fatal_surfaces() {
+        assertThat(CatReconnectPolicy.decide(false, Kind.FATAL, 0))
+                .isEqualTo(CatReconnectPolicy.Action.SURFACE);
+    }
+
+    @Test
+    public void decide_transientBudgetExhausted_surfaces() {
+        assertThat(CatReconnectPolicy.decide(
+                false, Kind.TRANSIENT, CatReconnectPolicy.MAX_AUTO_RECONNECT_ATTEMPTS))
+                .isEqualTo(CatReconnectPolicy.Action.SURFACE);
+    }
 }

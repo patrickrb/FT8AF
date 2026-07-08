@@ -34,6 +34,35 @@ public final class CatReconnectPolicy {
         FATAL
     }
 
+    /** What {@link CableConnector} should do about a serial read-loop error. */
+    public enum Action {
+        /** A deliberate user disconnect caused it — expected, do nothing. */
+        IGNORE,
+        /** Transient glitch with budget left — attempt a bounded auto-reconnect. */
+        RECONNECT,
+        /** Fatal, or reconnect budget exhausted — surface the manual retry state. */
+        SURFACE
+    }
+
+    /**
+     * Decides how to react to a serial read-loop error.
+     *
+     * <p>A deliberate user disconnect closes the port to interrupt the blocking
+     * read, which itself raises an {@code IOException} on the read loop. That
+     * error is <em>expected</em> and must be ignored rather than surfaced as a
+     * "Lost connection" error state. Otherwise a transient error with reconnect
+     * budget left reconnects; a fatal error or an exhausted budget surfaces.
+     *
+     * @param userDisconnected whether the user asked to disconnect
+     * @param kind             the classification of the error
+     * @param attemptsSoFar    auto-reconnects already tried this burst ({@code 0} first)
+     */
+    public static Action decide(boolean userDisconnected, Kind kind, int attemptsSoFar) {
+        if (userDisconnected) return Action.IGNORE;
+        if (shouldAutoReconnect(kind, attemptsSoFar)) return Action.RECONNECT;
+        return Action.SURFACE;
+    }
+
     /**
      * Most bounded auto-reconnect attempts before falling back to the manual
      * <em>tap to retry</em> chip. Chosen so a device that re-enumerates within a
