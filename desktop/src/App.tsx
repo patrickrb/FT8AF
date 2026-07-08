@@ -660,7 +660,12 @@ function SettingsScreen(props: {
     api.getConfig("rig_config").then((v) => {
       if (v) {
         try {
-          setRigCfg(JSON.parse(v));
+          // Normalize the persisted config through the selector mapping so a
+          // legacy/removed backend (e.g. "serial") falls back to "none" while
+          // keeping the connection fields — otherwise it would reach the Rust
+          // side (serde error) and render "Connecting undefined".
+          const parsed = JSON.parse(v) as RigConfig;
+          setRigCfg(applySelection(parsed, configToSelection(parsed)));
         } catch {
           /* ignore malformed saved config */
         }

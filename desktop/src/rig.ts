@@ -74,8 +74,6 @@ export function applySelection(cfg: RigConfig, selection: string): RigConfig {
  */
 export function rigName(cfg: RigConfig, hamlibRigs: HamlibRig[]): string {
   switch (cfg.backend) {
-    case "none":
-      return "None (manual tuning)";
     case "flrig":
       return "FLrig";
     case "hamlib":
@@ -83,5 +81,9 @@ export function rigName(cfg: RigConfig, hamlibRigs: HamlibRig[]): string {
         hamlibRigs.find((r) => r.model === cfg.hamlib_model)?.name ??
         `Hamlib #${cfg.hamlib_model}`
       );
+    default:
+      // "none" and any unexpected/legacy backend (e.g. a removed "serial" value
+      // in a persisted config) — never return undefined ("Connecting undefined").
+      return "None (manual tuning)";
   }
 }

@@ -110,4 +110,36 @@ describe("rigName", () => {
     expect(rigName(cfg({ backend: "none" }), RIGS)).toBe("None (manual tuning)");
     expect(rigName(cfg({ backend: "flrig" }), RIGS)).toBe("FLrig");
   });
+
+  it("never returns undefined for a legacy/unknown backend", () => {
+    // A persisted config with the removed "serial" backend must not surface as
+    // "Connecting undefined"; it falls back to the None label.
+    const legacy = cfg({ backend: "serial" as unknown as RigConfig["backend"] });
+    expect(rigName(legacy, RIGS)).toBe("None (manual tuning)");
+  });
+});
+
+describe("legacy config normalization (load-time)", () => {
+  it("maps a removed 'serial' backend to none while keeping connection fields", () => {
+    // Mirrors the load-time normalize: applySelection(cfg, configToSelection(cfg)).
+    const legacy = cfg({
+      backend: "serial" as unknown as RigConfig["backend"],
+      port: "COM7",
+      baud: 19200,
+      flrig_host: "192.168.1.5",
+    });
+    const normalized = applySelection(legacy, configToSelection(legacy));
+    expect(normalized.backend).toBe("none");
+    // Connection fields are preserved so re-selecting a rig keeps them.
+    expect(normalized.port).toBe("COM7");
+    expect(normalized.baud).toBe(19200);
+    expect(normalized.flrig_host).toBe("192.168.1.5");
+  });
+
+  it("leaves a valid hamlib config unchanged through the round-trip", () => {
+    const valid = cfg({ backend: "hamlib", hamlib_model: 3073 });
+    const normalized = applySelection(valid, configToSelection(valid));
+    expect(normalized.backend).toBe("hamlib");
+    expect(normalized.hamlib_model).toBe(3073);
+  });
 });
