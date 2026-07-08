@@ -147,6 +147,14 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
 
     override fun onStop(owner: LifecycleOwner) {
         handler.removeCallbacks(tick)
+        // Clear the surface callback we registered in onStart so the host stops
+        // delivering surface events to this (now-stopped) screen and doesn't hold
+        // the callback/renderer referenced while another screen is on top. onStart
+        // re-registers it when we come back.
+        if (useSurface && surfaceCallback != null) {
+            carContext.getCarService(AppManager::class.java)
+                .setSurfaceCallback(null)
+        }
         pskScope?.cancel()
         pskScope = null
     }
@@ -161,18 +169,34 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
         val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
         pskScope = scope
         scope.launch {
+            // Force the first fetch after (re)start: PskReporterClient's cooldown is
+            // client-wide, so a recent fetch from another screen would otherwise skip
+            // our initial fetch and leave the car overlay's PSK rings empty. Forcing
+            // still respects the server rate-limit back-off.
+            var forceNext = true
             while (isActive) {
                 val call = GeneralVariables.myCallsign
                 if (!call.isNullOrBlank()) {
                     val spots = try {
-                        PskReporterClient.fetchSpotsForMe(call, PSK_SECONDS_BACK, byReceiver = false)
+                        PskReporterClient.fetchSpotsForMe(
+                            call,
+                            PSK_SECONDS_BACK,
+                            force = forceNext,
+                            byReceiver = false,
+                        )
                     } catch (_: Exception) {
                         null
                     }
+                    forceNext = false
                     if (spots != null) {
                         WhoHeardMeCache.spots = spots
                         if (useSurface) drawSurfaceFrame() else invalidate()
                     }
+                } else {
+                    // Operator callsign cleared: drop the stale "who heard me" rings
+                    // instead of leaving the last operator's spots on the map.
+                    WhoHeardMeCache.clear()
+                    if (useSurface) drawSurfaceFrame() else invalidate()
                 }
                 delay(PSK_FETCH_INTERVAL_MS)
             }

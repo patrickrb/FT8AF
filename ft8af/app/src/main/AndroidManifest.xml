@@ -117,7 +117,7 @@
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
-        <!-- Level 1 = backward-compat floor. The surface map (MapWithContentTemplate)
+        <!-- Level 1 = backward-compat floor. The surface map (NavigationTemplate)
              needs API level 5+; older hosts fall back to a text PaneTemplate. -->
         <meta-data
             android:name="androidx.car.app.minCarApiLevel"
