@@ -201,9 +201,12 @@ dependencies {
     implementation 'androidx.compose.runtime:runtime-livedata'
     debugImplementation 'androidx.compose.ui:ui-tooling'
 
-    // Android Auto (phone projection) templated status screen. 1.4.0 is the last
-    // stable line compatible with AGP 8.7.3; its minSdk (23) matches ours.
-    implementation 'androidx.car.app:app:1.4.0'
+    // Android Auto (phone projection): surface-based map + status screen.
+    implementation 'androidx.car.app:app:1.7.0'
+    // DEBUG-ONLY: lets the same CarAppService render on an Android Automotive OS
+    // emulator (CarAppActivity host) so the car map can be tested without a phone
+    // + DHU. Never ships in release. Paired with src/debug/AndroidManifest.xml.
+    debugImplementation 'androidx.car.app:app-automotive:1.7.0'
 
     // Image loading for QRZ profile avatars
     implementation 'io.coil-kt:coil-compose:2.6.0'

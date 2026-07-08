@@ -251,6 +251,30 @@ class BuildActivationAdifTest {
     }
 
     @Test
+    fun ft2Qso_isExportedAsMfskWithSubmode_notBareFt2() {
+        // The reported bug: an FT2 QSO exported with <MODE:3>FT2 was rejected by
+        // pota.app as an invalid mode. FT2 is a submode of MFSK, so the record
+        // must carry MODE=MFSK + SUBMODE=FT2.
+        insertQso("W1AW", "20240601", "123500", mySigInfo = "K-1234", mode = "FT2")
+
+        val content = PotaAdifExporter.buildActivationAdif(db, activation("K-1234")).single().content
+
+        assertThat(content).contains("<MODE:4>MFSK ")
+        assertThat(content).contains("<SUBMODE:3>FT2 ")
+        assertThat(content).doesNotContain("<MODE:3>FT2 ")
+    }
+
+    @Test
+    fun ft8Qso_keepsBareFt8Mode_withNoSubmode() {
+        insertQso("W1AW", "20240601", "123500", mySigInfo = "K-1234", mode = "FT8")
+
+        val content = PotaAdifExporter.buildActivationAdif(db, activation("K-1234")).single().content
+
+        assertThat(content).contains("<MODE:3>FT8 ")
+        assertThat(content).doesNotContain("SUBMODE")
+    }
+
+    @Test
     fun onlyPotaRowsMatchingTheParkAreIncluded() {
         insertQso("INPARK", "20240601", "123500", mySigInfo = "K-1234")
         // Different park — must not bleed into K-1234's document.

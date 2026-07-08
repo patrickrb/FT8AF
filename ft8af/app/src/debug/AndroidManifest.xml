@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Debug-only overlay. Registers the Android Auto map test-injection receiver so
+    `adb shell am broadcast -a ft8af.DEBUG_INJECT ...` can forge QSO state on an
+    emulator that has no radio. Merged only into the debug variant.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+        app-automotive declares minSdk 29; this app is minSdk 23. This overlay is
+        debug-only and only ever runs on an API 35 AAOS emulator, so overriding the
+        library floor is safe here (it never merges into the release/phone build).
+    -->
+    <uses-sdk tools:overrideLibrary="androidx.car.app.automotive" />
+
+    <application>
+        <receiver
+            android:name="radio.ks3ckc.ft8af.car.DebugInjectReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="ft8af.DEBUG_INJECT" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+            DEBUG-ONLY: hosts the car-app-library CarAppService on an Android
+            Automotive OS emulator. This launcher entry + distractionOptimized
+            flag are what the AAOS template host binds to. Provided by the
+            debugImplementation app-automotive dependency; absent from release.
+        -->
+        <activity
+            android:name="androidx.car.app.activity.CarAppActivity"
+            android:exported="true"
+            android:label="FT8AF Car"
+            android:launchMode="singleTask"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data
+                android:name="distractionOptimized"
+                android:value="true" />
+        </activity>
+    </application>
+</manifest>

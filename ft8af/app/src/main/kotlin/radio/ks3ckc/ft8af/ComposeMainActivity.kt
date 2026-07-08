@@ -38,6 +38,7 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import radio.ks3ckc.ft8af.sync.QsoAutoSync
+import radio.ks3ckc.ft8af.util.bluetoothAdapter
 import com.k1af.ft8af.service.RxForegroundService
 import com.k1af.ft8af.service.RxServiceController
 import com.k1af.ft8af.bluetooth.BluetoothStateBroadcastReceive
@@ -440,7 +441,7 @@ class ComposeMainActivity : AppCompatActivity() {
             }
         })
 
-        DatabaseOpr.GetCallsignMapGrid(mainViewModel.databaseOpr.db).execute()
+        DatabaseOpr.loadCallsignMapGridAsync(mainViewModel.databaseOpr.db)
         mainViewModel.getFollowCallsignsFromDataBase()
     }
 
@@ -666,7 +667,7 @@ class ComposeMainActivity : AppCompatActivity() {
      * so it is unit-testable; this method only collects Android state and acts on CONNECT.
      */
     private fun autoConnectBluetoothIfNeeded() {
-        val adapter = BluetoothAdapter.getDefaultAdapter()
+        val adapter = bluetoothAdapter(this)
         val addr = GeneralVariables.bluetoothDeviceAddress
         // A corrupted/legacy persisted value would make getRemoteDevice() throw
         // IllegalArgumentException and crash startup, so validate the MAC up front (PR #227 review).

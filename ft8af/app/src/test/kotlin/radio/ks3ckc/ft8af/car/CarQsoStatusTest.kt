@@ -215,4 +215,61 @@ class CarQsoStatusTest {
         assertThat(shouldInvalidateForTick(lastSecond = 7, newSecond = 6)).isTrue()
         assertThat(shouldInvalidateForTick(lastSecond = -1, newSecond = 15)).isTrue()
     }
+
+    // -- buildCarPotaLine --
+
+    @Test
+    fun buildCarPotaLine_nullWhenNoActivation() {
+        assertThat(buildCarPotaLine(null, null)).isNull()
+        assertThat(buildCarPotaLine("", null)).isNull()
+        assertThat(buildCarPotaLine("  ", null)).isNull()
+    }
+
+    @Test
+    fun buildCarPotaLine_formatsSingleParkWithCount() {
+        val spec = buildCarPotaLine("K-1234", 3)
+        assertThat(spec?.resId).isEqualTo(R.string.car_pota_line)
+        assertThat(spec?.args).containsExactly("K-1234", 3).inOrder()
+    }
+
+    @Test
+    fun buildCarPotaLine_formatsMultiParkDisplay() {
+        val spec = buildCarPotaLine("K-1234 + K-5678", 12)
+        assertThat(spec?.resId).isEqualTo(R.string.car_pota_line)
+        assertThat(spec?.args).containsExactly("K-1234 + K-5678", 12).inOrder()
+    }
+
+    @Test
+    fun buildCarPotaLine_zeroCount() {
+        val spec = buildCarPotaLine("K-0001", 0)
+        assertThat(spec?.resId).isEqualTo(R.string.car_pota_line)
+        assertThat(spec?.args).containsExactly("K-0001", 0).inOrder()
+    }
+
+    @Test
+    fun buildCarPotaLine_nullCountTreatedAsZero() {
+        val spec = buildCarPotaLine("K-9999", null)
+        assertThat(spec?.resId).isEqualTo(R.string.car_pota_line)
+        assertThat(spec?.args).containsExactly("K-9999", 0).inOrder()
+    }
+
+    // -- pskSpotsToMarkers ("who heard me" rings) --
+
+    @Test
+    fun pskSpotsToMarkers_mapsCoordsAndColor_skipsZeroZero() {
+        val spots = listOf(
+            radio.ks3ckc.ft8af.pskreporter.PskReporterSpot(
+                "VE3XYZ", "FN03", 43.0, -79.0, 14_074_000L, -10, "FT8", 0L,
+            ),
+            // Gridless report at 0,0 \u2014 should be dropped, not plotted off Africa.
+            radio.ks3ckc.ft8af.pskreporter.PskReporterSpot(
+                "BADXYZ", "", 0.0, 0.0, 14_074_000L, -10, "FT8", 0L,
+            ),
+        )
+        val markers = pskSpotsToMarkers(spots)
+        assertThat(markers).hasSize(1)
+        assertThat(markers[0].lat).isEqualTo(43.0)
+        assertThat(markers[0].lon).isEqualTo(-79.0)
+        assertThat(markers[0].colorInt).isEqualTo(PSK_MARKER_COLOR)
+    }
 }

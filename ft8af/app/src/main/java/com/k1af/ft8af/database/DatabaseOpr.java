@@ -16,6 +16,9 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.os.AsyncTask;
+
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import android.util.Log;
 
 import com.k1af.ft8af.FT8Common;
@@ -1185,9 +1188,17 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             }
 
             if (cursor.getString(cursor.getColumnIndex("mode")) != null) {
-                logStr.append(String.format("<mode:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("mode")).length()
-                        , cursor.getString(cursor.getColumnIndex("mode"))));
+                // FT4/FT2 are ADIF submodes of MFSK, not standalone modes — a bare
+                // <mode>FT2 is rejected as invalid by pota.app and other ADIF consumers.
+                String mode = cursor.getString(cursor.getColumnIndex("mode"));
+                String submode = AdifFormat.mfskSubmode(mode);
+                if (submode != null) {
+                    logStr.append(String.format("<mode:4>MFSK <submode:%d>%s "
+                            , submode.length(), submode));
+                } else {
+                    logStr.append(String.format("<mode:%d>%s "
+                            , mode.length(), mode));
+                }
             }
 
             if (cursor.getString(cursor.getColumnIndex("rst_sent")) != null) {
@@ -2014,31 +2025,44 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         }
     }
 
-    public static class GetCallsignMapGrid extends AsyncTask<Void, Void, Void> {
-        SQLiteDatabase db;
+    /**
+     * Single-thread executor backing {@link #loadCallsignMapGridAsync(SQLiteDatabase)}.
+     * Replaces the deprecated {@code GetCallsignMapGrid} AsyncTask (issue #455).
+     */
+    private static final Executor CALLSIGN_MAP_GRID_EXECUTOR =
+            Executors.newSingleThreadExecutor();
 
-        public GetCallsignMapGrid(SQLiteDatabase db) {
-            this.db = db;
-        }
-
-        @SuppressLint("Range")
-        @Override
-        protected Void doInBackground(Void... voids) {
-
-            String querySQL = "select DISTINCT callsign,grid from QslCallsigns qc \n" +
-                    "where LENGTH(grid)>3\n" +
-                    "order by ID ";
-            Cursor cursor = db.rawQuery(querySQL, null);
-            try {
-                while (cursor.moveToNext()) {
-                    GeneralVariables.addCallsignAndGrid(cursor.getString(cursor.getColumnIndex("callsign"))
-                            , cursor.getString(cursor.getColumnIndex("grid")));
-                }
-            } finally {
-                cursor.close();
+    /**
+     * Loads the callsign→grid map from the {@code QslCallsigns} table into
+     * {@link GeneralVariables#addCallsignAndGrid} synchronously on the caller's thread.
+     * Extracted from the old {@code GetCallsignMapGrid} AsyncTask so the query logic is
+     * directly unit-testable; production callers should use
+     * {@link #loadCallsignMapGridAsync(SQLiteDatabase)} to stay off the main thread.
+     */
+    @SuppressLint("Range")
+    public static void loadCallsignMapGrid(SQLiteDatabase db) {
+        String querySQL = "select DISTINCT callsign,grid from QslCallsigns qc \n" +
+                "where LENGTH(grid)>3\n" +
+                "order by ID ";
+        Cursor cursor = db.rawQuery(querySQL, null);
+        try {
+            int callsignIdx = cursor.getColumnIndex("callsign");
+            int gridIdx = cursor.getColumnIndex("grid");
+            while (cursor.moveToNext()) {
+                GeneralVariables.addCallsignAndGrid(cursor.getString(callsignIdx), cursor.getString(gridIdx));
             }
-            return null;
+        } finally {
+            cursor.close();
         }
+    }
+
+    /**
+     * Runs {@link #loadCallsignMapGrid(SQLiteDatabase)} on a background executor. This
+     * is the non-deprecated replacement for the old
+     * {@code new GetCallsignMapGrid(db).execute()} AsyncTask call (issue #455).
+     */
+    public static void loadCallsignMapGridAsync(SQLiteDatabase db) {
+        CALLSIGN_MAP_GRID_EXECUTOR.execute(() -> loadCallsignMapGrid(db));
     }
 
     public interface OnGetQsoGrids {
