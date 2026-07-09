@@ -779,7 +779,7 @@ function SettingsScreen(props: {
             )}
           </div>
           <div className="field">
-            <label className="row" style={{ alignItems: "center", gap: 6 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <input
                 type="checkbox"
                 checked={locEnabled}
