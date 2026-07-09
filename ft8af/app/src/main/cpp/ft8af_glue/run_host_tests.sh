@@ -113,6 +113,21 @@ call_hash_out="$tmp/ft8_call_hash_test"
     -I "$ft8" "${call_hash_srcs[@]}" -lm -o "$call_hash_out"
 "$call_hash_out"
 
+# Callsign hash-store tests: the per-decoder open-addressing table shared by
+# ft8_decode_jni.cpp and ft2_decode_jni.cpp (ftx_hash_store.h). Guards the
+# save/lookup semantics and, crucially, that a saturated table drops the insert
+# instead of probing forever (the unbounded loop that used to hang the decode
+# thread). Header-only under test; links just the ft8_lib message path for the
+# hash-type enum.
+hash_store_srcs=(
+    "$here/test_hash_store.c"
+)
+hash_store_out="$tmp/ft8_hash_store_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${hash_store_srcs[@]}" -lm -o "$hash_store_out"
+"$hash_store_out"
+
 # EU_VHF / CONTESTING decoder tests (issue #403): the hand-rolled bit
 # extraction + direct formatting for i3=0 n3=2 and i3=0 n3=6 frames. Payloads
 # are assembled by an independent bit writer; callsign bits come from the

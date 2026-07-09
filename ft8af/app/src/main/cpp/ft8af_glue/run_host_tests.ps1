@@ -139,6 +139,22 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_call_hash)." }
 $callHashExit = $LASTEXITCODE
 
 # ---------------------------------------------------------------------------
+# Callsign hash-store tests: the per-decoder open-addressing table shared by
+# ft8_decode_jni.cpp and ft2_decode_jni.cpp (ftx_hash_store.h). Guards the
+# save/lookup semantics and, crucially, that a saturated table drops the insert
+# instead of probing forever (the unbounded loop that used to hang the decode
+# thread). Header-only under test; needs only the ft8_lib include path.
+# ---------------------------------------------------------------------------
+$srcHashStore = Join-Path $here "test_hash_store.c"
+$outHashStore = Join-Path $env:TEMP "ft8_hash_store_test.exe"
+
+& $Clang @common $srcHashStore -o $outHashStore
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_hash_store)." }
+
+& $outHashStore
+$hashStoreExit = $LASTEXITCODE
+
+# ---------------------------------------------------------------------------
 # EU_VHF / CONTESTING decoder tests (issue #403): the hand-rolled bit
 # extraction + direct formatting for i3=0 n3=2 and i3=0 n3=6 frames. Payloads
 # are assembled by an independent bit writer; callsign bits come from the
@@ -306,6 +322,7 @@ if ($goldenExit -ne 0) { exit $goldenExit }
 if ($dev625Exit -ne 0) { exit $dev625Exit }
 if ($fftWinExit -ne 0) { exit $fftWinExit }
 if ($callHashExit -ne 0) { exit $callHashExit }
+if ($hashStoreExit -ne 0) { exit $hashStoreExit }
 if ($contestExit -ne 0) { exit $contestExit }
 if ($firExit -ne 0) { exit $firExit }
 if ($ratExit -ne 0) { exit $ratExit }
