@@ -630,7 +630,7 @@ public class X6100Radio {
                 this.version = response.head.substring(1);
                 break;
             case HANDLE:
-                this.handle = Integer.parseInt(response.head.substring(1), 16);
+                this.handle = parseXieguHandle(response.head, this.handle);
                 break;
             case RESPONSE:
                 if (XieguCommand.AUDIO == response.xieguCommand) {//response information for audio command
@@ -673,6 +673,51 @@ public class X6100Radio {
                 break;
         }
 
+    }
+
+    /**
+     * Parse a Xiegu client-handle response ("H" + hex handle) into its numeric
+     * value, returning {@code currentHandle} unchanged when the frame is empty,
+     * truncated, or not valid hex.
+     *
+     * <p>This is the crash fix for the HANDLE branch of {@link #doReceiveLineEvent}.
+     * The previous {@code Integer.parseInt(head.substring(1), 16)} was unguarded,
+     * unlike every sibling parse in this class (seq_number, resultCode,
+     * play_volume) and unlike the identical handle parse in
+     * {@link com.k1af.ft8af.flex.FlexRadio}, which wraps it in a try/catch. Two
+     * inputs made it throw {@link NumberFormatException}: a garbled/truncated
+     * frame whose tail is not hex (even a lone {@code "H"}, whose tail is empty),
+     * and a legitimate high-bit 32-bit handle such as {@code "HFFFFFFFF"} — the
+     * Xiegu protocol handle is a full 32-bit value (see the {@code HANDLE} enum
+     * doc) and {@code 0xFFFFFFFF} overflows a signed {@code int}, so
+     * {@code Integer.parseInt} rejected it. This parse runs on the TCP CAT read
+     * thread ({@link com.k1af.ft8af.flex.RadioTcpClient}), whose read loop catches
+     * only {@code SocketException}/{@code IOException}; a {@code NumberFormatException}
+     * escaping here therefore killed that thread and crashed the whole app. We
+     * parse via {@code Long.parseLong} so the full unsigned 32-bit range is
+     * accepted (stored back into the {@code int} handle with the same bit
+     * pattern), and contain any remaining malformed input.
+     *
+     * <p>Package-private and static so it can be unit-tested without a live
+     * socket or {@code Context}.
+     *
+     * @param head          the response head ({@code "H"} + hex handle); may be
+     *                      {@code null} or too short to carry a handle
+     * @param currentHandle the handle value to keep when {@code head} can't be parsed
+     * @return the parsed handle, or {@code currentHandle} on any parse failure
+     */
+    static int parseXieguHandle(String head, int currentHandle) {
+        if (head == null || head.length() < 2) {
+            return currentHandle;
+        }
+        try {
+            // 32-bit handle: parse as long, then narrow so 0x80000000..0xFFFFFFFF
+            // (which overflow a signed-int parse) round-trip into the int field.
+            return (int) Long.parseLong(head.substring(1), 16);
+        } catch (NumberFormatException e) {
+            Log.e(TAG, "XieguResponse parseInt handle exception: " + e.getMessage());
+            return currentHandle;
+        }
     }
 
     /**
