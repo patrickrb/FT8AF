@@ -74,4 +74,19 @@ public class FlexRadioFactoryTest {
     public void emptyPayload_returnsEmpty() {
         assertThat(FlexRadioFactory.getSerialNum("")).isEqualTo("");
     }
+
+    @Test
+    public void nullPayload_isEmpty() {
+        // new String(vita.payload) is never null in practice, but guard anyway
+        // so a future caller can't trip a NullPointerException on the thread.
+        assertThat(FlexRadioFactory.getSerialNum(null)).isEqualTo("");
+    }
+
+    @Test
+    public void serialTokenIsCaseInsensitive_valuePreserved() {
+        // The prefix match lower-cases the token, but the returned value keeps
+        // its original case.
+        assertThat(FlexRadioFactory.getSerialNum("SERIAL=AB12-CD34"))
+                .isEqualTo("AB12-CD34");
+    }
 }

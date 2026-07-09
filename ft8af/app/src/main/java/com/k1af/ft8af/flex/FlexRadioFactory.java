@@ -108,6 +108,7 @@ public class FlexRadioFactory {
      * @return serial number
      */
     static String getSerialNum(String s){
+        if (s==null){return "";}
         String[] strings=s.split(" ");
         for (int i = 0; i <strings.length ; i++) {
             // Require the "serial=" prefix (not just "serial") before reading the
@@ -117,7 +118,8 @@ public class FlexRadioFactory {
             // StringIndexOutOfBoundsException. This runs on the UDP discovery read
             // thread (RadioUdpClient), whose loop catches only IOException, so that
             // RuntimeException escaped and crashed the whole app. Requiring the '='
-            // also matches how FlexRadio.getParameterStr reads "serial=".
+            // also matches how FlexRadio.getParameterStr reads "serial=" and avoids
+            // misreading a stray "serialfoo" token as a serial value.
             if (strings[i].toLowerCase().startsWith("serial=")){
                 return strings[i].substring("serial=".length());
             }

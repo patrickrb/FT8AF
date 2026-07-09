@@ -332,7 +332,18 @@ public class VITA {
         if (data.length < VITAmin) return;
 
         isAvailable = true;//Data length reaches 28 bytes, indicating it is valid
-        packetType = VitaPacketType.values()[(data[0] >> 4) & 0x0f];
+        //The VITA49 packet-type field is 4 bits (0..15), but only 6 types are
+        //defined. Reserved values (6..15) must not index the enum or they throw
+        //ArrayIndexOutOfBoundsException. That exception would escape the UDP/TCP
+        //read loops (which catch only IOException) and crash the whole app, so
+        //treat an unrecognized packet type as an invalid packet and bail out.
+        int packetTypeIndex = (data[0] >> 4) & 0x0f;
+        VitaPacketType[] packetTypes = VitaPacketType.values();
+        if (packetTypeIndex >= packetTypes.length) {
+            isAvailable = false;
+            return;
+        }
+        packetType = packetTypes[packetTypeIndex];
         classIdPresent = (data[0] & 0x8) == 0x8;//Indicates whether the packet contains a class identifier (class ID) field
         trailerPresent = (data[0] & 0x4) == 0x4;//Indicates whether the packet contains a trailer
         tsi = VitaTSI.values()[(data[1] >> 6) & 0x3];//If timestamp exists, indicates the type of the integer part
