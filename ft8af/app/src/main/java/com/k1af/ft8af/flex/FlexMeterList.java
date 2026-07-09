@@ -37,7 +37,8 @@ public class FlexMeterList extends HashMap<Integer, FlexMeterList.FlexMeter> {
                     // but no .nam token (e.g. a partial/split METER_LIST frame),
                     // so guard the dereference — an escaping NPE here crashes the
                     // FlexRadio meter-stream read thread (which catches only
-                    // IOException) and takes down the whole app.
+                    // SocketException/IOException, not RuntimeException) and takes
+                    // down the whole app.
                     if (meter.name != null && meter.name.contains("PWR")){//Convert dBm to power value
                         meter.value=(float) Math.pow(10,meter.value/10f)/1000f;
                     }
