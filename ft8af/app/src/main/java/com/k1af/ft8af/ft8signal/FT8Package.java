@@ -351,18 +351,27 @@ public class FT8Package {
 
 
     /**
-     * Format a standard callsign.
-     * A standard callsign is 6 characters: 1-2 letter prefix + 1 digit, suffix up to 3 letters.
-     * Formatting rules:
+     * Normalize a callsign into the 6-character {@code c6} field used by
+     * {@link #pack_c28}.
+     * <p>
+     * {@code pack_c28} calls this on the raw callsign <em>before</em> deciding
+     * whether the callsign is standard, so the input is not guaranteed to be a
+     * well-formed standard callsign — short/junk tokens (e.g. a CRC-collision
+     * false decode) reach here too and must pass through without crashing.
+     * Formatting rules (applied only when the input matches):
      * 1. Swaziland callsign prefix issue: 3DA0XYZ -> 3D0XYZ
      * 2. Guinea callsign prefix issue: 3XA0XYZ -> QA0XYZ
      * 3. Callsigns with a digit in position 2 are left-padded with a space: A0XYZ -> " A0XYZ"
-     * 4. Suffixes shorter than 3 characters are right-padded with spaces: BA2BI -> "BA2BI "
+     * 4. Results shorter than 6 characters are right-padded with spaces: BA2BI -> "BA2BI "
      *
-     * @param callsign callsign
-     * @return the C28 value represented as an int
+     * @param callsign callsign (may be a short/non-standard token)
+     * @return the space-padded 6-character {@code c6} string
      */
-    private static String formatCallsign(String callsign) {
+    // Package-private (not private) so FT8PackagePackingTest can exercise the
+    // short-callsign guard below directly: pack_c28 routes a non-standard
+    // callsign into the native getHash22 path, which a plain-JVM unit test
+    // cannot load, so the crash-safety of this formatter has to be tested here.
+    static String formatCallsign(String callsign) {
         String c6 = callsign;
         // fix Swaziland callsign prefix issue: 3DA0XYZ -> 3D0XYZ
         if (callsign.length() > 3 && callsign.substring(0, 4).equals("3DA0") && callsign.length() <= 7) {
@@ -372,7 +381,14 @@ public class FT8Package {
             c6 = "Q" + callsign.substring(2);
         } else {
             // if position 2 is a digit and position 3 is a letter, left-pad with a space: A0XYZ -> " A0XYZ" (except A6 prefix)
-            if (callsign.substring(0, 3).matches("[A-Z][0-9][A-Z]")) {
+            // The length>=3 guard is required: pack_c28 calls formatCallsign on
+            // the raw callsign BEFORE the standard-callsign check, and a decoder
+            // CRC-collision false decode can render a 1-2 char junk token into a
+            // callsign field (the same garbage getCallsignTo() already guards
+            // against). Without the guard, substring(0, 3) threw
+            // StringIndexOutOfBoundsException on the TX-encode path (e.g. calling
+            // a station whose decoded callsign came back as "W1").
+            if (callsign.length() >= 3 && callsign.substring(0, 3).matches("[A-Z][0-9][A-Z]")) {
                 c6 = " " + callsign;
             }
         }
