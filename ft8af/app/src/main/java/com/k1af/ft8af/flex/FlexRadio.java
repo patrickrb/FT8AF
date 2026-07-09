@@ -1123,7 +1123,14 @@ public class FlexRadio {
                     getHeadAndContent(line, "\\|");
                     try {
                         //Log.e(TAG, "FlexResponse: "+line );
-                        this.message_num = Integer.parseInt(head.substring(2), 16);//Message number, 32-bit, hex
+                        // Guard: substring(2) needs len > 2 to yield a non-empty
+                        // token. A truncated/garbled frame ("M"/"M|...") would throw
+                        // StringIndexOutOfBoundsException (uncaught -> read-thread
+                        // crash); "M1"/"M1|..." would yield "" and a needless
+                        // NumberFormatException. Mirrors the 'C' branch's length guard.
+                        if (head.length() > 2) {
+                            this.message_num = Integer.parseInt(head.substring(2), 16);//Message number, 32-bit, hex
+                        }
                     } catch (NumberFormatException e) {
                         e.printStackTrace();
                         Log.e(TAG, "FlexResponse parseInt message_num exception: " + e.getMessage());

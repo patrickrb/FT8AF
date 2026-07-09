@@ -111,15 +111,17 @@ public class FlexRadioFactory {
         if (s==null){return "";}
         String[] strings=s.split(" ");
         for (int i = 0; i <strings.length ; i++) {
-            // Real discovery tokens look like "serial=1234-5678"; skip the
-            // "serial=" prefix. A bare/truncated "serial" token (6 chars, no
-            // value) must not reach substring() — this runs on the
-            // RadioUdpClient receive thread, whose loop catches only
-            // IOException, so a StringIndexOutOfBoundsException here would kill
-            // the thread and crash the app on a malformed broadcast packet.
-            if (strings[i].toLowerCase().startsWith("serial")
-                    && strings[i].length() > "serial".length()){
-                return strings[i].substring("serial".length()+1);
+            // Require the "serial=" prefix (not just "serial") before reading the
+            // value. The old code matched startsWith("serial") and then did
+            // substring(7) unconditionally, so a bare "serial" token (length 6, as
+            // in a truncated/garbled discovery broadcast) threw
+            // StringIndexOutOfBoundsException. This runs on the UDP discovery read
+            // thread (RadioUdpClient), whose loop catches only IOException, so that
+            // RuntimeException escaped and crashed the whole app. Requiring the '='
+            // also matches how FlexRadio.getParameterStr reads "serial=" and avoids
+            // misreading a stray "serialfoo" token as a serial value.
+            if (strings[i].toLowerCase().startsWith("serial=")){
+                return strings[i].substring("serial=".length());
             }
         }
         return "";

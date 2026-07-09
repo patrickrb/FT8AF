@@ -8,23 +8,27 @@ import java.util.ArrayList;
 import java.util.HashMap;
 
 /**
- * Pure-JVM coverage for {@link ImportSharedLogs#parseLogRecords(String)} — the
- * ADIF field-length parser used by the "open shared .adi" import path.
+ * Pure-JVM coverage for the ADIF field-length handling in the shared-log
+ * importer (the VIEW/SEND intent path that lets other apps hand a {@code .adi}
+ * file to FT8AF). Exercises two extracted static helpers directly:
+ * {@link ImportSharedLogs#parseLogRecords(String)} (whole-body record parsing)
+ * and {@link ImportSharedLogs#extractFieldValue(String, int)} (the per-field
+ * value clamp), neither of which touches Android types, so no Robolectric
+ * runner is needed.
  *
- * <p>Regression: the old clamp was {@code valueLen = values[1].length() - 1}
+ * <p>Regression guarded: the old clamp was {@code valueLen = values[1].length() - 1}
  * with no re-check before {@code substring}. When a field declared a length
  * longer than the value actually present (a truncated or hand-edited record)
  * this silently dropped the last character of the value; for a zero-length
  * value it made {@code substring(0, -1)} throw
  * {@link StringIndexOutOfBoundsException}, which — caught at record scope —
- * discarded the entire QSO. The sibling importer {@link LogFileImport} clamps
- * to {@code values[1].length()} and re-checks {@code > 0}; these tests pin
- * {@code ImportSharedLogs} to the same, correct behaviour.
- *
- * <p>{@code parseLogRecords} touches no Android types, so no Robolectric runner
- * is needed.
+ * discarded the entire QSO. The fix clamps to {@code Math.min(declaredLen,
+ * raw.length())} (mirroring {@link LogFileImport}); these tests pin that
+ * behaviour.
  */
 public class ImportSharedLogsTest {
+
+    // ---- parseLogRecords(String): whole-body record parsing ----
 
     @Test
     public void wellFormedRecord_extractsValuesByDeclaredLength() {
@@ -52,13 +56,14 @@ public class ImportSharedLogsTest {
         // length. The old code computed valueLen = -1 and threw
         // StringIndexOutOfBoundsException from substring(0, -1); because the
         // exception was caught at record scope, the WHOLE record (including the
-        // valid gridsquare) was lost. It must now skip only the empty field and
-        // still return the record with the good field intact.
+        // valid gridsquare) was lost. It must now keep the record with the good
+        // field intact. extractFieldValue clamps the empty value to "" rather
+        // than omitting the field, so CALL is present but empty.
         ArrayList<HashMap<String, String>> records =
                 ImportSharedLogs.parseLogRecords("<call:3>>X<gridsquare:4>FN42<eor>");
         assertThat(records).hasSize(1);
         assertThat(records.get(0).get("GRIDSQUARE")).isEqualTo("FN42");
-        assertThat(records.get(0)).doesNotContainKey("CALL");
+        assertThat(records.get(0).get("CALL")).isEqualTo("");
     }
 
     @Test
@@ -94,5 +99,41 @@ public class ImportSharedLogsTest {
         assertThat(records).hasSize(1);
         assertThat(records.get(0).get("CALL")).isEqualTo("K1ABC");
         assertThat(records.get(0)).doesNotContainKey("COMMENT");
+    }
+
+    // ---- extractFieldValue(String, int): per-field value clamp ----
+
+    @Test
+    public void valueMatchesDeclaredLength_isReturnedVerbatim() {
+        assertThat(ImportSharedLogs.extractFieldValue("W1AW", 4)).isEqualTo("W1AW");
+    }
+
+    @Test
+    public void valueLongerThanDeclared_isTrimmedToDeclaredLength() {
+        // The raw slice runs up to the next '<', so it usually carries trailing
+        // whitespace/newline; the declared length trims it back to the real value.
+        assertThat(ImportSharedLogs.extractFieldValue("W1AW\n", 4)).isEqualTo("W1AW");
+        assertThat(ImportSharedLogs.extractFieldValue("FT8   ", 3)).isEqualTo("FT8");
+    }
+
+    @Test
+    public void valueShorterThanDeclared_keepsEveryCharacter() {
+        // Regression: the old `values[1].length() - 1` clamp dropped the last
+        // character of a truncated field, turning "FN31" into "FN3".
+        assertThat(ImportSharedLogs.extractFieldValue("FN31", 6)).isEqualTo("FN31");
+        assertThat(ImportSharedLogs.extractFieldValue("FN3", 4)).isEqualTo("FN3");
+    }
+
+    @Test
+    public void declaredLengthOneLongerThanValue_keepsWholeValue() {
+        // The exact case LogFileImportTest documents for the twin parser:
+        // <station_callsign:5> declared for the 4-char value "W1AW".
+        assertThat(ImportSharedLogs.extractFieldValue("W1AW", 5)).isEqualTo("W1AW");
+    }
+
+    @Test
+    public void singleCharacterValueShorterThanDeclared_isNotEmptied() {
+        // Old clamp turned this into "" (length 1 - 1 = 0); the value must survive.
+        assertThat(ImportSharedLogs.extractFieldValue("X", 5)).isEqualTo("X");
     }
 }
