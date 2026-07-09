@@ -107,10 +107,18 @@ public class FlexRadioFactory {
      * @param s data
      * @return serial number
      */
-    private String getSerialNum(String s){
+    static String getSerialNum(String s){
+        if (s==null){return "";}
         String[] strings=s.split(" ");
         for (int i = 0; i <strings.length ; i++) {
-            if (strings[i].toLowerCase().startsWith("serial")){
+            // Real discovery tokens look like "serial=1234-5678"; skip the
+            // "serial=" prefix. A bare/truncated "serial" token (6 chars, no
+            // value) must not reach substring() — this runs on the
+            // RadioUdpClient receive thread, whose loop catches only
+            // IOException, so a StringIndexOutOfBoundsException here would kill
+            // the thread and crash the app on a malformed broadcast packet.
+            if (strings[i].toLowerCase().startsWith("serial")
+                    && strings[i].length() > "serial".length()){
                 return strings[i].substring("serial".length()+1);
             }
         }
