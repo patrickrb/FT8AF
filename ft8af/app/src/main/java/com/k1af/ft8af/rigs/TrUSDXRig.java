@@ -146,16 +146,21 @@ public class TrUSDXRig extends BaseRig {
     @Override
     public void onReceiveData(byte[] data) {
         byte[] remain = data;
-        String s = new String(data);
-        while (s.contains(";")) { // ;
-            // Locate the ';' terminator by byte offset, not by char offset: the
-            // stream carries raw 8-bit audio whose >= 0x80 samples shift the
-            // decoded-String index away from the real byte position (see
-            // indexOfByte).
+        // Drive the loop off the raw-byte ';' scan rather than a decoded-String
+        // contains() check: the stream carries raw 8-bit audio whose >= 0x80
+        // samples shift the decoded-String index away from the real byte position
+        // (see indexOfByte). Using the byte-scan result as both the condition and
+        // the cut point keeps delimiter detection consistent and guarantees
+        // idx >= 0 inside the loop, so Arrays.copyOf(remain, idx) can never be
+        // handed a negative length. idx is recomputed at the top of every
+        // iteration so the `continue` below re-scans correctly.
+        while (true) { // ;
             int idx = indexOfByte(remain, (byte) ';');
+            if (idx < 0) {
+                break;
+            }
             byte[] cutted = Arrays.copyOf(remain, idx);
             remain = Arrays.copyOfRange(remain, idx + 1, remain.length);
-            s = new String(remain);
 
             if (rxStreaming) {
                 onReceivedWaveData(cutted, true);
@@ -193,7 +198,10 @@ public class TrUSDXRig extends BaseRig {
             byte[] wave = Arrays.copyOfRange(remain, 2, remain.length);
             onReceivedWaveData(wave);
         } else {
-            buffer.append(s);
+            // Trailing, un-terminated CAT command text (no ';' left); decoding the
+            // leftover bytes to a String is fine here — it is command text, not the
+            // raw audio the byte-scan protects.
+            buffer.append(new String(remain));
         }
     }
 
