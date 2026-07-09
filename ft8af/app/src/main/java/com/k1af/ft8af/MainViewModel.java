@@ -711,7 +711,21 @@ public class MainViewModel extends ViewModel {
                 }
                 //check QSO of SWL, and save to the QSO list in SWLQSOTable
                 if (GeneralVariables.saveSWL_QSO) {
-                    swlQsoList.findSwlQso(messages, ft8Messages, new SWLQsoList.OnFoundSwlQso() {
+                    // findSwlQso scans the "all messages" list with index-based backward
+                    // loops (checkPart1/checkPart2: for i = size()-1 .. 0, get(i)). Passing
+                    // the live ft8Messages let it iterate off-lock while a concurrent decode
+                    // pass (slot N's late/deep pass vs slot N+1's early pass, #398) held
+                    // synchronized(ft8Messages) running addAll + deleteArrayListMore's
+                    // remove(0), shrinking the list mid-scan -> IndexOutOfBoundsException on
+                    // the decode thread. Scan a snapshot copied under the same monitor the
+                    // writers use (mirrors publishFt8MessageList). The freshly decoded
+                    // `messages` were appended to ft8Messages under lock above, so they are
+                    // already in this snapshot and QSO detection is unchanged.
+                    final ArrayList<Ft8Message> allMessagesSnapshot;
+                    synchronized (ft8Messages) {
+                        allMessagesSnapshot = new ArrayList<>(ft8Messages);
+                    }
+                    swlQsoList.findSwlQso(messages, allMessagesSnapshot, new SWLQsoList.OnFoundSwlQso() {
                         @Override
                         public void doFound(QSLRecord record) {
                             databaseOpr.addSWL_QSO(record);//save SWL QSO to database
