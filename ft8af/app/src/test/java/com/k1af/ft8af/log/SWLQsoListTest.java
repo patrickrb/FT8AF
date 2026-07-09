@@ -129,6 +129,32 @@ public class SWLQsoListTest {
     }
 
     @Test
+    public void repeatedClosingMarker_isDedupedAcrossCycles() {
+        // The same closing marker decoded again in a later cycle must not re-log the
+        // QSO. Reusing one SWLQsoList instance across two findSwlQso calls exercises
+        // the two-key table that tracks already-logged contacts; a stub table (dedup
+        // disabled) fires the callback on every call.
+        Ft8Message reportSent = msg("W1AW", "K1ABC", "R-05");
+        Ft8Message reportRcvd = msg("K1ABC", "W1AW", "-10");
+        Ft8Message ending = msg("W1AW", "DL1XYZ", "RR73");
+
+        ArrayList<Ft8Message> all = new ArrayList<>();
+        all.add(reportSent);
+        all.add(reportRcvd);
+        all.add(ending);
+
+        ArrayList<Ft8Message> fresh = new ArrayList<>();
+        fresh.add(ending);
+
+        SWLQsoList list = new SWLQsoList();
+        CapturingCallback cb = new CapturingCallback();
+        list.findSwlQso(fresh, all, cb);   // cycle 1: QSO found and logged
+        list.findSwlQso(fresh, all, cb);   // cycle 2: same contact, must be deduped
+
+        assertThat(cb.found).hasSize(1);
+    }
+
+    @Test
     public void scanningACopyMatchesScanningTheLiveList() {
         // The MainViewModel fix scans a defensive copy of ft8Messages instead of
         // the live instance. findSwlQso depends only on list *contents*, so a copy
