@@ -66,7 +66,7 @@ public class CallsignFileOperation {
         String[] ls=s.replace("\n","").split(",");
         Set<String> callsigns=new HashSet<>();
         for (int i = 0; i < ls.length ; i++) {
-            if (ls[i].contains(")")) {
+            if (ls[i].contains("(")) {
                 //Log.d(TAG,ls[i]);
                 ls[i] = ls[i].substring(0, ls[i].indexOf("("));
                 //Log.d(TAG,ls[i]+"     (((");
