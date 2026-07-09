@@ -58,6 +58,32 @@ public class X6100RadioHandleParseTest {
     }
 
     @Test
+    public void lowercaseHex_isParsed() {
+        // The handle tail keeps the frame's original case (only the header char is
+        // upper-cased for dispatch), so lowercase hex is legitimate.
+        assertThat(X6100Radio.parseXieguHandle("Hbeef", KEEP)).isEqualTo(0xBEEF);
+    }
+
+    @Test
+    public void signedTail_keepsCurrent() {
+        // Long.parseLong would accept the sign ("-1" -> -1); a handle is unsigned,
+        // so a signed tail is malformed and must preserve the current handle.
+        assertThat(X6100Radio.parseXieguHandle("H-1", KEEP)).isEqualTo(KEEP);
+    }
+
+    @Test
+    public void overlongTail_keepsCurrent_noSilentTruncation() {
+        // 9 hex digits exceed a 32-bit handle; parsing+narrowing would silently
+        // truncate ("H100000000" -> 0), so reject and keep the current handle.
+        assertThat(X6100Radio.parseXieguHandle("H100000000", KEEP)).isEqualTo(KEEP);
+    }
+
+    @Test
+    public void whitespaceTail_keepsCurrent() {
+        assertThat(X6100Radio.parseXieguHandle("H 1A", KEEP)).isEqualTo(KEEP);
+    }
+
+    @Test
     public void emptyString_keepsCurrent() {
         assertThat(X6100Radio.parseXieguHandle("", KEEP)).isEqualTo(KEEP);
     }
