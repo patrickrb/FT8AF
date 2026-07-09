@@ -11,7 +11,7 @@ import org.robolectric.RobolectricTestRunner;
  * {@link ArrayIndexOutOfBoundsException} on all-slash callsigns.
  *
  * <p>{@code "/".split("/")} and {@code "//".split("/")} both return a zero-length
- * array (Java strips trailing empty tokens), yet the method unconditionally read
+ * array (Java strips trailing empty tokens), yet the method unconditionally reads
  * {@code temp[max_index]} — index 0 into an empty array. This is reached with the
  * operator's own persisted callsign on the config-load background thread
  * ({@code DatabaseOpr} ReadConfig) and on every decode cycle via
