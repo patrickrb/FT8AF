@@ -151,7 +151,10 @@ public class SWLQsoListTest {
         CapturingCallback copyCb = new CapturingCallback();
         new SWLQsoList().findSwlQso(fresh, new ArrayList<>(live), copyCb);
 
-        assertThat(copyCb.found).hasSize(liveCb.found.size());
+        // Assert the exact count on both sides first, so a regression to 0 records
+        // fails on this clear assertion rather than an IndexOutOfBounds on get(0).
+        assertThat(liveCb.found).hasSize(1);
+        assertThat(copyCb.found).hasSize(1);
         assertThat(copyCb.found.get(0).getSendReport())
                 .isEqualTo(liveCb.found.get(0).getSendReport());
         assertThat(copyCb.found.get(0).getReceivedReport())
