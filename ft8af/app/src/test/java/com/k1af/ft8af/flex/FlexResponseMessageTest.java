@@ -48,6 +48,15 @@ public class FlexResponseMessageTest {
     }
 
     @Test
+    public void twoCharHeader_leavesDefaultWithoutParsing() {
+        // head "M1" -> substring(2) == "" -> the guard skips the parse entirely
+        // rather than driving control flow through NumberFormatException.
+        FlexResponse r = new FlexResponse("M1|only one hex digit");
+        assertThat(r.responseStyle).isEqualTo(FlexResponseStyle.MESSAGE);
+        assertThat(r.message_num).isEqualTo(0);
+    }
+
+    @Test
     public void wellFormedMessage_stillParses() {
         // Real frame: 'M' + 32-bit hex message id + '|' + text. The guard must
         // not change parsing of valid frames.
