@@ -81,6 +81,20 @@ public class IcomCommandTest {
     }
 
     @Test
+    public void getFrequency_missingDataSectionReturnsMinusOne() {
+        // A short/garbled frame that matches the preamble and cmd 03 but carries
+        // no data payload: FE FE E0 A4 03 FD. getData(false) has nothing after the
+        // command byte and returns null, so getFrequency must not dereference it.
+        IcomCommand cmd = IcomCommand.getCommand(CTRL, RIG,
+                new byte[]{(byte) 0xFE, (byte) 0xFE, (byte) CTRL, (byte) RIG,
+                        (byte) 0x03, (byte) 0xFD});
+        assertThat(cmd).isNotNull();
+        assertThat(cmd.getCommandID()).isEqualTo(0x03);
+        assertThat(cmd.getData(false)).isNull();
+        assertThat(cmd.getFrequency(false)).isEqualTo(-1L);
+    }
+
+    @Test
     public void getData_returnsPayloadAfterCommand() {
         IcomCommand cmd = IcomCommand.getCommand(CTRL, RIG, freqFrame14074());
         assertThat(cmd).isNotNull();
