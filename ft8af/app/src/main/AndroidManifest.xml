@@ -36,6 +36,7 @@
     <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
 
     <application
+        android:name="radio.ks3ckc.ft8af.FT8AFApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:networkSecurityConfig="@xml/network_security_config"
@@ -45,6 +46,13 @@
         android:supportsRtl="true"
         android:localeConfig="@xml/locales_config"
         android:theme="@style/Theme.Ft8AF">
+        <!-- Sentry ships a ContentProvider that auto-inits at process start and
+             requires a manifest DSN. We init manually and only after the user
+             opts in (see CrashReporting), so disable that auto-init here — with
+             it on, the SDK crashes on launch with "DSN is required". -->
+        <meta-data
+            android:name="io.sentry.auto-init"
+            android:value="false" />
         <!-- New Compose-based main activity -->
         <activity
             android:name="radio.ks3ckc.ft8af.ComposeMainActivity"
