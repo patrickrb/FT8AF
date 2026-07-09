@@ -630,7 +630,7 @@ public class X6100Radio {
                 this.version = response.head.substring(1);
                 break;
             case HANDLE:
-                this.handle = Integer.parseInt(response.head.substring(1), 16);
+                this.handle = parseXieguHandle(response.head, this.handle);
                 break;
             case RESPONSE:
                 if (XieguCommand.AUDIO == response.xieguCommand) {//response information for audio command
@@ -673,6 +673,76 @@ public class X6100Radio {
                 break;
         }
 
+    }
+
+    /**
+     * Parse a Xiegu client-handle response ("H" + hex handle) into its numeric
+     * value, returning {@code currentHandle} unchanged when the frame is empty,
+     * truncated, or not valid hex.
+     *
+     * <p>This is the crash fix for the HANDLE branch of {@link #doReceiveLineEvent}.
+     * The previous {@code Integer.parseInt(head.substring(1), 16)} was unguarded,
+     * unlike every sibling parse in this class (seq_number, resultCode,
+     * play_volume) and unlike the identical handle parse in
+     * {@link com.k1af.ft8af.flex.FlexRadio}, which wraps it in a try/catch. Two
+     * inputs made it throw {@link NumberFormatException}: a garbled/truncated
+     * frame whose tail is not hex (even a lone {@code "H"}, whose tail is empty),
+     * and a legitimate high-bit 32-bit handle such as {@code "HFFFFFFFF"} — the
+     * Xiegu protocol handle is a full 32-bit value (see the {@code HANDLE} enum
+     * doc) and {@code 0xFFFFFFFF} overflows a signed {@code int}, so
+     * {@code Integer.parseInt} rejected it. This parse runs on the TCP CAT read
+     * thread ({@link com.k1af.ft8af.flex.RadioTcpClient}), whose read loop catches
+     * only {@code SocketException}/{@code IOException}; a {@code NumberFormatException}
+     * escaping here therefore killed that thread and crashed the whole app.
+     *
+     * <p>A valid handle is 1–8 <em>unsigned</em> hex digits. We validate that
+     * shape explicitly and only then parse via {@code Long.parseLong} (so the
+     * full {@code 0x00000000}–{@code 0xFFFFFFFF} range round-trips into the
+     * {@code int} handle field with the same bit pattern). Rejecting anything
+     * else keeps the last good handle rather than misinterpreting the frame:
+     * {@code Long.parseLong} would otherwise accept a leading sign
+     * (e.g. {@code "H-1"} → {@code -1}) and would accept more than 8 digits and
+     * then silently truncate them on the narrowing cast (e.g. {@code "H100000000"}
+     * → {@code 0}).
+     *
+     * <p>Package-private and static so it can be unit-tested without a live
+     * socket or {@code Context}.
+     *
+     * @param head          the response head ({@code "H"} + hex handle); may be
+     *                      {@code null} or too short to carry a handle
+     * @param currentHandle the handle value to keep when {@code head} can't be parsed
+     * @return the parsed handle, or {@code currentHandle} on any parse failure
+     */
+    static int parseXieguHandle(String head, int currentHandle) {
+        if (head == null || head.length() < 2) {
+            return currentHandle;
+        }
+        String hex = head.substring(1);
+        if (hex.length() > 8 || !isUnsignedHex(hex)) {
+            Log.e(TAG, "Xiegu handle parse failed (expected 1-8 hex digits): " + hex);
+            return currentHandle;
+        }
+        // Validated to 1-8 unsigned hex digits, so this never throws; parse as
+        // long so 0x80000000..0xFFFFFFFF narrow into the int field with the same
+        // 32-bit pattern (a plain signed-int parse would reject those).
+        return (int) Long.parseLong(hex, 16);
+    }
+
+    /** @return true iff {@code s} is non-empty and every char is {@code [0-9a-fA-F]}. */
+    private static boolean isUnsignedHex(String s) {
+        if (s.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            boolean hex = (c >= '0' && c <= '9')
+                    || (c >= 'a' && c <= 'f')
+                    || (c >= 'A' && c <= 'F');
+            if (!hex) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
