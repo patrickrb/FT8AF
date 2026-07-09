@@ -1123,7 +1123,9 @@ public class FlexRadio {
                     getHeadAndContent(line, "\\|");
                     try {
                         //Log.e(TAG, "FlexResponse: "+line );
-                        this.message_num = Integer.parseInt(head.substring(2), 16);//Message number, 32-bit, hex
+                        if (head.length() >= 2) {//Guard: a truncated/garbled frame ("M" or "M|...") would throw
+                            this.message_num = Integer.parseInt(head.substring(2), 16);//Message number, 32-bit, hex
+                        }
                     } catch (NumberFormatException e) {
                         e.printStackTrace();
                         Log.e(TAG, "FlexResponse parseInt message_num exception: " + e.getMessage());
