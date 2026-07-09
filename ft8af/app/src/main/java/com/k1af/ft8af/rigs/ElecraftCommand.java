@@ -71,7 +71,16 @@ public class ElecraftCommand {
     }
 
     public static int getSWRMeter(ElecraftCommand command) {
-        return  Integer.parseInt(command.data.substring(0,3));
+        if (command.data.length() < 3) return 0;
+        // Meter replies are parsed on the main thread with no surrounding
+        // try/catch on the Bluetooth SPP path, so a garbled or non-numeric byte
+        // sequence must not be allowed to throw and crash the app.
+        try {
+            return Integer.parseInt(command.data.substring(0, 3));
+        } catch (NumberFormatException e) {
+            Log.e(TAG, "Non-numeric SWR meter value: " + command.data);
+            return 0;
+        }
     }
 
 
