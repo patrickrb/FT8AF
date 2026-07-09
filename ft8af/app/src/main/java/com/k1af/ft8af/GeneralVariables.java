@@ -1221,17 +1221,30 @@ public class GeneralVariables {
     }
 
     /**
-     * Determine if it is an integer.
+     * Determine if it is an integer that fits in an {@code int}.
+     *
+     * <p>Callers use this as a guard immediately before {@code Integer.parseInt} /
+     * {@code toInt()} (e.g. the ICOM/Xiegu network-port fields). A digit-only
+     * regex is <em>not</em> sufficient for that contract: a string such as
+     * {@code "9999999999"} is all digits yet overflows {@code int}, so the
+     * subsequent parse throws {@link NumberFormatException}. Those parses run on
+     * the UI thread with no surrounding try/catch, so the mismatch was a hard
+     * crash. Verify the value actually parses so the guard cannot lie.
      *
      * @param str Input string
-     * @return Returns true if integer, false otherwise
+     * @return Returns true only if {@code str} is a non-empty run of digits that
+     *         parses into an {@code int}, false otherwise
      */
 
     public static boolean isInteger(String str) {
-        if (str != null && !"".equals(str.trim()))
-            return str.matches("^[0-9]*$");
-        else
+        if (str == null || "".equals(str.trim()) || !str.matches("^[0-9]*$"))
             return false;
+        try {
+            Integer.parseInt(str);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     /**
