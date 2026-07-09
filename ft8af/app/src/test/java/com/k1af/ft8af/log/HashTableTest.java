@@ -46,4 +46,17 @@ public class HashTableTest {
         assertThat(table.get(null, null)).isNull();
         assertThat(table.remove(null, "K1ABC")).isNull();
     }
+
+    @Test
+    public void nullKeyRowAndColumn_returnEmptyMapNotThrow() {
+        HashTable table = new HashTable();
+        table.put("W1AW", "K1ABC", true);
+        // row(null)/column(null) would throw NPE if forwarded straight to guava;
+        // to match the documented null-tolerance they report "nothing present".
+        assertThat(table.row(null)).isEmpty();
+        assertThat(table.column(null)).isEmpty();
+        // Non-null keys still resolve normally.
+        assertThat(table.row("W1AW")).containsKey("K1ABC");
+        assertThat(table.column("K1ABC")).containsKey("W1AW");
+    }
 }

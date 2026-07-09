@@ -25,8 +25,10 @@ import androidx.annotation.Nullable;
 
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Table;
+import com.google.common.collect.Tables;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
@@ -34,7 +36,13 @@ import java.util.Set;
 public class HashTable implements Table {
     // Raw Table so the delegated return types erase to the same raw types the raw
     // Table interface this class implements expects (e.g. Set<Cell>, Map).
-    private final Table delegate = HashBasedTable.create();
+    //
+    // findSwlQso runs on the decode thread, and concurrent decode passes can
+    // overlap (MainViewModel: slot N's late/deep pass vs slot N+1's early pass,
+    // #398), so contains/put/remove can be called from two threads at once.
+    // HashBasedTable is not thread-safe, so wrap it in a synchronized view to
+    // keep concurrent mutation from corrupting the backing HashMap.
+    private final Table delegate = Tables.synchronizedTable(HashBasedTable.create());
 
     @Override
     public boolean contains(@Nullable Object rowKey, @Nullable Object columnKey) {
@@ -100,11 +108,13 @@ public class HashTable implements Table {
 
     @Override
     public Map row(Object rowKey) {
+        if (rowKey == null) return Collections.emptyMap();
         return delegate.row(rowKey);
     }
 
     @Override
     public Map column(Object columnKey) {
+        if (columnKey == null) return Collections.emptyMap();
         return delegate.column(columnKey);
     }
 
