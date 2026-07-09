@@ -121,6 +121,30 @@ public class MaidenheadGridTest {
     }
 
     @Test
+    public void getDist_samePointNeverProducesNaN() {
+        // Regression: for two stations in the SAME Maidenhead grid, gridToLatLng
+        // resolves both to the identical grid centre. The great-circle dot
+        // product then rounds to fractionally above 1.0 for ~2% of grids, and an
+        // unclamped Math.acos(>1) returns NaN — surfacing as "NaN km" in the log
+        // and calling-list distance column and silently dropping the contact from
+        // the distance statistics. AI04's centre (-5.5, -179.0) is one such point.
+        LatLng ai04 = new LatLng(-5.5, -179.0);
+        double d = MaidenheadGrid.getDist(ai04, ai04);
+        assertThat(Double.isNaN(d)).isFalse();
+        assertThat(d).isWithin(DIST_TOL).of(0.0);
+    }
+
+    @Test
+    public void getDistStr_sameNaNProneGridIsBlankOrZero() {
+        // The same fault seen through the display formatter: getDistStr checks
+        // dist == 0 (false for NaN) then formats, so before the acos clamp this
+        // rendered the literal "NaN km"/"NaN mi". It must be "" or "0 <unit>".
+        String label = MaidenheadGrid.getDistUnitLabel();
+        assertThat(MaidenheadGrid.getDistStr("AI04", "AI04")).isAnyOf("", "0 " + label);
+        assertThat(MaidenheadGrid.getDistStrEN("AI04", "AI04")).isAnyOf("", "0 " + label);
+    }
+
+    @Test
     public void getDist_invalidGridReturnsZero() {
         // Per the production contract: if either grid fails to parse, return 0.
         // Grids of an unsupported length (3, 5, 7+) are rejected outright;
