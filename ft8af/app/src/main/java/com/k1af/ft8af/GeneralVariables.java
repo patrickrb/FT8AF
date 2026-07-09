@@ -432,7 +432,10 @@ public class GeneralVariables {
     public static String qrzXmlPassword = ""; //QRZ XML API password
     public static boolean pskOverlayEnabled = false; //PSK Reporter map overlay (issue #33)
     public static boolean synFrequency = false;//Same-frequency transmit
-    public static boolean holdTxFreq = false;//Hold TX freq: don't move the TX offset to a station you answer (WSJT-X "Hold Tx Freq")
+    // Hold TX freq: don't move the TX offset to a station you answer (WSJT-X
+    // "Hold Tx Freq"). Enabled by default (issue #498) to keep the TX frequency
+    // stable; the config DB only overrides this once the user explicitly toggles it.
+    public static boolean holdTxFreq = true;
     public static int transmitDelay = 500;//Transmit delay; also allows decoding time for the previous cycle
     public static int pttDelay = 100;//PTT response time; radios typically need some response time after PTT command, default 100ms
     public static int lateStartTolerance = 2000;//Max ms of leading audio a late manual TX may clip past the per-mode audio slack (ModeProfile.audioSlackMillis) and still go out this cycle. Effective start budget is slack+tolerance. 0-4000. See issue #467.
