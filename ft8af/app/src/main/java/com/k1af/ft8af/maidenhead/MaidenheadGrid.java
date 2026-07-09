@@ -263,14 +263,47 @@ public class MaidenheadGrid {
      * @return distance in kilometers
      */
     public static double getDist(LatLng latLng1, LatLng latLng2) {
-        double radiansAX = Math.toRadians(latLng1.longitude); // A longitude in radians
-        double radiansAY = Math.toRadians(latLng1.latitude); // A latitude in radians
-        double radiansBX = Math.toRadians(latLng2.longitude); // B longitude in radians
-        double radiansBY = Math.toRadians(latLng2.latitude); // B latitude in radians
+        return greatCircleDistanceKm(latLng1.latitude, latLng1.longitude,
+                latLng2.latitude, latLng2.longitude);
+    }
+
+    /**
+     * Great-circle distance in kilometres between two points given in decimal
+     * degrees. Extracted as a plain static method (no Play-Services {@code LatLng})
+     * so the {@code acos} domain clamp below is unit-testable without Robolectric.
+     *
+     * <p>The dot product {@code cos} of the angle AOB is mathematically in
+     * {@code [-1, 1]}, but for two identical or sub-metre-apart points IEEE-754
+     * rounding of {@code cos(b1)cos(b2)cos(a1-a2) + sin(b1)sin(b2)} can land one
+     * ULP above {@code 1.0}. {@link Math#acos} of anything {@code > 1.0} returns
+     * {@link Double#NaN}, which propagated as the literal "NaN km" / "NaN mi" in
+     * the log and calling-list distance columns for two stations in the same
+     * Maidenhead grid (their grid centres coincide), and silently dropped those
+     * contacts from the min/max distance statistics (every {@code NaN} comparison
+     * is false). Clamping {@code cos} to {@code [-1, 1]} yields the correct 0 km
+     * for coincident points and leaves every valid distance unchanged.
+     *
+     * @param lat1 latitude of point A in degrees
+     * @param lng1 longitude of point A in degrees
+     * @param lat2 latitude of point B in degrees
+     * @param lng2 longitude of point B in degrees
+     * @return great-circle distance in kilometres
+     */
+    static double greatCircleDistanceKm(double lat1, double lng1, double lat2, double lng2) {
+        double radiansAX = Math.toRadians(lng1); // A longitude in radians
+        double radiansAY = Math.toRadians(lat1); // A latitude in radians
+        double radiansBX = Math.toRadians(lng2); // B longitude in radians
+        double radiansBY = Math.toRadians(lat2); // B latitude in radians
 
         // The formula part "cos(b1)*cos(b2)*cos(a1-a2)+sin(b1)*sin(b2)" gives the cos value of angle AOB
         double cos = Math.cos(radiansAY) * Math.cos(radiansBY) * Math.cos(radiansAX - radiansBX)
                 + Math.sin(radiansAY) * Math.sin(radiansBY);
+        // Clamp to acos's valid domain — rounding can push cos just past ±1.
+        if (cos > 1.0) {
+            cos = 1.0;
+        } else if (cos < -1.0) {
+            cos = -1.0;
+        }
         double acos = Math.acos(cos); // Arccosine value
         return EARTH_RADIUS * acos / 1000; // Final result in km
     }
