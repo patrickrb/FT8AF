@@ -134,4 +134,18 @@ public class PeakBlocksTest {
     public void emptyBarsProduceEmptyResult() {
         assertThat(update(new int[] {1, 2, 3}, new int[0])).isEmpty();
     }
+
+    @Test
+    public void reusePreviousBlocks_onlyWhenGridUnchanged() {
+        // Steady state: previous bar count matches the bins to draw -> reuse the
+        // held blocks (bit-for-bit legacy behavior).
+        assertThat(PeakBlocks.canReusePreviousBlocks(64, 64)).isTrue();
+        // First frame: no previous bars -> nothing to reuse.
+        assertThat(PeakBlocks.canReusePreviousBlocks(0, 64)).isFalse();
+        // Bin count grew (spectrum-width / sample-rate change) -> stale grid.
+        assertThat(PeakBlocks.canReusePreviousBlocks(32, 64)).isFalse();
+        // Bin count shrank -> stale grid; blocks from the wider grid would smear
+        // over the new narrower bars, so they must be dropped, not reused.
+        assertThat(PeakBlocks.canReusePreviousBlocks(64, 32)).isFalse();
+    }
 }

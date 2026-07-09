@@ -101,7 +101,7 @@ public class ColumnarView extends View {
             // below). Drive the peak-hold state off those bars, sized to them,
             // so a bin-count change between frames can't index out of bounds.
             int bars = newData.size();
-            if (bars > 0) {
+            if (PeakBlocks.canReusePreviousBlocks(bars, binsToShow)) {
                 int floorTop = getHeight() - blockHeight;
                 int[] barTops = new int[bars];
                 for (int i = 0; i < bars; i++) {
@@ -122,6 +122,13 @@ public class ColumnarView extends View {
                     block.top = blockTops[i];
                     block.bottom = blockTops[i] + blockHeight;
                 }
+            } else {
+                // First frame, or the bin count changed this frame (spectrum-width
+                // / sample-rate change). The held blocks belong to the previous
+                // grid, so drop them instead of drawing them misaligned over the
+                // new bars; peak-hold restarts from the floor next frame.
+                blockData.clear();
+                blockTops = new int[0];
             }
         }
         newData.clear();

@@ -25,6 +25,26 @@ public final class PeakBlocks {
     }
 
     /**
+     * Whether the peak-hold blocks carried over from the previous frame are still
+     * valid for the frame about to be drawn.
+     *
+     * <p>The block geometry is built from the previous frame's bars but drawn over
+     * the current frame's bars, so it is only aligned when the grid is unchanged.
+     * A differing bin count — a spectrum-width or audio-sample-rate change — or the
+     * very first frame (no previous bars) means the held blocks belong to a stale
+     * grid; drawing them would smear misaligned blocks over the new bars for one
+     * frame. In that case the caller drops the blocks and lets peak-hold restart
+     * from the floor on the next frame.
+     *
+     * @param previousBarCount number of bars drawn last frame (the held block count).
+     * @param binsToShow       number of bars to be drawn this frame.
+     * @return {@code true} only when the grid is unchanged and blocks can be reused.
+     */
+    public static boolean canReusePreviousBlocks(int previousBarCount, int binsToShow) {
+        return previousBarCount > 0 && previousBarCount == binsToShow;
+    }
+
+    /**
      * Recomputes the peak-hold block tops for one frame.
      *
      * @param prevTops    previous frame's block tops (peak-hold state); its
