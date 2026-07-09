@@ -814,6 +814,13 @@ public class GeneralVariables {
     static public String getShortCallsign(String callsign) {
         if (callsign.contains("/")) {
             String[] temp = callsign.split("/");
+            // An all-slash string ("/", "//", ...) splits to a zero-length array
+            // because Java strips trailing empty tokens; there is no segment to
+            // return, so fall back to the original rather than indexing temp[0]
+            // and throwing ArrayIndexOutOfBoundsException.
+            if (temp.length == 0) {
+                return callsign;
+            }
             int max = 0;
             int max_index = 0;
             for (int i = 0; i < temp.length; i++) {
