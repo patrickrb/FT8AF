@@ -2870,7 +2870,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.audioOutput32Bit = result.equals("1");
                 }
                 if (name.equalsIgnoreCase("audioRate")) {//Output audio sample rate
-                    GeneralVariables.audioSampleRate =Integer.parseInt( result);
+                    // Defensive parse (like the FFT/serial keys): settings import (#382)
+                    // can feed an empty or non-numeric value through here, and this key
+                    // had no guard at all, so a hand-edited/corrupted backup crashed
+                    // startup hydration (and every relaunch). Fall back to the default.
+                    GeneralVariables.audioSampleRate = parseConfigInt(result, 12000);
                 }
                 if (name.equalsIgnoreCase("audioInputDevice")) {//Audio input device ID
                     GeneralVariables.audioInputDeviceId = result.equals("") ? 0 : Integer.parseInt(result);
@@ -2896,14 +2900,19 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("debugModeEnabled")) {//Hidden debug screen unlock
                     GeneralVariables.debugModeEnabled = result.equals("1");
                 }
+                // Serial line params: same defensive parse as audioRate above. These
+                // three keys were the only remaining hydration parses with no guard,
+                // so an empty or non-numeric value from an imported backup (#382) threw
+                // NumberFormatException and crashed hydration. Fall back to the defaults
+                // (8-N-1) that GeneralVariables initializes to.
                 if (name.equalsIgnoreCase("dataBits")) {//Serial data bits
-                    GeneralVariables.serialDataBits =Integer.parseInt(result);
+                    GeneralVariables.serialDataBits = parseConfigInt(result, 8);
                 }
                 if (name.equalsIgnoreCase("stopBits")) {//Serial stop bits
-                    GeneralVariables.serialStopBits =Integer.parseInt(result);
+                    GeneralVariables.serialStopBits = parseConfigInt(result, 1);
                 }
                 if (name.equalsIgnoreCase("parityBits")) {//Serial parity bits
-                    GeneralVariables.serialParity =Integer.parseInt(result);
+                    GeneralVariables.serialParity = parseConfigInt(result, 0);
                 }
 
                 // cloudlogs
