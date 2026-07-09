@@ -351,16 +351,21 @@ public class FT8Package {
 
 
     /**
-     * Format a standard callsign.
-     * A standard callsign is 6 characters: 1-2 letter prefix + 1 digit, suffix up to 3 letters.
-     * Formatting rules:
+     * Normalize a callsign into the 6-character {@code c6} field used by
+     * {@link #pack_c28}.
+     * <p>
+     * {@code pack_c28} calls this on the raw callsign <em>before</em> deciding
+     * whether the callsign is standard, so the input is not guaranteed to be a
+     * well-formed standard callsign — short/junk tokens (e.g. a CRC-collision
+     * false decode) reach here too and must pass through without crashing.
+     * Formatting rules (applied only when the input matches):
      * 1. Swaziland callsign prefix issue: 3DA0XYZ -> 3D0XYZ
      * 2. Guinea callsign prefix issue: 3XA0XYZ -> QA0XYZ
      * 3. Callsigns with a digit in position 2 are left-padded with a space: A0XYZ -> " A0XYZ"
-     * 4. Suffixes shorter than 3 characters are right-padded with spaces: BA2BI -> "BA2BI "
+     * 4. Results shorter than 6 characters are right-padded with spaces: BA2BI -> "BA2BI "
      *
-     * @param callsign callsign
-     * @return the C28 value represented as an int
+     * @param callsign callsign (may be a short/non-standard token)
+     * @return the space-padded 6-character {@code c6} string
      */
     // Package-private (not private) so FT8PackagePackingTest can exercise the
     // short-callsign guard below directly: pack_c28 routes a non-standard
