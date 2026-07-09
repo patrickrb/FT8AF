@@ -362,7 +362,11 @@ public class FT8Package {
      * @param callsign callsign
      * @return the C28 value represented as an int
      */
-    private static String formatCallsign(String callsign) {
+    // Package-private (not private) so FT8PackagePackingTest can exercise the
+    // short-callsign guard below directly: pack_c28 routes a non-standard
+    // callsign into the native getHash22 path, which a plain-JVM unit test
+    // cannot load, so the crash-safety of this formatter has to be tested here.
+    static String formatCallsign(String callsign) {
         String c6 = callsign;
         // fix Swaziland callsign prefix issue: 3DA0XYZ -> 3D0XYZ
         if (callsign.length() > 3 && callsign.substring(0, 4).equals("3DA0") && callsign.length() <= 7) {
@@ -372,7 +376,14 @@ public class FT8Package {
             c6 = "Q" + callsign.substring(2);
         } else {
             // if position 2 is a digit and position 3 is a letter, left-pad with a space: A0XYZ -> " A0XYZ" (except A6 prefix)
-            if (callsign.substring(0, 3).matches("[A-Z][0-9][A-Z]")) {
+            // The length>=3 guard is required: pack_c28 calls formatCallsign on
+            // the raw callsign BEFORE the standard-callsign check, and a decoder
+            // CRC-collision false decode can render a 1-2 char junk token into a
+            // callsign field (the same garbage getCallsignTo() already guards
+            // against). Without the guard, substring(0, 3) threw
+            // StringIndexOutOfBoundsException on the TX-encode path (e.g. calling
+            // a station whose decoded callsign came back as "W1").
+            if (callsign.length() >= 3 && callsign.substring(0, 3).matches("[A-Z][0-9][A-Z]")) {
                 c6 = " " + callsign;
             }
         }
