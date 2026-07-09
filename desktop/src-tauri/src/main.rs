@@ -190,8 +190,9 @@ fn all_config(state: State<AppState>) -> Vec<(String, String)> {
 /// Resolve the operator grid from the OS location service. Opt-in only: refuses
 /// unless the user has turned on the `location_service_enabled` flag, so nothing
 /// requests location (and no permission prompt appears) until they explicitly
-/// opt in. Returns lat/lon + the derived Maidenhead grid, or a human-readable
-/// error the UI shows without touching the manual field.
+/// opt in. Returns only the coarse derived Maidenhead grid (the raw fix is
+/// discarded inside the backend), or a human-readable error the UI shows without
+/// touching the manual field.
 #[tauri::command]
 fn get_os_location(state: State<AppState>) -> Result<OsLocation, String> {
     let enabled = os_location::location_enabled(

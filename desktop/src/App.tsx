@@ -737,6 +737,11 @@ function SettingsScreen(props: {
     setLocating(true);
     setLocError(null);
     try {
+      // The checkbox persists this flag asynchronously; the button only appears
+      // once locEnabled is true, so re-assert and AWAIT the write here before
+      // querying. Otherwise "enable then immediately click" can reach the backend
+      // gate before the flag is committed, and get_os_location would reject.
+      await api.setConfig("location_service_enabled", "true");
       const loc = await api.getOsLocation();
       setGrid(loc.grid);
       onStatus(`Location set grid to ${loc.grid}`);

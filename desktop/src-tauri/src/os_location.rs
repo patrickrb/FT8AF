@@ -13,6 +13,7 @@
 //!     to manual entry (see the module docs / PR for the CoreLocation plan).
 
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use crate::util;
@@ -29,11 +30,12 @@ pub const OS_GRID_PRECISION: usize = 6;
 /// "Use my location" button can never hang the app.
 const QUERY_TIMEOUT: Duration = Duration::from_secs(15);
 
-/// A resolved OS location plus the derived Maidenhead grid handed to the UI.
+/// The result handed to the UI: only the coarse derived Maidenhead grid. The raw
+/// latitude/longitude fix is used to compute the grid and then dropped inside the
+/// backend, so precise coordinates never cross the IPC boundary — the exposed
+/// value is a ~2.5 × 5 km subsquare, not a pinpoint QTH.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct OsLocation {
-    pub lat: f64,
-    pub lon: f64,
     pub grid: String,
 }
 
@@ -46,13 +48,12 @@ pub fn location_enabled(value: Option<&str>) -> bool {
     matches!(value, Some("true"))
 }
 
-/// Convert a raw OS fix into the [`OsLocation`] returned to the UI. Kept separate
+/// Convert a raw OS fix into the [`OsLocation`] returned to the UI, coarsening it
+/// to a Maidenhead subsquare and discarding the precise lat/lon. Kept separate
 /// from the platform query so the lat/lon -> grid step is unit-testable without
 /// touching any OS API.
 pub fn to_os_location(lat: f64, lon: f64) -> OsLocation {
     OsLocation {
-        lat,
-        lon,
         grid: util::latlon_to_maidenhead(lat, lon, OS_GRID_PRECISION),
     }
 }
@@ -67,17 +68,52 @@ pub fn resolve() -> Result<OsLocation, String> {
     Ok(to_os_location(lat, lon))
 }
 
+/// At most one OS location query runs at a time.
+///
+/// On timeout we return to the caller while the helper thread is still parked on
+/// the (possibly wedged) platform service — a blocking D-Bus / WinRT call can't
+/// be cancelled from outside. Without a guard, mashing "Use my location" would
+/// spawn a fresh thread per press and leak them (and their OS handles). This flag
+/// makes a second press reject fast instead, so a stuck service leaks at most one
+/// helper thread rather than one per click. The claiming thread releases it once
+/// `platform::query()` finally returns.
+static QUERY_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+
+/// Try to claim the single in-flight slot. Returns `true` if this caller claimed
+/// it (and must later call [`end_query`]), `false` if a query is already running.
+fn begin_query() -> bool {
+    !QUERY_IN_FLIGHT.swap(true, Ordering::SeqCst)
+}
+
+/// Release the in-flight slot claimed by [`begin_query`].
+fn end_query() {
+    QUERY_IN_FLIGHT.store(false, Ordering::SeqCst);
+}
+
 /// Run the platform query on a helper thread and bound it with [`QUERY_TIMEOUT`]
 /// so a stuck location service can never wedge the caller.
 fn query_with_timeout() -> Result<(f64, f64), String> {
+    if !begin_query() {
+        return Err(
+            "A location query is already in progress — please wait for it to \
+             finish."
+                .into(),
+        );
+    }
     let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::Builder::new()
+    let spawn = std::thread::Builder::new()
         .name("ft8af-os-location".into())
         .spawn(move || {
             // The receiver may already be gone (timed out); ignore send errors.
             let _ = tx.send(platform::query());
-        })
-        .map_err(|e| format!("could not start location query: {e}"))?;
+            // Release the slot only once the (possibly long) query has returned,
+            // so no second thread is spawned while this one is still parked.
+            end_query();
+        });
+    if let Err(e) = spawn {
+        end_query();
+        return Err(format!("could not start location query: {e}"));
+    }
     match rx.recv_timeout(QUERY_TIMEOUT) {
         Ok(result) => result,
         Err(_) => Err(
@@ -153,9 +189,14 @@ mod platform {
             .and_then(|b| b.build())
             .map_err(|e| format!("could not create a GeoClue client: {e}"))?;
         // DesktopId must match an installed .desktop file for GeoClue's authority
-        // check; the app id doubles as the identifier here.
-        let _ = client.set_desktop_id("ft8af");
-        let _ = client.set_requested_accuracy_level(ACCURACY_CITY);
+        // check; the app id doubles as the identifier here. Surface failures here
+        // rather than letting a later start() fail with a less obvious cause.
+        client
+            .set_desktop_id("ft8af")
+            .map_err(|e| format!("could not set the GeoClue desktop id: {e}"))?;
+        client
+            .set_requested_accuracy_level(ACCURACY_CITY)
+            .map_err(|e| format!("could not set the GeoClue accuracy level: {e}"))?;
 
         // Subscribe before Start() so we can't miss the first LocationUpdated.
         let updates = client
@@ -236,12 +277,22 @@ mod tests {
     }
 
     #[test]
-    fn to_os_location_derives_six_char_grid() {
-        // Munich -> JN58td (see util::latlon_to_maidenhead tests).
+    fn to_os_location_derives_six_char_grid_and_drops_coordinates() {
+        // Munich -> JN58td (see util::latlon_to_maidenhead tests). Only the coarse
+        // grid is exposed; the raw lat/lon is discarded inside the backend.
         let loc = to_os_location(48.14666, 11.60833);
         assert_eq!(loc.grid, "JN58td");
         assert_eq!(loc.grid.len(), OS_GRID_PRECISION);
-        assert_eq!(loc.lat, 48.14666);
-        assert_eq!(loc.lon, 11.60833);
+    }
+
+    #[test]
+    fn only_one_query_in_flight_at_a_time() {
+        // First caller claims the slot; a second is rejected until the first
+        // releases, so mashing the button can't spawn overlapping helper threads.
+        assert!(begin_query());
+        assert!(!begin_query());
+        end_query();
+        assert!(begin_query());
+        end_query();
     }
 }

@@ -99,10 +99,10 @@ export interface BandInfo {
   dial_hz: number;
 }
 
-/** Result of resolving the operator grid from the OS location service (issue #471). */
+/** Result of resolving the operator grid from the OS location service (issue #471).
+ *  Only the coarse grid is returned — the backend derives it from the raw fix and
+ *  discards the precise coordinates, so no pinpoint location crosses the IPC. */
 export interface OsLocation {
-  lat: number;
-  lon: number;
   /** Derived Maidenhead grid (6-char subsquare). */
   grid: string;
 }
