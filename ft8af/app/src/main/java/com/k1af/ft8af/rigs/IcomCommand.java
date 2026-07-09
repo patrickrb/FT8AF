@@ -157,7 +157,7 @@ public class IcomCommand {
      */
     public long getFrequency(boolean hasSubCommand) {
         byte[] data = getData(hasSubCommand);
-        if (data.length < 5) {
+        if (data == null || data.length < 5) {//short/garbled frame with no data section
             return -1;
         }
         return (int) (data[0] & 0x0f)//ones digit 1Hz
