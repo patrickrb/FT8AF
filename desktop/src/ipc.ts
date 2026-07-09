@@ -99,6 +99,14 @@ export interface BandInfo {
   dial_hz: number;
 }
 
+/** Result of resolving the operator grid from the OS location service (issue #471). */
+export interface OsLocation {
+  lat: number;
+  lon: number;
+  /** Derived Maidenhead grid (6-char subsquare). */
+  grid: string;
+}
+
 /** Waterfall FFT window (developer setting, issue #428). */
 export type WfWindow = "rect" | "hann" | "hamming" | "blackman" | "blackman_harris";
 
@@ -183,6 +191,10 @@ export const api = {
   getConfig: (key: string) => invoke<string | null>("get_config", { key }),
   setConfig: (key: string, value: string) => invoke("set_config", { key, value }),
   allConfig: () => invoke<[string, string][]>("all_config"),
+
+  /** Resolve the operator grid from the OS location service (opt-in, issue #471).
+   * Rejects unless `location_service_enabled` is on. */
+  getOsLocation: () => invoke<OsLocation>("get_os_location"),
 
   /** Apply + persist live-waterfall FFT parameters (Rust side persists). */
   setWaterfallConfig: (config: WaterfallConfig) =>

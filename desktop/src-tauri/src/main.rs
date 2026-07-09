@@ -11,6 +11,7 @@ use ft8af::audio::{self, AudioDevice};
 use ft8af::bands;
 use ft8af::db::{Db, QsoRecord};
 use ft8af::engine::{self, AnswerArgs, EngineCommand, EngineHandle};
+use ft8af::os_location::{self, OsLocation};
 use ft8af::rig::{self, HamlibRig, RigConfig, SerialPortInfo};
 use ft8af::wf::WfConfig;
 
@@ -184,6 +185,31 @@ fn all_config(state: State<AppState>) -> Vec<(String, String)> {
     state.db.all_config()
 }
 
+// --- optional OS location -> grid (issue #471) ------------------------------
+
+/// Resolve the operator grid from the OS location service. Opt-in only: refuses
+/// unless the user has turned on the `location_service_enabled` flag, so nothing
+/// requests location (and no permission prompt appears) until they explicitly
+/// opt in. Returns lat/lon + the derived Maidenhead grid, or a human-readable
+/// error the UI shows without touching the manual field.
+#[tauri::command]
+fn get_os_location(state: State<AppState>) -> Result<OsLocation, String> {
+    let enabled = os_location::location_enabled(
+        state
+            .db
+            .get_config(os_location::LOCATION_ENABLED_KEY)
+            .as_deref(),
+    );
+    if !enabled {
+        return Err(
+            "Location service is off. Turn on \"Use OS location service\" in \
+             Settings → Station first."
+                .into(),
+        );
+    }
+    os_location::resolve()
+}
+
 #[tauri::command]
 fn set_waterfall_config(state: State<AppState>, config: WfConfig) {
     // The engine sanitizes, persists (wf_window/wf_fft_size/wf_avg), and
@@ -268,6 +294,7 @@ fn main() {
             set_config,
             all_config,
             set_waterfall_config,
+            get_os_location,
         ])
         .run(tauri::generate_context!())
         .expect("error running FT8AF");
