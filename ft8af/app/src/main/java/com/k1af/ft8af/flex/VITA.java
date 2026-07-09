@@ -81,7 +81,10 @@ public class VITA {
     public int classId;//For FLEX this should be 0x534CFFF, combining informationClassCode and packetClassCode
     public long classId64;
 
-    public byte[] payload = new byte[0];//never null: UDP stream handlers deref this without a null check
+    //Shared empty payload so header-only/malformed packets (and the field default)
+    //don't each allocate a throwaway 0-length array on the high-rate UDP path.
+    private static final byte[] EMPTY_PAYLOAD = new byte[0];
+    public byte[] payload = EMPTY_PAYLOAD;//never null: UDP stream handlers deref this without a null check
     public long trailer;
     public boolean isAvailable = false;//Whether the radio object is valid
 
@@ -414,9 +417,10 @@ public class VITA {
         // whole app, since the Flex/Xiegu stream handlers dereference `payload` with
         // no null check. Clamp the length to >= 0 and always leave `payload` non-null.
         int payloadLength = data.length - offset - (trailerPresent ? 2 : 0);//trailer takes one 16-bit word
-        if (payloadLength < 0) payloadLength = 0;
-        payload = new byte[payloadLength];
-        if (payloadLength > 0) {
+        if (payloadLength <= 0) {
+            payload = EMPTY_PAYLOAD;//reuse the shared empty array; still non-null
+        } else {
+            payload = new byte[payloadLength];
             System.arraycopy(data, offset, payload, 0, payloadLength);
         }
         if (trailerPresent) {
