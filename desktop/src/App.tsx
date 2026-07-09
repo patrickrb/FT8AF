@@ -878,6 +878,12 @@ function SettingsScreen(props: {
   const [call, setCall] = useState("");
   const [rigLabel, setRigLabel] = useState("");
   const [grid, setGrid] = useState("");
+  // OS location service (opt-in, issue #471). Disabled by default: the button
+  // only appears once locEnabled is on, and nothing requests location until the
+  // user presses it.
+  const [locEnabled, setLocEnabled] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
   const [inputs, setInputs] = useState<AudioDevice[]>([]);
   const [outputs, setOutputs] = useState<AudioDevice[]>([]);
   const [ports, setPorts] = useState<SerialPortInfo[]>([]);
@@ -910,6 +916,9 @@ function SettingsScreen(props: {
     api.listHamlibRigs().then(setHamlibRigs);
     api.getConfig("my_call").then((v) => v && setCall(v));
     api.getConfig("my_grid").then((v) => v && setGrid(v));
+    // Restore the opt-in flag; only the exact string "true" enables it, so a
+    // missing/garbage value keeps the feature off.
+    api.getConfig("location_service_enabled").then((v) => setLocEnabled(v === "true"));
     api.getConfig("input_device").then((v) => v && setInput(v));
     api.getConfig("output_device").then((v) => v && setOutput(v));
     api.getConfig("base_freq").then((v) => v && setBaseFreq(parseInt(v, 10)));
@@ -969,6 +978,37 @@ function SettingsScreen(props: {
     onStatus(`Station set: ${call} ${grid}`);
   }
 
+  // Persist the opt-in flag. Turning it off never runs location code again; it
+  // does not itself request location (only the button does), so no permission
+  // prompt appears here.
+  function toggleLocEnabled(on: boolean) {
+    setLocEnabled(on);
+    setLocError(null);
+    api.setConfig("location_service_enabled", on ? "true" : "false");
+  }
+
+  // One-shot on demand: query the OS location service and fill the (still
+  // editable) Grid field. This press is what triggers the OS permission prompt.
+  async function useMyLocation() {
+    setLocating(true);
+    setLocError(null);
+    try {
+      // The checkbox persists this flag asynchronously; the button only appears
+      // once locEnabled is true, so re-assert and AWAIT the write here before
+      // querying. Otherwise "enable then immediately click" can reach the backend
+      // gate before the flag is committed, and get_os_location would reject.
+      await api.setConfig("location_service_enabled", "true");
+      const loc = await api.getOsLocation();
+      setGrid(loc.grid);
+      onStatus(`Location set grid to ${loc.grid}`);
+    } catch (e) {
+      // The manual field is left untouched on failure.
+      setLocError(typeof e === "string" ? e : String(e));
+    } finally {
+      setLocating(false);
+    }
+  }
+
   return (
     <div className="grid2">
       <div className="panel">
@@ -980,7 +1020,42 @@ function SettingsScreen(props: {
           </div>
           <div className="field">
             <label>Grid (Maidenhead)</label>
-            <input value={grid} onChange={(e) => setGrid(e.target.value.toUpperCase())} placeholder="EN37" />
+            <div className="row">
+              <input value={grid} onChange={(e) => setGrid(e.target.value.toUpperCase())} placeholder="EN37" />
+              {locEnabled && (
+                <button
+                  type="button"
+                  onClick={useMyLocation}
+                  disabled={locating}
+                  title="Fill the grid from your computer's location service"
+                >
+                  {locating ? "Locating…" : "📍 Use my location"}
+                </button>
+              )}
+            </div>
+            {locError && (
+              <span className="muted" style={{ display: "block", marginTop: 4, color: "var(--tx)" }}>
+                ⚠ {locError}
+              </span>
+            )}
+          </div>
+          <div className="field">
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={locEnabled}
+                onChange={(e) => toggleLocEnabled(e.target.checked)}
+                style={{ width: "auto" }}
+              />
+              Use OS location service
+            </label>
+            <span className="muted" style={{ display: "block", marginTop: 4 }}>
+              Off by default. When on, a “Use my location” button appears above to
+              fill your grid from the operating system’s location service (asks for
+              permission the first time). Coarse, city-level accuracy — a 6-char
+              subsquare, ~2.5 × 5 km. Linux uses GeoClue; Windows uses the system
+              geolocator; on macOS enter your grid manually for now.
+            </span>
           </div>
           <button className="primary" onClick={saveStation}>Save station</button>
         </div>
