@@ -40,14 +40,31 @@ public class DatabaseOprConfigHydrationTest {
 
     private DatabaseOpr opr;
 
+    private int origAudioSampleRate;
+    private int origSerialDataBits;
+    private int origSerialStopBits;
+    private int origSerialParity;
+
     @Before
     public void setUp() {
+        origAudioSampleRate = GeneralVariables.audioSampleRate;
+        origSerialDataBits = GeneralVariables.serialDataBits;
+        origSerialStopBits = GeneralVariables.serialStopBits;
+        origSerialParity = GeneralVariables.serialParity;
+
         opr = new DatabaseOpr(ApplicationProvider.getApplicationContext(), null, null, 18);
     }
 
     @After
     public void tearDown() {
-        opr.close();
+        try {
+            opr.close();
+        } finally {
+            GeneralVariables.audioSampleRate = origAudioSampleRate;
+            GeneralVariables.serialDataBits = origSerialDataBits;
+            GeneralVariables.serialStopBits = origSerialStopBits;
+            GeneralVariables.serialParity = origSerialParity;
+        }
     }
 
     private void hydrate() {
