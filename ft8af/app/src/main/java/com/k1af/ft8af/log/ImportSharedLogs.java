@@ -105,10 +105,7 @@ public class ImportSharedLogs {
                                         continue;//Skip pathological field lengths
                                     }
                                     if (valueLen > 0) {
-                                        if (values[1].length() < valueLen) {
-                                            valueLen = values[1].length() - 1;
-                                        }
-                                        String value = values[1].substring(0, valueLen);//Field value
+                                        String value = extractFieldValue(values[1], valueLen);//Field value
                                         record.put(name.toUpperCase(), value);//Save field, key must be uppercase
                                     }
                                 }
@@ -124,6 +121,25 @@ public class ImportSharedLogs {
             }
         }
         return records;
+    }
+
+    /**
+     * Slice an ADIF field value to its declared length, clamping the length down to the
+     * characters actually present. ADIF stores a field as {@code <NAME:LEN>VALUE}, and the
+     * declared LEN can exceed the value that follows when a record is truncated or the writer
+     * padded the length. In that case the whole (shorter) value must be kept — the previous
+     * {@code values[1].length() - 1} clamp silently dropped the last character (turning a value
+     * such as "FN31" into "FN3"), and reduced a single-character value to "". This mirrors the
+     * clamp used by {@link LogFileImport#getLogRecords()}.
+     *
+     * @param raw         the raw field value (everything after the first {@code >} up to the
+     *                    next {@code <})
+     * @param declaredLen the length declared in the field header (already known to be &gt; 0)
+     * @return the value clamped to the declared length or to the raw length, whichever is smaller
+     */
+    static String extractFieldValue(String raw, int declaredLen) {
+        int len = Math.min(declaredLen, raw.length());
+        return len > 0 ? raw.substring(0, len) : "";
     }
 
     public void doImport(InputStream logFileStream, OnShareLogEvents onShareLogEvents) {
