@@ -3,6 +3,7 @@ package radio.ks3ckc.ft8af
 import com.google.common.truth.Truth.assertThat
 import com.k1af.ft8af.GeneralVariables
 import org.junit.After
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -18,10 +19,17 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class HoldTxFreqDefaultTest {
 
+    private var savedHoldTxFreq = false
+
+    @Before
+    fun saveState() {
+        savedHoldTxFreq = GeneralVariables.holdTxFreq
+    }
+
     @After
-    fun restoreDefault() {
-        // Other suites read GeneralVariables.holdTxFreq; leave it at the default.
-        GeneralVariables.holdTxFreq = true
+    fun restoreState() {
+        // Other suites read GeneralVariables.holdTxFreq; restore the pre-test value.
+        GeneralVariables.holdTxFreq = savedHoldTxFreq
     }
 
     @Test
