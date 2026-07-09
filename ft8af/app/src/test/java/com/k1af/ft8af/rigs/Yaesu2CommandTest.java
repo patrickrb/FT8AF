@@ -9,9 +9,12 @@ import org.junit.Test;
  *
  * The rig reports frequency as 4 BCD bytes (8 nibbles, most-significant first)
  * followed by a mode byte. The eight nibbles are a strictly descending decimal
- * sequence with weights 1e8, 1e7, 1e6, 1e5, 1e4, 1e3, 1e2, 1e1 (10 Hz LSB) — the
- * exact inverse of {@link Yaesu2RigConstant#setOperationFreq}, which encodes those
- * same digit places.
+ * sequence with weights 1e8, 1e7, 1e6, 1e5, 1e4, 1e3, 1e2, 1e1 (10 Hz LSB).
+ *
+ * This inverts {@link Yaesu2RigConstant#setOperationFreq} exactly for
+ * 100 Hz-aligned dials. The encoder packs the last nibble as {@code freq % 100}
+ * rather than a clean tens-of-Hz digit, so for frequencies with a non-zero
+ * sub-100 Hz remainder the encoder and decoder are not exact inverses.
  */
 public class Yaesu2CommandTest {
 
