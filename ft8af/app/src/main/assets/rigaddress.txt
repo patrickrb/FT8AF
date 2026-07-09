@@ -73,3 +73,4 @@ UA3REO Wolf SDR(DIGU),00,4800,15
 UA3REO Wolf SDR(USB),00,4800,16
 (tr)uSDX (audio over cat),00,115200,17
 (tr)uSDX (TS-480),00,9600,7
+Hamlib NET (rigctld),00,00,26

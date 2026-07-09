@@ -353,6 +353,13 @@
     <string name="icom_login_button">Login</string>
     <string name="show_password">Password is visibility</string>
     <string name="connect_icom_ip">Connect ICom Radio %s …</string>
+    <string name="hamlib_connect_help">Connect to a Hamlib rigctld daemon</string>
+    <string name="hamlib_host">Host</string>
+    <string name="pl_input_hamlib_host">rigctld host or IP</string>
+    <string name="hamlib_port">Port</string>
+    <string name="pl_input_hamlib_port">rigctld port (default 4532)</string>
+    <string name="hamlib_connect_button">Connect</string>
+    <string name="connect_hamlib">Connect Hamlib rigctld %s …</string>
     <string name="connect_xiegu_ip">Connect XIEGU Radio %s …</string>
     <string name="network_exception">%s : Network transmission exception : %s</string>
     <string name="login_succeed">Login succeeded !</string>

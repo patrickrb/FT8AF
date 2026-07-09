@@ -587,9 +587,21 @@ public class FT8TransmitSignal {
         return out;
     }
 
+    /**
+     * Whether TX audio should be streamed over the rig's network control link
+     * instead of played through the local sound path. True only for network
+     * rigs that actually carry audio (FlexRadio / ICOM / XieGu Wi-Fi); a Hamlib
+     * NET rigctl link moves only CAT, so {@code rigUsesNetworkAudio} is false
+     * there and audio plays locally like a wired CAT rig.
+     */
+    static boolean transmitAudioOverNetwork(int connectMode, boolean rigUsesNetworkAudio) {
+        return connectMode == ConnectMode.NETWORK && rigUsesNetworkAudio;
+    }
+
     private void playFT8Signal(Ft8Message msg) {
 
-        if (GeneralVariables.connectMode == ConnectMode.NETWORK) {// network mode does not play audio locally
+        boolean rigUsesNetworkAudio = onDoTransmitted == null || onDoTransmitted.usesNetworkAudio();
+        if (transmitAudioOverNetwork(GeneralVariables.connectMode, rigUsesNetworkAudio)) {// network mode does not play audio locally
             Log.d(TAG, "playFT8Signal: Entering network transmit mode, waiting for audio to send.");
 
 

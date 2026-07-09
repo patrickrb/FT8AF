@@ -150,6 +150,17 @@ public abstract class BaseRig {
     }
 
     /**
+     * Whether this rig carries TX/RX audio over its control link (network
+     * rigs such as FlexRadio and the ICOM/XieGu Wi-Fi radios) rather than
+     * through the local sound path. Consulted only in network connect mode; a
+     * Hamlib NET rigctl link, which moves only CAT over TCP, overrides this to
+     * {@code false} so audio keeps flowing through the local sound card.
+     */
+    public boolean usesNetworkAudio() {
+        return true;
+    }
+
+    /**
      * Whether this rig's protocol has a CAT command to start the internal
      * antenna tuner (ATU). Capability can't be queried over CAT, so "true"
      * means the protocol family defines the command — rigs without an ATU

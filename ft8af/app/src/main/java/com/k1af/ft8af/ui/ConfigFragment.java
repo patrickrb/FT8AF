@@ -1529,6 +1529,8 @@ public class ConfigFragment extends Fragment {
                     // Open network radio list dialog
                     if (GeneralVariables.instructionSet== InstructionSet.FLEX_NETWORK) {
                         new SelectFlexRadioDialog(requireContext(), mainViewModel).show();
+                    }else if (GeneralVariables.instructionSet== InstructionSet.HAMLIB_NET) {
+                        new HamlibConnectDialog(requireContext(), mainViewModel).show();
                     }else if (GeneralVariables.instructionSet== InstructionSet.XIEGU_6100_FT8CNS) {
                         new SelectXieguRadioDialog(requireContext(), mainViewModel).show();
                     }

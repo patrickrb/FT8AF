@@ -22,4 +22,13 @@ public interface OnDoTransmitted {
     //as onBeforeTransmit/onAfterTransmit (VOX rigs key on the audio itself).
     default void onTuneKeyDown() {}
     default void onTuneKeyUp() {}
+
+    /**
+     * Whether the connected rig carries TX audio over its network control link
+     * (FlexRadio / ICOM / XieGu Wi-Fi) rather than the local sound path. A
+     * Hamlib NET rigctl link moves only CAT over TCP, so it returns false and TX
+     * audio plays locally like a wired CAT rig. Defaults true so existing
+     * network-rig behaviour is unchanged for implementers that don't override.
+     */
+    default boolean usesNetworkAudio() { return true; }
 }

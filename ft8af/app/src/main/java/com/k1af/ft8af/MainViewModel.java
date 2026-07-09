@@ -61,6 +61,7 @@ import com.k1af.ft8af.connector.CableConnector;
 import com.k1af.ft8af.connector.CableSerialPort;
 import com.k1af.ft8af.connector.ConnectMode;
 import com.k1af.ft8af.connector.FlexConnector;
+import com.k1af.ft8af.connector.HamlibConnector;
 import com.k1af.ft8af.connector.IComWifiConnector;
 import com.k1af.ft8af.connector.X6100Connector;
 import com.k1af.ft8af.database.ControlMode;
@@ -92,6 +93,7 @@ import com.k1af.ft8af.rigs.ElecraftRig;
 import com.k1af.ft8af.rigs.Flex6000Rig;
 import com.k1af.ft8af.rigs.FlexNetworkRig;
 import com.k1af.ft8af.rigs.GuoHeQ900Rig;
+import com.k1af.ft8af.rigs.HamlibNetRig;
 import com.k1af.ft8af.rigs.IcomRig;
 import com.k1af.ft8af.rigs.InstructionSet;
 import com.k1af.ft8af.rigs.KenwoodKT90Rig;
@@ -839,6 +841,14 @@ public class MainViewModel extends ViewModel {
             }
 
             @Override
+            public boolean usesNetworkAudio() {
+                // A Hamlib NET rigctl rig moves only CAT over TCP; its audio uses
+                // the local sound path, so TX must not be diverted to the
+                // network transmit branch (which would leave the air silent).
+                return baseRig == null || baseRig.usesNetworkAudio();
+            }
+
+            @Override
             public void onTransmitOverCAT(Ft8Message msg) {//send audio message via CAT
                 if (!supportTransmitOverCAT()) {
                     return;
@@ -1511,6 +1521,40 @@ public class MainViewModel extends ViewModel {
     }
 
     /**
+     * Connect to a Hamlib {@code rigctld} daemon over the network. Only CAT
+     * (frequency/PTT/mode) crosses the TCP link; audio keeps using the local
+     * sound path, so this is CAT control mode, not the audio-over-network mode.
+     *
+     * @param host rigctld host name or IP address
+     * @param port rigctld TCP port (Hamlib default 4532)
+     */
+    public void connectHamlibRig(String host, int port) {
+        if (host == null || host.trim().isEmpty() || port < 1 || port > 65535) {
+            return;//guarded UI can't submit this, but never open a socket on a bad target
+        }
+        if (baseRig != null && baseRig.getConnector() != null) {
+            baseRig.getConnector().disconnect();
+        }
+        GeneralVariables.controlMode = ControlMode.CAT;//CAT over the rigctld link
+        connectRig();//builds a HamlibNetRig for InstructionSet.HAMLIB_NET
+        if (baseRig == null) {
+            return;
+        }
+        HamlibConnector connector = new HamlibConnector(host, port, GeneralVariables.controlMode);
+        baseRig.setControlMode(GeneralVariables.controlMode);
+        baseRig.setOnRigStateChanged(onRigStateChanged);
+        baseRig.setConnector(connector);
+        connector.connect();
+
+        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {//connection takes time, wait before setting frequency
+            @Override
+            public void run() {
+                setOperationBand();//set carrier frequency
+            }
+        }, 1000);
+    }
+
+    /**
      * Connect to XieGu Radio
      *
      * @param context   context
@@ -1651,6 +1695,9 @@ public class MainViewModel extends ViewModel {
                 break;
             case InstructionSet.KENWOOD_TS440:
                 baseRig = new KenwoodTS440Rig();//KENWOOD TS-440S (TS-570 CAT, USB mode)
+                break;
+            case InstructionSet.HAMLIB_NET:
+                baseRig = new HamlibNetRig();//Hamlib NET rigctl: CAT over TCP to a rigctld daemon
                 break;
         }
 

@@ -477,6 +477,10 @@ public class GeneralVariables {
     public static String icomUserName = "ic705";
     public static String icomPassword = "";
 
+    //Hamlib NET rigctl connection: rigctld host and TCP port (Hamlib default 4532)
+    public static String hamlibHost = "192.168.1.1";
+    public static int hamlibPort = com.k1af.ft8af.rigs.HamlibRigctl.DEFAULT_PORT;
+
 
     public static boolean autoFollowCQ = false;//Auto-follow CQ
     public static boolean huntCallsCQ = false;//Hunt+CQ hybrid: call CQ when idle, answer CQs when heard

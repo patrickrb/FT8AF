@@ -2716,6 +2716,14 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("icomPassword")) {//ICOM password
                     GeneralVariables.icomPassword = result;
                 }
+                if (name.equalsIgnoreCase("hamlibHost")) {//Hamlib rigctld host
+                    GeneralVariables.hamlibHost = result.equals("") ? "192.168.1.1" : result;
+                }
+                if (name.equalsIgnoreCase("hamlibPort")) {//Hamlib rigctld TCP port
+                    GeneralVariables.hamlibPort = result.equals("")
+                            ? com.k1af.ft8af.rigs.HamlibRigctl.DEFAULT_PORT
+                            : Integer.parseInt(result);
+                }
                 if (name.equalsIgnoreCase("volumeValue")) {//Output volume level
                     GeneralVariables.volumePercent = result.equals("") ? 1.0f : Float.parseFloat(result) / 100f;
                     GeneralVariables.mutableVolumePercent.postValue(GeneralVariables.volumePercent);

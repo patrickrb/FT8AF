@@ -29,6 +29,7 @@ public class InstructionSet {
     public static final int YAESU_FT710=23;//FT-710, currently reuses DX10 instruction set; CAT read loop must stay off
     public static final int DISCOVERY_TX500=24;//Lab599 Discovery TX-500, TS-2000 compatible, DATA mode (MD6;)
     public static final int KENWOOD_TS440=25;//KENWOOD TS-440S, original Kenwood CAT, TS-570 compatible (TX;/RX; PTT)
+    public static final int HAMLIB_NET=26;//Hamlib NET rigctl: CAT over TCP to a rigctld daemon; audio stays on the local sound path
 
 
 
