@@ -184,9 +184,7 @@ object PskReporterSender {
         // Dedup: skip if same callsign+band reported within window
         val bandMhz = msg.band / 1_000_000
         val dedupKey = "$cleanCall|$bandMhz"
-        val lastSeen = dedup[dedupKey]
-        if (lastSeen != null && nowMs - lastSeen < DEDUP_WINDOW_MS) return null
-        dedup[dedupKey] = nowMs
+        if (!markIfFresh(dedupKey, nowMs)) return null
 
         return SpotRecord(
             senderCallsign = cleanCall,
@@ -196,6 +194,33 @@ object PskReporterSender {
             senderLocator = msg.maidenGrid?.takeIf { it.length >= 4 },
             flowStartSeconds = msg.utcTime / 1000,
         )
+    }
+
+    /**
+     * Atomically test the per-band dedup window for [dedupKey] ("CALL|BAND") and,
+     * when it has not been reported within [DEDUP_WINDOW_MS], record [nowMs] as its
+     * last-seen time.
+     *
+     * enqueue() runs on the decode worker thread, and overlapping decode passes
+     * (slot N's late/deep pass vs slot N+1's early pass, #398) can invoke it
+     * concurrently — the same reason the surrounding afterDecode() state is
+     * synchronized in MainViewModel. Two threads mutating a plain HashMap corrupt
+     * its buckets (dropped spots, wrong size, or a CPU-pinned wedged decode
+     * thread), and the get-then-put must be atomic or the same spot slips through
+     * twice. spotQueue is already a ConcurrentLinkedQueue; this map was the one
+     * shared structure left unguarded.
+     *
+     * @return true if the spot should be reported (and was just marked), false if
+     *         it is a duplicate inside the window.
+     */
+    @VisibleForTesting
+    internal fun markIfFresh(dedupKey: String, nowMs: Long): Boolean {
+        synchronized(dedup) {
+            val lastSeen = dedup[dedupKey]
+            if (lastSeen != null && nowMs - lastSeen < DEDUP_WINDOW_MS) return false
+            dedup[dedupKey] = nowMs
+            return true
+        }
     }
 
     @VisibleForTesting
@@ -536,7 +561,7 @@ object PskReporterSender {
     @VisibleForTesting
     internal fun resetForTests() {
         spotQueue.clear()
-        dedup.clear()
+        synchronized(dedup) { dedup.clear() }
         sendJob?.cancel()
         sendJob = null
         scope?.cancel()
