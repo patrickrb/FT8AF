@@ -105,4 +105,33 @@ public class AdifFormatTest {
         assertThat(AdifFormat.formatReport(-100)).isEqualTo("-100");
         assertThat(AdifFormat.formatReport(-120)).isEqualTo("-120");
     }
+
+    @Test
+    public void utf8Length_asciiEqualsCharCount() {
+        // Pure ASCII: byte length == char length, so existing records are byte-identical.
+        assertThat(AdifFormat.utf8Length("")).isEqualTo(0);
+        assertThat(AdifFormat.utf8Length("K1ABC")).isEqualTo(5);
+        assertThat(AdifFormat.utf8Length("Distance: 99 km, QSO by FT8AF")).isEqualTo(29);
+    }
+
+    @Test
+    public void utf8Length_countsBytesNotChars() {
+        // The bug: an ADIF <field:len> declared String.length() (chars). Non-ASCII
+        // content has more UTF-8 bytes than chars, so the declared length undercounted
+        // and the receiving logger mis-parsed the record.
+        assertThat("Café".length()).isEqualTo(4);        // é is one UTF-16 char
+        assertThat(AdifFormat.utf8Length("Café")).isEqualTo(5); // but two UTF-8 bytes
+
+        assertThat("naïve".length()).isEqualTo(5);
+        assertThat(AdifFormat.utf8Length("naïve")).isEqualTo(6);
+
+        // Three CJK ideographs: 3 chars, 9 bytes (3 bytes each).
+        assertThat("中文注".length()).isEqualTo(3);
+        assertThat(AdifFormat.utf8Length("中文注")).isEqualTo(9);
+    }
+
+    @Test
+    public void utf8Length_nullIsZero() {
+        assertThat(AdifFormat.utf8Length(null)).isEqualTo(0);
+    }
 }
