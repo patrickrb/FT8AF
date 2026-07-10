@@ -338,7 +338,9 @@ public class UtcTimer {
      * <p>Clamped to the {@code int} range so an absurdly wrong device clock (more than
      * ~24.8 days off) can't overflow the {@code int} field into a bogus small value.
      *
-     * <p>Package-visible via {@code public static} for pure-JVM testing.
+     * <p>Exposed as {@code public static} for pure-JVM testing, consistent with the sibling
+     * {@link #sequential(long, int)} / {@link #isCycleBoundary(long, int, int)} helpers in this
+     * file (also {@code public static} and tested from the same package).
      *
      * @param referenceUtcMs authoritative UTC "now" in ms (e.g. NTP transmit time)
      * @param deviceNowMs    the device wall clock at the same instant
