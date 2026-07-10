@@ -1,5 +1,6 @@
 package com.k1af.ft8af.log;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 /**
@@ -74,5 +75,22 @@ public final class AdifFormat {
             return String.valueOf(report);
         }
         return String.format(Locale.US, "%+03d", report);
+    }
+
+    /**
+     * The number of UTF-8 <em>bytes</em> in {@code value} — the length an ADIF
+     * {@code <field:len>value } declaration must carry, not the UTF-16
+     * {@link String#length()} (char count). The two differ for any non-ASCII content
+     * (an accented comment, a POTA park name): declaring the shorter char count makes
+     * the receiving parser read fewer bytes than were written, truncating the field
+     * and mis-aligning everything after it, so LoTW/QRZ/Cloudlog reject or mangle the
+     * record. Shared source of truth for every ADIF writer ({@link AdifRecord} and the
+     * {@link ThirdPartyService} upload paths). Null counts as 0.
+     */
+    public static int utf8Length(String value) {
+        if (value == null) {
+            return 0;
+        }
+        return value.getBytes(StandardCharsets.UTF_8).length;
     }
 }

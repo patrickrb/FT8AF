@@ -169,6 +169,6 @@ public final class AdifRecord {
     }
 
     private static int utf8Length(String value) {
-        return value.getBytes(StandardCharsets.UTF_8).length;
+        return AdifFormat.utf8Length(value);
     }
 }

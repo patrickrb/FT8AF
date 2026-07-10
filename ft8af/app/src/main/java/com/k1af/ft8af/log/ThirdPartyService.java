@@ -229,7 +229,7 @@ public class ThirdPartyService {
 
         if (qslRecord.getToMaidenGrid() != null) {
             logStr.append(String.format("<gridsquare:%d>%s "
-                    , qslRecord.getToMaidenGrid().length()
+                    , AdifFormat.utf8Length(qslRecord.getToMaidenGrid())
                     , qslRecord.getToMaidenGrid()));
         }
 
@@ -239,46 +239,46 @@ public class ThirdPartyService {
             String submode = AdifFormat.mfskSubmode(qslRecord.getMode());
             if (submode != null) {
                 logStr.append(String.format("<mode:4>MFSK <submode:%d>%s "
-                        , submode.length(), submode));
+                        , AdifFormat.utf8Length(submode), submode));
             } else {
                 logStr.append(String.format("<mode:%d>%s "
-                        , qslRecord.getMode().length()
+                        , AdifFormat.utf8Length(qslRecord.getMode())
                         , qslRecord.getMode()));
             }
         }
 
         String rstSent = AdifFormat.formatReport(qslRecord.getSendReport());
-        logStr.append(String.format("<rst_sent:%d>%s ", rstSent.length(), rstSent));
+        logStr.append(String.format("<rst_sent:%d>%s ", AdifFormat.utf8Length(rstSent), rstSent));
 
         String rstRcvd = AdifFormat.formatReport(qslRecord.getReceivedReport());
-        logStr.append(String.format("<rst_rcvd:%d>%s ", rstRcvd.length(), rstRcvd));
+        logStr.append(String.format("<rst_rcvd:%d>%s ", AdifFormat.utf8Length(rstRcvd), rstRcvd));
 
         if (qslRecord.getQso_date() != null) {
             logStr.append(String.format("<qso_date:%d>%s "
-                    , qslRecord.getQso_date().length()
+                    , AdifFormat.utf8Length(qslRecord.getQso_date())
                     , qslRecord.getQso_date()));
         }
 
         if (qslRecord.getTime_on() != null) {
             logStr.append(String.format("<time_on:%d>%s "
-                    , qslRecord.getTime_on().length()
+                    , AdifFormat.utf8Length(qslRecord.getTime_on())
                     , qslRecord.getTime_on()));
         }
         if (qslRecord.getBandLength() != null) {
             logStr.append(String.format("<band:%d>%s "
-                    , qslRecord.getBandLength().length()
+                    , AdifFormat.utf8Length(qslRecord.getBandLength())
                     , qslRecord.getBandLength()));
         }
 
         if (qslRecord.getQso_date_off() != null) {
             logStr.append(String.format("<qso_date_off:%d>%s "
-                    , qslRecord.getQso_date_off().length()
+                    , AdifFormat.utf8Length(qslRecord.getQso_date_off())
                     , qslRecord.getQso_date_off()));
         }
 
         if (qslRecord.getTime_off() != null) {
             logStr.append(String.format("<time_off:%d>%s "
-                    , qslRecord.getTime_off().length()
+                    , AdifFormat.utf8Length(qslRecord.getTime_off())
                     , qslRecord.getTime_off()));
         }
 
@@ -291,19 +291,19 @@ public class ThirdPartyService {
             }
 
             logStr.append(String.format("<freq:%d>%s "
-                    , freq.length()
+                    , AdifFormat.utf8Length(freq)
                     , freq));
         }
 
         if (qslRecord.getMyCallsign() != null) {
             logStr.append(String.format("<station_callsign:%d>%s "
-                    , qslRecord.getMyCallsign().length()
+                    , AdifFormat.utf8Length(qslRecord.getMyCallsign())
                     , qslRecord.getMyCallsign()));
         }
 
         if (qslRecord.getMyMaidenGrid() != null) {
             logStr.append(String.format("<my_gridsquare:%d>%s "
-                    , qslRecord.getMyMaidenGrid().length()
+                    , AdifFormat.utf8Length(qslRecord.getMyMaidenGrid())
                     , qslRecord.getMyMaidenGrid()));
         }
 
@@ -312,7 +312,7 @@ public class ThirdPartyService {
         //<comment:15>Distance: 99 km <eor>
         //When writing to the database, be sure to append " km"
         logStr.append(String.format("<comment:%d>%s <eor>\n"
-                , comment.length()
+                , AdifFormat.utf8Length(comment)
                 , comment));
         return logStr.toString();
     }
@@ -595,13 +595,13 @@ public class ThirdPartyService {
 
         String comment = colStr(c, "comment");
         if (comment == null) comment = "";
-        s.append(String.format("<comment:%d>%s <eor>\n", comment.length(), comment));
+        s.append(String.format("<comment:%d>%s <eor>\n", AdifFormat.utf8Length(comment), comment));
         return s.toString();
     }
 
     private static void appendAdif(StringBuilder sb, String tag, String value) {
         if (value == null || value.isEmpty()) return;
-        sb.append(String.format("<%s:%d>%s ", tag, value.length(), value));
+        sb.append(String.format("<%s:%d>%s ", tag, AdifFormat.utf8Length(value), value));
     }
 
     private static String colStr(Cursor c, String name) {
