@@ -128,8 +128,10 @@ public class WaterfallView extends View {
         Log.d(TAG, String.format("Bitmap created: %dx%d, blockHeight=%d, freq_width=%.2f, spectrumWidth=%d",
                 w, h, blockHeight, freq_width, spectrumWidth));
         lastBitMap = Bitmap.createBitmap(w, h, ARGB_8888);
-        // Fresh bitmap wiped the stamped labels, so allow the current cycle to re-stamp.
+        // Fresh bitmap wiped the stamped labels and the UTC gridline, so allow the current
+        // slot to re-stamp both instead of waiting for the next slot boundary.
         messageGate.reset();
+        timestampGate.reset();
         _canvas = new Canvas(lastBitMap);
         Paint blackPaint = new Paint();
         blackPaint.setColor(0xFF000000);
