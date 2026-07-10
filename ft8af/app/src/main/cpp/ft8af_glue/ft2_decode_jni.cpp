@@ -251,6 +251,12 @@ FT2JNI(void, DecoderFt2MonitorPressFloat)(JNIEnv* env, jobject, jfloatArray buff
         return;
     jsize n = env->GetArrayLength(buffer);
     jfloat* data = env->GetFloatArrayElements(buffer, nullptr);
+    // GetFloatArrayElements may return NULL if the JVM can't pin the array (OOM/heap
+    // pressure), leaving a pending exception. Bail out before feeding or releasing —
+    // ReleaseFloatArrayElements with a NULL pointer is undefined. Mirrors the int16
+    // DecoderMonitorPress guard in ft8_decode_jni.cpp.
+    if (!data)
+        return;
     ft2_feed(d, data, n);
     env->ReleaseFloatArrayElements(buffer, data, JNI_ABORT);
 }

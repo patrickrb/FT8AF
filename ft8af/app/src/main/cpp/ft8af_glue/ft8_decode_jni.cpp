@@ -316,6 +316,12 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderMonitorPressFloat(
         return;
     jsize n = env->GetArrayLength(buffer);
     jfloat* data = env->GetFloatArrayElements(buffer, nullptr);
+    // GetFloatArrayElements may return NULL if the JVM can't pin the array (OOM/heap
+    // pressure), leaving a pending exception. Bail out before feeding or releasing —
+    // ReleaseFloatArrayElements with a NULL pointer is undefined. Mirrors the int16
+    // DecoderMonitorPress guard above.
+    if (!data)
+        return;
     ft8_feed(d, data, n);
     env->ReleaseFloatArrayElements(buffer, data, JNI_ABORT);
 }
