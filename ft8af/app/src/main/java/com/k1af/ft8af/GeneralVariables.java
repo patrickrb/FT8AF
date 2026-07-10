@@ -651,13 +651,34 @@ public class GeneralVariables {
         GeneralVariables.baseFrequency = baseFrequency;
     }
 
+    /** Minimum/maximum spectrum display width (Hz), matching the settings UI slider range. */
+    public static final int MIN_SPECTRUM_WIDTH_HZ = 2500;
+    public static final int MAX_SPECTRUM_WIDTH_HZ = 5000;
+
     public static int getSpectrumWidth() {
         return spectrumWidth;
     }
 
+    /**
+     * Set the spectrum display width, clamped to
+     * [{@link #MIN_SPECTRUM_WIDTH_HZ}, {@link #MAX_SPECTRUM_WIDTH_HZ}] Hz.
+     *
+     * <p>This is display-only geometry: the waterfall/spectrum views divide the
+     * view pixel width by it to place the TX marker and message labels
+     * (e.g. {@code WaterfallView.freq_width = w / spectrumWidth}) and it drives
+     * click-to-tune. The settings UI already constrains the value, but config
+     * hydration ({@code DatabaseOpr}'s {@code parseConfigInt(result, 3500)})
+     * reaches this setter with whatever a hand-edited/corrupted settings backup
+     * persisted, unclamped. A stored {@code 0}/negative made {@code freq_width}
+     * {@code Infinity}/negative, so the marker, labels, and click-to-tune drew at
+     * {@code Infinity}/{@code NaN}/mirrored coordinates. Clamping here (mirroring
+     * {@link #setFftWindowType(int)}) keeps every consumer's geometry finite and
+     * is byte-identical for every in-range value.
+     */
     public static void setSpectrumWidth(int width) {
-        mutableSpectrumWidth.postValue(width);
-        GeneralVariables.spectrumWidth = width;
+        int clamped = Math.max(MIN_SPECTRUM_WIDTH_HZ, Math.min(MAX_SPECTRUM_WIDTH_HZ, width));
+        mutableSpectrumWidth.postValue(clamped);
+        GeneralVariables.spectrumWidth = clamped;
     }
 
     public static int getFftWindowType() {
