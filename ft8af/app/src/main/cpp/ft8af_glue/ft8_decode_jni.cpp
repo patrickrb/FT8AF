@@ -32,6 +32,7 @@ int ft8_snr(const waterfall_t* wf, const candidate_t* candidate);
 #include "ft8_xslot.h"
 #include "ft8_call_hash.h"
 #include "ftx_hash_store.h"
+#include "ftx_feed.h"
 
 // ---------------------------------------------------------------------------
 // 22-bit WSJT-X callsign hash (same as ft2_decode_jni.cpp / test_golden_encode.c).
@@ -261,17 +262,12 @@ static void ft8_feed(ft8_decoder_state* d, const float* data, int n)
 {
     if (!d || !d->mon_ready)
         return;
-    d->num_fed = 0;
     d->wf_dirty = false;
     d->sub_done_count = 0;
-    if (d->samples && n <= d->num_samples)
-    {
-        memcpy(d->samples, data, sizeof(float) * n);
-        d->num_fed = n;
-    }
-    monitor_reset(&d->mon);
-    for (int pos = 0; pos + d->mon.block_size <= n; pos += d->mon.block_size)
-        monitor_process(&d->mon, data + pos);
+    // Null-safe copy + monitor feed (shared with ft2_feed via ftx_feed.h). A
+    // NULL `data` (a failed JNI array pin under memory pressure) is a no-op,
+    // not a native SIGSEGV.
+    d->num_fed = ftx_feed_monitor(&d->mon, d->samples, d->num_samples, data, n);
 
     // Invalidate only: the context is rebuilt lazily when a deep pass
     // actually needs it (see DecoderFt8Analysis).
@@ -320,6 +316,12 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderMonitorPressFloat(
         return;
     jsize n = env->GetArrayLength(buffer);
     jfloat* data = env->GetFloatArrayElements(buffer, nullptr);
+    // GetFloatArrayElements may return NULL if the JVM can't pin the array (OOM/heap
+    // pressure), leaving a pending exception. Bail out before feeding or releasing —
+    // ReleaseFloatArrayElements with a NULL pointer is undefined. Mirrors the int16
+    // DecoderMonitorPress guard above.
+    if (!data)
+        return;
     ft8_feed(d, data, n);
     env->ReleaseFloatArrayElements(buffer, data, JNI_ABORT);
 }

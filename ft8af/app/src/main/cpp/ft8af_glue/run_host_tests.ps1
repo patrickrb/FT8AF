@@ -337,6 +337,28 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_gfsk_len)." }
 & $outGfskLen
 $gfskLenExit = $LASTEXITCODE
 
+# ---------------------------------------------------------------------------
+# Audio-feed tests: the per-slot monitor feed shared by ft8_decode_jni.cpp and
+# ft2_decode_jni.cpp (ftx_feed.h). Guards the bounded copy into the retained
+# samples buffer and, crucially, that a NULL `data` pointer (a failed JNI array
+# pin) is a no-op instead of the native SIGSEGV the two float feed paths used to
+# take. Links the monitor + FFT + decode path monitor_process exercises.
+# ---------------------------------------------------------------------------
+$feedSrcs = @(
+    "common\monitor.c","ft8\decode.c","ft8\constants.c","ft8\crc.c",
+    "ft8\text.c","ft8\message.c","ft8\pack.c","ft8\encode.c",
+    "ft8\ldpc.c","ft8\osd.c","ft8\unpack.c","fft\kiss_fft.c","fft\kiss_fftr.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+
+$srcFeed = Join-Path $here "test_feed.c"
+$outFeed = Join-Path $env:TEMP "ft8_feed_test.exe"
+
+& $Clang @common $srcFeed @feedSrcs -o $outFeed
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_feed)." }
+
+& $outFeed
+$feedExit = $LASTEXITCODE
+
 if ($goldenExit -ne 0) { exit $goldenExit }
 if ($dev625Exit -ne 0) { exit $dev625Exit }
 if ($fftWinExit -ne 0) { exit $fftWinExit }
@@ -351,4 +373,5 @@ if ($subExit -ne 0) { exit $subExit }
 if ($osdExit -ne 0) { exit $osdExit }
 if ($fineExit -ne 0) { exit $fineExit }
 if ($xslotExit -ne 0) { exit $xslotExit }
-exit $gfskLenExit
+if ($gfskLenExit -ne 0) { exit $gfskLenExit }
+exit $feedExit
