@@ -58,7 +58,17 @@ public class UsbAudioDevice {
     private volatile boolean capturing = false;
     // Non-zero when the libusb-backed capture session is live; in that case
     // captureLoop() is bypassed and stopCapture() routes through native.
-    private volatile long nativeCaptureHandle = 0;
+    // The live native capture session pointer (0 = none). AtomicLong so exactly
+    // one caller can claim it for teardown via getAndSet(0): a natural capture
+    // retire and a concurrent explicit stopCapture() must never both nativeStop
+    // the same session (that would double libusb_exit/free). See stopCapture()
+    // and the onCaptureStopped callback — the callback deliberately does NOT
+    // clear this, so the session's libusb context is freed by the follow-up
+    // stopCapture() (on the reinit worker, off the native event thread) instead
+    // of being leaked; leaking it burned a pthread TLS key per retire and
+    // eventually aborted libusb_init with a destroyed-mutex/key-exhaustion crash.
+    private final java.util.concurrent.atomic.AtomicLong nativeCaptureHandle =
+            new java.util.concurrent.atomic.AtomicLong(0);
 
     // Output (speaker)
     private UsbInterface streamingInterfaceOut;
@@ -545,14 +555,21 @@ public class UsbAudioDevice {
                                     "UsbAudioDevice: libusb capture stopped, "
                                             + "code=" + code + " ("
                                             + describeCaptureStopCode(code) + ")");
-                            nativeCaptureHandle = 0;
+                            // Do NOT clear nativeCaptureHandle here. This runs on
+                            // the native libusb event thread, which cannot free
+                            // its own session (nativeStop would join itself). We
+                            // leave the handle set so the follow-up stopCapture()
+                            // — driven by reinitialize() on the reinit worker,
+                            // off this thread — calls nativeStop() and releases
+                            // the libusb context (and its TLS key). Clearing it
+                            // here is what leaked the context on every retire.
                             capturing = false;
                             if (javaCb != null) javaCb.onCaptureStopped(code);
                         }
                     });
 
             if (handle != 0) {
-                nativeCaptureHandle = handle;
+                nativeCaptureHandle.set(handle);
                 com.k1af.ft8af.GeneralVariables.fileLog(
                         "UsbAudioDevice: libusb capture started OK");
                 return;
@@ -728,11 +745,23 @@ public class UsbAudioDevice {
         }
     }
 
+    /**
+     * Atomically take ownership of the native capture handle for teardown:
+     * returns the handle to stop (and clears the field), or {@code 0} if it was
+     * already claimed/absent. Pulling the two racing teardown drivers — a
+     * natural capture retire and an explicit stopCapture() — through one atomic
+     * getAndSet guarantees exactly one nativeStop() per session, so libusb_exit
+     * (and the free) runs once. Package-visible so the single-claim guarantee is
+     * unit-testable.
+     */
+    static long claimCaptureHandleForStop(java.util.concurrent.atomic.AtomicLong handleRef) {
+        return handleRef.getAndSet(0);
+    }
+
     public void stopCapture() {
         capturing = false;
-        long h = nativeCaptureHandle;
+        long h = claimCaptureHandleForStop(nativeCaptureHandle);
         if (h != 0) {
-            nativeCaptureHandle = 0;
             try {
                 UsbAudioNative.nativeStop(h);
             } catch (Throwable t) {
