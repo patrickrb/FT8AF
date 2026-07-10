@@ -144,8 +144,11 @@ Java_com_k1af_ft8af_ft8transmit_GenerateFT8_synth_1gfsk(
     // Mirrors the GetArrayLength(tones) >= FT8_NN guards above.
     jsize sig_len = env->GetArrayLength(signal);
     int out_len = synth_gfsk_output_len(count, symbol_period, signal_rate);
+    // int64_t (not long): `long` is 32-bit on 32-bit Android ABIs (armeabi-v7a/x86),
+    // so offset+out_len could overflow and wrap past this guard. jlong/int64 is 64-bit
+    // on every ABI, keeping the trust-boundary end-index check honest for hostile input.
     if (offset < 0 || out_len <= 0
-            || (long)offset + (long)out_len > (long)sig_len) {
+            || (int64_t)offset + (int64_t)out_len > (int64_t)sig_len) {
         return;
     }
 

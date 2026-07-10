@@ -118,7 +118,13 @@ int synth_gfsk_output_len(int n_sym, float symbol_period, int signal_rate)
     int n_spsym = (int)(0.5f + signal_rate * symbol_period);
     if (n_spsym <= 0)
         return 0;
-    return n_sym * n_spsym;
+    // Compute in int64 so a corrupted, out-of-range signal_rate can't overflow the
+    // signed int multiply (UB, and it would hand a bogus length back to the JNI bounds
+    // check that trusts this). Return 0 on overflow rather than a wrapped value.
+    int64_t n_wave = (int64_t)n_sym * n_spsym;
+    if (n_wave > INT32_MAX)
+        return 0;
+    return (int)n_wave;
 }
 
 // Synthesise a GFSK waveform from a tone sequence, writing into

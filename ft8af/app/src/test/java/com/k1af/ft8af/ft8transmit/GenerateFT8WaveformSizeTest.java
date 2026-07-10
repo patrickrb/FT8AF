@@ -101,4 +101,18 @@ public class GenerateFT8WaveformSizeTest {
         assertThat(GenerateFT8.waveformSampleCount(FT8_TONES, 0f, 12000)).isEqualTo(0);
         assertThat(GenerateFT8.waveformSampleCount(FT8_TONES, -0.16f, 12000)).isEqualTo(0);
     }
+
+    /**
+     * A corrupted/hand-edited backup rate large enough that {@code numTones * samplesPerSymbol}
+     * overflows a 32-bit int must return 0, not a wrapped negative/too-small length (which
+     * would drive a {@code new float[negative]} NegativeArraySizeException or, worse, an
+     * under-sized buffer handed to native). At 20 MHz FT8, {@code round(0.160*20e6) = 3_200_000}
+     * per symbol, {@code * 79 ≈ 2.53e8} still fits; push the rate high enough to overflow.
+     */
+    @Test
+    public void overflowingRate_returnsZero_ratherThanWrappedLength() {
+        // samplesPerSymbol ≈ round(0.160 * 200_000_000) = 32_000_000; * 79 ≈ 2.53e9 > INT_MAX.
+        int result = GenerateFT8.waveformSampleCount(FT8_TONES, FT8_PERIOD, 200_000_000);
+        assertThat(result).isEqualTo(0);
+    }
 }

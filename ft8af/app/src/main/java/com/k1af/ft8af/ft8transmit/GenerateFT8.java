@@ -299,14 +299,23 @@ public class GenerateFT8 {
      * @param symbolPeriod GFSK symbol period in seconds (0.160 FT8, 0.048 FT4, 0.024 FT2)
      * @param sampleRate   output audio sample rate in Hz
      * @return the exact sample count native {@code synth_gfsk} writes, or 0 for a
-     *         degenerate (non-positive) rate/period/tone count
+     *         degenerate (non-positive) rate/period/tone count, or a product that
+     *         overflows a 32-bit {@code int} (a corrupted/hand-edited backup rate)
      */
     static int waveformSampleCount(int numTones, float symbolPeriod, int sampleRate) {
         int samplesPerSymbol = Math.round(symbolPeriod * sampleRate);
         if (numTones <= 0 || samplesPerSymbol <= 0) {
             return 0;
         }
-        return numTones * samplesPerSymbol;
+        // Compute in long so a corrupted, out-of-range sampleRate (round-tripped
+        // verbatim through a settings backup) can't overflow the int multiply into a
+        // negative/too-small length — which would reintroduce the very OOB/NegativeArraySize
+        // failure this sizing guards against. Refuse (0) rather than hand back a bogus size.
+        long total = (long) numTones * samplesPerSymbol;
+        if (total > Integer.MAX_VALUE) {
+            return 0;
+        }
+        return (int) total;
     }
 
     /** Encode an a91 payload into 79 FT8 tones (native ft8_encode). */
