@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
+import com.k1af.ft8af.serialport.UsbId
 import com.k1af.ft8af.serialport.UsbSerialProber
 import com.k1af.ft8af.wave.UsbAudioDevice
 import kotlinx.coroutines.Dispatchers
@@ -39,11 +40,12 @@ import radio.ks3ckc.ft8af.theme.TextPrimary
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 
 // ---------------------------------------------------------------------------
-// Pure diagnostic logic (unit-tested — kept free of Android/Compose runtime types)
+// Pure diagnostic logic (unit-tested — no Android framework dependencies; the
+// Compose value classes used below, e.g. Color, are fine on the JVM under test)
 // ---------------------------------------------------------------------------
 
 /** Default CAT vendor id the wired-serial path matches on (ICOM), see CableSerialPort. */
-internal const val DEFAULT_CAT_VENDOR_ID = 0x0c26
+internal val DEFAULT_CAT_VENDOR_ID = UsbId.VENDOR_ICOM
 
 /**
  * Outcome of a single diagnostic check. [PASS]/[FAIL] render a coloured tick/cross;
@@ -304,7 +306,9 @@ private fun UsbDiagnosticRow(item: UsbDiagnosticItem) {
     val label = stringResource(item.labelRes)
     val value = resolveDiagnosticDisplayValue(item, stringResource(R.string.usb_diag_value_none))
     val statusWord = diagnosticStatusContentDescriptionRes(item.status)?.let { stringResource(it) }
-    val rowDescription = buildRowContentDescription(label, statusWord, value)
+    // Announce the raw item.value (null until a real VID/PID exists), NOT the rendered
+    // `value` — otherwise TalkBack would read the visual "—" placeholder as "Vendor ID, —".
+    val rowDescription = buildRowContentDescription(label, statusWord, item.value)
 
     Row(
         modifier = Modifier
