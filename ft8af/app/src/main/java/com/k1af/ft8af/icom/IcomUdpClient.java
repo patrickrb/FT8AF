@@ -30,7 +30,6 @@ public class IcomUdpClient {
     private boolean activated = false;
     private OnUdpEvents onUdpEvents = null;
     private final ExecutorService doReceiveThreadPool = Executors.newCachedThreadPool();
-    private DoReceiveRunnable doReceiveRunnable = new DoReceiveRunnable(this);
     private final ExecutorService sendDataThreadPool = Executors.newCachedThreadPool();
     private SendDataRunnable sendDataRunnable = new SendDataRunnable(this);
 
@@ -123,6 +122,11 @@ public class IcomUdpClient {
         } else {
             if (sendSocket != null) {
                 sendSocket.close();
+                // Owner-nulls the shared slot after closing it. The receive worker
+                // used to do this on its way out, but a slow worker could run that
+                // teardown *after* a reconnect had already installed a fresh socket
+                // here, closing/nulling the new socket and leaving the rig dead.
+                sendSocket = null;
                 try {
                     Thread.sleep(100);
                 } catch (InterruptedException e) {
@@ -133,7 +137,11 @@ public class IcomUdpClient {
     }
 
     private void receiveData() {
-        doReceiveThreadPool.execute(doReceiveRunnable);
+        // Hand the worker the exact socket it should own, captured under this
+        // synchronized method. It never reads the shared sendSocket field again, so a
+        // later reconnect that swaps sendSocket can't make it receive on (or tear down)
+        // the wrong socket.
+        doReceiveThreadPool.execute(new DoReceiveRunnable(this, sendSocket));
 //        new Thread(new Runnable() {
 //            @Override
 //            public void run() {
@@ -200,23 +208,35 @@ public class IcomUdpClient {
         return s.toString();
     }
 
-    private static class DoReceiveRunnable implements Runnable {
-        IcomUdpClient icomUdpClient;
+    // Package-private (not private) so a unit test in this package can drive its
+    // teardown deterministically.
+    static class DoReceiveRunnable implements Runnable {
+        final IcomUdpClient icomUdpClient;
+        // The socket this worker owns. Captured at construction so the loop and the
+        // teardown never touch the shared sendSocket field, which a reconnect may
+        // have swapped for a different socket.
+        final DatagramSocket socket;
 
-        public DoReceiveRunnable(IcomUdpClient icomUdpClient) {
+        public DoReceiveRunnable(IcomUdpClient icomUdpClient, DatagramSocket socket) {
             this.icomUdpClient = icomUdpClient;
+            this.socket = socket;
         }
 
         @Override
         public void run() {
-            while (icomUdpClient.activated) {
+            // Exit when deactivated OR when our own socket is closed. Keying on the
+            // socket (not just the shared activated flag) means a reconnect that flips
+            // activated false->true again still stops this old worker instead of
+            // leaving it to double-receive on the new socket or tight-spin on a closed
+            // one.
+            while (icomUdpClient.activated && !socket.isClosed()) {
                 byte[] data = new byte[icomUdpClient.MAX_BUFFER_SIZE];
                 DatagramPacket packet = new DatagramPacket(data, data.length);
                 try {
-                    icomUdpClient.sendSocket.receive(packet);
+                    socket.receive(packet);
                     if (icomUdpClient.onUdpEvents != null) {
                         byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
-                        icomUdpClient.onUdpEvents.OnReceiveData(icomUdpClient.sendSocket, packet, temp);
+                        icomUdpClient.onUdpEvents.OnReceiveData(socket, packet, temp);
                     }
                     //Log.d(TAG, "receiveData:host ip: " + packet.getAddress().getHostName());
                 } catch (IOException e) {
@@ -226,9 +246,17 @@ public class IcomUdpClient {
 
             }
             Log.e(TAG, "udpClient: is exit!");
-            icomUdpClient.sendSocket.close();
-            icomUdpClient.sendSocket = null;
+            // Close only the socket we own; never touch the shared sendSocket field
+            // (setActivated owns its lifecycle). Closing our own socket is idempotent
+            // if setActivated already closed it during teardown.
+            socket.close();
         }
+    }
+
+    // Visible for tests: install a socket into the shared slot without opening the
+    // receive loop, so DoReceiveRunnable's teardown can be asserted deterministically.
+    void primeSendSocketForTest(DatagramSocket socket) {
+        this.sendSocket = socket;
     }
 
 }
