@@ -312,8 +312,11 @@ fun DecodeScreen(
                         // Group messages by receive slot (mode-aware: 15s FT8,
                         // 7.5s FT4, 3.75s FT2). Draw a labeled divider at the first
                         // row of each new slot; the boundaries were precomputed in
-                        // timeGroupDividers above.
-                        if (timeGroupDividers.getOrElse(index) { true }) {
+                        // timeGroupDividers above. It is keyed on the same
+                        // filteredMessages this list iterates, so index is always
+                        // in bounds — index directly rather than masking a
+                        // size mismatch with a getOrElse default.
+                        if (timeGroupDividers[index]) {
                             TimeGroupDivider(utcTime = message.utcTime, compact = compactMode)
                         }
 

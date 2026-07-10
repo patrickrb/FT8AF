@@ -4,20 +4,21 @@ import com.google.common.truth.Truth.assertThat
 import com.k1af.ft8af.FT8Common
 import com.k1af.ft8af.Ft8Message
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 
 /**
  * Unit-tests the pure [computeTimeGroupDividers] decode-list slot grouper.
- * Robolectric is needed only because [Ft8Message] reaches android.util.Log on
- * construction (same reason as [DecodeFilterTest]).
+ *
+ * No Robolectric runner: [computeTimeGroupDividers] only reaches the pure
+ * [com.k1af.ft8af.ModeProfile] and [com.k1af.ft8af.ui.WaterfallTimestampGate],
+ * and the `Ft8Message(int)` constructor just assigns `signalFormat` (no
+ * android.util.Log). Any incidental framework call returns defaults under
+ * `unitTests.returnDefaultValues`.
  *
  * The divider marks the first row of each receive slot. It must key on the
  * per-message mode's slot length (FT8 15s, FT4 7.5s, FT2 3.75s) rather than a
  * hard-coded 15s, which previously collapsed 2-4 fast-mode cycles under one
  * divider.
  */
-@RunWith(RobolectricTestRunner::class)
 class DecodeTimeGroupTest {
 
     private fun msg(mode: Int, utcMs: Long) = Ft8Message(mode).apply { utcTime = utcMs }
