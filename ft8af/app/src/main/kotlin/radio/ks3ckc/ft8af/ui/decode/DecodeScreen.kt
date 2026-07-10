@@ -38,7 +38,9 @@ import com.k1af.ft8af.Ft8Message
 import com.k1af.ft8af.R
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
+import com.k1af.ft8af.ModeProfile
 import com.k1af.ft8af.timer.UtcTimer
+import com.k1af.ft8af.ui.WaterfallTimestampGate
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.EmptyStateWaves
 import radio.ks3ckc.ft8af.ui.components.FilterChips
@@ -154,6 +156,14 @@ fun DecodeScreen(
     // Apply filter
     val filteredMessages = remember(messages, selectedFilter) {
         filterMessages(messages, selectedFilter)
+    }
+
+    // Precompute, once per list change, where the mode-aware time-group dividers
+    // fall so each row looks its flag up by index instead of recomputing a
+    // hard-coded 15s slot boundary inline (which collapsed 2-4 FT4/FT2 cycles
+    // under one divider).
+    val timeGroupDividers = remember(filteredMessages) {
+        computeTimeGroupDividers(filteredMessages)
     }
 
     // Track which keys are new since the previous render (animated on entry only once).
@@ -299,11 +309,14 @@ fun DecodeScreen(
                     ) { index, message ->
                         val rowKey = "${message.utcTime}_${message.callsignFrom}_${message.freq_hz}_$index"
 
-                        // Group messages by FT8 cycle (15s slots). Draw a labeled
-                        // divider whenever we cross into a new slot.
-                        val prevSlot = if (index > 0) filteredMessages[index - 1].utcTime / 15000L else null
-                        val thisSlot = message.utcTime / 15000L
-                        if (prevSlot == null || prevSlot != thisSlot) {
+                        // Group messages by receive slot (mode-aware: 15s FT8,
+                        // 7.5s FT4, 3.75s FT2). Draw a labeled divider at the first
+                        // row of each new slot; the boundaries were precomputed in
+                        // timeGroupDividers above. It is keyed on the same
+                        // filteredMessages this list iterates, so index is always
+                        // in bounds — index directly rather than masking a
+                        // size mismatch with a getOrElse default.
+                        if (timeGroupDividers[index]) {
                             TimeGroupDivider(utcTime = message.utcTime, compact = compactMode)
                         }
 
@@ -359,6 +372,35 @@ fun DecodeScreen(
 // ---------------------------------------------------------------------------
 // Time Group Divider
 // ---------------------------------------------------------------------------
+
+/**
+ * For each message in [messages], whether a time-group divider should be drawn
+ * above it. A divider marks the start of a new receive slot (cycle): the first
+ * message always gets one, and every later message gets one when it falls in a
+ * different slot than its predecessor.
+ *
+ * The slot length is per-message and mode-aware — FT8 15s, FT4 7.5s, FT2 3.75s
+ * (see [ModeProfile.slotMillis]) — so a fast-mode list gets its finer grid
+ * instead of collapsing 2-4 real cycles under a single hard-coded 15s divider.
+ * The boundary math is shared with the waterfall gridline via
+ * [WaterfallTimestampGate.slotPeriod] so the two views stay on the same grid;
+ * for FT8's 15000ms slot it reproduces the previous `utcTime / 15000` exactly.
+ * Two messages of different modes never share a group even if their slot indices
+ * happen to coincide, because the (slot length, index) pair differs.
+ */
+internal fun computeTimeGroupDividers(messages: List<Ft8Message>): BooleanArray {
+    val dividers = BooleanArray(messages.size)
+    var prevSlotMillis = -1L
+    var prevSlotIndex = 0L
+    for (i in messages.indices) {
+        val slotMillis = ModeProfile.fromId(messages[i].signalFormat).slotMillis.toLong()
+        val slotIndex = WaterfallTimestampGate.slotPeriod(messages[i].utcTime, slotMillis)
+        dividers[i] = i == 0 || slotMillis != prevSlotMillis || slotIndex != prevSlotIndex
+        prevSlotMillis = slotMillis
+        prevSlotIndex = slotIndex
+    }
+    return dividers
+}
 
 @Composable
 private fun TimeGroupDivider(utcTime: Long, compact: Boolean = false) {
