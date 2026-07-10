@@ -17,6 +17,11 @@ import java.nio.ByteOrder
 @RunWith(RobolectricTestRunner::class)
 class PskReporterSenderTest {
 
+    // Upper bound on how long a worker thread may run before a bounded join() gives up and
+    // the test fails deterministically instead of hanging the whole run. Generous vs. the
+    // sub-millisecond work so it never flakes on a slow/loaded CI box.
+    private val JOIN_TIMEOUT_MS = 30_000L
+
     private val captured = mutableListOf<ByteArray>()
 
     @Before
@@ -553,7 +558,11 @@ class PskReporterSenderTest {
                 }
             }
             threads.forEach { it.start() }
-            threads.forEach { it.join() }
+            // Bounded join: a regression could wedge/spin a thread (one of the failure modes
+            // this test guards against); without a timeout that would hang the whole run
+            // instead of failing. Assert every thread actually finished.
+            threads.forEach { it.join(JOIN_TIMEOUT_MS) }
+            assertThat(threads.none { it.isAlive }).isTrue()
             assertThat(admitted.get()).isEqualTo(1)
         }
     }
@@ -581,7 +590,10 @@ class PskReporterSenderTest {
             }
         }
         threads.forEach { it.start() }
-        threads.forEach { it.join() }
+        // Bounded join (see the same-key test): a wedged/spinning thread must fail the run,
+        // not hang it. Assert every thread finished within the timeout.
+        threads.forEach { it.join(JOIN_TIMEOUT_MS) }
+        assertThat(threads.none { it.isAlive }).isTrue()
         // Every distinct key is fresh exactly once — no lost or double inserts.
         assertThat(admitted.get()).isEqualTo(threadCount * perThread)
     }
