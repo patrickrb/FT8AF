@@ -77,4 +77,27 @@ public class WaterfallTimestampGateTest {
         gate.reset();
         assertThat(gate.shouldDraw(15_000, 15_000)).isTrue();   // after a bitmap recreate
     }
+
+    @Test
+    public void modeSwitchMidSlotDoesNotDrawASpuriousGridline() {
+        // FT4→FT8 at t=8000: FT4 last drew slot index 1 (7.5s boundary); switching to FT8
+        // re-bases to the 15s grid. t=8000 is mid-FT8-slot-0, so no line — the next true FT8
+        // boundary is 15000, where it must draw. The old code compared 0 (FT8) against the
+        // stale 1 (FT4) and drew mid-slot.
+        WaterfallTimestampGate gate = new WaterfallTimestampGate();
+        assertThat(gate.shouldDraw(0, 7_500)).isTrue();         // FT4 slot 0
+        assertThat(gate.shouldDraw(7_500, 7_500)).isTrue();     // FT4 slot 1
+        assertThat(gate.shouldDraw(8_000, 15_000)).isFalse();   // switched to FT8, mid-slot
+        assertThat(gate.shouldDraw(15_000, 15_000)).isTrue();   // first true FT8 boundary
+    }
+
+    @Test
+    public void modeSwitchLandingExactlyOnANewModeBoundaryStillDraws() {
+        // FT8→FT4 exactly at 15000: 15000 is a boundary in both modes, so the switch should
+        // still stamp the line rather than swallow a real boundary.
+        WaterfallTimestampGate gate = new WaterfallTimestampGate();
+        assertThat(gate.shouldDraw(0, 15_000)).isTrue();        // FT8 slot 0
+        assertThat(gate.shouldDraw(15_000, 7_500)).isTrue();    // switched to FT4, on a boundary
+        assertThat(gate.shouldDraw(15_000, 7_500)).isFalse();   // same FT4 slot, no repeat
+    }
 }
