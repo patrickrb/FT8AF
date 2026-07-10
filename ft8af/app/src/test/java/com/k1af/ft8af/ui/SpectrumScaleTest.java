@@ -104,4 +104,14 @@ public class SpectrumScaleTest {
         // Old code at 48 kHz produced 24000/3500, ~4x too large (over-compressed).
         assertThat(24000f / spectrumWidth).isGreaterThan(fixed);
     }
+
+    @Test
+    public void gradientScaleGuardsNonPositiveWidth() {
+        // An out-of-range persisted spectrumWidth (config hydration doesn't clamp) must not
+        // divide by zero / go negative and break LinearGradient. Falls back to scale 1.0.
+        assertThat(SpectrumScale.gradientScale(0)).isEqualTo(1f);
+        assertThat(SpectrumScale.gradientScale(-100)).isEqualTo(1f);
+        // A positive width is unaffected.
+        assertThat(SpectrumScale.gradientScale(3500)).isEqualTo(6000f / 3500);
+    }
 }

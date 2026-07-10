@@ -54,8 +54,19 @@ public final class SpectrumScale {
      * Horizontal gradient scale for the waterfall strip: the full bin array
      * (0..{@link #RX_NYQUIST_HZ}) is stretched so that {@code spectrumWidthHz}
      * fills the visible view width.
+     *
+     * <p>A non-positive {@code spectrumWidthHz} (never produced by the settings UI, which
+     * constrains the value, but reachable because config hydration parses the persisted
+     * {@code spectrumWidth} without clamping — {@code DatabaseOpr.parseConfigInt} leaves range
+     * checks to setters) would divide by zero and yield {@code Infinity}/negative, breaking
+     * {@code LinearGradient}. Fall back to a scale of {@code 1.0} (the full 0..Nyquist band
+     * drawn undistorted across the view) instead, mirroring {@link #binsToShow}'s own
+     * collapse-to-zero fallback.
      */
     public static float gradientScale(int spectrumWidthHz) {
+        if (spectrumWidthHz <= 0) {
+            return 1f;
+        }
         return RX_NYQUIST_HZ / spectrumWidthHz;
     }
 }
