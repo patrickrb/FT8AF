@@ -318,6 +318,25 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_xslot)." }
 & $outXslot
 $xslotExit = $LASTEXITCODE
 
+# ---------------------------------------------------------------------------
+# GFSK output-length tests: the synth_gfsk_output_len helper (gfsk.c) that the
+# TX buffer sizing on both the Java side (GenerateFT8.waveformSampleCount) and
+# the native synth_gfsk JNI guard must agree on, plus a canary check that
+# synth_gfsk_offset writes exactly that many samples. Guards the heap OOB write a
+# non-integral audioRate (e.g. 44100) in FT4/FT2 used to trigger. No ft8_lib deps.
+# ---------------------------------------------------------------------------
+$gfskLenSrcs = @()
+$gfskLenSrcs += (Join-Path $here "gfsk.c")
+
+$srcGfskLen = Join-Path $here "test_gfsk_len.c"
+$outGfskLen = Join-Path $env:TEMP "ft8_gfsk_len_test.exe"
+
+& $Clang @common $srcGfskLen @gfskLenSrcs -o $outGfskLen
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_gfsk_len)." }
+
+& $outGfskLen
+$gfskLenExit = $LASTEXITCODE
+
 if ($goldenExit -ne 0) { exit $goldenExit }
 if ($dev625Exit -ne 0) { exit $dev625Exit }
 if ($fftWinExit -ne 0) { exit $fftWinExit }
@@ -331,4 +350,5 @@ if ($benchExit -ne 0) { exit $benchExit }
 if ($subExit -ne 0) { exit $subExit }
 if ($osdExit -ne 0) { exit $osdExit }
 if ($fineExit -ne 0) { exit $fineExit }
-exit $xslotExit
+if ($xslotExit -ne 0) { exit $xslotExit }
+exit $gfskLenExit

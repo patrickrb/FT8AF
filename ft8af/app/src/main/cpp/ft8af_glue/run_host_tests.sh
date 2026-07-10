@@ -292,3 +292,18 @@ xslot_out="$tmp/ft8_xslot_test"
     -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
     -I "$ft8" "${xslot_srcs[@]}" -lm -o "$xslot_out"
 "$xslot_out"
+
+# GFSK output-length tests: the synth_gfsk_output_len helper (gfsk.c) that the
+# TX buffer sizing on both the Java side (GenerateFT8.waveformSampleCount) and
+# the native synth_gfsk JNI guard must agree on, plus a canary check that
+# synth_gfsk_offset writes exactly that many samples. Guards the heap OOB write a
+# non-integral audioRate (e.g. 44100) in FT4/FT2 used to trigger. No ft8_lib deps.
+gfsk_len_srcs=(
+    "$here/test_gfsk_len.c"
+    "$here/gfsk.c"
+)
+gfsk_len_out="$tmp/ft8_gfsk_len_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${gfsk_len_srcs[@]}" -lm -o "$gfsk_len_out"
+"$gfsk_len_out"
