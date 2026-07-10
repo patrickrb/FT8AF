@@ -7,6 +7,7 @@ import com.k1af.ft8af.wave.HamlibNative;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * A {@link BaseRig} backed by hamlib instead of a hand-rolled per-manufacturer
@@ -32,6 +33,14 @@ public class HamlibRig extends BaseRig {
     private final int modelId;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private volatile long handle = 0;
+    /**
+     * Set once in {@link #onDisconnecting()}. After that the {@link #worker}
+     * executor has been shut down, so any further {@code worker.submit(...)}
+     * would throw {@link RejectedExecutionException}. Guarding on this flag (and
+     * catching the race with the shutdown) keeps a post-disconnect CAT call — or
+     * a second {@code onDisconnecting()} — from crashing the app.
+     */
+    private volatile boolean closed = false;
 
     /** Receives CAT bytes hamlib wants sent to the radio; forwards to connector. */
     private final HamlibNative.HamlibSink sink = data -> {
@@ -84,9 +93,26 @@ public class HamlibRig extends BaseRig {
         }
     }
 
+    /**
+     * Submit a CAT task to the worker, tolerating a rig that is (or is being)
+     * torn down. Once {@link #onDisconnecting()} has shut the executor down,
+     * {@code worker.submit(...)} would throw {@link RejectedExecutionException}
+     * on the caller's thread (the UI thread, or the TX sequencer for PTT) and
+     * crash the app; here the request is simply dropped instead.
+     */
+    private void submitToWorker(Runnable task) {
+        if (closed) return;
+        try {
+            worker.submit(task);
+        } catch (RejectedExecutionException e) {
+            // Raced onDisconnecting()'s shutdown; the rig is gone — drop the task.
+            Log.w(TAG, "worker rejected task after disconnect");
+        }
+    }
+
     @Override
     public void setUsbModeToRig() {
-        worker.submit(() -> {
+        submitToWorker(() -> {
             if (!ensureOpen()) return;
             int rc = HamlibNative.nativeSetMode(handle, FT_MODE);
             if (rc != 0) Log.w(TAG, "set_mode(" + FT_MODE + ") rc=" + rc);
@@ -99,7 +125,7 @@ public class HamlibRig extends BaseRig {
         // The app already picks an in-band FT8 frequency, so this never QSYs to
         // an untuned band — hamlib just sets exactly what the app asked for.
         final long hz = getFreq();
-        worker.submit(() -> {
+        submitToWorker(() -> {
             if (!ensureOpen()) return;
             int rc = HamlibNative.nativeSetFreq(handle, hz);
             if (rc != 0) Log.w(TAG, "set_freq(" + hz + ") rc=" + rc);
@@ -108,7 +134,7 @@ public class HamlibRig extends BaseRig {
 
     @Override
     public void readFreqFromRig() {
-        worker.submit(() -> {
+        submitToWorker(() -> {
             if (!ensureOpen()) return;
             long f = HamlibNative.nativeGetFreq(handle);
             if (f > 0) {
@@ -120,7 +146,7 @@ public class HamlibRig extends BaseRig {
     @Override
     public void setPTT(boolean on) {
         super.setPTT(on); // notify listeners / meter state
-        worker.submit(() -> {
+        submitToWorker(() -> {
             if (!ensureOpen()) return;
             int rc = HamlibNative.nativeSetPtt(handle, on);
             if (rc != 0) Log.w(TAG, "set_ptt(" + on + ") rc=" + rc);
@@ -134,13 +160,25 @@ public class HamlibRig extends BaseRig {
 
     @Override
     public void onDisconnecting() {
+        // Idempotent: this can be called more than once on the same instance
+        // (e.g. a user disconnect via CableConnector.disconnect() followed by a
+        // reconnect through connectRig(), which does not null the old rig).
+        // Shutting the worker down twice — or submitting to it after the first
+        // shutdown — would throw RejectedExecutionException and crash the app.
+        if (closed) return;
+        closed = true;
         final long h = handle;
         handle = 0;
-        worker.submit(() -> {
-            if (h != 0) {
-                HamlibNative.nativeClose(h);
-            }
-        });
+        try {
+            worker.submit(() -> {
+                if (h != 0) {
+                    HamlibNative.nativeClose(h);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            // Worker already terminated; the native handle (if any) is unreachable.
+            Log.w(TAG, "worker rejected close task");
+        }
         worker.shutdown();
     }
 }

@@ -36,4 +36,36 @@ public class HamlibRigTest {
         // reaching here without an exception is the assertion
         assertThat(rig.getName()).isEqualTo("Hamlib");
     }
+
+    @Test
+    public void onDisconnecting_isIdempotent_doesNotThrow() {
+        // onDisconnecting() shuts down the internal worker executor. It can be
+        // invoked more than once on the same instance (a user disconnect via
+        // CableConnector.disconnect() leaves baseRig set, then a reconnect runs
+        // connectRig() -> onDisconnecting() again). A second call must not
+        // re-submit to the now-terminated executor (RejectedExecutionException).
+        HamlibRig rig = new HamlibRig(1036);
+        rig.onDisconnecting();
+        rig.onDisconnecting(); // second call previously threw
+        rig.onDisconnecting(); // still safe on repeat
+        assertThat(rig.getName()).isEqualTo("Hamlib");
+    }
+
+    @Test
+    public void catControlAfterDisconnecting_doesNotThrow() {
+        // After the rig is torn down, any residual CAT call (e.g. the CAT
+        // liveness probe, a queued band change, or the TX sequencer releasing
+        // PTT) must be dropped rather than crashing the caller thread with a
+        // RejectedExecutionException from the shut-down worker.
+        HamlibRig rig = new HamlibRig(1036);
+        rig.onDisconnecting();
+
+        rig.setFreqToRig();
+        rig.readFreqFromRig();
+        rig.setUsbModeToRig();
+        rig.setPTT(true);
+        rig.setPTT(false);
+        // reaching here without an exception is the assertion
+        assertThat(rig.getName()).isEqualTo("Hamlib");
+    }
 }
