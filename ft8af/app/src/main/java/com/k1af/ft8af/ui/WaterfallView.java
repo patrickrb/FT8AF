@@ -293,10 +293,11 @@ public class WaterfallView extends View {
             }
         }
         // Scale gradient so the visible portion (0..drawWidth) maps to 0..spectrumWidth Hz.
-        // The FFT data covers 0 to Nyquist (sampleRate/2). We want spectrumWidth Hz
-        // to fill the view, so the full gradient length = drawWidth * (Nyquist / spectrumWidth).
-        float nyquist = GeneralVariables.audioSampleRate / 2f;
-        float gradientScale = nyquist / spectrumWidth;
+        // The FFT data covers 0 to the RX Nyquist (FT8Common.SAMPLE_RATE/2 = 6 kHz): RX
+        // audio is always captured/decoded at 12 kHz, independent of the user-selectable
+        // transmit audio rate (see SpectrumScale). We want spectrumWidth Hz to fill the
+        // view, so the full gradient length = drawWidth * (Nyquist / spectrumWidth).
+        float gradientScale = SpectrumScale.gradientScale(spectrumWidth);
         LinearGradient linearGradient = new LinearGradient(0, 0, drawWidth * gradientScale, 0, colors
                 , null, Shader.TileMode.CLAMP);
         linearPaint.setShader(linearGradient);

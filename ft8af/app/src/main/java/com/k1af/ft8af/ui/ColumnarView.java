@@ -89,11 +89,11 @@ public class ColumnarView extends View {
         if (data.length <= 0) {
             return;
         }
-        // Calculate how many FFT bins correspond to spectrumWidth Hz.
-        // The full data array covers 0 to Nyquist (sampleRate/2).
-        float nyquist = GeneralVariables.audioSampleRate / 2f;
-        int binsToShow = Math.min(data.length, Math.round((float) spectrumWidth / nyquist * data.length));
-        if (binsToShow <= 0) binsToShow = data.length / 2;
+        // Calculate how many FFT bins correspond to spectrumWidth Hz. The full
+        // data array covers 0 to the RX Nyquist (FT8Common.SAMPLE_RATE/2 = 6 kHz):
+        // RX audio is always captured/decoded at 12 kHz, independent of the
+        // user-selectable transmit audio rate (see SpectrumScale).
+        int binsToShow = SpectrumScale.binsToShow(data.length, spectrumWidth);
 
         width = getWidth() / binsToShow;
         if (drawblock) {// Whether to show the peak block
