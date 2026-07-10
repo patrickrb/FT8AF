@@ -79,8 +79,16 @@ public class X6100Radio {
     private XieguCommand xieguCommand;
     private int handle = 0;
     private String commandStr;
-    private int frames = 768;//frames per cycle
+    private int frames = 768;//frames per cycle (samples per TX audio packet)
     private int period = 64;//duration per cycle in milliseconds
+
+    // Upper bound accepted for a rig-reported audio "frames" (samples per TX
+    // packet). The default is 768 (64 ms at 12 kHz); a single packet larger than
+    // a whole 15 s TX cycle (180 000 samples) is nonsensical, so anything above
+    // this is a garbled/hostile reply. Capping keeps sendWaveData's
+    // `new short[frames]` allocation bounded (never an OutOfMemoryError) — see
+    // parseAudioFrames.
+    static final int MAX_AUDIO_FRAMES = 192_000;
 
 
     //************************event handling interfaces*******************************
@@ -755,14 +763,71 @@ public class X6100Radio {
         for (int i = 0; i < keys.length; i++) {
             String[] val = keys[i].split("=");
             if (val.length < 2) continue;
-            try {
-                if (val[0].equalsIgnoreCase("period")) period = Integer.parseInt(val[1]) / 1000;
-                if (val[0].equalsIgnoreCase("frames")) frames = Integer.parseInt(val[1]);
-            } catch (NumberFormatException e) {
-                Log.e(TAG, "Error parsing audio info: " + keys[i], e);
-            }
+            if (val[0].equalsIgnoreCase("period")) period = parseAudioPeriodMs(val[1], period);
+            if (val[0].equalsIgnoreCase("frames")) frames = parseAudioFrames(val[1], frames);
         }
         Log.d(TAG, String.format("set audio para:frames=%d,period=%d", frames, period));
+    }
+
+    /**
+     * Parse the rig's audio {@code frames=} value (samples per TX audio packet)
+     * from its network "audio get all" reply, returning {@code fallback} (the
+     * current value) for anything that isn't a sane positive count.
+     *
+     * <p>The value is consumed by {@link #sendWaveData(float[])} as an array size
+     * ({@code new short[frames]}) and a chunk stride. A non-positive value there
+     * is not just wrong data — it crashes or hangs the TX thread, and that thread
+     * is reached from untrusted network input via the TCP CAT read loop
+     * ({@link com.k1af.ft8af.flex.RadioTcpClient}), which catches only
+     * {@code SocketException}/{@code IOException}, while {@code sendWaveData}
+     * itself catches only {@code UnknownHostException}:
+     * <ul>
+     *   <li>{@code frames < 0} → {@code new short[frames]} throws
+     *       {@code NegativeArraySizeException} → uncaught → whole-app crash.</li>
+     *   <li>{@code frames == 0} → the copy loop never advances its offset and
+     *       spins for the whole over, flooding the rig with empty audio.</li>
+     *   <li>an absurdly large value → multi-GB allocation →
+     *       {@code OutOfMemoryError}.</li>
+     * </ul>
+     * Validating here, at the single ingestion point, keeps the invariant
+     * {@code 0 < frames <= MAX_AUDIO_FRAMES} for the field (its only other writer
+     * is the 768 default), so {@code sendWaveData} can never see a bad value.
+     *
+     * <p>Package-private and static so it can be unit-tested without a live
+     * socket or {@code Context}.
+     */
+    static int parseAudioFrames(String raw, int fallback) {
+        if (raw == null) return fallback;
+        try {
+            int f = Integer.parseInt(raw.trim());
+            if (f > 0 && f <= MAX_AUDIO_FRAMES) {
+                return f;
+            }
+        } catch (NumberFormatException ignored) {
+            // fall through to fallback
+        }
+        return fallback;
+    }
+
+    /**
+     * Parse the rig's audio {@code period=} value (microseconds) into whole
+     * milliseconds, returning {@code fallback} for anything that isn't a positive
+     * duration. {@code sendWaveData} busy-waits {@code period} ms between packets;
+     * a value below 1000 µs truncates to 0 ms on the {@code /1000}, turning that
+     * wait into a tight CPU spin. Same ingestion-point-validation rationale (and
+     * unit-testability) as {@link #parseAudioFrames}.
+     */
+    static int parseAudioPeriodMs(String raw, int fallback) {
+        if (raw == null) return fallback;
+        try {
+            int ms = Integer.parseInt(raw.trim()) / 1000;
+            if (ms > 0) {
+                return ms;
+            }
+        } catch (NumberFormatException ignored) {
+            // fall through to fallback
+        }
+        return fallback;
     }
 
     public synchronized void sendData(byte[] data) {
