@@ -223,6 +223,32 @@ public class LogFileImportTest {
         assertThat(LogFileImport.readFully(drip)).isEmpty();
     }
 
+    @Test(expected = IOException.class)
+    public void readFully_throwsWhenExceedingCap() throws IOException {
+        // A stream longer than MAX_IMPORT_BYTES must be rejected (defensive OOM guard on the
+        // web-logger HTTP-upload path), not read unbounded. This synthetic stream reports
+        // just over the cap without allocating a full copy up front.
+        InputStream oversize = new InputStream() {
+            private long remaining = (long) LogFileImport.MAX_IMPORT_BYTES + 1;
+
+            @Override
+            public int read() {
+                return remaining-- > 0 ? 0 : -1;
+            }
+
+            @Override
+            public int read(byte[] b, int off, int len) {
+                if (remaining <= 0) {
+                    return -1;
+                }
+                int n = (int) Math.min(len, remaining);
+                remaining -= n;
+                return n; // bytes left as-is; only the count matters for the cap
+            }
+        };
+        LogFileImport.readFully(oversize);
+    }
+
     @Test
     public void largeAdif_isNotTruncated() throws IOException {
         // End-to-end through the constructor: a file whose record body is much larger
@@ -239,7 +265,7 @@ public class LogFileImportTest {
         LogFileImport imp = new LogFileImport(task, big.getAbsolutePath());
         assertThat(imp.getLogRecords()).hasSize(count);
         // No NUL padding leaked in from a short read.
-        assertThat(imp.getFileContext()).doesNotContain(" ");
+        assertThat(imp.getFileContext()).doesNotContain("\u0000");
     }
 
     private static String repeat(String s, int times) {
