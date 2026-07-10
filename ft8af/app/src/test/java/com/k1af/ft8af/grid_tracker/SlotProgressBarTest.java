@@ -10,17 +10,21 @@ import org.junit.Test;
  */
 public class SlotProgressBarTest {
 
-    // FT8 15s cycle: byte-for-byte the same sweep the old (utcMs/1000)%15 bar drew, just at
-    // ms resolution — max is the slot length, full at the slot boundary.
+    // FT8 15s cycle: the sweep mirrors the old (utcMs/1000)%15 bar (rising across the slot,
+    // empty at the boundary) at ms resolution. max is slotMillis-1 so progress can reach it at
+    // the last ms of the slot and the bar renders fully full, then wraps to 0 at the boundary.
     @Test
-    public void ft8_maxIsFifteenSeconds() {
-        assertThat(SlotProgressBar.maxFor(15_000L)).isEqualTo(15_000);
+    public void ft8_maxIsSlotLengthMinusOne() {
+        assertThat(SlotProgressBar.maxFor(15_000L)).isEqualTo(14_999);
     }
 
     @Test
     public void ft8_progressSweepsOneSlot() {
         assertThat(SlotProgressBar.progressFor(0L, 15_000L)).isEqualTo(0);
         assertThat(SlotProgressBar.progressFor(7_500L, 15_000L)).isEqualTo(7_500);
+        // Last ms of the slot reaches max, so the bar fills completely.
+        assertThat(SlotProgressBar.progressFor(14_999L, 15_000L))
+                .isEqualTo(SlotProgressBar.maxFor(15_000L));
         // Slot boundary wraps back to empty.
         assertThat(SlotProgressBar.progressFor(15_000L, 15_000L)).isEqualTo(0);
         assertThat(SlotProgressBar.progressFor(16_000L, 15_000L)).isEqualTo(1_000);
@@ -29,7 +33,7 @@ public class SlotProgressBarTest {
     // FT4 7.5s slot: the fill must span 7.5s, not 15s.
     @Test
     public void ft4_maxIsSevenPointFiveSeconds() {
-        assertThat(SlotProgressBar.maxFor(7_500L)).isEqualTo(7_500);
+        assertThat(SlotProgressBar.maxFor(7_500L)).isEqualTo(7_499);
     }
 
     @Test
@@ -43,7 +47,7 @@ public class SlotProgressBarTest {
     // FT2 3.75s slot.
     @Test
     public void ft2_maxAndProgress() {
-        assertThat(SlotProgressBar.maxFor(3_750L)).isEqualTo(3_750);
+        assertThat(SlotProgressBar.maxFor(3_750L)).isEqualTo(3_749);
         assertThat(SlotProgressBar.progressFor(4_000L, 3_750L)).isEqualTo(250);
     }
 
@@ -68,13 +72,13 @@ public class SlotProgressBarTest {
     // contract) falls back to the FT8 15s cycle instead of dividing by zero.
     @Test
     public void nonPositiveSlotFallsBackToFt8() {
-        assertThat(SlotProgressBar.maxFor(0L)).isEqualTo(15_000);
-        assertThat(SlotProgressBar.maxFor(-5L)).isEqualTo(15_000);
+        assertThat(SlotProgressBar.maxFor(0L)).isEqualTo(14_999);
+        assertThat(SlotProgressBar.maxFor(-5L)).isEqualTo(14_999);
         assertThat(SlotProgressBar.progressFor(3_000L, 0L)).isEqualTo(3_000);
         assertThat(SlotProgressBar.progressFor(3_000L, -5L)).isEqualTo(3_000);
     }
 
-    // Progress is always in [0, max), including for a (theoretical) negative UTC.
+    // Progress is always in [0, max], including for a (theoretical) negative UTC.
     @Test
     public void progressIsAlwaysInRange() {
         assertThat(SlotProgressBar.progressFor(-1L, 15_000L)).isEqualTo(14_999);

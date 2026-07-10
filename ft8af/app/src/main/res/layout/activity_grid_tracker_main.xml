@@ -20,7 +20,7 @@
             android:layout_height="2dp"
             android:layout_marginTop="1dp"
             android:background="@color/button_tracker_button_color"
-            android:max="15000"
+            android:max="14999"
             android:visibility="visible"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
