@@ -258,8 +258,9 @@ public class GenerateFT8 {
         // a91 is the 12-byte (91+7)/8 payload; the native encoder fills the tone array
         mode.encode(a91, tones);
 
-        // convert FSK tones to audio signal
-        int num_samples = (int) (0.5f + mode.numTones * mode.symbolPeriod * sample_rate); // FT8: 0.5+79*0.16*12000
+        // Size the output buffer to EXACTLY the number of samples the native GFSK
+        // synthesiser (synth_gfsk, gfsk.c) will write — see waveformSampleCount.
+        int num_samples = waveformSampleCount(mode.numTones, mode.symbolPeriod, sample_rate);
 
         float[] signal = new float[num_samples];
         for (int i = 0; i < num_samples; i++)// silence all data
@@ -270,6 +271,51 @@ public class GenerateFT8 {
         // generate audio from the symbol array
         synth_gfsk(tones, mode.numTones, frequency, mode.symbolBt, mode.symbolPeriod, sample_rate, signal, 0);
         return signal;
+    }
+
+    /**
+     * Number of audio samples the native GFSK synthesiser writes for {@code numTones}
+     * symbols at {@code sampleRate}: {@code numTones * samplesPerSymbol}, where
+     * {@code samplesPerSymbol} is rounded the <em>same</em> way the native code rounds it
+     * (see {@code synth_gfsk_dphi_alloc} in {@code gfsk.c}:
+     * {@code n_spsym = (int)(0.5f + signal_rate * symbol_period)}, then
+     * {@code n_wave = n_sym * n_spsym}).
+     *
+     * <p>The Java output buffer handed to {@code synth_gfsk} MUST be sized exactly this
+     * way. Sizing it as {@code round(numTones * symbolPeriod * sampleRate)} instead — the
+     * previous behaviour — rounds the total once rather than per-symbol, so the two counts
+     * diverge whenever {@code sampleRate * symbolPeriod} is not an integer. When the total
+     * rounds <em>down</em> while the native per-symbol product rounds up, the native writer
+     * runs past the end of the Java {@code float[]} — a heap out-of-bounds write on the TX
+     * thread (native memory corruption, uncatchable). This bites at any audio rate that is
+     * not a clean multiple of the symbol rate, e.g. a 44100 Hz {@code audioRate} restored
+     * from a settings backup while running FT4/FT2 (the UI only offers 12/24/48 kHz, where
+     * {@code sampleRate * symbolPeriod} is always integral and the two formulas agree
+     * bit-for-bit, so this is byte-identical for every supported configuration).
+     *
+     * <p>Package-visible and free of JNI/global state so the sizing is unit-testable.
+     *
+     * @param numTones     channel symbols in the mode (79 FT8, 105 FT4/FT2)
+     * @param symbolPeriod GFSK symbol period in seconds (0.160 FT8, 0.048 FT4, 0.024 FT2)
+     * @param sampleRate   output audio sample rate in Hz
+     * @return the exact sample count native {@code synth_gfsk} writes, or 0 for a
+     *         degenerate (non-positive) rate/period/tone count, or a product that
+     *         overflows a 32-bit {@code int} (a corrupted/hand-edited backup rate)
+     */
+    static int waveformSampleCount(int numTones, float symbolPeriod, int sampleRate) {
+        int samplesPerSymbol = Math.round(symbolPeriod * sampleRate);
+        if (numTones <= 0 || samplesPerSymbol <= 0) {
+            return 0;
+        }
+        // Compute in long so a corrupted, out-of-range sampleRate (round-tripped
+        // verbatim through a settings backup) can't overflow the int multiply into a
+        // negative/too-small length — which would reintroduce the very OOB/NegativeArraySize
+        // failure this sizing guards against. Refuse (0) rather than hand back a bogus size.
+        long total = (long) numTones * samplesPerSymbol;
+        if (total > Integer.MAX_VALUE) {
+            return 0;
+        }
+        return (int) total;
     }
 
     /** Encode an a91 payload into 79 FT8 tones (native ft8_encode). */

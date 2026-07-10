@@ -19,6 +19,7 @@ extern "C" {
 void synth_gfsk_offset(const uint8_t* symbols, int n_sym, float f0,
                        float symbol_bt, float symbol_period,
                        int signal_rate, float* signal, int offset);
+int synth_gfsk_output_len(int n_sym, float symbol_period, int signal_rate);
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +132,25 @@ Java_com_k1af_ft8af_ft8transmit_GenerateFT8_synth_1gfsk(
     jsize sym_len = env->GetArrayLength(symbols);
     if (sym_len <= 0 || n_sym <= 0) return;
     int count = (n_sym < sym_len) ? n_sym : sym_len;
+
+    // Native trust boundary: synth_gfsk_offset writes exactly
+    // synth_gfsk_output_len(count, symbol_period, signal_rate) samples starting at
+    // `offset`. If the caller's output array is too small — e.g. a Java float[] sized
+    // as round(count*symbol_period*signal_rate) rather than count*round(...), which
+    // diverges whenever signal_rate*symbol_period is not integral — writing anyway is
+    // a heap out-of-bounds write (uncatchable native corruption). Refuse rather than
+    // corrupt memory; the well-formed Java caller (GenerateFT8.waveformSampleCount)
+    // sizes the buffer to exactly this length, so this never trips in normal use.
+    // Mirrors the GetArrayLength(tones) >= FT8_NN guards above.
+    jsize sig_len = env->GetArrayLength(signal);
+    int out_len = synth_gfsk_output_len(count, symbol_period, signal_rate);
+    // int64_t (not long): `long` is 32-bit on 32-bit Android ABIs (armeabi-v7a/x86),
+    // so offset+out_len could overflow and wrap past this guard. jlong/int64 is 64-bit
+    // on every ABI, keeping the trust-boundary end-index check honest for hostile input.
+    if (offset < 0 || out_len <= 0
+            || (int64_t)offset + (int64_t)out_len > (int64_t)sig_len) {
+        return;
+    }
 
     // Get the tone bytes (Java byte is signed; cast to uint8_t for the C API).
     jbyte* sym_j = env->GetByteArrayElements(symbols, nullptr);
