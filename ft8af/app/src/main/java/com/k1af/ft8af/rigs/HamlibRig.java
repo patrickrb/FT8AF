@@ -61,6 +61,13 @@ public class HamlibRig extends BaseRig {
      * call repeatedly.
      */
     private synchronized boolean ensureOpen() {
+        if (closed) {
+            // Torn down (or being torn down): never re-open. A task that was
+            // queued just before onDisconnecting() could otherwise open a fresh
+            // handle here that the close task (which captured the old handle)
+            // never releases — leaking the rig and leaving it open post-disconnect.
+            return false;
+        }
         if (handle != 0) {
             return true;
         }
@@ -101,13 +108,30 @@ public class HamlibRig extends BaseRig {
      * crash the app; here the request is simply dropped instead.
      */
     private void submitToWorker(Runnable task) {
-        if (closed) return;
+        if (closed) return; // fast path: don't even enqueue after disconnect
         try {
-            worker.submit(task);
+            worker.submit(() -> {
+                // Re-check at execution time: a task enqueued a moment before
+                // onDisconnecting() set closed can still be sitting in the queue
+                // when the rig is torn down. Running its CAT body then would call
+                // ensureOpen() and could re-open the handle after disconnect.
+                if (closed) return;
+                task.run();
+            });
         } catch (RejectedExecutionException e) {
             // Raced onDisconnecting()'s shutdown; the rig is gone — drop the task.
             Log.w(TAG, "worker rejected task after disconnect");
         }
+    }
+
+    /** Visible for tests: submit a raw task through the same closed-gate. */
+    void submitForTest(Runnable task) {
+        submitToWorker(task);
+    }
+
+    /** Visible for tests: block until the worker has fully drained/terminated. */
+    void awaitWorkerForTest() throws InterruptedException {
+        worker.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
     }
 
     @Override
@@ -176,8 +200,13 @@ public class HamlibRig extends BaseRig {
                 }
             });
         } catch (RejectedExecutionException e) {
-            // Worker already terminated; the native handle (if any) is unreachable.
-            Log.w(TAG, "worker rejected close task");
+            // Worker already terminated, so it can't run the close for us. The
+            // handle is still reachable via the local h — close it inline rather
+            // than leaking the native rig/pump resources.
+            Log.w(TAG, "worker rejected close task; closing handle inline");
+            if (h != 0) {
+                HamlibNative.nativeClose(h);
+            }
         }
         worker.shutdown();
     }

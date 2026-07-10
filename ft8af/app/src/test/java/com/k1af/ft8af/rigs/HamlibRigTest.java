@@ -2,6 +2,10 @@ package com.k1af.ft8af.rigs;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import org.junit.Test;
 
 /**
@@ -67,5 +71,41 @@ public class HamlibRigTest {
         rig.setPTT(false);
         // reaching here without an exception is the assertion
         assertThat(rig.getName()).isEqualTo("Hamlib");
+    }
+
+    @Test
+    public void taskQueuedBeforeDisconnect_doesNotRunBodyAfterClose() throws Exception {
+        // A CAT task can be sitting in the worker queue at the moment
+        // onDisconnecting() flips `closed`. Its body must NOT run afterward —
+        // otherwise it would call ensureOpen() and re-open a handle that the
+        // close task (which captured the pre-disconnect handle) never releases.
+        HamlibRig rig = new HamlibRig(1036);
+        CountDownLatch aStarted = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicBoolean bBodyRan = new AtomicBoolean(false);
+
+        // Task A occupies the single worker thread until released.
+        rig.submitForTest(() -> {
+            aStarted.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        assertThat(aStarted.await(5, TimeUnit.SECONDS)).isTrue();
+
+        // Task B is enqueued behind A while the rig is still live (closed==false),
+        // so it passes the submit-time fast path and gets wrapped + queued.
+        rig.submitForTest(() -> bBodyRan.set(true));
+
+        // Tear down: sets closed=true, then shutdown() lets A and B drain.
+        rig.onDisconnecting();
+
+        release.countDown();
+        rig.awaitWorkerForTest();
+
+        // The execution-time re-check dropped B's body after disconnect.
+        assertThat(bBodyRan.get()).isFalse();
     }
 }
