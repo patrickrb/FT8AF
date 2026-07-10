@@ -28,7 +28,6 @@ public class RadioUdpClient {
     private final ExecutorService sendDataThreadPool = Executors.newCachedThreadPool();
     private final ExecutorService receiveThreadPool = Executors.newCachedThreadPool();
     private final SendDataRunnable sendDataRunnable=new SendDataRunnable(this);
-    private final ReceiveRunnable receiveRunnable=new ReceiveRunnable(this);
 
     public RadioUdpClient(int port) {
         this.port = port;
@@ -45,7 +44,8 @@ public class RadioUdpClient {
         sendDataThreadPool.execute(sendDataRunnable);
     }
 
-    private static class SendDataRunnable implements Runnable{
+    // Package-private (not private) so a unit test in this package can drive it.
+    static class SendDataRunnable implements Runnable{
         byte[] data;
         InetAddress address;
         int port;
@@ -59,7 +59,12 @@ public class RadioUdpClient {
         public void run() {
             DatagramPacket packet = new DatagramPacket(data, data.length, address,port);
             try {
-                client.sendSocket.send(packet);
+                // Null-guard the shared socket: a disconnect that overlaps an in-flight
+                // send (setActivated(false) closes and nulls sendSocket) would otherwise
+                // NPE here, and only IOException is caught, so it escapes onto a pool
+                // worker and crashes the app. Mirrors IcomUdpClient.SendDataRunnable.
+                DatagramSocket socket = client.sendSocket;
+                if (socket != null) socket.send(packet);
             } catch (IOException e) {
                 e.printStackTrace();
                 Log.e(TAG, "run: " + e.getMessage());
@@ -80,6 +85,11 @@ public class RadioUdpClient {
         }else {
             if (sendSocket!=null){
                 sendSocket.close();
+                // Owner-nulls the shared slot after closing it. The receive worker
+                // used to do this on its way out, but a slow worker could run that
+                // teardown *after* a reconnect had already installed a fresh socket
+                // here, closing/nulling the new socket and leaving the rig dead.
+                sendSocket = null;
                 try {
                     Thread.sleep(100);
                 } catch (InterruptedException e) {
@@ -90,27 +100,44 @@ public class RadioUdpClient {
     }
 
     private void receiveData() {
-        receiveThreadPool.execute(receiveRunnable);
+        // Hand the worker the exact socket it should own, captured under this
+        // synchronized method. It never reads the shared sendSocket field again, so a
+        // later reconnect that swaps sendSocket can't make it receive on (or tear down)
+        // the wrong socket. Mirrors IcomUdpClient.receiveData().
+        receiveThreadPool.execute(new ReceiveRunnable(this, sendSocket));
     }
-    private static class ReceiveRunnable implements Runnable{
-        RadioUdpClient client;
 
-        public ReceiveRunnable(RadioUdpClient client) {
+    // Package-private (not private) so a unit test in this package can drive its
+    // teardown deterministically.
+    static class ReceiveRunnable implements Runnable{
+        final RadioUdpClient client;
+        // The socket this worker owns. Captured at construction so the loop and the
+        // teardown never touch the shared sendSocket field, which a reconnect may
+        // have swapped for a different socket.
+        final DatagramSocket socket;
+
+        public ReceiveRunnable(RadioUdpClient client, DatagramSocket socket) {
             this.client = client;
+            this.socket = socket;
         }
 
         @Override
         public void run() {
-            while (client.activated) {
+            // Exit when deactivated OR when our own socket is closed. Keying on the
+            // socket (not just the shared activated flag) means a reconnect that flips
+            // activated false->true again still stops this old worker instead of
+            // leaving it to double-receive on the new socket or tight-spin on a closed
+            // one.
+            while (client.activated && !socket.isClosed()) {
 
                 byte[] data = new byte[client.MAX_BUFFER_SIZE];
                 DatagramPacket packet = new DatagramPacket(data, data.length);
                 try {
-                    client.sendSocket.receive(packet);
+                    socket.receive(packet);
                     if (client.onUdpEvents != null) {
                         byte[] temp = Arrays.copyOf(packet.getData(), packet.getLength());
 
-                        client.onUdpEvents.OnReceiveData(client.sendSocket, packet, temp);
+                        client.onUdpEvents.OnReceiveData(socket, packet, temp);
 
 
                     }
@@ -121,8 +148,10 @@ public class RadioUdpClient {
 
             }
             Log.e(TAG, "udpClient: is exit!");
-            client.sendSocket.close();
-            client.sendSocket = null;
+            // Close only the socket we own; never touch the shared sendSocket field
+            // (setActivated owns its lifecycle). Closing our own socket is idempotent
+            // if setActivated already closed it during teardown.
+            socket.close();
         }
     }
     public void setOnUdpEvents(OnUdpEvents onUdpEvents) {
@@ -139,6 +168,18 @@ public class RadioUdpClient {
         }else {
             return 0;
         }
+    }
+
+    // Visible for tests: install a socket into the shared slot without opening the
+    // receive loop, so ReceiveRunnable's teardown can be asserted deterministically.
+    void primeSendSocketForTest(DatagramSocket socket) {
+        this.sendSocket = socket;
+    }
+
+    // Visible for tests: read the shared slot to assert a worker's teardown left it
+    // (and any reconnect-installed socket) untouched.
+    DatagramSocket getSendSocketForTest() {
+        return sendSocket;
     }
 
     public static String byteToStr(byte[] data) {
