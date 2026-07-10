@@ -36,13 +36,47 @@ public class MaidenheadGridTest {
 
     @Test
     public void gridToLatLng_sixChar_narrowsToSubsquare() {
-        // FN42aa: south-west corner of FN42.
+        // FN42aa: the south-west subsquare of FN42. Subsquares span 1/24° lat and
+        // 2/24° lng (letters a–x), so the 'aa' centroid sits half a subsquare in.
         LatLng p = MaidenheadGrid.gridToLatLng("FN42aa");
         assertThat(p).isNotNull();
-        // Sub-square centroid lat: 42 + (0.5 * 1/18) ≈ 42.0278
-        assertThat(p.latitude).isWithin(POS_TOL).of(42.028);
-        // Sub-square centroid lng: -72 + (0.5 * 2/18) ≈ -71.944
-        assertThat(p.longitude).isWithin(POS_TOL).of(-71.944);
+        // Sub-square centroid lat: 42 + (0.5 * 1/24) ≈ 42.0208
+        assertThat(p.latitude).isWithin(POS_TOL).of(42.021);
+        // Sub-square centroid lng: -72 + (0.5 * 2/24) ≈ -71.9583
+        assertThat(p.longitude).isWithin(POS_TOL).of(-71.958);
+    }
+
+    @Test
+    public void gridToLatLng_sixChar_highSubsquareMatchesRealLocation() {
+        // Regression for the subsquare divisor: the a–x third pair has 24
+        // divisions per axis, not 18. The +0.5 centre offset masks the error for
+        // the low letters ('aa'), so use a high subsquare — IO91wm is the classic
+        // central-London locator, true centre ≈ (51.52, -0.125). With the old /18
+        // divisor this resolved to (51.69, +0.5): ~45 km east and into the wrong
+        // hemisphere of the prime meridian.
+        LatLng p = MaidenheadGrid.gridToLatLng("IO91wm");
+        assertThat(p).isNotNull();
+        assertThat(p.latitude).isWithin(POS_TOL).of(51.521);
+        assertThat(p.longitude).isWithin(POS_TOL).of(-0.125);
+    }
+
+    @Test
+    public void gridToPolygon_sixChar_cellSpansOneSubsquare() {
+        // A 6-char cell outline must be exactly one subsquare: 1/24° tall and
+        // 2/24° wide. The /18 divisor inflated it to 1/18° × 2/18° (≈33% too big),
+        // drawing overlapping grid squares on the map.
+        LatLng[] poly = MaidenheadGrid.gridToPolygon("IO91wm");
+        assertThat(poly).isNotNull();
+        double minLat = Math.min(Math.min(poly[0].latitude, poly[1].latitude),
+                Math.min(poly[2].latitude, poly[3].latitude));
+        double maxLat = Math.max(Math.max(poly[0].latitude, poly[1].latitude),
+                Math.max(poly[2].latitude, poly[3].latitude));
+        double minLng = Math.min(Math.min(poly[0].longitude, poly[1].longitude),
+                Math.min(poly[2].longitude, poly[3].longitude));
+        double maxLng = Math.max(Math.max(poly[0].longitude, poly[1].longitude),
+                Math.max(poly[2].longitude, poly[3].longitude));
+        assertThat(maxLat - minLat).isWithin(1e-4).of(1.0 / 24.0);
+        assertThat(maxLng - minLng).isWithin(1e-4).of(2.0 / 24.0);
     }
 
     @Test

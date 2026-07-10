@@ -19,6 +19,16 @@ import java.util.List;
 public class MaidenheadGrid {
     private static final String TAG = "MaidenheadGrid";
     private static final double EARTH_RADIUS = 6371393; // Mean radius in meters; not the equatorial radius, which is about 6378 km
+    /**
+     * Maidenhead subsquares (the third pair, letters a–x) divide each square into
+     * 24 parts along each axis — not 18. The 6-character decode below must agree
+     * with the {@link #getGridSquare} encoder, which steps by 2/24° of longitude
+     * and 1/24° of latitude per subsquare. Dividing by 18 stretched every
+     * subsquare offset by 24/18 = 1.33×, misplacing 6-character grids by up to
+     * ~0.6° (~45 km) of longitude for the high subsquare letters (e.g. IO91wm
+     * landed at +0.5° instead of the true −0.125°).
+     */
+    private static final float SUBSQUARES = 24f;
 
     /**
      * Calculate latitude/longitude from a 4-character or 6-character Maidenhead grid. Returns null if grid data is invalid. For 4-character grids, 'll' is appended to use the center position.
@@ -55,7 +65,7 @@ public class MaidenheadGrid {
 
         if (grid.length()==6){
             z=grid.toUpperCase().getBytes()[5]-'A'+0.5f;
-            z=z*(1/18f);
+            z=z*(1/SUBSQUARES);
         }
         lat=x+y+z-90;
 
@@ -78,7 +88,7 @@ public class MaidenheadGrid {
         y*=2;
         if (grid.length()==6){
             z=grid.toUpperCase().getBytes()[4]-'A'+0.5;
-            z=z*(2/18f);
+            z=z*(2/SUBSQUARES);
         }
         lng=x+y+z-180;
         if (lat>85) lat=85;//Prevent going out of bounds on the map
@@ -113,7 +123,7 @@ public class MaidenheadGrid {
         }
         if (grid.length() > 4) {
             z = grid.toUpperCase().getBytes()[5] - 'A';
-            z = z * (1f / 18f);
+            z = z * (1f / SUBSQUARES);
         }
         lat1 = x + y + z - 90;
         if (lat1<-85.0){
@@ -141,7 +151,7 @@ public class MaidenheadGrid {
         }
         if (grid.length() == 6) {
             z = grid.toUpperCase().getBytes()[5] - 'A' + 1;
-            z = z * (1f / 18f);
+            z = z * (1f / SUBSQUARES);
         }
         lat2 = x + y + z - 90;
         if (lat2<-85.0){
@@ -164,7 +174,7 @@ public class MaidenheadGrid {
         }
         if (grid.length()>4){
             z=grid.toUpperCase().getBytes()[4]-'A';
-            z=z*2/18f;
+            z=z*2/SUBSQUARES;
         }
         lng1=x+y+z-180;
 
@@ -185,7 +195,7 @@ public class MaidenheadGrid {
         y*=2;
         if (grid.length()==6){
             z=grid.toUpperCase().getBytes()[4]-'A'+1;
-            z=z*2/18f;
+            z=z*2/SUBSQUARES;
         }
         lng2=x+y+z-180;
 
