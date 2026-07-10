@@ -199,6 +199,117 @@ public class LogFileImportTest {
         assertThat(imp.getLogRecords()).hasSize(1);
     }
 
+    @Test
+    public void readFully_readsWholeStreamAcrossShortReads() throws IOException {
+        // A stream that dribbles out one byte per read() call, exactly the case
+        // the old single-read-sized-by-available() code truncated. The payload is
+        // larger than one read would ever return here.
+        String payload = repeat("<call:5>K1ABC<eor>\n", 500);
+        InputStream drip = new DripInputStream(payload.getBytes(StandardCharsets.UTF_8), 1);
+        assertThat(LogFileImport.readFully(drip)).isEqualTo(payload);
+    }
+
+    @Test
+    public void readFully_decodesUtf8Regardless() throws IOException {
+        // Multibyte content must survive even when the stream hands back small chunks.
+        String payload = "<comment:9>café テスト<eor>";
+        InputStream drip = new DripInputStream(payload.getBytes(StandardCharsets.UTF_8), 3);
+        assertThat(LogFileImport.readFully(drip)).isEqualTo(payload);
+    }
+
+    @Test
+    public void readFully_emptyStreamReturnsEmptyString() throws IOException {
+        InputStream drip = new DripInputStream(new byte[0], 4);
+        assertThat(LogFileImport.readFully(drip)).isEmpty();
+    }
+
+    @Test(expected = IOException.class)
+    public void readFully_throwsWhenExceedingCap() throws IOException {
+        // A stream longer than MAX_IMPORT_BYTES must be rejected (defensive OOM guard on the
+        // web-logger HTTP-upload path), not read unbounded. This synthetic stream reports
+        // just over the cap without allocating a full copy up front.
+        InputStream oversize = new InputStream() {
+            private long remaining = (long) LogFileImport.MAX_IMPORT_BYTES + 1;
+
+            @Override
+            public int read() {
+                return remaining-- > 0 ? 0 : -1;
+            }
+
+            @Override
+            public int read(byte[] b, int off, int len) {
+                if (remaining <= 0) {
+                    return -1;
+                }
+                int n = (int) Math.min(len, remaining);
+                remaining -= n;
+                return n; // bytes left as-is; only the count matters for the cap
+            }
+        };
+        LogFileImport.readFully(oversize);
+    }
+
+    @Test
+    public void largeAdif_isNotTruncated() throws IOException {
+        // End-to-end through the constructor: a file whose record body is much larger
+        // than a single read is typically willing to return must parse every record.
+        StringBuilder sb = new StringBuilder("header<eoh>\n");
+        int count = 4000;
+        for (int i = 0; i < count; i++) {
+            sb.append("<call:5>K1ABC<eor>\n");
+        }
+        File big = tmp.newFile("big.adi");
+        try (FileOutputStream out = new FileOutputStream(big)) {
+            out.write(sb.toString().getBytes(StandardCharsets.UTF_8));
+        }
+        LogFileImport imp = new LogFileImport(task, big.getAbsolutePath());
+        assertThat(imp.getLogRecords()).hasSize(count);
+        // No NUL padding leaked in from a short read.
+        assertThat(imp.getFileContext()).doesNotContain("\u0000");
+    }
+
+    private static String repeat(String s, int times) {
+        StringBuilder sb = new StringBuilder(s.length() * times);
+        for (int i = 0; i < times; i++) {
+            sb.append(s);
+        }
+        return sb.toString();
+    }
+
+    /** InputStream that returns at most {@code maxPerRead} bytes per read() call. */
+    private static final class DripInputStream extends InputStream {
+        private final byte[] data;
+        private final int maxPerRead;
+        private int pos = 0;
+
+        DripInputStream(byte[] data, int maxPerRead) {
+            this.data = data;
+            this.maxPerRead = maxPerRead;
+        }
+
+        @Override
+        public int read() {
+            return pos < data.length ? (data[pos++] & 0xff) : -1;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) {
+            if (pos >= data.length) {
+                return -1;
+            }
+            int n = Math.min(Math.min(len, maxPerRead), data.length - pos);
+            System.arraycopy(data, pos, b, off, n);
+            pos += n;
+            return n;
+        }
+
+        // Deliberately misreport remaining bytes, like a content:// stream can.
+        @Override
+        public int available() {
+            return 0;
+        }
+    }
+
     private File fixture(String resource) throws IOException {
         File out = tmp.newFile(new File(resource).getName());
         try (InputStream in = getClass().getClassLoader().getResourceAsStream(resource)) {
