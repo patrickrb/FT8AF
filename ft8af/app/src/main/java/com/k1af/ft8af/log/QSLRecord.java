@@ -142,8 +142,10 @@ public class QSLRecord {
         }
 
         if (map.containsKey("FREQ")) {//Carrier frequency
-            try {//Convert float to Long
-                float freq = Float.parseFloat(Objects.requireNonNull(map.get("FREQ")));
+            try {//Convert MHz to Hz. Parse as double: a 32-bit float only holds
+                //~7 significant digits, so UHF/microwave dials (e.g. 432.174 or
+                //1296.174 MHz) would drift by tens of Hz once scaled to Hz.
+                double freq = Double.parseDouble(Objects.requireNonNull(map.get("FREQ")));
                 bandFreq = Math.round(freq * 1000000);
             } catch (NumberFormatException e) {
                 isInvalid=true;

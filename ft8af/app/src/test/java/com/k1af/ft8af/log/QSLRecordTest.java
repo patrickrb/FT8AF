@@ -141,6 +141,51 @@ public class QSLRecordTest {
     }
 
     @Test
+    public void mapConstructor_uhfFreq_preservesExactHz() {
+        // 432.174 MHz (70cm). A 24-bit float mantissa cannot hold this many
+        // significant Hz exactly, so the old float-based parse stored 432174016
+        // (+16 Hz). Import must round-trip the exact dial frequency.
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("FREQ", "432.174000");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.isInvalid).isFalse();
+        assertThat(r.getBandFreq()).isEqualTo(432_174_000L);
+    }
+
+    @Test
+    public void mapConstructor_microwaveFreq_preservesExactHz() {
+        // 1296.174 MHz (23cm). Float precision drifts even further here
+        // (old value 1296173952, -48 Hz).
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("FREQ", "1296.174000");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.isInvalid).isFalse();
+        assertThat(r.getBandFreq()).isEqualTo(1_296_174_000L);
+    }
+
+    @Test
+    public void mapConstructor_hfFreq_unchanged() {
+        // HF stays within float's exact-integer range; behaviour is preserved.
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("FREQ", "14.074000");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.isInvalid).isFalse();
+        assertThat(r.getBandFreq()).isEqualTo(14_074_000L);
+    }
+
+    @Test
     public void toStringAndHtml_includeTypeHeader() {
         QSLRecord r = new QSLRecord(EPOCH, PLUS_15S, "K1ABC", "", "W1AW", "",
                 -5, -10, "FT8", 14_074_000L, 1500);
