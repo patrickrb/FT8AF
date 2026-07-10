@@ -13,12 +13,15 @@
  * These no-op stubs satisfy the linker so the single libft8af.so has no
  * API-28/API-24 symbol dependency and loads cleanly on every supported device.
  *
- * They are defined with default visibility so the linker resolves hamlib's
- * references to them; on API 28+ devices Bionic also exports glob(), but our
- * internal definition is used for hamlib's calls and never leaks out because
- * the .so exports only the JNI entry points.
+ * They are marked hidden: hamlib is linked statically INTO libft8af.so, so its
+ * references resolve to these definitions at link time regardless of visibility,
+ * while hidden keeps them out of the .so's dynamic symbol table. That prevents
+ * them from interposing the real glob()/getifaddrs() of any other library in the
+ * process (libft8af.so is not otherwise built with hidden visibility).
  */
 #include <stddef.h>
+
+#define HL_HIDDEN __attribute__((visibility("hidden")))
 
 /* Mirror the layout hamlib's microham.c expects from <glob.h>; only gl_pathc /
  * gl_pathv are read, and we always report "no matches". */
@@ -30,7 +33,7 @@ typedef struct {
 
 #define HAMLIB_COMPAT_GLOB_NOMATCH 3
 
-int glob(const char *pattern, int flags, void *errfunc, hamlib_compat_glob_t *pglob) {
+HL_HIDDEN int glob(const char *pattern, int flags, void *errfunc, hamlib_compat_glob_t *pglob) {
     (void) pattern;
     (void) flags;
     (void) errfunc;
@@ -42,17 +45,17 @@ int glob(const char *pattern, int flags, void *errfunc, hamlib_compat_glob_t *pg
     return HAMLIB_COMPAT_GLOB_NOMATCH;
 }
 
-void globfree(hamlib_compat_glob_t *pglob) {
+HL_HIDDEN void globfree(hamlib_compat_glob_t *pglob) {
     (void) pglob;
 }
 
-int getifaddrs(void **ifap) {
+HL_HIDDEN int getifaddrs(void **ifap) {
     if (ifap) {
         *ifap = NULL;
     }
     return -1; /* report "cannot enumerate" - callers treat as no interfaces */
 }
 
-void freeifaddrs(void *ifa) {
+HL_HIDDEN void freeifaddrs(void *ifa) {
     (void) ifa;
 }

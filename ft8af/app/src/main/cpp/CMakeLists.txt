@@ -92,11 +92,12 @@ target_compile_options(ft8af_dsp PRIVATE
 # ---------------------------------------------------------------------------
 # hamlib (prebuilt static, per-ABI) — CAT protocol engine
 # ---------------------------------------------------------------------------
-# libhamlib.a is cross-compiled offline from the pinned source in hamlib/vendor/
-# by hamlib/build_android.sh and checked in under hamlib/prebuilt/<abi>/. hamlib
+# libhamlib.a is cross-compiled from the pinned source in hamlib/vendor/ by
+# hamlib/build_android.sh. It is NOT checked into git (large + rebuildable) —
+# the block below builds it on demand per ABI (see hamlib/.gitignore). hamlib
 # supplies per-radio CAT framing; ft8af_glue/hamlib_jni.cpp drives it over a
 # loopback-TCP socket bridged to the app's USB-serial transport. See
-# hamlib/HAMLIB_PIN.txt for the design + rebuild instructions.
+# hamlib/HAMLIB_PIN.txt for the design + build instructions.
 
 set(HAMLIB_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/hamlib)
 set(HAMLIB_A ${HAMLIB_ROOT}/prebuilt/${ANDROID_ABI}/libhamlib.a)

@@ -49,7 +49,14 @@ abi_triple() {
 ABIS="${1:-arm64-v8a armeabi-v7a x86 x86_64}"
 
 echo "== verifying vendored tarball checksum =="
-echo "$EXPECT_SHA  $TARBALL" | sha256sum -c - || { echo "FATAL: tarball checksum mismatch"; exit 3; }
+# macOS ships `shasum`, not `sha256sum`; support both.
+if command -v sha256sum >/dev/null; then
+  echo "$EXPECT_SHA  $TARBALL" | sha256sum -c - || { echo "FATAL: tarball checksum mismatch"; exit 3; }
+elif command -v shasum >/dev/null; then
+  echo "$EXPECT_SHA  $TARBALL" | shasum -a 256 -c - || { echo "FATAL: tarball checksum mismatch"; exit 3; }
+else
+  echo "FATAL: neither sha256sum nor shasum found"; exit 3
+fi
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT

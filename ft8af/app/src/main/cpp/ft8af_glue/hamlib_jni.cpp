@@ -30,6 +30,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <atomic>
 #include <cstring>
 #include <cstdlib>
 
@@ -52,10 +53,13 @@ static void ensure_vm(JNIEnv *env) {
 
 struct HamlibBridge {
     RIG *rig = nullptr;
-    int listen_fd = -1;
-    int srv_fd = -1;          // accepted server side; pump reads, feed writes
+    // fds + running are touched from the worker thread (open/close), the pump
+    // thread (accept/read), and nativeFeedFromRig (write) — std::atomic gives
+    // the needed atomicity + visibility that `volatile` does not.
+    std::atomic<int> listen_fd{-1};
+    std::atomic<int> srv_fd{-1};   // accepted server side; pump reads, feed writes
     pthread_t pump = 0;
-    volatile bool running = false;
+    std::atomic<bool> running{false};
     jobject sink = nullptr;   // global ref to HamlibNative.HamlibSink
     jmethodID onBytesToRig = nullptr;
 };
@@ -173,12 +177,19 @@ Java_com_k1af_ft8af_wave_HamlibNative_nativeOpen(JNIEnv *env, jclass,
     if (rc != RIG_OK) {
         LOGE("rig_open failed: %d (%s)", rc, rigerror(rc));
         b->running = false;
-        shutdown(b->srv_fd, SHUT_RDWR);
+        // The pump thread may still be blocked in accept() (hamlib never
+        // connected). Close the listener FIRST to release accept(); if it did
+        // connect, shutting down srv_fd releases a blocked read(). Only then is
+        // pthread_join safe — otherwise it would hang forever.
+        int lfd = b->listen_fd.exchange(-1);
+        if (lfd >= 0) { shutdown(lfd, SHUT_RDWR); close(lfd); }
+        int sfd = b->srv_fd.load();
+        if (sfd >= 0) shutdown(sfd, SHUT_RDWR);
         pthread_join(b->pump, nullptr);
         rig_cleanup(b->rig);
         env->DeleteGlobalRef(b->sink);
-        if (b->srv_fd >= 0) close(b->srv_fd);
-        close(b->listen_fd);
+        sfd = b->srv_fd.load();
+        if (sfd >= 0) close(sfd);
         delete b;
         return 0;
     }
@@ -248,11 +259,17 @@ Java_com_k1af_ft8af_wave_HamlibNative_nativeClose(JNIEnv *env, jclass, jlong han
     auto *b = handle_to_bridge(handle);
     if (b == nullptr) return;
     b->running = false;
-    if (b->srv_fd >= 0) shutdown(b->srv_fd, SHUT_RDWR);
+    // Unblock the pump whether it is parked in accept() (never connected) or
+    // read(): close the listener first, then shut down the accepted socket.
+    // Joining before this could deadlock. See nativeOpen's failure path.
+    int lfd = b->listen_fd.exchange(-1);
+    if (lfd >= 0) { shutdown(lfd, SHUT_RDWR); close(lfd); }
+    int sfd = b->srv_fd.load();
+    if (sfd >= 0) shutdown(sfd, SHUT_RDWR);
     if (b->pump) pthread_join(b->pump, nullptr);
     if (b->rig) { rig_close(b->rig); rig_cleanup(b->rig); }
-    if (b->srv_fd >= 0) close(b->srv_fd);
-    if (b->listen_fd >= 0) close(b->listen_fd);
+    sfd = b->srv_fd.load();
+    if (sfd >= 0) close(sfd);
     if (b->sink) env->DeleteGlobalRef(b->sink);
     delete b;
 }
