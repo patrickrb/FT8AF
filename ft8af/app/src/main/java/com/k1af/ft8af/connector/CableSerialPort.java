@@ -56,7 +56,13 @@ public class CableSerialPort {
     private int portNum = 0;//Port number
     private int baudRate = 19200;//Baud rate
 
-    private UsbSerialPort usbSerialPort;
+    // volatile: written on the connect thread (open) and cleared to null on the
+    // disconnect thread (disconnect()), read on the CAT/TX threads (sendData,
+    // setRTS/DTR). Readers MUST snapshot it into a local before check-and-use —
+    // reading the field twice let a concurrent disconnect null it between the
+    // null-check and usbSerialPort.write(), NPE-ing a delayed CAT freq write on
+    // the FT-891 (Yaesu39Rig.setFreqToRig) as the rig dropped.
+    private volatile UsbSerialPort usbSerialPort;
     private SerialInputOutputManager usbIoManager;
     public SerialInputOutputManager.Listener ioListener = null;
 
@@ -238,31 +244,58 @@ public class CableSerialPort {
         Log.d(TAG, msg);
     }
 
+    /**
+     * A single raw port write, extracted so the disconnect-race guard is
+     * unit-testable without the full {@link UsbSerialPort} surface (or a live
+     * device).
+     */
+    @FunctionalInterface
+    interface RawWrite {
+        void write(byte[] src, int timeout) throws IOException;
+    }
+
+    /**
+     * Write {@code src} to a port reference the caller has already snapshotted.
+     * A {@code null} writer means the port was disconnected (closed and nulled
+     * by {@link #disconnect()}): no write, returns {@code false} — never NPEs.
+     * The caller passes the snapshot's {@code ::write}, so a concurrent
+     * disconnect that nulls the field afterwards cannot affect this call.
+     *
+     * @return true if the write was issued, false if the port was not open
+     */
+    static boolean writeIfOpen(RawWrite writer, byte[] src, int timeout) throws IOException {
+        if (writer == null) return false;
+        writer.write(src, timeout);
+        return true;
+    }
+
     public boolean sendData(final byte[] src) {
-        if (usbSerialPort != null) {
-            try {
-                String preview = new String(src).replace("\r", "\\r").replace("\n", "\\n");
-                // Only log non-periodic commands (skip FA; reads to avoid log spam)
-                if (!preview.equals("FA;") && !preview.startsWith("RM")) {
-                    StringBuilder hex = new StringBuilder();
-                    for (byte b : src) hex.append(String.format("%02X ", b));
-                    fileLog("serial.send[" + src.length + "]: " + preview + " | hex: " + hex.toString().trim());
-                }
-                usbSerialPort.write(src, SEND_TIMEOUT);
-                if (!preview.equals("FA;") && !preview.startsWith("RM")) {
-                    fileLog("serial.send: write completed OK");
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-                fileLog("serial.send ERROR: " + e.getMessage());
-                return false;
-            }
-            return true;
-        } else {
+        // Snapshot the volatile field ONCE; disconnect() may null it on another
+        // thread at any moment. Using the local for both the check and the write
+        // removes the check-then-act NPE (see the field's comment).
+        final UsbSerialPort port = usbSerialPort;
+        if (port == null) {
             fileLog("serial.send: port not open!");
             return false;
         }
-
+        try {
+            String preview = new String(src).replace("\r", "\\r").replace("\n", "\\n");
+            // Only log non-periodic commands (skip FA; reads to avoid log spam)
+            if (!preview.equals("FA;") && !preview.startsWith("RM")) {
+                StringBuilder hex = new StringBuilder();
+                for (byte b : src) hex.append(String.format("%02X ", b));
+                fileLog("serial.send[" + src.length + "]: " + preview + " | hex: " + hex.toString().trim());
+            }
+            writeIfOpen(port::write, src, SEND_TIMEOUT);
+            if (!preview.equals("FA;") && !preview.startsWith("RM")) {
+                fileLog("serial.send: write completed OK");
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            fileLog("serial.send ERROR: " + e.getMessage());
+            return false;
+        }
+        return true;
     }
 
     public void disconnect() {
@@ -324,12 +357,15 @@ public class CableSerialPort {
      * @param rts_on true: on, false: off
      */
     public boolean setRTS_On(boolean rts_on) {
-        if (usbSerialPort == null) {
+        // Snapshot once — disconnect() may null the field on another thread
+        // between the check and the setRTS() call (same race as sendData).
+        final UsbSerialPort port = usbSerialPort;
+        if (port == null) {
             fileLog("serial.setRTS: port not open!");
             return false;
         }
         try {
-            if (!controlLineSupported(usbSerialPort.getSupportedControlLines(),
+            if (!controlLineSupported(port.getSupportedControlLines(),
                     UsbSerialPort.ControlLine.RTS)) {
                 // Report failure rather than a silent no-op: callers use the return
                 // value to decide whether a PTT toggle actually happened, so a port
@@ -337,7 +373,7 @@ public class CableSerialPort {
                 fileLog("serial.setRTS: RTS not supported by this port");
                 return false;
             }
-            usbSerialPort.setRTS(rts_on);
+            port.setRTS(rts_on);
             return true;
         } catch (IOException e) {
             e.printStackTrace();
@@ -347,19 +383,21 @@ public class CableSerialPort {
     }
 
     public boolean setDTR_On(boolean dtr_on) {
-        if (usbSerialPort == null) {
+        // Snapshot once (see setRTS_On) — the field can be nulled concurrently.
+        final UsbSerialPort port = usbSerialPort;
+        if (port == null) {
             fileLog("serial.setDTR: port not open!");
             return false;
         }
         try {
-            if (!controlLineSupported(usbSerialPort.getSupportedControlLines(),
+            if (!controlLineSupported(port.getSupportedControlLines(),
                     UsbSerialPort.ControlLine.DTR)) {
                 // Report failure rather than a silent no-op (see setRTS_On): a port
                 // that can't drive DTR must not read as a successful PTT toggle.
                 fileLog("serial.setDTR: DTR not supported by this port");
                 return false;
             }
-            usbSerialPort.setDTR(dtr_on);
+            port.setDTR(dtr_on);
             return true;
         } catch (IOException e) {
             e.printStackTrace();
