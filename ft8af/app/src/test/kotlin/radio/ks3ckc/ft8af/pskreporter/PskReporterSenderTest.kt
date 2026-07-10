@@ -496,6 +496,96 @@ class PskReporterSenderTest {
             .isEqualTo("FT8AF 1.0.2")
     }
 
+    // ---------------------------------------------------------------
+    // Dedup window bookkeeping (markIfFresh) + thread-safety
+    // ---------------------------------------------------------------
+
+    // Mirrors PskReporterSender.DEDUP_WINDOW_MS (private const): 5 minutes.
+    private val dedupWindowMs = 5 * 60 * 1000L
+
+    @Test
+    fun `markIfFresh reports first sighting then dedups within the window`() {
+        val key = "W1AW|14"
+        // First sighting → reportable, and now marked.
+        assertThat(PskReporterSender.markIfFresh(key, 1_000L)).isTrue()
+        // Same key well inside the window → duplicate.
+        assertThat(PskReporterSender.markIfFresh(key, 1_000L + 1_000L)).isFalse()
+        assertThat(PskReporterSender.markIfFresh(key, 1_000L + dedupWindowMs - 1)).isFalse()
+        // Once the window has fully elapsed → reportable again.
+        assertThat(PskReporterSender.markIfFresh(key, 1_000L + dedupWindowMs)).isTrue()
+    }
+
+    @Test
+    fun `markIfFresh dedups per callsign-band key independently`() {
+        assertThat(PskReporterSender.markIfFresh("W1AW|14", 1_000L)).isTrue()
+        // Different band for the same call is a separate spot.
+        assertThat(PskReporterSender.markIfFresh("W1AW|7", 1_000L)).isTrue()
+        // Different call, same band is a separate spot.
+        assertThat(PskReporterSender.markIfFresh("K2ABC|14", 1_000L)).isTrue()
+        // Repeats of each are suppressed.
+        assertThat(PskReporterSender.markIfFresh("W1AW|14", 1_000L)).isFalse()
+        assertThat(PskReporterSender.markIfFresh("W1AW|7", 1_000L)).isFalse()
+        assertThat(PskReporterSender.markIfFresh("K2ABC|14", 1_000L)).isFalse()
+    }
+
+    /**
+     * Overlapping decode passes (#398) call enqueue()/toSpotRecord()/markIfFresh()
+     * on two decode threads at once. When many threads race on the SAME key, the
+     * get-then-put must be atomic so exactly one spot is reported — a non-atomic
+     * check (or a plain HashMap) lets several threads see "absent" and each report
+     * the same spot. Barrier-synchronized rounds maximize overlap so a
+     * non-atomic implementation would let more than one through.
+     */
+    @Test
+    fun `markIfFresh admits exactly one thread per key under concurrent access`() {
+        val threadCount = 8
+        repeat(30) { round ->
+            PskReporterSender.resetForTests()
+            PskReporterSender.sendDatagram = { data -> captured.add(data.copyOf()) }
+            val key = "RACE|14"
+            val now = 1_000L + round
+            val admitted = java.util.concurrent.atomic.AtomicInteger(0)
+            val barrier = java.util.concurrent.CyclicBarrier(threadCount)
+            val threads = (0 until threadCount).map {
+                Thread {
+                    barrier.await()
+                    if (PskReporterSender.markIfFresh(key, now)) admitted.incrementAndGet()
+                }
+            }
+            threads.forEach { it.start() }
+            threads.forEach { it.join() }
+            assertThat(admitted.get()).isEqualTo(1)
+        }
+    }
+
+    /**
+     * Concurrent inserts of many DISTINCT keys hammer the shared map's resize path.
+     * A plain HashMap mutated from multiple threads can corrupt its buckets, lose
+     * entries, or spin — the guarded map must simply complete, admitting every key
+     * exactly once.
+     */
+    @Test
+    fun `markIfFresh handles concurrent distinct keys without corruption`() {
+        val threadCount = 8
+        val perThread = 500
+        val admitted = java.util.concurrent.atomic.AtomicInteger(0)
+        val barrier = java.util.concurrent.CyclicBarrier(threadCount)
+        val threads = (0 until threadCount).map { t ->
+            Thread {
+                barrier.await()
+                for (i in 0 until perThread) {
+                    if (PskReporterSender.markIfFresh("CALL_${t}_$i|14", 1_000L)) {
+                        admitted.incrementAndGet()
+                    }
+                }
+            }
+        }
+        threads.forEach { it.start() }
+        threads.forEach { it.join() }
+        // Every distinct key is fresh exactly once — no lost or double inserts.
+        assertThat(admitted.get()).isEqualTo(threadCount * perThread)
+    }
+
     /** Decode a hex string (all whitespace ignored) into bytes for golden-vector comparison. */
     private fun hex(s: String): ByteArray {
         val clean = s.filterNot { it.isWhitespace() }
