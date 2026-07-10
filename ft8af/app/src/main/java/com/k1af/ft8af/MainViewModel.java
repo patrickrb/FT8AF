@@ -388,6 +388,11 @@ public class MainViewModel extends ViewModel {
             catLivenessTimer.purge();
             catLivenessTimer = null;
         }
+        // Clear the "rig has answered" flag when the watchdog stops (disconnect, error,
+        // or teardown) so hasRigRespondedToCat() can't report a stale true after the rig
+        // is unplugged — the USB Diagnostics page would otherwise show "CAT Response: pass"
+        // alongside "Device Found: fail". A fresh connect re-arms it in start...().
+        sawRigResponseSinceConnect = false;
     }
 
     /** One watchdog tick: probe the rig, then declare it dead if it's gone quiet too long. */
@@ -1735,6 +1740,20 @@ public class MainViewModel extends ViewModel {
         } else {
             return baseRig.isConnected();
         }
+    }
+
+    /**
+     * Whether the connected rig has answered at least one CAT probe since the
+     * current connection came up. Backs the USB Diagnostics "CAT Response" check:
+     * the serial port can open ({@link #isRigConnected()}) while the rig never
+     * replies — wrong baud rate, wrong CAT protocol, or a powered-but-silent
+     * adapter — and this flag distinguishes "link up" from "rig actually talking".
+     * Reset to false on every (re)connect and set true in {@link #markRigResponded()}.
+     *
+     * @return true once a valid CAT reply has been seen on the live connection
+     */
+    public boolean hasRigRespondedToCat() {
+        return sawRigResponseSinceConnect;
     }
 
     /**
