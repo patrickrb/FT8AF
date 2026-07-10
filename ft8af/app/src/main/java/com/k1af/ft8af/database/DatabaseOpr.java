@@ -848,11 +848,54 @@ public class DatabaseOpr extends SQLiteOpenHelper {
      * Package-private static so it is unit-testable without a database.
      */
     static int parseConfigInt(String value, int fallback) {
+        return parseConfigInt(value, fallback, 10);
+    }
+
+    /**
+     * Radix-aware variant of {@link #parseConfigInt(String, int)} for keys
+     * stored in a non-decimal base (e.g. the ICOM CI-V address, hex). Same
+     * empty/non-numeric fallback contract.
+     */
+    static int parseConfigInt(String value, int fallback, int radix) {
         if (value == null || value.isEmpty()) {
             return fallback;
         }
         try {
-            return Integer.parseInt(value.trim());
+            return Integer.parseInt(value.trim(), radix);
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    /**
+     * {@code long} counterpart of {@link #parseConfigInt(String, int)} for
+     * config values that exceed {@code int} range (e.g. the band frequency in
+     * Hz). Same empty/non-numeric fallback contract.
+     */
+    static long parseConfigLong(String value, long fallback) {
+        if (value == null || value.isEmpty()) {
+            return fallback;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    /**
+     * {@code float} counterpart of {@link #parseConfigInt(String, int)} for
+     * config values stored as a decimal (e.g. the output volume percent). Same
+     * empty/non-numeric fallback contract. Any scaling the caller applied to
+     * the old raw parse (e.g. {@code / 100f}) must be applied to the return
+     * value so the empty/garbage fallback lands on the intended default.
+     */
+    static float parseConfigFloat(String value, float fallback) {
+        if (value == null || value.isEmpty()) {
+            return fallback;
+        }
+        try {
+            return Float.parseFloat(value.trim());
         } catch (NumberFormatException e) {
             return fallback;
         }
@@ -2632,13 +2675,13 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
 
                 if (name.equalsIgnoreCase("civ")) {
-                    GeneralVariables.civAddress = result.equals("") ? 0xa4 : Integer.parseInt(result, 16);
+                    GeneralVariables.civAddress = parseConfigInt(result, 0xa4, 16);
                 }
                 if (name.equalsIgnoreCase("baudRate")) {
-                    GeneralVariables.baudRate = result.equals("") ? 19200 : Integer.parseInt(result);
+                    GeneralVariables.baudRate = parseConfigInt(result, 19200);
                 }
                 if (name.equalsIgnoreCase("bandFreq")) {
-                    GeneralVariables.band = result.equals("") ? 14074000 : Long.parseLong(result);
+                    GeneralVariables.band = parseConfigLong(result, 14074000L);
                     GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(GeneralVariables.band);
                 }
 
@@ -2666,26 +2709,26 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
 
                 if (name.equalsIgnoreCase("ctrMode")) {
-                    GeneralVariables.controlMode = result.equals("") ? ControlMode.VOX : Integer.parseInt(result);
+                    GeneralVariables.controlMode = parseConfigInt(result, ControlMode.VOX);
                 }
                 if (name.equalsIgnoreCase("connectMode")) {
-                    GeneralVariables.connectMode = result.equals("") ? ConnectMode.USB_CABLE : Integer.parseInt(result);
+                    GeneralVariables.connectMode = parseConfigInt(result, ConnectMode.USB_CABLE);
                 }
                 if (name.equalsIgnoreCase("bluetoothDeviceAddress")) {//last-selected BT (SPP/CAT) device, for auto-reconnect
                     GeneralVariables.bluetoothDeviceAddress = result;
                 }
                 if (name.equalsIgnoreCase("model")) {//Radio model
-                    GeneralVariables.modelNo = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.modelNo = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("instruction")) {//Instruction set
-                    GeneralVariables.instructionSet = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.instructionSet = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("launchSupervision")) {//Transmit supervision
-                    GeneralVariables.launchSupervision = result.equals("") ?
-                            GeneralVariables.DEFAULT_LAUNCH_SUPERVISION : Integer.parseInt(result);
+                    GeneralVariables.launchSupervision =
+                            parseConfigInt(result, GeneralVariables.DEFAULT_LAUNCH_SUPERVISION);
                 }
                 if (name.equalsIgnoreCase("noReplyLimit")) {//
-                    GeneralVariables.noReplyLimit = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.noReplyLimit = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("autoFollowCQ")) {//Auto-follow CQ
                     GeneralVariables.autoFollowCQ = result.equals("1");
@@ -2707,7 +2750,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                             com.k1af.ft8af.location.GpsClockUpdater.parseIntervalMinutes(result);
                 }
                 if (name.equalsIgnoreCase("pttDelay")) {//PTT delay setting
-                    GeneralVariables.pttDelay = result.equals("") ? 100 : Integer.parseInt(result);
+                    GeneralVariables.pttDelay = parseConfigInt(result, 100);
                 }
                 if (name.equalsIgnoreCase("lateStartTolerance")) {//Late-start tolerance, ms (0-4000)
                     try {
@@ -2741,7 +2784,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.icomIp = result.equals("") ? "255.255.255.255" : result;
                 }
                 if (name.equalsIgnoreCase("icomPort")) {//ICOM port
-                    GeneralVariables.icomUdpPort = result.equals("") ? 50001 : Integer.parseInt(result);
+                    GeneralVariables.icomUdpPort = parseConfigInt(result, 50001);
                 }
                 if (name.equalsIgnoreCase("icomUserName")) {//ICOM username
                     GeneralVariables.icomUserName = result.equals("") ? "ic705" : result;
@@ -2750,7 +2793,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.icomPassword = result;
                 }
                 if (name.equalsIgnoreCase("volumeValue")) {//Output volume level
-                    GeneralVariables.volumePercent = result.equals("") ? 1.0f : Float.parseFloat(result) / 100f;
+                    // parseConfigFloat's fallback is pre-scaling: empty/garbage -> 100f -> 1.0f (unity).
+                    GeneralVariables.volumePercent = parseConfigFloat(result, 100f) / 100f;
                     GeneralVariables.mutableVolumePercent.postValue(GeneralVariables.volumePercent);
                 }
                 if (name.equalsIgnoreCase("inputVolume")) {//RX input gain (percent, 100 = unity)
@@ -2855,10 +2899,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.alertOnQsoComplete = result.equals("1");
                 }
                 if (name.equalsIgnoreCase("flexMaxRfPower")) {//Flex max RF power
-                    GeneralVariables.flexMaxRfPower = result.equals("") ? 10 : Integer.parseInt(result);
+                    GeneralVariables.flexMaxRfPower = parseConfigInt(result, 10);
                 }
                 if (name.equalsIgnoreCase("flexMaxTunePower")) {//Flex max tune power
-                    GeneralVariables.flexMaxTunePower = result.equals("") ? 10 : Integer.parseInt(result);
+                    GeneralVariables.flexMaxTunePower = parseConfigInt(result, 10);
                 }
                 if (name.equalsIgnoreCase("saveSWL")) {//Save decoded messages
                     GeneralVariables.saveSWLMessage = result.equals("1");
@@ -2877,22 +2921,22 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.audioSampleRate = parseConfigInt(result, 12000);
                 }
                 if (name.equalsIgnoreCase("audioInputDevice")) {//Audio input device ID
-                    GeneralVariables.audioInputDeviceId = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.audioInputDeviceId = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("audioOutputDevice")) {//Audio output device ID
-                    GeneralVariables.audioOutputDeviceId = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.audioOutputDeviceId = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("usbAudioInputVid")) {
-                    GeneralVariables.usbAudioInputVendorId = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.usbAudioInputVendorId = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("usbAudioInputPid")) {
-                    GeneralVariables.usbAudioInputProductId = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.usbAudioInputProductId = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("usbAudioOutputVid")) {
-                    GeneralVariables.usbAudioOutputVendorId = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.usbAudioOutputVendorId = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("usbAudioOutputPid")) {
-                    GeneralVariables.usbAudioOutputProductId = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.usbAudioOutputProductId = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("deepMode")) {//Deep decode mode
                     GeneralVariables.deepDecodeMode =result.equals("1");
@@ -2966,16 +3010,16 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.swrHaltEnabled = result.equals("1");
                 }
                 if (name.equalsIgnoreCase("swrHaltThreshold")) {
-                    GeneralVariables.swrHaltThreshold = result.equals("") ? 120 : Integer.parseInt(result);
+                    GeneralVariables.swrHaltThreshold = parseConfigInt(result, 120);
                 }
                 if (name.equalsIgnoreCase("alcTargetLow")) {
-                    GeneralVariables.alcTargetLow = result.equals("") ? 60 : Integer.parseInt(result);
+                    GeneralVariables.alcTargetLow = parseConfigInt(result, 60);
                 }
                 if (name.equalsIgnoreCase("alcTargetHigh")) {
-                    GeneralVariables.alcTargetHigh = result.equals("") ? 100 : Integer.parseInt(result);
+                    GeneralVariables.alcTargetHigh = parseConfigInt(result, 100);
                 }
                 if (name.equalsIgnoreCase("spectrumWidth")) {
-                    GeneralVariables.setSpectrumWidth(result.equals("") ? 3500 : Integer.parseInt(result));
+                    GeneralVariables.setSpectrumWidth(parseConfigInt(result, 3500));
                 }
                 // FFT display developer knobs (issue #428). Parsed defensively:
                 // these are expected to survive hand-edited/stale backups, so a

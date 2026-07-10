@@ -75,4 +75,54 @@ public class DatabaseOprParseConfigIntTest {
         assertThat(DatabaseOpr.parseConfigInt("eight", 8)).isEqualTo(8);
         assertThat(DatabaseOpr.parseConfigInt("none", 0)).isEqualTo(0);
     }
+
+    // --- Radix / long / float overloads --------------------------------------
+    // The remaining empty-guarded hydration parses (civ hex, bandFreq long,
+    // volumeValue float, and ~20 more decimal-int keys) were migrated to these
+    // same crash-safe helpers: they threw on a non-empty, non-numeric imported
+    // backup value where the fixed-4 already crashed on empty. Each overload
+    // keeps the empty/non-numeric -> fallback contract.
+
+    @Test
+    public void radixOverload_parsesHexAndFallsBack() {
+        assertThat(DatabaseOpr.parseConfigInt("a4", 0xa4, 16)).isEqualTo(0xa4); // civ default value
+        assertThat(DatabaseOpr.parseConfigInt("5e", 0xa4, 16)).isEqualTo(0x5e); // valid hex honored
+        assertThat(DatabaseOpr.parseConfigInt(" 5e ", 0xa4, 16)).isEqualTo(0x5e); // tolerates whitespace
+        assertThat(DatabaseOpr.parseConfigInt("", 0xa4, 16)).isEqualTo(0xa4);   // empty -> fallback
+        assertThat(DatabaseOpr.parseConfigInt(null, 0xa4, 16)).isEqualTo(0xa4); // null -> fallback
+        assertThat(DatabaseOpr.parseConfigInt("zz", 0xa4, 16)).isEqualTo(0xa4); // non-hex -> fallback
+    }
+
+    @Test
+    public void longOverload_parsesAndFallsBack() {
+        assertThat(DatabaseOpr.parseConfigLong("14074000", 14074000L)).isEqualTo(14074000L);
+        assertThat(DatabaseOpr.parseConfigLong("7074000", 14074000L)).isEqualTo(7074000L);
+        assertThat(DatabaseOpr.parseConfigLong(" 7074000 ", 14074000L)).isEqualTo(7074000L);
+        // A value that overflows int but is a valid long must be honored (why long, not int).
+        assertThat(DatabaseOpr.parseConfigLong("2400000000", 14074000L)).isEqualTo(2400000000L);
+        assertThat(DatabaseOpr.parseConfigLong("", 14074000L)).isEqualTo(14074000L);     // empty
+        assertThat(DatabaseOpr.parseConfigLong(null, 14074000L)).isEqualTo(14074000L);   // null
+        assertThat(DatabaseOpr.parseConfigLong("14.074MHz", 14074000L)).isEqualTo(14074000L); // garbage
+    }
+
+    @Test
+    public void floatOverload_parsesAndFallsBack() {
+        assertThat(DatabaseOpr.parseConfigFloat("50", 100f)).isEqualTo(50f);
+        assertThat(DatabaseOpr.parseConfigFloat("100", 100f)).isEqualTo(100f);
+        assertThat(DatabaseOpr.parseConfigFloat(" 50 ", 100f)).isEqualTo(50f);
+        assertThat(DatabaseOpr.parseConfigFloat("", 100f)).isEqualTo(100f);   // empty -> fallback
+        assertThat(DatabaseOpr.parseConfigFloat(null, 100f)).isEqualTo(100f); // null -> fallback
+        assertThat(DatabaseOpr.parseConfigFloat("loud", 100f)).isEqualTo(100f); // garbage -> fallback
+    }
+
+    /**
+     * volumeValue hydrates as {@code parseConfigFloat(result, 100f) / 100f}: the
+     * pre-scaling 100f fallback must land the empty/garbage case on unity (1.0f).
+     */
+    @Test
+    public void volumeValue_scalingKeepsUnityFallback() {
+        assertThat(DatabaseOpr.parseConfigFloat("", 100f) / 100f).isEqualTo(1.0f);     // empty
+        assertThat(DatabaseOpr.parseConfigFloat("loud", 100f) / 100f).isEqualTo(1.0f); // garbage
+        assertThat(DatabaseOpr.parseConfigFloat("50", 100f) / 100f).isEqualTo(0.5f);   // valid honored
+    }
 }
