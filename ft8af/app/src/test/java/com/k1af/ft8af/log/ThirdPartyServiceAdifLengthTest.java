@@ -71,6 +71,19 @@ public class ThirdPartyServiceAdifLengthTest {
     }
 
     @Test
+    public void nullComment_emitsEmptyFieldNotLiteralNull() {
+        // A COMMENT key mapped to a null value leaves getComment() null. Without coercion
+        // String.format would emit "<comment:0>null <eor>" (%s renders null as "null"),
+        // declaring length 0 but writing 4 bytes. It must be an empty field instead.
+        String adif = ThirdPartyService.QSLRecordToADIF(recordWithComment(null),
+                ServiceType.QRZ);
+
+        assertThat(declaredCommentLength(adif)).isEqualTo(0);
+        assertThat(adif).contains("<comment:0> <eor>");
+        assertThat(adif).doesNotContain("null <eor>");
+    }
+
+    @Test
     public void asciiComment_lengthUnchanged() {
         // Pure-ASCII values must be byte-identical to before: bytes == chars.
         String comment = "Distance: 99 km, QSO by FT8AF";

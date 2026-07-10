@@ -91,6 +91,16 @@ public final class AdifFormat {
         if (value == null) {
             return 0;
         }
-        return value.getBytes(StandardCharsets.UTF_8).length;
+        // Fast path: pure-ASCII values (callsigns, grids, most English comments — the
+        // overwhelmingly common case, especially in the syncAllQSOs batch loop) have exactly
+        // one UTF-8 byte per char, so the byte count equals String.length() with no
+        // allocation. Only non-ASCII content falls through to encode the array.
+        final int len = value.length();
+        for (int i = 0; i < len; i++) {
+            if (value.charAt(i) >= 0x80) {
+                return value.getBytes(StandardCharsets.UTF_8).length;
+            }
+        }
+        return len;
     }
 }

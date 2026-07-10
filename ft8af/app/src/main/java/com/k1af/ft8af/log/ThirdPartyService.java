@@ -308,6 +308,7 @@ public class ThirdPartyService {
         }
 
         String comment = qslRecord.getComment();
+        if (comment == null) comment = "";
 
         //<comment:15>Distance: 99 km <eor>
         //When writing to the database, be sure to append " km"
