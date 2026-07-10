@@ -109,6 +109,24 @@ public final class UsbCaptureRetryPolicy {
     }
 
     /**
+     * The failure tally after a <em>clean</em> stop (a {@code nativeStop} we
+     * requested: reinit, band change, {@code stopRecord()}, teardown). A clean
+     * stop is never itself a failure, so it never increments the tally — but if
+     * the session that just ended had been alive and delivering audio long enough
+     * to be useful (see {@link #isFailure}), the device has proven healthy, so any
+     * stale streak from earlier genuine failures is cleared to {@code 0}. Without
+     * this a healthy session that ends via a band change leaves an old streak in
+     * place, and the next genuine failure inherits an inflated backoff.
+     *
+     * @param prevFailures the tally before this session ended (never negative)
+     * @param sawData      whether any audio arrived during the session
+     * @param aliveMs      how long the session ran before the clean stop
+     */
+    static int tallyAfterCleanStop(int prevFailures, boolean sawData, long aliveMs) {
+        return isFailure(sawData, aliveMs) ? prevFailures : 0;
+    }
+
+    /**
      * The complete plan for reacting to a finished USB capture session: the
      * updated failure tally and how long to wait before the next reinit attempt.
      * Computed up front (on the native capture event thread) so the actual

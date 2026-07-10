@@ -328,9 +328,18 @@ public class MicRecorder {
                 // genuine failure (non-zero code: transfers retired, NO_DEVICE,
                 // event-loop error) drives the retry below.
                 if (!UsbCaptureRetryPolicy.isRetryableFailure(stopCode)) {
+                    // A clean stop is never a failure, but if this session stayed
+                    // alive and delivering audio long enough to be useful the
+                    // device is healthy — clear any stale failure streak so the
+                    // next genuine failure doesn't inherit an inflated backoff.
+                    int resetTally = UsbCaptureRetryPolicy.tallyAfterCleanStop(
+                            consecutiveUsbFailures, usbAudioSawData, aliveMs);
+                    boolean streakCleared = resetTally != consecutiveUsbFailures;
+                    consecutiveUsbFailures = resetTally;
                     GeneralVariables.fileLog(String.format(
                             "startUsbCapture: clean stop (code=%d aliveMs=%d) — not a "
-                                    + "failure, no reinit scheduled", stopCode, aliveMs));
+                                    + "failure, no reinit scheduled%s", stopCode, aliveMs,
+                            streakCleared ? " (healthy session, failure streak reset)" : ""));
                     return;
                 }
 

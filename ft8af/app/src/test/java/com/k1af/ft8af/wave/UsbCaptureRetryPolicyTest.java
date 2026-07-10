@@ -131,4 +131,26 @@ public class UsbCaptureRetryPolicyTest {
         assertThat(plan.consecutiveFailures).isEqualTo(0);
         assertThat(plan.backoffMs).isEqualTo(0);
     }
+
+    // ---- tallyAfterCleanStop -----------------------------------------------
+
+    @Test
+    public void cleanStop_afterHealthySession_clearsStaleStreak() {
+        // A long, healthy session ended by a band change / teardown proves the
+        // device works, so a stale failure streak from earlier is cleared.
+        assertThat(UsbCaptureRetryPolicy.tallyAfterCleanStop(
+                4, true, UsbCaptureRetryPolicy.MIN_USEFUL_SESSION_MS)).isEqualTo(0);
+        assertThat(UsbCaptureRetryPolicy.tallyAfterCleanStop(9, true, 60_000)).isEqualTo(0);
+    }
+
+    @Test
+    public void cleanStop_afterShortOrSilentSession_leavesStreakUnchanged() {
+        // A clean stop is never a failure (no increment), but a session that was
+        // too short or delivered no audio hasn't proven the device healthy, so an
+        // existing streak must be preserved rather than reset.
+        assertThat(UsbCaptureRetryPolicy.tallyAfterCleanStop(3, true, 100)).isEqualTo(3);
+        assertThat(UsbCaptureRetryPolicy.tallyAfterCleanStop(3, false, 60_000)).isEqualTo(3);
+        // Never increments, even from a short session.
+        assertThat(UsbCaptureRetryPolicy.tallyAfterCleanStop(0, true, 100)).isEqualTo(0);
+    }
 }

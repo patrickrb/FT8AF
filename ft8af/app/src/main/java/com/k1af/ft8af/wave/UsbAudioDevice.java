@@ -83,17 +83,30 @@ public class UsbAudioDevice {
     public interface AudioInputCallback {
         void onAudioData(float[] data, int length);
         /**
-         * Fired on a worker thread when the capture session ends.
+         * Fired on a worker thread when a capture session ends. The exact
+         * contract differs by capture path:
+         *
+         * <ul>
+         *   <li><b>Native (libusb) path</b> — invoked on <em>every</em> session
+         *       end. {@code stopCode == 0} is a clean stop we requested via
+         *       {@code nativeStop()} (a reinit, band change, {@code stopRecord()},
+         *       or teardown); any non-zero value is a genuine capture failure
+         *       (transfers retired, NO_DEVICE, event-loop error).</li>
+         *   <li><b>{@code UsbRequest} fallback path</b> — invoked <em>only</em> on
+         *       an abnormal exit (the device died mid-capture), always with
+         *       {@link #CAPTURE_STOP_FALLBACK_FAILURE}. A clean stop on this path
+         *       does not fire the callback at all, so {@code stopCode == 0} is
+         *       never delivered here.</li>
+         * </ul>
+         *
+         * <p>In both paths a non-zero code is a genuine failure and a
+         * {@code 0}/absent callback is a clean stop. Callers must not treat a
+         * clean stop as a failure: doing so pinned the adapter in a reinit loop
+         * that starved the decoder (429 of 434 field stops were clean stops).
+         * Default is a no-op so existing callers compile unchanged.
          *
          * @param stopCode the native stop reason (see
-         *     {@link #describeCaptureStopCode}): {@code 0} means a clean stop we
-         *     requested via {@code nativeStop()} (a reinit, band change,
-         *     {@code stopRecord()}, or teardown) — NOT a failure; any non-zero
-         *     value is a genuine capture failure (transfers retired, NO_DEVICE,
-         *     event-loop error). Callers must not treat a clean stop as a failure:
-         *     doing so pinned the adapter in a reinit loop that starved the
-         *     decoder (429 of 434 field stops were clean stops). Default is a
-         *     no-op so existing callers compile unchanged.
+         *     {@link #describeCaptureStopCode})
          */
         default void onCaptureStopped(int stopCode) {}
     }
