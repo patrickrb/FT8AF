@@ -109,11 +109,22 @@ public class XieguRadioFactory {
      * @param s data
      * @return MAC address
      */
-    private String getMacAddress(String s){
+    static String getMacAddress(String s){
+        if (s==null){return "";}
         String[] strings=s.split(" ");
         for (int i = 0; i <strings.length ; i++) {
-            if (strings[i].toLowerCase().startsWith("mac")){
-                return strings[i].substring("mac".length()+1);
+            // Require the "mac=" prefix (not just "mac") before reading the value.
+            // The old code matched startsWith("mac") and then did
+            // substring("mac".length() + 1) == substring(4) unconditionally, so a
+            // bare "mac" token (length 3, as in a truncated/garbled discovery
+            // broadcast) threw StringIndexOutOfBoundsException. This runs on the
+            // UDP discovery read thread (RadioUdpClient), whose loop catches only
+            // IOException, so that RuntimeException escaped and crashed the whole
+            // app. Requiring the '=' also matches how X6100Radio.getParameterStr
+            // reads "mac=" and avoids misreading a stray "machine" token as a MAC.
+            // Twin of the FlexRadioFactory.getSerialNum fix (PR #501/#503).
+            if (strings[i].toLowerCase().startsWith("mac=")){
+                return strings[i].substring("mac=".length());
             }
         }
         return "";
