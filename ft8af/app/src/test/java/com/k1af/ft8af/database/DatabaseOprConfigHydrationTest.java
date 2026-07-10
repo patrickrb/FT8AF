@@ -45,12 +45,28 @@ public class DatabaseOprConfigHydrationTest {
     private int origSerialStopBits;
     private int origSerialParity;
 
+    private int origCivAddress;
+    private int origBaudRate;
+    private long origBand;
+    private int origBandListIndex;
+    private int origIcomUdpPort;
+    private float origVolumePercent;
+    private int origAlcTargetLow;
+
     @Before
     public void setUp() {
         origAudioSampleRate = GeneralVariables.audioSampleRate;
         origSerialDataBits = GeneralVariables.serialDataBits;
         origSerialStopBits = GeneralVariables.serialStopBits;
         origSerialParity = GeneralVariables.serialParity;
+
+        origCivAddress = GeneralVariables.civAddress;
+        origBaudRate = GeneralVariables.baudRate;
+        origBand = GeneralVariables.band;
+        origBandListIndex = GeneralVariables.bandListIndex;
+        origIcomUdpPort = GeneralVariables.icomUdpPort;
+        origVolumePercent = GeneralVariables.volumePercent;
+        origAlcTargetLow = GeneralVariables.alcTargetLow;
 
         opr = new DatabaseOpr(ApplicationProvider.getApplicationContext(), null, null, 18);
     }
@@ -64,6 +80,14 @@ public class DatabaseOprConfigHydrationTest {
             GeneralVariables.serialDataBits = origSerialDataBits;
             GeneralVariables.serialStopBits = origSerialStopBits;
             GeneralVariables.serialParity = origSerialParity;
+
+            GeneralVariables.civAddress = origCivAddress;
+            GeneralVariables.baudRate = origBaudRate;
+            GeneralVariables.band = origBand;
+            GeneralVariables.bandListIndex = origBandListIndex;
+            GeneralVariables.icomUdpPort = origIcomUdpPort;
+            GeneralVariables.volumePercent = origVolumePercent;
+            GeneralVariables.alcTargetLow = origAlcTargetLow;
         }
     }
 
@@ -117,5 +141,63 @@ public class DatabaseOprConfigHydrationTest {
         assertThat(GeneralVariables.serialDataBits).isEqualTo(7);
         assertThat(GeneralVariables.serialStopBits).isEqualTo(2);
         assertThat(GeneralVariables.serialParity).isEqualTo(1);
+    }
+
+    /**
+     * The remaining hydration keys were {@code result.equals("") ? DEFAULT :
+     * parse(result)} — empty-guarded, so they survived an empty value like their
+     * fixed siblings, but a non-empty <em>non-numeric</em> value (which an
+     * imported or hand-edited backup can carry) still threw out of hydration and
+     * bricked the app. This covers a representative slice across every numeric
+     * type used: hex int (civ), decimal int (baudRate, icomPort, alcTargetLow),
+     * long (bandFreq) and float (volumeValue).
+     */
+    @Test
+    public void malformedRemainingNumericKeys_doNotCrashAndResetToDefaults() {
+        GeneralVariables.civAddress = 0x11;
+        GeneralVariables.baudRate = 1;
+        GeneralVariables.band = 1;
+        GeneralVariables.icomUdpPort = 1;
+        GeneralVariables.volumePercent = 9f;
+        GeneralVariables.alcTargetLow = 1;
+
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("civ", "zz");            // non-hex
+        config.put("baudRate", "fast");     // non-numeric
+        config.put("bandFreq", "lots");     // non-numeric
+        config.put("icomPort", "port");     // non-numeric
+        config.put("volumeValue", "loud");  // non-numeric
+        config.put("alcTargetLow", "lo");   // non-numeric
+        opr.writeConfigSync(config);
+
+        hydrate(); // must not throw
+
+        assertThat(GeneralVariables.civAddress).isEqualTo(0xa4);
+        assertThat(GeneralVariables.baudRate).isEqualTo(19200);
+        assertThat(GeneralVariables.band).isEqualTo(14074000L);
+        assertThat(GeneralVariables.icomUdpPort).isEqualTo(50001);
+        assertThat(GeneralVariables.volumePercent).isEqualTo(1.0f);
+        assertThat(GeneralVariables.alcTargetLow).isEqualTo(60);
+    }
+
+    @Test
+    public void validRemainingNumericKeys_areStillHonored() {
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("civ", "5e");            // hex -> 0x5e
+        config.put("baudRate", "9600");
+        config.put("bandFreq", "7074000");  // long
+        config.put("icomPort", "50002");
+        config.put("volumeValue", "50");    // -> 0.5f (scaled /100)
+        config.put("alcTargetLow", "70");
+        opr.writeConfigSync(config);
+
+        hydrate();
+
+        assertThat(GeneralVariables.civAddress).isEqualTo(0x5e);
+        assertThat(GeneralVariables.baudRate).isEqualTo(9600);
+        assertThat(GeneralVariables.band).isEqualTo(7074000L);
+        assertThat(GeneralVariables.icomUdpPort).isEqualTo(50002);
+        assertThat(GeneralVariables.volumePercent).isEqualTo(0.5f);
+        assertThat(GeneralVariables.alcTargetLow).isEqualTo(70);
     }
 }
