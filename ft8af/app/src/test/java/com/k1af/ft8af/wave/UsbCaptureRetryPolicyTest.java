@@ -58,4 +58,56 @@ public class UsbCaptureRetryPolicyTest {
         assertThat(UsbCaptureRetryPolicy.backoffMs(0)).isEqualTo(0);
         assertThat(UsbCaptureRetryPolicy.backoffMs(-5)).isEqualTo(0);
     }
+
+    // ---- failureTallyAfter -------------------------------------------------
+
+    @Test
+    public void tally_incrementsOnFailure() {
+        // A too-short session bumps the running count.
+        assertThat(UsbCaptureRetryPolicy.failureTallyAfter(0, true, 100)).isEqualTo(1);
+        assertThat(UsbCaptureRetryPolicy.failureTallyAfter(3, false, 0)).isEqualTo(4);
+    }
+
+    @Test
+    public void tally_resetsOnHealthySession() {
+        // A session that stayed alive long enough clears the streak, no matter
+        // how high it had climbed.
+        assertThat(UsbCaptureRetryPolicy.failureTallyAfter(
+                7, true, UsbCaptureRetryPolicy.MIN_USEFUL_SESSION_MS)).isEqualTo(0);
+        assertThat(UsbCaptureRetryPolicy.failureTallyAfter(1, true, 60_000)).isEqualTo(0);
+    }
+
+    // ---- planReinit --------------------------------------------------------
+
+    @Test
+    public void plan_firstFailure_backsOffBaseDelay() {
+        UsbCaptureRetryPolicy.ReinitPlan plan =
+                UsbCaptureRetryPolicy.planReinit(true, 100, 0);
+        assertThat(plan.consecutiveFailures).isEqualTo(1);
+        assertThat(plan.backoffMs).isEqualTo(UsbCaptureRetryPolicy.BASE_BACKOFF_MS);
+    }
+
+    @Test
+    public void plan_repeatedFailures_growExponentiallyUpToCap() {
+        // The Pixel 8 + C-Media field mode: session after session dies ~100ms in.
+        UsbCaptureRetryPolicy.ReinitPlan second =
+                UsbCaptureRetryPolicy.planReinit(true, 100, 1);
+        assertThat(second.consecutiveFailures).isEqualTo(2);
+        assertThat(second.backoffMs).isEqualTo(UsbCaptureRetryPolicy.BASE_BACKOFF_MS * 2);
+
+        UsbCaptureRetryPolicy.ReinitPlan many =
+                UsbCaptureRetryPolicy.planReinit(false, 0, 99);
+        assertThat(many.consecutiveFailures).isEqualTo(100);
+        assertThat(many.backoffMs).isEqualTo(UsbCaptureRetryPolicy.MAX_BACKOFF_MS);
+    }
+
+    @Test
+    public void plan_healthySession_resetsTallyAndReinitsImmediately() {
+        // A session that carried real audio clears the streak and re-arms with
+        // no backoff, so a genuine transient stop doesn't stall capture.
+        UsbCaptureRetryPolicy.ReinitPlan plan =
+                UsbCaptureRetryPolicy.planReinit(true, 30_000, 5);
+        assertThat(plan.consecutiveFailures).isEqualTo(0);
+        assertThat(plan.backoffMs).isEqualTo(0);
+    }
 }

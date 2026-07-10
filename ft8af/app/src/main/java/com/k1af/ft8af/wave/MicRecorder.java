@@ -22,6 +22,10 @@ import com.k1af.ft8af.GeneralVariables;
 import com.k1af.ft8af.R;
 import com.k1af.ft8af.ui.ToastMessage;
 
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 public class MicRecorder {
     private static final String TAG = "MicRecorder";
     private int bufferSize = 0;//minimum buffer size
@@ -68,6 +72,50 @@ public class MicRecorder {
     private long lastReinitMs = 0;
     private int consecutiveUsbFailures = 0;
     private volatile boolean usbAudioSawData = false;
+
+    // Runs the backoff + reinitialize() that follows a USB capture-stopped event.
+    // onCaptureStopped() fires on the native libusb event thread; doing the sleep
+    // + reinit there keeps that thread parked inside the native event loop, so an
+    // in-flight nativeStop()'s join() blocks on it while the reinit drives the
+    // next nativeStart() — the new libusb_init() then overlaps the dying
+    // session's libusb_exit() and the process aborts on a destroyed libusb mutex
+    // ("pthread_mutex_lock called on a destroyed mutex", the USB-attach crash
+    // loop). Handing the work to this single dedicated thread lets the event
+    // thread return so nativeStop() completes first; single-threaded so stacked
+    // stops reinit one-at-a-time; daemon so it never holds up process exit.
+    // Built via newUsbReinitExecutor() so a unit test can exercise the exact
+    // same executor (off-caller-thread + serialized) that guards the crash.
+    private final ExecutorService usbReinitExecutor = newUsbReinitExecutor();
+
+    /**
+     * The executor that must run every post-capture-stop reinit. A single
+     * daemon worker named {@code USB-Audio-Reinit}: single-threaded so stacked
+     * stop events reinit one-at-a-time (never two overlapping libusb contexts),
+     * off the caller so the native event thread is never parked in reinit, and
+     * daemon so it never holds up process exit. Extracted so
+     * {@code MicRecorderUsbReinitDispatchTest} verifies these properties on the
+     * real construction.
+     */
+    static ExecutorService newUsbReinitExecutor() {
+        return Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "USB-Audio-Reinit");
+            t.setDaemon(true);
+            return t;
+        });
+    }
+
+    /**
+     * Dispatch the backoff + reinit for a stopped USB capture session. The one
+     * job of this seam: the work ALWAYS goes through {@code executor} and NEVER
+     * runs on the calling thread. onCaptureStopped() runs on the native libusb
+     * event thread; running the reinit inline there is exactly what raced
+     * libusb into the destroyed-mutex SIGABRT (nativeStop()'s join() blocks on
+     * the event thread while it drives the next nativeStart()). A unit test
+     * pins this by passing an executor that records where the work ran.
+     */
+    static void dispatchUsbReinit(Executor executor, Runnable backoffAndReinit) {
+        executor.execute(backoffAndReinit);
+    }
     // When the current USB capture session started, to measure how long it
     // stayed alive. SystemClock.elapsedRealtime() (monotonic) — not wall clock:
     // a duration must be immune to NTP/user time jumps, which would otherwise
@@ -276,46 +324,58 @@ public class MicRecorder {
                 long now = SystemClock.elapsedRealtime();
                 long aliveMs = now - usbCaptureStartMs;
                 boolean failure = UsbCaptureRetryPolicy.isFailure(usbAudioSawData, aliveMs);
-                if (failure) {
-                    consecutiveUsbFailures++;
-                } else {
-                    consecutiveUsbFailures = 0;
-                }
+                UsbCaptureRetryPolicy.ReinitPlan plan = UsbCaptureRetryPolicy.planReinit(
+                        usbAudioSawData, aliveMs, consecutiveUsbFailures);
+                consecutiveUsbFailures = plan.consecutiveFailures;
                 GeneralVariables.fileLog(String.format(
                         "startUsbCapture: capture STOPPED (sawData=%b aliveMs=%d "
                                 + "failure=%b consecFailures=%d)",
                         usbAudioSawData, aliveMs, failure, consecutiveUsbFailures));
 
+                // CRITICAL: this callback runs on the native libusb event thread.
+                // The backoff sleep + reinitialize() (which drives the next
+                // nativeStart()/libusb_init()) MUST NOT run here — an in-flight
+                // nativeStop() is blocked in eventThread.join() waiting on this
+                // very thread, so running the reinit inline overlaps the new
+                // libusb context with the dying one's libusb_exit() and the
+                // process aborts on a destroyed libusb mutex (the USB-attach
+                // crash loop). Hand the sleep + reinit to a dedicated worker so
+                // this thread returns, the event loop exits, and nativeStop()
+                // finishes tearing the old context down first.
+                //
                 // Exponential, capped backoff before the next attempt. We keep
                 // retrying USB and never silently switch to the phone's built-in
                 // mic — an operator wants radio audio or none. A persistently
                 // dead adapter is still retried at the cap in case it recovers,
                 // without spinning the bus or libusb global state.
-                long backoff = UsbCaptureRetryPolicy.backoffMs(consecutiveUsbFailures);
-                if (backoff > 0) {
-                    GeneralVariables.fileLog(
-                            "startUsbCapture: backing off " + backoff
-                                    + "ms before USB reinit (consecFailures="
-                                    + consecutiveUsbFailures + ")");
-                    try {
-                        Thread.sleep(backoff);
-                    } catch (InterruptedException ignored) {
-                        Thread.currentThread().interrupt();
+                final long backoff = plan.backoffMs;
+                final int failuresForLog = plan.consecutiveFailures;
+                dispatchUsbReinit(usbReinitExecutor, () -> {
+                    if (backoff > 0) {
+                        GeneralVariables.fileLog(
+                                "startUsbCapture: backing off " + backoff
+                                        + "ms before USB reinit (consecFailures="
+                                        + failuresForLog + ")");
+                        try {
+                            Thread.sleep(backoff);
+                        } catch (InterruptedException ignored) {
+                            Thread.currentThread().interrupt();
+                            return;
+                        }
+                    }
+
+                    // A stop may have landed during the backoff (app teardown, or
+                    // a real unplug already drove reinitialize elsewhere). Don't
+                    // re-arm capture when we are no longer supposed to be running.
+                    if (!isRunning) {
+                        GeneralVariables.fileLog(
+                                "startUsbCapture: not re-arming USB capture "
+                                        + "(isRunning=false)");
                         return;
                     }
-                }
-
-                // A stop may have landed during the backoff (app teardown, or a
-                // real unplug already drove reinitialize elsewhere). Don't
-                // re-arm capture when we are no longer supposed to be running.
-                if (!isRunning) {
-                    GeneralVariables.fileLog(
-                            "startUsbCapture: not re-arming USB capture "
-                                    + "(isRunning=false)");
-                    return;
-                }
-                lastReinitMs = System.currentTimeMillis();
-                self.reinitialize();
+                    lastReinitMs = System.currentTimeMillis();
+                    self.reinitialize();
+                });
             }
         });
     }

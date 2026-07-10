@@ -71,4 +71,53 @@ public final class UsbCaptureRetryPolicy {
         if (delay <= 0 || delay > MAX_BACKOFF_MS) return MAX_BACKOFF_MS;
         return delay;
     }
+
+    /**
+     * The failure tally after a session ends: incremented when the session was a
+     * failure (see {@link #isFailure}), reset to {@code 0} when it stayed alive
+     * long enough to be useful. Kept separate from the raw {@code ++} at the call
+     * site so the state transition is unit-testable without a live capture.
+     *
+     * @param prevFailures the tally before this session ended (never negative)
+     * @param sawData      whether any audio arrived during the session
+     * @param aliveMs      how long the session ran before it stopped
+     */
+    static int failureTallyAfter(int prevFailures, boolean sawData, long aliveMs) {
+        return isFailure(sawData, aliveMs) ? prevFailures + 1 : 0;
+    }
+
+    /**
+     * The complete plan for reacting to a finished USB capture session: the
+     * updated failure tally and how long to wait before the next reinit attempt.
+     * Computed up front (on the native capture event thread) so the actual
+     * backoff sleep + {@code reinitialize()} can be handed to a separate worker
+     * thread — running them on the event thread is what raced libusb into the
+     * destroyed-mutex SIGABRT (nativeStop()'s join() blocks on the event thread
+     * while it drives the next nativeStart(), overlapping the two libusb
+     * contexts). See {@code MicRecorder}'s onCaptureStopped handoff.
+     */
+    static final class ReinitPlan {
+        /** Consecutive-failure tally after this session (see {@link #failureTallyAfter}). */
+        final int consecutiveFailures;
+        /** Delay before the reinit, in ms ({@code 0} = reinit immediately). */
+        final long backoffMs;
+
+        ReinitPlan(int consecutiveFailures, long backoffMs) {
+            this.consecutiveFailures = consecutiveFailures;
+            this.backoffMs = backoffMs;
+        }
+    }
+
+    /**
+     * Fold {@link #failureTallyAfter} and {@link #backoffMs} into the single
+     * decision {@code MicRecorder} needs when a capture session stops.
+     *
+     * @param sawData      whether any audio arrived during the session
+     * @param aliveMs      how long the session ran before it stopped
+     * @param prevFailures the tally before this session ended
+     */
+    static ReinitPlan planReinit(boolean sawData, long aliveMs, int prevFailures) {
+        int tally = failureTallyAfter(prevFailures, sawData, aliveMs);
+        return new ReinitPlan(tally, backoffMs(tally));
+    }
 }
