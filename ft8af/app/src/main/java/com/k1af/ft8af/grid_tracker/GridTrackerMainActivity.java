@@ -283,7 +283,11 @@ public class GridTrackerMainActivity extends AppCompatActivity {
                 } else {
                     binding.utcProgressBar.setBackgroundColor(getColor(R.color.progresss_bar_back_color));
                 }
-                binding.utcProgressBar.setProgress((int) ((aLong / 1000) % 15));
+                // Size the bar to the current mode's slot, not a hard-coded 15s FT8 cycle,
+                // so FT4 (7.5s) / FT2 (3.75s) sweeps line up with the real TX/RX grid.
+                int slotMillis = GeneralVariables.currentMode().slotMillis;
+                binding.utcProgressBar.setMax(SlotProgressBar.maxFor(slotMillis));
+                binding.utcProgressBar.setProgress(SlotProgressBar.progressFor(aLong, slotMillis));
             }
         });
 
