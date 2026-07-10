@@ -4,8 +4,11 @@ import android.util.Log;
 
 import com.k1af.ft8af.html.ImportTaskList;
 
+import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 
@@ -35,10 +38,32 @@ public class LogFileImport {
     public LogFileImport(ImportTaskList.ImportTask task, String logFileName) throws IOException {
         importTask=task;
         try (FileInputStream logFileStream = new FileInputStream(logFileName)) {
-            byte[] bytes = new byte[logFileStream.available()];
-            logFileStream.read(bytes);
-            fileContext = new String(bytes);
+            fileContext = readFully(logFileStream);
         }
+    }
+
+    /**
+     * Read a stream to its end into a UTF-8 string.
+     *
+     * <p>The previous implementation sized a single buffer from {@link InputStream#available()}
+     * and ignored the return value of a lone {@code read(byte[])} call. Neither is a reliable
+     * measure of a stream's length: {@code available()} is only an estimate, and one
+     * {@code read} is permitted to return fewer bytes than requested. On a large ADIF log this
+     * left the tail of the buffer as NUL bytes, silently garbling or dropping the last records.
+     * Reading in a loop until EOF (mirroring {@link ImportSharedLogs}) fixes this.
+     *
+     * @param stream input to drain (not closed here — the caller owns it)
+     * @return the full stream contents decoded as UTF-8
+     * @throws IOException if the underlying read fails
+     */
+    static String readFully(InputStream stream) throws IOException {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        byte[] chunk = new byte[8192];
+        int n;
+        while ((n = stream.read(chunk)) > 0) {
+            buffer.write(chunk, 0, n);
+        }
+        return buffer.toString(StandardCharsets.UTF_8.name());
     }
 
     /**
