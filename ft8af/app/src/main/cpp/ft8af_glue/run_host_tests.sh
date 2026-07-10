@@ -307,3 +307,30 @@ gfsk_len_out="$tmp/ft8_gfsk_len_test"
     -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
     -I "$ft8" "${gfsk_len_srcs[@]}" -lm -o "$gfsk_len_out"
 "$gfsk_len_out"
+
+# Audio-feed tests: the per-slot monitor feed shared by ft8_decode_jni.cpp and
+# ft2_decode_jni.cpp (ftx_feed.h). Guards the bounded copy into the retained
+# samples buffer and, crucially, that a NULL `data` pointer (a failed JNI array
+# pin) is a no-op instead of the native SIGSEGV the two float feed paths used to
+# take. Links the monitor + FFT + decode path monitor_process exercises.
+feed_srcs=(
+    "$here/test_feed.c"
+    "$ft8/common/monitor.c"
+    "$ft8/ft8/decode.c"
+    "$ft8/ft8/constants.c"
+    "$ft8/ft8/crc.c"
+    "$ft8/ft8/text.c"
+    "$ft8/ft8/message.c"
+    "$ft8/ft8/pack.c"
+    "$ft8/ft8/encode.c"
+    "$ft8/ft8/ldpc.c"
+    "$ft8/ft8/osd.c"
+    "$ft8/ft8/unpack.c"
+    "$ft8/fft/kiss_fft.c"
+    "$ft8/fft/kiss_fftr.c"
+)
+feed_out="$tmp/ft8_feed_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" -I "$here" "${feed_srcs[@]}" -lm -o "$feed_out"
+"$feed_out"
