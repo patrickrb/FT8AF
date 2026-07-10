@@ -73,12 +73,19 @@ public class UsbAudioDevice {
     public interface AudioInputCallback {
         void onAudioData(float[] data, int length);
         /**
-         * Fired on a worker thread when the capture loop exits without
-         * stopCapture() being called — e.g. the USB device was disconnected
-         * or the kernel returned a null URB. Default is a no-op so existing
-         * callers compile unchanged.
+         * Fired on a worker thread when the capture session ends.
+         *
+         * @param stopCode the native stop reason (see
+         *     {@link #describeCaptureStopCode}): {@code 0} means a clean stop we
+         *     requested via {@code nativeStop()} (a reinit, band change,
+         *     {@code stopRecord()}, or teardown) — NOT a failure; any non-zero
+         *     value is a genuine capture failure (transfers retired, NO_DEVICE,
+         *     event-loop error). Callers must not treat a clean stop as a failure:
+         *     doing so pinned the adapter in a reinit loop that starved the
+         *     decoder (429 of 434 field stops were clean stops). Default is a
+         *     no-op so existing callers compile unchanged.
          */
-        default void onCaptureStopped() {}
+        default void onCaptureStopped(int stopCode) {}
     }
 
     /**
@@ -540,7 +547,7 @@ public class UsbAudioDevice {
                                             + describeCaptureStopCode(code) + ")");
                             nativeCaptureHandle = 0;
                             capturing = false;
-                            if (javaCb != null) javaCb.onCaptureStopped();
+                            if (javaCb != null) javaCb.onCaptureStopped(code);
                         }
                     });
 
@@ -711,8 +718,11 @@ public class UsbAudioDevice {
             capturing = false;
             if (abnormalExit && callback != null) {
                 final AudioInputCallback cb = callback;
+                // Non-zero stop code: this is a genuine failure (device died),
+                // not a clean stop, so the recorder's retry path must run.
                 new Thread(() -> {
-                    try { cb.onCaptureStopped(); } catch (Exception ignored) {}
+                    try { cb.onCaptureStopped(CAPTURE_STOP_FALLBACK_FAILURE); }
+                    catch (Exception ignored) {}
                 }, "USB-Audio-Capture-Stopped").start();
             }
         }
@@ -1022,6 +1032,7 @@ public class UsbAudioDevice {
      * <p>Package-visible for testing.
      */
     static String describeCaptureStopCode(int code) {
+        if (code == CAPTURE_STOP_FALLBACK_FAILURE) return "UsbRequest fallback capture died";
         if (code == 0) return "clean stop (nativeStop)";
         if (code == 1) return "all transfers retired (no terminal cause)";
         if (code >= 1000 && code < 2000) {
@@ -1128,6 +1139,14 @@ public class UsbAudioDevice {
      * any immediate setup failure.
      */
     static final long MAX_FALLBACK_ELAPSED_MS = 1_000;
+
+    /**
+     * Stop code reported when the {@code UsbRequest} fallback capture loop exits
+     * abnormally (device died). Distinct negative sentinel so it can't collide
+     * with a native libusb stop reason ({@code 0}, {@code 1}, {@code 1000+});
+     * any non-zero code drives the recorder's failure-retry path.
+     */
+    static final int CAPTURE_STOP_FALLBACK_FAILURE = -1;
 
     public boolean hasInput() { return endpointIn != null; }
     public boolean hasOutput() { return endpointOut != null; }

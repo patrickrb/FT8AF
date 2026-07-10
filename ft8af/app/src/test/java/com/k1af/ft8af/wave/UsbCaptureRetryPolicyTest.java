@@ -59,6 +59,27 @@ public class UsbCaptureRetryPolicyTest {
         assertThat(UsbCaptureRetryPolicy.backoffMs(-5)).isEqualTo(0);
     }
 
+    // ---- isRetryableFailure ------------------------------------------------
+
+    @Test
+    public void cleanStop_isNotRetryable() {
+        // code 0 = a nativeStop WE requested (reinit / band change / stopRecord /
+        // teardown). Must NOT drive a retry — that self-kill loop starved the
+        // decoder in the field (429 of 434 stops were clean stops).
+        assertThat(UsbCaptureRetryPolicy.isRetryableFailure(0)).isFalse();
+    }
+
+    @Test
+    public void genuineFailures_areRetryable() {
+        // Every non-zero native stop reason is a real capture death and must retry.
+        assertThat(UsbCaptureRetryPolicy.isRetryableFailure(1)).isTrue();       // transfers retired
+        assertThat(UsbCaptureRetryPolicy.isRetryableFailure(2004)).isTrue();    // resubmit NO_DEVICE
+        assertThat(UsbCaptureRetryPolicy.isRetryableFailure(1005)).isTrue();    // transfer NO_DEVICE
+        assertThat(UsbCaptureRetryPolicy.isRetryableFailure(3110)).isTrue();    // handle_events failed
+        assertThat(UsbCaptureRetryPolicy.isRetryableFailure(
+                UsbAudioDevice.CAPTURE_STOP_FALLBACK_FAILURE)).isTrue();        // UsbRequest fallback died
+    }
+
     // ---- failureTallyAfter -------------------------------------------------
 
     @Test

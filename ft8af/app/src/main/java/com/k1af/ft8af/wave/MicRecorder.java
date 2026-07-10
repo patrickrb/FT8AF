@@ -310,19 +310,35 @@ public class MicRecorder {
             }
 
             @Override
-            public void onCaptureStopped() {
-                // The libusb-direct capture session ended without an explicit
-                // stop. Decide whether it counts as a failure by how long it
-                // stayed alive: a session that dies before it can carry a
-                // fraction of an FT8 cycle is useless even if a few samples
-                // arrived first (the Pixel 8 + C-Media field mode: ~100ms of
-                // audio, then every iso transfer retires). The old rule only
-                // counted "no data at all", so that mode never tripped the tally
-                // and churned a fresh libusb_init/exit every 2s forever — the
-                // waterfall freeze, and the churn that raced libusb into a
-                // native SIGSEGV.
+            public void onCaptureStopped(int stopCode) {
                 long now = SystemClock.elapsedRealtime();
                 long aliveMs = now - usbCaptureStartMs;
+
+                // A clean stop (code 0) is a nativeStop WE requested — a reinit,
+                // a band change, stopRecord(), or app teardown — not a capture
+                // failure. The initiator restarts capture itself where wanted
+                // (reinitialize() -> start()), so scheduling a retry here would
+                // tear down the capture it just brought back, and that self-kill
+                // then looks like another "failure" and schedules yet another
+                // reinit. That feedback loop pinned the C-Media adapter in a
+                // perpetual fail->backoff->reinit churn (in the field 429 of 434
+                // stops were clean stops misclassified this way), leaving the
+                // decoder deaf for ~87% of receive slots so stations' replies
+                // were never heard — the "QSO sequence broken" report. Only a
+                // genuine failure (non-zero code: transfers retired, NO_DEVICE,
+                // event-loop error) drives the retry below.
+                if (!UsbCaptureRetryPolicy.isRetryableFailure(stopCode)) {
+                    GeneralVariables.fileLog(String.format(
+                            "startUsbCapture: clean stop (code=%d aliveMs=%d) — not a "
+                                    + "failure, no reinit scheduled", stopCode, aliveMs));
+                    return;
+                }
+
+                // Genuine failure. Decide whether it counts against the tally by
+                // how long it stayed alive: a session that dies before it can
+                // carry a fraction of an FT8 cycle is useless even if a few
+                // samples arrived first (the Pixel 8 + C-Media field mode: ~100ms
+                // of audio, then every iso transfer retires).
                 boolean failure = UsbCaptureRetryPolicy.isFailure(usbAudioSawData, aliveMs);
                 UsbCaptureRetryPolicy.ReinitPlan plan = UsbCaptureRetryPolicy.planReinit(
                         usbAudioSawData, aliveMs, consecutiveUsbFailures);

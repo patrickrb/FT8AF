@@ -46,6 +46,28 @@ public final class UsbCaptureRetryPolicy {
     static final long MAX_BACKOFF_MS = 60_000;
 
     /**
+     * Whether a finished capture session warrants the failure-retry path at all,
+     * based on the native stop reason (see
+     * {@code UsbAudioDevice.describeCaptureStopCode}).
+     *
+     * <p>A clean stop ({@code stopCode == 0}) is a {@code nativeStop} <em>we</em>
+     * requested — a reinit, a band change, {@code stopRecord()}, or teardown —
+     * and the initiator restarts capture itself where appropriate. Treating it
+     * as a failure and scheduling a retry tears down the capture the initiator
+     * just brought back; doing that on every clean stop is what pinned the
+     * C-Media adapter in a fail&rarr;backoff&rarr;reinit loop (429 of 434 field
+     * stops were clean stops misclassified as failures), starving the FT8
+     * decoder of ~87% of receive slots so QSO replies were never heard. Only a
+     * non-zero stop reason (transfers retired, NO_DEVICE, event-loop error, or
+     * the {@code UsbRequest}-fallback death sentinel) is a real failure.
+     *
+     * @param stopCode native stop reason; {@code 0} == clean stop
+     */
+    static boolean isRetryableFailure(int stopCode) {
+        return stopCode != 0;
+    }
+
+    /**
      * Whether a finished capture session should count against the
      * consecutive-failure tally.
      *
