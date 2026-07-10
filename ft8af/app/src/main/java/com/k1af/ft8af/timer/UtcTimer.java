@@ -318,6 +318,41 @@ public class UtcTimer {
     }
 
     /**
+     * The clock offset (ms) to add to {@link System#currentTimeMillis()} so the app
+     * clock matches an authoritative UTC source — an NTP server's transmit timestamp.
+     * A positive result means the device clock is behind the reference and must be
+     * shifted forward. Written to {@link #delay} by {@link #syncTime}.
+     *
+     * <p><b>The full offset is returned</b>, not just its remainder within one FT8
+     * cycle. Storing only {@code offset % 15000} (as {@code syncTime} did before)
+     * keeps decode/TX cycle alignment intact — every slot length (15000, 7500, 3750)
+     * divides 15000, so the firing instants of {@link #isCycleBoundary} are unchanged
+     * — but it discards the whole-cycle part of the correction. A device clock more
+     * than one cycle out of sync would then leave {@link #getSystemTime()}, and every
+     * UTC value derived from it (the on-screen clock, QSO log start/end times, ADIF
+     * export times, and PSKReporter {@code flowStartSeconds}), wrong by a whole
+     * multiple of 15 s — silently, because RX/TX still work. This mirrors the GPS
+     * clock-discipline path ({@code GpsClockUpdater.gpsClockOffsetMs}) and the manual
+     * correction, both of which write the full offset.
+     *
+     * <p>Clamped to the {@code int} range so an absurdly wrong device clock (more than
+     * ~24.8 days off) can't overflow the {@code int} field into a bogus small value.
+     *
+     * <p>Package-visible via {@code public static} for pure-JVM testing.
+     *
+     * @param referenceUtcMs authoritative UTC "now" in ms (e.g. NTP transmit time)
+     * @param deviceNowMs    the device wall clock at the same instant
+     *                       ({@code System.currentTimeMillis()})
+     * @return the full offset in ms, clamped to {@code int} range
+     */
+    public static int ntpClockOffsetMs(long referenceUtcMs, long deviceNowMs) {
+        long offset = referenceUtcMs - deviceNowMs;
+        if (offset > Integer.MAX_VALUE) offset = Integer.MAX_VALUE;
+        if (offset < Integer.MIN_VALUE) offset = Integer.MIN_VALUE;
+        return (int) offset;
+    }
+
+    /**
      * Synchronize time using Microsoft's time server
      */
     public static void syncTime(AfterSyncTime afterSyncTime) {
@@ -330,8 +365,13 @@ public class UtcTimer {
                     InetAddress inetAddress = InetAddress.getByName("time.windows.com");
                     TimeInfo timeInfo = timeClient.getTime(inetAddress);
                     long serverTime = timeInfo.getMessage().getTransmitTimeStamp().getTime();
-                    int trueDelay = (int) ((serverTime - System.currentTimeMillis()));
-                    UtcTimer.delay = trueDelay % 15000;//delay per cycle
+                    // Apply the FULL correction, not just its remainder within one cycle.
+                    // Truncating to (offset % 15000) kept RX/TX cycle alignment but left the
+                    // app clock — and every UTC timestamp derived from it — off by a whole
+                    // multiple of 15s whenever the device clock was more than a cycle out.
+                    // See ntpClockOffsetMs.
+                    int trueDelay = ntpClockOffsetMs(serverTime, System.currentTimeMillis());
+                    UtcTimer.delay = trueDelay;
                     if (afterSyncTime != null) {
                         afterSyncTime.doAfterSyncTimer(trueDelay);
                     }
