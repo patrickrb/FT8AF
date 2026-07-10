@@ -92,6 +92,7 @@ import com.k1af.ft8af.rigs.ElecraftRig;
 import com.k1af.ft8af.rigs.Flex6000Rig;
 import com.k1af.ft8af.rigs.FlexNetworkRig;
 import com.k1af.ft8af.rigs.GuoHeQ900Rig;
+import com.k1af.ft8af.rigs.HamlibRig;
 import com.k1af.ft8af.rigs.IcomRig;
 import com.k1af.ft8af.rigs.InstructionSet;
 import com.k1af.ft8af.rigs.KenwoodKT90Rig;
@@ -1651,6 +1652,11 @@ public class MainViewModel extends ViewModel {
                 break;
             case InstructionSet.KENWOOD_TS440:
                 baseRig = new KenwoodTS440Rig();//KENWOOD TS-440S (TS-570 CAT, USB mode)
+                break;
+            case InstructionSet.HAMLIB:
+                // hamlib model number is carried in the rig table's address column
+                // (parsed base-16), e.g. FT-891 = 1036 = 0x40C.
+                baseRig = new HamlibRig(GeneralVariables.civAddress);
                 break;
         }
 

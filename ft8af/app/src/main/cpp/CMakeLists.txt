@@ -90,6 +90,44 @@ target_compile_options(ft8af_dsp PRIVATE
 )
 
 # ---------------------------------------------------------------------------
+# hamlib (prebuilt static, per-ABI) — CAT protocol engine
+# ---------------------------------------------------------------------------
+# libhamlib.a is cross-compiled offline from the pinned source in hamlib/vendor/
+# by hamlib/build_android.sh and checked in under hamlib/prebuilt/<abi>/. hamlib
+# supplies per-radio CAT framing; ft8af_glue/hamlib_jni.cpp drives it over a
+# loopback-TCP socket bridged to the app's USB-serial transport. See
+# hamlib/HAMLIB_PIN.txt for the design + rebuild instructions.
+
+set(HAMLIB_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/hamlib)
+set(HAMLIB_A ${HAMLIB_ROOT}/prebuilt/${ANDROID_ABI}/libhamlib.a)
+
+# libhamlib.a is NOT checked into git (it is large and rebuildable). Produce it
+# on demand: on Linux/macOS (incl. CI) run the cross-compile here; on Windows the
+# autotools build can't run against the Windows NDK, so require a one-time WSL
+# build. Once present it is reused (build_android.sh is skipped).
+if(NOT EXISTS ${HAMLIB_A})
+    if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+        message(FATAL_ERROR
+            "Missing ${HAMLIB_A}.\n"
+            "On Windows, build the hamlib static libs once under WSL:\n"
+            "  ANDROID_NDK_HOME=<linux-NDK> bash ${HAMLIB_ROOT}/build_android.sh\n"
+            "See ${HAMLIB_ROOT}/HAMLIB_PIN.txt.")
+    else()
+        message(STATUS "hamlib: building libhamlib.a for ${ANDROID_ABI} (one-time)")
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -E env ANDROID_NDK_HOME=${CMAKE_ANDROID_NDK}
+                    bash ${HAMLIB_ROOT}/build_android.sh ${ANDROID_ABI}
+            RESULT_VARIABLE HAMLIB_BUILD_RC)
+        if(NOT HAMLIB_BUILD_RC EQUAL 0)
+            message(FATAL_ERROR "hamlib build failed for ${ANDROID_ABI} (rc=${HAMLIB_BUILD_RC})")
+        endif()
+    endif()
+endif()
+
+add_library(hamlib STATIC IMPORTED)
+set_target_properties(hamlib PROPERTIES IMPORTED_LOCATION ${HAMLIB_A})
+
+# ---------------------------------------------------------------------------
 # libft8af.so — unified JNI bridge (replaces both libft8cn.so and libft8af_usb.so)
 # ---------------------------------------------------------------------------
 
@@ -118,16 +156,24 @@ add_library(ft8af SHARED
         ft8af_glue/ft8_xslot.c
         # JNI wrappers — FT2/FT4 decoder (from-source, was in ft8af_usb)
         ft8af_glue/ft2_decode_jni.cpp
+        # JNI wrappers — hamlib CAT bridge + Bionic API-gap shims
+        ft8af_glue/hamlib_jni.cpp
+        ft8af_glue/hamlib_compat.c
 )
 
-target_include_directories(ft8af PRIVATE ${FT8LIB_ROOT})
+target_include_directories(ft8af PRIVATE ${FT8LIB_ROOT} ${HAMLIB_ROOT}/include)
 
 find_library(log-lib log)
+find_library(android-lib android)
+find_library(m-lib m)
 
 target_link_options(ft8af PRIVATE "-Wl,-z,max-page-size=16384")
 
 target_link_libraries(ft8af
         usb1.0
         ft8af_dsp
+        hamlib
         ${log-lib}
+        ${android-lib}
+        ${m-lib}
 )

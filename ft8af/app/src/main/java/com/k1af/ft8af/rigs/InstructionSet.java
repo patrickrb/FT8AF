@@ -30,7 +30,10 @@ public class InstructionSet {
     public static final int DISCOVERY_TX500=24;//Lab599 Discovery TX-500, TS-2000 compatible, DATA mode (MD6;)
     public static final int KENWOOD_TS440=25;//KENWOOD TS-440S, original Kenwood CAT, TS-570 compatible (TX;/RX; PTT)
 
-
+    // Hamlib backend: CAT protocol supplied by libhamlib (see HamlibRig). The
+    // rig table's address column carries the hamlib model number (in hex, since
+    // that column is parsed base-16), e.g. FT-891 = 1036 = 0x40C.
+    public static final int HAMLIB=26;
 
 
 }
