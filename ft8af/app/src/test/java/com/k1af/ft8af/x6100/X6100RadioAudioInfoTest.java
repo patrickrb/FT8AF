@@ -112,4 +112,30 @@ public class X6100RadioAudioInfoTest {
         assertThat(X6100Radio.parseAudioPeriodMs("xyz", PERIOD_DEFAULT)).isEqualTo(PERIOD_DEFAULT);
         assertThat(X6100Radio.parseAudioPeriodMs(null, PERIOD_DEFAULT)).isEqualTo(PERIOD_DEFAULT);
     }
+
+    @Test
+    public void period_maxBoundary_isApplied() {
+        // Exactly the cap (1 s == 1_000_000 µs) is still accepted.
+        assertThat(X6100Radio.parseAudioPeriodMs(
+                Integer.toString(X6100Radio.MAX_AUDIO_PERIOD_MS * 1000), PERIOD_DEFAULT))
+                .isEqualTo(X6100Radio.MAX_AUDIO_PERIOD_MS);
+    }
+
+    @Test
+    public void period_absurdlyLarge_keepsDefault_avoidsBusyWaitHang() {
+        // period=2147483647 µs -> ~35 min busy-wait per packet on the TX thread.
+        // Anything past MAX_AUDIO_PERIOD_MS must fall back to the sane default.
+        assertThat(X6100Radio.parseAudioPeriodMs(
+                Integer.toString(Integer.MAX_VALUE), PERIOD_DEFAULT)).isEqualTo(PERIOD_DEFAULT);
+        assertThat(X6100Radio.parseAudioPeriodMs(
+                Integer.toString((X6100Radio.MAX_AUDIO_PERIOD_MS + 1) * 1000), PERIOD_DEFAULT))
+                .isEqualTo(PERIOD_DEFAULT);
+    }
+
+    @Test
+    public void frames_maxCapMatchesWholeTxCycle() {
+        // The cap equals a whole 15 s TX cycle at 12 kHz (180 000 samples), so the
+        // documented rationale and the constant agree.
+        assertThat(X6100Radio.MAX_AUDIO_FRAMES).isEqualTo(180_000);
+    }
 }

@@ -83,12 +83,20 @@ public class X6100Radio {
     private int period = 64;//duration per cycle in milliseconds
 
     // Upper bound accepted for a rig-reported audio "frames" (samples per TX
-    // packet). The default is 768 (64 ms at 12 kHz); a single packet larger than
-    // a whole 15 s TX cycle (180 000 samples) is nonsensical, so anything above
-    // this is a garbled/hostile reply. Capping keeps sendWaveData's
-    // `new short[frames]` allocation bounded (never an OutOfMemoryError) — see
-    // parseAudioFrames.
-    static final int MAX_AUDIO_FRAMES = 192_000;
+    // packet). The default is 768 (64 ms at 12 kHz); a single packet as large as
+    // a whole 15 s TX cycle (180 000 samples at 12 kHz) is already the ceiling of
+    // anything sensible, so anything larger is a garbled/hostile reply. Capping
+    // keeps sendWaveData's `new short[frames]` allocation bounded (never an
+    // OutOfMemoryError) — see parseAudioFrames.
+    static final int MAX_AUDIO_FRAMES = 180_000;
+
+    // Upper bound accepted for the rig-reported audio "period" (packet-pacing gap
+    // in ms, after the µs→ms conversion). The X6100 uses 64 ms; sendWaveData
+    // busy-waits `period` ms between packets, so a garbled value like
+    // period=2147483647 (µs) would spin the TX thread at 100% CPU for ~35 minutes
+    // per packet. A gap beyond 1 s is far past any real rig cadence, so treat it
+    // as garbled and fall back — see parseAudioPeriodMs.
+    static final int MAX_AUDIO_PERIOD_MS = 1_000;
 
 
     //************************event handling interfaces*******************************
@@ -811,17 +819,19 @@ public class X6100Radio {
 
     /**
      * Parse the rig's audio {@code period=} value (microseconds) into whole
-     * milliseconds, returning {@code fallback} for anything that isn't a positive
-     * duration. {@code sendWaveData} busy-waits {@code period} ms between packets;
-     * a value below 1000 µs truncates to 0 ms on the {@code /1000}, turning that
-     * wait into a tight CPU spin. Same ingestion-point-validation rationale (and
-     * unit-testability) as {@link #parseAudioFrames}.
+     * milliseconds, returning {@code fallback} for anything that isn't a sane
+     * positive duration. {@code sendWaveData} busy-waits {@code period} ms between
+     * packets, so the value is bounded on both ends: a value below 1000 µs
+     * truncates to 0 ms on the {@code /1000}, turning that wait into a tight CPU
+     * spin, and a value above {@link #MAX_AUDIO_PERIOD_MS} would spin the TX
+     * thread for many seconds/minutes per packet. Same ingestion-point-validation
+     * rationale (and unit-testability) as {@link #parseAudioFrames}.
      */
     static int parseAudioPeriodMs(String raw, int fallback) {
         if (raw == null) return fallback;
         try {
             int ms = Integer.parseInt(raw.trim()) / 1000;
-            if (ms > 0) {
+            if (ms > 0 && ms <= MAX_AUDIO_PERIOD_MS) {
                 return ms;
             }
         } catch (NumberFormatException ignored) {
