@@ -90,72 +90,118 @@ public class RadioTcpClient {
         public void run() {
             Log.d(TAG, "TcpSocketThread start...");
             super.run();
-            try {
-                if (mSocket != null) {
-                    mSocket.close();
-                    mSocket = null;
-                }
-                InetAddress ipAddress = InetAddress.getByName(ip);
-                mSocket = new Socket(ipAddress, port);
-                //Set no-delay sending
-                //mSocket.setTcpNoDelay(true);
-                //Set input/output buffer stream size
-                //mSocket.setSendBufferSize(8*1024);
-                //mSocket.setReceiveBufferSize(8*1024);
-                if (isConnect()) {
-                    mOutputStream = mSocket.getOutputStream();
-                    mInputStream = mSocket.getInputStream();
-
-
-                    isStop = false;
-                    connectSuccess();
-                }
-                /* This approach has limited value here; true socket disconnection should rely on heartbeat sending and waiting for server response; no response within a period means connection failed */
-                else {
-                    connectFail();
-                    return;
-                }
-
-            }catch (SocketException e){
-                Log.e(TAG,"TCP Connection exception:"+e.getMessage());
+            if (openConnection()) {
+                readLoop();
             }
-            catch (IOException e) {
+        }
+    }
+
+    /**
+     * Open the TCP socket to the configured endpoint and wire up the streams.
+     *
+     * <p>Package-private (not private) so the connect handling can be exercised by a unit
+     * test without spinning up the real receive thread.
+     *
+     * @return {@code true} when the socket is connected and streams are ready; {@code false}
+     *         on any failure (the caller must not enter {@link #readLoop()} in that case).
+     */
+    boolean openConnection() {
+        try {
+            if (mSocket != null) {
+                mSocket.close();
+                mSocket = null;
+            }
+            InetAddress ipAddress = InetAddress.getByName(ip);
+            mSocket = new Socket(ipAddress, port);
+            //Set no-delay sending
+            //mSocket.setTcpNoDelay(true);
+            //Set input/output buffer stream size
+            //mSocket.setSendBufferSize(8*1024);
+            //mSocket.setReceiveBufferSize(8*1024);
+            if (isConnect()) {
+                mOutputStream = mSocket.getOutputStream();
+                mInputStream = mSocket.getInputStream();
+
+
+                isStop = false;
+                connectSuccess();
+                return true;
+            }
+            /* This approach has limited value here; true socket disconnection should rely on heartbeat sending and waiting for server response; no response within a period means connection failed */
+            else {
                 connectFail();
-                Log.e(TAG, "SocketThread connect io exception = " + e.getMessage());
-                e.printStackTrace();
-                return;
+                return false;
             }
-            int errorCount=0;
-            //read ...
-            while (isConnect() && !isStop && !isInterrupted()) {
-                int size;
-                try {
-                    byte[] buffer = new byte[MAX_BUFFER_SIZE];
-                    if (mInputStream == null) return;
-                    size = mInputStream.read(buffer);//null data -1 ,
-                    if (size > 0) {
-                        if (onDataReceiveListener != null) {
-                            byte[] temp = Arrays.copyOf(buffer, size);
-                            onDataReceiveListener.onDataReceive(temp);
-                        }
-                        errorCount =0;
-                    }else {
-                        errorCount ++;
-                        if (errorCount > 10){
-                            if (onDataReceiveListener!=null){
-                                onDataReceiveListener.onConnectionClosed();
-                            }
-                        }
-                    }
 
-                } catch (SocketException e){
-                    Log.e(TAG,"Tcp Connection exception:"+e.getMessage());
-                } catch (IOException e) {
-                    //uiHandler.sendEmptyMessage(-1);
-                    Log.e(TAG, "SocketThread read io exception = " + e.getMessage());
-                    e.printStackTrace();
-                    return;
+        } catch (SocketException e) {
+            // ConnectException (rig off / wrong IP / peer refused) is a SocketException. Signal
+            // the failure and stop, exactly like the IOException sibling below — otherwise the
+            // connect attempt fell through silently and the UI stayed stuck on "connecting".
+            Log.e(TAG, "TCP Connection exception:" + e.getMessage());
+            connectFail();
+            return false;
+        } catch (IOException e) {
+            connectFail();
+            Log.e(TAG, "SocketThread connect io exception = " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Read from the connected socket until the peer closes it, an error occurs, or the client
+     * is stopped/interrupted. Package-private so a unit test can drive it against a real
+     * loopback socket.
+     *
+     * <p>Every exit path notifies {@link OnDataReceiveListener#onConnectionClosed()} and
+     * returns. In particular a {@link SocketException} (peer reset) MUST break the loop: a
+     * reset socket still reports {@link Socket#isConnected()} == {@code true} (that flag is
+     * sticky once connected), so continuing would re-throw on the next {@code read()} in a
+     * tight 100% CPU busy-loop that never signals the disconnect.
+     */
+    void readLoop() {
+        int errorCount = 0;
+        //read ...
+        while (isConnect() && !isStop && !Thread.currentThread().isInterrupted()) {
+            int size;
+            try {
+                byte[] buffer = new byte[MAX_BUFFER_SIZE];
+                InputStream in = mInputStream;
+                if (in == null) return;
+                size = in.read(buffer);//peer closed -> -1
+                if (size > 0) {
+                    if (onDataReceiveListener != null) {
+                        byte[] temp = Arrays.copyOf(buffer, size);
+                        onDataReceiveListener.onDataReceive(temp);
+                    }
+                    errorCount = 0;
+                } else {
+                    // read() == -1 means the peer closed the stream (EOF); it returns -1
+                    // immediately on every subsequent call, so declare the connection closed
+                    // and stop instead of spinning.
+                    errorCount++;
+                    if (errorCount > 10) {
+                        if (onDataReceiveListener != null) {
+                            onDataReceiveListener.onConnectionClosed();
+                        }
+                        return;
+                    }
                 }
+
+            } catch (SocketException e) {
+                Log.e(TAG, "Tcp Connection exception:" + e.getMessage());
+                if (onDataReceiveListener != null) {
+                    onDataReceiveListener.onConnectionClosed();
+                }
+                return;
+            } catch (IOException e) {
+                //uiHandler.sendEmptyMessage(-1);
+                Log.e(TAG, "SocketThread read io exception = " + e.getMessage());
+                e.printStackTrace();
+                if (onDataReceiveListener != null) {
+                    onDataReceiveListener.onConnectionClosed();
+                }
+                return;
             }
         }
     }
@@ -235,5 +281,20 @@ public class RadioTcpClient {
 
     public int getPort() {
         return port;
+    }
+
+    // ---- Test seams -------------------------------------------------------------------
+    // Package-private hooks that let the flex unit tests drive openConnection()/readLoop()
+    // against real loopback sockets without starting the SocketThread.
+
+    void setEndpointForTest(String ip, int port) {
+        this.ip = ip;
+        this.port = port;
+    }
+
+    void primeConnectionForTest(Socket socket, InputStream in) {
+        this.mSocket = socket;
+        this.mInputStream = in;
+        this.isStop = false;
     }
 }
