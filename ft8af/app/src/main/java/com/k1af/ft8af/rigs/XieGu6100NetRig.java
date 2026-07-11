@@ -67,6 +67,10 @@ public class XieGu6100NetRig extends BaseRig {
             }else {//otherwise transmit audio data normally
                 float[] data = GenerateFT8.generateFt8(message, GeneralVariables.getBaseFrequency()
                         , 12000);//rig audio sample rate is 12000
+                if (data == null) {//invalid callsign: generateFt8 aborted (toast already shown)
+                    setPTT(false);
+                    return;
+                }
                 getConnector().sendWaveData(data);
             }
         }

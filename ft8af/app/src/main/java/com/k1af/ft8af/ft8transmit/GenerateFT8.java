@@ -254,6 +254,16 @@ public class GenerateFT8 {
      * unit-testable without touching global state.
      */
     public static float[] generateFt8ByA91(byte[] a91, float frequency, int sample_rate, ModeProfile mode){
+        // generateA91 returns null for an invalid own callsign (<3 chars): it has already
+        // shown the "callsign_error" toast and the transmit must abort gracefully. Feeding
+        // that null into the native encoder below (mode.encode -> ft8_encode/ft4_encode,
+        // whose JNI wrappers call GetArrayLength(null)/GetByteArrayRegion(null,...) with no
+        // null guard) is an UNCATCHABLE native SIGSEGV on the TX thread. Return null instead
+        // so callers take their existing null path (setPTT(false)/afterPlayAudio()), which is
+        // exactly the graceful abort they were written against.
+        if (a91 == null) {
+            return null;
+        }
         byte[] tones = new byte[mode.numTones]; // FT8: 79 symbols, FT4: 105
         // a91 is the 12-byte (91+7)/8 payload; the native encoder fills the tone array
         mode.encode(a91, tones);

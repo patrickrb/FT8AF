@@ -75,6 +75,13 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_k1af_ft8af_ft8transmit_GenerateFT8_ft8_1encode(
         JNIEnv* env, jclass, jbyteArray payload, jbyteArray tones)
 {
+    // Trust-boundary null guard (mirrors pack77/packFreeTextTo77/synth_gfsk above): a null
+    // payload — e.g. from generateA91 aborting on a <3-char callsign — would make
+    // GetArrayLength(null)/GetByteArrayRegion(null,...) an uncatchable native crash. The
+    // Java side (generateFt8ByA91) already returns before reaching here, so this is
+    // defence-in-depth for any other/future caller (incl. the desktop FFI).
+    if (!payload || !tones) return;
+
     uint8_t payload_c[10] = {0};
     jsize plen = env->GetArrayLength(payload);
     env->GetByteArrayRegion(payload, 0, plen < 10 ? plen : 10,
@@ -99,6 +106,9 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_k1af_ft8af_ft8transmit_GenerateFT8_ft4_1encode(
         JNIEnv* env, jclass, jbyteArray payload, jbyteArray tones)
 {
+    // Trust-boundary null guard, same as ft8_1encode above.
+    if (!payload || !tones) return;
+
     uint8_t payload_c[10] = {0};
     jsize plen = env->GetArrayLength(payload);
     env->GetByteArrayRegion(payload, 0, plen < 10 ? plen : 10,
