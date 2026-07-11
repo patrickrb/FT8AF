@@ -94,6 +94,22 @@ public class BluetoothSerialSocket implements Runnable {
         socket.getOutputStream().write(data);
     }
 
+    /**
+     * Turn one {@link java.io.InputStream#read(byte[])} result into the frame to hand the
+     * listener. A negative length means the remote closed the RFCOMM stream (radio powered
+     * off, link dropped) — a normal end-of-stream, not corrupt data. Report it as a plain
+     * disconnect instead of letting {@code Arrays.copyOf(buffer, -1)} throw a
+     * NegativeArraySizeException whose "-1" message then surfaces to the operator as a bogus
+     * I/O error (every other transport checks {@code read() < 0} for EOF). For {@code len >= 0}
+     * the returned frame is byte-for-byte identical to the previous behaviour.
+     */
+    static byte[] frameFromRead(byte[] buffer, int len) throws IOException {
+        if (len < 0) {
+            throw new IOException("connection closed by remote device");
+        }
+        return Arrays.copyOf(buffer, len);
+    }
+
     @SuppressLint("MissingPermission")
     @Override
     public void run() { // connect & read
@@ -122,7 +138,7 @@ public class BluetoothSerialSocket implements Runnable {
             //noinspection InfiniteLoopStatement
             while (true) {
                 len = socket.getInputStream().read(buffer);
-                byte[] data = Arrays.copyOf(buffer, len);
+                byte[] data = frameFromRead(buffer, len);
                 if(listener != null)
                     listener.onSerialRead(data);
             }
