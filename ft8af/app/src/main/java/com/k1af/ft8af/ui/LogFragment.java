@@ -404,8 +404,14 @@ public class LogFragment extends Fragment {
                             , new DialogInterface.OnClickListener() {
                                 @Override
                                 public void onClick(DialogInterface dialogInterface, int i) {
-                                    logQSLAdapter.deleteRecord(viewHolder.getAdapterPosition());// Delete log entry
-                                    logQSLAdapter.notifyItemRemoved(viewHolder.getAdapterPosition());
+                                    // The holder may have detached or the list refreshed while the
+                                    // dialog was open, so getAdapterPosition() can now be NO_POSITION.
+                                    int position = viewHolder.getAdapterPosition();
+                                    if (position == RecyclerView.NO_POSITION) {
+                                        return;
+                                    }
+                                    logQSLAdapter.deleteRecord(position);// Delete log entry
+                                    logQSLAdapter.notifyItemRemoved(position);
                                 }
                             });
                     builder.setOnCancelListener(new DialogInterface.OnCancelListener() {
@@ -425,9 +431,12 @@ public class LogFragment extends Fragment {
                 }
 
                 if (direction == ItemTouchHelper.START) {
-                    logQSLAdapter.setRecordIsQSL(viewHolder.getAdapterPosition()
-                            , !logQSLAdapter.getRecord(viewHolder.getAdapterPosition()).isQSL);
-                    logQSLAdapter.notifyItemChanged(viewHolder.getAdapterPosition());
+                    int position = viewHolder.getAdapterPosition();
+                    if (position == RecyclerView.NO_POSITION) {
+                        return;
+                    }
+                    logQSLAdapter.setRecordIsQSL(position, !logQSLAdapter.getRecord(position).isQSL);
+                    logQSLAdapter.notifyItemChanged(position);
                 }
             }
 
