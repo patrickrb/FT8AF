@@ -52,6 +52,27 @@ public class LogHttpServer extends NanoHTTPD {
 
     }
 
+    /**
+     * Number of pages needed to show {@code recordCount} rows at {@code pageSize} rows per page.
+     *
+     * <p>This is a ceiling division: {@code n} pages hold up to {@code n * pageSize} rows. The
+     * old {@code Math.round(rc / pageSize + 0.5f)} form actually evaluated to
+     * {@code floor(rc / pageSize) + 1} (because {@link Math#round(float)} is itself
+     * {@code floor(x + 0.5)}, so the {@code + 0.5f} added a whole extra page), so an exact
+     * multiple — e.g. 100 rows at the default 100 rows/page — reported one page too many and
+     * the web logbook rendered a trailing empty page whose "last page" link led nowhere.
+     *
+     * <p>Always returns at least 1 so the page controls still render over an empty log (matching
+     * the old behaviour for 0 rows), and a non-positive {@code pageSize} (a malformed
+     * {@code ?pageSize=} query value) collapses to a single page instead of dividing by zero.
+     */
+    static int pageCount(int recordCount, int pageSize) {
+        if (pageSize <= 0 || recordCount <= 0) {
+            return 1;
+        }
+        return (recordCount + pageSize - 1) / pageSize;
+    }
+
     @Override
     public Response serve(IHTTPSession session) {
         String[] uriList = session.getUri().split("/");
@@ -991,7 +1012,7 @@ public class LogHttpServer extends NanoHTTPD {
                         "where ((CALL_TO LIKE ?)OR(CALL_FROM LIKE ?))" + dateSql
                 , new String[]{whereStr, whereStr});
         cursor.moveToFirst();
-        int pageCount = Math.round(((float) cursor.getInt(cursor.getColumnIndex("rc")) / pageSize) + 0.5f);
+        int pageCount = pageCount(cursor.getInt(cursor.getColumnIndex("rc")), pageSize);
         if (pageIndex > pageCount) pageIndex = pageCount;
         cursor.close();
 
@@ -1232,7 +1253,7 @@ public class LogHttpServer extends NanoHTTPD {
                         "where (([call] LIKE ?)OR(station_callsign LIKE ?))" + dateSql
                 , new String[]{whereStr, whereStr});
         cursor.moveToFirst();
-        int pageCount = Math.round(((float) cursor.getInt(cursor.getColumnIndex("rc")) / pageSize) + 0.5f);
+        int pageCount = pageCount(cursor.getInt(cursor.getColumnIndex("rc")), pageSize);
         if (pageIndex > pageCount) pageIndex = pageCount;
         cursor.close();
 
@@ -1492,7 +1513,7 @@ public class LogHttpServer extends NanoHTTPD {
                         "where (([call] LIKE ?)OR(station_callsign LIKE ?))" + dateSql
                 , new String[]{whereStr, whereStr});
         cursor.moveToFirst();
-        int pageCount = Math.round(((float) cursor.getInt(cursor.getColumnIndex("rc")) / pageSize) + 0.5f);
+        int pageCount = pageCount(cursor.getInt(cursor.getColumnIndex("rc")), pageSize);
         if (pageIndex > pageCount) pageIndex = pageCount;
         cursor.close();
 
