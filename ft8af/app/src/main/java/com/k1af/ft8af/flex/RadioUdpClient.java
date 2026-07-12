@@ -27,7 +27,6 @@ public class RadioUdpClient {
     private OnUdpEvents onUdpEvents = null;
     private final ExecutorService sendDataThreadPool = Executors.newCachedThreadPool();
     private final ExecutorService receiveThreadPool = Executors.newCachedThreadPool();
-    private final SendDataRunnable sendDataRunnable=new SendDataRunnable(this);
 
     public RadioUdpClient(int port) {
         this.port = port;
@@ -38,21 +37,26 @@ public class RadioUdpClient {
         //Log.e(TAG, "sendData: "+byteToStr(data) );
         //Log.e(TAG, String.format("sendData: ip: %s,port:%d ",ip,port) );
         InetAddress address = InetAddress.getByName(ip);
-        sendDataRunnable.data=data;
-        sendDataRunnable.address=address;
-        sendDataRunnable.port=port;
-        sendDataThreadPool.execute(sendDataRunnable);
+        // Submit a fresh runnable carrying an immutable snapshot of this call's
+        // payload/target. A single shared runnable whose fields we overwrite before
+        // each execute() would let back-to-back sends clobber each other on the pool
+        // (a worker reads data/address/port asynchronously), sending the wrong payload
+        // to the wrong host or duplicating the latest one.
+        sendDataThreadPool.execute(new SendDataRunnable(this, data, address, port));
     }
 
     // Package-private (not private) so a unit test in this package can drive it.
     static class SendDataRunnable implements Runnable{
-        byte[] data;
-        InetAddress address;
-        int port;
-        RadioUdpClient client;
+        final byte[] data;
+        final InetAddress address;
+        final int port;
+        final RadioUdpClient client;
 
-        public SendDataRunnable(RadioUdpClient client) {
+        public SendDataRunnable(RadioUdpClient client, byte[] data, InetAddress address, int port) {
             this.client = client;
+            this.data = data;
+            this.address = address;
+            this.port = port;
         }
 
         @Override

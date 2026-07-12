@@ -83,13 +83,40 @@ public class RadioUdpClientReceiveTeardownTest {
     public void send_afterSocketClearedByTeardown_doesNotThrow() throws Exception {
         RadioUdpClient client = new RadioUdpClient(0);
         // sendSocket is null (the state setActivated(false) / a teardown leaves behind).
-        RadioUdpClient.SendDataRunnable send = new RadioUdpClient.SendDataRunnable(client);
-        send.data = new byte[]{1, 2, 3};
-        send.address = InetAddress.getLoopbackAddress();
-        send.port = 5001;
+        RadioUdpClient.SendDataRunnable send = new RadioUdpClient.SendDataRunnable(
+                client, new byte[]{1, 2, 3}, InetAddress.getLoopbackAddress(), 5001);
 
         send.run(); // pre-fix: NullPointerException on client.sendSocket.send(...)
 
         assertThat(client.getSendSocketForTest()).isNull();
+    }
+
+    /**
+     * Each send carries its own immutable snapshot. The old code reused a single shared
+     * runnable whose data/address/port were overwritten before every {@code execute()},
+     * so two back-to-back sends racing on the pool could send the wrong payload to the
+     * wrong host (or duplicate the latest one). Two runnables built from different calls
+     * must retain their own fields.
+     */
+    @Test
+    public void eachSend_capturesIndependentSnapshot() throws Exception {
+        RadioUdpClient client = new RadioUdpClient(0);
+        byte[] first = {1, 2, 3};
+        byte[] second = {9, 9};
+        InetAddress addrA = InetAddress.getByName("192.0.2.10");
+        InetAddress addrB = InetAddress.getByName("192.0.2.20");
+
+        RadioUdpClient.SendDataRunnable a =
+                new RadioUdpClient.SendDataRunnable(client, first, addrA, 5001);
+        RadioUdpClient.SendDataRunnable b =
+                new RadioUdpClient.SendDataRunnable(client, second, addrB, 5002);
+
+        assertThat(a.data).isSameInstanceAs(first);
+        assertThat(a.address).isSameInstanceAs(addrA);
+        assertThat(a.port).isEqualTo(5001);
+        // b must not have clobbered a's snapshot.
+        assertThat(b.data).isSameInstanceAs(second);
+        assertThat(b.address).isSameInstanceAs(addrB);
+        assertThat(b.port).isEqualTo(5002);
     }
 }
