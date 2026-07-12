@@ -225,7 +225,14 @@ object WsjtxCodec {
     // --- inbound ------------------------------------------------------------
 
     sealed class Inbound {
-        data class Reply(val call: String, val grid: String, val snr: Int) : Inbound()
+        /**
+         * A Reply request. [deltaFreq] is the audio frequency (Hz) the companion asked us
+         * to answer on — the caller should honor it so we key up on the requested tone
+         * rather than whatever the current TX frequency happens to be (mirrors the iOS
+         * port). It is the WSJT-X message's `df` field; 0 means "unspecified".
+         */
+        data class Reply(val call: String, val grid: String, val snr: Int, val deltaFreq: Int) :
+            Inbound()
         object Replay : Inbound()
         data class HaltTx(val autoOnly: Boolean) : Inbound()
         data class FreeText(val text: String, val send: Boolean) : Inbound()
@@ -278,11 +285,11 @@ object WsjtxCodec {
                 r.i32() ?: return null // time
                 val snr = r.i32() ?: return null
                 r.f64() ?: return null // dt
-                r.i32() ?: return null // df
+                val deltaFreq = r.i32() ?: return null // df: the requested audio freq (Hz)
                 r.string() ?: return null // mode
                 val message = r.string() ?: return null
                 val target = parseReplyTarget(message) ?: return null
-                Inbound.Reply(target.first, target.second, snr)
+                Inbound.Reply(target.first, target.second, snr, deltaFreq)
             }
             T_REPLAY -> Inbound.Replay
             // Reject a truncated packet rather than defaulting the trailing bool: a malformed

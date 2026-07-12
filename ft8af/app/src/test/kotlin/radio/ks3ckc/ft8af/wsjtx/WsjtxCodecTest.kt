@@ -190,12 +190,12 @@ class WsjtxCodecTest {
         val out = ByteArray(bb.position()); bb.flip(); bb.get(out); return out
     }
 
-    private fun makeReply(message: String, snr: Int): ByteArray {
+    private fun makeReply(message: String, snr: Int, df: Int = 1500): ByteArray {
         val bb = beginInbound(WsjtxCodec.T_REPLY)
         bb.putInt(47_000_000) // time
         bb.putInt(snr)
         bb.putDouble(0.1)     // dt
-        bb.putInt(1500)       // df
+        bb.putInt(df)         // df
         putStr(bb, "FT8")
         putStr(bb, message)
         bb.put(0)             // low confidence
@@ -206,21 +206,29 @@ class WsjtxCodecTest {
     @Test
     fun parseReplyPlainCq() {
         assertThat(WsjtxCodec.parseInbound(makeReply("CQ K1ABC FN42", -3)))
-            .isEqualTo(WsjtxCodec.Inbound.Reply("K1ABC", "FN42", -3))
+            .isEqualTo(WsjtxCodec.Inbound.Reply("K1ABC", "FN42", -3, 1500))
     }
 
     @Test
     fun parseReplyCqWithDirective() {
         assertThat(WsjtxCodec.parseInbound(makeReply("CQ DX K1ABC FN42", -3)))
-            .isEqualTo(WsjtxCodec.Inbound.Reply("K1ABC", "FN42", -3))
+            .isEqualTo(WsjtxCodec.Inbound.Reply("K1ABC", "FN42", -3, 1500))
         assertThat(WsjtxCodec.parseInbound(makeReply("CQ POTA W1AW/4 EM70", 5)))
-            .isEqualTo(WsjtxCodec.Inbound.Reply("W1AW/4", "EM70", 5))
+            .isEqualTo(WsjtxCodec.Inbound.Reply("W1AW/4", "EM70", 5, 1500))
     }
 
     @Test
     fun parseReplyNonCqCallsSender() {
         assertThat(WsjtxCodec.parseInbound(makeReply("K0XYZ K1ABC -12", -12)))
-            .isEqualTo(WsjtxCodec.Inbound.Reply("K1ABC", "", -12))
+            .isEqualTo(WsjtxCodec.Inbound.Reply("K1ABC", "", -12, 1500))
+    }
+
+    @Test
+    fun parseReplyCapturesRequestedDeltaFreq() {
+        // The `df` field carries the audio frequency the companion asked us to answer on;
+        // the reply must surface it (not discard it) so the caller can key up on that tone.
+        assertThat(WsjtxCodec.parseInbound(makeReply("CQ K1ABC FN42", -3, df = 2100)))
+            .isEqualTo(WsjtxCodec.Inbound.Reply("K1ABC", "FN42", -3, 2100))
     }
 
     @Test

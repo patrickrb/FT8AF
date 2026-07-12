@@ -1262,10 +1262,28 @@ public class MainViewModel extends ViewModel {
         svc.sendQsoLogged(q, adif);
     }
 
+    /**
+     * The audio TX offset (Hz) to adopt for an inbound WSJT-X Reply's requested {@code df},
+     * or -1 to keep the current frequency. Bounds the untrusted UDP value to the usable
+     * audio passband {@code [1, maxHz]}; a non-positive or out-of-range df is ignored (a
+     * malformed/garbled datagram must not push the TX tone off the audio band).
+     */
+    static int replyTxFrequencyHz(int deltaFreq, int maxHz) {
+        return (deltaFreq > 0 && deltaFreq <= maxHz) ? deltaFreq : -1;
+    }
+
     /** Inbound Reply: call the referenced station, preferring the real decode. */
-    private void handleWsjtxReply(String call, String grid, int snr) {
+    private void handleWsjtxReply(String call, String grid, int snr, int deltaFreq) {
         if (ft8TransmitSignal == null || call == null || call.isEmpty()) {
             return;
+        }
+        // Honor the audio frequency the companion asked us to answer on (WSJT-X's `df`),
+        // so we key up on the requested tone rather than the current TX offset — matching
+        // the iOS port. getBaseFrequency() is the shared RX/TX audio offset
+        // FT8TransmitSignal reads when it generates the waveform.
+        int txHz = replyTxFrequencyHz(deltaFreq, GeneralVariables.MAX_SPECTRUM_WIDTH_HZ);
+        if (txHz > 0) {
+            GeneralVariables.setBaseFrequency(txHz);
         }
         Ft8Message target = findRecentDecode(call);
         if (target == null) {
