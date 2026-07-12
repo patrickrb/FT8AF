@@ -194,6 +194,11 @@ final class SettingsState {
     // Radio
     var spectrumWidthHz: Int = 3000
     var enabledBands: [String] = ["160M","80M","40M","30M","20M","17M","15M","12M","10M","6M"]
+    // WSJT-X UDP interface (GridTracker / JTAlert / N1MM / Log4OM interop).
+    var udpEnabled: Bool = false
+    var udpHost: String = "127.0.0.1"
+    var udpPort: Int = 2237
+    var udpAcceptRequests: Bool = false
 }
 
 // MARK: - Rig
@@ -280,6 +285,10 @@ enum SettingsPersistence {
         d.set(s.stopAfterAttempts, forKey: key("stopAfterAttempts"))
         d.set(s.spectrumWidthHz, forKey: key("spectrumWidthHz"))
         d.set(s.enabledBands, forKey: key("enabledBands"))
+        d.set(s.udpEnabled, forKey: key("udpEnabled"))
+        d.set(s.udpHost, forKey: key("udpHost"))
+        d.set(s.udpPort, forKey: key("udpPort"))
+        d.set(s.udpAcceptRequests, forKey: key("udpAcceptRequests"))
     }
 
     @MainActor static func load(into s: SettingsState) {
@@ -341,6 +350,17 @@ enum SettingsPersistence {
         }
         if let bands = d.stringArray(forKey: key("enabledBands")) {
             s.enabledBands = bands
+        }
+        if d.object(forKey: key("udpEnabled")) != nil {
+            s.udpEnabled = d.bool(forKey: key("udpEnabled"))
+        }
+        if let v = d.string(forKey: key("udpHost")), !v.isEmpty { s.udpHost = v }
+        if d.object(forKey: key("udpPort")) != nil {
+            let p = d.integer(forKey: key("udpPort"))
+            if p > 0 && p <= 65535 { s.udpPort = p }
+        }
+        if d.object(forKey: key("udpAcceptRequests")) != nil {
+            s.udpAcceptRequests = d.bool(forKey: key("udpAcceptRequests"))
         }
     }
 

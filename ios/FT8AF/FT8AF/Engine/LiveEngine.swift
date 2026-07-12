@@ -16,6 +16,13 @@ final class LiveEngine {
     private let txPlayer = TxPlayerService()
     private var engineTask: Task<Void, Never>?
     private var rxOffsetMs: Int64 = 0
+
+    // WSJT-X UDP interface (broadcast + inbound requests).
+    private let udp = WsjtxUdpService()
+    private var udpStatusTask: Task<Void, Never>?
+    private var lastUdpConfig: WsjtxUdpService.Config?
+    private var lastUdpBand = ""
+    private var lastUdpHeartbeatMs: Int64 = 0
     /// Weakly held so `stop()` can clear the LIVE indicator it set in `start()`.
     private weak var appState: AppState?
 
@@ -50,6 +57,9 @@ final class LiveEngine {
         qso.band = settings.band
         qso.freqMhz = bandToFreqMhz(settings.band)
         qsoEngine = qso
+
+        // Bring up the WSJT-X UDP interface for this session.
+        setupUdp(appState: appState)
 
         let accumulator = audio.accumulator
         let rxOffset = rxOffsetMs
@@ -100,6 +110,10 @@ final class LiveEngine {
     func stop() {
         engineTask?.cancel()
         engineTask = nil
+        udpStatusTask?.cancel()
+        udpStatusTask = nil
+        udp.stop()
+        lastUdpConfig = nil
         txPlayer.stop()
         audio.stop()
         isRunning = false
@@ -234,6 +248,9 @@ final class LiveEngine {
         // Sync latest settings into the engine before processing.
         syncSettingsToQso()
 
+        // Broadcast this slot's decodes over the WSJT-X UDP interface.
+        broadcastUdpDecodes(decoded)
+
         // Log incoming RX messages addressed to us for the conversation panel.
         let myCall = appState.settings.myCall.uppercased()
         if !myCall.isEmpty {
@@ -277,6 +294,8 @@ final class LiveEngine {
             record.id = nextId
             appState.logbook.records.insert(record, at: 0)
             QsoLogStore.save(appState.logbook.records)
+            // Broadcast the logged QSO over the WSJT-X UDP interface.
+            broadcastUdpQso(record)
             // Trigger QSO celebration animation.
             appState.tx.qsoCompletedAt = Date()
         }
@@ -408,6 +427,137 @@ final class LiveEngine {
         fmt.dateFormat = "HH:mm:ss"
         fmt.timeZone = TimeZone(identifier: "UTC")
         return fmt.string(from: date)
+    }
+
+    // MARK: - WSJT-X UDP interface
+
+    /// Wire the UDP service's inbound handlers to the transmit path, apply the
+    /// current settings, and start the periodic Status/Heartbeat loop.
+    private func setupUdp(appState: AppState) {
+        udp.onReply = { [weak self] call, grid, snr, deltaFreq in
+            guard let self, let appState = self.appState else { return }
+            // Honor the requested audio frequency: answer on the tone the companion asked
+            // for, not whatever the current TX frequency happens to be.
+            if deltaFreq > 0 { appState.waterfall.txFreqHz = Float(deltaFreq) }
+            let msg = DecodeMessage(
+                utcTime: Self.utcTimeString(from: Int64(Date().timeIntervalSince1970 * 1000)),
+                callFrom: call, callTo: "", snr: Int(snr),
+                freqHz: appState.waterfall.txFreqHz, grid: grid, extra: "", slotIndex: 0
+            )
+            self.answerStation(msg)
+        }
+        udp.onHaltTx = { [weak self] _ in self?.stopTx() }
+        udp.onFreeText = { [weak self] text, send in
+            guard let self, send else { return }
+            self.qsoEngine?.setFreeText(text)
+            self.syncQsoStatusToUI()
+        }
+        udp.onReplay = {} // decodes are re-sent inside the service
+
+        applyUdpConfig(appState.settings)
+        udp.sendClear()
+        udp.clearReplayCache()
+        lastUdpBand = appState.settings.band
+
+        udpStatusTask?.cancel()
+        udpStatusTask = Task { [weak self] in
+            while !Task.isCancelled {
+                self?.tickUdp()
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    private func applyUdpConfig(_ s: SettingsState) {
+        let cfg = WsjtxUdpService.Config(
+            enabled: s.udpEnabled,
+            host: s.udpHost,
+            port: UInt16(exactly: s.udpPort) ?? 2237,
+            acceptRequests: s.udpAcceptRequests
+        )
+        lastUdpConfig = cfg
+        udp.apply(cfg)
+    }
+
+    /// Runs ~1 Hz: re-applies config if the operator changed it, then sends a
+    /// Status (and a Heartbeat every ~15 s); clears companions on a band change.
+    private func tickUdp() {
+        guard let appState else { return }
+        applyUdpConfigIfChanged(appState.settings)
+        guard udp.isEnabled else { return }
+        if appState.settings.band != lastUdpBand {
+            lastUdpBand = appState.settings.band
+            udp.sendClear()
+            udp.clearReplayCache()
+        }
+        udp.sendStatus(buildUdpStatus())
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        if nowMs - lastUdpHeartbeatMs >= 15_000 {
+            lastUdpHeartbeatMs = nowMs
+            udp.sendHeartbeat(version: Self.appVersion)
+        }
+    }
+
+    private func applyUdpConfigIfChanged(_ s: SettingsState) {
+        let cfg = WsjtxUdpService.Config(
+            enabled: s.udpEnabled, host: s.udpHost,
+            port: UInt16(exactly: s.udpPort) ?? 2237, acceptRequests: s.udpAcceptRequests
+        )
+        if cfg != lastUdpConfig {
+            lastUdpConfig = cfg
+            udp.apply(cfg)
+        }
+    }
+
+    private func buildUdpStatus() -> WsjtxCodec.Status {
+        let s = appState?.settings
+        let qsoStatus = qsoEngine?.status()
+        let dialMhz = Double(bandToFreqMhz(s?.band ?? "20M")) ?? 14.074
+        let df = UInt32(max(0, Int(appState?.waterfall.txFreqHz ?? 1500)))
+        return WsjtxCodec.Status(
+            dialFreqHz: UInt64(dialMhz * 1_000_000), mode: "FT8",
+            dxCall: qsoStatus?.target ?? "", report: "", txMode: "FT8",
+            txEnabled: qsoStatus?.active ?? false,
+            transmitting: appState?.tx.isTransmitting ?? false, decoding: isRunning,
+            rxDf: df, txDf: df, deCall: s?.myCall ?? "", deGrid: s?.myGrid ?? "",
+            dxGrid: "", txWatchdog: false, subMode: "", fastMode: false,
+            specialOpMode: 0, freqTolerance: 0xFFFF_FFFF, trPeriod: 15,
+            configName: "Default", txMessage: qsoStatus?.txMessage ?? ""
+        )
+    }
+
+    private func broadcastUdpDecodes(_ decoded: [DecodedMessage]) {
+        guard udp.isEnabled, !decoded.isEmpty else { return }
+        let timeMs = UInt32(Int64(Date().timeIntervalSince1970 * 1000) % 86_400_000)
+        for m in decoded {
+            let text = m.rawText.isEmpty ? "\(m.callTo) \(m.callFrom) \(m.extra)" : m.rawText
+            udp.sendDecode(WsjtxCodec.Decode(
+                isNew: true, timeMs: timeMs, snr: Int32(m.snr), deltaTime: Double(m.timeSec),
+                deltaFreq: UInt32(max(0, Int(m.freqHz))), mode: "FT8", message: text,
+                lowConfidence: false, offAir: false
+            ))
+        }
+    }
+
+    private func broadcastUdpQso(_ record: QsoRecord) {
+        guard udp.isEnabled else { return }
+        let dialMhz = Double(record.freq) ?? (Double(bandToFreqMhz(record.band)) ?? 14.074)
+        let txFreqHz = UInt64(dialMhz * 1_000_000)
+            + UInt64(max(0, Int(appState?.waterfall.txFreqHz ?? 0)))
+        let q = WsjtxCodec.QsoLogged(
+            timeOff: .fromAdif(record.qsoDateOff, record.timeOff),
+            dxCall: record.call, dxGrid: record.gridsquare, txFreqHz: txFreqHz,
+            mode: record.mode, reportSent: record.rstSent, reportReceived: record.rstRcvd,
+            txPower: "", comments: record.comment, name: "",
+            timeOn: .fromAdif(record.qsoDate, record.timeOn),
+            operatorCall: record.stationCallsign, myCall: record.stationCallsign,
+            myGrid: record.myGridsquare, exchangeSent: "", exchangeReceived: "", propMode: ""
+        )
+        udp.sendQsoLogged(q, adif: Adif.export([record]))
+    }
+
+    private static var appVersion: String {
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"
     }
 }
 

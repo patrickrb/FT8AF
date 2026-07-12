@@ -440,6 +440,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "FT8AF needs microphone access to capture radio audio for FT8 decoding";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "FT8AF uses the local network to send WSJT-X UDP messages to companion apps like GridTracker and JTAlert";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -519,6 +520,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "FT8AF needs microphone access to capture radio audio for FT8 decoding";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "FT8AF uses the local network to send WSJT-X UDP messages to companion apps like GridTracker and JTAlert";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
