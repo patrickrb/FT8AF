@@ -37,6 +37,41 @@ import radio.ks3ckc.ft8af.ui.components.IntSlider
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 import radio.ks3ckc.ft8af.ui.components.SettingsRow
 
+// ALC target window bounds (0-255 normalized ALC scale). The low/high sliders
+// keep a [ALC_GAP]-unit gap between the two values; clampAlcLow/clampAlcHigh use
+// these both to bound each slider and to keep the coerceIn range non-empty when a
+// restored/corrupted config persists an out-of-order pair.
+private const val ALC_LOW_MIN = 10
+private const val ALC_LOW_MAX = 200
+private const val ALC_HIGH_MAX = 250
+private const val ALC_GAP = 10
+
+/**
+ * Clamp a desired ALC-target *low* value into [ALC_LOW_MIN]..[ALC_LOW_MAX], keeping
+ * it at least [ALC_GAP] below the current [high]. The upper bound is floored at
+ * [ALC_LOW_MIN] so the range never inverts: a corrupted/restored config with `high`
+ * below `ALC_LOW_MIN + ALC_GAP` would otherwise make `high - ALC_GAP` fall under
+ * [ALC_LOW_MIN] and crash `coerceIn` with an empty range. Byte-identical to the
+ * previous inline `coerceIn(ALC_LOW_MIN, minOf(ALC_LOW_MAX, high - ALC_GAP))`
+ * whenever that range is already valid (i.e. `high >= ALC_LOW_MIN + ALC_GAP`).
+ */
+internal fun clampAlcLow(desired: Int, high: Int): Int {
+    val upper = minOf(ALC_LOW_MAX, high - ALC_GAP).coerceAtLeast(ALC_LOW_MIN)
+    return desired.coerceIn(ALC_LOW_MIN, upper)
+}
+
+/**
+ * Clamp a desired ALC-target *high* value into (`low + ALC_GAP`)..[ALC_HIGH_MAX].
+ * The lower bound is capped at [ALC_HIGH_MAX] so the range never inverts when a
+ * corrupted/restored config persists a `low` above `ALC_HIGH_MAX - ALC_GAP`.
+ * Byte-identical to the previous inline `coerceIn(low + ALC_GAP, ALC_HIGH_MAX)`
+ * whenever that range is already valid (i.e. `low <= ALC_HIGH_MAX - ALC_GAP`).
+ */
+internal fun clampAlcHigh(desired: Int, low: Int): Int {
+    val lower = (low + ALC_GAP).coerceAtMost(ALC_HIGH_MAX)
+    return desired.coerceIn(lower, ALC_HIGH_MAX)
+}
+
 /**
  * Transmission settings: TX/RX split, watchdog, stop-after, TX protection
  * (auto-volume ALC + SWR halt), and auto-sequencing.
@@ -270,7 +305,7 @@ fun TransmissionSettings(
                             )
                             FT8AFIconButton(
                                 onClick = {
-                                    val clamped = (alcTargetLow - 5).coerceIn(10, minOf(200, alcTargetHigh - 10))
+                                    val clamped = clampAlcLow(alcTargetLow - 5, alcTargetHigh)
                                     alcTargetLow = clamped
                                     GeneralVariables.alcTargetLow = clamped
                                     mainViewModel.databaseOpr.writeConfig(
@@ -284,7 +319,7 @@ fun TransmissionSettings(
                             IntSlider(
                                 value = alcTargetLow,
                                 onValueChange = { v ->
-                                    val clamped = v.coerceIn(10, minOf(200, alcTargetHigh - 10))
+                                    val clamped = clampAlcLow(v, alcTargetHigh)
                                     alcTargetLow = clamped
                                     GeneralVariables.alcTargetLow = clamped
                                 },
@@ -300,7 +335,7 @@ fun TransmissionSettings(
                             )
                             FT8AFIconButton(
                                 onClick = {
-                                    val clamped = (alcTargetLow + 5).coerceIn(10, minOf(200, alcTargetHigh - 10))
+                                    val clamped = clampAlcLow(alcTargetLow + 5, alcTargetHigh)
                                     alcTargetLow = clamped
                                     GeneralVariables.alcTargetLow = clamped
                                     mainViewModel.databaseOpr.writeConfig(
@@ -327,7 +362,7 @@ fun TransmissionSettings(
                             )
                             FT8AFIconButton(
                                 onClick = {
-                                    val clamped = (alcTargetHigh - 5).coerceIn(alcTargetLow + 10, 250)
+                                    val clamped = clampAlcHigh(alcTargetHigh - 5, alcTargetLow)
                                     alcTargetHigh = clamped
                                     GeneralVariables.alcTargetHigh = clamped
                                     mainViewModel.databaseOpr.writeConfig(
@@ -341,7 +376,7 @@ fun TransmissionSettings(
                             IntSlider(
                                 value = alcTargetHigh,
                                 onValueChange = { v ->
-                                    val clamped = v.coerceIn(alcTargetLow + 10, 250)
+                                    val clamped = clampAlcHigh(v, alcTargetLow)
                                     alcTargetHigh = clamped
                                     GeneralVariables.alcTargetHigh = clamped
                                 },
@@ -357,7 +392,7 @@ fun TransmissionSettings(
                             )
                             FT8AFIconButton(
                                 onClick = {
-                                    val clamped = (alcTargetHigh + 5).coerceIn(alcTargetLow + 10, 250)
+                                    val clamped = clampAlcHigh(alcTargetHigh + 5, alcTargetLow)
                                     alcTargetHigh = clamped
                                     GeneralVariables.alcTargetHigh = clamped
                                     mainViewModel.databaseOpr.writeConfig(
