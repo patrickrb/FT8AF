@@ -364,7 +364,12 @@ pub fn parse_inbound(buf: &[u8]) -> Option<Inbound> {
         }
         T_REPLAY => Some(Inbound::Replay),
         T_HALT_TX => {
-            let auto_only = r.bool().unwrap_or(false);
+            // Reject a truncated packet rather than defaulting the auto-only flag: a
+            // malformed datagram must never trigger an unintended halt of an in-progress
+            // transmission when "Accept UDP requests" is enabled. A well-formed WSJT-X Halt
+            // always carries the bool; this mirrors the FreeText guard below and the
+            // Android/iOS codec ports, which reject the same truncation.
+            let auto_only = r.bool()?;
             Some(Inbound::HaltTx { auto_only })
         }
         T_FREE_TEXT => {
@@ -737,6 +742,16 @@ mod tests {
         );
 
         assert_eq!(parse_inbound(&begin(T_REPLAY).buf), Some(Inbound::Replay));
+    }
+
+    #[test]
+    fn parse_halt_missing_auto_only_flag_is_rejected() {
+        // A truncated Halt datagram (the trailing auto-only bool missing) must be rejected
+        // rather than defaulting to auto_only=false (a global halt) — otherwise a malformed
+        // or stray packet could stop an in-progress transmission when "Accept UDP requests"
+        // is on. A well-formed Halt still parses (see parse_halt_and_freetext_and_replay).
+        let w = begin(T_HALT_TX); // header only, no auto-only bool appended
+        assert_eq!(parse_inbound(&w.buf), None);
     }
 
     #[test]
