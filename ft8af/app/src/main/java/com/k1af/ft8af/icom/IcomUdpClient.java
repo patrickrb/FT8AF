@@ -30,8 +30,12 @@ public class IcomUdpClient {
     private boolean activated = false;
     private OnUdpEvents onUdpEvents = null;
     private final ExecutorService doReceiveThreadPool = Executors.newCachedThreadPool();
-    private final ExecutorService sendDataThreadPool = Executors.newCachedThreadPool();
-    private SendDataRunnable sendDataRunnable = new SendDataRunnable(this);
+    private ExecutorService sendDataThreadPool = Executors.newCachedThreadPool();
+    // Serializes the actual socket send across the pool's workers. The old code got this
+    // for free by reusing one shared Runnable (its `synchronized(this)`); now that each
+    // send has its own task, a shared lock keeps DatagramSocket.send (not documented
+    // thread-safe) one-at-a-time per client.
+    private final Object sendLock = new Object();
 
     public IcomUdpClient() {//Random local port
         localPort = -1;
@@ -45,10 +49,15 @@ public class IcomUdpClient {
         if (!activated) return;
 
         InetAddress address = InetAddress.getByName(ip);
-        sendDataRunnable.address = address;
-        sendDataRunnable.data = data;
-        sendDataRunnable.port = port;
-        sendDataThreadPool.execute(sendDataRunnable);
+        // Build a fresh task per call. A single shared SendDataRunnable reused across
+        // this cached pool let two overlapping sends (the ping/idle/are-you-there
+        // timers all fire on their own threads, plus CAT command sends) clobber each
+        // other's data/address/port. Because packets differ in length, a worker could
+        // read the old buffer but the new length in `new DatagramPacket(data,
+        // data.length, ...)` and throw IllegalArgumentException — uncaught on the pool
+        // thread, i.e. an app crash — or silently transmit the wrong bytes and desync
+        // the tracked sequence. A per-call immutable snapshot removes the shared state.
+        sendDataThreadPool.execute(new SendDataRunnable(this, data, address, port));
 //        new Thread(new Runnable() {
 //            @Override
 //            public void run() {
@@ -68,30 +77,37 @@ public class IcomUdpClient {
 //        }).start();
     }
 
-    private static class SendDataRunnable implements Runnable {
-        byte[] data;
-        int port;
-        InetAddress address;
-        IcomUdpClient client;
+    // Package-private (not private) so a unit test in this package can capture the
+    // per-call task and assert each keeps its own payload.
+    static class SendDataRunnable implements Runnable {
+        final byte[] data;
+        final int port;
+        final InetAddress address;
+        final IcomUdpClient client;
 
-        public SendDataRunnable(IcomUdpClient client) {
+        SendDataRunnable(IcomUdpClient client, byte[] data, InetAddress address, int port) {
             this.client = client;
+            this.data = data;
+            this.address = address;
+            this.port = port;
         }
 
         @Override
         public void run() {
             DatagramPacket packet = new DatagramPacket(data, data.length, address, port);
-            synchronized (this) {
+            synchronized (client.sendLock) {
+                // Snapshot the shared socket once: reading the field twice (null-check
+                // then send) could NPE if a concurrent disconnect nulls it in between. A
+                // closed socket still surfaces as an IOException, which is handled below.
+                DatagramSocket socket = client.sendSocket;
                 try {
-                    if (client.sendSocket != null) client.sendSocket.send(packet);
+                    if (socket != null) socket.send(packet);
 
                 } catch (IOException e) {
                     e.printStackTrace();
                     Log.e(TAG, "IComUdpClient: " + e.getMessage());
-                    if (client != null) {
-                        if (client.onUdpEvents != null) {
-                            client.onUdpEvents.OnUdpSendIOException(e);
-                        }
+                    if (client.onUdpEvents != null) {
+                        client.onUdpEvents.OnUdpSendIOException(e);
                     }
                 }
             }
@@ -257,6 +273,19 @@ public class IcomUdpClient {
     // receive loop, so DoReceiveRunnable's teardown can be asserted deterministically.
     void primeSendSocketForTest(DatagramSocket socket) {
         this.sendSocket = socket;
+    }
+
+    // Visible for tests: swap in a capturing executor so the per-call send tasks can be
+    // grabbed and asserted independent instead of run on the real cached pool. Rejects
+    // null (it would NPE the next sendData) and shuts down the executor being displaced
+    // so the default cached pool's worker threads don't leak across tests.
+    void setSendExecutorForTest(ExecutorService executor) {
+        java.util.Objects.requireNonNull(executor, "executor");
+        ExecutorService previous = this.sendDataThreadPool;
+        this.sendDataThreadPool = executor;
+        if (previous != null && previous != executor) {
+            previous.shutdownNow();
+        }
     }
 
 }
