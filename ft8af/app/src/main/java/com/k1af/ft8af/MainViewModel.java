@@ -79,6 +79,8 @@ import com.k1af.ft8af.ft8transmit.OnTransmitSuccess;
 import com.k1af.ft8af.ft8transmit.TuneMethod;
 import com.k1af.ft8af.html.LogHttpServer;
 import com.k1af.ft8af.icom.WifiRig;
+import com.k1af.ft8af.log.AdifFormat;
+import com.k1af.ft8af.log.AdifLogFile;
 import com.k1af.ft8af.log.QSLCallsignRecord;
 import com.k1af.ft8af.log.QSLRecord;
 import com.k1af.ft8af.log.SWLQsoList;
@@ -122,6 +124,8 @@ import com.k1af.ft8af.x6100.X6100Radio;
 
 import radio.ks3ckc.ft8af.UsbPermissionIntentsKt;
 import radio.ks3ckc.ft8af.pskreporter.PskReporterSender;
+import radio.ks3ckc.ft8af.wsjtx.WsjtxCodec;
+import radio.ks3ckc.ft8af.wsjtx.WsjtxUdpService;
 
 import java.io.File;
 import java.io.IOException;
@@ -325,6 +329,10 @@ public class MainViewModel extends ViewModel {
             // the recorded offsets belong to the old band's activity (issue #418).
             if (ft8TransmitSignal != null && !newWaveLength.equals(oldWaveLength)) {
                 ft8TransmitSignal.clearBandActivity();
+                // New band = new decode context: tell companion apps to wipe their
+                // band + forget our replay history.
+                WsjtxUdpService.INSTANCE.sendClear();
+                WsjtxUdpService.INSTANCE.clearReplayCache();
             }
 
             // The rig reported a band change (e.g. the operator turned the dial) —
@@ -744,6 +752,9 @@ public class MainViewModel extends ViewModel {
 
                 //upload decoded spots to PSKReporter
                 PskReporterSender.INSTANCE.enqueue(messages);
+
+                //broadcast decodes over the WSJT-X UDP interface
+                broadcastWsjtxDecodes(messages);
             }
         });
 
@@ -876,6 +887,9 @@ public class MainViewModel extends ViewModel {
                 // QSO-complete alert (opt-in). Fires once per logged contact.
                 dxAlertNotifier.notifyQsoComplete(qslRecord);
 
+                // broadcast the logged QSO over the WSJT-X UDP interface
+                broadcastWsjtxQso(qslRecord);
+
                 // record to third-party service; may take some time
                 new Thread(new Runnable() {
                     @Override
@@ -914,6 +928,9 @@ public class MainViewModel extends ViewModel {
         meterProtectionController = new MeterProtectionController();
         meterProtectionController.setTransmitSignal(ft8TransmitSignal);
         ft8TransmitSignal.setMeterProtectionController(meterProtectionController);
+
+        //bring up the WSJT-X UDP interface (status provider + inbound request handlers)
+        setupWsjtxUdp();
 
         //open HTTP SERVER
         httpServer = new LogHttpServer(this, LogHttpServer.DEFAULT_PORT);
@@ -1140,6 +1157,149 @@ public class MainViewModel extends ViewModel {
                 order,
                 message.extraInfo);
         ft8TransmitSignal.transmitNow();
+    }
+
+    // --- WSJT-X UDP interface -------------------------------------------------
+
+    /**
+     * Wire the WSJT-X UDP service to this ViewModel's state + transmit path, then
+     * (re)bind from the persisted settings. Called once after the transmit signal
+     * is created; the Settings screen calls {@link WsjtxUdpService#reload()}
+     * directly when the operator changes the options.
+     */
+    private void setupWsjtxUdp() {
+        WsjtxUdpService svc = WsjtxUdpService.INSTANCE;
+        svc.statusProvider = this::buildWsjtxStatus;
+        svc.onReply = this::handleWsjtxReply;
+        svc.onHaltTx = (autoOnly) -> {
+            if (ft8TransmitSignal != null) {
+                ft8TransmitSignal.setTransmitting(false);
+                ft8TransmitSignal.setActivated(false);
+            }
+        };
+        svc.onFreeText = this::handleWsjtxFreeText;
+        svc.onReplay = () -> { /* decodes are re-sent inside the service */ };
+        svc.reload();
+    }
+
+    /** Build a WSJT-X Status snapshot from current state (called ~1 Hz). */
+    private WsjtxCodec.Status buildWsjtxStatus() {
+        boolean transmitting = ft8TransmitSignal != null && ft8TransmitSignal.isTransmitting();
+        boolean txEnabled = ft8TransmitSignal != null && ft8TransmitSignal.isActivated();
+        boolean decoding = Boolean.TRUE.equals(mutableIsDecoding.getValue());
+        String myGrid = GeneralVariables.getMyMaidenheadGrid();
+        if (myGrid == null) myGrid = "";
+        String mode = ModeProfile.fromId(GeneralVariables.operatingMode).displayName;
+        int baseFreq = Math.max(0, (int) GeneralVariables.getBaseFrequency());
+        return new WsjtxCodec.Status(
+                GeneralVariables.band,       // dial frequency (Hz)
+                mode,
+                "",                           // dx call
+                "",                           // report
+                mode,                         // tx mode
+                txEnabled,
+                transmitting,
+                decoding,
+                baseFreq,                     // rx df
+                baseFreq,                     // tx df
+                GeneralVariables.myCallsign,  // de call
+                myGrid,                       // de grid
+                "",                           // dx grid
+                false,                        // tx watchdog
+                "",                           // sub mode
+                false,                        // fast mode
+                0,                            // special op mode
+                0xFFFFFFFF,                   // freq tolerance (u32 max)
+                15,                           // T/R period (s)
+                "Default",                    // config name
+                "");                          // tx message
+    }
+
+    /** Broadcast a slot's decodes as WSJT-X Decode messages. */
+    private void broadcastWsjtxDecodes(ArrayList<Ft8Message> messages) {
+        WsjtxUdpService svc = WsjtxUdpService.INSTANCE;
+        if (!svc.getEnabled()) {
+            return;
+        }
+        for (Ft8Message m : messages) {
+            String text = m.getMessageText();
+            if (text == null) {
+                text = "";
+            }
+            int timeMs = (int) (m.utcTime % 86_400_000L);
+            int snr = m.hasSnr() ? m.snr : 0;
+            int df = Math.max(0, (int) m.freq_hz);
+            String mode = ModeProfile.fromId(m.signalFormat).displayName;
+            svc.sendDecode(new WsjtxCodec.Decode(
+                    true, timeMs, snr, (double) m.time_sec, df, mode, text, false, false));
+        }
+    }
+
+    /** Broadcast a logged QSO as WSJT-X QSO-Logged + Logged-ADIF messages. */
+    private void broadcastWsjtxQso(QSLRecord r) {
+        WsjtxUdpService svc = WsjtxUdpService.INSTANCE;
+        if (!svc.getEnabled()) {
+            return;
+        }
+        long txFreq = r.getBandFreq() + Math.max(0, r.getWavFrequency());
+        WsjtxCodec.QsoLogged q = new WsjtxCodec.QsoLogged(
+                WsjtxCodec.DateTime.fromAdif(r.getQso_date_off(), r.getTime_off()),
+                nz(r.getToCallsign()),
+                nz(r.getToMaidenGrid()),
+                txFreq,
+                r.getMode() == null ? "FT8" : r.getMode(),
+                AdifFormat.formatReport(r.getSendReport()),
+                AdifFormat.formatReport(r.getReceivedReport()),
+                "",                            // tx power
+                nz(r.getComment()),
+                "",                            // name
+                WsjtxCodec.DateTime.fromAdif(r.getQso_date(), r.getTime_on()),
+                nz(r.getMyCallsign()),         // operator call
+                nz(r.getMyCallsign()),         // my call
+                nz(r.getMyMaidenGrid()),
+                "", "", "");                   // exch sent/recv, prop mode
+        String adif = AdifLogFile.fromQslRecord(r).build();
+        svc.sendQsoLogged(q, adif);
+    }
+
+    /** Inbound Reply: call the referenced station, preferring the real decode. */
+    private void handleWsjtxReply(String call, String grid, int snr) {
+        if (ft8TransmitSignal == null || call == null || call.isEmpty()) {
+            return;
+        }
+        Ft8Message target = findRecentDecode(call);
+        if (target == null) {
+            target = new Ft8Message("", call, grid == null ? "" : grid);
+        }
+        callStation(target);
+    }
+
+    /** Inbound Free Text: send the given text (only when the request asks to send). */
+    private void handleWsjtxFreeText(String text, boolean send) {
+        if (ft8TransmitSignal == null || !send || text == null) {
+            return;
+        }
+        ft8TransmitSignal.setFreeText(text);
+        ft8TransmitSignal.setTransmitFreeText(true);
+        ft8TransmitSignal.setActivated(true);
+        ft8TransmitSignal.transmitNow();
+    }
+
+    /** Most recent decode from {@code call} in the master list, or null. */
+    private Ft8Message findRecentDecode(String call) {
+        synchronized (ft8Messages) {
+            for (int i = ft8Messages.size() - 1; i >= 0; i--) {
+                Ft8Message m = ft8Messages.get(i);
+                if (m.callsignFrom != null && m.callsignFrom.equalsIgnoreCase(call)) {
+                    return m;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String nz(String s) {
+        return s == null ? "" : s;
     }
 
     /**
@@ -1925,6 +2085,7 @@ public class MainViewModel extends ViewModel {
         // the rig indefinitely. Tear it down here too.
         stopCatLivenessWatchdog();
         PskReporterSender.INSTANCE.stop();
+        WsjtxUdpService.INSTANCE.stop();
         getQTHThreadPool.shutdown();
         sendWaveDataThreadPool.shutdown();
     }

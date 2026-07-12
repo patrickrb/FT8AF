@@ -69,10 +69,35 @@ fun LoggingSettings(
     var qrzXmlPass by remember { mutableStateOf(GeneralVariables.qrzXmlPassword.orEmpty()) }
     var qrzApiKey by remember { mutableStateOf(GeneralVariables.qrzApiKey.orEmpty()) }
     var cloudlogAddress by remember { mutableStateOf(GeneralVariables.cloudlogServerAddress.orEmpty()) }
+    // WSJT-X UDP interface (GridTracker / JTAlert / N1MM / Log4OM interop).
+    var udpEnabled by remember { mutableStateOf(GeneralVariables.udpEnabled) }
+    var udpAccept by remember { mutableStateOf(GeneralVariables.udpAcceptRequests) }
+    var udpHost by remember { mutableStateOf(GeneralVariables.udpHost) }
+    var udpPort by remember { mutableStateOf(GeneralVariables.udpPort) }
 
     var showQrzLogbook by remember { mutableStateOf(false) }
     var showQrzCreds by remember { mutableStateOf(false) }
     var showCloudlog by remember { mutableStateOf(false) }
+    var showUdp by remember { mutableStateOf(false) }
+
+    // -- WSJT-X UDP server address dialog --
+    if (showUdp) {
+        WsjtxUdpDialog(
+            initialHost = udpHost,
+            initialPort = udpPort,
+            onDismiss = { showUdp = false },
+            onSave = { host, port ->
+                udpHost = host
+                udpPort = port
+                GeneralVariables.udpHost = host
+                GeneralVariables.udpPort = port
+                mainViewModel.databaseOpr.writeConfig("udp_host", host, null)
+                mainViewModel.databaseOpr.writeConfig("udp_port", port.toString(), null)
+                radio.ks3ckc.ft8af.wsjtx.WsjtxUdpService.reload()
+                showUdp = false
+            },
+        )
+    }
 
     // -- QRZ Logbook API Key Dialog (upload credential) --
     if (showQrzLogbook) {
@@ -236,6 +261,106 @@ fun LoggingSettings(
                         showChevron = true,
                         onClick = { showCloudlog = true },
                     )
+                }
+            }
+        }
+
+        SettingsSection(title = "WSJT-X UDP") {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    SettingsRow(
+                        label = "Enable UDP broadcast",
+                        description = "Broadcast decodes, status and logged QSOs to companion apps " +
+                            "(GridTracker, JTAlert, N1MM, Log4OM).",
+                        toggle = udpEnabled,
+                        onToggleChange = { checked ->
+                            udpEnabled = checked
+                            GeneralVariables.udpEnabled = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "udp_enabled", if (checked) "1" else "0", null,
+                            )
+                            radio.ks3ckc.ft8af.wsjtx.WsjtxUdpService.reload()
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = "Server address",
+                        description = "Destination host and port for outgoing datagrams.",
+                        value = "$udpHost:$udpPort",
+                        showChevron = true,
+                        onClick = { showUdp = true },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = "Accept UDP requests",
+                        description = "Let companion apps reply to a call, halt TX, or send free text.",
+                        toggle = udpAccept,
+                        onToggleChange = { checked ->
+                            udpAccept = checked
+                            GeneralVariables.udpAcceptRequests = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "udp_accept_requests", if (checked) "1" else "0", null,
+                            )
+                            radio.ks3ckc.ft8af.wsjtx.WsjtxUdpService.reload()
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Dialog for the WSJT-X UDP server address (host + port). Mirrors the other
+ * connection dialogs in this screen; validation keeps the port in 1..65535.
+ */
+@Composable
+private fun WsjtxUdpDialog(
+    initialHost: String,
+    initialPort: Int,
+    onDismiss: () -> Unit,
+    onSave: (host: String, port: Int) -> Unit,
+) {
+    var host by remember { mutableStateOf(initialHost) }
+    var portText by remember { mutableStateOf(initialPort.toString()) }
+    val port = portText.toIntOrNull()
+    val valid = host.isNotBlank() && port != null && port in 1..65535
+
+    Dialog(onDismissRequest = onDismiss) {
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "WSJT-X UDP server",
+                    style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold),
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = host,
+                    onValueChange = { host = it.trim() },
+                    label = { Text("Host") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = portText,
+                    onValueChange = { portText = it.filter { c -> c.isDigit() }.take(5) },
+                    label = { Text("Port") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TextButton(
+                        onClick = { if (valid) onSave(host.trim(), port!!) },
+                        enabled = valid,
+                    ) { Text("Save") }
                 }
             }
         }

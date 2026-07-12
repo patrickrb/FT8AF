@@ -2986,6 +2986,27 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("enableAdifExport")) {//Running ft8af_log.adi export
                     GeneralVariables.enableAdifExport = result.equals("1");
                 }
+                // WSJT-X UDP interface
+                if (name.equalsIgnoreCase("udp_enabled")) {
+                    GeneralVariables.udpEnabled = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("udp_host")) {
+                    if (result != null && !result.isEmpty()) GeneralVariables.udpHost = result;
+                }
+                if (name.equalsIgnoreCase("udp_port")) {
+                    // result (cursor.getString) can be null; the other udp_* keys already
+                    // null-check, and Integer.parseInt(null.trim()) would NPE config hydration.
+                    if (result != null) {
+                        try {
+                            int p = Integer.parseInt(result.trim());
+                            if (p > 0 && p <= 65535) GeneralVariables.udpPort = p;
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
+                if (name.equalsIgnoreCase("udp_accept_requests")) {
+                    GeneralVariables.udpAcceptRequests = result.equals("1");
+                }
                 if (name.equalsIgnoreCase("qrzXmlUsername")) {
                     GeneralVariables.qrzXmlUsername = result;
                 }
