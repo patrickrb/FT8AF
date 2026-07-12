@@ -246,8 +246,12 @@ public class XieGu6100Rig extends BaseRig {
             //if ft8cns mode, transmit a91 data packet
             if (GeneralVariables.instructionSet == InstructionSet.XIEGU_6100_FT8CNS) {
                 //Log.e(TAG,"generate A91");
-                getConnector().sendFt8A91(GenerateFT8.generateA91(message, true)
-                        , GeneralVariables.getBaseFrequency());
+                byte[] a91 = GenerateFT8.generateA91(message, true);
+                if (a91 == null) {//invalid callsign: generateA91 aborted (toast already shown)
+                    setPTT(false);
+                    return;
+                }
+                getConnector().sendFt8A91(a91, GeneralVariables.getBaseFrequency());
             } else {//otherwise transmit audio data normally
                 float[] data = GenerateFT8.generateFt8(message, GeneralVariables.getBaseFrequency()
                         , 12000);//ICOM rig audio sample rate is 12000
