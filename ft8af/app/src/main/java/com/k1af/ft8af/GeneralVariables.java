@@ -43,6 +43,12 @@ public class GeneralVariables {
     public static boolean enableQRZ = false;//Whether QRZ auto-sync is enabled
     public static boolean enablePskReporter = true;//Whether PSKReporter spot upload is enabled
     public static boolean enableAdifExport = true;//Append each logged QSO to a running ft8af_log.adi (real-time ADIF mirror for backup + desktop-logger import)
+    // WSJT-X UDP interface (issue: interop with GridTracker/JTAlert/N1MM/Log4OM).
+    // Off by default; persisted as config keys udp_enabled/udp_host/udp_port/udp_accept_requests.
+    public static boolean udpEnabled = false;//Whether the WSJT-X UDP broadcast is enabled
+    public static String udpHost = "127.0.0.1";//WSJT-X UDP server address (unicast/broadcast/multicast)
+    public static int udpPort = 2237;//WSJT-X UDP server port (WSJT-X default 2237)
+    public static boolean udpAcceptRequests = false;//Act on inbound Reply/Halt/Free-Text/Replay requests
     // Dark feature flag for issue #437 (auto per-location Wavelog station profiles).
     // Default false and NOT branched into any live upload path yet — this increment
     // only lands the pure LocationSignature/resolver/create_station/cache foundation.
