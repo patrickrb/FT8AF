@@ -108,7 +108,9 @@ public class FlexRadio {
     private OnMessageListener onMessageListener;//Message event trigger
     private OnStatusListener onStatusListener;//Status event trigger
     //*****************************************************************
-    private AudioTrack audioTrack = null;
+    // volatile: written by openAudio/closeAudio on the connect/disconnect thread,
+    // read by the UDP stream thread in writeAudioToTrack.
+    private volatile AudioTrack audioTrack = null;
 
     public FlexRadio() {
         updateLastSeen();
@@ -274,10 +276,46 @@ public class FlexRadio {
         if (onReceiveStreamData != null) {
             onReceiveStreamData.onReceiveAudio(data);
         }
-        if (audioTrack != null) {//If audio playback is already open, write audio stream data
-            float[] sound = getFloatFromBytes(data);//Length is 256 floats
-            audioTrack.write(sound, 0, sound.length, AudioTrack.WRITE_NON_BLOCKING);
+        writeAudio(data);
+    }
+
+    /**
+     * Write one DAX audio frame to the playback track, tolerating the
+     * disconnect-while-streaming race. Audio frames arrive on the UDP stream
+     * read thread (the {@link RadioUdpClient} receive worker, whose loop
+     * catches only {@code IOException}), while {@link #closeAudio()} releases
+     * and nulls {@link #audioTrack} from the disconnect thread — and
+     * {@code FlexConnector.disconnect()} calls {@code closeAudio()} <em>before</em>
+     * it stops the stream port, so the receive thread is still live when the
+     * track is torn down. Between the null-check and the write the track can be
+     * released, making {@link AudioTrack#write} throw an
+     * {@link IllegalStateException}; swallow it here rather than let it escape
+     * and crash the whole app. Package-private so a unit test can drive it
+     * without constructing a real {@link AudioTrack}.
+     */
+    void writeAudio(byte[] data) {
+        try {
+            writeAudioToTrack(data);
+        } catch (IllegalStateException e) {
+            // audioTrack was released concurrently (disconnect during streaming);
+            // drop this frame rather than crash the receive thread. This is an
+            // expected, handled race and multiple frames can arrive between
+            // release() and audioTrack=null, so log at DEBUG to avoid ERROR-level
+            // per-frame spam on every disconnect.
+            Log.d(TAG, "writeAudio: track released mid-stream: " + e.getMessage());
         }
+    }
+
+    /**
+     * Seam performing the actual conversion + write on a single volatile
+     * snapshot of {@link #audioTrack}. A no-op when audio is closed (snapshot is
+     * null). Overridden in tests to simulate a track released mid-write.
+     */
+    void writeAudioToTrack(byte[] data) {
+        AudioTrack track = audioTrack;// snapshot the volatile field once
+        if (track == null) return;// audio not open (or already closed)
+        float[] sound = getFloatFromBytes(data);//Length is 256 floats
+        track.write(sound, 0, sound.length, AudioTrack.WRITE_NON_BLOCKING);
     }
 
     /**
