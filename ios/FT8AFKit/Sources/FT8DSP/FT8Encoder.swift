@@ -49,12 +49,27 @@ public enum FT8Encoder {
         return a91
     }
 
+    /// Number of audio samples the GFSK synthesis writes for `nTones` tones at
+    /// `sampleRate`: the *per-symbol*-rounded count the C `synth_gfsk` actually
+    /// produces — `nTones * round(sampleRate * symbolPeriod)` — NOT the
+    /// *total*-rounded `round(nTones * symbolPeriod * sampleRate)`. The two agree
+    /// only when `sampleRate * symbolPeriod` is integral (true for the 12 kHz
+    /// default: `12000 * 0.16 = 1920`) and diverge otherwise, so this is the
+    /// single source of truth shared by both the TX buffer allocation in
+    /// `generateFT8` and the length guard in `synthGFSK`. Keeping them in lockstep
+    /// prevents the allocation from underrunning the write count — which tripped
+    /// `synthGFSK`'s `precondition` at non-integral rates (the iOS twin of the
+    /// Android GenerateFT8 fix and desktop `encode.rs::waveform_len`).
+    public static func waveformSampleCount(nTones: Int, sampleRate: Int32) -> Int {
+        let nSpsym = Int(0.5 + Double(sampleRate) * Double(FT8.symbolPeriod))
+        return nTones * nSpsym
+    }
+
     /// Render `tones` as a GFSK waveform into `signal[offset...]`.
     /// Traps (precondition) if `signal` is too short — mirrors the encode.rs assert.
     public static func synthGFSK(tones: [UInt8], f0: Float, sampleRate: Int32,
                                  into signal: inout [Float], offset: Int) {
-        let nSpsym = Int(0.5 + Double(sampleRate) * Double(FT8.symbolPeriod))
-        let nWave = tones.count * nSpsym
+        let nWave = waveformSampleCount(nTones: tones.count, sampleRate: sampleRate)
         // A negative offset would still satisfy the upper-bound check below yet
         // make the C write before signal[0] (OOB); and offset is handed to C as
         // an `int`, so it must fit Int32. The desktop encode.rs sidesteps both by
@@ -80,7 +95,11 @@ public enum FT8Encoder {
                                    sampleRate: Int32 = FT8.sampleRate) -> [Float]? {
         guard let payload = pack77(text) else { return nil }
         let tones = encodeTones(payload)
-        let numSamples = Int(0.5 + Float(FT8.nn) * FT8.symbolPeriod * Float(sampleRate))
+        // Size the buffer with the SAME per-symbol rounding synthGFSK writes, so
+        // it can never underrun the write count (and trip synthGFSK's length
+        // precondition) at a non-integral sample rate. Byte-identical to the old
+        // total-rounded size at the 12 kHz default.
+        let numSamples = waveformSampleCount(nTones: tones.count, sampleRate: sampleRate)
         var signal = [Float](repeating: 0, count: numSamples)
         synthGFSK(tones: tones, f0: baseFreqHz, sampleRate: sampleRate, into: &signal, offset: 0)
         return signal
