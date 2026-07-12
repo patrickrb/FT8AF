@@ -81,6 +81,36 @@ public class IcomCommandTest {
     }
 
     @Test
+    public void getFrequency_decodesGigahertzDigit() {
+        // 23cm band: 1296.000 MHz = 1_296_000_000 Hz. The 1 GHz digit lives in the
+        // high nibble of the top BCD byte (data[4]). Little-endian byte order:
+        //   data[0]=00 data[1]=00 data[2]=00 data[3]=0x96 (1MHz=6,10MHz=9)
+        //   data[4]=0x12 (100MHz=2, 1GHz=1)
+        byte[] frame = {(byte) 0xFE, (byte) 0xFE, (byte) CTRL, (byte) RIG,
+                (byte) 0x03,
+                (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x96, (byte) 0x12,
+                (byte) 0xFD};
+        IcomCommand cmd = IcomCommand.getCommand(CTRL, RIG, frame);
+        assertThat(cmd).isNotNull();
+        assertThat(cmd.getFrequency(false)).isEqualTo(1_296_000_000L);
+    }
+
+    @Test
+    public void getFrequency_gigahertzDigitDoesNotOverflowInt() {
+        // A 1 GHz digit of 9 contributes 9_000_000_000 Hz, which overflows a 32-bit
+        // int. The decode must accumulate in long arithmetic so the value is exact
+        // (int overflow would wrap to a negative/garbage frequency).
+        //   data[4]=0x90 (100MHz=0, 1GHz=9), all lower digits 0.
+        byte[] frame = {(byte) 0xFE, (byte) 0xFE, (byte) CTRL, (byte) RIG,
+                (byte) 0x03,
+                (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x90,
+                (byte) 0xFD};
+        IcomCommand cmd = IcomCommand.getCommand(CTRL, RIG, frame);
+        assertThat(cmd).isNotNull();
+        assertThat(cmd.getFrequency(false)).isEqualTo(9_000_000_000L);
+    }
+
+    @Test
     public void getFrequency_missingDataSectionReturnsMinusOne() {
         // A short/garbled frame that matches the preamble and cmd 03 but carries
         // no data payload: FE FE E0 A4 03 FD. getData(false) has nothing after the
