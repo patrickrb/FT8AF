@@ -286,6 +286,19 @@ public class LogFragment extends Fragment {
     @Override
     public boolean onContextItemSelected(@NonNull MenuItem item) {
         int position = (Integer) item.getActionView().getTag();
+        // The tag holds the row's adapter position captured at long-press time
+        // (LogQSLItemHolder#onCreateContextMenu). By the time the user taps a menu
+        // item that position can be stale: the row may have detached
+        // (getAdapterPosition() == RecyclerView.NO_POSITION == -1) or the backing
+        // list may have shrunk under a refresh (web import / notifyDataSetChanged).
+        // Indexing the adapter with it would throw IndexOutOfBoundsException on the
+        // main thread, so drop the stale action instead of crashing.
+        int itemCount = mainViewModel.logListShowCallsign
+                ? logCallsignAdapter.getItemCount()
+                : logQSLAdapter.getItemCount();
+        if (!isContextPositionInRange(position, itemCount)) {
+            return super.onContextItemSelected(item);
+        }
         if (!mainViewModel.logListShowCallsign) {
             switch (item.getItemId()) {
                 case 0:
@@ -324,6 +337,23 @@ public class LogFragment extends Fragment {
         }
 
         return super.onContextItemSelected(item);
+    }
+
+    /**
+     * A context-menu action carries the row's adapter position captured at
+     * long-press time. That index is only safe to use against the currently
+     * displayed adapter while it remains in range; a detached row yields
+     * {@link RecyclerView#NO_POSITION} (-1) and a list that shrank under a
+     * refresh leaves the captured index past the end. Extracted so the guard
+     * that keeps {@link #onContextItemSelected(MenuItem)} from indexing out of
+     * bounds on the main thread can be unit tested.
+     *
+     * @param position  adapter position captured when the context menu was built
+     * @param itemCount current item count of the visible adapter
+     * @return whether {@code position} can be safely used to index the adapter
+     */
+    static boolean isContextPositionInRange(int position, int itemCount) {
+        return position >= 0 && position < itemCount;
     }
 
 //    private boolean itemIsOnScreen(View view) {
