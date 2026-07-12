@@ -102,8 +102,12 @@ public abstract class WifiRig {
             writeAudioToTrack(audioData);
         } catch (IllegalStateException e) {
             // closeAudio() released the track on another thread between the null-check
-            // and the write (disconnect while RX audio was still streaming).
-            Log.w(TAG, "Dropped RX audio chunk: AudioTrack released mid-write");
+            // and the write (disconnect while RX audio was still streaming). Log the
+            // throwable for diagnosability. We deliberately do NOT null audioTrack here:
+            // closeAudio() already nulls it on the disconnect thread, and clearing it
+            // from the RX worker would race a reconnect's fresh AudioTrack and silently
+            // clobber it.
+            Log.w(TAG, "Dropped RX audio chunk: AudioTrack released mid-write", e);
         }
     }
 
