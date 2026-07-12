@@ -1,3 +1,4 @@
+import FT8Engine
 import SwiftUI
 
 /// Bottom sheet showing station detail when a decode row is tapped.

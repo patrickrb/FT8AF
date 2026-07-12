@@ -1,3 +1,4 @@
+import FT8Engine
 import SwiftUI
 
 /// Mini equirectangular map showing the great circle path between two grids.
