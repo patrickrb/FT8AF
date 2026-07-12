@@ -434,8 +434,11 @@ final class LiveEngine {
     /// Wire the UDP service's inbound handlers to the transmit path, apply the
     /// current settings, and start the periodic Status/Heartbeat loop.
     private func setupUdp(appState: AppState) {
-        udp.onReply = { [weak self] call, grid, snr in
+        udp.onReply = { [weak self] call, grid, snr, deltaFreq in
             guard let self, let appState = self.appState else { return }
+            // Honor the requested audio frequency: answer on the tone the companion asked
+            // for, not whatever the current TX frequency happens to be.
+            if deltaFreq > 0 { appState.waterfall.txFreqHz = Float(deltaFreq) }
             let msg = DecodeMessage(
                 utcTime: Self.utcTimeString(from: Int64(Date().timeIntervalSince1970 * 1000)),
                 callFrom: call, callTo: "", snr: Int(snr),

@@ -171,12 +171,12 @@ final class WsjtxCodecTests: XCTestCase {
         var len = UInt32(b.count).bigEndian; withUnsafeBytes(of: &len) { d.append(contentsOf: $0) }
         d.append(contentsOf: b)
     }
-    private func makeReply(_ message: String, _ snr: Int32) -> Data {
+    private func makeReply(_ message: String, _ snr: Int32, deltaFreq: UInt32 = 1500) -> Data {
         var d = beginInbound(WsjtxCodec.tReply)
         var time = UInt32(47_000_000).bigEndian; withUnsafeBytes(of: &time) { d.append(contentsOf: $0) }
         var sn = UInt32(bitPattern: snr).bigEndian; withUnsafeBytes(of: &sn) { d.append(contentsOf: $0) }
         var dt = Double(0.1).bitPattern.bigEndian; withUnsafeBytes(of: &dt) { d.append(contentsOf: $0) }
-        var df = UInt32(1500).bigEndian; withUnsafeBytes(of: &df) { d.append(contentsOf: $0) }
+        var df = deltaFreq.bigEndian; withUnsafeBytes(of: &df) { d.append(contentsOf: $0) }
         putStr(&d, "FT8"); putStr(&d, message)
         d.append(0); d.append(0) // low conf + modifiers
         return d
@@ -185,25 +185,33 @@ final class WsjtxCodecTests: XCTestCase {
     func testParseReplyPlainCq() {
         XCTAssertEqual(
             WsjtxCodec.parseInbound(makeReply("CQ K1ABC FN42", -3)),
-            .reply(call: "K1ABC", grid: "FN42", snr: -3)
+            .reply(call: "K1ABC", grid: "FN42", snr: -3, deltaFreq: 1500)
         )
     }
 
     func testParseReplyCqWithDirective() {
         XCTAssertEqual(
             WsjtxCodec.parseInbound(makeReply("CQ DX K1ABC FN42", -3)),
-            .reply(call: "K1ABC", grid: "FN42", snr: -3)
+            .reply(call: "K1ABC", grid: "FN42", snr: -3, deltaFreq: 1500)
         )
         XCTAssertEqual(
             WsjtxCodec.parseInbound(makeReply("CQ POTA W1AW/4 EM70", 5)),
-            .reply(call: "W1AW/4", grid: "EM70", snr: 5)
+            .reply(call: "W1AW/4", grid: "EM70", snr: 5, deltaFreq: 1500)
         )
     }
 
     func testParseReplyNonCqCallsSender() {
         XCTAssertEqual(
             WsjtxCodec.parseInbound(makeReply("K0XYZ K1ABC -12", -12)),
-            .reply(call: "K1ABC", grid: "", snr: -12)
+            .reply(call: "K1ABC", grid: "", snr: -12, deltaFreq: 1500)
+        )
+    }
+
+    func testParseReplyCapturesRequestedDeltaFreq() {
+        // The df field must survive to the caller so it can answer on the requested tone.
+        XCTAssertEqual(
+            WsjtxCodec.parseInbound(makeReply("CQ K1ABC FN42", -3, deltaFreq: 2100)),
+            .reply(call: "K1ABC", grid: "FN42", snr: -3, deltaFreq: 2100)
         )
     }
 
@@ -215,6 +223,18 @@ final class WsjtxCodecTests: XCTestCase {
         XCTAssertEqual(WsjtxCodec.parseInbound(free), .freeText(text: "TEST DE FT8AF", send: true))
 
         XCTAssertEqual(WsjtxCodec.parseInbound(beginInbound(WsjtxCodec.tReplay)), .replay)
+    }
+
+    func testParseHaltTxMissingBoolIsRejected() {
+        // Truncated HaltTx (no autoOnly byte) must be rejected, not defaulted to false.
+        XCTAssertNil(WsjtxCodec.parseInbound(beginInbound(WsjtxCodec.tHaltTx)))
+    }
+
+    func testParseFreeTextMissingSendFlagIsRejected() {
+        // Truncated Free-Text (text present, send byte missing) must be rejected, not
+        // defaulted to send=true — a malformed packet must never trigger a transmit.
+        var free = beginInbound(WsjtxCodec.tFreeText); putStr(&free, "HELLO")
+        XCTAssertNil(WsjtxCodec.parseInbound(free))
     }
 
     func testParseRejectsBadAndOutboundOnly() {

@@ -14,7 +14,9 @@ import Foundation
 /// `WsjtxUdpService` owns the socket.
 ///
 /// Wire primitives (all big-endian): u32/u64/i32/i64/f64, bool(1 byte); string =
-/// u32 byte-length (0xFFFFFFFF = null) then UTF-8 bytes (empty = length 0);
+/// u32 byte-length then UTF-8 bytes (empty = length 0). The 0xFFFFFFFF "null"
+/// length is decoded as the empty string ("") — the reader does not preserve a
+/// null/empty distinction, since nothing here needs it;
 /// datetime (UTC) = i64 Julian day, u32 ms-since-midnight, u8=1. Every datagram:
 /// u32 magic 0xADBCCBDA, u32 schema, u32 type, string id, then type fields.
 public enum WsjtxCodec {
@@ -262,7 +264,10 @@ public enum WsjtxCodec {
     // MARK: - inbound
 
     public enum Inbound: Equatable {
-        case reply(call: String, grid: String, snr: Int32)
+        /// A Reply request. `deltaFreq` is the audio frequency (Hz) the companion asked
+        /// us to answer on — the caller should honor it so we key up on the requested
+        /// tone rather than whatever the current TX frequency happens to be.
+        case reply(call: String, grid: String, snr: Int32, deltaFreq: UInt32)
         case replay
         case haltTx(autoOnly: Bool)
         case freeText(text: String, send: Bool)
@@ -306,21 +311,26 @@ public enum WsjtxCodec {
         guard r.string() != nil else { return nil } // id
         switch type {
         case tReply:
-            guard r.u32() != nil else { return nil }       // time
+            guard r.u32() != nil else { return nil }        // time
             guard let snr = r.i32() else { return nil }
             guard r.f64() != nil else { return nil }        // dt
-            guard r.u32() != nil else { return nil }        // df
+            guard let deltaFreq = r.u32() else { return nil } // df: the requested audio freq
             guard r.string() != nil else { return nil }     // mode
             guard let message = r.string() else { return nil }
             guard let target = parseReplyTarget(message) else { return nil }
-            return .reply(call: target.0, grid: target.1, snr: snr)
+            return .reply(call: target.0, grid: target.1, snr: snr, deltaFreq: deltaFreq)
         case tReplay:
             return .replay
         case tHaltTx:
-            return .haltTx(autoOnly: r.bool() ?? false)
+            // Reject a truncated packet rather than defaulting the bool: a malformed
+            // datagram must not trigger an unintended halt.
+            guard let autoOnly = r.bool() else { return nil }
+            return .haltTx(autoOnly: autoOnly)
         case tFreeText:
             guard let text = r.string() else { return nil }
-            return .freeText(text: text, send: r.bool() ?? true)
+            // Likewise: a missing send flag must not default to true and transmit.
+            guard let send = r.bool() else { return nil }
+            return .freeText(text: text, send: send)
         default:
             return nil
         }
