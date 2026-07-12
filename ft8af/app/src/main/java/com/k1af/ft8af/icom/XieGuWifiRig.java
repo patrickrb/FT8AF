@@ -5,8 +5,6 @@ package com.k1af.ft8af.icom;
  * @date 2023-08-27
  */
 
-import android.media.AudioTrack;
-
 import com.k1af.ft8af.GeneralVariables;
 import com.k1af.ft8af.R;
 import com.k1af.ft8af.icom.IcomUdpBase.IcomUdpStyle;
@@ -45,10 +43,7 @@ public class XieGuWifiRig extends WifiRig{
                 if (onDataEvents!=null){
                     onDataEvents.onReceivedWaveData(audioData);
                 }
-                if (audioTrack!=null){
-                        audioTrack.write(audioData, 0, audioData.length
-                                , AudioTrack.WRITE_NON_BLOCKING);
-                }
+                writeAudio(audioData);//Guards against a concurrent closeAudio() release
             }
 
             @Override
