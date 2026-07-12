@@ -68,6 +68,19 @@ public class LogFragment extends Fragment {
     private ShareLogsProgressDialog dialog = null;// Share log generation dialog
 
 
+    /**
+     * Whether a swipe callback may act on {@code position}. Swipe callbacks fire
+     * asynchronously — the END-delete path waits on a confirmation dialog — so by the time
+     * one runs the row may have detached ({@link RecyclerView#NO_POSITION}) or the backing
+     * list may have shrunk below {@code position}. Acting on such a position deletes/toggles
+     * the wrong record, throws IndexOutOfBounds in {@code getRecord()}, or desyncs the
+     * RecyclerView via an out-of-range {@code notifyItem*()}. Extracted (and package-private)
+     * so it can be unit-tested without a RecyclerView.
+     */
+    static boolean isSwipePositionActionable(int position, int itemCount) {
+        return position >= 0 && position < itemCount;
+    }
+
     public LogFragment() {
         // Required empty public constructor
     }
@@ -404,10 +417,15 @@ public class LogFragment extends Fragment {
                             , new DialogInterface.OnClickListener() {
                                 @Override
                                 public void onClick(DialogInterface dialogInterface, int i) {
-                                    // The holder may have detached or the list refreshed while the
-                                    // dialog was open, so getAdapterPosition() can now be NO_POSITION.
+                                    // This fires asynchronously after the confirm dialog, so the
+                                    // holder may have detached (NO_POSITION) or the list may have
+                                    // shrunk below `position` while the dialog was open. Acting on
+                                    // such a position would delete the wrong record or fire
+                                    // notifyItemRemoved() with an out-of-range index (RecyclerView
+                                    // inconsistency). Resync the whole list instead.
                                     int position = viewHolder.getAdapterPosition();
-                                    if (position == RecyclerView.NO_POSITION) {
+                                    if (!isSwipePositionActionable(position, logQSLAdapter.getItemCount())) {
+                                        logQSLAdapter.notifyDataSetChanged();
                                         return;
                                     }
                                     logQSLAdapter.deleteRecord(position);// Delete log entry
@@ -431,8 +449,13 @@ public class LogFragment extends Fragment {
                 }
 
                 if (direction == ItemTouchHelper.START) {
+                    // Guard the full valid range, not just NO_POSITION: if the backing list
+                    // shrank between the swipe and this callback, getRecord(position) would
+                    // throw IndexOutOfBounds and notifyItemChanged() would desync the
+                    // RecyclerView. Resync via notifyDataSetChanged() when out of range.
                     int position = viewHolder.getAdapterPosition();
-                    if (position == RecyclerView.NO_POSITION) {
+                    if (!isSwipePositionActionable(position, logQSLAdapter.getItemCount())) {
+                        logQSLAdapter.notifyDataSetChanged();
                         return;
                     }
                     logQSLAdapter.setRecordIsQSL(position, !logQSLAdapter.getRecord(position).isQSL);
