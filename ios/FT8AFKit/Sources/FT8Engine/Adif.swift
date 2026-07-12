@@ -82,7 +82,13 @@ public enum Adif {
 
             // name:len[:type]
             let parts = tag.split(separator: ":", omittingEmptySubsequences: false)
-            guard parts.count >= 2, let len = Int(parts[1]), len >= 0, i + len <= n else {
+            // `len` comes from an untrusted length prefix, so compare against the
+            // remaining byte count as `len <= n - i` rather than `i + len <= n`:
+            // the latter traps on 64-bit signed overflow for a length near Int.max
+            // (crashing the whole app on import of a corrupt/hostile .adi) before
+            // the bound is even checked. `i <= n` always holds here (i = close + 1,
+            // close < n), so `n - i` never underflows.
+            guard parts.count >= 2, let len = Int(parts[1]), len >= 0, len <= n - i else {
                 continue // skip a malformed/over-long field rather than mis-read
             }
             let name = parts[0].lowercased()

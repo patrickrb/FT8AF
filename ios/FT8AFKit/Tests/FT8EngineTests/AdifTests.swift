@@ -144,4 +144,18 @@ final class AdifTests: XCTestCase {
         XCTAssertEqual(parsed[0].call, "K1ABC")
         XCTAssertEqual(parsed[0].comment, "")
     }
+
+    func testParseSkipsHugeFieldLengthWithoutOverflowTrap() {
+        // A field length near Int.max fits in Int (so it parses) but is far longer
+        // than the remaining bytes. The over-long guard must reject it WITHOUT
+        // evaluating `i + len` (which would trap on 64-bit signed overflow and
+        // crash the whole app on import of a corrupt/hostile .adi). The record's
+        // valid CALL is still parsed; the huge field is skipped like any other
+        // over-long field.
+        let huge = String(Int.max) // 9223372036854775807
+        let parsed = Adif.parse("<eoh>\n<call:5>K1ABC <comment:\(huge)>x <eor>")
+        XCTAssertEqual(parsed.count, 1)
+        XCTAssertEqual(parsed[0].call, "K1ABC")
+        XCTAssertEqual(parsed[0].comment, "")
+    }
 }
