@@ -18,5 +18,6 @@ pub mod os_location;
 pub mod qso;
 pub mod rig;
 pub mod timesync;
+pub mod udp;
 pub mod util;
 pub mod wf;

@@ -77,6 +77,17 @@ fn wf_boundary_row(corrected_now_ms: i64, last_slot: &mut i64) -> bool {
     }
 }
 
+/// The on-air text of a decode: the raw decoded line if we have it, else a
+/// reconstruction from the parsed fields. Shared by the UI publish and the
+/// WSJT-X UDP Decode broadcast so both show identical message text.
+fn decode_text(m: &DecodedMessage) -> String {
+    if m.raw_text.is_empty() {
+        format!("{} {} {}", m.call_to, m.call_from, m.extra)
+    } else {
+        m.raw_text.clone()
+    }
+}
+
 // --- messages crossing the channel boundary --------------------------------
 
 #[derive(Debug, Clone, Deserialize)]
@@ -118,6 +129,11 @@ pub enum EngineCommand {
     ResyncTime,
     /// Apply new live-waterfall FFT parameters (developer knobs, issue #428).
     SetWaterfallConfig(WfConfig),
+    /// Apply new WSJT-X UDP settings (enable/host/port/accept-requests). Rebinds
+    /// the socket + listener live so the Settings screen takes effect at once.
+    SetUdpConfig(crate::udp::UdpConfig),
+    /// Re-broadcast this session's decodes over UDP (inbound WSJT-X Replay).
+    UdpReplay,
     Shutdown,
 }
 
@@ -288,6 +304,10 @@ struct Engine {
     // live waterfall FFT (plan + window table + floor state; rebuilt on config change)
     wf: WfProcessor,
     last_wf_slot: i64, // last cycle slot marked on the live waterfall (rx-corrected)
+    /// WSJT-X UDP interface (outbound broadcast + inbound request listener).
+    udp: crate::udp::UdpService,
+    /// UTC ms of the last UDP Heartbeat sent (rate-limits it to ~15 s).
+    last_udp_heartbeat_ms: i64,
 }
 
 impl Engine {
@@ -381,11 +401,29 @@ impl Engine {
             tx_parity: None,
             clock_offset_ms: saved_offset.unwrap_or(0),
             time_synced: saved_offset.is_some(),
+            udp: crate::udp::UdpService::new(cmd_tx.clone()),
             cmd_tx,
             ptt: false,
             tx_playback: None,
             wf,
             last_wf_slot: -1,
+            last_udp_heartbeat_ms: 0,
+        }
+    }
+
+    /// Load the persisted WSJT-X UDP settings into a config struct. Falls back to
+    /// the WSJT-X-compatible defaults (disabled, 127.0.0.1:2237) for missing keys.
+    fn read_udp_config(&self) -> crate::udp::UdpConfig {
+        let d = crate::udp::UdpConfig::default();
+        crate::udp::UdpConfig {
+            enabled: self.db.get_config("udp_enabled").as_deref() == Some("true"),
+            host: self.db.get_config("udp_host").filter(|s| !s.is_empty()).unwrap_or(d.host),
+            port: self
+                .db
+                .get_config("udp_port")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(d.port),
+            accept_requests: self.db.get_config("udp_accept_requests").as_deref() == Some("true"),
         }
     }
 
@@ -394,6 +432,15 @@ impl Engine {
     }
 
     fn run(&mut self, cmd_rx: Receiver<EngineCommand>) {
+        // Bring up the WSJT-X UDP interface from persisted settings (binds the
+        // socket + inbound listener if enabled). Non-fatal — a bad host/port just
+        // surfaces an error and leaves the feature off.
+        let udp_cfg = self.read_udp_config();
+        match self.udp.apply(udp_cfg) {
+            Ok(msg) => self.emit(EngineEvent::Info(msg)),
+            Err(e) => self.emit(EngineEvent::Error(e)),
+        }
+
         // Reconnect the last-used rig on startup (non-fatal if it can't).
         if let Some(json) = self.db.get_config("rig_config") {
             if let Ok(cfg) = serde_json::from_str::<RigConfig>(&json) {
@@ -425,6 +472,13 @@ impl Engine {
                     sequential: slot_id.rem_euclid(2),
                     ms_into_cycle: ms_into,
                 }));
+                // WSJT-X UDP Status every tick (so companions track dial/TX/decode
+                // state), Heartbeat every ~15 s (how they discover our address).
+                self.broadcast_status();
+                if now - self.last_udp_heartbeat_ms >= 15_000 {
+                    self.last_udp_heartbeat_ms = now;
+                    self.broadcast_heartbeat();
+                }
                 // RX input level + silence warning, once we're capturing. Surfaces
                 // a dead source (e.g. DAX channel not routed) that otherwise looks
                 // like a broken waterfall.
@@ -525,11 +579,15 @@ impl Engine {
     /// what drives CQ/auto-sequence retransmits.
     fn handle_decoded(&mut self, decoded: Vec<DecodedMessage>, slot_id: i64) {
         self.publish_decodes(&decoded);
+        self.broadcast_decodes(&decoded);
         self.calibrate_dt(&decoded);
 
         if let Some(QsoOutcome::Completed(record)) = self.qso.process_rx(&decoded) {
             match self.db.insert_qso(&record) {
-                Ok(_) => self.emit(EngineEvent::QsoCompleted(record)),
+                Ok(_) => {
+                    self.broadcast_qso(&record);
+                    self.emit(EngineEvent::QsoCompleted(record));
+                }
                 Err(e) => self.emit(EngineEvent::Error(format!("log QSO failed: {e}"))),
             }
         }
@@ -673,17 +731,111 @@ impl Engine {
                 snr: m.snr,
                 freq_hz: m.freq_hz,
                 time_sec: m.time_sec,
-                text: if m.raw_text.is_empty() {
-                    format!("{} {} {}", m.call_to, m.call_from, m.extra)
-                } else {
-                    m.raw_text.clone()
-                },
+                text: decode_text(m),
                 is_cq: m.call_to.eq_ignore_ascii_case("CQ"),
                 to_me: !self.qso.my_call.is_empty()
                     && m.call_to.eq_ignore_ascii_case(&self.qso.my_call),
             })
             .collect();
         self.emit(EngineEvent::Decoded(ui));
+    }
+
+    // --- WSJT-X UDP broadcast (outbound) ------------------------------------
+
+    /// Assemble a WSJT-X Status snapshot from current engine state.
+    fn udp_status(&self) -> crate::udp::codec::Status {
+        let st = self.qso.status();
+        crate::udp::codec::Status {
+            dial_freq_hz: self.dial_hz,
+            mode: "FT8".to_string(),
+            dx_call: st.target.clone().unwrap_or_default(),
+            report: st.report_sent.map(|n| format!("{n:+03}")).unwrap_or_default(),
+            tx_mode: "FT8".to_string(),
+            tx_enabled: st.active,
+            transmitting: self.tx_playback.is_some(),
+            decoding: self.decoding,
+            rx_df: self.tx_audio_hz.max(0) as u32,
+            tx_df: self.tx_audio_hz.max(0) as u32,
+            de_call: self.qso.my_call.clone(),
+            de_grid: self.qso.my_grid.clone(),
+            dx_grid: String::new(),
+            tx_watchdog: false,
+            sub_mode: String::new(),
+            fast_mode: false,
+            special_op_mode: 0,
+            freq_tolerance: 0xFFFF_FFFF,
+            tr_period: 15,
+            config_name: "Default".to_string(),
+            tx_message: st.tx_message.clone().unwrap_or_default(),
+        }
+    }
+
+    fn broadcast_status(&self) {
+        if self.udp.is_enabled() {
+            self.udp.send(&crate::udp::codec::status(&self.udp_status()));
+        }
+    }
+
+    fn broadcast_heartbeat(&self) {
+        if self.udp.is_enabled() {
+            self.udp
+                .send(&crate::udp::codec::heartbeat(env!("CARGO_PKG_VERSION"), ""));
+        }
+    }
+
+    /// Broadcast each of a slot's decodes as a WSJT-X Decode message. The `Time`
+    /// field is ms-since-UTC-midnight; `Frequency` is the audio offset in Hz.
+    fn broadcast_decodes(&mut self, decoded: &[DecodedMessage]) {
+        if !self.udp.is_enabled() {
+            return;
+        }
+        let time_ms = self.now().rem_euclid(86_400_000) as u32;
+        for m in decoded {
+            self.udp.send_decode(crate::udp::codec::Decode {
+                is_new: true,
+                time_ms,
+                snr: m.snr,
+                delta_time: m.time_sec as f64,
+                delta_freq: m.freq_hz.max(0.0) as u32,
+                mode: "FT8".to_string(),
+                message: decode_text(m),
+                low_confidence: false,
+                off_air: false,
+            });
+        }
+    }
+
+    /// Broadcast a logged QSO as both the structured QSO-Logged message and the
+    /// Logged-ADIF message (loggers consume one or the other).
+    fn broadcast_qso(&mut self, record: &QsoRecord) {
+        if !self.udp.is_enabled() {
+            return;
+        }
+        use crate::udp::codec::{qso_logged, DateTime, QsoLogged};
+        // Actual TX RF frequency = dial + audio offset (what WSJT-X reports).
+        let tx_freq_hz = self.dial_hz + self.tx_audio_hz.max(0) as u64;
+        let q = QsoLogged {
+            time_off: DateTime::from_adif(&record.qso_date_off, &record.time_off),
+            dx_call: record.call.clone(),
+            dx_grid: record.gridsquare.clone(),
+            tx_freq_hz,
+            mode: record.mode.clone(),
+            report_sent: record.rst_sent.clone(),
+            report_received: record.rst_rcvd.clone(),
+            tx_power: String::new(),
+            comments: record.comment.clone(),
+            name: String::new(),
+            time_on: DateTime::from_adif(&record.qso_date, &record.time_on),
+            operator_call: record.station_callsign.clone(),
+            my_call: record.station_callsign.clone(),
+            my_grid: record.my_gridsquare.clone(),
+            exchange_sent: String::new(),
+            exchange_received: String::new(),
+            prop_mode: String::new(),
+        };
+        self.udp.send(&qso_logged(&q));
+        self.udp
+            .send(&crate::udp::codec::logged_adif(&crate::db::adif_record(record)));
     }
 
     fn publish_tx_state(&self) {
@@ -694,6 +846,9 @@ impl Engine {
             message: self.qso.tx_message().map(|s| s.to_string()),
             status: self.qso.status(),
         }));
+        // Mirror the state change out over WSJT-X UDP so companion apps see TX
+        // start/stop and QSO progress without waiting for the next 1 Hz tick.
+        self.broadcast_status();
     }
 
     fn publish_rig_status(&self) {
@@ -727,6 +882,13 @@ impl Engine {
             EngineCommand::StopDecode => {
                 self.decoding = false;
                 self.input = None;
+                // Tell companion apps to wipe their decode band and forget the
+                // replay history — this is a genuine reset, not a per-cycle churn.
+                if self.udp.is_enabled() {
+                    self.udp.send(&crate::udp::codec::clear());
+                }
+                self.udp.clear_replay_cache();
+                self.broadcast_status();
                 self.emit(EngineEvent::Info("decode stopped".into()));
             }
             EngineCommand::SetStation { call, grid } => {
@@ -743,6 +905,13 @@ impl Engine {
                 if let Some(rig) = self.rig.as_mut() {
                     let _ = rig.set_frequency(hz);
                 }
+                // New band = new decode context: clear companions' band + replay
+                // history and push the fresh dial frequency in a Status.
+                if self.udp.is_enabled() {
+                    self.udp.send(&crate::udp::codec::clear());
+                }
+                self.udp.clear_replay_cache();
+                self.broadcast_status();
                 self.publish_rig_status();
             }
             EngineCommand::SetBaseFreq(hz) => {
@@ -768,6 +937,26 @@ impl Engine {
                     cfg.avg
                 )));
             }
+            EngineCommand::SetUdpConfig(cfg) => {
+                // Persist the four settings, then rebind live.
+                let _ = self.db.set_config("udp_enabled", if cfg.enabled { "true" } else { "false" });
+                let _ = self.db.set_config("udp_host", &cfg.host);
+                let _ = self.db.set_config("udp_port", &cfg.port.to_string());
+                let _ = self.db.set_config(
+                    "udp_accept_requests",
+                    if cfg.accept_requests { "true" } else { "false" },
+                );
+                match self.udp.apply(cfg) {
+                    Ok(msg) => {
+                        // Prime companions immediately on enable.
+                        self.broadcast_heartbeat();
+                        self.broadcast_status();
+                        self.emit(EngineEvent::Info(msg));
+                    }
+                    Err(e) => self.emit(EngineEvent::Error(e)),
+                }
+            }
+            EngineCommand::UdpReplay => self.udp.replay(),
             EngineCommand::SetInputDevice(name) => {
                 self.input_device = name.clone();
                 let _ = self.db.set_config("input_device", name.as_deref().unwrap_or(""));
