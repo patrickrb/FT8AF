@@ -1279,10 +1279,14 @@ public class MainViewModel extends ViewModel {
         if (ft8TransmitSignal == null || !send || text == null) {
             return;
         }
-        ft8TransmitSignal.setFreeText(text);
-        ft8TransmitSignal.setTransmitFreeText(true);
-        ft8TransmitSignal.setActivated(true);
-        ft8TransmitSignal.transmitNow();
+        // Route through the purpose-built one-shot entry point instead of open-coding the
+        // arming sequence. An inbound Free-Text request can be the very first TX action of a
+        // session (a companion app sends it before any CQ or decode tap), and transmitNow()
+        // dereferences toCallsign — which stays null until the first setTransmit/resetToCQ —
+        // for its status toast. sendFreeTextOnce() seeds a CQ baseline in that case (issue
+        // #401), validates the callsign, and arms freeTextOneShot so the text goes out once
+        // (WSJT-X Tx5 semantics) rather than repeating every cycle.
+        ft8TransmitSignal.sendFreeTextOnce(text);
     }
 
     /** Most recent decode from {@code call} in the master list, or null. */
