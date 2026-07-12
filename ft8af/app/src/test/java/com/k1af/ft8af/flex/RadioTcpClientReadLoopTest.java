@@ -152,6 +152,47 @@ public class RadioTcpClientReadLoopTest {
         assertThat(listener.connectionClosed).isEqualTo(1);
     }
 
+    /** A local disconnect() sets the stopping flag so the read-error paths stay quiet. */
+    @Test
+    public void isStopping_trueAfterLocalDisconnect() {
+        RadioTcpClient client = new RadioTcpClient();
+        assertThat(client.isStopping()).isFalse();
+
+        client.disconnect(); // user-initiated: sets isStop = true
+
+        assertThat(client.isStopping()).isTrue();
+    }
+
+    /**
+     * A user-initiated {@link RadioTcpClient#disconnect()} closes the socket, which unblocks
+     * the read with a SocketException/IOException. That must NOT be reported as a remote drop
+     * ({@code onConnectionClosed}), or the higher layers show a spurious "connection closed"
+     * toast on a disconnect the user asked for. The loop must still terminate.
+     */
+    @Test(timeout = 10_000)
+    public void readLoop_onLocalDisconnect_doesNotSignalClosed() throws Exception {
+        RadioTcpClient client = new RadioTcpClient();
+        RecordingListener listener = new RecordingListener();
+        client.setOnDataReceiveListener(listener);
+
+        Socket clientSocket = new Socket();
+        Socket serverSide = connectedPair(clientSocket);
+        client.primeConnectionForTest(clientSocket, clientSocket.getInputStream());
+
+        Thread loop = new Thread(client::readLoop);
+        loop.start();
+        // Let the loop reach its blocking read() (the peer sends nothing), then the user
+        // disconnects locally. Whether the loop exits via the guard or the gated catch, a
+        // local stop must never notify — so the assertion is independent of this timing.
+        Thread.sleep(200);
+        client.disconnect();
+        loop.join(5000);
+
+        assertThat(loop.isAlive()).isFalse();
+        assertThat(listener.connectionClosed).isEqualTo(0);
+        serverSide.close();
+    }
+
     /**
      * A refused connection (nothing listening on the port) is a {@link java.net.ConnectException},
      * a {@link java.net.SocketException}. openConnection() must report the failure and return

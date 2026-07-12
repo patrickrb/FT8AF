@@ -153,12 +153,28 @@ public class RadioTcpClient {
      * is stopped/interrupted. Package-private so a unit test can drive it against a real
      * loopback socket.
      *
-     * <p>Every exit path notifies {@link OnDataReceiveListener#onConnectionClosed()} and
+     * <p>An <em>unexpected</em> close — peer reset ({@link SocketException}), EOF, or a read
+     * {@link IOException} — notifies {@link OnDataReceiveListener#onConnectionClosed()} and
      * returns. In particular a {@link SocketException} (peer reset) MUST break the loop: a
      * reset socket still reports {@link Socket#isConnected()} == {@code true} (that flag is
      * sticky once connected), so continuing would re-throw on the next {@code read()} in a
      * tight 100% CPU busy-loop that never signals the disconnect.
+     *
+     * <p>A <em>local</em> {@link #disconnect()} also unblocks the read (it closes the socket
+     * and sets {@code isStop}/interrupts the thread), but that surfaces as the same
+     * {@code SocketException}/{@code IOException}. Those paths deliberately do NOT notify —
+     * a user-initiated disconnect must not look like an unexpected remote drop and fire the
+     * higher layers' "connection closed" UI/toast. The plain loop-condition exit
+     * ({@code isStop}/interrupt/already-disconnected) and the {@code mInputStream == null}
+     * guard likewise return quietly.
      */
+    // True when the read was unblocked by a local disconnect() (isStop set, or the read
+    // thread interrupted) rather than by a genuine remote drop. Package-private so a unit
+    // test can assert the suppression.
+    boolean isStopping() {
+        return isStop || Thread.currentThread().isInterrupted();
+    }
+
     void readLoop() {
         int errorCount = 0;
         //read ...
@@ -190,7 +206,10 @@ public class RadioTcpClient {
 
             } catch (SocketException e) {
                 Log.e(TAG, "Tcp Connection exception:" + e.getMessage());
-                if (onDataReceiveListener != null) {
+                // A local disconnect() closes the socket and surfaces here as a
+                // SocketException too; only notify on an actual remote drop, not a
+                // user-initiated stop.
+                if (!isStopping() && onDataReceiveListener != null) {
                     onDataReceiveListener.onConnectionClosed();
                 }
                 return;
@@ -198,7 +217,9 @@ public class RadioTcpClient {
                 //uiHandler.sendEmptyMessage(-1);
                 Log.e(TAG, "SocketThread read io exception = " + e.getMessage());
                 e.printStackTrace();
-                if (onDataReceiveListener != null) {
+                // Same as above: a local disconnect closing the stream can raise an
+                // IOException from the blocked read; don't report that as a remote drop.
+                if (!isStopping() && onDataReceiveListener != null) {
                     onDataReceiveListener.onConnectionClosed();
                 }
                 return;
