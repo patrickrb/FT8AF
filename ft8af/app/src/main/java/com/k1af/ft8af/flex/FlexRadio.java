@@ -282,7 +282,7 @@ public class FlexRadio {
     /**
      * Write one DAX audio frame to the playback track, tolerating the
      * disconnect-while-streaming race. Audio frames arrive on the UDP stream
-     * read thread ({@link RadioUdpClient.ReceiveRunnable#run()}, whose loop
+     * read thread (the {@link RadioUdpClient} receive worker, whose loop
      * catches only {@code IOException}), while {@link #closeAudio()} releases
      * and nulls {@link #audioTrack} from the disconnect thread — and
      * {@code FlexConnector.disconnect()} calls {@code closeAudio()} <em>before</em>
@@ -297,9 +297,12 @@ public class FlexRadio {
         try {
             writeAudioToTrack(data);
         } catch (IllegalStateException e) {
-            // audioTrack was released concurrently (disconnect during
-            // streaming); drop this frame rather than crash the receive thread.
-            Log.e(TAG, "writeAudio: track released mid-stream: " + e.getMessage());
+            // audioTrack was released concurrently (disconnect during streaming);
+            // drop this frame rather than crash the receive thread. This is an
+            // expected, handled race and multiple frames can arrive between
+            // release() and audioTrack=null, so log at DEBUG to avoid ERROR-level
+            // per-frame spam on every disconnect.
+            Log.d(TAG, "writeAudio: track released mid-stream: " + e.getMessage());
         }
     }
 
