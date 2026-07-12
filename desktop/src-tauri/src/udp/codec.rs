@@ -282,8 +282,12 @@ pub fn logged_adif(adif: &str) -> Vec<u8> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Inbound {
     /// User double-clicked a decode elsewhere: call this station. `grid` is the
-    /// station's grid if the clicked message carried one.
-    Reply { call: String, grid: String, snr: i32 },
+    /// station's grid if the clicked message carried one. `delta_freq` is the
+    /// audio frequency (Hz) the companion asked us to answer on (WSJT-X's `df`);
+    /// the caller should honor it so we key up on the requested tone rather than
+    /// whatever the current TX offset happens to be (mirrors the Android/iOS
+    /// ports). `0` means "unspecified".
+    Reply { call: String, grid: String, snr: i32, delta_freq: u32 },
     /// Re-broadcast this session's decodes.
     Replay,
     /// Stop transmitting. `auto_only` = halt only automatic (leave a manual TX).
@@ -355,12 +359,12 @@ pub fn parse_inbound(buf: &[u8]) -> Option<Inbound> {
             let _time = r.u32()?;
             let snr = r.i32()?;
             let _dt = r.f64()?;
-            let _df = r.u32()?;
+            let delta_freq = r.u32()?; // df: the audio freq (Hz) to answer on
             let _mode = r.string()?;
             let message = r.string()?;
             // trailing low_confidence / modifiers are optional across versions.
             let (call, grid) = parse_reply_target(&message)?;
-            Some(Inbound::Reply { call, grid, snr })
+            Some(Inbound::Reply { call, grid, snr, delta_freq })
         }
         T_REPLAY => Some(Inbound::Replay),
         T_HALT_TX => {
@@ -678,13 +682,18 @@ mod tests {
 
     // --- inbound parsing -----------------------------------------------------
 
-    // Build an inbound Reply datagram for a given message line.
+    // Build an inbound Reply datagram for a given message line (df fixed at 1500).
     fn make_reply(message: &str, snr: i32) -> Vec<u8> {
+        make_reply_df(message, snr, 1500)
+    }
+
+    // Build an inbound Reply datagram carrying a specific `df` (requested audio Hz).
+    fn make_reply_df(message: &str, snr: i32, df: u32) -> Vec<u8> {
         let mut w = begin(T_REPLY);
         w.u32(47_000_000); // time
         w.i32(snr);
         w.f64(0.1); // dt
-        w.u32(1500); // df
+        w.u32(df); // df
         w.string("FT8"); // mode
         w.string(message);
         w.bool(false); // low confidence
@@ -697,7 +706,12 @@ mod tests {
         let d = make_reply("CQ K1ABC FN42", -3);
         assert_eq!(
             parse_inbound(&d),
-            Some(Inbound::Reply { call: "K1ABC".into(), grid: "FN42".into(), snr: -3 })
+            Some(Inbound::Reply {
+                call: "K1ABC".into(),
+                grid: "FN42".into(),
+                snr: -3,
+                delta_freq: 1500
+            })
         );
     }
 
@@ -705,11 +719,21 @@ mod tests {
     fn parse_reply_cq_with_directive() {
         assert_eq!(
             parse_inbound(&make_reply("CQ DX K1ABC FN42", -3)),
-            Some(Inbound::Reply { call: "K1ABC".into(), grid: "FN42".into(), snr: -3 })
+            Some(Inbound::Reply {
+                call: "K1ABC".into(),
+                grid: "FN42".into(),
+                snr: -3,
+                delta_freq: 1500
+            })
         );
         assert_eq!(
             parse_inbound(&make_reply("CQ POTA W1AW/4 EM70", 5)),
-            Some(Inbound::Reply { call: "W1AW/4".into(), grid: "EM70".into(), snr: 5 })
+            Some(Inbound::Reply {
+                call: "W1AW/4".into(),
+                grid: "EM70".into(),
+                snr: 5,
+                delta_freq: 1500
+            })
         );
     }
 
@@ -718,8 +742,28 @@ mod tests {
         // Double-click a station mid-QSO: we call the FROM (sender) station.
         assert_eq!(
             parse_inbound(&make_reply("K0XYZ K1ABC -12", -12)),
-            Some(Inbound::Reply { call: "K1ABC".into(), grid: "".into(), snr: -12 })
+            Some(Inbound::Reply {
+                call: "K1ABC".into(),
+                grid: "".into(),
+                snr: -12,
+                delta_freq: 1500
+            })
         );
+    }
+
+    #[test]
+    fn parse_reply_captures_requested_df() {
+        // The `df` field carries the audio tone the companion wants us to answer on;
+        // it must be preserved (not discarded) so the engine can key up on it.
+        match parse_inbound(&make_reply_df("CQ K1ABC FN42", -3, 2100)) {
+            Some(Inbound::Reply { delta_freq, .. }) => assert_eq!(delta_freq, 2100),
+            other => panic!("expected Reply, got {other:?}"),
+        }
+        // df == 0 is a legitimate "unspecified" value and must round-trip as 0.
+        match parse_inbound(&make_reply_df("CQ K1ABC FN42", -3, 0)) {
+            Some(Inbound::Reply { delta_freq, .. }) => assert_eq!(delta_freq, 0),
+            other => panic!("expected Reply, got {other:?}"),
+        }
     }
 
     #[test]

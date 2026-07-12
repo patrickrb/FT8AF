@@ -35,6 +35,11 @@ const TX_LATEST_MS: i64 = TX_SLACK_MS - PTT_DELAY_MS as i64;
 // 13.2 s keeps a comfortable margin above the 12.64 s waveform end.
 const DECODE_AT_MS: i64 = 13_200;
 const DEFAULT_TX_AUDIO_HZ: i32 = 1_500;
+// Usable TX audio-offset passband (Hz). Real FT8 audio tones live well inside
+// this; both the base-freq setter and an inbound WSJT-X Reply's requested `df`
+// validate against it.
+const MIN_TX_AUDIO_HZ: i32 = 200;
+const MAX_TX_AUDIO_HZ: i32 = 3_000;
 // Default TX output level (0.0–1.0). Slightly below full scale so a fresh
 // install doesn't overdrive the soundcard/ALC before the operator sets it.
 const DEFAULT_TX_GAIN: f32 = 0.9;
@@ -42,6 +47,16 @@ const DEFAULT_TX_GAIN: f32 = 0.9;
 /// Clamp a requested TX gain into the valid 0.0–1.0 range (full scale).
 fn clamp_tx_gain(g: f32) -> f32 {
     g.clamp(0.0, 1.0)
+}
+
+/// The TX audio offset (Hz) to adopt for an inbound WSJT-X Reply's requested
+/// `df`, or `None` to keep the current offset. Bounds the untrusted UDP value to
+/// the usable audio passband; a `0` (unspecified) or out-of-band `df` is ignored
+/// so a malformed/garbled datagram can't push the TX tone off the band. Mirrors
+/// the Android/iOS ports, which likewise honor a plausible `df` and drop the rest.
+fn reply_tx_audio_hz(delta_freq: u32) -> Option<i32> {
+    let df = i32::try_from(delta_freq).ok()?;
+    (MIN_TX_AUDIO_HZ..=MAX_TX_AUDIO_HZ).contains(&df).then_some(df)
 }
 // Live-waterfall FFT parameters (window/size/averaging + display constants)
 // live in `crate::wf` and are runtime-configurable via SetWaterfallConfig.
@@ -97,6 +112,11 @@ pub struct AnswerArgs {
     pub grid: String,
     #[serde(default)]
     pub snr: i32,
+    /// Audio offset (Hz) to answer on — WSJT-X's `df`, set by an inbound UDP
+    /// Reply request. `0` (the default, and what the desktop UI's own "click to
+    /// answer" sends) means "keep the current TX offset".
+    #[serde(default)]
+    pub delta_freq: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -915,7 +935,7 @@ impl Engine {
                 self.publish_rig_status();
             }
             EngineCommand::SetBaseFreq(hz) => {
-                self.tx_audio_hz = hz.clamp(200, 3000);
+                self.tx_audio_hz = hz.clamp(MIN_TX_AUDIO_HZ, MAX_TX_AUDIO_HZ);
                 let _ = self.db.set_config("base_freq", &self.tx_audio_hz.to_string());
             }
             EngineCommand::SetTxGain(g) => {
@@ -1000,6 +1020,14 @@ impl Engine {
                 self.publish_tx_state();
             }
             EngineCommand::Answer(args) => {
+                // Honor the audio tone the companion asked us to answer on (WSJT-X's
+                // `df`) when it carries a plausible one, so we key up on the requested
+                // offset rather than the current TX tone — matching the Android/iOS
+                // ports. The desktop UI's own "click to answer" sends df=0 (unchanged).
+                if let Some(hz) = reply_tx_audio_hz(args.delta_freq) {
+                    self.tx_audio_hz = hz;
+                    let _ = self.db.set_config("base_freq", &self.tx_audio_hz.to_string());
+                }
                 let msg = DecodedMessage {
                     call_from: args.call_from,
                     grid: args.grid,
@@ -1092,7 +1120,28 @@ impl Engine {
 
 #[cfg(test)]
 mod tests {
-    use super::{clamp_tx_gain, rms_dbfs, wf_boundary_row, CYCLE_MS, SILENCE_DBFS};
+    use super::{
+        clamp_tx_gain, reply_tx_audio_hz, rms_dbfs, wf_boundary_row, CYCLE_MS, MAX_TX_AUDIO_HZ,
+        MIN_TX_AUDIO_HZ, SILENCE_DBFS,
+    };
+
+    #[test]
+    fn reply_df_honors_in_band_and_ignores_the_rest() {
+        // A plausible tone in the passband is adopted verbatim so we answer on it.
+        assert_eq!(reply_tx_audio_hz(1500), Some(1500));
+        assert_eq!(reply_tx_audio_hz(MIN_TX_AUDIO_HZ as u32), Some(MIN_TX_AUDIO_HZ));
+        assert_eq!(reply_tx_audio_hz(MAX_TX_AUDIO_HZ as u32), Some(MAX_TX_AUDIO_HZ));
+
+        // df == 0 is WSJT-X's "unspecified" — keep the current offset.
+        assert_eq!(reply_tx_audio_hz(0), None);
+        // Below/above the usable audio passband: a garbled datagram must not push
+        // the TX tone off the band, so ignore it and keep the current offset.
+        assert_eq!(reply_tx_audio_hz(MIN_TX_AUDIO_HZ as u32 - 1), None);
+        assert_eq!(reply_tx_audio_hz(MAX_TX_AUDIO_HZ as u32 + 1), None);
+        assert_eq!(reply_tx_audio_hz(50_000), None);
+        // A value past i32::MAX can't be a real audio offset either.
+        assert_eq!(reply_tx_audio_hz(u32::MAX), None);
+    }
 
     #[test]
     fn rms_dbfs_flags_silence_and_signal() {
