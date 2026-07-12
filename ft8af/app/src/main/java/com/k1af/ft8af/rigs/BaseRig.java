@@ -99,6 +99,11 @@ public abstract class BaseRig {
     }
 
     public static String byteToStr(byte[] data) {
+        // Null-safe: this is a logging/diagnostic helper and a null array (e.g. an aborted
+        // A91 payload) must not NPE the caller mid-transmit.
+        if (data == null) {
+            return "null";
+        }
         StringBuilder s = new StringBuilder();
         for (int i = 0; i < data.length; i++) {
             s.append(String.format("%02x ", data[i] & 0xff));
