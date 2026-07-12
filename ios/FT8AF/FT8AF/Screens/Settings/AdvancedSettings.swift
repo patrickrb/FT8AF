@@ -82,6 +82,59 @@ struct AdvancedSettings: View {
             }
             .listRowBackground(bgSurface)
 
+            // WSJT-X UDP section
+            Section {
+                Toggle(isOn: $settings.udpEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Enable UDP broadcast").foregroundStyle(textPrimary)
+                        Text("Send decodes, status & QSOs to companion apps")
+                            .font(.system(size: 11)).foregroundStyle(textFaint)
+                    }
+                }
+                .tint(accent)
+
+                HStack {
+                    Text("Server host").foregroundStyle(textPrimary)
+                    Spacer()
+                    TextField("127.0.0.1", text: $settings.udpHost)
+                        .font(.system(size: 14, design: .monospaced))
+                        .foregroundStyle(textPrimary)
+                        .multilineTextAlignment(.trailing)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .frame(width: 140)
+                        .disabled(!settings.udpEnabled)
+                }
+
+                HStack {
+                    Text("Server port").foregroundStyle(textPrimary)
+                    Spacer()
+                    TextField("2237", value: $settings.udpPort, format: .number)
+                        .font(.system(size: 14, design: .monospaced))
+                        .foregroundStyle(textPrimary)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numberPad)
+                        .frame(width: 80)
+                        .disabled(!settings.udpEnabled)
+                }
+
+                Toggle(isOn: $settings.udpAcceptRequests) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Accept UDP requests").foregroundStyle(textPrimary)
+                        Text("Let companion apps reply / halt / free-text")
+                            .font(.system(size: 11)).foregroundStyle(textFaint)
+                    }
+                }
+                .tint(accent)
+                .disabled(!settings.udpEnabled)
+            } header: {
+                Text("WSJT-X UDP").foregroundStyle(textMuted)
+            } footer: {
+                Text("Interoperate with GridTracker, JTAlert, N1MM+, Log4OM. Default 127.0.0.1:2237. Takes effect on the next receive session.")
+                    .foregroundStyle(textFaint)
+            }
+            .listRowBackground(bgSurface)
+
             // Reset section
             Section {
                 Button {
@@ -108,5 +161,9 @@ struct AdvancedSettings: View {
         .onChange(of: settings.pttDelayMs) { _, _ in SettingsPersistence.save(settings) }
         .onChange(of: settings.txDelayMs) { _, _ in SettingsPersistence.save(settings) }
         .onChange(of: settings.lateStartToleranceMs) { _, _ in SettingsPersistence.save(settings) }
+        .onChange(of: settings.udpEnabled) { _, _ in SettingsPersistence.save(settings) }
+        .onChange(of: settings.udpHost) { _, _ in SettingsPersistence.save(settings) }
+        .onChange(of: settings.udpPort) { _, _ in SettingsPersistence.save(settings) }
+        .onChange(of: settings.udpAcceptRequests) { _, _ in SettingsPersistence.save(settings) }
     }
 }
