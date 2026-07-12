@@ -274,6 +274,14 @@ fn set_waterfall_config(state: State<AppState>, config: WfConfig) {
     state.engine.send(EngineCommand::SetWaterfallConfig(config));
 }
 
+/// Apply new WSJT-X UDP settings. The engine persists the `udp_*` config keys
+/// and rebinds the socket + inbound listener live; see
+/// `EngineCommand::SetUdpConfig`.
+#[tauri::command]
+fn set_udp_config(state: State<AppState>, config: ft8af::udp::UdpConfig) {
+    state.engine.send(EngineCommand::SetUdpConfig(config));
+}
+
 fn main() {
     // Debug helper: `ft8af --list-rigs` prints the Hamlib-enumerated rig count
     // and exits — verifies the bundled Hamlib library loads without the GUI.
@@ -355,6 +363,7 @@ fn main() {
             set_config,
             all_config,
             set_waterfall_config,
+            set_udp_config,
             get_os_location,
         ])
         .run(tauri::generate_context!())

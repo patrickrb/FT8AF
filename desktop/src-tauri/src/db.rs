@@ -415,6 +415,30 @@ fn row_to_qso(r: &rusqlite::Row) -> rusqlite::Result<QsoRecord> {
     })
 }
 
+/// One QSO as a single ADIF record line (ending in `<eor>`), matching the field
+/// set/order of [`Db::export_adif_range`]. Used for the WSJT-X "Logged ADIF" UDP
+/// message so companion loggers (JTAlert, N1MM) can capture the QSO verbatim.
+pub fn adif_record(r: &QsoRecord) -> String {
+    let mut out = String::new();
+    out.push_str(&adif_field("call", &r.call));
+    let qsl = if r.confirmed { "Y" } else { "N" };
+    out.push_str(&format!("<QSL_RCVD:1>{qsl} <QSL_MANUAL:1>N "));
+    adif_opt(&mut out, "gridsquare", &r.gridsquare);
+    adif_opt(&mut out, "mode", &r.mode);
+    adif_opt(&mut out, "rst_sent", &r.rst_sent);
+    adif_opt(&mut out, "rst_rcvd", &r.rst_rcvd);
+    adif_opt(&mut out, "qso_date", &r.qso_date);
+    adif_opt(&mut out, "time_on", &r.time_on);
+    adif_opt(&mut out, "qso_date_off", &r.qso_date_off);
+    adif_opt(&mut out, "time_off", &r.time_off);
+    adif_opt(&mut out, "band", &r.band);
+    adif_opt(&mut out, "freq", &r.freq);
+    adif_opt(&mut out, "station_callsign", &r.station_callsign);
+    adif_opt(&mut out, "my_gridsquare", &r.my_gridsquare);
+    out.push_str(&format!("<comment:{}>{} <eor>", r.comment.len(), r.comment));
+    out
+}
+
 fn adif_field(name: &str, value: &str) -> String {
     format!("<{}:{}>{} ", name, value.len(), value)
 }

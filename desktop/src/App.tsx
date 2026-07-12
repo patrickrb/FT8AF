@@ -15,6 +15,7 @@ import {
   type SerialPortInfo,
   type TxStage,
   type TxStateEvent,
+  type UdpConfig,
   type UiMessage,
   type WaterfallConfig,
   type WfWindow,
@@ -898,6 +899,14 @@ function SettingsScreen(props: {
     fft_size: 2048,
     avg: 6,
   });
+  // WSJT-X UDP interface (outbound broadcast + inbound requests). Defaults match
+  // WSJT-X: disabled, 127.0.0.1:2237. Rust persists the udp_* keys.
+  const [udp, setUdp] = useState<UdpConfig>({
+    enabled: false,
+    host: "127.0.0.1",
+    port: 2237,
+    accept_requests: false,
+  });
   const [rigCfg, setRigCfg] = useState<RigConfig>({
     backend: "none",
     port: "",
@@ -959,6 +968,44 @@ function SettingsScreen(props: {
   function applyWfCfg(next: WaterfallConfig) {
     setWfCfg(next);
     api.setWaterfallConfig(next);
+  }
+
+  // Load the persisted WSJT-X UDP settings on mount (only the exact string
+  // "true" enables a flag, so a missing/garbage value stays off).
+  useEffect(() => {
+    Promise.all([
+      api.getConfig("udp_enabled"),
+      api.getConfig("udp_host"),
+      api.getConfig("udp_port"),
+      api.getConfig("udp_accept_requests"),
+    ]).then(([en, host, port, accept]) => {
+      const p = parseInt(port ?? "", 10);
+      setUdp((prev) => ({
+        enabled: en === "true",
+        host: host && host.length > 0 ? host : prev.host,
+        port: Number.isFinite(p) && p > 0 && p <= 65535 ? p : prev.port,
+        accept_requests: accept === "true",
+      }));
+    });
+  }, []);
+
+  // Push UDP settings to the backend (which persists + rebinds live).
+  function applyUdp(next: UdpConfig) {
+    // Normalize before persisting. The port input uses parseInt(...) || 0, so clearing the
+    // field yields 0 (NaN/out-of-range are possible too); fall back to the default 2237 so
+    // we never persist a port the backend rejects or that can't deliver. Default an empty
+    // host to loopback. Write the corrected config back to state so the field reflects it.
+    const port =
+      Number.isFinite(next.port) && next.port > 0 && next.port <= 65535 ? next.port : 2237;
+    const host = next.host.trim().length > 0 ? next.host.trim() : "127.0.0.1";
+    const cfg: UdpConfig = { ...next, host, port };
+    setUdp(cfg);
+    api.setUdpConfig(cfg);
+    onStatus(
+      cfg.enabled
+        ? `WSJT-X UDP → ${cfg.host}:${cfg.port}${cfg.accept_requests ? " (accepting requests)" : ""}`
+        : "WSJT-X UDP off",
+    );
   }
 
   const refreshPorts = () => api.listSerialPorts().then(setPorts);
@@ -1352,6 +1399,64 @@ function SettingsScreen(props: {
                 </option>
               ))}
             </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="panel">
+        <h3>WSJT-X UDP</h3>
+        <div className="col">
+          <div className="muted">
+            Broadcast decodes, status and logged QSOs over UDP in the WSJT-X
+            protocol so companion apps (GridTracker, JTAlert, N1MM+, Log4OM) can
+            plot and log them. Default target 127.0.0.1:2237.
+          </div>
+          <div className="field">
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={udp.enabled}
+                onChange={(e) => applyUdp({ ...udp, enabled: e.target.checked })}
+                style={{ width: "auto" }}
+              />
+              Enable UDP broadcast
+            </label>
+          </div>
+          <div className="field">
+            <label>Server address (host)</label>
+            <input
+              type="text"
+              value={udp.host}
+              disabled={!udp.enabled}
+              onChange={(e) => setUdp({ ...udp, host: e.target.value })}
+              onBlur={() => applyUdp(udp)}
+              placeholder="127.0.0.1"
+            />
+          </div>
+          <div className="field">
+            <label>Server port</label>
+            <input
+              type="number"
+              min={1}
+              max={65535}
+              value={udp.port}
+              disabled={!udp.enabled}
+              onChange={(e) => setUdp({ ...udp, port: parseInt(e.target.value, 10) || 0 })}
+              onBlur={() => applyUdp(udp)}
+              placeholder="2237"
+            />
+          </div>
+          <div className="field">
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={udp.accept_requests}
+                disabled={!udp.enabled}
+                onChange={(e) => applyUdp({ ...udp, accept_requests: e.target.checked })}
+                style={{ width: "auto" }}
+              />
+              Accept UDP requests (let companion apps reply/halt/free-text)
+            </label>
           </div>
         </div>
       </div>

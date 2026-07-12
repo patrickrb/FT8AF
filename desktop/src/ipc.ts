@@ -219,4 +219,16 @@ export const api = {
   /** Apply + persist live-waterfall FFT parameters (Rust side persists). */
   setWaterfallConfig: (config: WaterfallConfig) =>
     invoke("set_waterfall_config", { config }),
+
+  /** Apply + persist WSJT-X UDP settings (Rust side persists the udp_* keys and
+   * rebinds the socket/listener live). */
+  setUdpConfig: (config: UdpConfig) => invoke("set_udp_config", { config }),
+};
+
+/** WSJT-X UDP settings. Field names match the Rust `UdpConfig` (snake_case). */
+export type UdpConfig = {
+  enabled: boolean;
+  host: string;
+  port: number;
+  accept_requests: boolean;
 };
