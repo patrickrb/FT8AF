@@ -25,7 +25,10 @@ public class RadioTcpClient {
     public static final int MAX_BUFFER_SIZE=1024 * 32;
 
     private final ExecutorService sendByteThreadPool = Executors.newCachedThreadPool();
-    private final SendByteRunnable sendByteRunnable=new SendByteRunnable(this);
+    // Serializes the actual writes to the shared TCP OutputStream. The cached pool can run
+    // two sends concurrently and OutputStream.write(byte[]) is not atomic, so without this
+    // the bytes of two CAT commands could interleave into a single corrupt frame on the wire.
+    private final Object sendLock = new Object();
 
     public static RadioTcpClient getInstance() {
         if (radioTcpClient == null) {
@@ -244,8 +247,11 @@ public class RadioTcpClient {
      * Exception : android.os.NetworkOnMainThreadException
      */
     public synchronized void sendByte(final byte[] mBuffer) {
-        sendByteRunnable.mBuffer=mBuffer;
-        sendByteThreadPool.execute(sendByteRunnable);
+        // Submit a fresh runnable carrying an immutable snapshot of this call's buffer. A single
+        // shared runnable whose mBuffer we overwrite before each execute() would let back-to-back
+        // sends clobber each other on the cached pool (a worker reads mBuffer asynchronously),
+        // dropping one command and sending the latest one twice. Mirrors RadioUdpClient.sendData.
+        sendByteThreadPool.execute(new SendByteRunnable(this, mBuffer));
 //        new Thread(new Runnable() {
 //            @Override
 //            public void run() {
@@ -261,23 +267,29 @@ public class RadioTcpClient {
 //        }).start();
     }
 
-    private static class SendByteRunnable implements Runnable{
-        RadioTcpClient client;
-        byte[] mBuffer;
-        public SendByteRunnable(RadioTcpClient client) {
+    // Package-private (not private) so a unit test in this package can construct and drive it.
+    static class SendByteRunnable implements Runnable{
+        final RadioTcpClient client;
+        final byte[] mBuffer;
+        public SendByteRunnable(RadioTcpClient client, byte[] mBuffer) {
             this.client = client;
+            this.mBuffer = mBuffer;
         }
 
         @Override
         public void run() {
-            try {
-                if (mBuffer==null) return;
-                if (client.mOutputStream != null) {
-                    client.mOutputStream.write(mBuffer);
-                    client.mOutputStream.flush();
+            if (mBuffer == null) return;
+            // Hold sendLock across the write+flush so a concurrent send on the cached pool
+            // can't interleave its bytes into the middle of this command frame.
+            synchronized (client.sendLock) {
+                OutputStream out = client.mOutputStream;
+                if (out == null) return;
+                try {
+                    out.write(mBuffer);
+                    out.flush();
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
-            } catch (IOException e) {
-                e.printStackTrace();
             }
         }
     }
@@ -317,5 +329,9 @@ public class RadioTcpClient {
         this.mSocket = socket;
         this.mInputStream = in;
         this.isStop = false;
+    }
+
+    void primeOutputStreamForTest(OutputStream out) {
+        this.mOutputStream = out;
     }
 }
