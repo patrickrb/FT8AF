@@ -73,6 +73,19 @@ public class LogHttpServer extends NanoHTTPD {
         return (recordCount + pageSize - 1) / pageSize;
     }
 
+    /**
+     * Clamp a page size parsed from a {@code ?pageSize=} query value to a safe positive size.
+     *
+     * <p>{@link #pageCount(int, int)} tolerates a non-positive size, but the raw value also
+     * drives the paged {@code LIMIT (offset),(pageSize)} query and every navigation link. A
+     * {@code pageSize} of 0 forces {@code LIMIT ...,0} (an always-empty table) and a negative
+     * value hands SQLite an undefined/unbounded limit — and either leaks into the links. Fall
+     * back to the default so the count, the query, and the links all agree on one sane size.
+     */
+    static int normalizePageSize(int pageSize) {
+        return pageSize > 0 ? pageSize : 100;
+    }
+
     @Override
     public Response serve(IHTTPSession session) {
         String[] uriList = session.getUri().split("/");
@@ -966,6 +979,9 @@ public class LogHttpServer extends NanoHTTPD {
         if (pars.get("pageSize") != null) {
             pageSize = Integer.parseInt(Objects.requireNonNull(pars.get("pageSize")));
         }
+        // Normalize before it feeds pageCount(), the SQL LIMIT, and the nav links, so a
+        // malformed 0/negative ?pageSize= can't force an empty page or an undefined limit.
+        pageSize = normalizePageSize(pageSize);
         if (pars.get("callsign") != null) {
             callsign = Objects.requireNonNull(pars.get("callsign"));
         }
@@ -1210,6 +1226,9 @@ public class LogHttpServer extends NanoHTTPD {
         if (pars.get("pageSize") != null) {
             pageSize = Integer.parseInt(Objects.requireNonNull(pars.get("pageSize")));
         }
+        // Normalize before it feeds pageCount(), the SQL LIMIT, and the nav links, so a
+        // malformed 0/negative ?pageSize= can't force an empty page or an undefined limit.
+        pageSize = normalizePageSize(pageSize);
         if (pars.get("callsign") != null) {
             callsign = Objects.requireNonNull(pars.get("callsign"));
         }
@@ -1455,6 +1474,9 @@ public class LogHttpServer extends NanoHTTPD {
         if (pars.get("pageSize") != null) {
             pageSize = Integer.parseInt(Objects.requireNonNull(pars.get("pageSize")));
         }
+        // Normalize before it feeds pageCount(), the SQL LIMIT, and the nav links, so a
+        // malformed 0/negative ?pageSize= can't force an empty page or an undefined limit.
+        pageSize = normalizePageSize(pageSize);
         if (pars.get("callsign") != null) {
             callsign = Objects.requireNonNull(pars.get("callsign"));
         }

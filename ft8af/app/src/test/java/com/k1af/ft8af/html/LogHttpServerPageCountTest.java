@@ -50,4 +50,21 @@ public class LogHttpServerPageCountTest {
         assertThat(LogHttpServer.pageCount(50, 0)).isEqualTo(1);
         assertThat(LogHttpServer.pageCount(50, -5)).isEqualTo(1);
     }
+
+    @Test
+    public void normalizePageSize_fallsBackForNonPositive() {
+        // A 0 pageSize would make the SQL LIMIT ...,0 an always-empty table and a negative
+        // value an undefined/unbounded limit; both must be clamped to the default before they
+        // reach the query and the nav links.
+        assertThat(LogHttpServer.normalizePageSize(0)).isEqualTo(100);
+        assertThat(LogHttpServer.normalizePageSize(-25)).isEqualTo(100);
+    }
+
+    @Test
+    public void normalizePageSize_keepsValidSize() {
+        assertThat(LogHttpServer.normalizePageSize(1)).isEqualTo(1);
+        assertThat(LogHttpServer.normalizePageSize(50)).isEqualTo(50);
+        assertThat(LogHttpServer.normalizePageSize(100)).isEqualTo(100);
+        assertThat(LogHttpServer.normalizePageSize(500)).isEqualTo(500);
+    }
 }
