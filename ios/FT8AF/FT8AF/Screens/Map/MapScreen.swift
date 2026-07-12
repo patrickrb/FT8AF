@@ -1,3 +1,4 @@
+import FT8Engine
 import SwiftUI
 
 enum MapProjection: String, CaseIterable {
@@ -273,15 +274,5 @@ struct MapMarker: Identifiable, Equatable {
     }
 }
 
-/// Convert 4-char Maidenhead grid to lat/lon center.
-func gridToLatLon(_ grid: String) -> (Double, Double)? {
-    let chars = Array(grid.uppercased().utf8)
-    guard chars.count >= 4,
-          chars[0] >= 65, chars[0] <= 82,
-          chars[1] >= 65, chars[1] <= 82,
-          chars[2] >= 48, chars[2] <= 57,
-          chars[3] >= 48, chars[3] <= 57 else { return nil }
-    let lon = Double(chars[0] - 65) * 20 + Double(chars[2] - 48) * 2 + 1 - 180
-    let lat = Double(chars[1] - 65) * 10 + Double(chars[3] - 48) * 1 + 0.5 - 90
-    return (lat, lon)
-}
+// `gridToLatLon` now lives in FT8Engine (see FT8AFKit/Sources/FT8Engine/Util.swift)
+// so it decodes 6-character subsquares and is unit-tested; imported above.

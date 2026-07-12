@@ -1,3 +1,4 @@
+import FT8Engine
 import SwiftUI
 
 /// Canvas-drawn equirectangular world map with station markers.

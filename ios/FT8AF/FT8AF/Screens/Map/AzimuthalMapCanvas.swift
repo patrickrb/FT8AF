@@ -1,3 +1,4 @@
+import FT8Engine
 import SwiftUI
 
 /// Canvas-drawn azimuthal equidistant projection centered on the operator's grid.
