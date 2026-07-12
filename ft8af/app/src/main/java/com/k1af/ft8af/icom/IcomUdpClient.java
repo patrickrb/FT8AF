@@ -276,9 +276,16 @@ public class IcomUdpClient {
     }
 
     // Visible for tests: swap in a capturing executor so the per-call send tasks can be
-    // grabbed and asserted independent instead of run on the real cached pool.
+    // grabbed and asserted independent instead of run on the real cached pool. Rejects
+    // null (it would NPE the next sendData) and shuts down the executor being displaced
+    // so the default cached pool's worker threads don't leak across tests.
     void setSendExecutorForTest(ExecutorService executor) {
+        java.util.Objects.requireNonNull(executor, "executor");
+        ExecutorService previous = this.sendDataThreadPool;
         this.sendDataThreadPool = executor;
+        if (previous != null && previous != executor) {
+            previous.shutdownNow();
+        }
     }
 
 }

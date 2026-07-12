@@ -38,6 +38,7 @@ public class IcomUdpClientSendDataTest {
     /** Executor that records submitted tasks instead of running them. */
     private static final class CapturingExecutor extends AbstractExecutorService {
         final List<Runnable> tasks = new ArrayList<>();
+        boolean shutdownNowCalled = false;
 
         @Override
         public void execute(Runnable command) {
@@ -50,6 +51,7 @@ public class IcomUdpClientSendDataTest {
 
         @Override
         public List<Runnable> shutdownNow() {
+            shutdownNowCalled = true;
             return new ArrayList<>();
         }
 
@@ -120,6 +122,31 @@ public class IcomUdpClientSendDataTest {
 
         executor.tasks.get(1).run();
         assertThat(receiveBytes()).isEqualTo(second);
+    }
+
+    /** The test hook rejects null instead of leaving a null pool that would NPE sendData. */
+    @Test
+    public void setSendExecutorForTest_rejectsNull() {
+        client = new IcomUdpClient(-1);
+        try {
+            client.setSendExecutorForTest(null);
+            org.junit.Assert.fail("Expected NullPointerException");
+        } catch (NullPointerException expected) {
+            // executor is required
+        }
+    }
+
+    /** Swapping in a new executor shuts down the one it displaces, so its threads don't leak. */
+    @Test
+    public void setSendExecutorForTest_shutsDownDisplacedExecutor() {
+        client = new IcomUdpClient(-1);
+        CapturingExecutor first = new CapturingExecutor();
+        CapturingExecutor second = new CapturingExecutor();
+
+        client.setSendExecutorForTest(first);   // displaces the default cached pool
+        client.setSendExecutorForTest(second);  // displaces `first`
+
+        assertThat(first.shutdownNowCalled).isTrue();
     }
 
     private byte[] receiveBytes() throws Exception {
