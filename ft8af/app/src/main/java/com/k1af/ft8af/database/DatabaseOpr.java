@@ -2994,10 +2994,14 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     if (result != null && !result.isEmpty()) GeneralVariables.udpHost = result;
                 }
                 if (name.equalsIgnoreCase("udp_port")) {
-                    try {
-                        int p = Integer.parseInt(result.trim());
-                        if (p > 0 && p <= 65535) GeneralVariables.udpPort = p;
-                    } catch (NumberFormatException ignored) {
+                    // result (cursor.getString) can be null; the other udp_* keys already
+                    // null-check, and Integer.parseInt(null.trim()) would NPE config hydration.
+                    if (result != null) {
+                        try {
+                            int p = Integer.parseInt(result.trim());
+                            if (p > 0 && p <= 65535) GeneralVariables.udpPort = p;
+                        } catch (NumberFormatException ignored) {
+                        }
                     }
                 }
                 if (name.equalsIgnoreCase("udp_accept_requests")) {

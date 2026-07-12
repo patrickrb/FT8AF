@@ -235,7 +235,11 @@ object WsjtxCodec {
     private class Reader(private val b: ByteArray) {
         var pos = 0
         private fun take(n: Int): Int? {
-            if (pos + n > b.size) return null
+            // Reject a negative length (e.g. a hostile/garbled 32-bit string length) and any
+            // n that overruns the buffer. Comparing against the remaining bytes (b.size - pos,
+            // always >= 0 since pos only advances through validated takes) avoids the
+            // pos + n integer overflow a huge n would cause with a naive `pos + n > b.size`.
+            if (n < 0 || n > b.size - pos) return null
             val start = pos; pos += n; return start
         }
         fun u8(): Int? { val i = take(1) ?: return null; return b[i].toInt() and 0xFF }
@@ -281,10 +285,12 @@ object WsjtxCodec {
                 Inbound.Reply(target.first, target.second, snr)
             }
             T_REPLAY -> Inbound.Replay
-            T_HALT_TX -> Inbound.HaltTx(r.bool() ?: false)
+            // Reject a truncated packet rather than defaulting the trailing bool: a malformed
+            // datagram must not trigger an unintended halt or transmit when accepting requests.
+            T_HALT_TX -> Inbound.HaltTx(r.bool() ?: return null)
             T_FREE_TEXT -> {
                 val text = r.string() ?: return null
-                Inbound.FreeText(text, r.bool() ?: true)
+                Inbound.FreeText(text, r.bool() ?: return null)
             }
             else -> null
         }

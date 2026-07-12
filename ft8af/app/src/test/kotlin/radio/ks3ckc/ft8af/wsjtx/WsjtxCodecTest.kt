@@ -251,4 +251,38 @@ class WsjtxCodecTest {
         bb.putInt(1) // time only, truncated
         assertThat(WsjtxCodec.parseInbound(sized(bb))).isNull()
     }
+
+    @Test
+    fun parseHaltTxMissingBoolIsRejected() {
+        // Truncated HaltTx (no autoOnly byte) must be rejected, not defaulted to false —
+        // a malformed packet must never trigger an unintended halt.
+        assertThat(WsjtxCodec.parseInbound(sized(beginInbound(WsjtxCodec.T_HALT_TX)))).isNull()
+    }
+
+    @Test
+    fun parseFreeTextMissingSendFlagIsRejected() {
+        // Truncated Free-Text (text present, send byte missing) must be rejected, not
+        // defaulted to send=true — a malformed packet must never trigger a transmit.
+        val free = beginInbound(WsjtxCodec.T_FREE_TEXT)
+        putStr(free, "HELLO") // no trailing send bool
+        assertThat(WsjtxCodec.parseInbound(sized(free))).isNull()
+    }
+
+    @Test
+    fun parseRejectsNegativeStringLength() {
+        // A hostile 32-bit string length that is negative (and not the 0xFFFFFFFF null
+        // sentinel) must not move the reader backwards / throw — the reader rejects it.
+        val bb = beginInbound(WsjtxCodec.T_FREE_TEXT)
+        bb.putInt(-2) // negative "text" length (not -1)
+        assertThat(WsjtxCodec.parseInbound(sized(bb))).isNull()
+    }
+
+    @Test
+    fun parseRejectsOverflowStringLength() {
+        // A huge positive length must be rejected via the remaining-bytes check, not wrap
+        // past the buffer end through pos + n integer overflow.
+        val bb = beginInbound(WsjtxCodec.T_FREE_TEXT)
+        bb.putInt(Int.MAX_VALUE) // enormous "text" length
+        assertThat(WsjtxCodec.parseInbound(sized(bb))).isNull()
+    }
 }

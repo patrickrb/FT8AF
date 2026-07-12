@@ -200,4 +200,28 @@ public class DatabaseOprConfigHydrationTest {
         assertThat(GeneralVariables.volumePercent).isEqualTo(0.5f);
         assertThat(GeneralVariables.alcTargetLow).isEqualTo(70);
     }
+
+    /**
+     * A raw SQL NULL for {@code udp_port} makes {@code cursor.getString(...)} return null.
+     * Its sibling {@code udp_host} already null-checks, but {@code udp_port} used to call
+     * {@code result.trim()} unguarded — an NPE that bricked config hydration for any backup
+     * carrying a null value. The guard leaves the current value untouched instead.
+     */
+    @Test
+    public void nullUdpPort_doesNotCrashHydration() {
+        int orig = GeneralVariables.udpPort;
+        try {
+            GeneralVariables.udpPort = 2237;
+            // writeConfigSync coerces null -> "", so insert a genuine SQL NULL directly.
+            opr.getWritableDatabase().execSQL("DELETE FROM config WHERE KeyName='udp_port'");
+            opr.getWritableDatabase()
+                    .execSQL("INSERT INTO config (KeyName,Value) VALUES ('udp_port', NULL)");
+
+            hydrate(); // pre-fix: NullPointerException on result.trim()
+
+            assertThat(GeneralVariables.udpPort).isEqualTo(2237); // unchanged, no crash
+        } finally {
+            GeneralVariables.udpPort = orig;
+        }
+    }
 }

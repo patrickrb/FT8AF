@@ -51,7 +51,11 @@ object WsjtxUdpService {
     private var targetPort = 0
     private var listenerThread: Thread? = null
     @Volatile private var listening = false
+    // Guarded by [replayLock]: mutated from decode/band-change callers and read from the
+    // listener thread handling a Replay request, so all access must be synchronized —
+    // ArrayDeque is not thread-safe.
     private val replayCache = ArrayDeque<WsjtxCodec.Decode>()
+    private val replayLock = Any()
 
     // Java-friendly SAM interfaces so the (Java) ViewModel can wire these with
     // plain lambdas.
@@ -82,9 +86,14 @@ object WsjtxUdpService {
         try {
             target = InetAddress.getByName(GeneralVariables.udpHost)
             targetPort = GeneralVariables.udpPort
+            // When accepting requests, bind the configured UDP port (default 2237) so
+            // companion apps that send Reply/Halt/FreeText/Replay to that port actually
+            // reach us. An ephemeral local port would only work for outbound broadcasts —
+            // no companion could discover it. Send-only mode keeps the ephemeral port.
+            val localPort = if (GeneralVariables.udpAcceptRequests) targetPort else 0
             val sock = DatagramSocket(null as java.net.SocketAddress?).apply {
                 reuseAddress = true
-                bind(InetSocketAddress(0)) // ephemeral local port
+                bind(InetSocketAddress(localPort))
                 broadcast = true
             }
             socket = sock
@@ -137,8 +146,10 @@ object WsjtxUdpService {
     fun sendDecode(d: WsjtxCodec.Decode) {
         if (!enabled) return
         send(WsjtxCodec.decode(d))
-        if (replayCache.size >= REPLAY_CACHE_CAP) replayCache.removeFirst()
-        replayCache.addLast(d)
+        synchronized(replayLock) {
+            if (replayCache.size >= REPLAY_CACHE_CAP) replayCache.removeFirst()
+            replayCache.addLast(d)
+        }
     }
 
     fun sendQsoLogged(q: WsjtxCodec.QsoLogged, adif: String) {
@@ -147,12 +158,14 @@ object WsjtxUdpService {
         send(WsjtxCodec.loggedAdif(adif))
     }
 
-    fun clearReplayCache() = replayCache.clear()
+    fun clearReplayCache() = synchronized(replayLock) { replayCache.clear() }
 
     /** Re-broadcast this session's decodes (marked not-new) for a Replay request. */
     private fun replay() {
         if (!enabled) return
-        for (d in replayCache.toList()) send(WsjtxCodec.decode(d.copy(isNew = false)))
+        // Snapshot under the lock, then send outside it (send() must not hold replayLock).
+        val snapshot = synchronized(replayLock) { replayCache.toList() }
+        for (d in snapshot) send(WsjtxCodec.decode(d.copy(isNew = false)))
     }
 
     private suspend fun periodicLoop() {
