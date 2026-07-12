@@ -991,11 +991,19 @@ function SettingsScreen(props: {
 
   // Push UDP settings to the backend (which persists + rebinds live).
   function applyUdp(next: UdpConfig) {
-    setUdp(next);
-    api.setUdpConfig(next);
+    // Normalize before persisting. The port input uses parseInt(...) || 0, so clearing the
+    // field yields 0 (NaN/out-of-range are possible too); fall back to the default 2237 so
+    // we never persist a port the backend rejects or that can't deliver. Default an empty
+    // host to loopback. Write the corrected config back to state so the field reflects it.
+    const port =
+      Number.isFinite(next.port) && next.port > 0 && next.port <= 65535 ? next.port : 2237;
+    const host = next.host.trim().length > 0 ? next.host.trim() : "127.0.0.1";
+    const cfg: UdpConfig = { ...next, host, port };
+    setUdp(cfg);
+    api.setUdpConfig(cfg);
     onStatus(
-      next.enabled
-        ? `WSJT-X UDP → ${next.host}:${next.port}${next.accept_requests ? " (accepting requests)" : ""}`
+      cfg.enabled
+        ? `WSJT-X UDP → ${cfg.host}:${cfg.port}${cfg.accept_requests ? " (accepting requests)" : ""}`
         : "WSJT-X UDP off",
     );
   }

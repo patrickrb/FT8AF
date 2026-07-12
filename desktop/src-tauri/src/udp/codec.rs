@@ -198,8 +198,9 @@ pub fn decode(d: &Decode) -> Vec<u8> {
     w.buf
 }
 
-/// Type 3 (outbound form). Tells companion apps to wipe their decode band —
-/// sent at the start of each cycle so their view tracks ours.
+/// Type 3 (outbound form). Tells companion apps to wipe their decode band. The
+/// engine sends this on a genuine decode reset — stopping decode and changing
+/// band/context — not once per cycle, to avoid churning companions' views.
 pub fn clear() -> Vec<u8> {
     begin(T_CLEAR).buf
 }
@@ -368,7 +369,10 @@ pub fn parse_inbound(buf: &[u8]) -> Option<Inbound> {
         }
         T_FREE_TEXT => {
             let text = r.string()?;
-            let send = r.bool().unwrap_or(true);
+            // Reject a truncated packet rather than defaulting the send flag to true: a
+            // malformed datagram must never trigger an unintended transmit when "Accept
+            // UDP requests" is enabled.
+            let send = r.bool()?;
             Some(Inbound::FreeText { text, send })
         }
         _ => None,
@@ -733,6 +737,17 @@ mod tests {
         );
 
         assert_eq!(parse_inbound(&begin(T_REPLAY).buf), Some(Inbound::Replay));
+    }
+
+    #[test]
+    fn parse_freetext_missing_send_flag_is_rejected() {
+        // A truncated Free-Text datagram (text present, send bool missing) must be
+        // rejected rather than defaulting send=true — otherwise a malformed packet could
+        // trigger an unintended transmit when "Accept UDP requests" is enabled.
+        let mut w = begin(T_FREE_TEXT);
+        w.string("HELLO");
+        // no w.bool(...) — the trailing send flag is missing
+        assert_eq!(parse_inbound(&w.buf), None);
     }
 
     #[test]

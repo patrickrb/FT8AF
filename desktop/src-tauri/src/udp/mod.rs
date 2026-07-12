@@ -9,7 +9,7 @@
 
 pub mod codec;
 
-use std::net::{Ipv4Addr, SocketAddr, ToSocketAddrs, UdpSocket};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs, UdpSocket};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
@@ -120,13 +120,26 @@ impl UdpService {
             return Ok("WSJT-X UDP off".into());
         }
 
+        // Reject a zero port: it can never deliver, but would otherwise leave the service
+        // "enabled" (sock bound to an ephemeral port) yet silently dropping every send.
+        if cfg.port == 0 {
+            return Err("WSJT-X UDP port must be non-zero".into());
+        }
+
         let target = (cfg.host.as_str(), cfg.port)
             .to_socket_addrs()
             .map_err(|e| format!("bad UDP host '{}': {e}", cfg.host))?
             .next()
             .ok_or_else(|| format!("could not resolve UDP host '{}'", cfg.host))?;
 
-        let sock = UdpSocket::bind("0.0.0.0:0").map_err(|e| format!("UDP bind failed: {e}"))?;
+        // Bind the same address family as the resolved target. A dual-stack name like
+        // "localhost" can resolve to IPv6 (::1) first, and an IPv4-only 0.0.0.0 socket
+        // can't send to an IPv6 destination — send_to would fail at runtime.
+        let bind_addr: SocketAddr = match target {
+            SocketAddr::V4(_) => (Ipv4Addr::UNSPECIFIED, 0).into(),
+            SocketAddr::V6(_) => (Ipv6Addr::UNSPECIFIED, 0).into(),
+        };
+        let sock = UdpSocket::bind(bind_addr).map_err(|e| format!("UDP bind failed: {e}"))?;
         // Allow a broadcast destination (e.g. x.x.x.255); harmless otherwise.
         let _ = sock.set_broadcast(true);
         // For a multicast target, join the group so replies on it reach us.
@@ -309,6 +322,24 @@ mod tests {
     }
 
     #[test]
+    fn apply_enabled_zero_port_is_rejected_and_disabled() {
+        // Port 0 can never deliver; apply() must error and leave the service disabled
+        // rather than binding an ephemeral port that silently drops every send.
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let mut svc = UdpService::new(tx);
+        let err = svc
+            .apply(UdpConfig {
+                enabled: true,
+                host: "127.0.0.1".into(),
+                port: 0,
+                accept_requests: false,
+            })
+            .unwrap_err();
+        assert!(err.contains("non-zero"));
+        assert!(!svc.is_enabled());
+    }
+
+    #[test]
     fn apply_enabled_binds_and_sends_to_loopback() {
         // Bind a real receiver on an OS-assigned port, point the service at it,
         // and confirm a datagram arrives — exercises the full bind+send path.
@@ -344,7 +375,9 @@ mod tests {
         svc.apply(UdpConfig {
             enabled: true,
             host: "127.0.0.1".into(),
-            port: 0, // send target unused here; we drive the listener directly
+            // Any valid non-zero target; the socket still binds an ephemeral local port and
+            // we drive the listener directly via local_addr() below, so the target is unused.
+            port: 2237,
             accept_requests: true,
         })
         .unwrap();
