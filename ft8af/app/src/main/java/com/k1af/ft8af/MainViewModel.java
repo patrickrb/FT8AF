@@ -1069,6 +1069,7 @@ public class MainViewModel extends ViewModel {
      * writers' monitor makes the check-and-get atomic. Package-visible for
      * testing.
      */
+    @Nullable
     static Ft8Message messageAt(ArrayList<Ft8Message> list, int position) {
         synchronized (list) {
             if (position < 0 || position >= list.size()) {
@@ -1083,6 +1084,7 @@ public class MainViewModel extends ViewModel {
      * callers; {@code null} if the position is no longer valid. See
      * {@link #messageAt(ArrayList, int)} for why the lock is required.
      */
+    @Nullable
     public Ft8Message getFt8MessageAtOrNull(int position) {
         return messageAt(ft8Messages, position);
     }
