@@ -24,10 +24,15 @@ public class RadioTcpClient {
     private int port;
     public static final int MAX_BUFFER_SIZE=1024 * 32;
 
-    private final ExecutorService sendByteThreadPool = Executors.newCachedThreadPool();
-    // Serializes the actual writes to the shared TCP OutputStream. The cached pool can run
-    // two sends concurrently and OutputStream.write(byte[]) is not atomic, so without this
-    // the bytes of two CAT commands could interleave into a single corrupt frame on the wire.
+    // Single-thread executor: it keeps sendByte() asynchronous (off the caller/main thread)
+    // while naturally queueing sends on one worker. A cached pool would spawn an unbounded
+    // number of threads under rapid sendByte() calls that then all block on sendLock — a
+    // resource-exhaustion hazard now that writes are serialized anyway.
+    private final ExecutorService sendByteThreadPool = Executors.newSingleThreadExecutor();
+    // Serializes the actual writes to the shared TCP OutputStream. Even with a single worker
+    // this guards against any other caller reaching a SendByteRunnable's write path, and
+    // OutputStream.write(byte[]) is not atomic, so without it the bytes of two CAT commands
+    // could interleave into a single corrupt frame on the wire.
     private final Object sendLock = new Object();
 
     public static RadioTcpClient getInstance() {
@@ -247,10 +252,12 @@ public class RadioTcpClient {
      * Exception : android.os.NetworkOnMainThreadException
      */
     public synchronized void sendByte(final byte[] mBuffer) {
-        // Submit a fresh runnable carrying an immutable snapshot of this call's buffer. A single
-        // shared runnable whose mBuffer we overwrite before each execute() would let back-to-back
-        // sends clobber each other on the cached pool (a worker reads mBuffer asynchronously),
-        // dropping one command and sending the latest one twice. Mirrors RadioUdpClient.sendData.
+        // Submit a fresh runnable that captures this call's buffer reference. A single shared
+        // runnable whose mBuffer we overwrite before each execute() would let back-to-back sends
+        // clobber each other (the worker reads mBuffer asynchronously), dropping one command and
+        // sending the latest one twice. Each call gets its own runnable + buffer reference instead;
+        // callers are expected not to mutate the array after handing it off. Mirrors
+        // RadioUdpClient.sendData.
         sendByteThreadPool.execute(new SendByteRunnable(this, mBuffer));
 //        new Thread(new Runnable() {
 //            @Override
@@ -279,8 +286,8 @@ public class RadioTcpClient {
         @Override
         public void run() {
             if (mBuffer == null) return;
-            // Hold sendLock across the write+flush so a concurrent send on the cached pool
-            // can't interleave its bytes into the middle of this command frame.
+            // Hold sendLock across the write+flush so any concurrent send path can't
+            // interleave its bytes into the middle of this command frame.
             synchronized (client.sendLock) {
                 OutputStream out = client.mOutputStream;
                 if (out == null) return;

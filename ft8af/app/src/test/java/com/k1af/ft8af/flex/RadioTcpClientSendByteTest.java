@@ -5,23 +5,27 @@ import static com.google.common.truth.Truth.assertThat;
 import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Regression coverage for {@link RadioTcpClient#sendByte(byte[])} dispatch.
  *
  * <p>The Flex command channel writes CAT commands with {@code sendByte()}, which hands the
- * work to a cached thread pool. Before the fix a single long-lived {@link
+ * work to a single-thread executor. Before the fix a single long-lived {@link
  * RadioTcpClient.SendByteRunnable} was reused: {@code sendByte()} overwrote its {@code mBuffer}
- * field, then submitted the same object again. Because the pool reads {@code mBuffer}
+ * field, then submitted the same object again. Because the worker reads {@code mBuffer}
  * asynchronously, two back-to-back sends could clobber each other — one command dropped and the
- * latest one written twice. Worse than the UDP sibling, the runnable writes to a <em>shared</em>
+ * latest one written twice. The runnable also writes to a <em>shared</em>
  * {@link java.io.OutputStream} whose {@code write(byte[])} is not atomic, so two concurrent
  * sends could interleave into a single corrupt command frame.
  *
- * <p>The fix submits a fresh runnable carrying an immutable per-call snapshot and holds a lock
- * across the write+flush. These tests exercise the new {@link RadioTcpClient.SendByteRunnable}
- * directly (pure JDK — the only Android type in {@link RadioTcpClient} is {@code
- * android.util.Log}, stubbed via {@code returnDefaultValues}).
+ * <p>The fix submits a fresh runnable per call (each capturing its own buffer reference) and
+ * holds {@code sendLock} across the write+flush. These tests exercise the new {@link
+ * RadioTcpClient.SendByteRunnable} directly (pure JDK — the only Android type in {@link
+ * RadioTcpClient} is {@code android.util.Log}, stubbed via {@code returnDefaultValues}).
  */
 public class RadioTcpClientSendByteTest {
 
@@ -77,5 +81,68 @@ public class RadioTcpClientSendByteTest {
         new RadioTcpClient.SendByteRunnable(client, null).run();
 
         assertThat(sink.toByteArray()).isEmpty();
+    }
+
+    /**
+     * Two runnables run concurrently against the same shared OutputStream must not interleave
+     * their bytes: {@code sendLock} serializes the whole write+flush, so each command frame lands
+     * intact. The sink deliberately yields mid-{@code write(byte[])} to give a racing writer every
+     * chance to tear the frame if the lock weren't held. This is the on-the-wire corruption the
+     * single-thread executor + lock exists to prevent (a bounded, serialized send path).
+     */
+    @Test
+    public void concurrentRuns_doNotInterleave() throws InterruptedException {
+        RadioTcpClient client = new RadioTcpClient();
+
+        // OutputStream.write(byte[]) default-decomposes into per-byte write(int) calls; yielding
+        // between them widens the interleave window for any writer not holding sendLock.
+        final ByteArrayOutputStream sink = new ByteArrayOutputStream();
+        OutputStream tearProne = new OutputStream() {
+            @Override
+            public void write(int b) throws IOException {
+                sink.write(b);
+                Thread.yield();
+            }
+        };
+        client.primeOutputStreamForTest(tearProne);
+
+        final byte[] a = {1, 1, 1, 1, 1, 1, 1, 1};
+        final byte[] b = {2, 2, 2, 2, 2, 2, 2, 2};
+
+        final CountDownLatch start = new CountDownLatch(1);
+        final CountDownLatch done = new CountDownLatch(2);
+        Runnable ra = () -> {
+            awaitQuietly(start);
+            new RadioTcpClient.SendByteRunnable(client, a).run();
+            done.countDown();
+        };
+        Runnable rb = () -> {
+            awaitQuietly(start);
+            new RadioTcpClient.SendByteRunnable(client, b).run();
+            done.countDown();
+        };
+        new Thread(ra).start();
+        new Thread(rb).start();
+        start.countDown();
+        assertThat(done.await(5, TimeUnit.SECONDS)).isTrue();
+
+        // 16 bytes total, and each 8-byte frame must appear as an unbroken run (never a 1 in the
+        // middle of the 2s or vice-versa). Any interleave would break one of these runs.
+        byte[] out = sink.toByteArray();
+        assertThat(out).hasLength(16);
+        for (int i = 0; i < out.length; i += 8) {
+            byte v = out[i];
+            for (int j = 1; j < 8; j++) {
+                assertThat(out[i + j]).isEqualTo(v);
+            }
+        }
+    }
+
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }
