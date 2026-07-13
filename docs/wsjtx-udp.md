@@ -70,7 +70,7 @@ each logged QSO.
 
 | # | Name | Fields after header | Action |
 |---|------|---------------------|--------|
-| 4 | Reply | `u32` time, `i32` snr, `f64` dt, `u32` df, `str` mode, `str` message, `bool` low-conf, `u8` modifiers | Call the station named in `message` (auto-sequence). |
+| 4 | Reply | `u32` time, `i32` snr, `f64` dt, `u32` df, `str` mode, `str` message, `bool` low-conf, `u8` modifiers | Call the station named in `message` (auto-sequence), answering on the requested `df` audio tone when it is in the usable passband. |
 | 7 | Replay | — | Re-broadcast this session's decodes (marked not-new). |
 | 8 | Halt Tx | `bool` auto-only | Stop transmitting. |
 | 9 | Free Text | `str` text, `bool` send | Send `text` (only acted on when `send` = true). |
@@ -78,7 +78,10 @@ each logged QSO.
 The station to call from a **Reply** is parsed from the message line: `TO FROM
 …`, or a CQ line with an optional directive (`CQ FROM GRID`, `CQ DX FROM GRID`,
 `CQ POTA FROM GRID`) → the first callsign-shaped token, with the grid taken from
-the first following 4-char Maidenhead square. Any other/unknown message type is
+the first following 4-char Maidenhead square. The Reply's `df` is the audio
+frequency (Hz) the companion wants us to answer on; we adopt it as the TX offset
+when it falls inside the usable audio passband, otherwise (0/unspecified or
+out-of-band) we keep the current offset. Any other/unknown message type is
 ignored; malformed or truncated datagrams are dropped without effect.
 
 ## Golden vectors

@@ -238,9 +238,9 @@ fn spawn_listener(sock: &UdpSocket, cmd_tx: Sender<EngineCommand>) -> Result<Lis
 /// existing operator-facing commands. `None` for requests we ignore.
 fn to_command(buf: &[u8]) -> Option<EngineCommand> {
     match codec::parse_inbound(buf)? {
-        codec::Inbound::Reply { call, grid, snr } => {
-            Some(EngineCommand::Answer(AnswerArgs { call_from: call, grid, snr }))
-        }
+        codec::Inbound::Reply { call, grid, snr, delta_freq } => Some(EngineCommand::Answer(
+            AnswerArgs { call_from: call, grid, snr, delta_freq },
+        )),
         // We only support a global halt; `auto_only` doesn't map to a separate
         // manual-TX path here, so any halt request stops TX.
         codec::Inbound::HaltTx { .. } => Some(EngineCommand::StopTx),
@@ -293,6 +293,9 @@ mod tests {
                 assert_eq!(a.call_from, "K1ABC");
                 assert_eq!(a.grid, "FN42");
                 assert_eq!(a.snr, -3);
+                // The requested audio tone (df) rides through to the engine so it
+                // can key up on it rather than the current TX offset.
+                assert_eq!(a.delta_freq, 1500);
             }
             other => panic!("expected Answer, got {other:?}"),
         }
