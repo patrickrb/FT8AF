@@ -33,6 +33,16 @@ public enum SlotClock {
         floorMod(slotID, 2)
     }
 
+    /// Whether we should key up in `slotID` for the operator's selected TX slot.
+    ///
+    /// TX audio is scheduled to start immediately, so it physically occupies
+    /// `slotID` itself — eligibility is therefore the parity of that very slot,
+    /// not the next one. This mirrors the desktop engine's `maybe_transmit`,
+    /// which gates on `slot_id.rem_euclid(2)` for the slot it keys up in.
+    public static func shouldTransmit(slotID: Int64, desiredParity: Int) -> Bool {
+        Int(parity(slotID: slotID)) == desiredParity
+    }
+
     // Euclidean division/modulo: quotient floored toward -inf so the remainder is
     // always in [0, |b|). For non-negative inputs these equal `/` and `%`.
     static func floorDiv(_ a: Int64, _ b: Int64) -> Int64 {
