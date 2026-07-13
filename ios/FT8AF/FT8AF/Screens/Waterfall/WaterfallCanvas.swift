@@ -43,7 +43,7 @@ struct WaterfallCanvas: View {
             // Draw TX frequency marker. Map with the same span the waterfall
             // columns cover (WaterfallAxis) so the marker sits on the trace.
             let txFreq = appState.waterfall.txFreqHz
-            let txX = CGFloat(WaterfallAxis.fraction(forHz: txFreq)) * size.width
+            let txX = CGFloat(WaterfallAxis.clampedFraction(forHz: txFreq)) * size.width
             let txPath = Path { p in
                 p.move(to: CGPoint(x: txX, y: 0))
                 p.addLine(to: CGPoint(x: txX, y: size.height))

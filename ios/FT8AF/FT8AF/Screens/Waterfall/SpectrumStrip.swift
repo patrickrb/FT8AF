@@ -28,7 +28,7 @@ struct SpectrumStrip: View {
                 }
 
                 // TX frequency marker line
-                let txX = CGFloat(WaterfallAxis.fraction(forHz: appState.waterfall.txFreqHz)) * size.width
+                let txX = CGFloat(WaterfallAxis.clampedFraction(forHz: appState.waterfall.txFreqHz)) * size.width
                 let markerRect = CGRect(x: txX - 0.5, y: 0, width: 1, height: size.height)
                 context.fill(Path(markerRect), with: .color(accent))
 

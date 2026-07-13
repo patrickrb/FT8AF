@@ -1,5 +1,3 @@
-import Foundation
-
 /// Horizontal-axis geometry shared by the waterfall heatmap, the spectrum
 /// strip, the frequency ruler and tap-to-tune.
 ///
@@ -27,7 +25,7 @@ public enum WaterfallAxis {
     /// bound keeps TX inside the SSB passband and mirrors the desktop engine's
     /// `tx_audio_hz.clamp(200, 3000)`; the display band (`displayMaxHz`) extends
     /// above it so higher signals remain visible even though they can't be tuned.
-    public static let minTxHz: Float = 100
+    public static let minTxHz: Float = 200
     public static let maxTxHz: Float = 3000
 
     /// Horizontal position (0...1 of the view width) for a frequency.
@@ -35,6 +33,15 @@ public enum WaterfallAxis {
         let span = displayMaxHz
         guard span > 0 else { return 0 }
         return hz / span
+    }
+
+    /// Horizontal position for a TX-marker overlay, clamped to the drawable
+    /// width (0...1). `txFreqHz` can be set externally without any range check
+    /// — a WSJT-X UDP reply carries a raw `deltaFreq` — so an out-of-band value
+    /// would otherwise push the marker line off-canvas. Clamping keeps it pinned
+    /// to the nearest edge instead of vanishing.
+    public static func clampedFraction(forHz hz: Float) -> Float {
+        return min(max(fraction(forHz: hz), 0), 1)
     }
 
     /// Frequency (Hz) at a horizontal position given as a 0...1 fraction of the

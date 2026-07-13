@@ -1,5 +1,4 @@
 import XCTest
-import Foundation
 import FT8Audio
 
 final class WaterfallAxisTests: XCTestCase {
@@ -52,6 +51,24 @@ final class WaterfallAxisTests: XCTestCase {
         // Far right (3500 Hz) clamps down to the SSB passband ceiling, not 3500.
         XCTAssertEqual(WaterfallAxis.tunedTxHz(forFraction: 1.0), WaterfallAxis.maxTxHz, accuracy: 1e-4)
         XCTAssertEqual(WaterfallAxis.maxTxHz, 3000, accuracy: 1e-6)
+    }
+
+    /// A TX marker's x-fraction must stay on-canvas even when `txFreqHz` is set
+    /// externally without clamping (e.g. a WSJT-X UDP reply's raw deltaFreq).
+    func testClampedFractionStaysWithinUnitInterval() {
+        // Below the band clamps to the left edge.
+        XCTAssertEqual(WaterfallAxis.clampedFraction(forHz: -500), 0, accuracy: 1e-6)
+        // Above the display span clamps to the right edge.
+        XCTAssertEqual(WaterfallAxis.clampedFraction(forHz: 9999), 1, accuracy: 1e-6)
+        // In-band values pass through unchanged.
+        XCTAssertEqual(WaterfallAxis.clampedFraction(forHz: 1750),
+                       WaterfallAxis.fraction(forHz: 1750), accuracy: 1e-6)
+        // Sweep a range spanning outside the band; result never leaves [0, 1].
+        for hz: Float in [-10_000, -1, 0, 1750, 3500, 4000, 100_000] {
+            let f = WaterfallAxis.clampedFraction(forHz: hz)
+            XCTAssertGreaterThanOrEqual(f, 0)
+            XCTAssertLessThanOrEqual(f, 1)
+        }
     }
 
     /// Tapping a visible signal keys up on that signal, not ~17% low as before.
