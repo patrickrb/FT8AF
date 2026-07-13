@@ -199,6 +199,23 @@ final class SettingsState {
     var udpHost: String = "127.0.0.1"
     var udpPort: Int = 2237
     var udpAcceptRequests: Bool = false
+    // Online logging (Cloudlog/Wavelog family + QRZ.com logbook + PSK Reporter)
+    var cloudlogEnabled: Bool = false
+    var cloudlogUrl: String = ""
+    var cloudlogApiKey: String = ""
+    var cloudlogStationId: String = ""
+    var qrzLogbookEnabled: Bool = false
+    var qrzLogbookApiKey: String = ""
+    var pskReporterEnabled: Bool = false
+    // Decode highlights & filters
+    var highlightNewDxcc: Bool = true
+    var highlightNewGrid: Bool = true
+    var highlightNewBand: Bool = true
+    var highlightWorked: Bool = true
+    var continentFilter: String = "All"   // All / NA / SA / EU / AF / AS / OC / AN
+    var distanceInMiles: Bool = false
+    // Tune
+    var tuneTimeoutSec: Int = 30
 }
 
 // MARK: - Rig
@@ -289,6 +306,20 @@ enum SettingsPersistence {
         d.set(s.udpHost, forKey: key("udpHost"))
         d.set(s.udpPort, forKey: key("udpPort"))
         d.set(s.udpAcceptRequests, forKey: key("udpAcceptRequests"))
+        d.set(s.cloudlogEnabled, forKey: key("cloudlogEnabled"))
+        d.set(s.cloudlogUrl, forKey: key("cloudlogUrl"))
+        d.set(s.cloudlogApiKey, forKey: key("cloudlogApiKey"))
+        d.set(s.cloudlogStationId, forKey: key("cloudlogStationId"))
+        d.set(s.qrzLogbookEnabled, forKey: key("qrzLogbookEnabled"))
+        d.set(s.qrzLogbookApiKey, forKey: key("qrzLogbookApiKey"))
+        d.set(s.pskReporterEnabled, forKey: key("pskReporterEnabled"))
+        d.set(s.highlightNewDxcc, forKey: key("highlightNewDxcc"))
+        d.set(s.highlightNewGrid, forKey: key("highlightNewGrid"))
+        d.set(s.highlightNewBand, forKey: key("highlightNewBand"))
+        d.set(s.highlightWorked, forKey: key("highlightWorked"))
+        d.set(s.continentFilter, forKey: key("continentFilter"))
+        d.set(s.distanceInMiles, forKey: key("distanceInMiles"))
+        d.set(s.tuneTimeoutSec, forKey: key("tuneTimeoutSec"))
     }
 
     @MainActor static func load(into s: SettingsState) {
@@ -361,6 +392,40 @@ enum SettingsPersistence {
         }
         if d.object(forKey: key("udpAcceptRequests")) != nil {
             s.udpAcceptRequests = d.bool(forKey: key("udpAcceptRequests"))
+        }
+        if d.object(forKey: key("cloudlogEnabled")) != nil {
+            s.cloudlogEnabled = d.bool(forKey: key("cloudlogEnabled"))
+        }
+        if let v = d.string(forKey: key("cloudlogUrl")) { s.cloudlogUrl = v }
+        if let v = d.string(forKey: key("cloudlogApiKey")) { s.cloudlogApiKey = v }
+        if let v = d.string(forKey: key("cloudlogStationId")) { s.cloudlogStationId = v }
+        if d.object(forKey: key("qrzLogbookEnabled")) != nil {
+            s.qrzLogbookEnabled = d.bool(forKey: key("qrzLogbookEnabled"))
+        }
+        if let v = d.string(forKey: key("qrzLogbookApiKey")) { s.qrzLogbookApiKey = v }
+        if d.object(forKey: key("pskReporterEnabled")) != nil {
+            s.pskReporterEnabled = d.bool(forKey: key("pskReporterEnabled"))
+        }
+        if d.object(forKey: key("highlightNewDxcc")) != nil {
+            s.highlightNewDxcc = d.bool(forKey: key("highlightNewDxcc"))
+        }
+        if d.object(forKey: key("highlightNewGrid")) != nil {
+            s.highlightNewGrid = d.bool(forKey: key("highlightNewGrid"))
+        }
+        if d.object(forKey: key("highlightNewBand")) != nil {
+            s.highlightNewBand = d.bool(forKey: key("highlightNewBand"))
+        }
+        if d.object(forKey: key("highlightWorked")) != nil {
+            s.highlightWorked = d.bool(forKey: key("highlightWorked"))
+        }
+        if let v = d.string(forKey: key("continentFilter")), !v.isEmpty {
+            s.continentFilter = v
+        }
+        if d.object(forKey: key("distanceInMiles")) != nil {
+            s.distanceInMiles = d.bool(forKey: key("distanceInMiles"))
+        }
+        if d.object(forKey: key("tuneTimeoutSec")) != nil {
+            s.tuneTimeoutSec = d.integer(forKey: key("tuneTimeoutSec"))
         }
     }
 
