@@ -896,6 +896,23 @@ impl Engine {
         let _ = self.evt.send(e);
     }
 
+    /// Adopt an inbound WSJT-X Reply's requested `df` as the **session** TX audio
+    /// offset — in-memory only. The value arrives on an untrusted UDP socket, so
+    /// this deliberately does *not* write through to the persisted `base_freq`
+    /// config: only explicit operator actions (SetBaseFreq / the UI) change the
+    /// saved offset, and a datagram can't survive a restart. A `0`/unspecified or
+    /// out-of-band `df` is ignored (current offset kept). Returns whether the
+    /// session offset changed.
+    fn apply_reply_df(&mut self, delta_freq: u32) -> bool {
+        match reply_tx_audio_hz(delta_freq) {
+            Some(hz) => {
+                self.tx_audio_hz = hz;
+                true
+            }
+            None => false,
+        }
+    }
+
     fn handle(&mut self, cmd: EngineCommand) {
         match cmd {
             EngineCommand::StartDecode => self.start_decode(),
@@ -1021,13 +1038,14 @@ impl Engine {
             }
             EngineCommand::Answer(args) => {
                 // Honor the audio tone the companion asked us to answer on (WSJT-X's
-                // `df`) when it carries a plausible one, so we key up on the requested
-                // offset rather than the current TX tone — matching the Android/iOS
-                // ports. The desktop UI's own "click to answer" sends df=0 (unchanged).
-                if let Some(hz) = reply_tx_audio_hz(args.delta_freq) {
-                    self.tx_audio_hz = hz;
-                    let _ = self.db.set_config("base_freq", &self.tx_audio_hz.to_string());
-                }
+                // `df`) for *this session* when it carries a plausible one, so we key
+                // up on the requested offset rather than the current TX tone —
+                // matching the Android/iOS ports. This is an in-memory-only change:
+                // the `df` arrives on an untrusted UDP socket, so it must never
+                // rewrite the operator's persisted `base_freq` (only SetBaseFreq / the
+                // UI do that, and the saved offset survives a restart). The desktop
+                // UI's own "click to answer" sends df=0 (offset unchanged).
+                self.apply_reply_df(args.delta_freq);
                 let msg = DecodedMessage {
                     call_from: args.call_from,
                     grid: args.grid,
@@ -1121,9 +1139,38 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::{
-        clamp_tx_gain, reply_tx_audio_hz, rms_dbfs, wf_boundary_row, CYCLE_MS, MAX_TX_AUDIO_HZ,
-        MIN_TX_AUDIO_HZ, SILENCE_DBFS,
+        clamp_tx_gain, reply_tx_audio_hz, rms_dbfs, wf_boundary_row, Engine, CYCLE_MS,
+        MAX_TX_AUDIO_HZ, MIN_TX_AUDIO_HZ, SILENCE_DBFS,
     };
+    use crate::db::Db;
+    use std::sync::Arc;
+
+    #[test]
+    fn reply_df_updates_session_offset_without_persisting() {
+        // The operator's saved TX offset (base_freq) is what survives a restart.
+        let db = Arc::new(Db::open_in_memory().expect("in-memory db"));
+        db.set_config("base_freq", "1500").expect("seed base_freq");
+
+        let (evt_tx, _evt_rx) = std::sync::mpsc::channel();
+        let (cmd_tx, _cmd_rx) = std::sync::mpsc::channel();
+        let mut engine = Engine::new(Arc::clone(&db), evt_tx, cmd_tx);
+        assert_eq!(engine.tx_audio_hz, 1500, "restored from persisted base_freq");
+
+        // An inbound (untrusted) UDP Reply asks us to answer on 1800 Hz: the
+        // in-memory session offset moves so we key up on the requested tone...
+        assert!(engine.apply_reply_df(1800));
+        assert_eq!(engine.tx_audio_hz, 1800);
+        // ...but the operator's *persisted* offset is left exactly as they saved
+        // it — a network datagram must not change what comes back after a restart.
+        assert_eq!(db.get_config("base_freq").as_deref(), Some("1500"));
+
+        // A 0/unspecified or out-of-band df changes neither the session offset nor
+        // the persisted config.
+        assert!(!engine.apply_reply_df(0));
+        assert!(!engine.apply_reply_df(50_000));
+        assert_eq!(engine.tx_audio_hz, 1800);
+        assert_eq!(db.get_config("base_freq").as_deref(), Some("1500"));
+    }
 
     #[test]
     fn reply_df_honors_in_band_and_ignores_the_rest() {
