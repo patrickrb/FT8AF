@@ -309,15 +309,24 @@ final class LiveEngine {
         // desktop engine's `maybe_transmit`), not the next slot's.
         if let txMsg = qso.txMessage {
             if SlotClock.shouldTransmit(slotID: slotID, desiredParity: appState.tx.slotParity) {
-                scheduleTx(message: txMsg, freqHz: appState.waterfall.txFreqHz)
+                if scheduleTx(message: txMsg, freqHz: appState.waterfall.txFreqHz) {
+                    // Tell the sequencer the message actually went out. This is what
+                    // lets a courtesy "73" wrap the QSO up only after it's on the
+                    // air; if scheduleTx bailed (encode failure) the QSO stays armed
+                    // and retransmits next slot instead of clobbering the 73.
+                    qso.notifyTransmitted()
+                }
             }
         }
     }
 
-    /// Generate FT8 audio and play it through the speaker.
-    private func scheduleTx(message: String, freqHz: Float) {
-        guard let appState else { return }
-        guard let samples = FT8Encoder.generateFT8(message, baseFreqHz: freqHz) else { return }
+    /// Generate FT8 audio and play it through the speaker. Returns `true` if a
+    /// transmission was actually started, `false` if it bailed (encode failure) —
+    /// the caller uses this to tell the sequencer the message really went out.
+    @discardableResult
+    private func scheduleTx(message: String, freqHz: Float) -> Bool {
+        guard let appState else { return false }
+        guard let samples = FT8Encoder.generateFT8(message, baseFreqHz: freqHz) else { return false }
 
         // Log the TX message to conversation panel.
         let utcTime = Self.utcTimeString(from: Int64(Date().timeIntervalSince1970 * 1000))
@@ -331,6 +340,7 @@ final class LiveEngine {
                 self?.appState?.tx.isTransmitting = false
             }
         }
+        return true
     }
 
     // MARK: - Waterfall loop
