@@ -189,6 +189,14 @@ impl QsoEngine {
             return None;
         }
 
+        // The courtesy "73" queued on the previous slot (RReport -> RR73, or a
+        // manual Tx5) has now had its TX slot; wrap up (return to CQ / stop)
+        // regardless of incoming traffic this slot.
+        if self.stage == TxStage::Bye73 {
+            self.finish_qso();
+            return None;
+        }
+
         // Find a message addressed to us, from our target if we have one.
         let mine = messages.iter().find(|m| {
             m.call_to.eq_ignore_ascii_case(&self.my_call)
@@ -305,7 +313,17 @@ impl QsoEngine {
             confirmed: false,
         };
 
-        // Return to CQ or go idle.
+        // If a courtesy "73" is queued (the RReport arm set stage = Bye73), leave
+        // tx_message/stage so the scheduler transmits it; the next slot's Bye73
+        // handler in process_rx then wraps up. Otherwise finish now.
+        if self.stage != TxStage::Bye73 {
+            self.finish_qso();
+        }
+        Some(QsoOutcome::Completed(record))
+    }
+
+    /// Return to calling CQ, or stop, per `auto_return_to_cq`.
+    fn finish_qso(&mut self) {
         if self.auto_return_to_cq {
             self.reset_qso();
             self.stage = TxStage::Cq;
@@ -313,7 +331,6 @@ impl QsoEngine {
         } else {
             self.stop();
         }
-        Some(QsoOutcome::Completed(record))
     }
 }
 
@@ -384,7 +401,7 @@ mod tests {
         assert_eq!(e.tx_message(), Some("K1ABC K0XYZ R-08"));
         assert_eq!(e.status().report_rcvd, Some(-12));
 
-        // DX sends RR73 -> we send 73 and log.
+        // DX sends RR73 -> we log AND queue the courtesy 73 to transmit.
         let out = e.process_rx(&[msg("K0XYZ", "K1ABC", "RR73", "", -8)]);
         match out {
             Some(QsoOutcome::Completed(rec)) => {
@@ -395,6 +412,13 @@ mod tests {
             }
             _ => panic!("expected completed QSO"),
         }
+        // The final 73 is queued (not clobbered by the auto-return to CQ)...
+        assert_eq!(e.tx_message(), Some("K1ABC K0XYZ 73"));
+        assert_eq!(e.status().stage, TxStage::Bye73);
+        // ...and once its TX slot has passed, the next slot returns to CQ.
+        assert!(e.process_rx(&[]).is_none());
+        assert_eq!(e.tx_message(), Some("CQ K0XYZ EN37"));
+        assert_eq!(e.status().stage, TxStage::Cq);
     }
 
     #[test]
