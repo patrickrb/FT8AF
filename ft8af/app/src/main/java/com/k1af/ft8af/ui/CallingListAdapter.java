@@ -47,9 +47,11 @@ public class CallingListAdapter extends RecyclerView.Adapter<CallingListAdapter.
 
             //view.setTag(ft8Message);// Pass the message object to the parent view
             int postion= (int) view.getTag();
-            if (postion==-1) return;
-            if (postion>ft8MessageArrayList.size()-1) return;
-            Ft8Message ft8Message=ft8MessageArrayList.get(postion);
+            // The tag was captured at bind time; the shared decode list can be trimmed or
+            // cleared out from under a long-press, so fetch under the decode-thread lock
+            // with a range check rather than indexing raw. See messageAtOrNull.
+            Ft8Message ft8Message = messageAtOrNull(postion);
+            if (ft8Message == null) return;
 
             // Menu parameters: i1=group, i2=id, i3=display order
             if (!ft8Message.getCallsignTo().contains("...")// Target cannot be self
@@ -150,16 +152,15 @@ public class CallingListAdapter extends RecyclerView.Adapter<CallingListAdapter.
      * @param position Position in the list
      */
     public void deleteMessage(int position) {
-        if (position >= 0) {
-            ft8MessageArrayList.remove(position);
+        synchronized (ft8MessageArrayList) {
+            if (isValidPosition(position, ft8MessageArrayList.size())) {
+                ft8MessageArrayList.remove(position);
+            }
         }
     }
 
     public Ft8Message getMessageByPosition(int position){
-        if (ft8MessageArrayList==null) return null;
-        if (position<0) return null;
-        if (position>ft8MessageArrayList.size()-1) return null;
-        return ft8MessageArrayList.get(position);
+        return messageAtOrNull(position);
     }
 
     /**
@@ -169,17 +170,56 @@ public class CallingListAdapter extends RecyclerView.Adapter<CallingListAdapter.
      * @return ft8message
      */
     public Ft8Message getMessageByViewHolder(RecyclerView.ViewHolder holder) {
-        if (holder.getAdapterPosition() == -1) {
-            return null;
+        return messageAtOrNull(holder.getAdapterPosition());
+    }
+
+    /**
+     * True when {@code position} indexes an existing row of a {@code size}-element list.
+     * RecyclerView returns {@link RecyclerView#NO_POSITION} (-1) for a detached holder,
+     * and the live decode list can shrink under the UI thread, so every indexed access
+     * must range-check first. Mirrors {@code LogQSLAdapter.isValidPosition}.
+     */
+    static boolean isValidPosition(int position, int size) {
+        return position >= 0 && position < size;
+    }
+
+    /**
+     * Fetch the row at {@code position} atomically with respect to the decode thread, or
+     * {@code null} if it is out of range.
+     *
+     * <p>The two live hosts ({@code CallingListFragment} and {@code GridTrackerMainActivity})
+     * hand this adapter the same {@code MainViewModel.ft8Messages} instance the decode thread
+     * mutates under {@code synchronized (ft8Messages)}: it appends decodes, trims the front via
+     * {@code GeneralVariables.deleteArrayListMore}, and clears the list every cycle. RecyclerView
+     * reads {@code getItemCount()} and then indexes the list from {@code onBindViewHolder} and the
+     * gesture/menu handlers on the UI thread, so a trim or clear landing in that window made a
+     * plain {@code get(position)} throw {@link IndexOutOfBoundsException} on the main thread —
+     * an uncaught whole-app crash. Locking on the list instance (the decode thread's own monitor)
+     * makes the range-check-and-get a single critical section that cannot observe a half-applied
+     * mutation.
+     */
+    Ft8Message messageAtOrNull(int position) {
+        if (ft8MessageArrayList == null) return null;
+        synchronized (ft8MessageArrayList) {
+            if (!isValidPosition(position, ft8MessageArrayList.size())) return null;
+            return ft8MessageArrayList.get(position);
         }
-        return ft8MessageArrayList.get(holder.getAdapterPosition());
     }
 
     @SuppressLint("ResourceAsColor")
     @Override
     public void onBindViewHolder(@NonNull CallingListItemHolder holder, int position) {
+        Ft8Message message = messageAtOrNull(position);
+        if (message == null) {
+            // The decode thread trimmed/cleared the shared ft8Messages list between
+            // getItemCount() and this bind (both run off-lock on the UI thread while the
+            // decode thread mutates the list under synchronized(ft8Messages)). Skip this
+            // stale bind rather than crashing; the mutableFt8MessageList observer already
+            // has a notifyDataSetChanged queued that rebinds against a consistent list.
+            return;
+        }
         holder.callListHolderConstraintLayout.setTag(position);// Set layout tag to identify message position
-        holder.ft8Message = ft8MessageArrayList.get(position);
+        holder.ft8Message = message;
         holder.showMode = showMode;// Determine if this is the message list or the watched message list
         holder.isSyncFreq = mainViewModel.ft8TransmitSignal.isSynFrequency();// If transmitting on same frequency, don't show call receiver
 
