@@ -156,10 +156,13 @@ public class GridTrackerMainActivity extends AppCompatActivity {
                 if (position == -1) {
                     return;
                 }
-                if (position > mainViewModel.ft8Messages.size() - 1) {
+                // Read under the decode-list monitor: an unguarded size()-then-get() on
+                // the main thread races the decode thread's remove(0)/clear() and throws
+                // IndexOutOfBoundsException (whole-app crash) — see getFt8MessageAtOrNull.
+                Ft8Message msg = mainViewModel.getFt8MessageAtOrNull(position);
+                if (msg == null) {
                     return;
                 }
-                Ft8Message msg = mainViewModel.ft8Messages.get(position);
 
                 if (msg.checkIsCQ()) {
                     GridOsmMapView.GridMarker marker = gridOsmMapView.getMarker(msg);
