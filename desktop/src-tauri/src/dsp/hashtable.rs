@@ -236,10 +236,24 @@ mod tests {
             tx.send((extra_stored, existing_survived)).unwrap();
         });
 
-        // Pre-fix, the worker never returns and this times out (test fails here).
-        let (extra_stored, existing_survived) = rx
-            .recv_timeout(Duration::from_secs(5))
-            .expect("save() on a full table hung — the linear probe is unbounded");
+        // Pre-fix, the worker never returns and this times out. Don't just panic
+        // on timeout: that unwinds the *main* thread but leaves the spinning
+        // worker alive for the rest of the test run, which can stall CI or make
+        // later tests flaky. Instead abort the whole process — a genuine
+        // regression then fails fast and loudly with no runaway thread left
+        // behind. On the (normal) success path the worker has already sent its
+        // result and returns immediately, so the join never blocks.
+        let (extra_stored, existing_survived) = match rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(result) => result,
+            Err(_) => {
+                eprintln!(
+                    "FATAL: save() on a full table hung — the linear probe is \
+                     unbounded (decoder-thread hang regressed). Aborting to avoid \
+                     leaving a runaway spinner thread."
+                );
+                std::process::abort();
+            }
+        };
         worker.join().unwrap();
 
         // A saturated table drops the new insert (like lookup's graceful miss)…
