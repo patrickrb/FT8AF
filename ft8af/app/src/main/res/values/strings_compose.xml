@@ -201,6 +201,13 @@
     <string name="qso_live_step_fallback">message</string>
     <string name="qso_tx_now">TX NOW</string>
     <string name="qso_tx_next">TX NEXT</string>
+    <string name="qso_last_heard">Last heard</string>
+    <string name="qso_last_heard_unknown">--</string>
+    <string name="qso_last_heard_just_now">just now</string>
+    <string name="qso_last_heard_seconds">%1$ds ago</string>
+    <string name="qso_last_heard_minutes">%1$dm ago</string>
+    <string name="qso_last_heard_hours">%1$dh ago</string>
+    <string name="qso_last_heard_days">%1$dd ago</string>
 
     <!-- ===== Logbook ===== -->
     <string name="log_tab_stats">Stats</string>
