@@ -68,6 +68,11 @@ pub struct QsoEngine {
     report_rcvd: Option<i32>,
     tx_message: Option<String>,
     started_ms: i64,
+    /// True once the courtesy "73" queued in `TxStage::Bye73` has actually been
+    /// handed to the transmitter (via `notify_transmitted`). Guards `finish_qso`
+    /// so a Bye73 that missed its slot (late TX window, rig busy, encode failure)
+    /// is retransmitted next slot instead of being clobbered by the wrap-up.
+    bye73_sent: bool,
 }
 
 impl QsoEngine {
@@ -86,6 +91,7 @@ impl QsoEngine {
             report_rcvd: None,
             tx_message: None,
             started_ms: 0,
+            bye73_sent: false,
         }
     }
 
@@ -102,6 +108,16 @@ impl QsoEngine {
 
     pub fn tx_message(&self) -> Option<&str> {
         self.tx_message.as_deref()
+    }
+
+    /// The scheduler calls this after the current `tx_message` has actually been
+    /// handed to the transmitter. It only matters for the courtesy "73": it marks
+    /// the Bye73 as sent so the next `process_rx` may wrap the QSO up. For every
+    /// other stage the sequencer advances on received replies, so this is a no-op.
+    pub fn notify_transmitted(&mut self) {
+        if self.stage == TxStage::Bye73 {
+            self.bye73_sent = true;
+        }
     }
 
     /// Begin calling CQ.
@@ -157,6 +173,7 @@ impl QsoEngine {
             TxStage::Bye73 => {
                 self.tx_message = Some(format!("{} {} 73", dx, self.my_call));
                 self.stage = TxStage::Bye73;
+                self.bye73_sent = false;
             }
             TxStage::Cq | TxStage::Idle => unreachable!("handled above"),
         }
@@ -180,6 +197,7 @@ impl QsoEngine {
         self.report_sent = None;
         self.report_rcvd = None;
         self.started_ms = util::now_unix_ms();
+        self.bye73_sent = false;
     }
 
     /// Process the decoded messages of a finished RX slot. Updates `tx_message`
@@ -189,11 +207,16 @@ impl QsoEngine {
             return None;
         }
 
-        // The courtesy "73" queued on the previous slot (RReport -> RR73, or a
-        // manual Tx5) has now had its TX slot; wrap up (return to CQ / stop)
-        // regardless of incoming traffic this slot.
+        // A courtesy "73" is queued (RReport -> RR73, or a manual Tx5). Only wrap
+        // up (return to CQ / stop) once it has *actually* been transmitted — the
+        // scheduler signals that via `notify_transmitted`. If it hasn't gone out
+        // yet (missed TX window, rig busy, encode failure), leave the message
+        // queued so the scheduler retransmits it next slot instead of clobbering
+        // it. Either way we don't act on incoming traffic while a 73 is pending.
         if self.stage == TxStage::Bye73 {
-            self.finish_qso();
+            if self.bye73_sent {
+                self.finish_qso();
+            }
             return None;
         }
 
@@ -261,6 +284,7 @@ impl QsoEngine {
                     // Acknowledge with 73, then log.
                     self.tx_message = Some(format!("{} {} 73", dx, self.my_call));
                     self.stage = TxStage::Bye73;
+                    self.bye73_sent = false;
                     return self.complete(&dx);
                 }
                 _ => {}
@@ -415,10 +439,65 @@ mod tests {
         // The final 73 is queued (not clobbered by the auto-return to CQ)...
         assert_eq!(e.tx_message(), Some("K1ABC K0XYZ 73"));
         assert_eq!(e.status().stage, TxStage::Bye73);
+        // ...the scheduler actually transmits it (signalled here)...
+        e.notify_transmitted();
         // ...and once its TX slot has passed, the next slot returns to CQ.
         assert!(e.process_rx(&[]).is_none());
         assert_eq!(e.tx_message(), Some("CQ K0XYZ EN37"));
         assert_eq!(e.status().stage, TxStage::Cq);
+    }
+
+    #[test]
+    fn bye73_not_finished_until_actually_transmitted() {
+        // Regression: process_rx must not wrap up on stage==Bye73 alone. If the
+        // courtesy 73 couldn't be transmitted this slot (late TX window, rig busy,
+        // encode failure) the QSO must stay armed and retransmit it, not clobber
+        // it by returning to CQ.
+        let mut e = QsoEngine::new("K0XYZ", "EN37");
+        e.answer(&msg("CQ", "K1ABC", "FN42", "FN42", -5));
+        e.process_rx(&[msg("K0XYZ", "K1ABC", "-12", "", -8)]);
+        assert_eq!(e.tx_message(), Some("K1ABC K0XYZ R-08"));
+
+        // DX sends RR73 -> QSO logs and the courtesy 73 is queued.
+        let out = e.process_rx(&[msg("K0XYZ", "K1ABC", "RR73", "", -8)]);
+        assert!(matches!(out, Some(QsoOutcome::Completed(_))));
+        assert_eq!(e.tx_message(), Some("K1ABC K0XYZ 73"));
+        assert_eq!(e.status().stage, TxStage::Bye73);
+
+        // The 73 did NOT go out this slot (no notify_transmitted). The next slot
+        // must keep the 73 queued rather than returning to CQ, and must not log
+        // the QSO a second time.
+        assert!(e.process_rx(&[]).is_none());
+        assert_eq!(e.tx_message(), Some("K1ABC K0XYZ 73"));
+        assert_eq!(e.status().stage, TxStage::Bye73);
+        // Still pending after another silent slot.
+        assert!(e.process_rx(&[]).is_none());
+        assert_eq!(e.tx_message(), Some("K1ABC K0XYZ 73"));
+        assert_eq!(e.status().stage, TxStage::Bye73);
+
+        // Once the scheduler reports the 73 actually transmitted, the next slot
+        // wraps the QSO up and returns to CQ.
+        e.notify_transmitted();
+        assert!(e.process_rx(&[]).is_none());
+        assert_eq!(e.tx_message(), Some("CQ K0XYZ EN37"));
+        assert_eq!(e.status().stage, TxStage::Cq);
+    }
+
+    #[test]
+    fn notify_transmitted_is_noop_off_bye73() {
+        // notify_transmitted only latches the courtesy 73; it must not disturb an
+        // in-progress sequence (e.g. after answering, stage == Grid).
+        let mut e = QsoEngine::new("K0XYZ", "EN37");
+        e.answer(&msg("CQ", "K1ABC", "FN42", "FN42", -5));
+        assert_eq!(e.status().stage, TxStage::Grid);
+        e.notify_transmitted();
+        // Still awaiting the DX report; nothing changed.
+        assert_eq!(e.tx_message(), Some("K1ABC K0XYZ EN37"));
+        assert_eq!(e.status().stage, TxStage::Grid);
+        // The DX report still advances us normally.
+        e.process_rx(&[msg("K0XYZ", "K1ABC", "-12", "", -8)]);
+        assert_eq!(e.tx_message(), Some("K1ABC K0XYZ R-08"));
+        assert_eq!(e.status().stage, TxStage::RReport);
     }
 
     #[test]

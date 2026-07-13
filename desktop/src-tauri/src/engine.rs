@@ -622,7 +622,13 @@ impl Engine {
         self.tx_parity = Some(parity);
         self.txed_slot = slot_id;
         if let Some(msg) = self.qso.tx_message().map(|s| s.to_string()) {
-            self.start_transmit(&msg);
+            if self.start_transmit(&msg) {
+                // Tell the sequencer the message actually went out. This is what
+                // lets a courtesy "73" wrap the QSO up only after it's on the air;
+                // if start_transmit bailed (busy/encode error) the QSO stays armed
+                // and retransmits next slot instead of clobbering the 73.
+                self.qso.notify_transmitted();
+            }
         }
     }
 
@@ -640,16 +646,21 @@ impl Engine {
     /// loop (in `tx_playback`) so the engine keeps draining commands — that's what
     /// makes Stop TX able to interrupt mid-transmission. PTT is dropped later, when
     /// the run loop sees the playback finish (or on Stop TX).
-    fn start_transmit(&mut self, message: &str) {
+    ///
+    /// Returns `true` if a transmission was actually started (PTT keyed, playback
+    /// armed), `false` if it bailed out (already transmitting, or an encode /
+    /// device / playback error). The caller uses this to tell the sequencer the
+    /// message really went out.
+    fn start_transmit(&mut self, message: &str) -> bool {
         // Never key a second transmission over a live one.
         if self.tx_playback.is_some() {
-            return;
+            return false;
         }
         let signal = match crate::dsp::encode::generate_ft8(message, self.tx_audio_hz as f32, SAMPLE_RATE) {
             Some(s) => s,
             None => {
                 self.emit(EngineEvent::Error(format!("cannot encode '{message}'")));
-                return;
+                return false;
             }
         };
 
@@ -661,7 +672,7 @@ impl Engine {
             Ok(p) => p,
             Err(e) => {
                 self.emit(EngineEvent::Error(format!("playback failed: {e}")));
-                return;
+                return false;
             }
         };
 
@@ -679,10 +690,11 @@ impl Engine {
         if let Err(e) = prepared.start(ms_late) {
             self.emit(EngineEvent::Error(format!("playback failed: {e}")));
             self.set_ptt(false);
-            return;
+            return false;
         }
         self.tx_playback = Some(prepared);
         self.publish_tx_state();
+        true
     }
 
     /// Stop the in-flight transmission (if any): dropping the handle halts the
