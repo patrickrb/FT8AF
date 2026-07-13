@@ -4,6 +4,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
 
 import com.k1af.ft8af.GeneralVariables;
+import com.k1af.ft8af.timer.UtcTimer;
 
 import org.junit.After;
 import org.junit.Before;
@@ -45,6 +46,28 @@ public class FreeTextTransmitTargetSeedTest {
     @After
     public void tearDown() {
         GeneralVariables.myCallsign = "";
+        UtcTimer.delay = 0;// undo any clock pinning so other tests see the real clock
+    }
+
+    /**
+     * Pin the wall clock (via {@link UtcTimer#delay}) so {@code getNowSequential()}
+     * lands on {@code targetParity}, in the MIDDLE of that slot. Landing mid-slot keeps
+     * the parity stable across {@code transmitNow()}'s single {@code getNowSequential()}
+     * read (no slot-boundary race), which lets a test force a deterministic slot
+     * mismatch: with the signal's post-seed sequential != {@code targetParity},
+     * {@code transmitNow()} returns after the toast/flag updates instead of entering
+     * {@code doTransmit()} — so the native encoder never runs on a background thread.
+     */
+    private static void pinNowSequential(int targetParity) {
+        int slot = GeneralVariables.currentMode().slotMillis;
+        long now = System.currentTimeMillis();
+        // Shift so we sit at slot/2 (far from both slot boundaries).
+        long adjust = (slot / 2L) - (now % slot);
+        // If that lands on the wrong parity, shift one whole slot; still mid-slot.
+        if (((now + adjust) / slot) % 2 != targetParity) {
+            adjust += slot;
+        }
+        UtcTimer.delay = (int) adjust;
     }
 
     private Object toCallsign() throws Exception {
@@ -85,6 +108,14 @@ public class FreeTextTransmitTargetSeedTest {
         // first TX action of the session (no target set). This must NOT throw (the CQ
         // baseline is seeded) and must arm the one-shot so the text goes out once rather
         // than repeating every cycle.
+        // Force a deterministic slot mismatch. sendFreeTextOnce seeds a CQ baseline
+        // (resetToCQ), which sets the signal's sequential to (0 + 1) % 2 == 1 on a fresh
+        // signal. Pinning getNowSequential() to 0 makes transmitNow()'s slot check
+        // (getNowSequential() == sequential) fail, so it returns right after updating the
+        // toast/flags — it never enters doTransmit()/the native encoder. Without this the
+        // test is time-dependent: ~half of runs the live slot matches and, if early in the
+        // cycle, a background native encode fires (flaky, UnsatisfiedLinkError noise).
+        pinNowSequential(0);
         assertThat(toCallsign()).isNull();
         signal.sendFreeTextOnce("TEST DE K1ABC");
         assertThat(signal.isTransmitFreeText()).isTrue();
