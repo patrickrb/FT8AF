@@ -28,7 +28,9 @@ struct AppTabView: View {
 
             // Bottom chrome: ActiveQsoPanel + TxStrip + SlotTimer + TabBar
             VStack(spacing: 0) {
-                if showsTxStrip && appState.tx.isActivated {
+                // Panel also shows while HUNT is armed (silent listening) so
+                // the "Hunting…" header state has somewhere to live.
+                if showsTxStrip && (appState.tx.isActivated || appState.tx.huntEnabled) {
                     ActiveQsoPanel()
                 }
 
@@ -38,6 +40,7 @@ struct AppTabView: View {
                         onCallCQ: { appState.engine?.callCQ() },
                         onStop: { appState.engine?.stopTx() },
                         onToggleSlot: { appState.engine?.toggleSlotParity() },
+                        onToggleTune: { appState.engine?.toggleTune() },
                         onOpenFrequencyPicker: { showFrequencyPicker = true },
                         onVolumeChange: { newVol in
                             appState.settings.txVolume = newVol

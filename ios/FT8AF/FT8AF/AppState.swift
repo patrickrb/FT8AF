@@ -53,6 +53,12 @@ struct DecodeMessage: Identifiable, Equatable {
     var grid: String
     var extra: String
     var slotIndex: Int
+    /// Wall-clock arrival of the decode. Defaulted to construction time so
+    /// every existing `DecodeMessage(...)` call site (LiveEngine creates
+    /// messages the moment a slot decodes) gets the correct arrival without
+    /// changes; the decode list derives the relative "now / 32s / 5m" age
+    /// from it.
+    var arrival: Date = Date()
 
     static let mock: [DecodeMessage] = [
         DecodeMessage(utcTime: "12:30:00", callFrom: "W1AW", callTo: "CQ", snr: -5, freqHz: 1120, grid: "FN31", extra: "FN31", slotIndex: 0),
@@ -274,6 +280,16 @@ final class TxState {
     var conversationLog: [QsoLogEntry] = []
     /// Set by the engine when our CQ is answered, to auto-open QsoSheet.
     var autoOpenMessage: DecodeMessage?
+    /// The QSO engine's raw sequencer stage, mirrored by LiveEngine for the
+    /// TX message-selector chips (`TxStageSelector`).
+    var qsoStage: TxStage = .idle
+    /// Last SNR heard from the current target (for the Active QSO header).
+    var targetSnr: Int?
+    /// Callsigns waiting their turn (mirror of LiveEngine's `CallerQueue`).
+    var queuedCallers: [String] = []
+    /// TUNE carrier state: latched steady tone at the TX audio frequency.
+    var isTuning: Bool = false
+    var tuneRemainingSec: Int = 0
 }
 
 // MARK: - POTA

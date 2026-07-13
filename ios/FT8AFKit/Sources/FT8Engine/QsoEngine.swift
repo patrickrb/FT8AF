@@ -240,8 +240,41 @@ public final class QsoEngine {
         stage = .rr73
     }
 
+    /// Force-log the current QSO and move on without waiting for the partner's
+    /// 73 (the Active QSO panel's LOG action; port of Android
+    /// `forceLogAndMoveOn`). Only produces a record when the QSO progressed far
+    /// enough to be a real contact — both reports known, i.e. we have sent
+    /// R-report or beyond (Android `shouldForceLog`: order >= 3). Either way
+    /// the QSO context is cleared and we return to CQ / stop per
+    /// `autoReturnToCq`.
+    public func forceLog() -> QsoOutcome? {
+        guard let dx = target else { return nil }
+        let progressed = stage == .rReport || stage == .rr73 || stage == .bye73
+        let outcome: QsoOutcome? = progressed ? .completed(makeRecord(dx)) : nil
+        finishQso()
+        return outcome
+    }
+
+    /// Abandon the current target and return to the CQ baseline (the Active QSO
+    /// panel's ✕ action; port of Android `userResetToCQ`). Nothing is logged.
+    public func abandonToCq() {
+        finishQso()
+    }
+
     private func complete(_ dx: String) -> QsoOutcome {
-        let record = QsoRecord(
+        let record = makeRecord(dx)
+
+        // If a courtesy "73" is queued (the .rReport path set stage = .bye73),
+        // leave pendingTx/stage so the scheduler transmits it; the next slot's
+        // .bye73 handler in processRx then wraps up. Otherwise finish now.
+        if stage != .bye73 {
+            finishQso()
+        }
+        return .completed(record)
+    }
+
+    private func makeRecord(_ dx: String) -> QsoRecord {
+        QsoRecord(
             call: dx,
             gridsquare: gridRcvd ?? "",
             mode: "FT8",
@@ -257,14 +290,6 @@ public final class QsoEngine {
             myGridsquare: myGrid,
             comment: ""
         )
-
-        // If a courtesy "73" is queued (the .rReport path set stage = .bye73),
-        // leave pendingTx/stage so the scheduler transmits it; the next slot's
-        // .bye73 handler in processRx then wraps up. Otherwise finish now.
-        if stage != .bye73 {
-            finishQso()
-        }
-        return .completed(record)
     }
 
     /// Return to calling CQ, or stop, per `autoReturnToCq`.

@@ -1,3 +1,4 @@
+import FT8Engine
 import SwiftUI
 import UIKit
 
@@ -9,6 +10,7 @@ struct TxStrip: View {
     var onCallCQ: () -> Void = {}
     var onStop: () -> Void = {}
     var onToggleSlot: () -> Void = {}
+    var onToggleTune: () -> Void = {}
     var onOpenFrequencyPicker: () -> Void = {}
     var onVolumeChange: (Int) -> Void = { _ in }
 
@@ -32,8 +34,10 @@ struct TxStrip: View {
                 // CAT status chip
                 CatChip(status: appState.rig.connectionStatus)
 
-                // Right: mode + frequency chips
+                // Right: mode + frequency + tune chips
                 HStack(spacing: 6) {
+                    // Mode pill — static "FT8" (FT4/FT2 deferred; plain,
+                    // non-interactive).
                     TxChip(label: "FT8", color: accent)
 
                     // Tappable frequency/band chip
@@ -41,6 +45,17 @@ struct TxStrip: View {
                         TxChip(label: settings.band, color: textPrimary)
                     }
                     .buttonStyle(.plain)
+
+                    // TUNE pill: latches a steady carrier at the TX audio
+                    // frequency; red with a countdown while active. Locked off
+                    // while the sequencer is armed/transmitting — tune and FT8
+                    // TX are mutually exclusive.
+                    TunePill(
+                        isTuning: tx.isTuning,
+                        remainingSec: tx.tuneRemainingSec,
+                        locked: tx.isActivated || tx.isTransmitting,
+                        action: onToggleTune
+                    )
                 }
 
                 // Expand/collapse chevron
@@ -162,6 +177,32 @@ struct TxStrip: View {
 }
 
 // MARK: - Subviews
+
+/// TUNE toggle pill: idle = plain chip; active = statusBad red with the
+/// remaining-seconds countdown (label via the kit's `TuneTone.chipLabel`);
+/// dimmed/disabled while the sequencer owns the transmitter.
+private struct TunePill: View {
+    let isTuning: Bool
+    let remainingSec: Int
+    let locked: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(TuneTone.chipLabel(isTuning: isTuning, remainingSec: remainingSec))
+                .font(.system(size: 11, weight: isTuning ? .bold : .semibold, design: .monospaced))
+                .foregroundStyle(isTuning ? .white : (locked ? textMuted.opacity(0.4) : textMuted))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(isTuning ? statusBad : bgSurface3.opacity(locked ? 0.4 : 1.0))
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(locked && !isTuning)
+    }
+}
 
 private struct CatChip: View {
     let status: ConnectionStatus

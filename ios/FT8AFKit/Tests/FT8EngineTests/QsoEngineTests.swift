@@ -204,4 +204,74 @@ final class QsoEngineTests: XCTestCase {
         XCTAssertEqual(FT8Time.yyyymmdd(fromMs: 1_700_000_000_000), "20231114")
         XCTAssertEqual(FT8Time.hhmmss(fromMs: 1_700_000_000_000), "221320")
     }
+
+    // MARK: forceLog / abandonToCq (LOG and ✕ panel actions)
+
+    func testForceLogAfterReportsExchangedLogsAndReturnsToCq() {
+        let e = QsoEngine(myCall: "K0XYZ", myGrid: "EN37")
+        e.answer(msg("CQ", "K1ABC", "FN42", "FN42", -5))
+        _ = e.processRx([msg("K0XYZ", "K1ABC", "-12", "", -8)]) // we sent R-08 → .rReport
+        XCTAssertEqual(e.status().stage, .rReport)
+
+        guard case .completed(let rec)? = e.forceLog() else {
+            return XCTFail("expected a logged record after reports were exchanged")
+        }
+        XCTAssertEqual(rec.call, "K1ABC")
+        XCTAssertEqual(rec.rstSent, "-08")
+        XCTAssertEqual(rec.rstRcvd, "-12")
+        // autoReturnToCq (default true) → back at the CQ baseline.
+        XCTAssertEqual(e.status().stage, .cq)
+        XCTAssertEqual(e.txMessage, "CQ K0XYZ EN37")
+        XCTAssertNil(e.status().target)
+    }
+
+    func testForceLogTooEarlyDoesNotLogButStillMovesOn() {
+        let e = QsoEngine(myCall: "K0XYZ", myGrid: "EN37")
+        e.answer(msg("CQ", "K1ABC", "FN42", "FN42", -5)) // stage .grid, no reports yet
+        XCTAssertNil(e.forceLog())
+        XCTAssertNil(e.status().target)
+        XCTAssertEqual(e.status().stage, .cq)
+    }
+
+    func testForceLogWithNoTargetIsNil() {
+        let e = QsoEngine(myCall: "K0XYZ", myGrid: "EN37")
+        e.startCq()
+        XCTAssertNil(e.forceLog())
+        // Untouched: still calling CQ.
+        XCTAssertEqual(e.txMessage, "CQ K0XYZ EN37")
+    }
+
+    func testForceLogStopsWhenAutoReturnOff() {
+        let e = QsoEngine(myCall: "K0XYZ", myGrid: "EN37")
+        e.autoReturnToCq = false
+        e.answer(msg("CQ", "K1ABC", "FN42", "FN42", -5))
+        _ = e.processRx([msg("K0XYZ", "K1ABC", "-12", "", -8)])
+        XCTAssertNotNil(e.forceLog())
+        XCTAssertFalse(e.status().active)
+        XCTAssertNil(e.txMessage)
+        XCTAssertEqual(e.status().stage, .idle)
+    }
+
+    func testAbandonToCqDropsTargetWithoutLogging() {
+        let e = QsoEngine(myCall: "K0XYZ", myGrid: "EN37")
+        e.answer(msg("CQ", "K1ABC", "FN42", "FN42", -5))
+        _ = e.processRx([msg("K0XYZ", "K1ABC", "-12", "", -8)])
+        e.abandonToCq()
+        XCTAssertNil(e.status().target)
+        XCTAssertEqual(e.status().stage, .cq)
+        XCTAssertEqual(e.txMessage, "CQ K0XYZ EN37")
+    }
+
+    func testAutoReturnToCqOffStopsAfterCompletion() {
+        let e = QsoEngine(myCall: "K0XYZ", myGrid: "EN37")
+        e.autoReturnToCq = false
+        e.startCq()
+        _ = e.processRx([msg("K0XYZ", "K1ABC", "FN42", "FN42", -10)])
+        _ = e.processRx([msg("K0XYZ", "K1ABC", "R-15", "", -10)])
+        guard case .completed? = e.processRx([msg("K0XYZ", "K1ABC", "73", "", -10)]) else {
+            return XCTFail("expected completed QSO")
+        }
+        XCTAssertFalse(e.status().active)
+        XCTAssertNil(e.txMessage)
+    }
 }
