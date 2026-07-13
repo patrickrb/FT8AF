@@ -60,7 +60,7 @@ object WsjtxUdpService {
     // Java-friendly SAM interfaces so the (Java) ViewModel can wire these with
     // plain lambdas.
     fun interface StatusProvider { fun get(): WsjtxCodec.Status? }
-    fun interface ReplyHandler { fun onReply(call: String, grid: String, snr: Int) }
+    fun interface ReplyHandler { fun onReply(call: String, grid: String, snr: Int, deltaFreq: Int) }
     fun interface HaltHandler { fun onHalt(autoOnly: Boolean) }
     fun interface FreeTextHandler { fun onFreeText(text: String, send: Boolean) }
     fun interface ReplayHandler { fun onReplay() }
@@ -210,7 +210,7 @@ object WsjtxUdpService {
     private fun dispatch(buf: ByteArray) {
         when (val msg = WsjtxCodec.parseInbound(buf)) {
             is WsjtxCodec.Inbound.Reply ->
-                mainHandler.post { onReply?.onReply(msg.call, msg.grid, msg.snr) }
+                mainHandler.post { onReply?.onReply(msg.call, msg.grid, msg.snr, msg.deltaFreq) }
             is WsjtxCodec.Inbound.HaltTx ->
                 mainHandler.post { onHaltTx?.onHalt(msg.autoOnly) }
             is WsjtxCodec.Inbound.FreeText ->
