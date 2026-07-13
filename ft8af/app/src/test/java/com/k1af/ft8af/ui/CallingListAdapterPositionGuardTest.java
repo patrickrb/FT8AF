@@ -92,6 +92,25 @@ public class CallingListAdapterPositionGuardTest {
     }
 
     @Test
+    public void rowTagFor_boundRowKeepsItsPosition() {
+        Ft8Message message = new Ft8Message(FT8Common.FT8_MODE);
+        // A row backed by a message tags its own index so the click / long-press handlers
+        // resolve the right message.
+        assertThat(CallingListAdapter.rowTagFor(message, 0)).isEqualTo(0);
+        assertThat(CallingListAdapter.rowTagFor(message, 7)).isEqualTo(7);
+    }
+
+    @Test
+    public void rowTagFor_noRowUsesNoPositionSentinel() {
+        // A recycled holder whose position no longer has a message (list trimmed/cleared
+        // between getItemCount() and the bind) must carry NO_POSITION so a tap can't fire
+        // against whatever message now occupies the stale index. The grid-tracker click
+        // listener guards `position == -1` and the context menu fetches messageAtOrNull(-1).
+        assertThat(CallingListAdapter.rowTagFor(null, 5)).isEqualTo(-1);
+        assertThat(CallingListAdapter.rowTagFor(null, -1)).isEqualTo(-1);
+    }
+
+    @Test
     public void deleteMessage_outOfRangeIsNoOp_notCrash() {
         CallingListAdapter adapter = adapterWith(messages(3));
         // Pre-fix deleteMessage only guarded position >= 0, so an END-swipe on a holder

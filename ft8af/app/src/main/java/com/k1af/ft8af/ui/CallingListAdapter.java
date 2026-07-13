@@ -206,6 +206,19 @@ public class CallingListAdapter extends RecyclerView.Adapter<CallingListAdapter.
         }
     }
 
+    /**
+     * The layout tag a bound row must carry so its click / long-press handlers act on the
+     * right message. The handlers read this tag back
+     * ({@code messageAtOrNull(tag)} in the context menu, {@code tag == -1} guard in the
+     * grid-tracker click listener), so a row with no backing message — the decode list was
+     * trimmed/cleared between {@link #getItemCount()} and the bind — must carry
+     * {@link RecyclerView#NO_POSITION} rather than the previous bind's index. Otherwise a tap
+     * on a reused-but-stale holder would fire against whatever message now occupies that index.
+     */
+    static int rowTagFor(Ft8Message message, int position) {
+        return message == null ? RecyclerView.NO_POSITION : position;
+    }
+
     @SuppressLint("ResourceAsColor")
     @Override
     public void onBindViewHolder(@NonNull CallingListItemHolder holder, int position) {
@@ -216,9 +229,15 @@ public class CallingListAdapter extends RecyclerView.Adapter<CallingListAdapter.
             // decode thread mutates the list under synchronized(ft8Messages)). Skip this
             // stale bind rather than crashing; the mutableFt8MessageList observer already
             // has a notifyDataSetChanged queued that rebinds against a consistent list.
+            // RecyclerView recycles holders, so before returning put this one into a safe
+            // "no row" state: leaving the previous bind's tag/message/content in place would
+            // keep a stale row visible and clickable until the queued rebind, letting a tap
+            // or long-press fire against whatever message now sits at that index.
+            resetRowToNoPosition(holder);
             return;
         }
-        holder.callListHolderConstraintLayout.setTag(position);// Set layout tag to identify message position
+        holder.itemView.setVisibility(View.VISIBLE);// Undo any prior no-row hide before rebinding
+        holder.callListHolderConstraintLayout.setTag(rowTagFor(message, position));// Set layout tag to identify message position
         holder.ft8Message = message;
         holder.showMode = showMode;// Determine if this is the message list or the watched message list
         holder.isSyncFreq = mainViewModel.ft8TransmitSignal.isSynFrequency();// If transmitting on same frequency, don't show call receiver
@@ -369,6 +388,33 @@ public class CallingListAdapter extends RecyclerView.Adapter<CallingListAdapter.
             holder.callingListCallsignToTextView.setVisibility(View.VISIBLE);
             holder.callingListCallsignFromTextView.setVisibility(View.VISIBLE);
         }
+    }
+
+    /**
+     * Put a recycled holder into a safe "no row" state for the null-message early return in
+     * {@link #onBindViewHolder}. Clears the layout tag to {@link RecyclerView#NO_POSITION} (so the
+     * click / long-press handlers treat it as empty instead of acting on a stale index), drops the
+     * cached message, blanks the visible text, and hides the row until the queued rebind restores it.
+     */
+    private void resetRowToNoPosition(@NonNull CallingListItemHolder holder) {
+        holder.callListHolderConstraintLayout.setTag(rowTagFor(null, RecyclerView.NO_POSITION));
+        holder.ft8Message = null;
+        holder.otherBandIsQso = false;
+
+        holder.callingUtcTextView.setText("");
+        holder.callingListSequenceTextView.setText("");
+        holder.callingListIdBTextView.setText("");
+        holder.callListDtTextView.setText("");
+        holder.callingListFreqTextView.setText("");
+        holder.callListMessageTextView.setText("");
+        holder.bandItemTextView.setText("");
+        holder.callingListDistTextView.setText("");
+        holder.callingListCommandIInfoTextView.setText("");
+        holder.callingListCallsignFromTextView.setText("");
+        holder.callingListCallsignToTextView.setText("");
+        holder.isWeakSignalImageView.setVisibility(View.INVISIBLE);
+
+        holder.itemView.setVisibility(View.GONE);// Take no visible space until the rebind
     }
 
     /**
