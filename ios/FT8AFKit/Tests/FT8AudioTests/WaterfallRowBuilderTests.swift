@@ -52,6 +52,28 @@ final class WaterfallRowBuilderTests: XCTestCase {
         XCTAssertEqual(row.hzPerCol, 12_000.0 / 2_048.0, accuracy: 1e-4)
     }
 
+    func testDefaultFloorSeedMatchesEngine() {
+        // Regression: the noise-floor EMA must seed at the engine's -60 dB
+        // (desktop wf.rs `WfProcessor::new` -> `floor_db: -60.0`), NOT 0 dB. A 0 dB
+        // seed puts the black point ~4 dB, far above the real floor, so the first
+        // seconds of every waterfall (and every rebuild) render black until the EMA
+        // crawls down to the true floor.
+        XCTAssertEqual(WaterfallRowBuilder().floorDb, -60, accuracy: 0.001)
+    }
+
+    func testStrongSignalIsVisibleOnTheVeryFirstRow() {
+        // With the correct -60 dB seed, a real signal above the noise floor is
+        // bright immediately at startup instead of being swallowed by a too-high
+        // black point. Pre-fix (0 dB seed) bins[10] came back 0 (black).
+        var b = WaterfallRowBuilder()
+        let cols = 100
+        var spec = [Float](repeating: summedPower(forDb: -60), count: cols) // noise floor
+        spec[10] = summedPower(forDb: -25) // strong signal, well above the floor
+        let row = b.buildRow(summedPower: spec, sampleRate: 12_000) // the FIRST row
+        XCTAssertEqual(row.bins[10], 255, "strong signal is bright on the first row, not black")
+        XCTAssertEqual(row.bins[0], 0, "noise floor still renders dark")
+    }
+
     func testColumnsClampToNyquistHalfAtHighRates() {
         // A very high rate would put maxHz within the first few bins; columns must
         // still be >= 1 and never exceed fftSize/2.
