@@ -50,7 +50,19 @@ func grid4(_ s: String) -> String { String(s.prefix(4)) }
 /// the wrong side of the prime meridian). The 4-character result is unchanged from
 /// the previous app-local implementation.
 public func gridToLatLon(_ grid: String) -> (Double, Double)? {
-    let chars = Array(grid.uppercased().utf8)
+    let upper = grid.uppercased()
+
+    // "RR73" and the bare "RR" are FT8 QSO sign-offs, not locators — but they
+    // match the Maidenhead field/square pattern (R,R are valid A–R field
+    // letters and 7,3 are valid digits), so they would otherwise decode to a bogus
+    // point in the Arctic Ocean (83.5°N, 175°E). The decoder places "RR73" in a
+    // message's `grid` field via `looksLikeGrid`, and the map/distance/awards
+    // screens feed that straight in, so it must be rejected here — mirroring the
+    // Android decoder (`MaidenheadGrid.gridToLatLng`, which rejects both tokens)
+    // — to avoid a phantom map pin and a nonsense great-circle distance.
+    if upper == "RR73" || upper == "RR" { return nil }
+
+    let chars = Array(upper.utf8)
     guard chars.count >= 4,
           chars[0] >= 65, chars[0] <= 82,   // field:  A–R
           chars[1] >= 65, chars[1] <= 82,
