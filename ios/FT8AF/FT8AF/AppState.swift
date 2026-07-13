@@ -296,12 +296,21 @@ final class TxState {
 
 @Observable @MainActor
 final class PotaState {
+    /// Start-form inputs (park reference + optional notes).
     var parkInput: String = ""
-    var parkRefs: [String] = []
     var notes: String = ""
-    var isActivating: Bool = false
-    var activationQsoCount: Int = 0
-    var activationStartTime: Date?
+    /// All activation sessions (past + at most one active). Loaded from
+    /// `PotaActivationStore` the first time the POTA screen appears and
+    /// persisted on every change; an unfinished activation therefore survives
+    /// app restarts.
+    var activations: [PotaActivationRecord] = []
+    /// Whether `activations` has been loaded from disk yet (the POTA screen
+    /// loads lazily on first appearance).
+    var activationsLoaded: Bool = false
+
+    /// The in-progress activation, if any (endedAtMs == nil).
+    var current: PotaActivationRecord? { activations.first { $0.isActive } }
+    var isActivating: Bool { current != nil }
 }
 
 // MARK: - Settings Persistence

@@ -10,7 +10,7 @@ struct BlockedCallsignsSettings: View {
             Section {
                 HStack(spacing: 8) {
                     TextField("Enter callsign", text: $newCallsign)
-                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .font(.ft8afMono(size: 14, weight: .medium))
                         .foregroundStyle(textPrimary)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
@@ -19,7 +19,7 @@ struct BlockedCallsignsSettings: View {
                         addCallsign()
                     } label: {
                         Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 20))
+                            .font(.ft8afUI(size: 20))
                             .foregroundStyle(newCallsign.isEmpty ? textFaint : accent)
                     }
                     .buttonStyle(.plain)
@@ -39,14 +39,14 @@ struct BlockedCallsignsSettings: View {
                     ForEach(appState.settings.blockedCallsigns, id: \.self) { call in
                         HStack {
                             Text(call)
-                                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                .font(.ft8afMono(size: 14, weight: .bold))
                                 .foregroundStyle(textPrimary)
                             Spacer()
                             Button {
                                 removeCallsign(call)
                             } label: {
                                 Image(systemName: "xmark.circle")
-                                    .font(.system(size: 16))
+                                    .font(.ft8afUI(size: 16))
                                     .foregroundStyle(statusBad)
                             }
                             .buttonStyle(.plain)

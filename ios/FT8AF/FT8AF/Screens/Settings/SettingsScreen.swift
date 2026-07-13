@@ -30,14 +30,14 @@ struct SettingsScreen: View {
                     } label: {
                         HStack {
                             Image(systemName: "antenna.radiowaves.left.and.right")
-                                .font(.system(size: 14))
+                                .font(.ft8afUI(size: 14))
                                 .foregroundStyle(accent)
                                 .frame(width: 24)
                             Text("Radio & Audio")
                                 .foregroundStyle(textPrimary)
                             Spacer()
                             Text(settings.rigModel.rawValue)
-                                .font(.system(size: 14, design: .monospaced))
+                                .font(.ft8afMono(size: 14))
                                 .foregroundStyle(textMuted)
                         }
                     }
@@ -54,14 +54,14 @@ struct SettingsScreen: View {
                     } label: {
                         HStack {
                             Image(systemName: "bolt.horizontal")
-                                .font(.system(size: 14))
+                                .font(.ft8afUI(size: 14))
                                 .foregroundStyle(accent)
                                 .frame(width: 24)
                             Text("Transmission")
                                 .foregroundStyle(textPrimary)
                             Spacer()
                             Text("\(settings.txPowerWatts)W / \(settings.pttMode.rawValue)")
-                                .font(.system(size: 14, design: .monospaced))
+                                .font(.ft8afMono(size: 14))
                                 .foregroundStyle(textMuted)
                         }
                     }
@@ -78,7 +78,7 @@ struct SettingsScreen: View {
                     } label: {
                         HStack {
                             Image(systemName: "line.3.horizontal.decrease.circle")
-                                .font(.system(size: 14))
+                                .font(.ft8afUI(size: 14))
                                 .foregroundStyle(accent)
                                 .frame(width: 24)
                             Text("Decode Filters")
@@ -91,14 +91,14 @@ struct SettingsScreen: View {
                     } label: {
                         HStack {
                             Image(systemName: "hand.raised")
-                                .font(.system(size: 14))
+                                .font(.ft8afUI(size: 14))
                                 .foregroundStyle(accent)
                                 .frame(width: 24)
                             Text("Blocked Callsigns")
                                 .foregroundStyle(textPrimary)
                             Spacer()
                             Text("\(settings.blockedCallsigns.count)")
-                                .font(.system(size: 14, design: .monospaced))
+                                .font(.ft8afMono(size: 14))
                                 .foregroundStyle(textMuted)
                         }
                     }
@@ -115,14 +115,14 @@ struct SettingsScreen: View {
                     } label: {
                         HStack {
                             Image(systemName: "icloud.and.arrow.up")
-                                .font(.system(size: 14))
+                                .font(.ft8afUI(size: 14))
                                 .foregroundStyle(accent)
                                 .frame(width: 24)
                             Text("Online Logging")
                                 .foregroundStyle(textPrimary)
                             Spacer()
                             Text(onlineLoggingSummary)
-                                .font(.system(size: 14, design: .monospaced))
+                                .font(.ft8afMono(size: 14))
                                 .foregroundStyle(textMuted)
                         }
                     }
@@ -130,7 +130,7 @@ struct SettingsScreen: View {
                     Toggle(isOn: $settings.autoLog) {
                         HStack {
                             Image(systemName: "book")
-                                .font(.system(size: 14))
+                                .font(.ft8afUI(size: 14))
                                 .foregroundStyle(accent)
                                 .frame(width: 24)
                             Text("Auto-log QSOs")
@@ -151,7 +151,7 @@ struct SettingsScreen: View {
                     } label: {
                         HStack {
                             Image(systemName: "gearshape.2")
-                                .font(.system(size: 14))
+                                .font(.ft8afUI(size: 14))
                                 .foregroundStyle(accent)
                                 .frame(width: 24)
                             Text("Advanced")
@@ -171,14 +171,14 @@ struct SettingsScreen: View {
                     } label: {
                         HStack {
                             Image(systemName: "info.circle")
-                                .font(.system(size: 14))
+                                .font(.ft8afUI(size: 14))
                                 .foregroundStyle(accent)
                                 .frame(width: 24)
                             Text("About")
                                 .foregroundStyle(textPrimary)
                             Spacer()
                             Text(appVersion)
-                                .font(.system(size: 14, design: .monospaced))
+                                .font(.ft8afMono(size: 14))
                                 .foregroundStyle(textFaint)
                         }
                     }
@@ -234,24 +234,24 @@ private struct OperatorIdentityCard: View {
                 RoundedRectangle(cornerRadius: 10)
                     .fill(accent.opacity(0.14))
                 Text(settings.myCall.isEmpty ? "?" : String(settings.myCall.prefix(2)))
-                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    .font(.ft8afMono(size: 16, weight: .bold))
                     .foregroundStyle(accent)
             }
             .frame(width: 44, height: 44)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(settings.myCall.isEmpty ? "No Callsign" : settings.myCall)
-                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    .font(.ft8afMono(size: 16, weight: .bold))
                     .foregroundStyle(settings.myCall.isEmpty ? textFaint : textPrimary)
 
                 HStack(spacing: 8) {
                     if !settings.myGrid.isEmpty {
                         Label(settings.myGrid, systemImage: "mappin")
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .font(.ft8afMono(size: 11, weight: .medium))
                             .foregroundStyle(textMuted)
                     }
                     Label(settings.rigModel.rawValue, systemImage: "antenna.radiowaves.left.and.right")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.ft8afUI(size: 11, weight: .medium))
                         .foregroundStyle(textFaint)
                 }
             }
@@ -259,7 +259,7 @@ private struct OperatorIdentityCard: View {
             Spacer()
 
             Image(systemName: "pencil.circle")
-                .font(.system(size: 18))
+                .font(.ft8afUI(size: 18))
                 .foregroundStyle(textFaint)
         }
     }
@@ -282,7 +282,7 @@ private struct OperatorEditSheet: View {
                             .foregroundStyle(textPrimary)
                         Spacer()
                         TextField("e.g. KD2OGR", text: $callsign)
-                            .font(.system(.body, design: .monospaced))
+                            .font(.ft8afMono(size: 17))
                             .multilineTextAlignment(.trailing)
                             .foregroundStyle(textPrimary)
                             .textInputAutocapitalization(.characters)
@@ -293,7 +293,7 @@ private struct OperatorEditSheet: View {
                             .foregroundStyle(textPrimary)
                         Spacer()
                         TextField("e.g. FN20", text: $grid)
-                            .font(.system(.body, design: .monospaced))
+                            .font(.ft8afMono(size: 17))
                             .multilineTextAlignment(.trailing)
                             .foregroundStyle(textPrimary)
                             .textInputAutocapitalization(.characters)

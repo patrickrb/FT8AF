@@ -135,13 +135,13 @@ private struct TabBarButton: View {
                             .frame(width: 40, height: 28)
                     }
                     Image(systemName: tab.icon)
-                        .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
+                        .font(.ft8afUI(size: 16, weight: isSelected ? .semibold : .regular))
                         .foregroundStyle(isSelected ? accent : textFaint)
                 }
                 .frame(height: 28)
 
                 Text(tab.label)
-                    .font(.system(size: 10.5, weight: isSelected ? .semibold : .medium))
+                    .font(.ft8afUI(size: 10.5, weight: isSelected ? .semibold : .medium))
                     .foregroundStyle(isSelected ? accent : textFaint)
             }
             .frame(maxWidth: .infinity)

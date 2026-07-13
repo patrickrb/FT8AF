@@ -48,7 +48,7 @@ struct SpectrumStrip: View {
 
                     // Frequency label
                     let label = context.resolve(Text("\(Int(tf)) Hz")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .font(.ft8afMono(size: 9, weight: .bold))
                         .foregroundStyle(textPrimary))
                     let labelX = min(max(touchX, 30), size.width - 30)
                     context.draw(label, at: CGPoint(x: labelX, y: 8), anchor: .top)

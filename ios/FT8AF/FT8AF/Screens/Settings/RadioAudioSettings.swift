@@ -30,7 +30,7 @@ struct RadioAudioSettings: View {
                         .foregroundStyle(textPrimary)
                     Spacer()
                     Text("Built-in Microphone")
-                        .font(.system(size: 14))
+                        .font(.ft8afUI(size: 14))
                         .foregroundStyle(textMuted)
                 }
 
@@ -40,7 +40,7 @@ struct RadioAudioSettings: View {
                         Text("Spectrum Width")
                             .foregroundStyle(textPrimary)
                         Text("Decode bandwidth")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                     Spacer()
@@ -66,7 +66,7 @@ struct RadioAudioSettings: View {
                         .foregroundStyle(textPrimary)
                     Spacer()
                     Text("Not connected")
-                        .font(.system(size: 14))
+                        .font(.ft8afUI(size: 14))
                         .foregroundStyle(textFaint)
                 }
                 Button { } label: {
@@ -94,7 +94,7 @@ struct RadioAudioSettings: View {
                             .fill(statusColor)
                             .frame(width: 8, height: 8)
                         Text(appState.rig.connectionStatus.rawValue)
-                            .font(.system(size: 14, design: .monospaced))
+                            .font(.ft8afMono(size: 14))
                             .foregroundStyle(textMuted)
                     }
                 }
@@ -103,7 +103,7 @@ struct RadioAudioSettings: View {
                         .foregroundStyle(textPrimary)
                     Spacer()
                     Text(formatFreq(appState.rig.currentFreqHz))
-                        .font(.system(size: 14, design: .monospaced))
+                        .font(.ft8afMono(size: 14))
                         .foregroundStyle(textMuted)
                 }
             } header: {
@@ -133,11 +133,11 @@ struct RadioAudioSettings: View {
                                 .fill(bandColor(for: band))
                                 .frame(width: 3, height: 18)
                             Text(band)
-                                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                .font(.ft8afMono(size: 14, weight: .medium))
                                 .foregroundStyle(textPrimary)
                             Spacer()
                             Text(bandFrequency(band))
-                                .font(.system(size: 12, design: .monospaced))
+                                .font(.ft8afMono(size: 12))
                                 .foregroundStyle(textFaint)
                         }
                     }

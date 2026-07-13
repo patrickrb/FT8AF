@@ -20,7 +20,7 @@ struct MapScreen: View {
             // Top bar
             HStack {
                 Text("Map")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.ft8afUI(size: 18, weight: .bold))
                     .foregroundStyle(textPrimary)
 
                 Spacer()
@@ -34,9 +34,9 @@ struct MapScreen: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: projection == .equirectangular ? "map" : "globe")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.ft8afUI(size: 11, weight: .medium))
                         Text(projection.rawValue)
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .font(.ft8afMono(size: 10, weight: .semibold))
                     }
                     .foregroundStyle(textMuted)
                     .padding(.horizontal, 8)
@@ -50,7 +50,7 @@ struct MapScreen: View {
                 .padding(.trailing, 8)
 
                 Text("\(markers.count) stations")
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .font(.ft8afMono(size: 12, weight: .medium))
                     .foregroundStyle(textMuted)
             }
             .padding(.horizontal, 16)
@@ -145,26 +145,26 @@ struct MapScreen: View {
     private func markerPopup(_ marker: MapMarker) -> some View {
         VStack(spacing: 4) {
             Text(marker.callsign)
-                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .font(.ft8afMono(size: 14, weight: .bold))
                 .foregroundStyle(textPrimary)
             Text(marker.grid)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .font(.ft8afMono(size: 11, weight: .medium))
                 .foregroundStyle(textMuted)
 
             HStack(spacing: 8) {
                 if let snr = marker.snr {
                     Text("SNR: \(snr >= 0 ? "+\(snr)" : "\(snr)")")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.ft8afMono(size: 10, weight: .medium))
                         .foregroundStyle(textFaint)
                 }
                 if let dist = markerDistance(marker) {
                     Text(dist)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.ft8afMono(size: 10, weight: .medium))
                         .foregroundStyle(textFaint)
                 }
                 if let brg = markerBearing(marker) {
                     Text(brg)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.ft8afMono(size: 10, weight: .medium))
                         .foregroundStyle(textFaint)
                 }
             }
@@ -238,7 +238,7 @@ private struct ZoomButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.ft8afUI(size: 13, weight: .semibold))
                 .foregroundStyle(textPrimary)
                 .frame(width: 32, height: 32)
                 .background(

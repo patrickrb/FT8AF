@@ -12,7 +12,7 @@ struct DecodeScreen: View {
             // Top bar
             HStack {
                 Text("Decode")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.ft8afUI(size: 18, weight: .bold))
                     .foregroundStyle(textPrimary)
 
                 Spacer()
@@ -22,7 +22,7 @@ struct DecodeScreen: View {
                     appState.decode.compactMode.toggle()
                 } label: {
                     Image(systemName: decode.compactMode ? "list.bullet" : "list.bullet.indent")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.ft8afUI(size: 14, weight: .medium))
                         .foregroundStyle(decode.compactMode ? accent : textMuted)
                 }
                 .buttonStyle(.plain)
@@ -33,7 +33,7 @@ struct DecodeScreen: View {
                     appState.decode.autoClear.toggle()
                 } label: {
                     Image(systemName: decode.autoClear ? "arrow.clockwise.circle.fill" : "arrow.clockwise.circle")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.ft8afUI(size: 14, weight: .medium))
                         .foregroundStyle(decode.autoClear ? accent : textMuted)
                 }
                 .buttonStyle(.plain)
@@ -44,14 +44,14 @@ struct DecodeScreen: View {
                     appState.decode.messages.removeAll()
                 } label: {
                     Image(systemName: "trash")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.ft8afUI(size: 13, weight: .medium))
                         .foregroundStyle(textMuted)
                 }
                 .buttonStyle(.plain)
                 .padding(.trailing, 8)
 
                 Text("\(decode.messages.count) msgs")
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .font(.ft8afMono(size: 12, weight: .medium))
                     .foregroundStyle(textMuted)
             }
             .padding(.horizontal, 16)
@@ -267,13 +267,13 @@ struct DecodeScreen: View {
         VStack(spacing: 12) {
             Spacer()
             Image(systemName: "waveform.slash")
-                .font(.system(size: 40))
+                .font(.ft8afUI(size: 40))
                 .foregroundStyle(textFaint)
             Text("No messages")
-                .font(.system(size: 16, weight: .medium))
+                .font(.ft8afUI(size: 16, weight: .medium))
                 .foregroundStyle(textMuted)
             Text("Decoded FT8 messages will appear here")
-                .font(.system(size: 13))
+                .font(.ft8afUI(size: 13))
                 .foregroundStyle(textFaint)
             Spacer()
         }
@@ -290,7 +290,7 @@ private struct SlotDivider: View {
                 .fill(textDim.opacity(0.4))
                 .frame(height: 1)
             Text(String(time.prefix(5)))
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .font(.ft8afMono(size: 9, weight: .medium))
                 .foregroundStyle(textFaint)
             Rectangle()
                 .fill(textDim.opacity(0.4))

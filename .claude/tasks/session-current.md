@@ -160,3 +160,58 @@ App — `ios/FT8AF/FT8AF/`:
 - Inert-by-platform: `earlyDecode` (slot-end decode pipeline), `pttDelayMs` (no PTT line on iOS). Both documented above; everything else in the TX/sequencer settings group now does something real.
 - `autoCQAfterQSO` default-off behavior change called out in #1 — flag in the PR body.
 - TUNE plays through the same `TxPlayerService`/AVAudioEngine speaker path as FT8 TX; on-device it keys VOX like any TX audio. Requires RX running (toast prompts if not).
+
+### Agent E — POTA parity
+
+**Status: COMPLETE** — kit tests 329/329 green (`swift test`; 298 baseline + 31 new), simulator build green (`xcodebuild` iPhone 16 Pro), `xcodegen generate` re-run after adding the two app files. Not committed (coordinator commits). Verified the live endpoint shape with one manual curl; tests use canned fixtures only.
+
+**What was built** (parity with Android `pota/PotaClient.getActiveSpots`, `PotaSpotsRepository`, `PotaQsoWindow`, `ui/pota/PotaScreen.kt` HuntTab/historyForDisplay, `PotaAdifExporter.buildActivationAdif`; OAuth self-spot/upload stays deferred as documented):
+
+Kit — pure, network-free logic in `ios/FT8AFKit/Sources/FT8Engine/`:
+- `PotaSpots.swift` — `PotaSpot` model (activator, kHz, mode, ref, park name from the feed's `name` key, locationDesc, spotter, spotTime, comments; same row identity Android keys by) + `PotaSpots.decode` (tolerant of string/number `frequency`, null fields, malformed elements skipped; activator uppercased), `forDisplay(ft8Only:)` (case-insensitive FT8 filter + frequency sort, Android's hunt constraint but client-side so the toggle is instant), `ageSeconds` (lenient "yyyy-MM-ddTHH:mm:ss[.frac]" UTC parse, clamps skew; feeds the existing `relativeAge`), `band(forFrequencyKhz:)` (full HF/6m allocations → the app's "20M" band names).
+- `PotaActivations.swift` — `PotaActivationRecord` (Codable; parkRef comma-split for two-fers, `parkRefsDisplay`, open end = active) + `potaHistoryForDisplay` (drops active, newest first) + `PotaQsoWindow` port (yyyyMMddHHmmss GMT stamps, Android's variable-width `time_on` normalization incl. dropped-leading-zero odd widths, `openEnd` bound for active sessions, `qsos(in:)`/`qsoCount`).
+- `PotaAdif.swift` — `Adif.potaActivationExport(records:activation:)` in a NEW file (Adif.swift untouched, no signature changes): Android's exact field set/order (CALL GRIDSQUARE MODE[/SUBMODE] BAND FREQ RST_SENT RST_RCVD QSO_DATE TIME_ON TIME_OFF STATION_CALLSIGN MY_GRIDSQUARE MY_SIG=POTA MY_SIG_INFO), UTF-8 byte lengths, FT4/FT2 → MODE=MFSK+SUBMODE (the pota.app rejection Android fixed), one document per park with MY_SIG_INFO pinned, window-scoped via PotaQsoWindow, empty window → `[]` (never header-only files), `pota-<ref>-<yyyyMMdd-HHmm>.adi` filenames (UTC stamp; Android uses local — cosmetic).
+- Tests (31 new): `PotaSpotsTests` (canned JSON fixture from a real 2026-07-13 response — decode mapping, uppercasing, int-string freq, null/garbage tolerance, filter+sort, age parse incl. fractional seconds, band map edges), `PotaActivationsTests` (stamps, time_on normalization, window in/ex-clusion incl. same-park repeat visits, sorting, Codable round-trip, history), `PotaAdifTests` (golden single-park document, byte-length UTF-8, empty-field omission, MFSK submodes, two-fer pinning, window scoping, empty→[]).
+
+App — `ios/FT8AF/FT8AF/`:
+- `Engine/PotaService.swift` — `@Observable @MainActor` singleton: URLSession fetch of `api.pota.app/spot/activator` (10 s timeout, same UA/Accept as Android), isLoading/lastError/lastUpdatedAt, `ft8Only` toggle, `displaySpots` via kit. Re-entrant refreshes dropped; cancellation isn't surfaced as an error.
+- `Engine/PotaActivationStore.swift` — Documents-dir JSON store (`pota_activations.json`), QsoLogStore pattern; History and a still-open activation survive restarts.
+- `Screens/POTA/PotaScreen.swift` — mock data fully removed. Hunt: live spot list (List → native pull-to-refresh), 60 s auto-refresh via `.task(id: selectedTab)` while the tab is visible, loading/empty/error states, FT8 ONLY chip, rows show activator/park pill/park·location/comments/freq/relative age/spotter (+mode chip when non-FT8); tap = band switch through the same path as the TX strip's band chip (settings.band + SettingsPersistence.save) when the spot is FT8 on a mapped band, + targeting toast (else "tune manually" toast). Activate: sessions are `PotaActivationRecord`s; QSO count **derived** from `logbook.records` in the activation window (Observation-driven — no manual increments), elapsed ticks via TimelineView, End freezes the count into the record, Export ADIF button (disabled at 0 QSOs). History: real past activations (park refs, date, QSO count, per-row ADIF share). Share = per-park temp files → UIActivityViewController.
+- `AppState.swift` — PotaState body ONLY: replaced the inert `isActivating/activationQsoCount/activationStartTime/parkRefs` with `activations: [PotaActivationRecord]` + derived `current`/`isActivating` (isActivating keeps its name so the ACTIVE header pill logic reads the same).
+
+**Coordinator notes:**
+- Tapping a spot switches band only (mirrors TxStrip's FrequencyPickerSheet path); it does NOT prefill a QSO target — Android opens its QSO sheet with the activator instead, but iOS target selection is engine-owned (LiveEngine is Agent B's file) and out of my ownership. Trivial follow-up if wanted: set a decode-tap-equivalent hook.
+- POTA spots are NOT fed into the decode annotator's park-ref enrichment (Android's `PotaSpotsRepository.parkRefFor`); Agent R's `isPotaCq` works off message text. Possible future wire-up via PotaService.shared.
+- QSOs logged during an activation aren't tagged MY_SIG in `qso_log.json` (QsoRecord has no sig fields and QsoRecord.swift is Agent D's back-compat surface); the export derives membership from the activation time window instead — same result as Android's window-scoped query, and repeat visits to one park stay separate (tested).
+- Build passed with Agent S's in-flight font/typography edits present in the tree; my PotaScreen rewrite predates any font adoption pass on Screens/POTA (rows still use `.system` fonts — Agent S or coordinator can sweep it with the same treatment as other screens).
+
+### Agent S — Style parity
+
+**Status: COMPLETE** — kit tests 298/298 green (`swift test`, kit untouched), `xcodegen generate` + simulator build green (iPhone 16 Pro), fonts verified rendering in the simulator. Not committed (coordinator commits).
+
+**1. Fonts bundled** — `ios/FT8AF/FT8AF/Fonts/`: `inter_variable.ttf`, `geist_mono_{regular,medium,semibold,bold}.ttf` copied from `ft8af/app/src/main/res/font/` (proportional Geist skipped — Android UI font is Inter). CoreText inspection: Geist Mono statics register as PS `GeistMono-{Regular,Medium,SemiBold,Bold}`; the Inter variable TTF exposes **named instances** `Inter-Regular`, `Inter-Regular_Medium`, `Inter-Regular_SemiBold`, `Inter-Regular_Bold` (verified via CTFontManager registration test: all four resolve with distinct weight traits 0/0.2/0.3/0.4), so weight selection works from the single variable file — **no static Inter weights needed, nothing downloaded**.
+
+**2. Info.plist migration** — `project.yml` now uses an XcodeGen `info:` block (`FT8AF/Info.plist`); `GENERATE_INFOPLIST_FILE` and all `INFOPLIST_KEY_*` settings removed. Migrated keys (the full set present in project.yml/pbxproj — there was no NSLocalNetworkUsageDescription anywhere):
+- `NSMicrophoneUsageDescription` (same string)
+- `UIApplicationSceneManifest` = { UIApplicationSupportsMultipleScenes: true, UISceneConfigurations: {} } (matches previous generated plist)
+- `UIApplicationSupportsIndirectInputEvents` = true
+- `UILaunchScreen` = {} (launch-screen generation equivalent)
+- `UISupportedInterfaceOrientations` (iPhone list) + `UISupportedInterfaceOrientations~ipad` (previous _iPhone/_iPad values)
+- `LSRequiresIPhoneOS` = true
+- **new** `UIAppFonts` = the 5 bundled ttf files
+Built product's Info.plist inspected via `plutil -p` in DerivedData: all keys + UIAppFonts present, mic string intact, 5 ttf files in the app bundle.
+
+**3. Typography layer** — new `ios/FT8AF/FT8AF/Theme/Typography.swift`: `Font.ft8afUI(size:weight:)` (Inter named instances; variation-axis `wght` fallback if instances aren't registered; SF fallback if the file fails) and `Font.ft8afMono(size:weight:)` (Geist Mono statics; SF Mono fallback). Slashed zero implemented (no rabbit hole): OpenType `zero` feature via `UIFontDescriptor.featureSettings` with the CoreText `kCTFontOpenTypeFeatureTag/Value` keys — mirrors Android's `fontFeatureSettings = "zero"`.
+
+**4. App-wide adoption** — all 30 view files under `ios/FT8AF/FT8AF/` swept mechanically (Components, Navigation, Screens/Decode|Logbook|Map|Settings|Waterfall, SplashScreen): `.system(size:…, design: .monospaced)` → `.ft8afMono(size:…)`, `.system(size:…)` → `.ft8afUI(size:…)` (227 call sites, weights preserved incl. ternaries). Zero `.system(` font sites remain outside the exclusions. Notes:
+- **Screens/POTA/ untouched per concurrency rule — PotaScreen still uses system fonts; coordinator sweeps it after Agent E lands.**
+- The 7 `.system(.body, design:.monospaced)` sites (TextFields) → `.ft8afMono(size: 17)` — fixed 17pt (body default) instead of dynamic type, consistent with the rest of the app's fixed sizes.
+- SF Symbol `Image(systemName:)` sites keep their `.font()` for sizing (now ft8af helpers) — verified rendering unchanged.
+- `Theme/Typography.swift`'s own `.system` fallbacks intentionally kept.
+
+**5. Visual verification (simulator)** — app installed + launched on iPhone 16 Pro sim, screenshots inspected: Geist Mono clearly rendering on chips/TX controls with **slashed zero visible** ("0 msgs"); Inter confirmed decisively by ink-width measurement of the Decode empty-state subtitle (rendered 248.7pt vs Inter 249.4pt vs SF 244.1pt at 13pt). No file found where the font failed to load.
+
+**Coordinator notes:**
+- App target has no unit-test target and the typography layer is pure UIKit/SwiftUI font resolution (kit untouched), so no new kit tests; the font-name/weight mapping is trivial and verified by the build + on-sim rendering.
+- `xcodegen generate` re-ran; pbxproj regenerated (adds Fonts/ resources + INFOPLIST_FILE). If Agent E regenerates after me nothing is lost — everything is declared in project.yml.
+- Android's per-style letterspacing from Type.kt (e.g. -0.02em display, +0.04em labels) not replicated — iOS sites set explicit sizes rather than semantic styles; can be layered on later via `.kerning()` if the coordinator wants closer parity.

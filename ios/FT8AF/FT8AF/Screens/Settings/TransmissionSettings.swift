@@ -14,7 +14,7 @@ struct TransmissionSettings: View {
                         .foregroundStyle(textPrimary)
                     Spacer()
                     TextField("Watts", value: $settings.txPowerWatts, format: .number)
-                        .font(.system(.body, design: .monospaced))
+                        .font(.ft8afMono(size: 17))
                         .multilineTextAlignment(.trailing)
                         .foregroundStyle(textPrimary)
                         .keyboardType(.numberPad)
@@ -53,7 +53,7 @@ struct TransmissionSettings: View {
                             .foregroundStyle(textPrimary)
                         Spacer()
                         Text("\(settings.txVolume)%")
-                            .font(.system(size: 14, design: .monospaced))
+                            .font(.ft8afMono(size: 14))
                             .foregroundStyle(textMuted)
                     }
                     Slider(
@@ -93,7 +93,7 @@ struct TransmissionSettings: View {
                         Text("Hunt: Call CQ")
                             .foregroundStyle(textPrimary)
                         Text("Automatically call CQ when hunting")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                 }
@@ -104,7 +104,7 @@ struct TransmissionSettings: View {
                         Text("Auto-Call Follow")
                             .foregroundStyle(textPrimary)
                         Text("Automatically respond to stations calling you")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                 }
@@ -115,7 +115,7 @@ struct TransmissionSettings: View {
                         Text("Early Decode")
                             .foregroundStyle(textPrimary)
                         Text("Start decoding before end of RX cycle")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                 }
@@ -126,7 +126,7 @@ struct TransmissionSettings: View {
                         Text("Auto-CQ After QSO")
                             .foregroundStyle(textPrimary)
                         Text("Resume calling CQ after completing a QSO")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                 }
@@ -147,7 +147,7 @@ struct TransmissionSettings: View {
                         Text("TX Watchdog")
                             .foregroundStyle(textPrimary)
                         Text("Auto-stop TX after timeout")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                     Spacer()
@@ -167,7 +167,7 @@ struct TransmissionSettings: View {
                         Text("Stop After")
                             .foregroundStyle(textPrimary)
                         Text("Max CQ attempts before stopping")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                     Spacer()
@@ -187,7 +187,7 @@ struct TransmissionSettings: View {
                         Text("Tune Timeout")
                             .foregroundStyle(textPrimary)
                         Text("Max carrier time for the TUNE button")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                     Spacer()

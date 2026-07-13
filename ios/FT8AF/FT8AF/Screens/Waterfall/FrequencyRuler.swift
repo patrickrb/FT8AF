@@ -26,7 +26,7 @@ struct FrequencyRuler: View {
                 // Label
                 context.draw(
                     Text("\(tick.hz)")
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .font(.ft8afMono(size: 8, weight: .medium))
                         .foregroundStyle(textFaint),
                     at: CGPoint(x: x, y: 14),
                     anchor: .center

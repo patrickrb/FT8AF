@@ -48,7 +48,7 @@ struct DecodeRow: View {
                 Spacer().frame(height: compact ? 2 : 4)
                 if !compact && !fullMessageText.isEmpty {
                     Text(fullMessageText)
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(.ft8afMono(size: 12))
                         .foregroundStyle(textMuted)
                         .lineLimit(1)
                     Spacer().frame(height: 4)
@@ -58,10 +58,10 @@ struct DecodeRow: View {
                     Spacer().frame(height: 4)
                     HStack(spacing: 4) {
                         Image(systemName: "globe")
-                            .font(.system(size: 10))
+                            .font(.ft8afUI(size: 10))
                             .foregroundStyle(textFaint)
                         Text(location)
-                            .font(.system(size: 10.5, weight: .medium))
+                            .font(.ft8afUI(size: 10.5, weight: .medium))
                             .foregroundStyle(textFaint)
                     }
                 }
@@ -100,12 +100,12 @@ struct DecodeRow: View {
             }
 
             Text(message.callFrom)
-                .font(.system(size: 15, weight: .bold, design: .monospaced))
+                .font(.ft8afMono(size: 15, weight: .bold))
                 .foregroundStyle(callsignColor)
 
             if !message.grid.isEmpty {
                 Text(message.grid)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.ft8afMono(size: 11))
                     .foregroundStyle(textFaint)
             }
 
@@ -206,7 +206,7 @@ private struct StatusPillView: View {
                 .fill(hue)
                 .frame(width: 6, height: 6)
             Text(label)
-                .font(.system(size: compact ? 9.5 : 11, weight: .semibold))
+                .font(.ft8afUI(size: compact ? 9.5 : 11, weight: .semibold))
                 .foregroundStyle(hue)
         }
         .padding(.horizontal, compact ? 6 : 8)
@@ -300,7 +300,7 @@ private struct MessageLabel: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 9.5, weight: .bold))
+            .font(.ft8afUI(size: 9.5, weight: .bold))
             .kerning(0.6)
             .foregroundStyle(color)
             .padding(.horizontal, 5)
@@ -316,7 +316,7 @@ private struct MetaText: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 10.5, design: .monospaced))
+            .font(.ft8afMono(size: 10.5))
             .foregroundStyle(textFaint)
     }
 }

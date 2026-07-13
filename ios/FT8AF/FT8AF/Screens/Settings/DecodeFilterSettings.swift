@@ -30,7 +30,7 @@ struct DecodeFilterSettings: View {
                         Text("Show Only CQ")
                             .foregroundStyle(textPrimary)
                         Text("Hide QSO traffic, show only CQ calls")
-                            .font(.system(size: 12))
+                            .font(.ft8afUI(size: 12))
                             .foregroundStyle(textFaint)
                     }
                 }
@@ -41,7 +41,7 @@ struct DecodeFilterSettings: View {
                         Text("DX Only")
                             .foregroundStyle(textPrimary)
                         Text("Hide stations on your own continent")
-                            .font(.system(size: 12))
+                            .font(.ft8afUI(size: 12))
                             .foregroundStyle(textFaint)
                     }
                 }
@@ -56,7 +56,7 @@ struct DecodeFilterSettings: View {
                         Text("Continent Filter")
                             .foregroundStyle(textPrimary)
                         Text("Show only stations from one continent")
-                            .font(.system(size: 12))
+                            .font(.ft8afUI(size: 12))
                             .foregroundStyle(textFaint)
                     }
                 }
@@ -102,7 +102,7 @@ struct DecodeFilterSettings: View {
                         Text("Distance Unit")
                             .foregroundStyle(textPrimary)
                         Text("Unit for QSO-path distances in the decode list")
-                            .font(.system(size: 12))
+                            .font(.ft8afUI(size: 12))
                             .foregroundStyle(textFaint)
                     }
                 }
@@ -116,7 +116,7 @@ struct DecodeFilterSettings: View {
                             .foregroundStyle(textPrimary)
                         Spacer()
                         Text("\(appState.settings.blockedCallsigns.count)")
-                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .font(.ft8afMono(size: 14, weight: .medium))
                             .foregroundStyle(textMuted)
                     }
                 }
@@ -153,7 +153,7 @@ struct DecodeFilterSettings: View {
                     Text(title)
                         .foregroundStyle(textPrimary)
                     Text(description)
-                        .font(.system(size: 12))
+                        .font(.ft8afUI(size: 12))
                         .foregroundStyle(textFaint)
                 }
             }

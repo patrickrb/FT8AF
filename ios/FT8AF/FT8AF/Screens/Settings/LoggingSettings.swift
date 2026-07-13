@@ -144,7 +144,7 @@ struct LoggingSettings: View {
                         .keyboardType(keyboard)
                 }
             }
-            .font(.system(.body, design: .monospaced))
+            .font(.ft8afMono(size: 17))
             .multilineTextAlignment(.trailing)
             .foregroundStyle(textPrimary)
             .textInputAutocapitalization(.never)
@@ -172,7 +172,7 @@ struct LoggingSettings: View {
                     .tint(accent)
             } else if let result {
                 Text(result ? "Pass" : "Fail")
-                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                    .font(.ft8afMono(size: 14, weight: .semibold))
                     .foregroundStyle(result ? statusConfirmed : statusBad)
             }
         }

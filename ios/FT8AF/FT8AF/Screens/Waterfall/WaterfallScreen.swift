@@ -24,12 +24,12 @@ struct WaterfallScreen: View {
             // Info bar (bottom)
             HStack {
                 Text(utcString)
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .font(.ft8afMono(size: 12, weight: .semibold))
                     .foregroundStyle(textPrimary)
 
                 // TX frequency display
                 Text("TX \(Int(appState.waterfall.txFreqHz)) Hz")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.ft8afMono(size: 10, weight: .bold))
                     .foregroundStyle(accent)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -63,7 +63,7 @@ struct WaterfallScreen: View {
                     .buttonStyle(.plain)
 
                     Text("\(appState.waterfall.updateCount)")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.ft8afMono(size: 10, weight: .medium))
                         .foregroundStyle(textDim)
 
                     LiveIndicator(isLive: appState.waterfall.isLive)
@@ -121,7 +121,7 @@ private struct InputLevelMeter: View {
     var body: some View {
         HStack(spacing: 4) {
             Text("RX")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .font(.ft8afMono(size: 9, weight: .bold))
                 .foregroundStyle(textMuted)
 
             // Meter bar: RMS fill + peak tick.
@@ -140,7 +140,7 @@ private struct InputLevelMeter: View {
             .clipShape(RoundedRectangle(cornerRadius: 3))
 
             Text(statusText)
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .font(.ft8afMono(size: 9, weight: .bold))
                 .foregroundStyle(color)
         }
     }
@@ -152,7 +152,7 @@ private struct InfoChip: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+            .font(.ft8afMono(size: 10, weight: .semibold))
             .foregroundStyle(isOn ? accent : textFaint)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
@@ -172,7 +172,7 @@ private struct LiveIndicator: View {
                 .fill(isLive ? statusConfirmed : statusBad)
                 .frame(width: 6, height: 6)
             Text(isLive ? "LIVE" : "OFF")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .font(.ft8afMono(size: 10, weight: .bold))
                 .foregroundStyle(isLive ? statusConfirmed : textFaint)
         }
     }

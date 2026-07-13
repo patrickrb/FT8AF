@@ -90,7 +90,7 @@ struct WaterfallCanvas: View {
             // Period-start time at the left edge, just below the divider.
             context.draw(
                 Text(label)
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .font(.ft8afMono(size: 9, weight: .medium))
                     .foregroundStyle(textFaint),
                 at: CGPoint(x: 3, y: y + 2),
                 anchor: .topLeading
@@ -118,7 +118,7 @@ struct WaterfallCanvas: View {
             guard x > 0, x < size.width else { continue }
 
             let label = context.resolve(Text(msg.callFrom)
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .font(.ft8afMono(size: 8, weight: .bold))
                 .foregroundStyle(labelColor(msg)))
             context.draw(label, at: CGPoint(x: x, y: 8), anchor: .top)
 

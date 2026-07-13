@@ -45,17 +45,17 @@ struct ActiveQsoPanel: View {
             // Header row: QSO label + state + SNR · LOG · ✕ · collapse
             HStack(spacing: 8) {
                 Text("QSO")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .font(.ft8afMono(size: 10, weight: .semibold))
                     .foregroundStyle(textFaint)
 
                 Text(headerLabel)
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .font(.ft8afMono(size: 13, weight: .bold))
                     .foregroundStyle(accent)
                     .lineLimit(1)
 
                 if hasTarget, let snr = tx.targetSnr {
                     Text(snr >= 0 ? "+\(snr)dB" : "\(snr)dB")
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .font(.ft8afMono(size: 11, weight: .medium))
                         .foregroundStyle(signal)
                 }
 
@@ -67,7 +67,7 @@ struct ActiveQsoPanel: View {
                         appState.engine?.forceLogAndMoveOn()
                     } label: {
                         Text("LOG")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .font(.ft8afMono(size: 10, weight: .bold))
                             .foregroundStyle(signal)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
@@ -80,7 +80,7 @@ struct ActiveQsoPanel: View {
                         appState.engine?.clearActiveQso()
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.ft8afUI(size: 11, weight: .semibold))
                             .foregroundStyle(textMuted)
                             .frame(width: 22, height: 22)
                     }
@@ -93,7 +93,7 @@ struct ActiveQsoPanel: View {
                     }
                 } label: {
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.ft8afUI(size: 10, weight: .semibold))
                         .foregroundStyle(textMuted)
                         .frame(width: 22, height: 22)
                 }
@@ -123,7 +123,7 @@ struct ActiveQsoPanel: View {
             } else if !tx.txMessage.isEmpty {
                 // Fallback: show current TX message if no log entries yet
                 Text(tx.txMessage)
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .font(.ft8afMono(size: 12, weight: .medium))
                     .foregroundStyle(textMuted)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 8)
@@ -175,19 +175,19 @@ struct ActiveQsoPanel: View {
                     .frame(width: 6, height: 6)
 
                 Text(headerLabel)
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .font(.ft8afMono(size: 12, weight: .semibold))
                     .foregroundStyle(textPrimary)
 
                 if !tx.queuedCallers.isEmpty {
                     Text("+\(tx.queuedCallers.count)")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .font(.ft8afMono(size: 10, weight: .bold))
                         .foregroundStyle(signal)
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.up")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.ft8afUI(size: 10, weight: .semibold))
                     .foregroundStyle(textMuted)
             }
             .padding(.horizontal, 14)
@@ -218,7 +218,7 @@ private struct TxSelectorRow: View {
     var body: some View {
         HStack(spacing: 4) {
             Text("TX:")
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .font(.ft8afMono(size: 10, weight: .semibold))
                 .foregroundStyle(textFaint)
 
             ForEach(TxStageSelector.chips, id: \.rawValue) { chip in
@@ -229,7 +229,7 @@ private struct TxSelectorRow: View {
                     onSelect(chip)
                 } label: {
                     Text(TxStageSelector.label(for: chip))
-                        .font(.system(size: 10, weight: isActive ? .bold : .medium, design: .monospaced))
+                        .font(.ft8afMono(size: 10, weight: isActive ? .bold : .medium))
                         .foregroundStyle(isActive ? accent : (isCompleted ? signal : textMuted))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
@@ -261,7 +261,7 @@ private struct CallerQueueBar: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             Text("QUEUE")
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .font(.ft8afMono(size: 9, weight: .semibold))
                 .foregroundStyle(textFaint)
 
             WrappingHStack(spacing: 4, lineSpacing: 3) {
@@ -270,7 +270,7 @@ private struct CallerQueueBar: View {
                         onTap(callsign)
                     } label: {
                         Text(callsign)
-                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .font(.ft8afMono(size: 10, weight: .medium))
                             .foregroundStyle(signal)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -330,7 +330,7 @@ private struct ConversationRow: View {
         HStack(spacing: 6) {
             // Direction badge
             Text(entry.direction.rawValue)
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .font(.ft8afMono(size: 8, weight: .bold))
                 .foregroundStyle(directionColor)
                 .frame(width: 28)
                 .padding(.vertical, 2)
@@ -341,7 +341,7 @@ private struct ConversationRow: View {
 
             // Message
             Text(entry.message)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .font(.ft8afMono(size: 11, weight: .medium))
                 .foregroundStyle(textPrimary)
                 .lineLimit(1)
 
@@ -350,13 +350,13 @@ private struct ConversationRow: View {
             // SNR (for RX)
             if let snr = entry.snr {
                 Text(snr >= 0 ? "+\(snr)" : "\(snr)")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(.ft8afMono(size: 9, weight: .semibold))
                     .foregroundStyle(textFaint)
             }
 
             // Time
             Text(String(entry.utcTime.prefix(5)))
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .font(.ft8afMono(size: 9, weight: .medium))
                 .foregroundStyle(textDim)
         }
         .padding(.horizontal, 8)
@@ -401,7 +401,7 @@ struct QsoStageDots: View {
                         .fill(isReached(idx) ? accent : textDim.opacity(0.3))
                         .frame(width: isCurrent(idx) ? 10 : 7, height: isCurrent(idx) ? 10 : 7)
                     Text(item.label)
-                        .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                        .font(.ft8afMono(size: 8, weight: .semibold))
                         .foregroundStyle(isReached(idx) ? accent : textFaint)
                 }
             }
