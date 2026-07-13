@@ -303,11 +303,12 @@ final class LiveEngine {
         // Sync QSO status back to UI.
         syncQsoStatusToUI()
 
-        // TX scheduling: if QSO engine has a message and slot parity matches, transmit.
+        // TX scheduling: if the QSO engine has a message and this slot matches the
+        // operator's selected TX parity, transmit. The audio keys up immediately,
+        // so it plays in `slotID` itself — gate on that slot's parity (mirrors the
+        // desktop engine's `maybe_transmit`), not the next slot's.
         if let txMsg = qso.txMessage {
-            let nextSlotParity = Int(SlotClock.parity(slotID: slotID + 1))
-            let desiredParity = appState.tx.slotParity
-            if nextSlotParity == desiredParity {
+            if SlotClock.shouldTransmit(slotID: slotID, desiredParity: appState.tx.slotParity) {
                 scheduleTx(message: txMsg, freqHz: appState.waterfall.txFreqHz)
             }
         }
