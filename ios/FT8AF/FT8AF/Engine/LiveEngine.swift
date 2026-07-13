@@ -438,8 +438,13 @@ final class LiveEngine {
         udp.onReply = { [weak self] call, grid, snr, deltaFreq in
             guard let self, let appState = self.appState else { return }
             // Honor the requested audio frequency: answer on the tone the companion asked
-            // for, not whatever the current TX frequency happens to be.
-            if deltaFreq > 0 { appState.waterfall.txFreqHz = Float(deltaFreq) }
+            // for, not whatever the current TX frequency happens to be. `deltaFreq` is a
+            // raw value off an untrusted UDP socket, so only adopt it when it lands inside
+            // the transmittable passband; an unspecified (0) or out-of-band request keeps
+            // the current offset (mirrors the desktop/Android reply-df guards).
+            if let txHz = WaterfallAxis.boundedReplyTxHz(Float(deltaFreq)) {
+                appState.waterfall.txFreqHz = txHz
+            }
             let msg = DecodeMessage(
                 utcTime: Self.utcTimeString(from: Int64(Date().timeIntervalSince1970 * 1000)),
                 callFrom: call, callTo: "", snr: Int(snr),
