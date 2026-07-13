@@ -85,4 +85,21 @@ final class GridToLatLonTests: XCTestCase {
         XCTAssertNil(gridToLatLon("ZZ99"))   // field letters must be A–R
         XCTAssertNil(gridToLatLon("FNXY"))   // square must be digits
     }
+
+    // MARK: FT8 sign-off tokens that collide with the grid pattern → nil
+
+    func testRr73SignOffIsRejected() {
+        // "RR73" is the FT8 QSO sign-off (roger, best regards), placed in a
+        // message's grid field by the decoder's looksLikeGrid. R,R are valid
+        // A–R field letters and 7,3 are valid digits, so without an explicit
+        // guard it decodes to a phantom point in the Arctic Ocean (83.5°N,
+        // 175°E). The Android decoder rejects it; this port must too.
+        XCTAssertNil(gridToLatLon("RR73"))
+        XCTAssertNil(gridToLatLon("rr73"))   // case-insensitive
+    }
+
+    func testRrSignOffIsRejected() {
+        XCTAssertNil(gridToLatLon("RR"))
+        XCTAssertNil(gridToLatLon("rr"))
+    }
 }
