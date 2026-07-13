@@ -89,6 +89,27 @@ impl PreparedTx {
     }
 }
 
+/// Apply the operator's TX `gain` and clamp every sample to the DAC's full-scale
+/// range `[-1.0, 1.0]`.
+///
+/// The clamp is unconditional — deliberately **not** gated on `gain != 1.0`. FFT
+/// resampling of the full-scale GFSK waveform (`synth_gfsk` peaks at exactly
+/// ±1.0) interpolates a few samples slightly past full scale — measured ≈1.05
+/// for 12 kHz→48 kHz — and the f32 output path hands samples to the driver
+/// verbatim (`f32::from_sample` is identity) with no saturation net, unlike the
+/// i16 cast which saturates. At `gain == 1.0` (TX level at 100%) those >1.0
+/// samples would otherwise reach the soundcard unclamped and overdrive the rig's
+/// input past 0 dBFS. Clamping here mirrors Android, which clamps unconditionally
+/// on the output cast (`FT8TransmitSignal.float2Short` / `floatToInt16NoPad`),
+/// kept separate from its gain step. For in-range samples the result is
+/// byte-identical to a bare multiply, so the common `gain < 1.0` path is
+/// unchanged.
+fn apply_gain_and_clip(data: &mut [f32], gain: f32) {
+    for s in data.iter_mut() {
+        *s = (*s * gain).clamp(-1.0, 1.0);
+    }
+}
+
 /// Render a 12 kHz mono buffer for `device_name`, applying `gain`, and build the
 /// (paused) output stream. Does NOT key audio — call [`PreparedTx::start`] to
 /// begin. This is the slow phase (device open + full-buffer resample); run it
@@ -107,11 +128,7 @@ pub fn prepare(
     let device_rate = config.sample_rate.0;
 
     let mut data = resample_buffer(samples_12k, SAMPLE_RATE as u32, device_rate);
-    if gain != 1.0 {
-        for s in data.iter_mut() {
-            *s = (*s * gain).clamp(-1.0, 1.0);
-        }
-    }
+    apply_gain_and_clip(&mut data, gain);
     let total = data.len();
     let buffer = Arc::new(data);
     let cursor = Arc::new(AtomicUsize::new(0));
@@ -205,6 +222,57 @@ mod tests {
         // A clip longer than the buffer starts at the end (plays silence), never
         // overruns the buffer.
         assert_eq!(skip_cursor(60_000, 48_000, 1_000), 1_000);
+    }
+
+    #[test]
+    fn apply_gain_and_clip_clamps_overshoot_at_unity_gain() {
+        // Regression: the old `if gain != 1.0` guard skipped the clamp at unity
+        // gain, letting post-resample overshoot past ±1.0 reach the DAC. The
+        // clamp must run at every gain, including 1.0 (TX level 100%).
+        let mut d = vec![1.05_f32, -1.05, 0.5, -0.5, 1.0, -1.0];
+        apply_gain_and_clip(&mut d, 1.0);
+        assert_eq!(d, vec![1.0, -1.0, 0.5, -0.5, 1.0, -1.0]);
+    }
+
+    #[test]
+    fn apply_gain_and_clip_scales_then_clamps() {
+        let mut d = vec![2.0_f32, 1.0, -2.0, 0.4];
+        apply_gain_and_clip(&mut d, 0.5);
+        // 0.5*2=1.0, 0.5*1=0.5, 0.5*-2=-1.0, 0.5*0.4=0.2
+        assert_eq!(d, vec![1.0, 0.5, -1.0, 0.2]);
+    }
+
+    #[test]
+    fn apply_gain_and_clip_is_identity_for_in_range_unity_gain() {
+        // Happy path: unity gain, already-in-range samples are untouched.
+        let mut d = vec![0.0_f32, 0.25, -0.75, 1.0, -1.0];
+        let expected = d.clone();
+        apply_gain_and_clip(&mut d, 1.0);
+        assert_eq!(d, expected);
+    }
+
+    #[test]
+    fn resampled_full_scale_waveform_is_clamped_at_unity_gain() {
+        // End-to-end: resampling a full-scale (±1.0) tone to a device rate
+        // overshoots past 1.0; after the output stage at gain == 1.0 nothing
+        // exceeds full scale. (Default gain 0.9 masks this, which is why the bug
+        // survived — exercise the load-bearing unity-gain case.)
+        let n = 12_000usize;
+        let mut sig = Vec::with_capacity(n);
+        let mut phi = 0.0f32;
+        for _ in 0..n {
+            phi += 2.0 * std::f32::consts::PI * 1500.0 / 12_000.0;
+            sig.push(phi.sin());
+        }
+        let mut data = resample_buffer(&sig, SAMPLE_RATE as u32, 48_000);
+        // Guard the test itself: the resampler really does overshoot, so the
+        // clamp is doing real work (not silently passing on a no-overshoot input).
+        assert!(
+            data.iter().any(|&x| x.abs() > 1.0),
+            "expected resample overshoot past full scale"
+        );
+        apply_gain_and_clip(&mut data, 1.0);
+        assert!(data.iter().all(|&x| (-1.0..=1.0).contains(&x)));
     }
 
     #[test]
