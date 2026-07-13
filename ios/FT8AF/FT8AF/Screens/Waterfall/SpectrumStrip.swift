@@ -1,4 +1,5 @@
 import SwiftUI
+import FT8Audio
 
 /// Vertical bar chart of live FFT magnitudes with a TX frequency marker.
 /// Reads normalized magnitudes (0...1) from `appState.waterfall.spectrum`.
@@ -6,8 +7,6 @@ import SwiftUI
 struct SpectrumStrip: View {
     @Environment(AppState.self) private var appState
     @State private var touchFreq: Float?
-
-    private let maxFreqHz: Float = 3000
 
     var body: some View {
         GeometryReader { geo in
@@ -29,13 +28,13 @@ struct SpectrumStrip: View {
                 }
 
                 // TX frequency marker line
-                let txX = CGFloat(appState.waterfall.txFreqHz / maxFreqHz) * size.width
+                let txX = CGFloat(WaterfallAxis.clampedFraction(forHz: appState.waterfall.txFreqHz)) * size.width
                 let markerRect = CGRect(x: txX - 0.5, y: 0, width: 1, height: size.height)
                 context.fill(Path(markerRect), with: .color(accent))
 
                 // Touch frequency indicator
                 if let tf = touchFreq {
-                    let touchX = CGFloat(tf / maxFreqHz) * size.width
+                    let touchX = CGFloat(WaterfallAxis.fraction(forHz: tf)) * size.width
                     let touchRect = CGRect(x: touchX - 0.5, y: 0, width: 1, height: size.height)
                     context.fill(Path(touchRect), with: .color(target.opacity(0.7)))
 
@@ -57,12 +56,12 @@ struct SpectrumStrip: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        let freq = Float(value.location.x / geo.size.width) * maxFreqHz
-                        touchFreq = max(100, min(freq, maxFreqHz))
+                        let fraction = Float(value.location.x / geo.size.width)
+                        touchFreq = WaterfallAxis.tunedTxHz(forFraction: fraction)
                     }
                     .onEnded { value in
-                        let freq = Float(value.location.x / geo.size.width) * maxFreqHz
-                        let clamped = max(100, min(freq, maxFreqHz))
+                        let fraction = Float(value.location.x / geo.size.width)
+                        let clamped = WaterfallAxis.tunedTxHz(forFraction: fraction)
                         appState.waterfall.txFreqHz = clamped
                         // Clear touch indicator after short delay
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
