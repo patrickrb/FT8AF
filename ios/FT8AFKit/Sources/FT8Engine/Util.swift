@@ -52,9 +52,9 @@ func grid4(_ s: String) -> String { String(s.prefix(4)) }
 public func gridToLatLon(_ grid: String) -> (Double, Double)? {
     let upper = grid.uppercased()
 
-    // "RR73" (and the bare "RR") is an FT8 QSO sign-off, not a locator — but it
-    // matches the Maidenhead field/square pattern (R,R are valid A–R field
-    // letters and 7,3 are valid digits), so it would otherwise decode to a bogus
+    // "RR73" and the bare "RR" are FT8 QSO sign-offs, not locators — but they
+    // match the Maidenhead field/square pattern (R,R are valid A–R field
+    // letters and 7,3 are valid digits), so they would otherwise decode to a bogus
     // point in the Arctic Ocean (83.5°N, 175°E). The decoder places "RR73" in a
     // message's `grid` field via `looksLikeGrid`, and the map/distance/awards
     // screens feed that straight in, so it must be rejected here — mirroring the
