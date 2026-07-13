@@ -27,8 +27,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 
 public class GeneralVariables {
@@ -624,7 +626,17 @@ public class GeneralVariables {
 
     public static final ArrayList<String> followCallsign = new ArrayList<>();//Followed callsigns
 
-    public static ArrayList<Ft8Message> transmitMessages = new ArrayList<>();//List for the calling UI, followed entries
+    // The calling-UI "followed entries" list. Mutated concurrently from three
+    // threads with no external lock: the decode thread (findIncludedCallsigns
+    // add + deleteArrayListMore remove(0) + clear), the TX-sequencer thread
+    // (FT8TransmitSignal.doComplete reverse scans, onBeforeTransmit add) and the
+    // UI thread (GridTracker / GridMarkerInfoWindow add, clearTransmittingMessage).
+    // A plain ArrayList corrupts its backing array / throws
+    // IndexOutOfBounds under that contention, so this is a CopyOnWriteArrayList:
+    // every add/remove/clear is atomic. Index scans must still snapshot the list
+    // first (size() then get(i) can otherwise race a concurrent remove) — see
+    // FT8TransmitSignal.doComplete.
+    public static List<Ft8Message> transmitMessages = new CopyOnWriteArrayList<>();//List for the calling UI, followed entries
 
     public static void setMyMaidenheadGrid(String grid) {
         myMaidenheadGrid = grid;
@@ -1239,7 +1251,7 @@ public class GeneralVariables {
         return result.toString();
     }
 
-    public static synchronized void deleteArrayListMore(ArrayList<Ft8Message> list) {
+    public static synchronized void deleteArrayListMore(List<Ft8Message> list) {
         if (list.size() > GeneralVariables.MESSAGE_COUNT) {
             while (list.size() > GeneralVariables.MESSAGE_COUNT) {
                 list.remove(0);

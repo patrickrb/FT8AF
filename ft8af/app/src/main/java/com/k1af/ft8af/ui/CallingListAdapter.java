@@ -29,13 +29,13 @@ import com.k1af.ft8af.maidenhead.MaidenheadGrid;
 import com.k1af.ft8af.rigs.BaseRigOperation;
 import com.k1af.ft8af.timer.UtcTimer;
 
-import java.util.ArrayList;
+import java.util.List;
 
 public class CallingListAdapter extends RecyclerView.Adapter<CallingListAdapter.CallingListItemHolder> {
     public enum ShowMode{CALLING_LIST,MY_CALLING,TRACKER}
     private static final String TAG = "CallingListAdapter";
     private final MainViewModel mainViewModel;
-    private final ArrayList<Ft8Message> ft8MessageArrayList;
+    private final List<Ft8Message> ft8MessageArrayList;
     private final Context context;
 
     private final ShowMode showMode;
@@ -126,7 +126,7 @@ public class CallingListAdapter extends RecyclerView.Adapter<CallingListAdapter.
 
 
     public CallingListAdapter(Context context, MainViewModel mainViewModel
-            , ArrayList<Ft8Message> messages, ShowMode showMode) {
+            , List<Ft8Message> messages, ShowMode showMode) {
         this.mainViewModel = mainViewModel;
         this.context = context;
         this.showMode=showMode;
