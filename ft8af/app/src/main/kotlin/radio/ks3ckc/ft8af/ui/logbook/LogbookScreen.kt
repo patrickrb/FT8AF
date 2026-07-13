@@ -882,8 +882,42 @@ private fun AwardProgressBar(
 }
 
 // ---------------------------------------------------------------------------
-// Grid square coverage heatmap (18x10 field grid: AA..RR x 00..99 at field level)
+// Grid square coverage heatmap (18x18 field grid: AA..RR at Maidenhead field level)
 // ---------------------------------------------------------------------------
+
+// A Maidenhead field designator is two letters: the longitude field (A..R, 18
+// divisions of 360° = 20° each) followed by the latitude field (A..R, 18
+// divisions of 180° = 10° each). BOTH axes span the full A..R range — the
+// latitude field is a letter, not a digit — so the coverage grid is 18x18 (324
+// cells). Iterating fewer latitude rows silently drops every field north of +10°
+// (latitude field K onward: essentially all of North America, Europe, and Japan),
+// so those worked grids could never highlight.
+internal const val GRID_HEATMAP_COLS = 18
+internal const val GRID_HEATMAP_ROWS = 18
+
+/** One coverage-grid cell: its Maidenhead field (e.g. "FN") and whether it was worked. */
+internal data class GridHeatmapCell(val field: String, val isWorked: Boolean)
+
+/**
+ * The two-letter field designators actually worked, derived from each record's
+ * grid (first two chars, upper-cased). Grids shorter than two chars are skipped.
+ */
+internal fun workedGridFields(grids: List<String?>): Set<String> =
+    grids.mapNotNull { grid ->
+        if (grid != null && grid.length >= 2) grid.substring(0, 2).uppercase() else null
+    }.toSet()
+
+/**
+ * The full 18x18 coverage grid, row-major (row = latitude field A..R, col =
+ * longitude field A..R), each cell flagged worked against [workedFields].
+ */
+internal fun buildGridHeatmapCells(workedFields: Set<String>): List<List<GridHeatmapCell>> =
+    (0 until GRID_HEATMAP_ROWS).map { row ->
+        (0 until GRID_HEATMAP_COLS).map { col ->
+            val field = "${'A' + col}${'A' + row}"
+            GridHeatmapCell(field, field in workedFields)
+        }
+    }
 
 @Composable
 private fun GridSquareHeatmap(
@@ -891,19 +925,9 @@ private fun GridSquareHeatmap(
     modifier: Modifier = Modifier,
     progress: Float = 1f,
 ) {
-    // Build set of worked 2-char field designators (e.g., "FN", "JO")
-    val workedFields = remember(records) {
-        records.mapNotNull { record ->
-            val grid = record.grid
-            if (grid != null && grid.length >= 2) {
-                grid.substring(0, 2).uppercase()
-            } else null
-        }.toSet()
+    val cells = remember(records) {
+        buildGridHeatmapCells(workedGridFields(records.map { it.grid }))
     }
-
-    val cols = 18  // A..R
-    val rows = 10  // 0..9 (latitude bands, typically A-R letters mapped, but for the field
-                   // grid we show longitude letters across, latitude digits down)
 
     GlassCard(modifier = modifier) {
         Column(
@@ -912,16 +936,11 @@ private fun GridSquareHeatmap(
                 .horizontalScroll(rememberScrollState())
                 .padding(12.dp),
         ) {
-            for (row in 0 until rows) {
+            cells.forEachIndexed { row, rowCells ->
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    for (col in 0 until cols) {
-                        val fieldLon = ('A' + col)
-                        val fieldLat = ('A' + row)
-                        val field = "$fieldLon$fieldLat"
-                        val isWorked = field in workedFields
-
+                    for (cell in rowCells) {
                         val cellColor = when {
-                            isWorked -> Signal.copy(alpha = 0.7f * progress.coerceIn(0f, 1f))
+                            cell.isWorked -> Signal.copy(alpha = 0.7f * progress.coerceIn(0f, 1f))
                             else -> BgSurface3.copy(alpha = 0.4f)
                         }
 
@@ -933,7 +952,7 @@ private fun GridSquareHeatmap(
                         )
                     }
                 }
-                if (row < rows - 1) Spacer(modifier = Modifier.height(2.dp))
+                if (row < cells.size - 1) Spacer(modifier = Modifier.height(2.dp))
             }
         }
     }
