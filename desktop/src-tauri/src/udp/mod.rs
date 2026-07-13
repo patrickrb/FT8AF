@@ -303,6 +303,31 @@ mod tests {
         assert!(to_command(&[0xDE, 0xAD, 0xBE, 0xEF]).is_none());
     }
 
+    // A datagram header for `msg_type` with no type-specific payload.
+    fn header_only(msg_type: u32) -> Vec<u8> {
+        let mut b = Vec::new();
+        b.extend_from_slice(&codec::MAGIC.to_be_bytes());
+        b.extend_from_slice(&codec::SCHEMA.to_be_bytes());
+        b.extend_from_slice(&msg_type.to_be_bytes());
+        b.extend_from_slice(&(codec::CLIENT_ID.len() as u32).to_be_bytes());
+        b.extend_from_slice(codec::CLIENT_ID.as_bytes());
+        b
+    }
+
+    #[test]
+    fn well_formed_halt_stops_tx() {
+        let mut b = header_only(codec::T_HALT_TX);
+        b.push(0); // auto_only = false
+        assert!(matches!(to_command(&b), Some(EngineCommand::StopTx)));
+    }
+
+    #[test]
+    fn truncated_halt_does_not_stop_tx() {
+        // A Halt with the trailing auto-only bool missing must NOT map to StopTx: a
+        // malformed/stray datagram must never halt an in-progress transmission.
+        assert!(to_command(&header_only(codec::T_HALT_TX)).is_none());
+    }
+
     #[test]
     fn disabled_service_send_is_noop() {
         let (tx, _rx) = std::sync::mpsc::channel();
