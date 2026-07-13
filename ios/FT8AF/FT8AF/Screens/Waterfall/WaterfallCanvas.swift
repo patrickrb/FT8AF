@@ -1,4 +1,5 @@
 import SwiftUI
+import FT8Audio
 
 /// Live scrolling waterfall heatmap, driven by `appState.waterfall.rows`.
 /// Each row is a `[UInt8]` of brightness values (0...255) produced by
@@ -39,10 +40,10 @@ struct WaterfallCanvas: View {
                 drawMessageLabels(context: context, size: size, numCols: numCols)
             }
 
-            // Draw TX frequency marker
+            // Draw TX frequency marker. Map with the same span the waterfall
+            // columns cover (WaterfallAxis) so the marker sits on the trace.
             let txFreq = appState.waterfall.txFreqHz
-            let maxFreq: Float = 3000 // FT8 audio bandwidth
-            let txX = CGFloat(txFreq / maxFreq) * size.width
+            let txX = CGFloat(WaterfallAxis.fraction(forHz: txFreq)) * size.width
             let txPath = Path { p in
                 p.move(to: CGPoint(x: txX, y: 0))
                 p.addLine(to: CGPoint(x: txX, y: size.height))
@@ -58,7 +59,6 @@ struct WaterfallCanvas: View {
         let messages = appState.decode.messages
         guard !messages.isEmpty else { return }
 
-        let maxFreq: Float = 3000
         // Only show unique callsigns at unique frequencies (latest per callsign)
         var seen = Set<String>()
         let uniqueMessages = messages.prefix(20).filter { msg in
@@ -69,7 +69,7 @@ struct WaterfallCanvas: View {
         }
 
         for msg in uniqueMessages {
-            let x = CGFloat(msg.freqHz / maxFreq) * size.width
+            let x = CGFloat(WaterfallAxis.fraction(forHz: msg.freqHz)) * size.width
             guard x > 0, x < size.width else { continue }
 
             let label = context.resolve(Text(msg.callFrom)

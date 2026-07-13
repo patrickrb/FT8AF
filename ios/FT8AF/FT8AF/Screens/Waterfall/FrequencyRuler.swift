@@ -1,14 +1,16 @@
 import SwiftUI
+import FT8Audio
 
-/// Horizontal ruler showing Hz tick marks from 0 to 3000.
+/// Horizontal ruler showing Hz tick marks across the displayed audio band.
+/// Ticks span the same range the waterfall/spectrum data covers
+/// (`WaterfallAxis.displayMaxHz`) so the labels line up with the trace.
 struct FrequencyRuler: View {
-    private let ticks = stride(from: 0, through: 3000, by: 500).map { $0 }
+    private let ticks = stride(from: 0, through: Int(WaterfallAxis.displayMaxHz), by: 500).map { $0 }
 
     var body: some View {
         Canvas { context, size in
-            let hzRange: CGFloat = 3000
             for hz in ticks {
-                let x = CGFloat(hz) / hzRange * size.width
+                let x = CGFloat(WaterfallAxis.fraction(forHz: Float(hz))) * size.width
                 // Tick mark
                 let tickPath = Path { p in
                     p.move(to: CGPoint(x: x, y: 0))
