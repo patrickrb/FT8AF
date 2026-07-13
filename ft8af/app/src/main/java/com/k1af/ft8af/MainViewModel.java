@@ -1053,6 +1053,43 @@ public class MainViewModel extends ViewModel {
     }
 
     /**
+     * Bounds-checked, lock-guarded read of the live {@link #ft8Messages} decode
+     * list; returns {@code null} when {@code position} is out of range.
+     *
+     * <p>UI item-click handlers (e.g. the Grid Tracker calling list) turn a
+     * RecyclerView row into a position and then index the live list on the main
+     * thread. The decode thread mutates {@code ft8Messages} — {@code addAll} plus
+     * {@link GeneralVariables#deleteArrayListMore} ({@code remove(0)}) and
+     * {@code clear()} — under {@code synchronized (ft8Messages)}. A main-thread
+     * {@code size()}-check-then-{@code get(pos)} is therefore not atomic: a
+     * concurrent {@code remove(0)}/{@code clear()} landing between the two steps
+     * throws {@link IndexOutOfBoundsException} on the UI thread (an uncaught,
+     * whole-app crash), and a {@code remove(0)} that merely shifts indices makes
+     * an in-bounds {@code get} return the wrong station. Reading under the
+     * writers' monitor makes the check-and-get atomic. Package-visible for
+     * testing.
+     */
+    @Nullable
+    static Ft8Message messageAt(ArrayList<Ft8Message> list, int position) {
+        synchronized (list) {
+            if (position < 0 || position >= list.size()) {
+                return null;
+            }
+            return list.get(position);
+        }
+    }
+
+    /**
+     * Safe accessor for a decoded message by list position for main-thread UI
+     * callers; {@code null} if the position is no longer valid. See
+     * {@link #messageAt(ArrayList, int)} for why the lock is required.
+     */
+    @Nullable
+    public Ft8Message getFt8MessageAtOrNull(int position) {
+        return messageAt(ft8Messages, position);
+    }
+
+    /**
      * Wipe the now-stale decode list and reset the TX target to CQ after a band or
      * mode change, so the decode screen and TX target reflect the new band/mode
      * instead of leftover spots from the old one (tester request). Callers gate this
