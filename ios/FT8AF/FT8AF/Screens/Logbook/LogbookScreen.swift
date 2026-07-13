@@ -27,6 +27,32 @@ struct LogbookScreen: View {
                     .foregroundStyle(textPrimary)
                 Spacer()
 
+                // Catch-up sync to Cloudlog/QRZ (shown when a service is enabled)
+                if appState.settings.cloudlogEnabled || appState.settings.qrzLogbookEnabled {
+                    let service = OnlineLogService.shared
+                    Button {
+                        runCatchUpSync()
+                    } label: {
+                        if service.isSyncing {
+                            HStack(spacing: 5) {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                    .tint(accent)
+                                Text("\(service.syncDone)/\(service.syncTotal)")
+                                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(textMuted)
+                            }
+                        } else {
+                            Image(systemName: "icloud.and.arrow.up")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(textMuted)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(service.isSyncing)
+                    .padding(.trailing, 4)
+                }
+
                 // Import button
                 Button {
                     showImportPicker = true
@@ -152,7 +178,11 @@ struct LogbookScreen: View {
                 } else {
                     LazyVStack(spacing: 0) {
                         ForEach(filteredRecords, id: \.id) { record in
-                            LogbookRow(record: record)
+                            LogbookRow(
+                                record: record,
+                                showCloudlogChip: appState.settings.cloudlogEnabled,
+                                showQrzChip: appState.settings.qrzLogbookEnabled
+                            )
                                 .onTapGesture {
                                     editingRecord = record
                                 }
@@ -198,6 +228,24 @@ struct LogbookScreen: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 60)
+    }
+
+    /// Upload every unsynced QSO to the enabled services, then toast the result.
+    private func runCatchUpSync() {
+        Task {
+            let s = appState.settings
+            let result = await OnlineLogService.shared.syncAll(appState: appState)
+            if result.attempted == 0 {
+                appState.toast.show("All QSOs already synced", icon: "checkmark.icloud")
+                return
+            }
+            var parts: [String] = []
+            if s.cloudlogEnabled { parts.append("CL \(result.cloudlogOk)") }
+            if s.qrzLogbookEnabled { parts.append("QRZ \(result.qrzOk)") }
+            appState.toast.show(
+                "Synced \(parts.joined(separator: ", ")) of \(result.attempted)",
+                icon: "icloud.and.arrow.up")
+        }
     }
 
     private func importAdif(result: Result<[URL], Error>) {
@@ -256,6 +304,8 @@ struct LogbookScreen: View {
 
 private struct LogbookRow: View {
     let record: QsoRecord
+    var showCloudlogChip = false
+    var showQrzChip = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -265,15 +315,23 @@ private struct LogbookRow: View {
                 .frame(width: 3, height: 36)
                 .padding(.trailing, 10)
 
-            // Call + grid
+            // Call + grid + sync chips
             VStack(alignment: .leading, spacing: 2) {
                 Text(record.call)
                     .font(.system(size: 14, weight: .bold, design: .monospaced))
                     .foregroundStyle(textPrimary)
-                if !record.gridsquare.isEmpty {
-                    Text(record.gridsquare)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(textFaint)
+                HStack(spacing: 4) {
+                    if !record.gridsquare.isEmpty {
+                        Text(record.gridsquare)
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundStyle(textFaint)
+                    }
+                    if showCloudlogChip {
+                        syncChip("CL", synced: record.syncedCloudlog, color: signal)
+                    }
+                    if showQrzChip {
+                        syncChip("QRZ", synced: record.syncedQrz, color: statusConfirmed)
+                    }
                 }
             }
 
@@ -323,6 +381,19 @@ private struct LogbookRow: View {
                 .fill(borderSubtle)
                 .frame(height: 1)
         }
+    }
+
+    /// Tiny "uploaded to <service>" badge — colored once the record is synced.
+    private func syncChip(_ label: String, synced: Bool, color: Color) -> some View {
+        Text(label)
+            .font(.system(size: 8, weight: .bold, design: .monospaced))
+            .foregroundStyle(synced ? color : textDim)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(synced ? color.opacity(0.14) : bgSurface2)
+            )
     }
 
     private var snrColor: Color {

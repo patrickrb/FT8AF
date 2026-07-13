@@ -75,7 +75,22 @@ struct DecodeMessage: Identifiable, Equatable {
 @Observable @MainActor
 final class WaterfallState {
     var rows: [[UInt8]] = []
+    /// Optional UTC boundary label per row, kept in lockstep with `rows`:
+    /// non-nil on the first row of each 15 s FT8 period ("HH:mm:ss" of the
+    /// period start), nil elsewhere. `WaterfallCanvas` draws a divider + label
+    /// at these rows.
+    var rowTimestamps: [String?] = []
     var spectrum: [Float] = []
+    /// Top of the audio band the current `rows`/`spectrum` were built to, in
+    /// Hz. Maintained by the LiveEngine waterfall loop from the operator's
+    /// spectrum-width setting; on a live width change the loop clears the
+    /// old-width history and updates this.
+    var displayMaxHz: Float = 3000
+    /// RX input level of the most recent metering window (linear, 0..~1), for
+    /// the level indicator in the waterfall info bar. Classified via
+    /// `AudioInputLevel.fromPeakRms` in the view.
+    var inputPeak: Float = 0
+    var inputRms: Float = 0
     var txFreqHz: Float = 1500
     var isLive: Bool = false
     var noiseReduction: Bool = false

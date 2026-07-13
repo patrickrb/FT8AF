@@ -75,14 +75,33 @@ final class LiveEngine {
                 appState.decode.messages.removeLast(appState.decode.messages.count - 200)
             }
         }
-        let applyWaterfall: @Sendable @MainActor ([UInt8], [Float]) -> Void = { row, spectrum in
-            appState.waterfall.rows.append(row)
-            // Keep at most 120 rows for the scrolling waterfall.
-            if appState.waterfall.rows.count > 120 {
-                appState.waterfall.rows.removeFirst(appState.waterfall.rows.count - 120)
+        // Live spectrum-width source for the waterfall loop: read on the main
+        // actor each tick so a settings change applies without restarting.
+        let readSpectrumWidthHz: @Sendable @MainActor () -> Int = {
+            appState.settings.spectrumWidthHz
+        }
+        let applyWaterfall: @Sendable @MainActor (WaterfallUpdate) -> Void = { update in
+            let wf = appState.waterfall
+            // Width changed live: the new rows span a different band, so drop
+            // the old-width history rather than draw it against the new axis.
+            if wf.displayMaxHz != update.displayMaxHz {
+                wf.displayMaxHz = update.displayMaxHz
+                wf.rows.removeAll()
+                wf.rowTimestamps.removeAll()
             }
-            appState.waterfall.spectrum = spectrum
-            appState.waterfall.updateCount += 1
+            wf.rows.append(update.bins)
+            wf.rowTimestamps.append(update.timestamp)
+            // Keep at most 120 rows for the scrolling waterfall (timestamps
+            // stay in lockstep with the rows they annotate).
+            if wf.rows.count > 120 {
+                let overflow = wf.rows.count - 120
+                wf.rows.removeFirst(overflow)
+                wf.rowTimestamps.removeFirst(min(overflow, wf.rowTimestamps.count))
+            }
+            wf.spectrum = update.spectrum
+            wf.inputPeak = update.inputPeak
+            wf.inputRms = update.inputRms
+            wf.updateCount += 1
         }
 
         engineTask = Task.detached { [weak self] in
@@ -99,6 +118,7 @@ final class LiveEngine {
                 group.addTask {
                     await self?.runWaterfallLoop(
                         accumulator: accumulator,
+                        readSpectrumWidthHz: readSpectrumWidthHz,
                         applyWaterfall: applyWaterfall
                     )
                 }
@@ -251,6 +271,11 @@ final class LiveEngine {
         // Broadcast this slot's decodes over the WSJT-X UDP interface.
         broadcastUdpDecodes(decoded)
 
+        // Hand this slot's decodes to the PSK Reporter queue (policy-filtered,
+        // rate-limited per callsign/band, flushed every ~5 min when enabled).
+        let dialHz = Int64((Double(bandToFreqMhz(appState.settings.band)) ?? 14.074) * 1_000_000)
+        OnlineLogService.shared.enqueuePskDecodes(decoded, dialFreqHz: dialHz, appState: appState)
+
         // Log incoming RX messages addressed to us for the conversation panel.
         let myCall = appState.settings.myCall.uppercased()
         if !myCall.isEmpty {
@@ -296,6 +321,9 @@ final class LiveEngine {
             QsoLogStore.save(appState.logbook.records)
             // Broadcast the logged QSO over the WSJT-X UDP interface.
             broadcastUdpQso(record)
+            // Upload to Cloudlog/QRZ when enabled (fire-and-forget with retry;
+            // marks the record's synced flags and re-persists on success).
+            OnlineLogService.shared.handleQsoLogged(record, appState: appState)
             // Trigger QSO celebration animation.
             appState.tx.qsoCompletedAt = Date()
         }
@@ -336,22 +364,34 @@ final class LiveEngine {
     // MARK: - Waterfall loop
 
     /// Runs ~4x per second, building FFT rows and updating the waterfall +
-    /// spectrum state.
+    /// spectrum state. Reads the operator's spectrum-width setting each tick so
+    /// a change applies live (display-only — the FT8 decoder's fixed range is
+    /// untouched), stamps a UTC label on the first row of each 15 s period, and
+    /// meters the RX input level for the info-bar indicator.
     private nonisolated func runWaterfallLoop(
         accumulator: SlotAccumulator,
-        applyWaterfall: @escaping @Sendable @MainActor ([UInt8], [Float]) -> Void
+        readSpectrumWidthHz: @escaping @Sendable @MainActor () -> Int,
+        applyWaterfall: @escaping @Sendable @MainActor (WaterfallUpdate) -> Void
     ) async {
         let sampleRate = Int(FT8.sampleRate)
         let needed = WaterfallRowBuilder.samplesNeeded()
-        let columns = WaterfallRowBuilder.columns(sampleRate: sampleRate)
         var builder = WaterfallRowBuilder()
+        var timestampGate = WaterfallTimestampGate()
 
         while !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(250))
             if Task.isCancelled { break }
 
+            let displayMaxHz = Float(await MainActor.run { readSpectrumWidthHz() })
+            let columns = WaterfallRowBuilder.columns(sampleRate: sampleRate, maxHz: displayMaxHz)
+
             let samples = accumulator.peekRecent(needed)
             guard samples.count >= needed else { continue }
+
+            // RX input level from the most recent ~250 ms (the window Android
+            // meters), classified later by the pure AudioInputLevel.
+            let levelWindow = min(samples.count, sampleRate / 4)
+            let level = AudioInputLevel.measure(Array(samples.suffix(levelWindow)))
 
             // Compute Welch-averaged power spectrum.
             let power = FFTProcessor.welchPower(
@@ -367,7 +407,25 @@ final class LiveEngine {
             let scale = maxPower > 0 ? 1.0 / maxPower : 1.0
             let spectrum = power.map { min($0 * scale, 1.0) }
 
-            await MainActor.run { applyWaterfall(row.bins, spectrum) }
+            // Stamp the UTC label once on the first row of each FT8 period
+            // (label shows the period start, matching Android).
+            let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+            var timestamp: String?
+            if timestampGate.shouldDraw(utcMs: nowMs) {
+                timestamp = WaterfallTimestampGate.utcLabel(
+                    forUtcMs: WaterfallTimestampGate.slotStartMs(utcMs: nowMs)
+                )
+            }
+
+            let update = WaterfallUpdate(
+                bins: row.bins,
+                spectrum: spectrum,
+                displayMaxHz: displayMaxHz,
+                timestamp: timestamp,
+                inputPeak: level.peak,
+                inputRms: level.rms
+            )
+            await MainActor.run { applyWaterfall(update) }
         }
     }
 
@@ -560,6 +618,19 @@ final class LiveEngine {
     private static var appVersion: String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"
     }
+}
+
+/// One tick of the waterfall pipeline, handed from the background loop to the
+/// MainActor state application: the new brightness row, the normalized
+/// spectrum, the display width the row was built to, an optional UTC label for
+/// a 15 s period boundary, and the RX input level of the metering window.
+struct WaterfallUpdate: Sendable {
+    let bins: [UInt8]
+    let spectrum: [Float]
+    let displayMaxHz: Float
+    let timestamp: String?
+    let inputPeak: Float
+    let inputRms: Float
 }
 
 /// Initializer extension on DecodedMessage for constructing from individual

@@ -110,6 +110,23 @@ struct SettingsScreen: View {
 
                 // Logging section
                 Section {
+                    NavigationLink {
+                        LoggingSettings()
+                    } label: {
+                        HStack {
+                            Image(systemName: "icloud.and.arrow.up")
+                                .font(.system(size: 14))
+                                .foregroundStyle(accent)
+                                .frame(width: 24)
+                            Text("Online Logging")
+                                .foregroundStyle(textPrimary)
+                            Spacer()
+                            Text(onlineLoggingSummary)
+                                .font(.system(size: 14, design: .monospaced))
+                                .foregroundStyle(textMuted)
+                        }
+                    }
+
                     Toggle(isOn: $settings.autoLog) {
                         HStack {
                             Image(systemName: "book")
@@ -185,6 +202,17 @@ struct SettingsScreen: View {
             .onChange(of: appState.settings.myGrid) { _, _ in SettingsPersistence.save(appState.settings) }
             .onChange(of: appState.settings.autoLog) { _, _ in SettingsPersistence.save(appState.settings) }
         }
+    }
+
+    /// Short summary of enabled online-logging services for the nav row.
+    private var onlineLoggingSummary: String {
+        let s = appState.settings
+        let parts = [
+            s.cloudlogEnabled ? "CL" : nil,
+            s.qrzLogbookEnabled ? "QRZ" : nil,
+            s.pskReporterEnabled ? "PSK" : nil,
+        ].compactMap { $0 }
+        return parts.isEmpty ? "Off" : parts.joined(separator: " ")
     }
 
     private var appVersion: String {
