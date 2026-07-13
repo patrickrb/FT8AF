@@ -172,6 +172,10 @@ impl QsoEngine {
         self.active = false;
         self.tx_message = None;
         self.stage = TxStage::Idle;
+        // Clear the QSO context too, so a later manual set_stage() can't
+        // re-activate and transmit to a stale target/report from the QSO we
+        // just stopped (mirrors the iOS QsoEngine.stop()).
+        self.reset_qso();
     }
 
     fn reset_qso(&mut self) {
@@ -425,6 +429,29 @@ mod tests {
         }
         // auto-returned to CQ
         assert_eq!(e.tx_message(), Some("CQ K0XYZ EN37"));
+    }
+
+    #[test]
+    fn stop_clears_target_so_set_stage_cannot_rekey_a_stopped_qso() {
+        let mut e = QsoEngine::new("K0XYZ", "EN37");
+        // Answering a CQ arms a target + report context.
+        e.answer(&msg("CQ", "K1ABC", "FN42", "FN42", -5));
+        assert_eq!(e.status().target.as_deref(), Some("K1ABC"));
+        assert_eq!(e.status().report_sent, Some(-5));
+
+        // Operator halts TX: the QSO context must be cleared, not just idled.
+        e.stop();
+        assert!(!e.status().active);
+        assert_eq!(e.status().stage, TxStage::Idle);
+        assert_eq!(e.status().target, None);
+        assert_eq!(e.status().report_sent, None);
+        assert_eq!(e.status().report_rcvd, None);
+
+        // A later manual stage button (WSJT-X Tx1–Tx5) must NOT re-key the
+        // just-stopped station — with no target, set_stage is a no-op.
+        e.set_stage(TxStage::Report);
+        assert!(!e.status().active);
+        assert_eq!(e.tx_message(), None);
     }
 
     #[test]
