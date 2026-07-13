@@ -47,11 +47,14 @@ private const val ALC_HIGH_MAX = 250
 private const val ALC_GAP = 10
 
 /**
- * Clamp a desired ALC-target *low* value into [ALC_LOW_MIN]..[ALC_LOW_MAX], keeping
- * it at least [ALC_GAP] below the current [high]. The upper bound is floored at
+ * Clamp a desired ALC-target *low* value into [ALC_LOW_MIN]..[ALC_LOW_MAX]. The
+ * [ALC_GAP]-unit gap below the current [high] is enforced only when [high] leaves
+ * room for it (i.e. `high >= ALC_LOW_MIN + ALC_GAP`); otherwise the value is simply
+ * clamped to [ALC_LOW_MIN]. This is because the upper bound is floored at
  * [ALC_LOW_MIN] so the range never inverts: a corrupted/restored config with `high`
  * below `ALC_LOW_MIN + ALC_GAP` would otherwise make `high - ALC_GAP` fall under
- * [ALC_LOW_MIN] and crash `coerceIn` with an empty range. Byte-identical to the
+ * [ALC_LOW_MIN] and crash `coerceIn` with an empty range (in that degenerate case
+ * the only non-crashing result is [ALC_LOW_MIN] itself). Byte-identical to the
  * previous inline `coerceIn(ALC_LOW_MIN, minOf(ALC_LOW_MAX, high - ALC_GAP))`
  * whenever that range is already valid (i.e. `high >= ALC_LOW_MIN + ALC_GAP`).
  */
@@ -62,10 +65,14 @@ internal fun clampAlcLow(desired: Int, high: Int): Int {
 
 /**
  * Clamp a desired ALC-target *high* value into (`low + ALC_GAP`)..[ALC_HIGH_MAX].
- * The lower bound is capped at [ALC_HIGH_MAX] so the range never inverts when a
- * corrupted/restored config persists a `low` above `ALC_HIGH_MAX - ALC_GAP`.
- * Byte-identical to the previous inline `coerceIn(low + ALC_GAP, ALC_HIGH_MAX)`
- * whenever that range is already valid (i.e. `low <= ALC_HIGH_MAX - ALC_GAP`).
+ * The [ALC_GAP]-unit gap above the current [low] is enforced only when [low] leaves
+ * room for it (i.e. `low <= ALC_HIGH_MAX - ALC_GAP`); otherwise the lower bound is
+ * capped at [ALC_HIGH_MAX] and the value clamps to [ALC_HIGH_MAX]. This keeps the
+ * range from inverting when a corrupted/restored config persists a `low` above
+ * `ALC_HIGH_MAX - ALC_GAP` (in that degenerate case the only non-crashing result is
+ * [ALC_HIGH_MAX] itself). Byte-identical to the previous inline
+ * `coerceIn(low + ALC_GAP, ALC_HIGH_MAX)` whenever that range is already valid
+ * (i.e. `low <= ALC_HIGH_MAX - ALC_GAP`).
  */
 internal fun clampAlcHigh(desired: Int, low: Int): Int {
     val lower = (low + ALC_GAP).coerceAtMost(ALC_HIGH_MAX)
