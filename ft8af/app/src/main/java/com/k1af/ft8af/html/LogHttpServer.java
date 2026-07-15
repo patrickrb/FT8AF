@@ -74,6 +74,47 @@ public class LogHttpServer extends NanoHTTPD {
     }
 
     /**
+     * Parse an integer query-parameter value, falling back to {@code fallback} when the
+     * value is {@code null} or not a valid integer.
+     *
+     * <p>The web-logbook handlers read {@code ?page=}, {@code ?pageSize=} and
+     * {@code ?session=} straight off the request. NanoHTTPD's {@code ClientHandler}
+     * swallows any exception thrown out of {@link #serve} — it logs it and closes the
+     * socket — so a raw {@code Integer.parseInt} of a malformed value (a hand-edited URL,
+     * a stale bookmark, or a truncated link) surfaced to the browser as an aborted/empty
+     * response instead of the requested view. Routing every parse through here keeps a bad
+     * value from throwing: the handler just uses its default (page 1, the default page
+     * size, or an id that matches no import task).
+     */
+    static int parseQueryInt(String value, int fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    /**
+     * Clamp a 1-based page index to {@code [1, pageCount]}.
+     *
+     * <p>The three list handlers clamped only the high side
+     * ({@code if (pageIndex > pageCount) pageIndex = pageCount}), so {@code ?page=0} or a
+     * negative page left {@code pageIndex < 1} and the paged query's
+     * {@code LIMIT (pageIndex - 1) * pageSize, pageSize} offset went negative — a wrong or
+     * empty result set numbered from a negative "No." column. {@link #pageCount(int, int)}
+     * always returns at least 1, so the clamped index is always a page that exists.
+     */
+    static int clampPageIndex(int pageIndex, int pageCount) {
+        if (pageIndex < 1) {
+            return 1;
+        }
+        return Math.min(pageIndex, pageCount);
+    }
+
+    /**
      * Clamp a page size parsed from a {@code ?pageSize=} query value to a safe positive size.
      *
      * <p>{@link #pageCount(int, int)} tolerates a non-positive size, but the raw value also
@@ -241,8 +282,7 @@ public class LogHttpServer extends NanoHTTPD {
                 " </script>\n";
         Map<String, String> pars = session.getParms();
         if (pars.get("session") != null) {
-            String s = Objects.requireNonNull(pars.get("session"));
-            int id = Integer.parseInt(s);
+            int id = parseQueryInt(pars.get("session"), -1);
             if (!importTaskList.checkTaskIsRunning(id)) {//If the task has stopped, no need to refresh
                 script = "";
             }
@@ -257,8 +297,7 @@ public class LogHttpServer extends NanoHTTPD {
         Map<String, String> pars = session.getParms();
         Log.e(TAG, "doCancelImport: " + pars.toString());
         if (pars.get("session") != null) {
-            String s = Objects.requireNonNull(pars.get("session"));
-            int id = Integer.parseInt(s);
+            int id = parseQueryInt(pars.get("session"), -1);
             importTaskList.cancelTask(id);
             return String.format("<head>\n<meta http-equiv=\"Refresh\" content=\"0; URL=getImportTask?session=%d\" /></head><body></body>"
                     , id);
@@ -973,12 +1012,8 @@ public class LogHttpServer extends NanoHTTPD {
         //Read query parameters
         Map<String, String> pars = session.getParms();
         int pageIndex = 1;
-        if (pars.get("page") != null) {
-            pageIndex = Integer.parseInt(Objects.requireNonNull(pars.get("page")));
-        }
-        if (pars.get("pageSize") != null) {
-            pageSize = Integer.parseInt(Objects.requireNonNull(pars.get("pageSize")));
-        }
+        pageIndex = parseQueryInt(pars.get("page"), pageIndex);
+        pageSize = parseQueryInt(pars.get("pageSize"), pageSize);
         // Normalize before it feeds pageCount(), the SQL LIMIT, and the nav links, so a
         // malformed 0/negative ?pageSize= can't force an empty page or an undefined limit.
         pageSize = normalizePageSize(pageSize);
@@ -1029,7 +1064,7 @@ public class LogHttpServer extends NanoHTTPD {
                 , new String[]{whereStr, whereStr});
         cursor.moveToFirst();
         int pageCount = pageCount(cursor.getInt(cursor.getColumnIndex("rc")), pageSize);
-        if (pageIndex > pageCount) pageIndex = pageCount;
+        pageIndex = clampPageIndex(pageIndex, pageCount);
         cursor.close();
 
         //Query and per-page message count settings
@@ -1220,12 +1255,8 @@ public class LogHttpServer extends NanoHTTPD {
         //Read query parameters
         Map<String, String> pars = session.getParms();
         int pageIndex = 1;
-        if (pars.get("page") != null) {
-            pageIndex = Integer.parseInt(Objects.requireNonNull(pars.get("page")));
-        }
-        if (pars.get("pageSize") != null) {
-            pageSize = Integer.parseInt(Objects.requireNonNull(pars.get("pageSize")));
-        }
+        pageIndex = parseQueryInt(pars.get("page"), pageIndex);
+        pageSize = parseQueryInt(pars.get("pageSize"), pageSize);
         // Normalize before it feeds pageCount(), the SQL LIMIT, and the nav links, so a
         // malformed 0/negative ?pageSize= can't force an empty page or an undefined limit.
         pageSize = normalizePageSize(pageSize);
@@ -1273,7 +1304,7 @@ public class LogHttpServer extends NanoHTTPD {
                 , new String[]{whereStr, whereStr});
         cursor.moveToFirst();
         int pageCount = pageCount(cursor.getInt(cursor.getColumnIndex("rc")), pageSize);
-        if (pageIndex > pageCount) pageIndex = pageCount;
+        pageIndex = clampPageIndex(pageIndex, pageCount);
         cursor.close();
 
         //Query and per-page message count settings
@@ -1468,12 +1499,8 @@ public class LogHttpServer extends NanoHTTPD {
         //Read query parameters
         Map<String, String> pars = session.getParms();
         int pageIndex = 1;
-        if (pars.get("page") != null) {
-            pageIndex = Integer.parseInt(Objects.requireNonNull(pars.get("page")));
-        }
-        if (pars.get("pageSize") != null) {
-            pageSize = Integer.parseInt(Objects.requireNonNull(pars.get("pageSize")));
-        }
+        pageIndex = parseQueryInt(pars.get("page"), pageIndex);
+        pageSize = parseQueryInt(pars.get("pageSize"), pageSize);
         // Normalize before it feeds pageCount(), the SQL LIMIT, and the nav links, so a
         // malformed 0/negative ?pageSize= can't force an empty page or an undefined limit.
         pageSize = normalizePageSize(pageSize);
@@ -1536,7 +1563,7 @@ public class LogHttpServer extends NanoHTTPD {
                 , new String[]{whereStr, whereStr});
         cursor.moveToFirst();
         int pageCount = pageCount(cursor.getInt(cursor.getColumnIndex("rc")), pageSize);
-        if (pageIndex > pageCount) pageIndex = pageCount;
+        pageIndex = clampPageIndex(pageIndex, pageCount);
         cursor.close();
 
         //Query and per-page message count settings
