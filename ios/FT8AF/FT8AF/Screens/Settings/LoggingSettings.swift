@@ -119,7 +119,14 @@ struct LoggingSettings: View {
         .onChange(of: settings.cloudlogStationId) { _, _ in persist() }
         .onChange(of: settings.qrzLogbookEnabled) { _, _ in persist() }
         .onChange(of: settings.qrzLogbookApiKey) { _, _ in qrzResult = nil; persist() }
-        .onChange(of: settings.pskReporterEnabled) { _, _ in persist() }
+        .onChange(of: settings.pskReporterEnabled) { _, newValue in
+            persist()
+            // Opting out drops any queued spots and cancels the pending
+            // flush task right away — nothing may be sent after opt-out.
+            if !newValue {
+                OnlineLogService.shared.flushPsk(appState: appState)
+            }
+        }
     }
 
     private func persist() {

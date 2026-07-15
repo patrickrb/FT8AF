@@ -11,9 +11,11 @@ import FT8Audio
 struct WaterfallCanvas: View {
     @Environment(AppState.self) private var appState
 
-    /// Top of the displayed band — the operator's spectrum-width setting. All
-    /// overlays map frequencies against this span so they sit on the trace.
-    private var displayMaxHz: Float { Float(appState.settings.spectrumWidthHz) }
+    /// Top of the displayed band — the span the drawn rows actually cover
+    /// (`waterfall.displayMaxHz`, maintained by the waterfall loop). All
+    /// overlays map frequencies against this span so they sit on the trace
+    /// even when the loop is stopped and the settings width has changed.
+    private var displayMaxHz: Float { appState.waterfall.displayMaxHz }
 
     var body: some View {
         Canvas { context, size in

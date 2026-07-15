@@ -61,6 +61,20 @@ final class TxPlayerService: @unchecked Sendable {
     /// Schedule and play `samples` (mono Float32 at 12 kHz). Interrupts any
     /// previously playing buffer so a new TX overrides the old one.
     func play(_ samples: [Float], completion: (() -> Void)? = nil) {
+        // The shared engine can be stopped at play time (route/config change,
+        // interruption, Simulator startup) — AVAudioPlayerNode.play() on a
+        // stopped engine logs "Cannot play yet!" and the TX is silent, and a
+        // stopped engine can also report an invalid mixer format, which would
+        // make the deferred attach below bail. Restart it first.
+        if let engine, !engine.isRunning {
+            do {
+                try engine.start()
+            } catch {
+                completion?()
+                return
+            }
+        }
+
         guard ensureAttached(), let converter = outputConverter else {
             completion?()
             return

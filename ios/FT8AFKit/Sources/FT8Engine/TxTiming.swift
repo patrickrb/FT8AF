@@ -26,4 +26,18 @@ public enum TxTiming {
     public static func clipSampleCount(clipMs: Int64, sampleRate: Int) -> Int {
         max(0, Int(clipMs) * sampleRate / 1000)
     }
+
+    /// Whether to skip the transmission for this slot entirely.
+    ///
+    /// `toleranceMs` is the operator's late-start tolerance (the
+    /// "Late Start Tolerance" setting): the maximum amount of leading audio
+    /// they will accept losing to a late-start clip. It is a *skip threshold*,
+    /// never the clip slack — the clip slack is the physical
+    /// `defaultSlackMs` constant. A clip larger than the tolerance means the
+    /// TX would lose too much of its head (Costas sync and beyond), so the
+    /// whole slot is skipped instead of transmitting a mutilated signal.
+    /// Negative tolerances are clamped to 0 (skip any clipped start).
+    public static func shouldSkip(clipMs: Int64, toleranceMs: Int64) -> Bool {
+        clipMs > max(0, toleranceMs)
+    }
 }

@@ -169,11 +169,34 @@ final class OnlineLogService {
         }
     }
 
+    /// Flush-on-stop (Android `PskReporterSender.stop()`): send anything
+    /// queued immediately, then cancel the pending flush task. Called from
+    /// `LiveEngine.stop()`.
+    func stopPsk(appState: AppState?) {
+        pskFlushTask?.cancel()
+        pskFlushTask = nil
+        flushPsk(appState: appState)
+    }
+
     /// Build the IPFIX datagrams for the queued spots and send them.
+    /// Re-checks the PSK Reporter toggle at flush time: once the operator
+    /// opts out, queued spots are dropped and the pending flush task is
+    /// cancelled — nothing may be sent after opt-out.
     func flushPsk(appState: AppState?) {
-        guard !pskQueue.isEmpty, let appState else { return }
+        guard let appState, appState.settings.pskReporterEnabled else {
+            pskQueue.removeAll()
+            pskFlushTask?.cancel()
+            pskFlushTask = nil
+            return
+        }
+        guard !pskQueue.isEmpty else { return }
         let myCall = appState.settings.myCall
-        guard !myCall.isEmpty else { return }
+        // Spots are only enqueued while a callsign is set; if it was cleared
+        // since, the queue can never be sent — drop it rather than strand it.
+        guard !myCall.isEmpty else {
+            pskQueue.removeAll()
+            return
+        }
         let spots = pskQueue
         pskQueue.removeAll()
         let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"

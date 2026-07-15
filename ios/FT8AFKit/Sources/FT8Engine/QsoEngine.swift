@@ -60,6 +60,10 @@ public final class QsoEngine {
     private var reportRcvd: Int?
     private var pendingTx: String?
     private var startedMs: Int64 = 0
+    /// True once `complete()` has emitted the record for the current QSO —
+    /// guards the courtesy-73 window (`stage == .bye73`, target still set)
+    /// against a second identical record from `forceLog()`.
+    private var recordEmitted = false
 
     public init(myCall: String, myGrid: String) {
         self.myCall = myCall.uppercased()
@@ -139,6 +143,7 @@ public final class QsoEngine {
         gridRcvd = nil
         reportSent = nil
         reportRcvd = nil
+        recordEmitted = false
         startedMs = FT8Time.nowUnixMs()
     }
 
@@ -244,13 +249,16 @@ public final class QsoEngine {
     /// 73 (the Active QSO panel's LOG action; port of Android
     /// `forceLogAndMoveOn`). Only produces a record when the QSO progressed far
     /// enough to be a real contact — both reports known, i.e. we have sent
-    /// R-report or beyond (Android `shouldForceLog`: order >= 3). Either way
-    /// the QSO context is cleared and we return to CQ / stop per
+    /// R-report or beyond (Android `shouldForceLog`: order >= 3) — and
+    /// `complete()` hasn't already emitted it (the courtesy-73 window keeps
+    /// the target set after completion; a LOG tap there must not double-log).
+    /// Either way the QSO context is cleared and we return to CQ / stop per
     /// `autoReturnToCq`.
     public func forceLog() -> QsoOutcome? {
         guard let dx = target else { return nil }
         let progressed = stage == .rReport || stage == .rr73 || stage == .bye73
-        let outcome: QsoOutcome? = progressed ? .completed(makeRecord(dx)) : nil
+        let outcome: QsoOutcome? = (progressed && !recordEmitted)
+            ? .completed(makeRecord(dx)) : nil
         finishQso()
         return outcome
     }
@@ -263,6 +271,7 @@ public final class QsoEngine {
 
     private func complete(_ dx: String) -> QsoOutcome {
         let record = makeRecord(dx)
+        recordEmitted = true
 
         // If a courtesy "73" is queued (the .rReport path set stage = .bye73),
         // leave pendingTx/stage so the scheduler transmits it; the next slot's

@@ -25,6 +25,7 @@ targets:
       properties:
         LSRequiresIPhoneOS: true
         NSMicrophoneUsageDescription: "FT8AF needs microphone access to capture radio audio for FT8 decoding"
+        NSLocalNetworkUsageDescription: "FT8AF uses the local network to send WSJT-X UDP messages to companion apps like GridTracker and JTAlert"
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
           UISceneConfigurations: {}

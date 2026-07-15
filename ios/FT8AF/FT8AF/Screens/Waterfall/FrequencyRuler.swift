@@ -2,8 +2,10 @@ import SwiftUI
 import FT8Audio
 
 /// Horizontal ruler showing Hz tick marks across the displayed audio band.
-/// Ticks span the operator's spectrum-width setting — the same range the
-/// waterfall/spectrum data covers — so the labels line up with the trace.
+/// Ticks span `waterfall.displayMaxHz` — the range the drawn waterfall and
+/// spectrum data actually cover (the loop keeps it in step with the
+/// spectrum-width setting while live) — so the labels line up with the trace
+/// even when RX is stopped and the setting changes.
 /// Tick geometry comes from `WaterfallAxis.rulerTicks`, which places each
 /// label at its true `hz / width` fraction (mirrors the Android fix for ruler
 /// labels drifting when the width isn't a 500 Hz multiple, commit 647b12e8).
@@ -12,7 +14,7 @@ struct FrequencyRuler: View {
 
     var body: some View {
         let ticks = WaterfallAxis.rulerTicks(
-            displayMaxHz: Float(appState.settings.spectrumWidthHz)
+            displayMaxHz: appState.waterfall.displayMaxHz
         )
         Canvas { context, size in
             for tick in ticks {

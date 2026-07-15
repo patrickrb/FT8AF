@@ -155,6 +155,86 @@ final class PskReporterTests: XCTestCase {
         XCTAssertEqual(enc.sequenceNumber, UInt32(packets.count))
     }
 
+    /// True when `needle` appears as a contiguous byte run inside `haystack`.
+    private func containsBytes(_ haystack: [UInt8], _ needle: [UInt8]) -> Bool {
+        guard !needle.isEmpty, haystack.count >= needle.count else { return false }
+        for start in 0...(haystack.count - needle.count)
+        where Array(haystack[start..<(start + needle.count)]) == needle {
+            return true
+        }
+        return false
+    }
+
+    func testExactBoundaryBatchNeverExceedsMaxDatagramIncludingPadding() {
+        // Sweep locator lengths 0/2/4/6 chars to shift the record size (and
+        // therefore the fit boundary) across every 4-byte padding alignment:
+        // whatever lands exactly at the budget, the padded datagram must stay
+        // <= 1400 bytes.
+        for locLen in [0, 2, 4, 6] {
+            let enc = PskReporterEncoder(observationDomainId: 1, sequenceNumber: 0)
+            let loc = locLen > 0 ? String(repeating: "A", count: locLen) : nil
+            let many = (0..<300).map { i in
+                spot(call: String(format: "K%03dABC", i), locator: loc)
+            }
+            let packets = enc.buildPackets(rxCall: "KD2OGR", rxGrid: "FN20",
+                                           software: "FT8AF 1.0", spots: many,
+                                           nowMs: 1_700_000_000_000)
+            XCTAssertGreaterThan(packets.count, 1)
+            for p in packets {
+                XCTAssertLessThanOrEqual(p.count, 1400,
+                                         "locator length \(locLen) busted the datagram cap")
+                XCTAssertEqual(p.count % 4, 0)
+                XCTAssertEqual(Int(p[2]) << 8 | Int(p[3]), p.count) // declared == actual
+            }
+        }
+    }
+
+    func testOversizedSingleRecordDroppedSubsequentRecordsStillSent() {
+        // A record that cannot fit even alone in an empty datagram is
+        // pathological: drop it, keep sending the rest, never emit > 1400.
+        let enc = PskReporterEncoder(observationDomainId: 1, sequenceNumber: 0)
+        let huge = spot(call: String(repeating: "X", count: 1500))
+        let packets = enc.buildPackets(
+            rxCall: "KD2OGR", rxGrid: "FN20", software: "FT8AF 1.0",
+            spots: [huge, spot(call: "K1ABC"), spot(call: "W9DEF")],
+            nowMs: 1_700_000_000_000)
+        XCTAssertEqual(packets.count, 1)
+        let p = packets[0]
+        XCTAssertLessThanOrEqual(p.count, 1400)
+        XCTAssertTrue(containsBytes(p, Array("K1ABC".utf8)))
+        XCTAssertTrue(containsBytes(p, Array("W9DEF".utf8)))
+        XCTAssertFalse(containsBytes(p, Array(String(repeating: "X", count: 20).utf8)))
+        // Sequence advanced once per emitted packet — dropped records don't
+        // consume sequence numbers.
+        XCTAssertEqual(enc.sequenceNumber, 1)
+    }
+
+    func testOversizedRecordInMiddleOfBatchIsSkipped() {
+        let enc = PskReporterEncoder(observationDomainId: 1, sequenceNumber: 0)
+        let huge = spot(call: String(repeating: "X", count: 1500))
+        let packets = enc.buildPackets(
+            rxCall: "KD2OGR", rxGrid: "FN20", software: "FT8AF 1.0",
+            spots: [spot(call: "K1ABC"), huge, spot(call: "W9DEF")],
+            nowMs: 1_700_000_000_000)
+        for p in packets { XCTAssertLessThanOrEqual(p.count, 1400) }
+        let all = packets.flatMap { $0 }
+        XCTAssertTrue(containsBytes(all, Array("K1ABC".utf8)))
+        XCTAssertTrue(containsBytes(all, Array("W9DEF".utf8)))
+        XCTAssertFalse(containsBytes(all, Array(String(repeating: "X", count: 20).utf8)))
+        XCTAssertEqual(enc.sequenceNumber, UInt32(packets.count))
+    }
+
+    func testAllRecordsOversizedProducesNoPackets() {
+        let enc = PskReporterEncoder(observationDomainId: 1, sequenceNumber: 0)
+        let packets = enc.buildPackets(
+            rxCall: "KD2OGR", rxGrid: "FN20", software: "FT8AF 1.0",
+            spots: [spot(call: String(repeating: "X", count: 1500)),
+                    spot(call: String(repeating: "Y", count: 2000))],
+            nowMs: 1_700_000_000_000)
+        XCTAssertTrue(packets.isEmpty)
+        XCTAssertEqual(enc.sequenceNumber, 0)
+    }
+
     func testBuildPacketsEmptySpots() {
         let enc = PskReporterEncoder(observationDomainId: 1, sequenceNumber: 0)
         XCTAssertTrue(enc.buildPackets(rxCall: "K", rxGrid: "AA00", software: "s",

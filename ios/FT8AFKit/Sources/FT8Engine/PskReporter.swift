@@ -153,22 +153,35 @@ public final class PskReporterEncoder {
             let receiverBytes = Self.encodeReceiverDataSet(
                 call: rxCall, grid: rxGrid, software: software, antenna: antenna, rig: rig)
 
-            // Header is 16 bytes.
+            // Header is 16 bytes. Reserve the worst-case sender-set padding
+            // (3 bytes) inside the budget so the padded datagram can never
+            // exceed `maxDatagram`.
             let overhead = 16 + templateBytes.count + receiverBytes.count
-            let budget = Self.maxDatagram - overhead
+            let budget = Self.maxDatagram - overhead - 3
 
-            // Encode as many sender records as fit.
+            // Encode as many sender records as fit. A record that cannot fit
+            // even alone in an otherwise-empty datagram is pathological —
+            // drop it (never emit an oversized datagram) and keep going.
             var senderRecords: [[UInt8]] = []
             var senderSetSize = 4 // set header (setId + length)
             var used = 0
             for spot in remaining {
                 let rec = Self.encodeSenderRecord(spot)
-                if senderSetSize + rec.count > budget && !senderRecords.isEmpty { break }
+                if senderSetSize + rec.count > budget {
+                    if senderRecords.isEmpty {
+                        used += 1 // oversized single record: drop it
+                        continue
+                    }
+                    break
+                }
                 senderRecords.append(rec)
                 senderSetSize += rec.count
                 used += 1
             }
             remaining = remaining.dropFirst(used)
+            // Everything consumed this pass was dropped as oversized —
+            // nothing to send in this datagram.
+            if senderRecords.isEmpty { continue }
 
             // Pad sender set to a 4-byte boundary.
             let senderPadding = (4 - (senderSetSize % 4)) % 4

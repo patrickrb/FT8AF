@@ -156,6 +156,9 @@ final class LiveEngine {
         audio.stop()
         isRunning = false
         appState?.waterfall.isLive = false
+        // Flush any queued PSK Reporter spots before the session state goes
+        // away (mirrors Android PskReporterSender.stop()).
+        OnlineLogService.shared.stopPsk(appState: appState)
         appState = nil
         qsoEngine = nil
     }
@@ -527,20 +530,29 @@ final class LiveEngine {
                 watchdogMin: settings.txWatchdogMin,
                 stopAfterAttempts: settings.stopAfterAttempts
             ) {
+                // A supervisor stop must also disarm hunt: with hunt left
+                // armed, the hunt branch would restart CQ next slot with a
+                // fresh supervisor — runaway TX forever. Only supervisor
+                // stops disarm; a manual STOP tap keeps hunt as-is.
+                let huntWasArmed = appState.tx.huntEnabled
+                appState.tx.huntEnabled = false
                 stopTx()
+                let huntSuffix = huntWasArmed ? " (hunt disarmed)" : ""
                 switch reason {
                 case .watchdog:
                     appState.toast.show(
-                        "TX watchdog: stopped after \(settings.txWatchdogMin) min",
+                        "TX watchdog: stopped after \(settings.txWatchdogMin) min\(huntSuffix)",
                         icon: "exclamationmark.triangle")
                 case .noReply:
                     appState.toast.show(
-                        "No reply after \(settings.stopAfterAttempts) attempts — TX stopped",
+                        "No reply after \(settings.stopAfterAttempts) attempts — TX stopped\(huntSuffix)",
                         icon: "stop.circle")
                 }
             } else if SlotClock.shouldTransmit(slotID: slotID, desiredParity: appState.tx.slotParity) {
+                // The attempt is counted in beginTxPlayback, once playback is
+                // actually committed — TUNE, encode failure, and late-skip
+                // slots must not feed the stop-after-N / watchdog bookkeeping.
                 scheduleTx(message: txMsg, freqHz: appState.waterfall.txFreqHz)
-                supervisor.noteTransmission(txMsg)
             }
         }
     }
@@ -713,18 +725,30 @@ final class LiveEngine {
 
     /// Start playback now: clip the leading `max(0, msIntoCycle - slack)` ms
     /// when we're late into the 15 s cycle so the TX still ends on the cycle
-    /// boundary. An on-time start clips NOTHING — clipping normal starts
-    /// destroys the leading Costas sync (see CLAUDE.md, TX pipeline gotcha #2).
+    /// boundary. The slack is the *physical* `TxTiming.defaultSlackMs`
+    /// constant (15000 − 12640 = 2360 ms) — never the user setting: a smaller
+    /// slack clips the leading Costas sync of ON-TIME transmissions and makes
+    /// them audible but undecodable (see CLAUDE.md, TX pipeline gotcha #2).
+    /// The late-start-tolerance setting is a SKIP threshold instead: when more
+    /// than that much leading audio would be clipped, the slot is skipped.
     private func beginTxPlayback(message: String, samples: [Float]) {
         guard let appState else { return }
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let clipMs = TxTiming.lateStartClipMs(
-            msIntoCycle: SlotClock.msIntoCycle(atUtcMs: nowMs),
-            slackMs: Int64(appState.settings.lateStartToleranceMs)
+            msIntoCycle: SlotClock.msIntoCycle(atUtcMs: nowMs)
         )
+        guard !TxTiming.shouldSkip(
+            clipMs: clipMs,
+            toleranceMs: Int64(appState.settings.lateStartToleranceMs)
+        ) else { return } // too late for the operator's tolerance — skip this cycle
         let skip = TxTiming.clipSampleCount(clipMs: clipMs, sampleRate: Int(FT8.sampleRate))
         guard skip < samples.count else { return } // hopelessly late — skip this cycle
         let playSamples = skip > 0 ? Array(samples[skip...]) : samples
+
+        // Playback is definitely happening now — count the attempt for the
+        // TX safety nets (stop-after-N / watchdog bookkeeping). Skipped or
+        // failed slots above never reach this point.
+        supervisor.noteTransmission(message)
 
         // Log the TX message to conversation panel.
         appState.tx.conversationLog.append(

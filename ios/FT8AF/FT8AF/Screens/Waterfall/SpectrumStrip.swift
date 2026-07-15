@@ -4,13 +4,17 @@ import FT8Audio
 /// Vertical bar chart of live FFT magnitudes with a TX frequency marker.
 /// Reads normalized magnitudes (0...1) from `appState.waterfall.spectrum`.
 /// Tap or drag to set the TX frequency. All frequency ↔ x mappings use the
-/// operator's spectrum-width setting so overlays track the drawn bars.
+/// span the drawn data actually covers so overlays track the drawn bars.
 struct SpectrumStrip: View {
     @Environment(AppState.self) private var appState
     @State private var touchFreq: Float?
 
-    /// Top of the displayed band — the operator's spectrum-width setting.
-    private var displayMaxHz: Float { Float(appState.settings.spectrumWidthHz) }
+    /// Top of the displayed band — the span the drawn rows/spectrum actually
+    /// cover (`waterfall.displayMaxHz`, maintained by the waterfall loop).
+    /// NOT the settings width: when the loop isn't running, a settings change
+    /// hasn't been applied to the data yet, and mapping against it would put
+    /// overlays and tap-to-tune on the wrong frequencies.
+    private var displayMaxHz: Float { appState.waterfall.displayMaxHz }
 
     var body: some View {
         GeometryReader { geo in

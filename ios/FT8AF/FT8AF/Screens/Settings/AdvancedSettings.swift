@@ -57,7 +57,7 @@ struct AdvancedSettings: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Late Start Tolerance")
                             .foregroundStyle(textPrimary)
-                        Text("Max ms into cycle before skipping TX")
+                        Text("Max ms clipped from a late TX before skipping it")
                             .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
@@ -77,7 +77,7 @@ struct AdvancedSettings: View {
             } header: {
                 Text("Timing").foregroundStyle(textMuted)
             } footer: {
-                Text("PTT delay compensates for rig keying latency. Late start tolerance sets how far into a 15-second cycle TX can still start (default 2360 ms = FT8 message duration).")
+                Text("PTT delay compensates for rig keying latency. A TX starting more than 2.36 s into the 15-second cycle has its leading audio clipped so it still ends on time; late start tolerance is the most clipped audio allowed before the transmission is skipped for that cycle (0 = skip any clipped start).")
                     .foregroundStyle(textFaint)
             }
             .listRowBackground(bgSurface)

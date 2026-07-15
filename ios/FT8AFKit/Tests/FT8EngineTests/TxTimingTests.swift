@@ -41,6 +41,37 @@ final class TxTimingTests: XCTestCase {
         XCTAssertEqual(TxTiming.lateStartClipMs(msIntoCycle: 100, slackMs: -500), 100)
     }
 
+    // MARK: shouldSkip — the tolerance is a SKIP threshold, never the clip slack
+
+    func testShouldSkipWhenClipExceedsTolerance() {
+        // clip(3000) = 640; tolerance 500 → too much leading audio lost, skip.
+        XCTAssertEqual(TxTiming.lateStartClipMs(msIntoCycle: 3000), 640)
+        XCTAssertTrue(TxTiming.shouldSkip(clipMs: 640, toleranceMs: 500))
+        // Same clip within tolerance → transmit (clipped).
+        XCTAssertFalse(TxTiming.shouldSkip(clipMs: 640, toleranceMs: 640))
+        XCTAssertFalse(TxTiming.shouldSkip(clipMs: 640, toleranceMs: 2360))
+    }
+
+    func testShouldSkipOnTimeStartNeverSkips() {
+        // clip(800) = 0 always → never skipped, whatever the tolerance.
+        XCTAssertEqual(TxTiming.lateStartClipMs(msIntoCycle: 800), 0)
+        XCTAssertFalse(TxTiming.shouldSkip(clipMs: 0, toleranceMs: 0))
+        XCTAssertFalse(TxTiming.shouldSkip(clipMs: 0, toleranceMs: -100))
+        XCTAssertFalse(TxTiming.shouldSkip(clipMs: 0, toleranceMs: 2360))
+    }
+
+    func testShouldSkipZeroToleranceSkipsAnyClippedStart() {
+        XCTAssertTrue(TxTiming.shouldSkip(clipMs: 1, toleranceMs: 0))
+        XCTAssertTrue(TxTiming.shouldSkip(clipMs: 640, toleranceMs: 0))
+    }
+
+    func testShouldSkipClampsNegativeTolerance() {
+        // A nonsensical negative tolerance behaves like 0, not like a
+        // magically-permissive threshold.
+        XCTAssertTrue(TxTiming.shouldSkip(clipMs: 1, toleranceMs: -500))
+        XCTAssertTrue(TxTiming.shouldSkip(clipMs: 640, toleranceMs: -1))
+    }
+
     func testClipSampleCount() {
         XCTAssertEqual(TxTiming.clipSampleCount(clipMs: 0, sampleRate: 12_000), 0)
         XCTAssertEqual(TxTiming.clipSampleCount(clipMs: 640, sampleRate: 12_000), 7680)

@@ -213,7 +213,9 @@ final class SettingsState {
     var txWatchdogMin: Int = 0          // 0 = off
     var stopAfterAttempts: Int = 0      // 0 = off
     // Radio
-    var spectrumWidthHz: Int = 3000
+    // Default 3500 matches the pre-configurable fixed span (desktop WF_MAX_HZ)
+    // so updating doesn't silently narrow the displayed band.
+    var spectrumWidthHz: Int = 3500
     var enabledBands: [String] = ["160M","80M","40M","30M","20M","17M","15M","12M","10M","6M"]
     // WSJT-X UDP interface (GridTracker / JTAlert / N1MM / Log4OM interop).
     var udpEnabled: Bool = false
@@ -237,6 +239,9 @@ final class SettingsState {
     var distanceInMiles: Bool = false
     // Tune
     var tuneTimeoutSec: Int = 30
+    // Preferred audio input port name ("" = system default); matched by name
+    // so the choice survives replug/relaunch.
+    var preferredInputPort: String = ""
 }
 
 // MARK: - Rig
@@ -360,6 +365,7 @@ enum SettingsPersistence {
         d.set(s.continentFilter, forKey: key("continentFilter"))
         d.set(s.distanceInMiles, forKey: key("distanceInMiles"))
         d.set(s.tuneTimeoutSec, forKey: key("tuneTimeoutSec"))
+        d.set(s.preferredInputPort, forKey: key("preferredInputPort"))
     }
 
     @MainActor static func load(into s: SettingsState) {
@@ -466,6 +472,9 @@ enum SettingsPersistence {
         }
         if d.object(forKey: key("tuneTimeoutSec")) != nil {
             s.tuneTimeoutSec = d.integer(forKey: key("tuneTimeoutSec"))
+        }
+        if let v = d.string(forKey: key("preferredInputPort")) {
+            s.preferredInputPort = v
         }
     }
 
