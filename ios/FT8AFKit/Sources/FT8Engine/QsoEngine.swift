@@ -286,7 +286,15 @@ func clampReport(_ snr: Int) -> Int { min(30, max(-30, snr)) }
 func fmtReport(_ n: Int) -> String { String(format: "%+03d", Int32(n)) }
 
 private func classify(_ msg: DecodedMessage) -> Content {
-    if !msg.grid.isEmpty { return .grid(msg.grid) }
+    // Recognize the QSO sign-offs before treating the message as a grid report.
+    // "RR73" is a valid 4-char Maidenhead-shaped token (R,R in A..R + two
+    // digits), so the decoder copies it into `grid` (looksLikeGrid("RR73") is
+    // true). Checking grid first would classify a partner's standard RR73
+    // sign-off as Content.grid, stranding the auto-sequencer at the RReport
+    // stage — it would retransmit our R-report forever and never complete/log
+    // the QSO. Matching the sign-offs first fixes that without touching
+    // looksLikeGrid (the map/distance code relies on its shape test). Mirrors
+    // the desktop (qso.rs) and Android (GeneralVariables) reference ports.
     let extra = msg.extra.trimmingCharacters(in: .whitespacesAndNewlines)
     switch extra {
     case "RR73": return .rr73
@@ -294,6 +302,7 @@ private func classify(_ msg: DecodedMessage) -> Content {
     case "73": return .bye73
     default: break
     }
+    if !msg.grid.isEmpty { return .grid(msg.grid) }
     if extra.hasPrefix("R") {
         let rest = String(extra.dropFirst())
         if let n = Int(rest) { return .rReport(n) }
