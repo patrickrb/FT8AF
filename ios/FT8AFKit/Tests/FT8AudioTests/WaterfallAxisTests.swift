@@ -77,4 +77,26 @@ final class WaterfallAxisTests: XCTestCase {
         let fraction = WaterfallAxis.fraction(forHz: 2000)
         XCTAssertEqual(WaterfallAxis.tunedTxHz(forFraction: fraction), 2000, accuracy: 1e-3)
     }
+
+    /// A WSJT-X UDP reply's requested `deltaFreq` is honored only when it lands
+    /// inside the transmittable passband — mirrors the desktop/Android guards the
+    /// iOS reply path previously omitted (it adopted any deltaFreq > 0).
+    func testBoundedReplyTxHzHonorsInBandRequests() {
+        XCTAssertEqual(WaterfallAxis.boundedReplyTxHz(200), 200) // lower edge, inclusive
+        XCTAssertEqual(WaterfallAxis.boundedReplyTxHz(1500), 1500)
+        XCTAssertEqual(WaterfallAxis.boundedReplyTxHz(3000), 3000) // upper edge, inclusive
+        XCTAssertEqual(WaterfallAxis.boundedReplyTxHz(WaterfallAxis.minTxHz), WaterfallAxis.minTxHz)
+        XCTAssertEqual(WaterfallAxis.boundedReplyTxHz(WaterfallAxis.maxTxHz), WaterfallAxis.maxTxHz)
+    }
+
+    /// Unspecified (0) or out-of-band requests are dropped (nil) so the caller
+    /// keeps the operator's current offset rather than keying up off-air.
+    func testBoundedReplyTxHzDropsUnspecifiedAndOutOfBand() {
+        XCTAssertNil(WaterfallAxis.boundedReplyTxHz(0))    // the app's own click-to-answer sends 0
+        XCTAssertNil(WaterfallAxis.boundedReplyTxHz(199))  // just below the passband
+        XCTAssertNil(WaterfallAxis.boundedReplyTxHz(3001)) // just above the passband
+        XCTAssertNil(WaterfallAxis.boundedReplyTxHz(3400)) // in the display band but not transmittable
+        // A garbage UInt32 df (huge, would overdrive far outside the passband).
+        XCTAssertNil(WaterfallAxis.boundedReplyTxHz(Float(UInt32.max)))
+    }
 }
