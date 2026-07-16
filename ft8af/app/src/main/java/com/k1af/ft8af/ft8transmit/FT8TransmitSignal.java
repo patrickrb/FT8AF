@@ -101,6 +101,13 @@ public class FT8TransmitSignal {
     private AudioFormat myFormat = null;
     private AudioTrack audioTrack = null;
 
+    // Held for the duration of each AudioTrack TX so other apps' sounds
+    // (touch clicks, notifications) aren't mixed into the audio feeding the
+    // rig. Acquired in playFT8Signal's sound-card branch, released in
+    // afterPlayAudio (a no-op for the CAT/USB-direct paths, which never
+    // acquire it). The tune worker uses its own instance.
+    private final TxAudioFocus txAudioFocus = new TxAudioFocus();
+
     // Milliseconds we are late into the current cycle; leading audio is clipped
     // so the TX still finishes on the cycle boundary. Set just before playback.
     private volatile int lateStartSkipMs = 0;
@@ -747,6 +754,13 @@ public class FT8TransmitSignal {
         GeneralVariables.fileLog(
                 "playFT8Signal: using AudioTrack output (Android default sink)");
 
+        // This branch shares Android's mixer with every other app, so claim
+        // exclusive focus for the transmission. Denial is log-only: TX must
+        // still go out.
+        boolean focusGranted = txAudioFocus.acquire(GeneralVariables.getMainContext());
+        GeneralVariables.fileLog("playFT8Signal: audio focus "
+                + (focusGranted ? "granted (exclusive)" : "NOT granted — other-app audio may mix into TX"));
+
         Log.d(TAG, String.format("playFT8Signal: Preparing sound card playback... bit depth: %s, sample rate: %d"
                 , GeneralVariables.audioOutput32Bit ? "Float32" : "Int16"
                 , GeneralVariables.audioSampleRate));
@@ -1009,6 +1023,7 @@ public class FT8TransmitSignal {
             audioTrack.release();
             audioTrack = null;
         }
+        txAudioFocus.release();
         // One-shot free text (WSJT-X Tx5 style) just finished sending: stop here
         // instead of repeating it every cycle, and revert to standard messages so
         // the next CQ is a normal CQ. Safe to deactivate now — the audio has already
@@ -2549,6 +2564,9 @@ public class FT8TransmitSignal {
         float offsetHz = GeneralVariables.getBaseFrequency();
         AudioTrack track = null;
         boolean keyed = false;
+        // Own instance (not the TX field): tune and FT8 playback teardowns
+        // must not release each other's focus.
+        TxAudioFocus tuneFocus = new TxAudioFocus();
         try {
             GeneralVariables.fileLog(String.format(
                     "TUNE: start offset=%.0fHz level=%d%% maxOn=%ds rate=%d",
@@ -2558,6 +2576,12 @@ public class FT8TransmitSignal {
             onDoTransmitted.onTuneKeyDown();
             keyed = true;
             mutableIsTuning.postValue(true);
+
+            // Same mixer-sharing exposure as the FT8 AudioTrack branch; keep
+            // other apps' audio out of the carrier. Denial is log-only.
+            boolean tuneFocusGranted = tuneFocus.acquire(GeneralVariables.getMainContext());
+            GeneralVariables.fileLog("TUNE: audio focus "
+                    + (tuneFocusGranted ? "granted (exclusive)" : "NOT granted"));
 
             int sampleRate = GeneralVariables.audioSampleRate;
             AudioAttributes tuneAttributes = new AudioAttributes.Builder()
@@ -2633,6 +2657,7 @@ public class FT8TransmitSignal {
                 }
                 track.release();
             }
+            tuneFocus.release();
             if (keyed) {
                 try {
                     onDoTransmitted.onTuneKeyUp();
