@@ -5,16 +5,21 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
-import com.k1af.ft8af.R
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Pins the Android Auto manifest wiring: the host discovers the app through the
- * CarAppService intent filter plus the automotive_app_desc meta-data, and a
- * silently dropped entry would only show up as "app missing from the car
- * launcher" — a failure mode adb/unit tests can't otherwise see.
+ * Pins Android Auto as *unwired* in the manifest. The car-app screens
+ * (FT8AFCarAppService/QsoStatusScreen) still exist in the tree, but the manifest
+ * entries the Android Auto host discovers them through were removed: Play rejected
+ * the app for not behaving as a NAVIGATION-category car app ("does not load map and
+ * user location in Android Auto Environment"), and re-adding either entry would
+ * re-flag the app as Android-Auto-enabled and re-trigger that review failure.
+ *
+ * This runs against the debug variant's merged manifest, which still overlays the
+ * debug-only CarAppActivity used for on-emulator development — that entry is not a
+ * release Android Auto descriptor and never ships, so it doesn't count here.
  */
 @RunWith(RobolectricTestRunner::class)
 class CarAppManifestWiringTest {
@@ -22,28 +27,26 @@ class CarAppManifestWiringTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
     @Test
-    fun carAppService_isDeclaredExported_withNavigationCategory() {
+    fun noCarAppService_isDeclared() {
         val intent = Intent("androidx.car.app.CarAppService").setPackage(context.packageName)
         val services = context.packageManager.queryIntentServices(
             intent,
             PackageManager.GET_RESOLVED_FILTER,
         )
-        assertThat(services).hasSize(1)
-        val resolved = services[0]
-        assertThat(resolved.serviceInfo.name).isEqualTo("radio.ks3ckc.ft8af.car.FT8AFCarAppService")
-        assertThat(resolved.serviceInfo.exported).isTrue()
-        // NAVIGATION category = the full-bleed map surface stays visible while driving.
-        assertThat(resolved.filter.hasCategory("androidx.car.app.category.NAVIGATION")).isTrue()
+        assertThat(services).isEmpty()
     }
 
     @Test
-    fun automotiveAppDescriptor_andMinCarApiLevel_areDeclared() {
+    fun androidAutoDescriptorMetaData_isAbsent() {
         val appInfo = context.packageManager.getApplicationInfo(
             context.packageName,
             PackageManager.GET_META_DATA,
         )
-        assertThat(appInfo.metaData.getInt("com.google.android.gms.car.application"))
-            .isEqualTo(R.xml.automotive_app_desc)
-        assertThat(appInfo.metaData.getInt("androidx.car.app.minCarApiLevel")).isEqualTo(1)
+        // Other application-level meta-data (e.g. io.sentry.auto-init) keeps this
+        // bundle non-null; what must be gone is the Android Auto descriptor and the
+        // car-app API-level floor that together mark the app as an AA app.
+        val meta = appInfo.metaData
+        assertThat(meta.containsKey("com.google.android.gms.car.application")).isFalse()
+        assertThat(meta.containsKey("androidx.car.app.minCarApiLevel")).isFalse()
     }
 }
