@@ -55,6 +55,42 @@ final class QsoEngineTests: XCTestCase {
         XCTAssertEqual(e.txMessage, "CQ K0XYZ EN37")
     }
 
+    func testRr73WithDecoderGridStillCompletesQso() {
+        // Regression for the sign-off-vs-grid classification bug (ported from
+        // desktop qso.rs `rr73_with_decoder_grid_still_completes_qso`). Live, the
+        // DX's RR73 arrives with grid == "RR73" because looksLikeGrid("RR73") is
+        // true and the decoder copies it into the grid field. If classify checked
+        // grid first it returned Content.grid, the RReport arm hit `default:
+        // break`, and the QSO hung retransmitting our R-report forever instead of
+        // logging.
+        let e = QsoEngine(myCall: "K0XYZ", myGrid: "EN37")
+        e.answer(msg("CQ", "K1ABC", "FN42", "FN42", -5))
+        _ = e.processRx([msg("K0XYZ", "K1ABC", "-12", "", -8)])
+        XCTAssertEqual(e.txMessage, "K1ABC K0XYZ R-08")
+        XCTAssertEqual(e.status().stage, .rReport)
+
+        // DX signs off with RR73 exactly as the decoder emits it live (grid set).
+        let out = e.processRx([msg("K0XYZ", "K1ABC", "RR73", "RR73", -8)])
+        guard case .completed(let rec)? = out else {
+            return XCTFail("RR73 sign-off must complete the QSO")
+        }
+        XCTAssertEqual(rec.call, "K1ABC")
+        XCTAssertEqual(rec.gridsquare, "FN42")
+        XCTAssertEqual(rec.rstSent, "-08")
+        XCTAssertEqual(rec.rstRcvd, "-12")
+        XCTAssertEqual(e.txMessage, "K1ABC K0XYZ 73")
+        XCTAssertEqual(e.status().stage, .bye73)
+
+        // A genuine 4-char grid reply is still classified as a grid, not a
+        // sign-off — the fix reorders the checks without weakening grid handling.
+        // As the CQ initiator, an answerer's grid must advance us to send a report.
+        let e2 = QsoEngine(myCall: "K0XYZ", myGrid: "EN37")
+        e2.startCq()
+        _ = e2.processRx([msg("K0XYZ", "K1ABC", "FN31", "FN31", -10)])
+        XCTAssertEqual(e2.txMessage, "K1ABC K0XYZ -10")
+        XCTAssertEqual(e2.status().stage, .report)
+    }
+
     func testBye73NotFinishedUntilActuallyTransmitted() {
         // Regression: processRx must not wrap up on stage == .bye73 alone. If the
         // courtesy 73 couldn't be transmitted this slot (late TX window, rig busy,
