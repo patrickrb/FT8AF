@@ -82,6 +82,26 @@ class RingVertexWalkTest {
     }
 
     @Test
+    fun `empty ring returns false even when minVertices is zero`() {
+        // Contract: the return value means "a vertex was plotted, caller should
+        // close()". With minVertices = 0 the < guard alone would pass an empty
+        // ring through and wrongly return true; the explicit empty guard keeps it
+        // false so the caller never close()s an empty path.
+        val (plotted, verts) = walk(floatArrayOf(), minVertices = 0)
+        assertThat(plotted).isFalse()
+        assertThat(verts).isEmpty()
+    }
+
+    @Test
+    fun `single-vertex ring with minVertices zero still plots and returns true`() {
+        // Sanity: minVertices = 0 must not become "reject everything" — one
+        // complete vertex is plotted and returns true.
+        val (plotted, verts) = walk(floatArrayOf(4f, 5f), minVertices = 0)
+        assertThat(plotted).isTrue()
+        assertThat(verts).containsExactly(Vertex(4f, 5f, true))
+    }
+
+    @Test
     fun `the pre-fix unbounded walk really did overrun an odd-length ring`() {
         // Guards against anyone reverting the bound: this reproduces the old
         // `while (i < ring.size)` walk and asserts it throws on odd input, while

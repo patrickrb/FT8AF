@@ -68,7 +68,9 @@ internal inline fun forEachRingVertex(
     plot: (lon: Float, lat: Float, first: Boolean) -> Unit,
 ): Boolean {
     val vertices = ring.size / 2
-    if (vertices < minVertices) return false
+    // Explicit empty guard so the contract holds even for minVertices <= 0: an
+    // empty ring must return false (nothing plotted, caller must not close()).
+    if (vertices == 0 || vertices < minVertices) return false
     for (v in 0 until vertices) {
         plot(ring[v * 2], ring[v * 2 + 1], v == 0)
     }
