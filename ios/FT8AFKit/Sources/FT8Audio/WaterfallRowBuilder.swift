@@ -26,7 +26,11 @@ public struct WaterfallRowBuilder {
     public static let fftSize = 2048              // ~5.86 Hz/bin at 12 kHz
     public static let segments = 6                // WF_AVG (Welch segments)
     public static let step = fftSize / 2          // WF_STEP, 50% overlap
-    public static let maxHz: Float = 3500         // displayed top of the audio band
+    /// Default displayed top of the audio band (desktop `WF_MAX_HZ`). The
+    /// operator's spectrum-width setting overrides it per call via the `maxHz`
+    /// parameter of `columns(sampleRate:maxHz:)` — display-only; the FT8
+    /// decoder's range is unaffected.
+    public static let defaultMaxHz: Float = 3500
     public static let spanDb: Float = 26          // dB above black that maps to full brightness
     public static let blackOffsetDb: Float = 4    // push black above the noise floor
     public static let noiseFloorPercentile: Float = 0.30
@@ -40,8 +44,9 @@ public struct WaterfallRowBuilder {
     /// Hz per FFT bin at a given sample rate.
     public static func binHz(sampleRate: Int) -> Float { Float(sampleRate) / Float(fftSize) }
 
-    /// Number of displayed columns: bins up to `maxHz`, capped at the Nyquist half.
-    public static func columns(sampleRate: Int) -> Int {
+    /// Number of displayed columns: bins up to `maxHz` (the operator's spectrum
+    /// width; defaults to `defaultMaxHz`), capped at the Nyquist half.
+    public static func columns(sampleRate: Int, maxHz: Float = WaterfallRowBuilder.defaultMaxHz) -> Int {
         let bh = binHz(sampleRate: sampleRate)
         guard bh > 0 else { return 1 }
         return min(fftSize / 2, max(1, Int(maxHz / bh)))

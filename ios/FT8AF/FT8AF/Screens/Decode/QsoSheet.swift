@@ -14,13 +14,13 @@ struct QsoSheet: View {
             // Callsign header
             VStack(spacing: 4) {
                 Text(message.callFrom)
-                    .font(.system(size: 28, weight: .bold, design: .monospaced))
+                    .font(.ft8afMono(size: 28, weight: .bold))
                     .foregroundStyle(textPrimary)
 
                 HStack(spacing: 8) {
                     if !message.grid.isEmpty {
                         Text(message.grid)
-                            .font(.system(size: 14, weight: .medium, design: .monospaced))
+                            .font(.ft8afMono(size: 14, weight: .medium))
                             .foregroundStyle(textMuted)
                     }
 
@@ -30,7 +30,7 @@ struct QsoSheet: View {
                         }
                     } label: {
                         Text("QRZ")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.ft8afUI(size: 11, weight: .bold))
                             .foregroundStyle(signal)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
@@ -64,7 +64,7 @@ struct QsoSheet: View {
             if appState.tx.isActivated {
                 VStack(spacing: 6) {
                     Text("QSO PROGRESS")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .font(.ft8afMono(size: 9, weight: .bold))
                         .foregroundStyle(textFaint)
                     QsoStageDots(currentStage: appState.tx.stage)
                         .padding(.horizontal, 24)
@@ -83,11 +83,11 @@ struct QsoSheet: View {
             if !message.extra.isEmpty && message.extra != message.grid {
                 HStack {
                     Text("Report")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.ft8afUI(size: 12, weight: .medium))
                         .foregroundStyle(textFaint)
                     Spacer()
                     Text(message.extra)
-                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                        .font(.ft8afMono(size: 14, weight: .semibold))
                         .foregroundStyle(textPrimary)
                 }
                 .padding(.horizontal, 24)
@@ -98,7 +98,7 @@ struct QsoSheet: View {
             if appState.tx.isActivated && !appState.tx.txMessage.isEmpty {
                 HStack(spacing: 8) {
                     Text(appState.tx.isTransmitting ? "TX NOW" : "TX NEXT")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .font(.ft8afMono(size: 9, weight: .bold))
                         .foregroundStyle(appState.tx.isTransmitting ? bgApp : accent)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -108,7 +108,7 @@ struct QsoSheet: View {
                         )
 
                     Text(appState.tx.txMessage)
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .font(.ft8afMono(size: 12, weight: .medium))
                         .foregroundStyle(textPrimary)
                         .lineLimit(1)
 
@@ -133,9 +133,9 @@ struct QsoSheet: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "antenna.radiowaves.left.and.right")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.ft8afUI(size: 14, weight: .semibold))
                     Text("Call \(message.callFrom)")
-                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .font(.ft8afMono(size: 16, weight: .bold))
                 }
                 .foregroundStyle(bgApp)
                 .frame(maxWidth: .infinity)
@@ -172,11 +172,11 @@ private struct StatBadge: View {
     var body: some View {
         VStack(spacing: 4) {
             Text(label)
-                .font(.system(size: 10, weight: .medium))
+                .font(.ft8afUI(size: 10, weight: .medium))
                 .foregroundStyle(textFaint)
                 .textCase(.uppercase)
             Text(value)
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .font(.ft8afMono(size: 13, weight: .semibold))
                 .foregroundStyle(textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)

@@ -15,7 +15,7 @@ struct AdvancedSettings: View {
                         Text("PTT Delay")
                             .foregroundStyle(textPrimary)
                         Text("Delay before audio starts after PTT key")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                     Spacer()
@@ -35,19 +35,19 @@ struct AdvancedSettings: View {
                         Text("TX Delay")
                             .foregroundStyle(textPrimary)
                         Text("Extra delay before TX audio playback")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                     Spacer()
                     HStack(spacing: 4) {
                         TextField("0", value: $settings.txDelayMs, format: .number)
-                            .font(.system(size: 14, design: .monospaced))
+                            .font(.ft8afMono(size: 14))
                             .foregroundStyle(textPrimary)
                             .multilineTextAlignment(.trailing)
                             .keyboardType(.numberPad)
                             .frame(width: 60)
                         Text("ms")
-                            .font(.system(size: 12))
+                            .font(.ft8afUI(size: 12))
                             .foregroundStyle(textFaint)
                     }
                 }
@@ -57,27 +57,27 @@ struct AdvancedSettings: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Late Start Tolerance")
                             .foregroundStyle(textPrimary)
-                        Text("Max ms into cycle before skipping TX")
-                            .font(.system(size: 11))
+                        Text("Max ms clipped from a late TX before skipping it")
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                     Spacer()
                     HStack(spacing: 4) {
                         TextField("2360", value: $settings.lateStartToleranceMs, format: .number)
-                            .font(.system(size: 14, design: .monospaced))
+                            .font(.ft8afMono(size: 14))
                             .foregroundStyle(textPrimary)
                             .multilineTextAlignment(.trailing)
                             .keyboardType(.numberPad)
                             .frame(width: 60)
                         Text("ms")
-                            .font(.system(size: 12))
+                            .font(.ft8afUI(size: 12))
                             .foregroundStyle(textFaint)
                     }
                 }
             } header: {
                 Text("Timing").foregroundStyle(textMuted)
             } footer: {
-                Text("PTT delay compensates for rig keying latency. Late start tolerance sets how far into a 15-second cycle TX can still start (default 2360 ms = FT8 message duration).")
+                Text("PTT delay compensates for rig keying latency. A TX starting more than 2.36 s into the 15-second cycle has its leading audio clipped so it still ends on time; late start tolerance is the most clipped audio allowed before the transmission is skipped for that cycle (0 = skip any clipped start).")
                     .foregroundStyle(textFaint)
             }
             .listRowBackground(bgSurface)
@@ -88,7 +88,7 @@ struct AdvancedSettings: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Enable UDP broadcast").foregroundStyle(textPrimary)
                         Text("Send decodes, status & QSOs to companion apps")
-                            .font(.system(size: 11)).foregroundStyle(textFaint)
+                            .font(.ft8afUI(size: 11)).foregroundStyle(textFaint)
                     }
                 }
                 .tint(accent)
@@ -97,7 +97,7 @@ struct AdvancedSettings: View {
                     Text("Server host").foregroundStyle(textPrimary)
                     Spacer()
                     TextField("127.0.0.1", text: $settings.udpHost)
-                        .font(.system(size: 14, design: .monospaced))
+                        .font(.ft8afMono(size: 14))
                         .foregroundStyle(textPrimary)
                         .multilineTextAlignment(.trailing)
                         .autocorrectionDisabled()
@@ -110,7 +110,7 @@ struct AdvancedSettings: View {
                     Text("Server port").foregroundStyle(textPrimary)
                     Spacer()
                     TextField("2237", value: $settings.udpPort, format: .number)
-                        .font(.system(size: 14, design: .monospaced))
+                        .font(.ft8afMono(size: 14))
                         .foregroundStyle(textPrimary)
                         .multilineTextAlignment(.trailing)
                         .keyboardType(.numberPad)
@@ -122,7 +122,7 @@ struct AdvancedSettings: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Accept UDP requests").foregroundStyle(textPrimary)
                         Text("Let companion apps reply / halt / free-text")
-                            .font(.system(size: 11)).foregroundStyle(textFaint)
+                            .font(.ft8afUI(size: 11)).foregroundStyle(textFaint)
                     }
                 }
                 .tint(accent)

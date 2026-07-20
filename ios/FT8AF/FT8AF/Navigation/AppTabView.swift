@@ -28,7 +28,9 @@ struct AppTabView: View {
 
             // Bottom chrome: ActiveQsoPanel + TxStrip + SlotTimer + TabBar
             VStack(spacing: 0) {
-                if showsTxStrip && appState.tx.isActivated {
+                // Panel also shows while HUNT is armed (silent listening) so
+                // the "Hunting…" header state has somewhere to live.
+                if showsTxStrip && (appState.tx.isActivated || appState.tx.huntEnabled) {
                     ActiveQsoPanel()
                 }
 
@@ -38,6 +40,7 @@ struct AppTabView: View {
                         onCallCQ: { appState.engine?.callCQ() },
                         onStop: { appState.engine?.stopTx() },
                         onToggleSlot: { appState.engine?.toggleSlotParity() },
+                        onToggleTune: { appState.engine?.toggleTune() },
                         onOpenFrequencyPicker: { showFrequencyPicker = true },
                         onVolumeChange: { newVol in
                             appState.settings.txVolume = newVol
@@ -132,13 +135,13 @@ private struct TabBarButton: View {
                             .frame(width: 40, height: 28)
                     }
                     Image(systemName: tab.icon)
-                        .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
+                        .font(.ft8afUI(size: 16, weight: isSelected ? .semibold : .regular))
                         .foregroundStyle(isSelected ? accent : textFaint)
                 }
                 .frame(height: 28)
 
                 Text(tab.label)
-                    .font(.system(size: 10.5, weight: isSelected ? .semibold : .medium))
+                    .font(.ft8afUI(size: 10.5, weight: isSelected ? .semibold : .medium))
                     .foregroundStyle(isSelected ? accent : textFaint)
             }
             .frame(maxWidth: .infinity)

@@ -5,9 +5,17 @@ import FT8Audio
 /// Each row is a `[UInt8]` of brightness values (0...255) produced by
 /// `WaterfallRowBuilder`. Renders newest rows at the bottom.
 /// When message marking is enabled, decoded callsign labels are drawn at
-/// their frequency positions.
+/// their frequency positions. Rows carrying a UTC boundary label (the first
+/// row of each 15 s FT8 period) get a subtle divider line plus the period
+/// start time at the left edge, matching Android's slot gridline.
 struct WaterfallCanvas: View {
     @Environment(AppState.self) private var appState
+
+    /// Top of the displayed band — the span the drawn rows actually cover
+    /// (`waterfall.displayMaxHz`, maintained by the waterfall loop). All
+    /// overlays map frequencies against this span so they sit on the trace
+    /// even when the loop is stopped and the settings width has changed.
+    private var displayMaxHz: Float { appState.waterfall.displayMaxHz }
 
     var body: some View {
         Canvas { context, size in
@@ -35,15 +43,22 @@ struct WaterfallCanvas: View {
                 }
             }
 
+            // UTC period-boundary dividers + labels (rows flagged by the
+            // engine's timestamp gate, one per 15 s slot).
+            drawPeriodTimestamps(context: context, size: size, numRows: numRows, cellH: cellH)
+
             // Draw message frequency labels when enabled
             if appState.waterfall.messageMarking {
                 drawMessageLabels(context: context, size: size, numCols: numCols)
             }
 
             // Draw TX frequency marker. Map with the same span the waterfall
-            // columns cover (WaterfallAxis) so the marker sits on the trace.
+            // columns cover (the spectrum-width setting) so the marker sits on
+            // the trace.
             let txFreq = appState.waterfall.txFreqHz
-            let txX = CGFloat(WaterfallAxis.clampedFraction(forHz: txFreq)) * size.width
+            let txX = CGFloat(WaterfallAxis.clampedFraction(
+                forHz: txFreq, displayMaxHz: displayMaxHz
+            )) * size.width
             let txPath = Path { p in
                 p.move(to: CGPoint(x: txX, y: 0))
                 p.addLine(to: CGPoint(x: txX, y: size.height))
@@ -53,6 +68,36 @@ struct WaterfallCanvas: View {
         }
         .background(bgApp)
         .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    /// Divider line + "HH:mm:ss" label on each row that starts a new FT8
+    /// period. Left edge, faint monospaced caption — Android's look.
+    private func drawPeriodTimestamps(
+        context: GraphicsContext, size: CGSize, numRows: Int, cellH: CGFloat
+    ) {
+        let stamps = appState.waterfall.rowTimestamps
+        guard !stamps.isEmpty else { return }
+
+        for r in 0..<min(numRows, stamps.count) {
+            guard let label = stamps[r] else { continue }
+            let y = CGFloat(r) * cellH
+
+            // Subtle horizontal divider across the full width.
+            let divider = Path { p in
+                p.move(to: CGPoint(x: 0, y: y))
+                p.addLine(to: CGPoint(x: size.width, y: y))
+            }
+            context.stroke(divider, with: .color(textFaint.opacity(0.4)), lineWidth: 0.5)
+
+            // Period-start time at the left edge, just below the divider.
+            context.draw(
+                Text(label)
+                    .font(.ft8afMono(size: 9, weight: .medium))
+                    .foregroundStyle(textFaint),
+                at: CGPoint(x: 3, y: y + 2),
+                anchor: .topLeading
+            )
+        }
     }
 
     private func drawMessageLabels(context: GraphicsContext, size: CGSize, numCols: Int) {
@@ -69,11 +114,13 @@ struct WaterfallCanvas: View {
         }
 
         for msg in uniqueMessages {
-            let x = CGFloat(WaterfallAxis.fraction(forHz: msg.freqHz)) * size.width
+            let x = CGFloat(WaterfallAxis.fraction(
+                forHz: msg.freqHz, displayMaxHz: displayMaxHz
+            )) * size.width
             guard x > 0, x < size.width else { continue }
 
             let label = context.resolve(Text(msg.callFrom)
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .font(.ft8afMono(size: 8, weight: .bold))
                 .foregroundStyle(labelColor(msg)))
             context.draw(label, at: CGPoint(x: x, y: 8), anchor: .top)
 

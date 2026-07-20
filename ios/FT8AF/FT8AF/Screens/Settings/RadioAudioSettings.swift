@@ -4,6 +4,22 @@ private let allBands = ["160M","80M","40M","30M","20M","17M","15M","12M","10M","
 
 struct RadioAudioSettings: View {
     @Environment(AppState.self) private var appState
+    @State private var audioRoutes = AudioRouteController()
+
+    /// Selection binding for the input-device picker: reflects the session's
+    /// current input, and on change applies + persists the preference.
+    private var inputSelection: Binding<String> {
+        Binding(
+            get: { audioRoutes.currentInputUid },
+            set: { uid in
+                guard uid != audioRoutes.currentInputUid else { return }
+                if let portName = audioRoutes.selectInput(uid: uid) {
+                    appState.settings.preferredInputPort = portName
+                    SettingsPersistence.save(appState.settings)
+                }
+            }
+        )
+    }
 
     var body: some View {
         @Bindable var settings = appState.settings
@@ -25,13 +41,25 @@ struct RadioAudioSettings: View {
 
             // Audio input
             Section {
+                Picker("Input Device", selection: inputSelection) {
+                    ForEach(audioRoutes.inputs) { input in
+                        Text(input.label).tag(input.id)
+                    }
+                }
+                .foregroundStyle(textPrimary)
+                .tint(accent)
+
                 HStack {
-                    Text("Input Device")
-                        .foregroundStyle(textPrimary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Output Device")
+                            .foregroundStyle(textPrimary)
+                        Text(audioRoutes.currentOutputLabel)
+                            .font(.ft8afUI(size: 11))
+                            .foregroundStyle(textMuted)
+                    }
                     Spacer()
-                    Text("Built-in Microphone")
-                        .font(.system(size: 14))
-                        .foregroundStyle(textMuted)
+                    AudioRoutePickerButton()
+                        .frame(width: 44, height: 32)
                 }
 
                 // Spectrum width
@@ -40,12 +68,12 @@ struct RadioAudioSettings: View {
                         Text("Spectrum Width")
                             .foregroundStyle(textPrimary)
                         Text("Decode bandwidth")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                     Spacer()
                     Picker("", selection: $settings.spectrumWidthHz) {
-                        ForEach([2500, 3000, 4000, 5000], id: \.self) { hz in
+                        ForEach([2500, 3000, 3500, 4000, 5000], id: \.self) { hz in
                             Text("\(hz) Hz").tag(hz)
                         }
                     }
@@ -66,7 +94,7 @@ struct RadioAudioSettings: View {
                         .foregroundStyle(textPrimary)
                     Spacer()
                     Text("Not connected")
-                        .font(.system(size: 14))
+                        .font(.ft8afUI(size: 14))
                         .foregroundStyle(textFaint)
                 }
                 Button { } label: {
@@ -94,7 +122,7 @@ struct RadioAudioSettings: View {
                             .fill(statusColor)
                             .frame(width: 8, height: 8)
                         Text(appState.rig.connectionStatus.rawValue)
-                            .font(.system(size: 14, design: .monospaced))
+                            .font(.ft8afMono(size: 14))
                             .foregroundStyle(textMuted)
                     }
                 }
@@ -103,7 +131,7 @@ struct RadioAudioSettings: View {
                         .foregroundStyle(textPrimary)
                     Spacer()
                     Text(formatFreq(appState.rig.currentFreqHz))
-                        .font(.system(size: 14, design: .monospaced))
+                        .font(.ft8afMono(size: 14))
                         .foregroundStyle(textMuted)
                 }
             } header: {
@@ -133,11 +161,11 @@ struct RadioAudioSettings: View {
                                 .fill(bandColor(for: band))
                                 .frame(width: 3, height: 18)
                             Text(band)
-                                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                .font(.ft8afMono(size: 14, weight: .medium))
                                 .foregroundStyle(textPrimary)
                             Spacer()
                             Text(bandFrequency(band))
-                                .font(.system(size: 12, design: .monospaced))
+                                .font(.ft8afMono(size: 12))
                                 .foregroundStyle(textFaint)
                         }
                     }
@@ -159,6 +187,8 @@ struct RadioAudioSettings: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .onChange(of: settings.rigModel) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.spectrumWidthHz) { _, _ in SettingsPersistence.save(appState.settings) }
+        .onAppear { audioRoutes.start(preferredPortName: appState.settings.preferredInputPort) }
+        .onDisappear { audioRoutes.stop() }
     }
 
     private var statusColor: Color {
