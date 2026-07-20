@@ -101,7 +101,15 @@ public class LogHttpServer extends NanoHTTPD {
      * >= 3} guard the DELFOLLOW / DELQSL / DELQSLCALLSIGN branches already use.
      */
     static String uriSegment(String[] uriList, int index) {
-        return uriList != null && index >= 0 && index < uriList.length ? uriList[index] : null;
+        if (uriList == null || index < 0 || index >= uriList.length) {
+            return null;
+        }
+        String segment = uriList[index];
+        // Treat a present-but-empty segment (e.g. the "" that a double slash like
+        // "/SHOWQSL//" splits to) as absent, so it falls back to the default page
+        // rather than flowing an empty month into showQSLByMonth/downQSLByMonth
+        // (where month.length() == 0 could match unintended rows).
+        return segment == null || segment.isEmpty() ? null : segment;
     }
 
     /**
@@ -195,21 +203,23 @@ public class LogHttpServer extends NanoHTTPD {
                 String month = uriSegment(uriList, 2);
                 if (month != null) {
                     msg = downQSLByMonth(month, true);
+                    response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain", msg);
+                    response.addHeader("Content-Disposition", "attachment;filename=" + downloadFileName(month));
                 } else {
-                    msg = HtmlContext.DEFAULT_HTML();
+                    // No month segment: serve the normal HTML page instead of a
+                    // text/plain .adi attachment whose body is actually HTML.
+                    response = newFixedLengthResponse(HtmlContext.DEFAULT_HTML());
                 }
-                response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain", msg);
-                response.addHeader("Content-Disposition", "attachment;filename=" + downloadFileName(month));
 
             } else if (uri.equalsIgnoreCase("DOWNQSLNOQSL")) {
                 String month = uriSegment(uriList, 2);
                 if (month != null) {
                     msg = downQSLByMonth(month, false);
+                    response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain", msg);
+                    response.addHeader("Content-Disposition", "attachment;filename=" + downloadFileName(month));
                 } else {
-                    msg = HtmlContext.DEFAULT_HTML();
+                    response = newFixedLengthResponse(HtmlContext.DEFAULT_HTML());
                 }
-                response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain", msg);
-                response.addHeader("Content-Disposition", "attachment;filename=" + downloadFileName(month));
 
             } else {
                 response = newFixedLengthResponse(msg);

@@ -47,6 +47,19 @@ public class LogHttpServerUriSegmentTest {
     }
 
     @Test
+    public void presentButEmptySegment_isTreatedAsAbsent() {
+        // "/SHOWQSL//x".split("/") == ["", "SHOWQSL", "", "x"], so index 2 is a
+        // present-but-empty segment. It must read as null (not "") so an empty
+        // month never reaches showQSLByMonth/downQSLByMonth where
+        // month.length() == 0 could match unintended rows.
+        String[] uriList = "/SHOWQSL//x".split("/");
+        assertThat(uriList[2]).isEmpty();
+        assertThat(LogHttpServer.uriSegment(uriList, 2)).isNull();
+        // Same for a direct empty element.
+        assertThat(LogHttpServer.uriSegment(new String[] {"", "DOWNQSL", ""}, 2)).isNull();
+    }
+
+    @Test
     public void outOfRangeAndDegenerateInputs_areNull() {
         String[] one = {"", "SHOWQSL"};
         assertThat(LogHttpServer.uriSegment(one, 5)).isNull();
