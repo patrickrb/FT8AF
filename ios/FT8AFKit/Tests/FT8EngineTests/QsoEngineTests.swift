@@ -48,9 +48,64 @@ final class QsoEngineTests: XCTestCase {
         // The final 73 is queued (not clobbered by the auto-return)...
         XCTAssertEqual(e.txMessage, "K1ABC K0XYZ 73")
         XCTAssertEqual(e.status().stage, .bye73)
+        // ...the scheduler actually transmits it (signalled here)...
+        e.notifyTransmitted()
         // ...and once its TX slot has passed, the next slot returns to CQ.
         XCTAssertNil(e.processRx([]))
         XCTAssertEqual(e.txMessage, "CQ K0XYZ EN37")
+    }
+
+    func testBye73NotFinishedUntilActuallyTransmitted() {
+        // Regression: processRx must not wrap up on stage == .bye73 alone. If the
+        // courtesy 73 couldn't be transmitted this slot (late TX window, rig busy,
+        // encode failure) the QSO must stay armed and retransmit it, not clobber it
+        // by returning to CQ. Ported from desktop qso.rs
+        // `bye73_not_finished_until_actually_transmitted`.
+        let e = QsoEngine(myCall: "K0XYZ", myGrid: "EN37")
+        e.answer(msg("CQ", "K1ABC", "FN42", "FN42", -5))
+        _ = e.processRx([msg("K0XYZ", "K1ABC", "-12", "", -8)])
+        XCTAssertEqual(e.txMessage, "K1ABC K0XYZ R-08")
+
+        // DX sends RR73 -> QSO logs and the courtesy 73 is queued.
+        let out = e.processRx([msg("K0XYZ", "K1ABC", "RR73", "", -8)])
+        guard case .completed? = out else { return XCTFail("expected completed QSO") }
+        XCTAssertEqual(e.txMessage, "K1ABC K0XYZ 73")
+        XCTAssertEqual(e.status().stage, .bye73)
+
+        // The 73 did NOT go out this slot (no notifyTransmitted). The next slot
+        // must keep the 73 queued rather than returning to CQ, and must not log the
+        // QSO a second time.
+        XCTAssertNil(e.processRx([]))
+        XCTAssertEqual(e.txMessage, "K1ABC K0XYZ 73")
+        XCTAssertEqual(e.status().stage, .bye73)
+        // Still pending after another silent slot.
+        XCTAssertNil(e.processRx([]))
+        XCTAssertEqual(e.txMessage, "K1ABC K0XYZ 73")
+        XCTAssertEqual(e.status().stage, .bye73)
+
+        // Once the scheduler reports the 73 actually transmitted, the next slot
+        // wraps the QSO up and returns to CQ.
+        e.notifyTransmitted()
+        XCTAssertNil(e.processRx([]))
+        XCTAssertEqual(e.txMessage, "CQ K0XYZ EN37")
+        XCTAssertEqual(e.status().stage, .cq)
+    }
+
+    func testNotifyTransmittedIsNoOpOffBye73() {
+        // notifyTransmitted only latches the courtesy 73; it must not disturb an
+        // in-progress sequence (e.g. after answering, stage == .grid). Ported from
+        // desktop qso.rs `notify_transmitted_is_noop_off_bye73`.
+        let e = QsoEngine(myCall: "K0XYZ", myGrid: "EN37")
+        e.answer(msg("CQ", "K1ABC", "FN42", "FN42", -5))
+        XCTAssertEqual(e.status().stage, .grid)
+        e.notifyTransmitted()
+        // Still awaiting the DX report; nothing changed.
+        XCTAssertEqual(e.txMessage, "K1ABC K0XYZ EN37")
+        XCTAssertEqual(e.status().stage, .grid)
+        // The DX report still advances us normally.
+        _ = e.processRx([msg("K0XYZ", "K1ABC", "-12", "", -8)])
+        XCTAssertEqual(e.txMessage, "K1ABC K0XYZ R-08")
+        XCTAssertEqual(e.status().stage, .rReport)
     }
 
     func testInitiatorCqSequenceLogsQso() {
