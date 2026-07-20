@@ -89,14 +89,28 @@ fn tx_slot_eligible(
     into_cycle_ms <= TX_LATEST_MS
 }
 
+/// Whether any decode batch is still outstanding, gating the boundary TX trigger.
+/// Derived from the pending-decode *count* (not a single in-flight bool) so the
+/// gate stays closed until every enqueued slot has returned — see
+/// [`Engine::pending_decodes`].
+fn awaiting_any_decode(pending_decodes: usize) -> bool {
+    pending_decodes > 0
+}
+
 /// Whether the run loop should key a queued transmission at this tick. Unlike an
 /// operator command (which keys immediately), the per-tick boundary trigger waits
 /// until the current slot's decodes have been processed (`!awaiting_decode`) so it
 /// never keys a stale message ahead of a slow decode; once they are in,
 /// `handle_decoded` has set the fresh `tx_message` this fires on. This is what lets
-/// a reply computed early in the previous cycle (fast CPU) still go out at the top
-/// of its slot — `maybe_transmit` is otherwise only reached on decode arrival,
-/// which on a quick decode lands mid-slot, past the TX window, dropping the reply.
+/// a reply computed early in the previous cycle (fast CPU) still go out early in
+/// its slot — `maybe_transmit` is otherwise only reached on decode arrival, which
+/// on a quick decode lands mid-slot, past the TX window, dropping the reply.
+///
+/// "Early in its slot" is the whole TX window, not a hard boundary: the gate only
+/// requires `into_cycle_ms <= TX_LATEST_MS` (via [`tx_slot_eligible`]). In practice
+/// the run loop ticks fast, so the first eligible tick after the decodes settle is
+/// near the top of the slot — but a reply that becomes eligible a little later in
+/// the window is still keyed rather than dropped.
 fn boundary_tx_ready(
     active: bool,
     awaiting_decode: bool,
@@ -353,11 +367,14 @@ struct Engine {
     /// Slot id (rx-corrected clock) most recently handed to the decode worker.
     /// Guards the once-per-slot early decode trigger in the run loop.
     last_decoded_slot: i64,
-    /// True from the moment a slot's audio is handed to the decode worker until its
-    /// decodes come back. Gates the run loop's boundary TX trigger so it never keys
-    /// a stale message ahead of a slow decode (the fresh one is keyed by
-    /// `handle_decoded` when it arrives). See [`boundary_tx_ready`].
-    awaiting_decode: bool,
+    /// Number of decode batches handed to the worker but not yet returned. A
+    /// *count* rather than a single in-flight bool: the decoder returns exactly one
+    /// batch per enqueued slot, so if it ever falls behind by more than one slot,
+    /// the first returned batch must not clear the gate while later slots are still
+    /// pending. Gates the run loop's boundary TX trigger (via [`awaiting_any_decode`])
+    /// so it never keys a stale message ahead of a slow decode (the fresh one is
+    /// keyed by `handle_decoded` when it arrives). See [`boundary_tx_ready`].
+    pending_decodes: usize,
     /// Audio-capture latency compensation (ms). The RX decode window is sliced
     /// this much later than the UTC cycle boundary so that buffered/late-arriving
     /// input audio lands aligned — drives decoded DT toward 0. Auto-calibrated
@@ -470,7 +487,7 @@ impl Engine {
             tx_audio_hz,
             tx_gain,
             last_decoded_slot: -1,
-            awaiting_decode: false,
+            pending_decodes: 0,
             rx_offset_ms,
             last_tick_ms: 0,
             tx_parity: None,
@@ -587,7 +604,9 @@ impl Engine {
                     // Hold off the boundary TX trigger until this slot's decodes
                     // come back, so it can't key a stale message ahead of a slow
                     // decode (the fresh one is keyed by handle_decoded on arrival).
-                    self.awaiting_decode = true;
+                    // Count it: if the decoder is already behind, the gate must
+                    // stay closed until every outstanding slot has returned.
+                    self.pending_decodes += 1;
                 }
             }
 
@@ -596,21 +615,25 @@ impl Engine {
             // and then `maybe_transmit` keys up if it's our turn. Immediate keying
             // on an operator tap is handled separately, in the command handlers.
             while let Ok(msgs) = self.dec_rx.try_recv() {
-                self.awaiting_decode = false;
+                // One batch settled — decrement, not reset, so a still-pending
+                // later slot keeps the boundary gate closed. saturating_sub guards
+                // against a stray batch arriving after a StopDecode reset.
+                self.pending_decodes = self.pending_decodes.saturating_sub(1);
                 self.handle_decoded(msgs, slot_id);
             }
 
-            // Boundary TX trigger: key a queued reply/CQ at the top of its slot even
-            // when this slot's decodes were processed earlier in the previous cycle.
-            // `maybe_transmit` is otherwise only reached on decode arrival, which on a
-            // fast decode lands mid-slot — past the TX window — so the queued message
-            // would never go out (auto-sequence stalls; CQ never retransmits). Gated
-            // on `!awaiting_decode` so a stale message is never keyed before this
-            // slot's decodes are in; `maybe_transmit` re-checks eligibility and is
-            // idempotent per slot (the `txed_slot` guard).
+            // Boundary TX trigger: key a queued reply/CQ early in its slot (anywhere
+            // within the TX window), even when this slot's decodes were processed
+            // earlier in the previous cycle. `maybe_transmit` is otherwise only
+            // reached on decode arrival, which on a fast decode lands mid-slot — past
+            // the TX window — so the queued message would never go out (auto-sequence
+            // stalls; CQ never retransmits). Gated on `!awaiting_any_decode` so a
+            // stale message is never keyed before every outstanding slot's decodes
+            // are in; `maybe_transmit` re-checks eligibility and is idempotent per
+            // slot (the `txed_slot` guard).
             if boundary_tx_ready(
                 self.qso.active,
-                self.awaiting_decode,
+                awaiting_any_decode(self.pending_decodes),
                 self.tx_parity,
                 slot_id,
                 self.txed_slot,
@@ -1006,9 +1029,10 @@ impl Engine {
             EngineCommand::StopDecode => {
                 self.decoding = false;
                 self.input = None;
-                // No slot is in flight once capture stops; clear the wait so a
-                // later CQ can key at its slot boundary without being blocked.
-                self.awaiting_decode = false;
+                // No slot is in flight once capture stops; clear the count so a
+                // later CQ can key at its slot boundary without being blocked. Any
+                // batch still in the channel decrements from 0 via saturating_sub.
+                self.pending_decodes = 0;
                 // Tell companion apps to wipe their decode band and forget the
                 // replay history — this is a genuine reset, not a per-cycle churn.
                 if self.udp.is_enabled() {
@@ -1355,5 +1379,34 @@ mod tests {
         assert!(!boundary_tx_ready(true, false, None, 4, 4, 0));
         assert!(!boundary_tx_ready(true, false, Some(1), 4, -1, 0)); // wants odd, slot 4 even
         assert!(!boundary_tx_ready(false, false, None, 4, -1, 0));
+    }
+
+    #[test]
+    fn awaiting_gate_stays_closed_until_every_pending_slot_returns() {
+        use super::awaiting_any_decode;
+        // The gate is driven by the pending-decode count. Walk the "decoder falls
+        // behind by a slot" sequence a single in-flight bool would get wrong: it
+        // would clear on the first returned batch while a later slot is still out.
+        let mut pending = 0usize; // idle: nothing outstanding, gate open.
+        assert!(!awaiting_any_decode(pending));
+
+        pending += 1; // slot A enqueued
+        assert!(awaiting_any_decode(pending));
+        pending += 1; // slot B enqueued before A came back (decoder behind)
+        assert!(awaiting_any_decode(pending));
+
+        pending = pending.saturating_sub(1); // A's batch returns...
+        assert!(
+            awaiting_any_decode(pending),
+            "gate must stay closed while slot B is still decoding",
+        );
+        pending = pending.saturating_sub(1); // B's batch returns
+        assert!(!awaiting_any_decode(pending));
+
+        // A stray settle (e.g. a batch arriving after a StopDecode reset to 0)
+        // can't underflow the count and reopen/close spuriously.
+        pending = pending.saturating_sub(1);
+        assert_eq!(pending, 0);
+        assert!(!awaiting_any_decode(pending));
     }
 }
