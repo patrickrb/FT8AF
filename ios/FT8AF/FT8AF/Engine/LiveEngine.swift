@@ -320,26 +320,36 @@ final class LiveEngine {
         }
     }
 
-    /// Generate FT8 audio and play it through the speaker. Returns `true` if a
-    /// transmission was actually started, `false` if it bailed (encode failure) —
-    /// the caller uses this to tell the sequencer the message really went out.
+    /// Generate FT8 audio and play it through the speaker. Returns `true` only if
+    /// a transmission was actually started, `false` if it bailed — either an encode
+    /// failure or `txPlayer.play` failing to key any audio (invalid hardware output
+    /// format, buffer/conversion failure). The caller uses this to tell the
+    /// sequencer the message really went out; a `false` keeps the QSO armed so it
+    /// retransmits next slot instead of latching (e.g. the courtesy 73) as sent.
     @discardableResult
     private func scheduleTx(message: String, freqHz: Float) -> Bool {
         guard let appState else { return false }
         guard let samples = FT8Encoder.generateFT8(message, baseFreqHz: freqHz) else { return false }
 
-        // Log the TX message to conversation panel.
-        let utcTime = Self.utcTimeString(from: Int64(Date().timeIntervalSince1970 * 1000))
-        appState.tx.conversationLog.append(
-            QsoLogEntry(direction: .tx, message: message, snr: nil, utcTime: utcTime)
-        )
-
         appState.tx.isTransmitting = true
-        txPlayer.play(samples) { [weak self] in
+        let started = txPlayer.play(samples) { [weak self] in
             Task { @MainActor in
                 self?.appState?.tx.isTransmitting = false
             }
         }
+        guard started else {
+            // Playback never keyed any audio, so nothing went on the air. Clear the
+            // optimistic flag and report not-transmitted (no conversation-log entry
+            // for a message that never played).
+            appState.tx.isTransmitting = false
+            return false
+        }
+
+        // Log the TX message to the conversation panel now that it's actually on air.
+        let utcTime = Self.utcTimeString(from: Int64(Date().timeIntervalSince1970 * 1000))
+        appState.tx.conversationLog.append(
+            QsoLogEntry(direction: .tx, message: message, snr: nil, utcTime: utcTime)
+        )
         return true
     }
 
