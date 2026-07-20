@@ -146,6 +146,11 @@ private fun QsoSheetContent(
 
         Spacer(modifier = Modifier.height(20.dp))
 
+        // -- Last heard: relative recency of this decode, above the map --
+        LastHeardRow(utcTimeMillis = message.utcTime, mainViewModel = mainViewModel)
+
+        Spacer(modifier = Modifier.height(12.dp))
+
         // -- Path map: operator grid -> remote grid, with a connecting line.
         // Renders nothing (and no trailing spacer) when either grid is unknown.
         QsoPathMap(
@@ -809,6 +814,99 @@ private fun CurrentTxBanner(
             fontFamily = GeistMonoFamily,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// "Last heard" relative time
+// ---------------------------------------------------------------------------
+
+/**
+ * Bucketed relative age of a decode, used for the "Last heard" line above the
+ * map. Keeping the bucketing as a pure sealed result (rather than a formatted
+ * string) lets [computeLastHeard] be unit-tested without Compose/resources and
+ * keeps the "ago" wording localizable in [lastHeardText].
+ */
+internal sealed interface LastHeard {
+    /** No usable timestamp (missing / non-positive). */
+    object Unknown : LastHeard
+
+    /** Under 5 s old, or a future timestamp clamped forward. */
+    object JustNow : LastHeard
+
+    data class Seconds(val value: Long) : LastHeard
+    data class Minutes(val value: Long) : LastHeard
+    data class Hours(val value: Long) : LastHeard
+    data class Days(val value: Long) : LastHeard
+}
+
+/**
+ * Bucket the elapsed time between [utcTimeMillis] (when the station was heard)
+ * and [nowMillis] into a [LastHeard] value. Edge cases handled cleanly:
+ *  - a missing/non-positive timestamp -> [LastHeard.Unknown]
+ *  - a future timestamp (clock skew) -> [LastHeard.JustNow] (never negative)
+ *  - a very old timestamp -> a plain [LastHeard.Days] count
+ *
+ * The bucket *thresholds* (5 s / 60 s / 60 m / 24 h) mirror the existing
+ * decode-row "ago" formatter so recency reads consistently across the app; the
+ * displayed wording is independent (e.g. this bucket says "just now" where the
+ * decode row says "now") and lives in [lastHeardText].
+ */
+internal fun computeLastHeard(utcTimeMillis: Long, nowMillis: Long): LastHeard {
+    if (utcTimeMillis <= 0L) return LastHeard.Unknown
+    val elapsedMs = nowMillis - utcTimeMillis
+    val seconds = (elapsedMs / 1000L).coerceAtLeast(0L)
+    return when {
+        seconds < 5L -> LastHeard.JustNow
+        seconds < 60L -> LastHeard.Seconds(seconds)
+        seconds < 3600L -> LastHeard.Minutes(seconds / 60L)
+        seconds < 86_400L -> LastHeard.Hours(seconds / 3600L)
+        else -> LastHeard.Days(seconds / 86_400L)
+    }
+}
+
+/** Map a [LastHeard] bucket to its localized display string. */
+@Composable
+private fun lastHeardText(lastHeard: LastHeard): String = when (lastHeard) {
+    LastHeard.Unknown -> stringResource(R.string.qso_last_heard_unknown)
+    LastHeard.JustNow -> stringResource(R.string.qso_last_heard_just_now)
+    is LastHeard.Seconds -> stringResource(R.string.qso_last_heard_seconds, lastHeard.value)
+    is LastHeard.Minutes -> stringResource(R.string.qso_last_heard_minutes, lastHeard.value)
+    is LastHeard.Hours -> stringResource(R.string.qso_last_heard_hours, lastHeard.value)
+    is LastHeard.Days -> stringResource(R.string.qso_last_heard_days, lastHeard.value)
+}
+
+/**
+ * "Last heard" row shown above the path map. The app's ticking UTC clock
+ * (`MainViewModel.timerSec`) is observed *here* rather than in the parent sheet:
+ * it changes ~1×/s, and the sheet also hosts `QsoPathMap`, which redraws on every
+ * recompose — observing the tick at the sheet level would repaint the whole map
+ * each second, so the observation is scoped to just this row.
+ */
+@Composable
+private fun LastHeardRow(utcTimeMillis: Long, mainViewModel: MainViewModel) {
+    val nowMillis by mainViewModel.timerSec.observeAsState(UtcTimer.getSystemTime())
+    val valueText = lastHeardText(computeLastHeard(utcTimeMillis, nowMillis))
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.qso_last_heard),
+            color = TextFaint,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.06.sp,
+        )
+        Text(
+            text = valueText,
+            color = TextPrimary,
+            fontFamily = GeistMonoFamily,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 13.sp,
         )
     }
 }
