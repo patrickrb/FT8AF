@@ -628,7 +628,7 @@ public class GeneralVariables {
 
     // The calling-UI "followed entries" list. Mutated concurrently from three
     // threads with no external lock: the decode thread (findIncludedCallsigns
-    // add + deleteArrayListMore remove(0) + clear), the TX-sequencer thread
+    // add + trimToMessageCount remove(0) + clear), the TX-sequencer thread
     // (FT8TransmitSignal.doComplete reverse scans, onBeforeTransmit add) and the
     // UI thread (GridTracker / GridMarkerInfoWindow add, clearTransmittingMessage).
     // A plain ArrayList corrupts its backing array / throws
@@ -636,7 +636,10 @@ public class GeneralVariables {
     // every add/remove/clear is atomic. Index scans must still snapshot the list
     // first (size() then get(i) can otherwise race a concurrent remove) — see
     // FT8TransmitSignal.doComplete.
-    public static List<Ft8Message> transmitMessages = new CopyOnWriteArrayList<>();//List for the calling UI, followed entries
+    // final: the thread-safety invariant depends on this always being the
+    // CopyOnWriteArrayList — never reassign it to a plain List, or the cross-thread
+    // crash this guards against returns. Mutate in place (add/remove/clear) only.
+    public static final List<Ft8Message> transmitMessages = new CopyOnWriteArrayList<>();//List for the calling UI, followed entries
 
     public static void setMyMaidenheadGrid(String grid) {
         myMaidenheadGrid = grid;
@@ -1251,7 +1254,12 @@ public class GeneralVariables {
         return result.toString();
     }
 
-    public static synchronized void deleteArrayListMore(List<Ft8Message> list) {
+    /**
+     * Trim {@code list} from the front down to {@link #MESSAGE_COUNT} entries.
+     * Accepts any {@link List} (the shared calling list is a CopyOnWriteArrayList),
+     * so the name reflects the contract rather than a concrete ArrayList.
+     */
+    public static synchronized void trimToMessageCount(List<Ft8Message> list) {
         if (list.size() > GeneralVariables.MESSAGE_COUNT) {
             while (list.size() > GeneralVariables.MESSAGE_COUNT) {
                 list.remove(0);

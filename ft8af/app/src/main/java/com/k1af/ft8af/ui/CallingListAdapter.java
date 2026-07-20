@@ -190,7 +190,7 @@ public class CallingListAdapter extends RecyclerView.Adapter<CallingListAdapter.
      * <p>The two live hosts ({@code CallingListFragment} and {@code GridTrackerMainActivity})
      * hand this adapter the same {@code MainViewModel.ft8Messages} instance the decode thread
      * mutates under {@code synchronized (ft8Messages)}: it appends decodes, trims the front via
-     * {@code GeneralVariables.deleteArrayListMore}, and clears the list every cycle. RecyclerView
+     * {@code GeneralVariables.trimToMessageCount}, and clears the list every cycle. RecyclerView
      * reads {@code getItemCount()} and then indexes the list from {@code onBindViewHolder} and the
      * gesture/menu handlers on the UI thread, so a trim or clear landing in that window made a
      * plain {@code get(position)} throw {@link IndexOutOfBoundsException} on the main thread —

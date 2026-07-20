@@ -1037,7 +1037,7 @@ public class FT8TransmitSignal {
         // look up signal report from history
         // processing signal reports here because saved reports often differ from actual QSO reports
         // Snapshot the shared transmitMessages list once: it is mutated concurrently
-        // by the decode thread (add / deleteArrayListMore remove(0) / clear), so a live
+        // by the decode thread (add / trimToMessageCount remove(0) / clear), so a live
         // size()-then-get(i) scan can throw IndexOutOfBounds when the list shrinks
         // mid-scan. Iterating a private copy is race-free and preserves the
         // most-recent-first (reverse index) semantics.

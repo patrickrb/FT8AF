@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <p>That list is mutated with no external lock from three threads at once: the decode
  * thread ({@code MainViewModel.findIncludedCallsigns} appends matches then trims the
- * front via {@link GeneralVariables#deleteArrayListMore} {@code remove(0)}, and
+ * front via {@link GeneralVariables#trimToMessageCount} {@code remove(0)}, and
  * {@code clearTransmittingMessage} clears it), the TX-sequencer thread
  * ({@code FT8TransmitSignal.doComplete} reverse-scans it for the QSO signal reports,
  * {@code onBeforeTransmit} appends), and the UI thread ({@code GridTrackerMainActivity}
@@ -84,7 +84,7 @@ public class TransmitMessagesConcurrencyTest {
             try {
                 for (int i = 0; i < iterations; i++) {
                     GeneralVariables.transmitMessages.add(new Ft8Message(FT8Common.FT8_MODE));
-                    GeneralVariables.deleteArrayListMore(GeneralVariables.transmitMessages);
+                    GeneralVariables.trimToMessageCount(GeneralVariables.transmitMessages);
                     if (i % 128 == 0) {
                         GeneralVariables.transmitMessages.clear();
                     }
