@@ -112,8 +112,6 @@ private fun QsoSheetContent(
     val isActivated by mainViewModel.ft8TransmitSignal.mutableIsActivated.observeAsState(false)
     val toCallsign by mainViewModel.ft8TransmitSignal.mutableToCallsign.observeAsState()
     val txFunctionOrder by mainViewModel.ft8TransmitSignal.mutableFunctionOrder.observeAsState(6)
-    // App-wide UTC clock (~1s heartbeat); keeps the "Last heard" value fresh.
-    val nowMillis by mainViewModel.timerSec.observeAsState(UtcTimer.getSystemTime())
 
     val usState = UsStateLookup.stateFromGrid(context, message.maidenGrid)
 
@@ -149,7 +147,7 @@ private fun QsoSheetContent(
         Spacer(modifier = Modifier.height(20.dp))
 
         // -- Last heard: relative recency of this decode, above the map --
-        LastHeardRow(utcTimeMillis = message.utcTime, nowMillis = nowMillis)
+        LastHeardRow(utcTimeMillis = message.utcTime, mainViewModel = mainViewModel)
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -850,8 +848,10 @@ internal sealed interface LastHeard {
  *  - a future timestamp (clock skew) -> [LastHeard.JustNow] (never negative)
  *  - a very old timestamp -> a plain [LastHeard.Days] count
  *
- * Thresholds mirror the existing decode-row "ago" formatter (5 s / 60 s / 60 m /
- * 24 h) so recency reads consistently across the app.
+ * The bucket *thresholds* (5 s / 60 s / 60 m / 24 h) mirror the existing
+ * decode-row "ago" formatter so recency reads consistently across the app; the
+ * displayed wording is independent (e.g. this bucket says "just now" where the
+ * decode row says "now") and lives in [lastHeardText].
  */
 internal fun computeLastHeard(utcTimeMillis: Long, nowMillis: Long): LastHeard {
     if (utcTimeMillis <= 0L) return LastHeard.Unknown
@@ -878,12 +878,15 @@ private fun lastHeardText(lastHeard: LastHeard): String = when (lastHeard) {
 }
 
 /**
- * "Last heard" row shown above the path map. [nowMillis] is the app's ticking
- * UTC clock (`MainViewModel.timerSec`), so the value refreshes about once a
- * second while the sheet is open without a dedicated timer here.
+ * "Last heard" row shown above the path map. The app's ticking UTC clock
+ * (`MainViewModel.timerSec`) is observed *here* rather than in the parent sheet:
+ * it changes ~1×/s, and the sheet also hosts `QsoPathMap`, which redraws on every
+ * recompose — observing the tick at the sheet level would repaint the whole map
+ * each second, so the observation is scoped to just this row.
  */
 @Composable
-private fun LastHeardRow(utcTimeMillis: Long, nowMillis: Long) {
+private fun LastHeardRow(utcTimeMillis: Long, mainViewModel: MainViewModel) {
+    val nowMillis by mainViewModel.timerSec.observeAsState(UtcTimer.getSystemTime())
     val valueText = lastHeardText(computeLastHeard(utcTimeMillis, nowMillis))
 
     Row(

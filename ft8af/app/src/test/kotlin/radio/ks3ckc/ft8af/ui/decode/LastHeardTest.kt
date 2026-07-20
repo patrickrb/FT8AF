@@ -53,7 +53,7 @@ class LastHeardTest {
 
     @Test
     fun `days bucket covers a day and beyond, including very old timestamps`() {
-        assertThat(computeLastHeard(now - 86_400_000L, now)).isEqualTo(LastHeard.Days(2 - 1))
+        assertThat(computeLastHeard(now - 86_400_000L, now)).isEqualTo(LastHeard.Days(1))
         assertThat(computeLastHeard(now - 2L * 86_400_000L, now)).isEqualTo(LastHeard.Days(2))
         // Very old timestamp still formats cleanly as a large day count.
         assertThat(computeLastHeard(now - 500L * 86_400_000L, now)).isEqualTo(LastHeard.Days(500))
