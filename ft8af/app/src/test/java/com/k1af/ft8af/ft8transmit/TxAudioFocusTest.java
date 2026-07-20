@@ -45,6 +45,29 @@ public class TxAudioFocusTest {
     }
 
     @Test
+    public void acquire_fromLooperlessWorkerThread_isHeld() throws Exception {
+        // acquire() runs on worker threads with no Looper (e.g. the TuneTone
+        // thread). The focus-change listener is registered on an explicit
+        // main-looper Handler so this can't depend on the calling thread's
+        // Looper. Drive acquire() from a raw Thread and confirm it succeeds.
+        final boolean[] granted = {false};
+        final Throwable[] thrown = {null};
+        Thread worker = new Thread(() -> {
+            try {
+                granted[0] = focus.acquire(context);
+            } catch (Throwable t) {
+                thrown[0] = t;
+            }
+        });
+        worker.start();
+        worker.join();
+
+        assertThat(thrown[0]).isNull();
+        assertThat(granted[0]).isTrue();
+        assertThat(focus.isHeld()).isTrue();
+    }
+
+    @Test
     public void acquire_denied_notHeld() {
         shadowAudioManager.setNextFocusRequestResponse(
                 AudioManager.AUDIOFOCUS_REQUEST_FAILED);

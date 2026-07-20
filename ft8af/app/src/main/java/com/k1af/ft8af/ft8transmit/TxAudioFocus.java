@@ -5,6 +5,8 @@ import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 
 import com.k1af.ft8af.GeneralVariables;
 
@@ -33,6 +35,13 @@ public class TxAudioFocus {
             focusChange -> GeneralVariables.fileLog(
                     "TxAudioFocus: focus change during TX: " + focusChange);
 
+    // acquire() is called from worker threads (e.g. the TuneTone `new Thread(...)`
+    // path) that have no Looper. Both the AudioFocusRequest.Builder listener and
+    // the legacy requestAudioFocus() register their callback on a Handler; without
+    // an explicit one they can bind to the calling thread's (missing) Looper. Pin
+    // the callbacks to the main looper so acquire() is safe from any thread.
+    private final Handler focusListenerHandler = new Handler(Looper.getMainLooper());
+
     /**
      * Request transient-exclusive focus. Idempotent while held.
      *
@@ -60,7 +69,7 @@ public class TxAudioFocus {
                                 .setUsage(AudioAttributes.USAGE_MEDIA)
                                 .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                                 .build())
-                        .setOnAudioFocusChangeListener(focusChangeListener)
+                        .setOnAudioFocusChangeListener(focusChangeListener, focusListenerHandler)
                         .build();
                 result = am.requestAudioFocus(request);
             } else {
