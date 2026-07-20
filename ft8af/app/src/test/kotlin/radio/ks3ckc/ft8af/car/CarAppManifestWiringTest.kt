@@ -3,6 +3,7 @@ package radio.ks3ckc.ft8af.car
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Bundle
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
@@ -42,10 +43,12 @@ class CarAppManifestWiringTest {
             context.packageName,
             PackageManager.GET_META_DATA,
         )
-        // Other application-level meta-data (e.g. io.sentry.auto-init) keeps this
-        // bundle non-null; what must be gone is the Android Auto descriptor and the
-        // car-app API-level floor that together mark the app as an AA app.
-        val meta = appInfo.metaData
+        // ApplicationInfo.metaData is null when the manifest carries no
+        // application-level meta-data at all; treat that as an empty Bundle so the
+        // test asserts on absence of the AA keys rather than NPE-ing. (Today
+        // io.sentry.auto-init keeps it non-null, but the guard must not depend on
+        // that unrelated entry surviving.)
+        val meta = appInfo.metaData ?: Bundle()
         assertThat(meta.containsKey("com.google.android.gms.car.application")).isFalse()
         assertThat(meta.containsKey("androidx.car.app.minCarApiLevel")).isFalse()
     }
