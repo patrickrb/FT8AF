@@ -94,13 +94,21 @@ public enum PotaSpots {
     public static func ageSeconds(spotTimeUtc: String, now: Date) -> Int? {
         let trimmed = String(spotTimeUtc.prefix(19))
         guard trimmed.count == 19 else { return nil }
+        guard let date = spotTimeFormatter.date(from: trimmed) else { return nil }
+        return max(0, Int(now.timeIntervalSince(date)))
+    }
+
+    /// Shared UTC/POSIX parser for spot timestamps. Building a `DateFormatter` is
+    /// expensive, and `ageSeconds` runs once per rendered spot row, so configure it
+    /// once and reuse it. A configured `DateFormatter` is safe to share for parsing
+    /// (only `date(from:)` is called; it is never mutated after this).
+    private static let spotTimeFormatter: DateFormatter = {
         let fmt = DateFormatter()
         fmt.locale = Locale(identifier: "en_US_POSIX")
         fmt.timeZone = TimeZone(identifier: "UTC")
         fmt.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        guard let date = fmt.date(from: trimmed) else { return nil }
-        return max(0, Int(now.timeIntervalSince(date)))
-    }
+        return fmt
+    }()
 
     /// Amateur band (in the app's "20M" naming) containing a spot frequency, or
     /// nil when it falls outside the HF/6m allocations the band picker offers.

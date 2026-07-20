@@ -25,14 +25,20 @@ final class AudioRouteController {
 
     @ObservationIgnored private var observer: NSObjectProtocol?
 
+    /// The port name we re-apply on a route change. Seeded from `start`'s
+    /// persisted preference and updated by `selectInput` so a live input change
+    /// isn't undone by the next route-change refresh re-applying the old value.
+    @ObservationIgnored private var preferredPortName: String = ""
+
     func start(preferredPortName: String) {
-        refresh(preferredPortName: preferredPortName)
+        self.preferredPortName = preferredPortName
+        refresh()
         observer = NotificationCenter.default.addObserver(
             forName: AVAudioSession.routeChangeNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.refresh(preferredPortName: preferredPortName)
+                self?.refresh()
             }
         }
     }
@@ -42,13 +48,14 @@ final class AudioRouteController {
         observer = nil
     }
 
-    func refresh(preferredPortName: String) {
+    func refresh() {
         let session = AVAudioSession.sharedInstance()
         inputs = (session.availableInputs ?? []).map { port in
             AudioInputOption(id: port.uid, name: port.portName, label: Self.label(for: port))
         }
-        // Re-apply the persisted preference when its port is present but not
-        // active (e.g. the USB interface was replugged).
+        // Re-apply the current preference when its port is present but not
+        // active (e.g. the USB interface was replugged). Reads the stored value
+        // so a preference set via selectInput sticks across route changes.
         if !preferredPortName.isEmpty,
            let wanted = (session.availableInputs ?? []).first(where: { $0.portName == preferredPortName }),
            session.currentRoute.inputs.first?.uid != wanted.uid {
@@ -69,6 +76,9 @@ final class AudioRouteController {
         do {
             try session.setPreferredInput(port)
             currentInputUid = port.uid
+            // Update the stored preference so a later route-change refresh
+            // re-applies this choice, not the one `start` was seeded with.
+            preferredPortName = port.portName
             return port.portName
         } catch {
             return nil
