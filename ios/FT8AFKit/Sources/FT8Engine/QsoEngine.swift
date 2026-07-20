@@ -64,6 +64,11 @@ public final class QsoEngine {
     /// guards the courtesy-73 window (`stage == .bye73`, target still set)
     /// against a second identical record from `forceLog()`.
     private var recordEmitted = false
+    /// True once the courtesy "73" queued in `.bye73` has actually been handed to
+    /// the transmitter (via `notifyTransmitted`). Guards `finishQso` so a Bye73
+    /// that missed its slot (late TX window, rig busy, encode failure) is
+    /// retransmitted next slot instead of being clobbered by the wrap-up.
+    private var bye73Sent = false
 
     public init(myCall: String, myGrid: String) {
         self.myCall = myCall.uppercased()
@@ -77,6 +82,16 @@ public final class QsoEngine {
 
     /// The message queued for the next TX slot (nil when idle).
     public var txMessage: String? { pendingTx }
+
+    /// The scheduler calls this after the current `txMessage` has actually been
+    /// handed to the transmitter. It only matters for the courtesy "73": it marks
+    /// the Bye73 as sent so the next `processRx` may wrap the QSO up. For every
+    /// other stage the sequencer advances on received replies, so this is a no-op.
+    public func notifyTransmitted() {
+        if stage == .bye73 {
+            bye73Sent = true
+        }
+    }
 
     /// Begin calling CQ.
     public func startCq() {
@@ -119,6 +134,7 @@ public final class QsoEngine {
         case .bye73:
             pendingTx = "\(dx) \(myCall) 73"
             stage = .bye73
+            bye73Sent = false
         case .cq, .idle: break // handled above
         }
     }
@@ -145,6 +161,7 @@ public final class QsoEngine {
         reportRcvd = nil
         recordEmitted = false
         startedMs = FT8Time.nowUnixMs()
+        bye73Sent = false
     }
 
     /// Process the decoded messages of a finished RX slot. Updates the queued TX
@@ -152,10 +169,16 @@ public final class QsoEngine {
     public func processRx(_ messages: [DecodedMessage]) -> QsoOutcome? {
         if !active || stage == .idle { return nil }
 
-        // The courtesy "73" queued on the previous slot has now had its TX slot;
-        // wrap up (return to CQ / stop) regardless of incoming traffic this slot.
+        // A courtesy "73" is queued (RReport -> RR73, or a manual Tx5). Only wrap
+        // up (return to CQ / stop) once it has *actually* been transmitted — the
+        // scheduler signals that via `notifyTransmitted`. If it hasn't gone out yet
+        // (missed TX window, rig busy, encode failure), leave the message queued so
+        // the scheduler retransmits it next slot instead of clobbering it. Either
+        // way we don't act on incoming traffic while a 73 is pending.
         if stage == .bye73 {
-            finishQso()
+            if bye73Sent {
+                finishQso()
+            }
             return nil
         }
 
@@ -213,6 +236,7 @@ public final class QsoEngine {
                 // Acknowledge with 73, then log.
                 pendingTx = "\(dx) \(myCall) 73"
                 stage = .bye73
+                bye73Sent = false
                 return complete(dx)
             default: break
             }

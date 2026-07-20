@@ -373,15 +373,23 @@ fn fmt_report(n: i32) -> String {
 }
 
 fn classify(msg: &DecodedMessage) -> Content {
-    if !msg.grid.is_empty() {
-        return Content::Grid(msg.grid.clone());
-    }
+    // Recognize the QSO sign-offs before treating the message as a grid report.
+    // "RR73" is a valid 4-char Maidenhead-shaped token (R,R in A..R + two
+    // digits), so the decoder copies it into `grid` (looks_like_grid("RR73") is
+    // true). Checking grid first would classify a partner's standard RR73
+    // sign-off as Content::Grid, stranding the auto-sequencer at the RReport
+    // stage — it would retransmit our R-report forever and never complete/log
+    // the QSO. Matching the sign-offs first fixes that without touching
+    // looks_like_grid (the map/distance code relies on its shape test).
     let extra = msg.extra.trim();
     match extra {
         "RR73" => return Content::Rr73,
         "RRR" => return Content::Rrr,
         "73" => return Content::Bye73,
         _ => {}
+    }
+    if !msg.grid.is_empty() {
+        return Content::Grid(msg.grid.clone());
     }
     if let Some(rest) = extra.strip_prefix('R') {
         if let Ok(n) = rest.parse::<i32>() {
@@ -429,8 +437,10 @@ mod tests {
         assert_eq!(e.tx_message(), Some("K1ABC K0XYZ R-08"));
         assert_eq!(e.status().report_rcvd, Some(-12));
 
-        // DX sends RR73 -> we log AND queue the courtesy 73 to transmit.
-        let out = e.process_rx(&[msg("K0XYZ", "K1ABC", "RR73", "", -8)]);
+        // DX sends RR73 -> we log AND queue the courtesy 73 to transmit. The
+        // decoder copies the grid-shaped "RR73" into the grid field, so pass it
+        // here as it actually arrives live (grid == "RR73"), not grid == "".
+        let out = e.process_rx(&[msg("K0XYZ", "K1ABC", "RR73", "RR73", -8)]);
         match out {
             Some(QsoOutcome::Completed(rec)) => {
                 assert_eq!(rec.call, "K1ABC");
@@ -462,8 +472,9 @@ mod tests {
         e.process_rx(&[msg("K0XYZ", "K1ABC", "-12", "", -8)]);
         assert_eq!(e.tx_message(), Some("K1ABC K0XYZ R-08"));
 
-        // DX sends RR73 -> QSO logs and the courtesy 73 is queued.
-        let out = e.process_rx(&[msg("K0XYZ", "K1ABC", "RR73", "", -8)]);
+        // DX sends RR73 -> QSO logs and the courtesy 73 is queued. As live, the
+        // grid-shaped "RR73" also lands in the decoder's grid field.
+        let out = e.process_rx(&[msg("K0XYZ", "K1ABC", "RR73", "RR73", -8)]);
         assert!(matches!(out, Some(QsoOutcome::Completed(_))));
         assert_eq!(e.tx_message(), Some("K1ABC K0XYZ 73"));
         assert_eq!(e.status().stage, TxStage::Bye73);
@@ -564,5 +575,44 @@ mod tests {
         // traffic between two other stations
         assert!(e.process_rx(&[msg("W1AW", "K1ABC", "FN42", "FN42", -3)]).is_none());
         assert_eq!(e.tx_message(), Some("CQ K0XYZ EN37"));
+    }
+
+    #[test]
+    fn rr73_signoff_is_not_classified_as_a_grid() {
+        // "RR73" passes looks_like_grid, so the decoder copies it into the grid
+        // field. classify must still treat it as the RR73 sign-off, not a grid
+        // report — otherwise the auto-sequencer never completes the QSO.
+        let signoff = msg("K0XYZ", "K1ABC", "RR73", "RR73", -8);
+        assert!(matches!(classify(&signoff), Content::Rr73));
+        // A genuine grid report is unaffected.
+        let grid = msg("K0XYZ", "K1ABC", "FN42", "FN42", -8);
+        assert!(matches!(classify(&grid), Content::Grid(g) if g == "FN42"));
+    }
+
+    #[test]
+    fn rr73_with_decoder_grid_still_completes_qso() {
+        // Regression for the sign-off-vs-grid classification bug. Live, the DX's
+        // RR73 arrives with grid == "RR73" (looks_like_grid is true). Before the
+        // fix classify returned Content::Grid, the RReport arm hit `_ => {}`, and
+        // the QSO hung retransmitting our R-report forever instead of logging.
+        let mut e = QsoEngine::new("K0XYZ", "EN37");
+        e.answer(&msg("CQ", "K1ABC", "FN42", "FN42", -5));
+        e.process_rx(&[msg("K0XYZ", "K1ABC", "-12", "", -8)]);
+        assert_eq!(e.tx_message(), Some("K1ABC K0XYZ R-08"));
+        assert_eq!(e.status().stage, TxStage::RReport);
+
+        // DX signs off with RR73 exactly as the decoder emits it live.
+        let out = e.process_rx(&[msg("K0XYZ", "K1ABC", "RR73", "RR73", -8)]);
+        match out {
+            Some(QsoOutcome::Completed(rec)) => {
+                assert_eq!(rec.call, "K1ABC");
+                assert_eq!(rec.gridsquare, "FN42");
+                assert_eq!(rec.rst_sent, "-08");
+                assert_eq!(rec.rst_rcvd, "-12");
+            }
+            _ => panic!("RR73 sign-off must complete the QSO"),
+        }
+        assert_eq!(e.tx_message(), Some("K1ABC K0XYZ 73"));
+        assert_eq!(e.status().stage, TxStage::Bye73);
     }
 }

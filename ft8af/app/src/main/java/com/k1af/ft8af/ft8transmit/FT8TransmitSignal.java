@@ -38,6 +38,7 @@ import com.k1af.ft8af.timer.UtcTimer;
 import com.k1af.ft8af.ui.ToastMessage;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -1035,9 +1036,15 @@ public class FT8TransmitSignal {
 
         // look up signal report from history
         // processing signal reports here because saved reports often differ from actual QSO reports
+        // Snapshot the shared transmitMessages list once: it is mutated concurrently
+        // by the decode thread (add / trimToMessageCount remove(0) / clear), so a live
+        // size()-then-get(i) scan can throw IndexOutOfBounds when the list shrinks
+        // mid-scan. Iterating a private copy is race-free and preserves the
+        // most-recent-first (reverse index) semantics.
+        List<Ft8Message> transmitMessagesSnapshot = new ArrayList<>(GeneralVariables.transmitMessages);
         // iterate through received signal reports from the other party
-        for (int i = GeneralVariables.transmitMessages.size() - 1; i >= 0; i--) {
-            Ft8Message message = GeneralVariables.transmitMessages.get(i);
+        for (int i = transmitMessagesSnapshot.size() - 1; i >= 0; i--) {
+            Ft8Message message = transmitMessagesSnapshot.get(i);
             if ((GeneralVariables.checkFun3(message.extraInfo)
                     || GeneralVariables.checkFun2(message.extraInfo))
                     && (message.callsignFrom.equals(toCallsign.callsign)
@@ -1048,8 +1055,8 @@ public class FT8TransmitSignal {
             }
         }
         // iterate through signal reports I sent to the other party
-        for (int i = GeneralVariables.transmitMessages.size() - 1; i >= 0; i--) {
-            Ft8Message message = GeneralVariables.transmitMessages.get(i);
+        for (int i = transmitMessagesSnapshot.size() - 1; i >= 0; i--) {
+            Ft8Message message = transmitMessagesSnapshot.get(i);
             if ((GeneralVariables.checkFun3(message.extraInfo)
                     || GeneralVariables.checkFun2(message.extraInfo))
                     && (message.callsignTo.equals(toCallsign.callsign)

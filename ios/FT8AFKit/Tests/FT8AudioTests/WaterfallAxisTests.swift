@@ -181,4 +181,18 @@ final class WaterfallAxisTests: XCTestCase {
         XCTAssertEqual(WaterfallAxis.rulerTicks(displayMaxHz: 0), [RulerTick(hz: 0, fraction: 0)])
         XCTAssertEqual(WaterfallAxis.rulerTicks(displayMaxHz: -100), [RulerTick(hz: 0, fraction: 0)])
     }
+
+    func testBoundedReplyTxHzAcceptsInPassbandAndRejectsTheRest() {
+        // A WSJT-X reply's df is adopted only inside the fixed transmittable
+        // passband (minTxHz ... txCeilingHz); anything else keeps the current
+        // offset (nil). This is independent of the display width.
+        XCTAssertEqual(WaterfallAxis.boundedReplyTxHz(1500), 1500)
+        XCTAssertEqual(WaterfallAxis.boundedReplyTxHz(WaterfallAxis.minTxHz), WaterfallAxis.minTxHz)
+        XCTAssertEqual(WaterfallAxis.boundedReplyTxHz(WaterfallAxis.txCeilingHz), WaterfallAxis.txCeilingHz)
+        // 0 = "unspecified" (the app's own click-to-answer sends 0) -> keep offset.
+        XCTAssertNil(WaterfallAxis.boundedReplyTxHz(0))
+        // Below the floor and above the ceiling are both rejected.
+        XCTAssertNil(WaterfallAxis.boundedReplyTxHz(WaterfallAxis.minTxHz - 1))
+        XCTAssertNil(WaterfallAxis.boundedReplyTxHz(WaterfallAxis.txCeilingHz + 1))
+    }
 }

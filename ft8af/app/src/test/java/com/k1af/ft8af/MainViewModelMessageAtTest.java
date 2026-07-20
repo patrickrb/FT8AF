@@ -14,7 +14,7 @@ import java.util.ArrayList;
  * {@code size()}-check-then-{@code get(pos)} on the main thread against the live
  * {@code ft8Messages} list, which the decode thread mutates under
  * {@code synchronized (ft8Messages)} — appending decodes and trimming the front
- * with {@link GeneralVariables#deleteArrayListMore} ({@code remove(0)}), or
+ * with {@link GeneralVariables#trimToMessageCount} ({@code remove(0)}), or
  * {@code clear()}ing it. A concurrent trim/clear between the check and the get
  * throws {@link IndexOutOfBoundsException} on the UI thread (whole-app crash).
  * {@code messageAt} makes the check-and-get atomic and returns {@code null} for a
@@ -62,7 +62,7 @@ public class MainViewModelMessageAtTest {
     public void stalePositionAfterFrontTrim_returnsNullInsteadOfThrowing() {
         // Reproduces the race outcome: the click handler captured position 4 while
         // the list held 5 messages; the decode thread then trimmed the front
-        // (deleteArrayListMore -> remove(0)) down to 3. The old code's
+        // (trimToMessageCount -> remove(0)) down to 3. The old code's
         // ft8Messages.get(4) would throw; messageAt returns null.
         ArrayList<Ft8Message> list = listOf(5);
         int stalePosition = 4;

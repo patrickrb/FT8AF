@@ -552,6 +552,10 @@ final class LiveEngine {
                 // The attempt is counted in beginTxPlayback, once playback is
                 // actually committed — TUNE, encode failure, and late-skip
                 // slots must not feed the stop-after-N / watchdog bookkeeping.
+                // beginTxPlayback also signals qso.notifyTransmitted() once the
+                // audio actually keys, so a courtesy "73" only wraps the QSO up
+                // after it's on the air (scheduleTx here is fire-and-forget: it
+                // defers playback by the operator's TX delay).
                 scheduleTx(message: txMsg, freqHz: appState.waterfall.txFreqHz)
             }
         }
@@ -757,11 +761,23 @@ final class LiveEngine {
         )
 
         appState.tx.isTransmitting = true
-        txPlayer.play(playSamples) { [weak self] in
+        let started = txPlayer.play(playSamples) { [weak self] in
             Task { @MainActor in
                 self?.appState?.tx.isTransmitting = false
             }
         }
+        guard started else {
+            // Playback never keyed any audio (invalid hardware output format,
+            // buffer/conversion failure). Clear the optimistic flag; the QSO stays
+            // armed so it retransmits next slot instead of latching as sent.
+            appState.tx.isTransmitting = false
+            return
+        }
+        // The audio is on the air now — tell the sequencer the message actually
+        // went out. This is what lets a courtesy "73" wrap the QSO up only after
+        // it's transmitted; a Bye73 that never keyed stays queued
+        // (see QsoEngine.notifyTransmitted / bye73Sent).
+        qsoEngine?.notifyTransmitted()
     }
 
     // MARK: - Waterfall loop
@@ -905,8 +921,13 @@ final class LiveEngine {
         udp.onReply = { [weak self] call, grid, snr, deltaFreq in
             guard let self, let appState = self.appState else { return }
             // Honor the requested audio frequency: answer on the tone the companion asked
-            // for, not whatever the current TX frequency happens to be.
-            if deltaFreq > 0 { appState.waterfall.txFreqHz = Float(deltaFreq) }
+            // for, not whatever the current TX frequency happens to be. `deltaFreq` is a
+            // raw value off an untrusted UDP socket, so only adopt it when it lands inside
+            // the transmittable passband; an unspecified (0) or out-of-band request keeps
+            // the current offset (mirrors the desktop/Android reply-df guards).
+            if let txHz = WaterfallAxis.boundedReplyTxHz(Float(deltaFreq)) {
+                appState.waterfall.txFreqHz = txHz
+            }
             let msg = DecodeMessage(
                 utcTime: Self.utcTimeString(from: Int64(Date().timeIntervalSince1970 * 1000)),
                 callFrom: call, callTo: "", snr: Int(snr),

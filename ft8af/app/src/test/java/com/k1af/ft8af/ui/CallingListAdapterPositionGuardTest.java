@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * {@code GridTrackerMainActivity}) hands the adapter the SAME live
  * {@code MainViewModel.ft8Messages} instance the decode thread mutates under
  * {@code synchronized (ft8Messages)} — it appends decodes, trims the front via
- * {@code GeneralVariables.deleteArrayListMore}, and clears the list every cycle.
+ * {@code GeneralVariables.trimToMessageCount}, and clears the list every cycle.
  * RecyclerView reads {@code getItemCount()} and then indexes the list on the UI
  * thread from {@code onBindViewHolder} and the swipe/menu handlers, so a trim or
  * clear landing in that window turned a raw {@code get(position)} into an

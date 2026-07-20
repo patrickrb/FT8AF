@@ -83,6 +83,22 @@ public enum WaterfallAxis {
         return min(max(hz, minTxHz), maxTxHz(displayMaxHz: displayMaxHz))
     }
 
+    /// The audio offset (Hz) to answer a WSJT-X `Reply` on, given the companion's
+    /// requested `deltaFreq`, or `nil` to keep the current TX offset. The `df`
+    /// arrives on an untrusted UDP socket, so a value of 0 (unspecified — the
+    /// app's own click-to-answer sends 0) or one outside the transmittable
+    /// passband `minTxHz ... txCeilingHz` must NOT be adopted: keying up outside
+    /// the SSB passband sends the reply attenuated/off-air, and (because the TX
+    /// marker is separately pinned to the band edge by `clampedFraction`) leaves
+    /// the marker pointing where the tone isn't. Bounds to the *fixed*
+    /// transmittable passband — not the display-width-dependent `maxTxHz`, which
+    /// only limits tap-to-tune to what's on screen. Mirrors the desktop
+    /// `reply_tx_audio_hz` and Android `replyTxFrequencyHz` guards, which the iOS
+    /// port previously omitted (it honored any `deltaFreq > 0` unbounded).
+    public static func boundedReplyTxHz(_ hz: Float) -> Float? {
+        return (minTxHz...txCeilingHz).contains(hz) ? hz : nil
+    }
+
     /// Ruler labels at `rulerStepHz` intervals from 0 up to `displayMaxHz`,
     /// each paired with the horizontal fraction it must sit at.
     ///
