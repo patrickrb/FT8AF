@@ -127,6 +127,41 @@ public class LogHttpServer extends NanoHTTPD {
         return pageSize > 0 ? pageSize : 100;
     }
 
+    /**
+     * The request path segment at {@code index} (from {@code getUri().split("/")}),
+     * or {@code null} when the request has no such segment.
+     *
+     * <p>Every {@code uriList[2]} read in {@link #serve} routes through this so a
+     * request that omits the trailing segment falls back to the default page instead
+     * of throwing {@link ArrayIndexOutOfBoundsException}. {@code GET /SHOWQSL} split to
+     * {@code ["", "SHOWQSL"]} (length 2), so the old bare {@code uriList[2]} threw — and
+     * for SHOWQSL that read sat <em>outside</em> the try/catch, so it escaped
+     * {@code serve} uncaught; for the DOWNQSL / DOWNQSLNOQSL {@code Content-Disposition}
+     * header it threw inside the try and returned an opaque HTTP 500 even though the
+     * body branch had already fallen back correctly. Mirrors the {@code uriList.length
+     * >= 3} guard the DELFOLLOW / DELQSL / DELQSLCALLSIGN branches already use.
+     */
+    static String uriSegment(String[] uriList, int index) {
+        if (uriList == null || index < 0 || index >= uriList.length) {
+            return null;
+        }
+        String segment = uriList[index];
+        // Treat a present-but-empty segment (e.g. the "" that a double slash like
+        // "/SHOWQSL//" splits to) as absent, so it falls back to the default page
+        // rather than flowing an empty month into showQSLByMonth/downQSLByMonth
+        // (where month.length() == 0 could match unintended rows).
+        return segment == null || segment.isEmpty() ? null : segment;
+    }
+
+    /**
+     * {@code Content-Disposition} filename for a per-month QSL download. Falls back to
+     * {@code log.adi} when the month segment is absent (see {@link #uriSegment}), rather
+     * than reading a missing path segment.
+     */
+    static String downloadFileName(String month) {
+        return String.format("log%s.adi", month != null ? month : "");
+    }
+
     @Override
     public Response serve(IHTTPSession session) {
         String[] uriList = session.getUri().split("/");
@@ -187,7 +222,8 @@ public class LogHttpServer extends NanoHTTPD {
         } else if (uri.equalsIgnoreCase("SHOWALLQSL")) {
             msg = HTML_STRING(showAllQSL());
         } else if (uri.equalsIgnoreCase("SHOWQSL")) {
-            msg = HTML_STRING(showQSLByMonth(uriList[2]));
+            String month = uriSegment(uriList, 2);
+            msg = month != null ? HTML_STRING(showQSLByMonth(month)) : HtmlContext.DEFAULT_HTML();
         } else if (uri.equalsIgnoreCase("DELQSLCALLSIGN")) {//Delete a QSO callsign
             if (uriList.length >= 3) {
                 deleteQSLCallSign(uriList[2].replace("_", "/"));
@@ -205,22 +241,26 @@ public class LogHttpServer extends NanoHTTPD {
                 response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain", msg);
                 response.addHeader("Content-Disposition", "attachment;filename=All_log.adi");
             } else if (uri.equalsIgnoreCase("DOWNQSL")) {
-                if (uriList.length >= 3) {
-                    msg = downQSLByMonth(uriList[2], true);
+                String month = uriSegment(uriList, 2);
+                if (month != null) {
+                    msg = downQSLByMonth(month, true);
+                    response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain", msg);
+                    response.addHeader("Content-Disposition", "attachment;filename=" + downloadFileName(month));
                 } else {
-                    msg = HtmlContext.DEFAULT_HTML();
+                    // No month segment: serve the normal HTML page instead of a
+                    // text/plain .adi attachment whose body is actually HTML.
+                    response = newFixedLengthResponse(HtmlContext.DEFAULT_HTML());
                 }
-                response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain", msg);
-                response.addHeader("Content-Disposition", String.format("attachment;filename=log%s.adi", uriList[2]));
 
             } else if (uri.equalsIgnoreCase("DOWNQSLNOQSL")) {
-                if (uriList.length >= 3) {
-                    msg = downQSLByMonth(uriList[2], false);
+                String month = uriSegment(uriList, 2);
+                if (month != null) {
+                    msg = downQSLByMonth(month, false);
+                    response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain", msg);
+                    response.addHeader("Content-Disposition", "attachment;filename=" + downloadFileName(month));
                 } else {
-                    msg = HtmlContext.DEFAULT_HTML();
+                    response = newFixedLengthResponse(HtmlContext.DEFAULT_HTML());
                 }
-                response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain", msg);
-                response.addHeader("Content-Disposition", String.format("attachment;filename=log%s.adi", uriList[2]));
 
             } else {
                 response = newFixedLengthResponse(msg);

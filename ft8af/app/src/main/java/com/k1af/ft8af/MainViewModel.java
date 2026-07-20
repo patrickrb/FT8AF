@@ -644,7 +644,7 @@ public class MainViewModel extends ViewModel {
                     // an unguarded removal can race the snapshot copy in
                     // publishFt8MessageList().
                     ft8Messages.addAll(messages);//add messages to list
-                    GeneralVariables.deleteArrayListMore(ft8Messages);//remove excess messages; FT8CN limits the total displayable messages
+                    GeneralVariables.trimToMessageCount(ft8Messages);//remove excess messages; FT8CN limits the total displayable messages
                 }
 
                 publishFt8MessageList();//post an immutable snapshot so the UI recomposes immediately
@@ -729,7 +729,7 @@ public class MainViewModel extends ViewModel {
                     // loops (checkPart1/checkPart2: for i = size()-1 .. 0, get(i)). Passing
                     // the live ft8Messages let it iterate off-lock while a concurrent decode
                     // pass (slot N's late/deep pass vs slot N+1's early pass, #398) held
-                    // synchronized(ft8Messages) running addAll + deleteArrayListMore's
+                    // synchronized(ft8Messages) running addAll + trimToMessageCount's
                     // remove(0), shrinking the list mid-scan -> IndexOutOfBoundsException on
                     // the decode thread. Scan a snapshot copied under the same monitor the
                     // writers use (mirrors publishFt8MessageList). The freshly decoded
@@ -983,7 +983,7 @@ public class MainViewModel extends ViewModel {
                 }
             }
         }
-        GeneralVariables.deleteArrayListMore(GeneralVariables.transmitMessages);//remove excess messages
+        GeneralVariables.trimToMessageCount(GeneralVariables.transmitMessages);//remove excess messages
         //mutableTransmitMessages.postValue(GeneralVariables.transmitMessages);
         mutableTransmitMessagesCount.postValue(count);
     }
@@ -1059,7 +1059,7 @@ public class MainViewModel extends ViewModel {
      * <p>UI item-click handlers (e.g. the Grid Tracker calling list) turn a
      * RecyclerView row into a position and then index the live list on the main
      * thread. The decode thread mutates {@code ft8Messages} — {@code addAll} plus
-     * {@link GeneralVariables#deleteArrayListMore} ({@code remove(0)}) and
+     * {@link GeneralVariables#trimToMessageCount} ({@code remove(0)}) and
      * {@code clear()} — under {@code synchronized (ft8Messages)}. A main-thread
      * {@code size()}-check-then-{@code get(pos)} is therefore not atomic: a
      * concurrent {@code remove(0)}/{@code clear()} landing between the two steps
