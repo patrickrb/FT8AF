@@ -80,6 +80,7 @@ import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.count.CountDbOpr
 import com.k1af.ft8af.log.QSLCallsignRecord
 import com.k1af.ft8af.log.ThirdPartyService
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -904,7 +905,11 @@ internal data class GridHeatmapCell(val field: String, val isWorked: Boolean)
  */
 internal fun workedGridFields(grids: List<String?>): Set<String> =
     grids.mapNotNull { grid ->
-        if (grid != null && grid.length >= 2) grid.substring(0, 2).uppercase() else null
+        // Locale.ROOT: the generated field designators are ASCII A..R, so the
+        // upper-casing here must be locale-insensitive. A default-locale
+        // uppercase() would map "i" to "İ" under a Turkish locale and the field
+        // would never match its generated "IO" cell.
+        if (grid != null && grid.length >= 2) grid.substring(0, 2).uppercase(Locale.ROOT) else null
     }.toSet()
 
 /**

@@ -2,6 +2,7 @@ package radio.ks3ckc.ft8af.ui.logbook
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
+import java.util.Locale
 
 /**
  * Unit tests for the pure logic extracted from the logbook's [GridSquareHeatmap]:
@@ -70,5 +71,19 @@ class GridSquareHeatmapTest {
     @Test
     fun workedGridFieldsDedupes() {
         assertThat(workedGridFields(listOf("FN31", "FN42", "fn20"))).containsExactly("FN")
+    }
+
+    @Test
+    fun workedGridFieldsUpperCasesLocaleInsensitively() {
+        // Under a Turkish locale, a default-locale uppercase() maps "i" to the
+        // dotted capital "İ", so "io91" would become "İO" and never match the
+        // ASCII "IO" cell the grid generates. Locale.ROOT keeps it "IO".
+        val previous = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale("tr", "TR"))
+            assertThat(workedGridFields(listOf("io91wm"))).containsExactly("IO")
+        } finally {
+            Locale.setDefault(previous)
+        }
     }
 }
