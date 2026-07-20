@@ -29,6 +29,7 @@ import radio.ks3ckc.ft8af.theme.BgSurface
 import radio.ks3ckc.ft8af.theme.Signal
 import radio.ks3ckc.ft8af.ui.map.UsStateOutlines
 import radio.ks3ckc.ft8af.ui.map.WorldOutlines
+import radio.ks3ckc.ft8af.ui.map.forEachRingVertex
 
 /**
  * Compact equirectangular map auto-zoomed to frame the operator's location and
@@ -152,14 +153,12 @@ private fun buildRingPath(rings: List<FloatArray>, proj: PotaActivationProjectio
     val path = Path()
     for (off in doubleArrayOf(-360.0, 0.0, 360.0)) {
         for (ring in rings) {
-            if (ring.size < 6) continue
-            path.moveTo(proj.projectX(ring[0].toDouble() + off), proj.projectY(ring[1].toDouble()))
-            var i = 2
-            while (i < ring.size) {
-                path.lineTo(proj.projectX(ring[i].toDouble() + off), proj.projectY(ring[i + 1].toDouble()))
-                i += 2
+            val plotted = forEachRingVertex(ring) { lon, lat, first ->
+                val x = proj.projectX(lon.toDouble() + off)
+                val y = proj.projectY(lat.toDouble())
+                if (first) path.moveTo(x, y) else path.lineTo(x, y)
             }
-            path.close()
+            if (plotted) path.close()
         }
     }
     return path

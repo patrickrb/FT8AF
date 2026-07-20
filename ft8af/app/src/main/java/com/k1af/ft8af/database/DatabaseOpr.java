@@ -848,11 +848,54 @@ public class DatabaseOpr extends SQLiteOpenHelper {
      * Package-private static so it is unit-testable without a database.
      */
     static int parseConfigInt(String value, int fallback) {
+        return parseConfigInt(value, fallback, 10);
+    }
+
+    /**
+     * Radix-aware variant of {@link #parseConfigInt(String, int)} for keys
+     * stored in a non-decimal base (e.g. the ICOM CI-V address, hex). Same
+     * empty/non-numeric fallback contract.
+     */
+    static int parseConfigInt(String value, int fallback, int radix) {
         if (value == null || value.isEmpty()) {
             return fallback;
         }
         try {
-            return Integer.parseInt(value.trim());
+            return Integer.parseInt(value.trim(), radix);
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    /**
+     * {@code long} counterpart of {@link #parseConfigInt(String, int)} for
+     * config values that exceed {@code int} range (e.g. the band frequency in
+     * Hz). Same empty/non-numeric fallback contract.
+     */
+    static long parseConfigLong(String value, long fallback) {
+        if (value == null || value.isEmpty()) {
+            return fallback;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    /**
+     * {@code float} counterpart of {@link #parseConfigInt(String, int)} for
+     * config values stored as a decimal (e.g. the output volume percent). Same
+     * empty/non-numeric fallback contract. Any scaling the caller applied to
+     * the old raw parse (e.g. {@code / 100f}) must be applied to the return
+     * value so the empty/garbage fallback lands on the intended default.
+     */
+    static float parseConfigFloat(String value, float fallback) {
+        if (value == null || value.isEmpty()) {
+            return fallback;
+        }
+        try {
+            return Float.parseFloat(value.trim());
         } catch (NumberFormatException e) {
             return fallback;
         }
@@ -1446,6 +1489,13 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
     @SuppressLint("Range")
     public boolean doInsertQSLData(QSLRecord record,AfterInsertQSLData afterInsertQSLData) {
+        // On-air and web-logged QSOs mirror to the running ft8af_log.adi; bulk imports use the
+        // 3-arg overload with appendToAdifFile=false to avoid double-counting on re-export.
+        return doInsertQSLData(record, afterInsertQSLData, true);
+    }
+
+    public boolean doInsertQSLData(QSLRecord record, AfterInsertQSLData afterInsertQSLData,
+                                   boolean appendToAdifFile) {
         if (record.getToCallsign() == null) {
             if (afterInsertQSLData!=null){
                 afterInsertQSLData.doAfterInsert(true,true);//Invalid QSL
@@ -1537,6 +1587,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 db.execSQL("UPDATE pota_activation SET qso_count = qso_count + 1 "
                         + "WHERE park_ref = ? AND ended_at IS NULL"
                         , new Object[]{record.getMySigInfo()});
+            }
+            // Mirror this genuinely-new QSO to the running ADIF file. Wrapped so a full disk
+            // or missing SD can never break QSO logging (AdifLogFile.logQso itself never throws).
+            if (appendToAdifFile) {
+                com.k1af.ft8af.log.AdifLogFile.logQso(context, record);
             }
             if (afterInsertQSLData!=null){
                 afterInsertQSLData.doAfterInsert(false,true);//New QSL
@@ -2326,6 +2381,27 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             }
             GeneralVariables.QSL_Callsign_list_other_band = other_callsigns;
 
+            // Load distinct callsigns worked today or yesterday (any band) for the
+            // TODAY worked-station scope. Dates are ADIF YYYYMMDD (UTC), so a plain
+            // string >= yesterday comparison selects the last two UTC days.
+            long nowUtc = com.k1af.ft8af.timer.UtcTimer.getSystemTime();
+            String yesterday = com.k1af.ft8af.timer.UtcTimer.getYYYYMMDD(nowUtc - 86400000L);
+            querySQL = "select distinct [call] from QSLTable where qso_date>=?";
+            cursor = db.rawQuery(querySQL, new String[]{yesterday});
+            java.util.HashSet<String> today_callsigns = new java.util.HashSet<>();
+            try {
+                while (cursor.moveToNext()) {
+                    @SuppressLint("Range")
+                    String s = cursor.getString(cursor.getColumnIndex("call"));
+                    if (s != null) {
+                        today_callsigns.add(s);
+                    }
+                }
+            } finally {
+                cursor.close();
+            }
+            GeneralVariables.QSL_Callsign_list_today = today_callsigns;
+
             // Load distinct 4-char worked grids (any band) into in-memory set
             querySQL = "select distinct upper(substr(gridsquare,1,4)) as g from QSLTable" +
                     " where gridsquare is not null and length(gridsquare) >= 4";
@@ -2599,13 +2675,13 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
 
                 if (name.equalsIgnoreCase("civ")) {
-                    GeneralVariables.civAddress = result.equals("") ? 0xa4 : Integer.parseInt(result, 16);
+                    GeneralVariables.civAddress = parseConfigInt(result, 0xa4, 16);
                 }
                 if (name.equalsIgnoreCase("baudRate")) {
-                    GeneralVariables.baudRate = result.equals("") ? 19200 : Integer.parseInt(result);
+                    GeneralVariables.baudRate = parseConfigInt(result, 19200);
                 }
                 if (name.equalsIgnoreCase("bandFreq")) {
-                    GeneralVariables.band = result.equals("") ? 14074000 : Long.parseLong(result);
+                    GeneralVariables.band = parseConfigLong(result, 14074000L);
                     GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(GeneralVariables.band);
                 }
 
@@ -2633,26 +2709,26 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
 
                 if (name.equalsIgnoreCase("ctrMode")) {
-                    GeneralVariables.controlMode = result.equals("") ? ControlMode.VOX : Integer.parseInt(result);
+                    GeneralVariables.controlMode = parseConfigInt(result, ControlMode.VOX);
                 }
                 if (name.equalsIgnoreCase("connectMode")) {
-                    GeneralVariables.connectMode = result.equals("") ? ConnectMode.USB_CABLE : Integer.parseInt(result);
+                    GeneralVariables.connectMode = parseConfigInt(result, ConnectMode.USB_CABLE);
                 }
                 if (name.equalsIgnoreCase("bluetoothDeviceAddress")) {//last-selected BT (SPP/CAT) device, for auto-reconnect
                     GeneralVariables.bluetoothDeviceAddress = result;
                 }
                 if (name.equalsIgnoreCase("model")) {//Radio model
-                    GeneralVariables.modelNo = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.modelNo = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("instruction")) {//Instruction set
-                    GeneralVariables.instructionSet = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.instructionSet = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("launchSupervision")) {//Transmit supervision
-                    GeneralVariables.launchSupervision = result.equals("") ?
-                            GeneralVariables.DEFAULT_LAUNCH_SUPERVISION : Integer.parseInt(result);
+                    GeneralVariables.launchSupervision =
+                            parseConfigInt(result, GeneralVariables.DEFAULT_LAUNCH_SUPERVISION);
                 }
                 if (name.equalsIgnoreCase("noReplyLimit")) {//
-                    GeneralVariables.noReplyLimit = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.noReplyLimit = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("autoFollowCQ")) {//Auto-follow CQ
                     GeneralVariables.autoFollowCQ = result.equals("1");
@@ -2674,7 +2750,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                             com.k1af.ft8af.location.GpsClockUpdater.parseIntervalMinutes(result);
                 }
                 if (name.equalsIgnoreCase("pttDelay")) {//PTT delay setting
-                    GeneralVariables.pttDelay = result.equals("") ? 100 : Integer.parseInt(result);
+                    GeneralVariables.pttDelay = parseConfigInt(result, 100);
                 }
                 if (name.equalsIgnoreCase("lateStartTolerance")) {//Late-start tolerance, ms (0-4000)
                     try {
@@ -2708,7 +2784,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.icomIp = result.equals("") ? "255.255.255.255" : result;
                 }
                 if (name.equalsIgnoreCase("icomPort")) {//ICOM port
-                    GeneralVariables.icomUdpPort = result.equals("") ? 50001 : Integer.parseInt(result);
+                    GeneralVariables.icomUdpPort = parseConfigInt(result, 50001);
                 }
                 if (name.equalsIgnoreCase("icomUserName")) {//ICOM username
                     GeneralVariables.icomUserName = result.equals("") ? "ic705" : result;
@@ -2717,7 +2793,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.icomPassword = result;
                 }
                 if (name.equalsIgnoreCase("volumeValue")) {//Output volume level
-                    GeneralVariables.volumePercent = result.equals("") ? 1.0f : Float.parseFloat(result) / 100f;
+                    // parseConfigFloat's fallback is pre-scaling: empty/garbage -> 100f -> 1.0f (unity).
+                    GeneralVariables.volumePercent = parseConfigFloat(result, 100f) / 100f;
                     GeneralVariables.mutableVolumePercent.postValue(GeneralVariables.volumePercent);
                 }
                 if (name.equalsIgnoreCase("inputVolume")) {//RX input gain (percent, 100 = unity)
@@ -2822,10 +2899,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.alertOnQsoComplete = result.equals("1");
                 }
                 if (name.equalsIgnoreCase("flexMaxRfPower")) {//Flex max RF power
-                    GeneralVariables.flexMaxRfPower = result.equals("") ? 10 : Integer.parseInt(result);
+                    GeneralVariables.flexMaxRfPower = parseConfigInt(result, 10);
                 }
                 if (name.equalsIgnoreCase("flexMaxTunePower")) {//Flex max tune power
-                    GeneralVariables.flexMaxTunePower = result.equals("") ? 10 : Integer.parseInt(result);
+                    GeneralVariables.flexMaxTunePower = parseConfigInt(result, 10);
                 }
                 if (name.equalsIgnoreCase("saveSWL")) {//Save decoded messages
                     GeneralVariables.saveSWLMessage = result.equals("1");
@@ -2837,25 +2914,29 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.audioOutput32Bit = result.equals("1");
                 }
                 if (name.equalsIgnoreCase("audioRate")) {//Output audio sample rate
-                    GeneralVariables.audioSampleRate =Integer.parseInt( result);
+                    // Defensive parse (like the FFT/serial keys): settings import (#382)
+                    // can feed an empty or non-numeric value through here, and this key
+                    // had no guard at all, so a hand-edited/corrupted backup crashed
+                    // startup hydration (and every relaunch). Fall back to the default.
+                    GeneralVariables.audioSampleRate = parseConfigInt(result, 12000);
                 }
                 if (name.equalsIgnoreCase("audioInputDevice")) {//Audio input device ID
-                    GeneralVariables.audioInputDeviceId = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.audioInputDeviceId = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("audioOutputDevice")) {//Audio output device ID
-                    GeneralVariables.audioOutputDeviceId = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.audioOutputDeviceId = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("usbAudioInputVid")) {
-                    GeneralVariables.usbAudioInputVendorId = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.usbAudioInputVendorId = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("usbAudioInputPid")) {
-                    GeneralVariables.usbAudioInputProductId = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.usbAudioInputProductId = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("usbAudioOutputVid")) {
-                    GeneralVariables.usbAudioOutputVendorId = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.usbAudioOutputVendorId = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("usbAudioOutputPid")) {
-                    GeneralVariables.usbAudioOutputProductId = result.equals("") ? 0 : Integer.parseInt(result);
+                    GeneralVariables.usbAudioOutputProductId = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("deepMode")) {//Deep decode mode
                     GeneralVariables.deepDecodeMode =result.equals("1");
@@ -2863,14 +2944,19 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("debugModeEnabled")) {//Hidden debug screen unlock
                     GeneralVariables.debugModeEnabled = result.equals("1");
                 }
+                // Serial line params: same defensive parse as audioRate above. These
+                // three keys were the only remaining hydration parses with no guard,
+                // so an empty or non-numeric value from an imported backup (#382) threw
+                // NumberFormatException and crashed hydration. Fall back to the defaults
+                // (8-N-1) that GeneralVariables initializes to.
                 if (name.equalsIgnoreCase("dataBits")) {//Serial data bits
-                    GeneralVariables.serialDataBits =Integer.parseInt(result);
+                    GeneralVariables.serialDataBits = parseConfigInt(result, 8);
                 }
                 if (name.equalsIgnoreCase("stopBits")) {//Serial stop bits
-                    GeneralVariables.serialStopBits =Integer.parseInt(result);
+                    GeneralVariables.serialStopBits = parseConfigInt(result, 1);
                 }
                 if (name.equalsIgnoreCase("parityBits")) {//Serial parity bits
-                    GeneralVariables.serialParity =Integer.parseInt(result);
+                    GeneralVariables.serialParity = parseConfigInt(result, 0);
                 }
 
                 // cloudlogs
@@ -2897,6 +2983,30 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("enablePskReporter")) {
                     GeneralVariables.enablePskReporter = result.equals("1");
                 }
+                if (name.equalsIgnoreCase("enableAdifExport")) {//Running ft8af_log.adi export
+                    GeneralVariables.enableAdifExport = result.equals("1");
+                }
+                // WSJT-X UDP interface
+                if (name.equalsIgnoreCase("udp_enabled")) {
+                    GeneralVariables.udpEnabled = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("udp_host")) {
+                    if (result != null && !result.isEmpty()) GeneralVariables.udpHost = result;
+                }
+                if (name.equalsIgnoreCase("udp_port")) {
+                    // result (cursor.getString) can be null; the other udp_* keys already
+                    // null-check, and Integer.parseInt(null.trim()) would NPE config hydration.
+                    if (result != null) {
+                        try {
+                            int p = Integer.parseInt(result.trim());
+                            if (p > 0 && p <= 65535) GeneralVariables.udpPort = p;
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
+                if (name.equalsIgnoreCase("udp_accept_requests")) {
+                    GeneralVariables.udpAcceptRequests = result.equals("1");
+                }
                 if (name.equalsIgnoreCase("qrzXmlUsername")) {
                     GeneralVariables.qrzXmlUsername = result;
                 }
@@ -2921,16 +3031,16 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.swrHaltEnabled = result.equals("1");
                 }
                 if (name.equalsIgnoreCase("swrHaltThreshold")) {
-                    GeneralVariables.swrHaltThreshold = result.equals("") ? 120 : Integer.parseInt(result);
+                    GeneralVariables.swrHaltThreshold = parseConfigInt(result, 120);
                 }
                 if (name.equalsIgnoreCase("alcTargetLow")) {
-                    GeneralVariables.alcTargetLow = result.equals("") ? 60 : Integer.parseInt(result);
+                    GeneralVariables.alcTargetLow = parseConfigInt(result, 60);
                 }
                 if (name.equalsIgnoreCase("alcTargetHigh")) {
-                    GeneralVariables.alcTargetHigh = result.equals("") ? 100 : Integer.parseInt(result);
+                    GeneralVariables.alcTargetHigh = parseConfigInt(result, 100);
                 }
                 if (name.equalsIgnoreCase("spectrumWidth")) {
-                    GeneralVariables.setSpectrumWidth(result.equals("") ? 3500 : Integer.parseInt(result));
+                    GeneralVariables.setSpectrumWidth(parseConfigInt(result, 3500));
                 }
                 // FFT display developer knobs (issue #428). Parsed defensively:
                 // these are expected to survive hand-edited/stale backups, so a
@@ -2960,6 +3070,15 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("highlightPota")) {
                     GeneralVariables.highlightPota = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("workedStationMode")) {
+                    GeneralVariables.workedStationMode = parseConfigInt(result, 0);
+                }
+                if (name.equalsIgnoreCase("workedStationScope")) {
+                    GeneralVariables.workedStationScope = parseConfigInt(result, 0);
+                }
+                if (name.equalsIgnoreCase("workedStationList")) {
+                    GeneralVariables.addWorkedStationList(result);
                 }
 
                 if (name.equalsIgnoreCase("distanceInMiles")) {

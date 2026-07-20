@@ -43,6 +43,9 @@ public class ColumnarView extends View {
     private final Paint paint = new Paint();
     private final List<Rect> newData = new ArrayList<>();
     private final List<Rect> blockData = new ArrayList<>();
+    // Peak-hold state, one top per drawn bar. Sized to newData every frame by
+    // PeakBlocks.update so a bin-count change can never index past the bars.
+    private int[] blockTops = new int[0];
 
     private int spectrumWidth = 3500;//Spectrum display width in Hz
 
@@ -86,34 +89,46 @@ public class ColumnarView extends View {
         if (data.length <= 0) {
             return;
         }
-        // Calculate how many FFT bins correspond to spectrumWidth Hz.
-        // The full data array covers 0 to Nyquist (sampleRate/2).
-        float nyquist = GeneralVariables.audioSampleRate / 2f;
-        int binsToShow = Math.min(data.length, Math.round((float) spectrumWidth / nyquist * data.length));
-        if (binsToShow <= 0) binsToShow = data.length / 2;
+        // Calculate how many FFT bins correspond to spectrumWidth Hz. The full
+        // data array covers 0 to the RX Nyquist (FT8Common.SAMPLE_RATE/2 = 6 kHz):
+        // RX audio is always captured/decoded at 12 kHz, independent of the
+        // user-selectable transmit audio rate (see SpectrumScale).
+        int binsToShow = SpectrumScale.binsToShow(data.length, spectrumWidth);
 
         width = getWidth() / binsToShow;
         if (drawblock) {// Whether to show the peak block
-            if (newData.size() > 0) {
-                if (blockData.size() == 0 || newData.size() != blockData.size()) {
+            // newData still holds the PREVIOUS frame's bars here (it is rebuilt
+            // below). Drive the peak-hold state off those bars, sized to them,
+            // so a bin-count change between frames can't index out of bounds.
+            int bars = newData.size();
+            if (PeakBlocks.canReusePreviousBlocks(bars, binsToShow)) {
+                int floorTop = getHeight() - blockHeight;
+                int[] barTops = new int[bars];
+                for (int i = 0; i < bars; i++) {
+                    barTops[i] = newData.get(i).top;
+                }
+                blockTops = PeakBlocks.update(blockTops, barTops, floorTop,
+                        blockHeight, blockSpeed, distance);
+                if (blockData.size() != bars) {
                     blockData.clear();
-                    for (int i = 0; i < binsToShow; i++) {
-                        Rect blockRect = new Rect();
-                        blockRect.top =getHeight()- blockHeight;
-                        blockRect.bottom = getHeight();
-                        blockData.add(blockRect);
+                    for (int i = 0; i < bars; i++) {
+                        blockData.add(new Rect());
                     }
                 }
-                for (int i = 0; i < blockData.size(); i++) {
-                    blockData.get(i).left = newData.get(i).left;
-                    blockData.get(i).right = newData.get(i).right;
-                    if (newData.get(i).top < blockData.get(i).top) {
-                        blockData.get(i).top = newData.get(i).top - blockHeight - distance;
-                    } else {
-                        blockData.get(i).top = blockData.get(i).top + blockSpeed;
-                    }
-                    blockData.get(i).bottom = blockData.get(i).top + blockHeight;
+                for (int i = 0; i < bars; i++) {
+                    Rect block = blockData.get(i);
+                    block.left = newData.get(i).left;
+                    block.right = newData.get(i).right;
+                    block.top = blockTops[i];
+                    block.bottom = blockTops[i] + blockHeight;
                 }
+            } else {
+                // First frame, or the bin count changed this frame (spectrum-width
+                // / sample-rate change). The held blocks belong to the previous
+                // grid, so drop them instead of drawing them misaligned over the
+                // new bars; peak-hold restarts from the floor next frame.
+                blockData.clear();
+                blockTops = new int[0];
             }
         }
         newData.clear();

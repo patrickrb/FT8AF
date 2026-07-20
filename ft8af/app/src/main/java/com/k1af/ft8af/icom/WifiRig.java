@@ -9,6 +9,7 @@ package com.k1af.ft8af.icom;
 import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioTrack;
+import android.util.Log;
 
 import com.k1af.ft8af.GeneralVariables;
 import com.k1af.ft8af.R;
@@ -18,6 +19,8 @@ import com.k1af.ft8af.ui.ToastMessage;
 import java.io.IOException;
 
 public abstract class WifiRig {
+    private static final String TAG = "WifiRig";
+
     public interface OnDataEvents {
         void onReceivedCivData(byte[] data);
 
@@ -25,7 +28,10 @@ public abstract class WifiRig {
     }
 
     public ControlUdp controlUdp;
-    public AudioTrack audioTrack = null;
+    // volatile: the UDP receive worker reads this to play RX audio while another
+    // thread (UI disconnect, or a send-side network error routed through
+    // OnUdpSendIOException -> close()) may release and null it in closeAudio().
+    public volatile AudioTrack audioTrack = null;
     public final String ip;
     public final int port;
     public final String userName;
@@ -77,6 +83,40 @@ public abstract class WifiRig {
                 , IComPacketTypes.AUDIO_SAMPLE_RATE * 4, AudioTrack.MODE_STREAM
                 , mySession);
         audioTrack.play();
+    }
+
+    /**
+     * Play a chunk of received RX audio to the speaker, tolerating a concurrent
+     * {@link #closeAudio()} on another thread.
+     *
+     * <p>The UDP receive worker calls this for every audio packet. A disconnect —
+     * either the user tapping disconnect or a send-side network error routed through
+     * {@code OnUdpSendIOException -> close() -> closeAudio()} — can release the
+     * {@link AudioTrack} while a chunk is in flight. Writing to a released AudioTrack
+     * throws {@link IllegalStateException}; uncaught on the receive worker (its loop
+     * catches only {@code IOException}) that crashed the whole app. Swallow it and
+     * drop the chunk instead.
+     */
+    public void writeAudio(byte[] audioData) {
+        try {
+            writeAudioToTrack(audioData);
+        } catch (IllegalStateException e) {
+            // closeAudio() released the track on another thread between the null-check
+            // and the write (disconnect while RX audio was still streaming). Log the
+            // throwable for diagnosability. We deliberately do NOT null audioTrack here:
+            // closeAudio() already nulls it on the disconnect thread, and clearing it
+            // from the RX worker would race a reconnect's fresh AudioTrack and silently
+            // clobber it.
+            Log.w(TAG, "Dropped RX audio chunk: AudioTrack released mid-write", e);
+        }
+    }
+
+    // Isolated from writeAudio() so a unit test can drive the released-track path
+    // deterministically without emulating AudioTrack's native lifecycle.
+    void writeAudioToTrack(byte[] audioData) {
+        AudioTrack track = audioTrack; // single volatile read
+        if (track == null) return;
+        track.write(audioData, 0, audioData.length, AudioTrack.WRITE_NON_BLOCKING);
     }
 
     /**

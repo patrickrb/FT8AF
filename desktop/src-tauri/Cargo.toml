@@ -37,6 +37,17 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 # async runtime for the UTC scheduler
 tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"] }
 
+# Optional, opt-in OS location service -> operator grid (issue #471). Each
+# platform's native geolocation API is pulled in only for that target so the
+# other OSes never compile it.
+[target.'cfg(target_os = "linux")'.dependencies]
+# GeoClue 2 over D-Bus (system bus).
+zbus = "5"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# Windows.Devices.Geolocation Geolocator + IAsyncOperation.
+windows = { version = "0.58", features = ["Devices_Geolocation", "Foundation"] }
+
 # The C FT8 DSP core (kgoba ft8_lib @ 6f528128 + ft8af_glue/gfsk.c) is compiled
 # from source in build.rs via the `cc` crate — no prebuilt .so, so this links
 # natively on Windows/macOS/Linux.

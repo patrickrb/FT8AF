@@ -242,4 +242,70 @@ public class UtcTimerTest {
             UtcTimer.delay = saved;
         }
     }
+
+    // ------------------------------------------------------------------
+    // ntpClockOffsetMs: the clock correction written to UtcTimer.delay by
+    // an NTP "Sync now" / startup auto-sync. Must be the FULL offset, not
+    // just its remainder within one FT8 cycle.
+    // ------------------------------------------------------------------
+
+    @Test
+    public void ntpClockOffsetMs_zeroWhenClockMatchesReference() {
+        assertThat(UtcTimer.ntpClockOffsetMs(1_700_000_000_000L, 1_700_000_000_000L))
+                .isEqualTo(0);
+    }
+
+    @Test
+    public void ntpClockOffsetMs_subCycleErrorReturnedVerbatim() {
+        // Device 5s behind the reference -> shift forward 5000ms.
+        assertThat(UtcTimer.ntpClockOffsetMs(1_700_000_005_000L, 1_700_000_000_000L))
+                .isEqualTo(5000);
+        // Device 3s ahead -> shift back 3000ms.
+        assertThat(UtcTimer.ntpClockOffsetMs(1_700_000_000_000L, 1_700_000_003_000L))
+                .isEqualTo(-3000);
+    }
+
+    @Test
+    public void ntpClockOffsetMs_multiCycleErrorKeepsWholeCyclePart() {
+        // Device 20s slow: the correction is the FULL 20000ms. The previous
+        // implementation stored (offset % 15000) = 5000, leaving the app clock a
+        // whole cycle (15s) behind true UTC and every logged/reported/displayed
+        // timestamp wrong by that much. Guard against that regression.
+        long device = 1_700_000_000_000L;
+        long reference = device + 20_000L;
+        int offset = UtcTimer.ntpClockOffsetMs(reference, device);
+        assertThat(offset).isEqualTo(20_000);
+        assertThat(offset).isNotEqualTo(20_000 % 15_000); // != the old truncated 5000
+
+        // Device 4 minutes fast -> full -240000ms correction (the old code, with
+        // 240000 an exact multiple of 15000, produced 0 -> "sync did nothing").
+        int fast = UtcTimer.ntpClockOffsetMs(device, device + 240_000L);
+        assertThat(fast).isEqualTo(-240_000);
+    }
+
+    @Test
+    public void ntpClockOffsetMs_preservesCycleAlignmentLikeTheOldTruncation() {
+        // Applying the full offset must keep decode/TX cycle timing identical: for
+        // every FT8/FT4/FT2 slot length, (fullOffset mod slot) == (truncatedOffset
+        // mod slot), because each slot length divides 15000. Only the whole-cycle
+        // part — the timestamp error — differs.
+        long device = 1_700_000_000_000L;
+        long reference = device + 47_321L; // arbitrary >1-cycle skew
+        int full = UtcTimer.ntpClockOffsetMs(reference, device);
+        int truncated = full % 15_000;
+        for (int slot : new int[]{15_000, 7_500, 3_750, 1_000}) {
+            assertThat(Math.floorMod(full, slot)).isEqualTo(Math.floorMod(truncated, slot));
+        }
+    }
+
+    @Test
+    public void ntpClockOffsetMs_clampsAbsurdErrorsToIntRange() {
+        // A wildly wrong device clock (> ~24.8 days off) must not overflow the int
+        // field. Clamp instead of wrapping to a bogus small value.
+        long device = 1_700_000_000_000L;
+        assertThat(UtcTimer.ntpClockOffsetMs(device + 5_000_000_000L, device))
+                .isEqualTo(Integer.MAX_VALUE);
+        assertThat(UtcTimer.ntpClockOffsetMs(device, device + 5_000_000_000L))
+                .isEqualTo(Integer.MIN_VALUE);
+    }
 }

@@ -79,6 +79,8 @@ import com.k1af.ft8af.ft8transmit.OnTransmitSuccess;
 import com.k1af.ft8af.ft8transmit.TuneMethod;
 import com.k1af.ft8af.html.LogHttpServer;
 import com.k1af.ft8af.icom.WifiRig;
+import com.k1af.ft8af.log.AdifFormat;
+import com.k1af.ft8af.log.AdifLogFile;
 import com.k1af.ft8af.log.QSLCallsignRecord;
 import com.k1af.ft8af.log.QSLRecord;
 import com.k1af.ft8af.log.SWLQsoList;
@@ -92,6 +94,7 @@ import com.k1af.ft8af.rigs.ElecraftRig;
 import com.k1af.ft8af.rigs.Flex6000Rig;
 import com.k1af.ft8af.rigs.FlexNetworkRig;
 import com.k1af.ft8af.rigs.GuoHeQ900Rig;
+import com.k1af.ft8af.rigs.HamlibRig;
 import com.k1af.ft8af.rigs.IcomRig;
 import com.k1af.ft8af.rigs.InstructionSet;
 import com.k1af.ft8af.rigs.KenwoodKT90Rig;
@@ -121,6 +124,8 @@ import com.k1af.ft8af.x6100.X6100Radio;
 
 import radio.ks3ckc.ft8af.UsbPermissionIntentsKt;
 import radio.ks3ckc.ft8af.pskreporter.PskReporterSender;
+import radio.ks3ckc.ft8af.wsjtx.WsjtxCodec;
+import radio.ks3ckc.ft8af.wsjtx.WsjtxUdpService;
 
 import java.io.File;
 import java.io.IOException;
@@ -324,6 +329,10 @@ public class MainViewModel extends ViewModel {
             // the recorded offsets belong to the old band's activity (issue #418).
             if (ft8TransmitSignal != null && !newWaveLength.equals(oldWaveLength)) {
                 ft8TransmitSignal.clearBandActivity();
+                // New band = new decode context: tell companion apps to wipe their
+                // band + forget our replay history.
+                WsjtxUdpService.INSTANCE.sendClear();
+                WsjtxUdpService.INSTANCE.clearReplayCache();
             }
 
             // The rig reported a band change (e.g. the operator turned the dial) —
@@ -388,6 +397,11 @@ public class MainViewModel extends ViewModel {
             catLivenessTimer.purge();
             catLivenessTimer = null;
         }
+        // Clear the "rig has answered" flag when the watchdog stops (disconnect, error,
+        // or teardown) so hasRigRespondedToCat() can't report a stale true after the rig
+        // is unplugged — the USB Diagnostics page would otherwise show "CAT Response: pass"
+        // alongside "Device Found: fail". A fresh connect re-arms it in start...().
+        sawRigResponseSinceConnect = false;
     }
 
     /** One watchdog tick: probe the rig, then declare it dead if it's gone quiet too long. */
@@ -630,7 +644,7 @@ public class MainViewModel extends ViewModel {
                     // an unguarded removal can race the snapshot copy in
                     // publishFt8MessageList().
                     ft8Messages.addAll(messages);//add messages to list
-                    GeneralVariables.deleteArrayListMore(ft8Messages);//remove excess messages; FT8CN limits the total displayable messages
+                    GeneralVariables.trimToMessageCount(ft8Messages);//remove excess messages; FT8CN limits the total displayable messages
                 }
 
                 publishFt8MessageList();//post an immutable snapshot so the UI recomposes immediately
@@ -711,7 +725,21 @@ public class MainViewModel extends ViewModel {
                 }
                 //check QSO of SWL, and save to the QSO list in SWLQSOTable
                 if (GeneralVariables.saveSWL_QSO) {
-                    swlQsoList.findSwlQso(messages, ft8Messages, new SWLQsoList.OnFoundSwlQso() {
+                    // findSwlQso scans the "all messages" list with index-based backward
+                    // loops (checkPart1/checkPart2: for i = size()-1 .. 0, get(i)). Passing
+                    // the live ft8Messages let it iterate off-lock while a concurrent decode
+                    // pass (slot N's late/deep pass vs slot N+1's early pass, #398) held
+                    // synchronized(ft8Messages) running addAll + trimToMessageCount's
+                    // remove(0), shrinking the list mid-scan -> IndexOutOfBoundsException on
+                    // the decode thread. Scan a snapshot copied under the same monitor the
+                    // writers use (mirrors publishFt8MessageList). The freshly decoded
+                    // `messages` were appended to ft8Messages under lock above, so they are
+                    // already in this snapshot and QSO detection is unchanged.
+                    final ArrayList<Ft8Message> allMessagesSnapshot;
+                    synchronized (ft8Messages) {
+                        allMessagesSnapshot = new ArrayList<>(ft8Messages);
+                    }
+                    swlQsoList.findSwlQso(messages, allMessagesSnapshot, new SWLQsoList.OnFoundSwlQso() {
                         @Override
                         public void doFound(QSLRecord record) {
                             databaseOpr.addSWL_QSO(record);//save SWL QSO to database
@@ -724,6 +752,9 @@ public class MainViewModel extends ViewModel {
 
                 //upload decoded spots to PSKReporter
                 PskReporterSender.INSTANCE.enqueue(messages);
+
+                //broadcast decodes over the WSJT-X UDP interface
+                broadcastWsjtxDecodes(messages);
             }
         });
 
@@ -856,6 +887,9 @@ public class MainViewModel extends ViewModel {
                 // QSO-complete alert (opt-in). Fires once per logged contact.
                 dxAlertNotifier.notifyQsoComplete(qslRecord);
 
+                // broadcast the logged QSO over the WSJT-X UDP interface
+                broadcastWsjtxQso(qslRecord);
+
                 // record to third-party service; may take some time
                 new Thread(new Runnable() {
                     @Override
@@ -894,6 +928,9 @@ public class MainViewModel extends ViewModel {
         meterProtectionController = new MeterProtectionController();
         meterProtectionController.setTransmitSignal(ft8TransmitSignal);
         ft8TransmitSignal.setMeterProtectionController(meterProtectionController);
+
+        //bring up the WSJT-X UDP interface (status provider + inbound request handlers)
+        setupWsjtxUdp();
 
         //open HTTP SERVER
         httpServer = new LogHttpServer(this, LogHttpServer.DEFAULT_PORT);
@@ -946,7 +983,7 @@ public class MainViewModel extends ViewModel {
                 }
             }
         }
-        GeneralVariables.deleteArrayListMore(GeneralVariables.transmitMessages);//remove excess messages
+        GeneralVariables.trimToMessageCount(GeneralVariables.transmitMessages);//remove excess messages
         //mutableTransmitMessages.postValue(GeneralVariables.transmitMessages);
         mutableTransmitMessagesCount.postValue(count);
     }
@@ -1013,6 +1050,43 @@ public class MainViewModel extends ViewModel {
      */
     static ArrayList<Ft8Message> uiSeedSnapshot(ArrayList<Ft8Message> live) {
         return new ArrayList<>(live);
+    }
+
+    /**
+     * Bounds-checked, lock-guarded read of the live {@link #ft8Messages} decode
+     * list; returns {@code null} when {@code position} is out of range.
+     *
+     * <p>UI item-click handlers (e.g. the Grid Tracker calling list) turn a
+     * RecyclerView row into a position and then index the live list on the main
+     * thread. The decode thread mutates {@code ft8Messages} — {@code addAll} plus
+     * {@link GeneralVariables#trimToMessageCount} ({@code remove(0)}) and
+     * {@code clear()} — under {@code synchronized (ft8Messages)}. A main-thread
+     * {@code size()}-check-then-{@code get(pos)} is therefore not atomic: a
+     * concurrent {@code remove(0)}/{@code clear()} landing between the two steps
+     * throws {@link IndexOutOfBoundsException} on the UI thread (an uncaught,
+     * whole-app crash), and a {@code remove(0)} that merely shifts indices makes
+     * an in-bounds {@code get} return the wrong station. Reading under the
+     * writers' monitor makes the check-and-get atomic. Package-visible for
+     * testing.
+     */
+    @Nullable
+    static Ft8Message messageAt(ArrayList<Ft8Message> list, int position) {
+        synchronized (list) {
+            if (position < 0 || position >= list.size()) {
+                return null;
+            }
+            return list.get(position);
+        }
+    }
+
+    /**
+     * Safe accessor for a decoded message by list position for main-thread UI
+     * callers; {@code null} if the position is no longer valid. See
+     * {@link #messageAt(ArrayList, int)} for why the lock is required.
+     */
+    @Nullable
+    public Ft8Message getFt8MessageAtOrNull(int position) {
+        return messageAt(ft8Messages, position);
     }
 
     /**
@@ -1120,6 +1194,176 @@ public class MainViewModel extends ViewModel {
                 order,
                 message.extraInfo);
         ft8TransmitSignal.transmitNow();
+    }
+
+    // --- WSJT-X UDP interface -------------------------------------------------
+
+    /**
+     * Wire the WSJT-X UDP service to this ViewModel's state + transmit path, then
+     * (re)bind from the persisted settings. Called once after the transmit signal
+     * is created; the Settings screen calls {@link WsjtxUdpService#reload()}
+     * directly when the operator changes the options.
+     */
+    private void setupWsjtxUdp() {
+        WsjtxUdpService svc = WsjtxUdpService.INSTANCE;
+        svc.statusProvider = this::buildWsjtxStatus;
+        svc.onReply = this::handleWsjtxReply;
+        svc.onHaltTx = (autoOnly) -> {
+            if (ft8TransmitSignal != null) {
+                ft8TransmitSignal.setTransmitting(false);
+                ft8TransmitSignal.setActivated(false);
+            }
+        };
+        svc.onFreeText = this::handleWsjtxFreeText;
+        svc.onReplay = () -> { /* decodes are re-sent inside the service */ };
+        svc.reload();
+    }
+
+    /** Build a WSJT-X Status snapshot from current state (called ~1 Hz). */
+    private WsjtxCodec.Status buildWsjtxStatus() {
+        boolean transmitting = ft8TransmitSignal != null && ft8TransmitSignal.isTransmitting();
+        boolean txEnabled = ft8TransmitSignal != null && ft8TransmitSignal.isActivated();
+        boolean decoding = Boolean.TRUE.equals(mutableIsDecoding.getValue());
+        String myGrid = GeneralVariables.getMyMaidenheadGrid();
+        if (myGrid == null) myGrid = "";
+        String mode = ModeProfile.fromId(GeneralVariables.operatingMode).displayName;
+        int baseFreq = Math.max(0, (int) GeneralVariables.getBaseFrequency());
+        return new WsjtxCodec.Status(
+                GeneralVariables.band,       // dial frequency (Hz)
+                mode,
+                "",                           // dx call
+                "",                           // report
+                mode,                         // tx mode
+                txEnabled,
+                transmitting,
+                decoding,
+                baseFreq,                     // rx df
+                baseFreq,                     // tx df
+                GeneralVariables.myCallsign,  // de call
+                myGrid,                       // de grid
+                "",                           // dx grid
+                false,                        // tx watchdog
+                "",                           // sub mode
+                false,                        // fast mode
+                0,                            // special op mode
+                0xFFFFFFFF,                   // freq tolerance (u32 max)
+                15,                           // T/R period (s)
+                "Default",                    // config name
+                "");                          // tx message
+    }
+
+    /** Broadcast a slot's decodes as WSJT-X Decode messages. */
+    private void broadcastWsjtxDecodes(ArrayList<Ft8Message> messages) {
+        WsjtxUdpService svc = WsjtxUdpService.INSTANCE;
+        if (!svc.getEnabled()) {
+            return;
+        }
+        for (Ft8Message m : messages) {
+            String text = m.getMessageText();
+            if (text == null) {
+                text = "";
+            }
+            int timeMs = (int) (m.utcTime % 86_400_000L);
+            int snr = m.hasSnr() ? m.snr : 0;
+            int df = Math.max(0, (int) m.freq_hz);
+            String mode = ModeProfile.fromId(m.signalFormat).displayName;
+            svc.sendDecode(new WsjtxCodec.Decode(
+                    true, timeMs, snr, (double) m.time_sec, df, mode, text, false, false));
+        }
+    }
+
+    /** Broadcast a logged QSO as WSJT-X QSO-Logged + Logged-ADIF messages. */
+    private void broadcastWsjtxQso(QSLRecord r) {
+        WsjtxUdpService svc = WsjtxUdpService.INSTANCE;
+        if (!svc.getEnabled()) {
+            return;
+        }
+        long txFreq = r.getBandFreq() + Math.max(0, r.getWavFrequency());
+        WsjtxCodec.QsoLogged q = new WsjtxCodec.QsoLogged(
+                WsjtxCodec.DateTime.fromAdif(r.getQso_date_off(), r.getTime_off()),
+                nz(r.getToCallsign()),
+                nz(r.getToMaidenGrid()),
+                txFreq,
+                r.getMode() == null ? "FT8" : r.getMode(),
+                AdifFormat.formatReport(r.getSendReport()),
+                AdifFormat.formatReport(r.getReceivedReport()),
+                "",                            // tx power
+                nz(r.getComment()),
+                "",                            // name
+                WsjtxCodec.DateTime.fromAdif(r.getQso_date(), r.getTime_on()),
+                nz(r.getMyCallsign()),         // operator call
+                nz(r.getMyCallsign()),         // my call
+                nz(r.getMyMaidenGrid()),
+                "", "", "");                   // exch sent/recv, prop mode
+        String adif = AdifLogFile.fromQslRecord(r).build();
+        svc.sendQsoLogged(q, adif);
+    }
+
+    /**
+     * The audio TX offset (Hz) to adopt for an inbound WSJT-X Reply's requested {@code df},
+     * or -1 to keep the current frequency. Bounds the untrusted UDP value to the same
+     * audio passband the tuning UI permits: {@code [100, spectrumWidthHz - 100]}, matching
+     * {@code WaterfallView}'s click-to-tune clamp of {@code freq_hz} to
+     * {@code [100, spectrumWidth - 100]}. A df below 100, above {@code spectrumWidthHz - 100},
+     * non-positive, or absent is ignored — a malformed/garbled datagram, or one asking for a
+     * tone the user could never dial in by hand, must not push the TX marker outside the
+     * visible/tunable range.
+     */
+    static int replyTxFrequencyHz(int deltaFreq, int spectrumWidthHz) {
+        int max = spectrumWidthHz - 100;
+        return (deltaFreq >= 100 && deltaFreq <= max) ? deltaFreq : -1;
+    }
+
+    /** Inbound Reply: call the referenced station, preferring the real decode. */
+    private void handleWsjtxReply(String call, String grid, int snr, int deltaFreq) {
+        if (ft8TransmitSignal == null || call == null || call.isEmpty()) {
+            return;
+        }
+        // Honor the audio frequency the companion asked us to answer on (WSJT-X's `df`),
+        // so we key up on the requested tone rather than the current TX offset — matching
+        // the iOS port. getBaseFrequency() is the shared RX/TX audio offset
+        // FT8TransmitSignal reads when it generates the waveform.
+        int txHz = replyTxFrequencyHz(deltaFreq, GeneralVariables.getSpectrumWidth());
+        if (txHz > 0) {
+            GeneralVariables.setBaseFrequency(txHz);
+        }
+        Ft8Message target = findRecentDecode(call);
+        if (target == null) {
+            target = new Ft8Message("", call, grid == null ? "" : grid);
+        }
+        callStation(target);
+    }
+
+    /** Inbound Free Text: send the given text (only when the request asks to send). */
+    private void handleWsjtxFreeText(String text, boolean send) {
+        if (ft8TransmitSignal == null || !send || text == null) {
+            return;
+        }
+        // Route through the purpose-built one-shot entry point instead of open-coding the
+        // arming sequence. An inbound Free-Text request can be the very first TX action of a
+        // session (a companion app sends it before any CQ or decode tap), and transmitNow()
+        // dereferences toCallsign — which stays null until the first setTransmit/resetToCQ —
+        // for its status toast. sendFreeTextOnce() seeds a CQ baseline in that case (issue
+        // #401), validates the callsign, and arms freeTextOneShot so the text goes out once
+        // (WSJT-X Tx5 semantics) rather than repeating every cycle.
+        ft8TransmitSignal.sendFreeTextOnce(text);
+    }
+
+    /** Most recent decode from {@code call} in the master list, or null. */
+    private Ft8Message findRecentDecode(String call) {
+        synchronized (ft8Messages) {
+            for (int i = ft8Messages.size() - 1; i >= 0; i--) {
+                Ft8Message m = ft8Messages.get(i);
+                if (m.callsignFrom != null && m.callsignFrom.equalsIgnoreCase(call)) {
+                    return m;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String nz(String s) {
+        return s == null ? "" : s;
     }
 
     /**
@@ -1652,6 +1896,11 @@ public class MainViewModel extends ViewModel {
             case InstructionSet.KENWOOD_TS440:
                 baseRig = new KenwoodTS440Rig();//KENWOOD TS-440S (TS-570 CAT, USB mode)
                 break;
+            case InstructionSet.HAMLIB:
+                // hamlib model number is carried in the rig table's address column
+                // (parsed base-16), e.g. FT-891 = 1036 = 0x40C.
+                baseRig = new HamlibRig(GeneralVariables.civAddress);
+                break;
         }
 
         // Store the rig name for PSKReporter software string.
@@ -1721,6 +1970,20 @@ public class MainViewModel extends ViewModel {
         } else {
             return baseRig.isConnected();
         }
+    }
+
+    /**
+     * Whether the connected rig has answered at least one CAT probe since the
+     * current connection came up. Backs the USB Diagnostics "CAT Response" check:
+     * the serial port can open ({@link #isRigConnected()}) while the rig never
+     * replies — wrong baud rate, wrong CAT protocol, or a powered-but-silent
+     * adapter — and this flag distinguishes "link up" from "rig actually talking".
+     * Reset to false on every (re)connect and set true in {@link #markRigResponded()}.
+     *
+     * @return true once a valid CAT reply has been seen on the live connection
+     */
+    public boolean hasRigRespondedToCat() {
+        return sawRigResponseSinceConnect;
     }
 
     /**
@@ -1886,6 +2149,7 @@ public class MainViewModel extends ViewModel {
         // the rig indefinitely. Tear it down here too.
         stopCatLivenessWatchdog();
         PskReporterSender.INSTANCE.stop();
+        WsjtxUdpService.INSTANCE.stop();
         getQTHThreadPool.shutdown();
         sendWaveDataThreadPool.shutdown();
     }

@@ -68,6 +68,19 @@ public class LogFragment extends Fragment {
     private ShareLogsProgressDialog dialog = null;// Share log generation dialog
 
 
+    /**
+     * Whether a swipe callback may act on {@code position}. Swipe callbacks fire
+     * asynchronously — the END-delete path waits on a confirmation dialog — so by the time
+     * one runs the row may have detached ({@link RecyclerView#NO_POSITION}) or the backing
+     * list may have shrunk below {@code position}. Acting on such a position deletes/toggles
+     * the wrong record, throws IndexOutOfBounds in {@code getRecord()}, or desyncs the
+     * RecyclerView via an out-of-range {@code notifyItem*()}. Extracted (and package-private)
+     * so it can be unit-tested without a RecyclerView.
+     */
+    static boolean isSwipePositionActionable(int position, int itemCount) {
+        return position >= 0 && position < itemCount;
+    }
+
     public LogFragment() {
         // Required empty public constructor
     }
@@ -286,6 +299,19 @@ public class LogFragment extends Fragment {
     @Override
     public boolean onContextItemSelected(@NonNull MenuItem item) {
         int position = (Integer) item.getActionView().getTag();
+        // The tag holds the row's adapter position captured at long-press time
+        // (LogQSLItemHolder#onCreateContextMenu). By the time the user taps a menu
+        // item that position can be stale: the row may have detached
+        // (getAdapterPosition() == RecyclerView.NO_POSITION == -1) or the backing
+        // list may have shrunk under a refresh (web import / notifyDataSetChanged).
+        // Indexing the adapter with it would throw IndexOutOfBoundsException on the
+        // main thread, so drop the stale action instead of crashing.
+        int itemCount = mainViewModel.logListShowCallsign
+                ? logCallsignAdapter.getItemCount()
+                : logQSLAdapter.getItemCount();
+        if (!isContextPositionInRange(position, itemCount)) {
+            return super.onContextItemSelected(item);
+        }
         if (!mainViewModel.logListShowCallsign) {
             switch (item.getItemId()) {
                 case 0:
@@ -324,6 +350,23 @@ public class LogFragment extends Fragment {
         }
 
         return super.onContextItemSelected(item);
+    }
+
+    /**
+     * A context-menu action carries the row's adapter position captured at
+     * long-press time. That index is only safe to use against the currently
+     * displayed adapter while it remains in range; a detached row yields
+     * {@link RecyclerView#NO_POSITION} (-1) and a list that shrank under a
+     * refresh leaves the captured index past the end. Extracted so the guard
+     * that keeps {@link #onContextItemSelected(MenuItem)} from indexing out of
+     * bounds on the main thread can be unit tested.
+     *
+     * @param position  adapter position captured when the context menu was built
+     * @param itemCount current item count of the visible adapter
+     * @return whether {@code position} can be safely used to index the adapter
+     */
+    static boolean isContextPositionInRange(int position, int itemCount) {
+        return position >= 0 && position < itemCount;
     }
 
 //    private boolean itemIsOnScreen(View view) {
@@ -404,8 +447,19 @@ public class LogFragment extends Fragment {
                             , new DialogInterface.OnClickListener() {
                                 @Override
                                 public void onClick(DialogInterface dialogInterface, int i) {
-                                    logQSLAdapter.deleteRecord(viewHolder.getAdapterPosition());// Delete log entry
-                                    logQSLAdapter.notifyItemRemoved(viewHolder.getAdapterPosition());
+                                    // This fires asynchronously after the confirm dialog, so the
+                                    // holder may have detached (NO_POSITION) or the list may have
+                                    // shrunk below `position` while the dialog was open. Acting on
+                                    // such a position would delete the wrong record or fire
+                                    // notifyItemRemoved() with an out-of-range index (RecyclerView
+                                    // inconsistency). Resync the whole list instead.
+                                    int position = viewHolder.getAdapterPosition();
+                                    if (!isSwipePositionActionable(position, logQSLAdapter.getItemCount())) {
+                                        logQSLAdapter.notifyDataSetChanged();
+                                        return;
+                                    }
+                                    logQSLAdapter.deleteRecord(position);// Delete log entry
+                                    logQSLAdapter.notifyItemRemoved(position);
                                 }
                             });
                     builder.setOnCancelListener(new DialogInterface.OnCancelListener() {
@@ -425,9 +479,17 @@ public class LogFragment extends Fragment {
                 }
 
                 if (direction == ItemTouchHelper.START) {
-                    logQSLAdapter.setRecordIsQSL(viewHolder.getAdapterPosition()
-                            , !logQSLAdapter.getRecord(viewHolder.getAdapterPosition()).isQSL);
-                    logQSLAdapter.notifyItemChanged(viewHolder.getAdapterPosition());
+                    // Guard the full valid range, not just NO_POSITION: if the backing list
+                    // shrank between the swipe and this callback, getRecord(position) would
+                    // throw IndexOutOfBounds and notifyItemChanged() would desync the
+                    // RecyclerView. Resync via notifyDataSetChanged() when out of range.
+                    int position = viewHolder.getAdapterPosition();
+                    if (!isSwipePositionActionable(position, logQSLAdapter.getItemCount())) {
+                        logQSLAdapter.notifyDataSetChanged();
+                        return;
+                    }
+                    logQSLAdapter.setRecordIsQSL(position, !logQSLAdapter.getRecord(position).isQSL);
+                    logQSLAdapter.notifyItemChanged(position);
                 }
             }
 

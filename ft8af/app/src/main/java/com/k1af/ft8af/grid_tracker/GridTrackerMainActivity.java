@@ -156,10 +156,13 @@ public class GridTrackerMainActivity extends AppCompatActivity {
                 if (position == -1) {
                     return;
                 }
-                if (position > mainViewModel.ft8Messages.size() - 1) {
+                // Read under the decode-list monitor: an unguarded size()-then-get() on
+                // the main thread races the decode thread's remove(0)/clear() and throws
+                // IndexOutOfBoundsException (whole-app crash) — see getFt8MessageAtOrNull.
+                Ft8Message msg = mainViewModel.getFt8MessageAtOrNull(position);
+                if (msg == null) {
                     return;
                 }
-                Ft8Message msg = mainViewModel.ft8Messages.get(position);
 
                 if (msg.checkIsCQ()) {
                     GridOsmMapView.GridMarker marker = gridOsmMapView.getMarker(msg);
@@ -283,7 +286,11 @@ public class GridTrackerMainActivity extends AppCompatActivity {
                 } else {
                     binding.utcProgressBar.setBackgroundColor(getColor(R.color.progresss_bar_back_color));
                 }
-                binding.utcProgressBar.setProgress((int) ((aLong / 1000) % 15));
+                // Size the bar to the current mode's slot, not a hard-coded 15s FT8 cycle,
+                // so FT4 (7.5s) / FT2 (3.75s) sweeps line up with the real TX/RX grid.
+                int slotMillis = GeneralVariables.currentMode().slotMillis;
+                binding.utcProgressBar.setMax(SlotProgressBar.maxFor(slotMillis));
+                binding.utcProgressBar.setProgress(SlotProgressBar.progressFor(aLong, slotMillis));
             }
         });
 

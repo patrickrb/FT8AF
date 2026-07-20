@@ -77,7 +77,7 @@ public class Yaesu3Command {
      */
     public static int getALCOrSWR38(Yaesu3Command command) {
         if (command.data.length() < 7) return 0;
-        return Integer.parseInt(command.data.substring(1, 4));
+        return parseMeterValue(command.data.substring(1, 4));
     }
 
     public static boolean isSWRMeter38(Yaesu3Command command) {
@@ -99,7 +99,7 @@ public class Yaesu3Command {
      */
     public static int getSWROrALC39(Yaesu3Command command) {
         if (command.data.length() < 4) return 0;
-        return Integer.parseInt(command.data.substring(1, 4));
+        return parseMeterValue(command.data.substring(1, 4));
     }
 
     public static boolean isSWRMeter39(Yaesu3Command command) {
@@ -119,7 +119,24 @@ public class Yaesu3Command {
      * @return value
      */
     public static int get590ALCOrSWR(Yaesu3Command command) {
-        return Integer.parseInt(command.data.substring(1, 5));
+        if (command.data.length() < 5) return 0;
+        return parseMeterValue(command.data.substring(1, 5));
+    }
+
+    /**
+     * Parse a numeric CAT meter token, returning 0 ("no reading") for any
+     * non-numeric value. The rig's meter replies are read on the main thread
+     * with no surrounding try/catch on the Bluetooth SPP path, so a garbled or
+     * non-numeric byte sequence must not be allowed to throw
+     * {@link NumberFormatException} and crash the app.
+     */
+    private static int parseMeterValue(String token) {
+        try {
+            return Integer.parseInt(token);
+        } catch (NumberFormatException e) {
+            Log.e(TAG, "Non-numeric CAT meter value: " + token);
+            return 0;
+        }
     }
 
     public static boolean is590MeterALC(Yaesu3Command command){

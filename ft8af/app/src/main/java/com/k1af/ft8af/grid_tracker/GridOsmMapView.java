@@ -303,6 +303,14 @@ public class GridOsmMapView {
         if (gridPolygon == null) {
             gridPolygon = addGridPolygon(grid, GridMode.QSX);
         }
+        if (gridPolygon == null) {
+            // addGridPolygon returns null when the overlay can't be built - the map
+            // is not ready yet, or the GridPolygon constructor threw and was swallowed
+            // by its own guard ("when log volume is too large, a crash can occur").
+            // This runs on the UI thread from a LiveData observer with no try/catch,
+            // so dereferencing the null here would crash the whole app; skip instead.
+            return null;
+        }
         gridPolygon.setSnippet(msg);
         gridPolygon.setSubDescription(subDetail);
         //gridPolygon.showInfoWindow();
@@ -323,6 +331,12 @@ public class GridOsmMapView {
             } else {
                 gridPolygon = addGridPolygon(recordStr.getGridsquare(), GridMode.QSO);
             }
+        }
+        if (gridPolygon == null) {
+            // Same guard as the message overload: addGridPolygon can return null
+            // (map not ready, or a swallowed GridPolygon-constructor crash). Bail
+            // out instead of dereferencing null on the UI thread.
+            return null;
         }
 
         gridPolygon.setSnippet(String.format(String.format("%s %s",

@@ -5,8 +5,6 @@ package com.k1af.ft8af.icom;
  * @date 2023-03-20
  */
 
-import android.media.AudioTrack;
-
 import com.k1af.ft8af.GeneralVariables;
 import com.k1af.ft8af.R;
 import com.k1af.ft8af.icom.IcomUdpBase.IcomUdpStyle;
@@ -45,12 +43,8 @@ public class IComWifiRig extends WifiRig{
                 if (onDataEvents!=null){
                     onDataEvents.onReceivedWaveData(audioData);
                 }
-                if (audioTrack!=null){
-                   // if (!isPttOn) {//If PTT is not pressed
-                        audioTrack.write(audioData, 0, audioData.length
-                                , AudioTrack.WRITE_NON_BLOCKING);
-                 //   }
-                }
+                // (Historically gated on !isPttOn; left ungated as before.)
+                writeAudio(audioData);//Guards against a concurrent closeAudio() release
             }
 
             @Override

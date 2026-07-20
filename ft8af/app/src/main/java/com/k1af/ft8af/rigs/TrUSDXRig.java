@@ -117,16 +117,50 @@ public class TrUSDXRig extends BaseRig {
         }
     }
 
+    /**
+     * Find the first index of {@code target} in {@code data}, scanning by raw byte.
+     *
+     * <p>The (tr)uSDX audio-over-CAT stream interleaves raw 8-bit PCM samples
+     * (roughly half of which are &gt;= 0x80) with ';'-terminated CAT commands in a
+     * single byte stream. Locating the ';' terminator via
+     * {@code new String(data).indexOf(";")} is wrong: decoding the bytes as a
+     * String collapses/relocates any 0x80-0xFF sample (a valid multi-byte UTF-8
+     * pair decodes to a single char; malformed bytes decode to replacement
+     * chars), so the returned <em>char</em> index is smaller than the delimiter's
+     * real <em>byte</em> offset. The subsequent {@link Arrays#copyOfRange} then
+     * slices the stream in the wrong place, corrupting the received audio. Because
+     * ';' (0x3B) is never a UTF-8 lead or continuation byte it always stands
+     * alone, so scanning for the byte directly is offset-exact.
+     *
+     * @return the index of the first {@code target} byte, or -1 if absent.
+     */
+    static int indexOfByte(byte[] data, byte target) {
+        for (int i = 0; i < data.length; i++) {
+            if (data[i] == target) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     @Override
     public void onReceiveData(byte[] data) {
         byte[] remain = data;
-        String s = new String(data);
-        while (s.contains(";")) { // ;
-            // TODO apply effective way
-            int idx = s.indexOf(";");
+        // Drive the loop off the raw-byte ';' scan rather than a decoded-String
+        // contains() check: the stream carries raw 8-bit audio whose >= 0x80
+        // samples shift the decoded-String index away from the real byte position
+        // (see indexOfByte). Using the byte-scan result as both the condition and
+        // the cut point keeps delimiter detection consistent and guarantees
+        // idx >= 0 inside the loop, so Arrays.copyOf(remain, idx) can never be
+        // handed a negative length. idx is recomputed at the top of every
+        // iteration so the `continue` below re-scans correctly.
+        while (true) { // ;
+            int idx = indexOfByte(remain, (byte) ';');
+            if (idx < 0) {
+                break;
+            }
             byte[] cutted = Arrays.copyOf(remain, idx);
             remain = Arrays.copyOfRange(remain, idx + 1, remain.length);
-            s = new String(remain);
 
             if (rxStreaming) {
                 onReceivedWaveData(cutted, true);
@@ -164,7 +198,10 @@ public class TrUSDXRig extends BaseRig {
             byte[] wave = Arrays.copyOfRange(remain, 2, remain.length);
             onReceivedWaveData(wave);
         } else {
-            buffer.append(s);
+            // Trailing, un-terminated CAT command text (no ';' left); decoding the
+            // leftover bytes to a String is fine here — it is command text, not the
+            // raw audio the byte-scan protects.
+            buffer.append(new String(remain));
         }
     }
 

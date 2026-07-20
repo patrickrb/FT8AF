@@ -27,8 +27,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 
 public class GeneralVariables {
@@ -42,6 +44,13 @@ public class GeneralVariables {
     public static boolean enableCloudlog = false;//Whether Cloudlog auto-sync is enabled
     public static boolean enableQRZ = false;//Whether QRZ auto-sync is enabled
     public static boolean enablePskReporter = true;//Whether PSKReporter spot upload is enabled
+    public static boolean enableAdifExport = true;//Append each logged QSO to a running ft8af_log.adi (real-time ADIF mirror for backup + desktop-logger import)
+    // WSJT-X UDP interface (issue: interop with GridTracker/JTAlert/N1MM/Log4OM).
+    // Off by default; persisted as config keys udp_enabled/udp_host/udp_port/udp_accept_requests.
+    public static boolean udpEnabled = false;//Whether the WSJT-X UDP broadcast is enabled
+    public static String udpHost = "127.0.0.1";//WSJT-X UDP server address (unicast/broadcast/multicast)
+    public static int udpPort = 2237;//WSJT-X UDP server port (WSJT-X default 2237)
+    public static boolean udpAcceptRequests = false;//Act on inbound Reply/Halt/Free-Text/Replay requests
     // Dark feature flag for issue #437 (auto per-location Wavelog station profiles).
     // Default false and NOT branched into any live upload path yet — this increment
     // only lands the pure LocationSignature/resolver/create_station/cache foundation.
@@ -431,10 +440,13 @@ public class GeneralVariables {
     public static String qrzXmlPassword = ""; //QRZ XML API password
     public static boolean pskOverlayEnabled = false; //PSK Reporter map overlay (issue #33)
     public static boolean synFrequency = false;//Same-frequency transmit
-    public static boolean holdTxFreq = false;//Hold TX freq: don't move the TX offset to a station you answer (WSJT-X "Hold Tx Freq")
+    // Hold TX freq: don't move the TX offset to a station you answer (WSJT-X
+    // "Hold Tx Freq"). Enabled by default (issue #498) to keep the TX frequency
+    // stable; the config DB only overrides this once the user explicitly toggles it.
+    public static boolean holdTxFreq = true;
     public static int transmitDelay = 500;//Transmit delay; also allows decoding time for the previous cycle
     public static int pttDelay = 100;//PTT response time; radios typically need some response time after PTT command, default 100ms
-    public static int lateStartTolerance = 2000;//Max ms into a cycle that a manual TX may start; leading audio is clipped so TX still ends on the cycle boundary. 0-4000.
+    public static int lateStartTolerance = 2000;//Max ms of leading audio a late manual TX may clip past the per-mode audio slack (ModeProfile.audioSlackMillis) and still go out this cycle. Effective start budget is slack+tolerance. 0-4000. See issue #467.
     public static int manualTimeCorrectionMs = 0;//Manual clock correction (ms) applied to UtcTimer.delay; for field use without internet NTP. Range -2000..2000. See TimeSyncSettings.
     public static boolean earlyDecode = true;//Fast turnaround: decode a shorter RX window so CQ decodes appear ~1s before the cycle boundary, enabling a next-slot reply.
     public static int operatingMode = FT8Common.FT8_MODE;//Current operating mode (FT8Common.FT8_MODE / FT4_MODE); persisted as config "operatingMode".
@@ -496,6 +508,7 @@ public class GeneralVariables {
     public static MutableLiveData<Long> mutableGpsClockSync = new MutableLiveData<>();
     public static ArrayList<String> QSL_Callsign_list = new ArrayList<>();//Successfully QSL'd callsigns
     public static ArrayList<String> QSL_Callsign_list_other_band = new ArrayList<>();//Successfully QSL'd callsigns on other bands
+    public static HashSet<String> QSL_Callsign_list_today = new HashSet<>();//Callsigns worked today or yesterday (any band); a set for O(1) membership checks
     public static HashSet<String> QSL_Grid_list = new HashSet<>();//Distinct worked 4-char Maidenhead grids (any band)
     public static HashSet<String> QSL_Pota_list = new HashSet<>();//Distinct hunted POTA park refs (UPPER), any band
 
@@ -504,8 +517,26 @@ public class GeneralVariables {
     public static boolean highlightNewDxcc = true;//Highlight stations from an unworked DXCC entity
     public static boolean highlightNewGrid = false;//Off by default — most grids are "new", so it's noisy
     public static boolean highlightNewBand = true;//Highlight stations worked only on other bands
-    public static boolean highlightWorked = true;//Tag stations already worked
+    public static boolean highlightWorked = true;//Master enable for worked-station handling (see workedStationMode)
     public static boolean highlightPota = true;//Highlight spotted POTA activators (new parks stand out)
+
+    // Worked-station handling — modelled on WSJT-X/JTDX "worked before" highlighting,
+    // which lets you "hide, ignore, or highlight stations worked before on the current
+    // band, worked today, or those present in a list". When highlightWorked is enabled,
+    // workedStationMode selects what to do with a station that counts as "worked" under
+    // workedStationScope; when highlightWorked is off, no worked handling is applied.
+    //   mode  0=HIGHLIGHT (tag with the WORKED pill — the legacy behavior),
+    //         1=IGNORE    (leave visible but don't highlight),
+    //         2=HIDE      (drop from the decode list, unless the station is calling me).
+    //   scope 0=ON_BAND   (worked this band — the legacy basis),
+    //         1=BEFORE    (worked ever, any band),
+    //         2=TODAY     (worked today or yesterday, any band),
+    //         3=FROM_LIST (present in the user-maintained worked-station list).
+    public static int workedStationMode = 0;   // HIGHLIGHT — preserves legacy behavior
+    public static int workedStationScope = 0;   // ON_BAND — preserves legacy behavior
+    // User-maintained "worked" callsign list backing the FROM_LIST scope. Upper-cased
+    // whole-call tokens, same parse/join convention as the callsign blocklist.
+    private static final java.util.LinkedHashSet<String> workedStationList = new java.util.LinkedHashSet<>();
 
     // Decode-list display filters (Settings → Decode Filters). Persistent
     // "show only" filters applied to the decode list in DecodeScreen.filterMessages().
@@ -595,7 +626,20 @@ public class GeneralVariables {
 
     public static final ArrayList<String> followCallsign = new ArrayList<>();//Followed callsigns
 
-    public static ArrayList<Ft8Message> transmitMessages = new ArrayList<>();//List for the calling UI, followed entries
+    // The calling-UI "followed entries" list. Mutated concurrently from three
+    // threads with no external lock: the decode thread (findIncludedCallsigns
+    // add + trimToMessageCount remove(0) + clear), the TX-sequencer thread
+    // (FT8TransmitSignal.doComplete reverse scans, onBeforeTransmit add) and the
+    // UI thread (GridTracker / GridMarkerInfoWindow add, clearTransmittingMessage).
+    // A plain ArrayList corrupts its backing array / throws
+    // IndexOutOfBounds under that contention, so this is a CopyOnWriteArrayList:
+    // every add/remove/clear is atomic. Index scans must still snapshot the list
+    // first (size() then get(i) can otherwise race a concurrent remove) — see
+    // FT8TransmitSignal.doComplete.
+    // final: the thread-safety invariant depends on this always being the
+    // CopyOnWriteArrayList — never reassign it to a plain List, or the cross-thread
+    // crash this guards against returns. Mutate in place (add/remove/clear) only.
+    public static final List<Ft8Message> transmitMessages = new CopyOnWriteArrayList<>();//List for the calling UI, followed entries
 
     public static void setMyMaidenheadGrid(String grid) {
         myMaidenheadGrid = grid;
@@ -628,13 +672,34 @@ public class GeneralVariables {
         GeneralVariables.baseFrequency = baseFrequency;
     }
 
+    /** Minimum/maximum spectrum display width (Hz), matching the settings UI slider range. */
+    public static final int MIN_SPECTRUM_WIDTH_HZ = 2500;
+    public static final int MAX_SPECTRUM_WIDTH_HZ = 5000;
+
     public static int getSpectrumWidth() {
         return spectrumWidth;
     }
 
+    /**
+     * Set the spectrum display width, clamped to
+     * [{@link #MIN_SPECTRUM_WIDTH_HZ}, {@link #MAX_SPECTRUM_WIDTH_HZ}] Hz.
+     *
+     * <p>This is display-only geometry: the waterfall/spectrum views divide the
+     * view pixel width by it to place the TX marker and message labels
+     * (e.g. {@code WaterfallView.freq_width = w / spectrumWidth}) and it drives
+     * click-to-tune. The settings UI already constrains the value, but config
+     * hydration ({@code DatabaseOpr}'s {@code parseConfigInt(result, 3500)})
+     * reaches this setter with whatever a hand-edited/corrupted settings backup
+     * persisted, unclamped. A stored {@code 0}/negative made {@code freq_width}
+     * {@code Infinity}/negative, so the marker, labels, and click-to-tune drew at
+     * {@code Infinity}/{@code NaN}/mirrored coordinates. Clamping here (mirroring
+     * {@link #setFftWindowType(int)}) keeps every consumer's geometry finite and
+     * is byte-identical for every in-range value.
+     */
     public static void setSpectrumWidth(int width) {
-        mutableSpectrumWidth.postValue(width);
-        GeneralVariables.spectrumWidth = width;
+        int clamped = Math.max(MIN_SPECTRUM_WIDTH_HZ, Math.min(MAX_SPECTRUM_WIDTH_HZ, width));
+        mutableSpectrumWidth.postValue(clamped);
+        GeneralVariables.spectrumWidth = clamped;
     }
 
     public static int getFftWindowType() {
@@ -719,6 +784,45 @@ public class GeneralVariables {
     }
 
     /**
+     * Check if a callsign has been contacted today or yesterday (any band). Backs
+     * the TODAY worked-station scope; the list is (re)loaded from the log by
+     * {@code GetAllQSLCallsign}.
+     *
+     * @param callsign callsign
+     * @return whether it exists
+     */
+    public static boolean checkQSLCallsignToday(String callsign) {
+        return QSL_Callsign_list_today.contains(callsign);
+    }
+
+    /**
+     * Replace the user-maintained worked-station list (FROM_LIST scope) from a
+     * user-entered comma/space/pipe-separated string.
+     */
+    public static synchronized void addWorkedStationList(String callsigns) {
+        parseBlockTokens(callsigns, workedStationList);
+    }
+
+    /**
+     * The worked-station list as the canonical comma-separated string (persistence
+     * and Settings display).
+     */
+    public static synchronized String getWorkedStationList() {
+        return joinBlockTokens(workedStationList);
+    }
+
+    /**
+     * Check whether a callsign is in the user-maintained worked-station list.
+     *
+     * @param callsign callsign
+     * @return whether it is present
+     */
+    public static synchronized boolean checkWorkedListCallsign(String callsign) {
+        if (callsign == null) return false;
+        return workedStationList.contains(callsign.toUpperCase(java.util.Locale.ROOT));
+    }
+
+    /**
      * Check if a 4-character Maidenhead grid has been previously worked (any band).
      * Caller should pass the first 4 characters upper-cased.
      */
@@ -755,6 +859,13 @@ public class GeneralVariables {
     static public String getShortCallsign(String callsign) {
         if (callsign.contains("/")) {
             String[] temp = callsign.split("/");
+            // An all-slash string ("/", "//", ...) splits to a zero-length array
+            // because Java strips trailing empty tokens; there is no segment to
+            // return, so fall back to the original rather than indexing temp[0]
+            // and throwing ArrayIndexOutOfBoundsException.
+            if (temp.length == 0) {
+                return callsign;
+            }
             int max = 0;
             int max_index = 0;
             for (int i = 0; i < temp.length; i++) {
@@ -1143,7 +1254,12 @@ public class GeneralVariables {
         return result.toString();
     }
 
-    public static synchronized void deleteArrayListMore(ArrayList<Ft8Message> list) {
+    /**
+     * Trim {@code list} from the front down to {@link #MESSAGE_COUNT} entries.
+     * Accepts any {@link List} (the shared calling list is a CopyOnWriteArrayList),
+     * so the name reflects the contract rather than a concrete ArrayList.
+     */
+    public static synchronized void trimToMessageCount(List<Ft8Message> list) {
         if (list.size() > GeneralVariables.MESSAGE_COUNT) {
             while (list.size() > GeneralVariables.MESSAGE_COUNT) {
                 list.remove(0);
@@ -1152,17 +1268,30 @@ public class GeneralVariables {
     }
 
     /**
-     * Determine if it is an integer.
+     * Determine if it is an integer that fits in an {@code int}.
+     *
+     * <p>Callers use this as a guard immediately before {@code Integer.parseInt} /
+     * {@code toInt()} (e.g. the ICOM/Xiegu network-port fields). A digit-only
+     * regex is <em>not</em> sufficient for that contract: a string such as
+     * {@code "9999999999"} is all digits yet overflows {@code int}, so the
+     * subsequent parse throws {@link NumberFormatException}. Those parses run on
+     * the UI thread with no surrounding try/catch, so the mismatch was a hard
+     * crash. Verify the value actually parses so the guard cannot lie.
      *
      * @param str Input string
-     * @return Returns true if integer, false otherwise
+     * @return Returns true only if {@code str} is a non-empty run of digits that
+     *         parses into an {@code int}, false otherwise
      */
 
     public static boolean isInteger(String str) {
-        if (str != null && !"".equals(str.trim()))
-            return str.matches("^[0-9]*$");
-        else
+        if (str == null || "".equals(str.trim()) || !str.matches("^[0-9]*$"))
             return false;
+        try {
+            Integer.parseInt(str);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     /**

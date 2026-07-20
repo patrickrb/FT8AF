@@ -1,3 +1,4 @@
+import FT8Engine
 import SwiftUI
 
 enum MapProjection: String, CaseIterable {
@@ -19,7 +20,7 @@ struct MapScreen: View {
             // Top bar
             HStack {
                 Text("Map")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.ft8afUI(size: 18, weight: .bold))
                     .foregroundStyle(textPrimary)
 
                 Spacer()
@@ -33,9 +34,9 @@ struct MapScreen: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: projection == .equirectangular ? "map" : "globe")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.ft8afUI(size: 11, weight: .medium))
                         Text(projection.rawValue)
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .font(.ft8afMono(size: 10, weight: .semibold))
                     }
                     .foregroundStyle(textMuted)
                     .padding(.horizontal, 8)
@@ -49,7 +50,7 @@ struct MapScreen: View {
                 .padding(.trailing, 8)
 
                 Text("\(markers.count) stations")
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .font(.ft8afMono(size: 12, weight: .medium))
                     .foregroundStyle(textMuted)
             }
             .padding(.horizontal, 16)
@@ -144,26 +145,26 @@ struct MapScreen: View {
     private func markerPopup(_ marker: MapMarker) -> some View {
         VStack(spacing: 4) {
             Text(marker.callsign)
-                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .font(.ft8afMono(size: 14, weight: .bold))
                 .foregroundStyle(textPrimary)
             Text(marker.grid)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .font(.ft8afMono(size: 11, weight: .medium))
                 .foregroundStyle(textMuted)
 
             HStack(spacing: 8) {
                 if let snr = marker.snr {
                     Text("SNR: \(snr >= 0 ? "+\(snr)" : "\(snr)")")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.ft8afMono(size: 10, weight: .medium))
                         .foregroundStyle(textFaint)
                 }
                 if let dist = markerDistance(marker) {
                     Text(dist)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.ft8afMono(size: 10, weight: .medium))
                         .foregroundStyle(textFaint)
                 }
                 if let brg = markerBearing(marker) {
                     Text(brg)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.ft8afMono(size: 10, weight: .medium))
                         .foregroundStyle(textFaint)
                 }
             }
@@ -237,7 +238,7 @@ private struct ZoomButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.ft8afUI(size: 13, weight: .semibold))
                 .foregroundStyle(textPrimary)
                 .frame(width: 32, height: 32)
                 .background(
@@ -273,15 +274,5 @@ struct MapMarker: Identifiable, Equatable {
     }
 }
 
-/// Convert 4-char Maidenhead grid to lat/lon center.
-func gridToLatLon(_ grid: String) -> (Double, Double)? {
-    let chars = Array(grid.uppercased().utf8)
-    guard chars.count >= 4,
-          chars[0] >= 65, chars[0] <= 82,
-          chars[1] >= 65, chars[1] <= 82,
-          chars[2] >= 48, chars[2] <= 57,
-          chars[3] >= 48, chars[3] <= 57 else { return nil }
-    let lon = Double(chars[0] - 65) * 20 + Double(chars[2] - 48) * 2 + 1 - 180
-    let lat = Double(chars[1] - 65) * 10 + Double(chars[3] - 48) * 1 + 0.5 - 90
-    return (lat, lon)
-}
+// `gridToLatLon` now lives in FT8Engine (see FT8AFKit/Sources/FT8Engine/Util.swift)
+// so it decodes 6-character subsquares and is unit-tested; imported above.

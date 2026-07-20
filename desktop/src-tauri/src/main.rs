@@ -4,25 +4,19 @@
 
 use std::sync::Arc;
 
-use serde::Serialize;
 use tauri::{Emitter, State};
 
 use ft8af::audio::{self, AudioDevice};
-use ft8af::bands;
-use ft8af::db::{Db, QsoRecord};
+use ft8af::bands::{self, BandEntry, CustomBand};
+use ft8af::db::{ConfirmedFilter, Db, QsoRecord};
 use ft8af::engine::{self, AnswerArgs, EngineCommand, EngineHandle};
+use ft8af::os_location::{self, OsLocation};
 use ft8af::rig::{self, HamlibRig, RigConfig, SerialPortInfo};
 use ft8af::wf::WfConfig;
 
 struct AppState {
     engine: EngineHandle,
     db: Arc<Db>,
-}
-
-#[derive(Serialize)]
-struct BandInfo {
-    name: String,
-    dial_hz: u64,
 }
 
 // --- device / port / band enumeration --------------------------------------
@@ -47,12 +41,49 @@ fn list_hamlib_rigs() -> Vec<HamlibRig> {
     rig::list_hamlib_rigs()
 }
 
+/// Read + parse the persisted custom-band list from the config store.
+fn load_custom_bands(db: &Db) -> Vec<CustomBand> {
+    bands::parse_custom_bands(&db.get_config(bands::CUSTOM_BANDS_KEY).unwrap_or_default())
+}
+
 #[tauri::command]
-fn list_bands() -> Vec<BandInfo> {
-    bands::FT8_BANDS
-        .iter()
-        .map(|b| BandInfo { name: b.name.to_string(), dial_hz: b.dial_hz })
-        .collect()
+fn list_bands(state: State<AppState>) -> Vec<BandEntry> {
+    bands::merged_bands(&load_custom_bands(&state.db))
+}
+
+#[tauri::command]
+fn list_custom_bands(state: State<AppState>) -> Vec<CustomBand> {
+    load_custom_bands(&state.db)
+}
+
+/// Add (or rename, if the dial already exists) a custom band. `freq` is the raw
+/// operator input, validated here so a clear error surfaces in the UI. Returns
+/// the merged band list on success.
+#[tauri::command]
+fn add_custom_band(
+    state: State<AppState>,
+    freq: String,
+    name: String,
+) -> Result<Vec<BandEntry>, String> {
+    let dial_hz = bands::parse_dial_hz(&freq)?;
+    let mut custom = load_custom_bands(&state.db);
+    bands::upsert_custom_band(&mut custom, &name, dial_hz);
+    state
+        .db
+        .set_config(bands::CUSTOM_BANDS_KEY, &bands::serialize_custom_bands(&custom))
+        .map_err(|e| e.to_string())?;
+    Ok(bands::merged_bands(&custom))
+}
+
+#[tauri::command]
+fn delete_custom_band(state: State<AppState>, dial_hz: u64) -> Result<Vec<BandEntry>, String> {
+    let mut custom = load_custom_bands(&state.db);
+    bands::remove_custom_band(&mut custom, dial_hz);
+    state
+        .db
+        .set_config(bands::CUSTOM_BANDS_KEY, &bands::serialize_custom_bands(&custom))
+        .map_err(|e| e.to_string())?;
+    Ok(bands::merged_bands(&custom))
 }
 
 // --- engine control ---------------------------------------------------------
@@ -149,6 +180,24 @@ fn list_log(state: State<AppState>, limit: i64, offset: i64) -> Vec<QsoRecord> {
     state.db.list_qsos(limit, offset)
 }
 
+/// Server-side search/filter for the Logbook tab. `filter` is one of
+/// `"all"` / `"confirmed"` / `"unconfirmed"`; anything else is treated as All.
+#[tauri::command]
+fn search_log(
+    state: State<AppState>,
+    callsign: String,
+    filter: String,
+    limit: i64,
+    offset: i64,
+) -> Vec<QsoRecord> {
+    let filter = match filter.as_str() {
+        "confirmed" => ConfirmedFilter::Confirmed,
+        "unconfirmed" => ConfirmedFilter::Unconfirmed,
+        _ => ConfirmedFilter::All,
+    };
+    state.db.search_qsos(&callsign, filter, limit, offset)
+}
+
 #[tauri::command]
 fn log_count(state: State<AppState>) -> i64 {
     state.db.count()
@@ -164,9 +213,17 @@ fn save_qso(state: State<AppState>, record: QsoRecord) -> Result<i64, String> {
     state.db.insert_qso(&record).map_err(|e| e.to_string())
 }
 
+/// Export the log as ADIF, optionally restricted to an inclusive `[start, end]`
+/// `YYYYMMDD` date range. Empty strings / omitted args mean an open bound.
 #[tauri::command]
-fn export_adif(state: State<AppState>) -> String {
-    state.db.export_adif()
+fn export_adif(
+    state: State<AppState>,
+    start: Option<String>,
+    end: Option<String>,
+) -> String {
+    state
+        .db
+        .export_adif_range(start.as_deref(), end.as_deref())
 }
 
 #[tauri::command]
@@ -184,11 +241,45 @@ fn all_config(state: State<AppState>) -> Vec<(String, String)> {
     state.db.all_config()
 }
 
+// --- optional OS location -> grid (issue #471) ------------------------------
+
+/// Resolve the operator grid from the OS location service. Opt-in only: refuses
+/// unless the user has turned on the `location_service_enabled` flag, so nothing
+/// requests location (and no permission prompt appears) until they explicitly
+/// opt in. Returns only the coarse derived Maidenhead grid (the raw fix is
+/// discarded inside the backend), or a human-readable error the UI shows without
+/// touching the manual field.
+#[tauri::command]
+fn get_os_location(state: State<AppState>) -> Result<OsLocation, String> {
+    let enabled = os_location::location_enabled(
+        state
+            .db
+            .get_config(os_location::LOCATION_ENABLED_KEY)
+            .as_deref(),
+    );
+    if !enabled {
+        return Err(
+            "Location service is off. Turn on \"Use OS location service\" in \
+             Settings → Station first."
+                .into(),
+        );
+    }
+    os_location::resolve()
+}
+
 #[tauri::command]
 fn set_waterfall_config(state: State<AppState>, config: WfConfig) {
     // The engine sanitizes, persists (wf_window/wf_fft_size/wf_avg), and
     // rebuilds its FFT plan; see EngineCommand::SetWaterfallConfig.
     state.engine.send(EngineCommand::SetWaterfallConfig(config));
+}
+
+/// Apply new WSJT-X UDP settings. The engine persists the `udp_*` config keys
+/// and rebinds the socket + inbound listener live; see
+/// `EngineCommand::SetUdpConfig`.
+#[tauri::command]
+fn set_udp_config(state: State<AppState>, config: ft8af::udp::UdpConfig) {
+    state.engine.send(EngineCommand::SetUdpConfig(config));
 }
 
 fn main() {
@@ -242,6 +333,9 @@ fn main() {
             list_serial_ports,
             list_hamlib_rigs,
             list_bands,
+            list_custom_bands,
+            add_custom_band,
+            delete_custom_band,
             start_decode,
             stop_decode,
             set_station,
@@ -260,6 +354,7 @@ fn main() {
             stop_tx,
             free_text,
             list_log,
+            search_log,
             log_count,
             delete_qso,
             save_qso,
@@ -268,6 +363,8 @@ fn main() {
             set_config,
             all_config,
             set_waterfall_config,
+            set_udp_config,
+            get_os_location,
         ])
         .run(tauri::generate_context!())
         .expect("error running FT8AF");

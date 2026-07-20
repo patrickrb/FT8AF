@@ -1347,14 +1347,10 @@ private fun DrawScope.drawWorldLand(rings: List<FloatArray>, vp: EquirectViewpor
 
     val path = Path()
     for (ring in rings) {
-        if (ring.size < 6) continue // need at least 3 points for a polygon
-        path.moveTo(px(ring[0]), py(ring[1]))
-        var i = 2
-        while (i < ring.size) {
-            path.lineTo(px(ring[i]), py(ring[i + 1]))
-            i += 2
+        val plotted = forEachRingVertex(ring) { lon, lat, first ->
+            if (first) path.moveTo(px(lon), py(lat)) else path.lineTo(px(lon), py(lat))
         }
-        path.close()
+        if (plotted) path.close()
     }
     drawPath(path, color = Color(0x4094A3B8))                                  // fill
     drawPath(path, color = Color(0x9094A3B8), style = Stroke(width = 0.75f))   // outline
@@ -1377,24 +1373,13 @@ private fun DrawScope.drawAzimuthalLand(
 ) {
     val land = Path()
     for (ring in rings) {
-        if (ring.size < 6) continue
-        var first = true
-        var i = 0
-        while (i < ring.size) {
-            val lon = ring[i].toDouble()
-            val lat = ring[i + 1].toDouble()
-            val proj = azProject(opLat, opLon, lat, lon)
+        val plotted = forEachRingVertex(ring) { lonF, latF, first ->
+            val proj = azProject(opLat, opLon, latF.toDouble(), lonF.toDouble())
             val px = cx + proj.x * r * scale + panX
             val py = cy + proj.y * r * scale + panY
-            if (first) {
-                land.moveTo(px, py)
-                first = false
-            } else {
-                land.lineTo(px, py)
-            }
-            i += 2
+            if (first) land.moveTo(px, py) else land.lineTo(px, py)
         }
-        land.close()
+        if (plotted) land.close()
     }
     // Clip to the disc so anything that strays past the horizon (or wraps
     // weirdly near the antipode) is hidden.

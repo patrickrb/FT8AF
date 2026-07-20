@@ -35,6 +35,11 @@ const TX_LATEST_MS: i64 = TX_SLACK_MS - PTT_DELAY_MS as i64;
 // 13.2 s keeps a comfortable margin above the 12.64 s waveform end.
 const DECODE_AT_MS: i64 = 13_200;
 const DEFAULT_TX_AUDIO_HZ: i32 = 1_500;
+// Usable TX audio-offset passband (Hz). Real FT8 audio tones live well inside
+// this; both the base-freq setter and an inbound WSJT-X Reply's requested `df`
+// validate against it.
+const MIN_TX_AUDIO_HZ: i32 = 200;
+const MAX_TX_AUDIO_HZ: i32 = 3_000;
 // Default TX output level (0.0–1.0). Slightly below full scale so a fresh
 // install doesn't overdrive the soundcard/ALC before the operator sets it.
 const DEFAULT_TX_GAIN: f32 = 0.9;
@@ -42,6 +47,79 @@ const DEFAULT_TX_GAIN: f32 = 0.9;
 /// Clamp a requested TX gain into the valid 0.0–1.0 range (full scale).
 fn clamp_tx_gain(g: f32) -> f32 {
     g.clamp(0.0, 1.0)
+}
+
+/// The TX audio offset (Hz) to adopt for an inbound WSJT-X Reply's requested
+/// `df`, or `None` to keep the current offset. Bounds the untrusted UDP value to
+/// the usable audio passband; a `0` (unspecified) or out-of-band `df` is ignored
+/// so a malformed/garbled datagram can't push the TX tone off the band. Mirrors
+/// the Android/iOS ports, which likewise honor a plausible `df` and drop the rest.
+fn reply_tx_audio_hz(delta_freq: u32) -> Option<i32> {
+    let df = i32::try_from(delta_freq).ok()?;
+    (MIN_TX_AUDIO_HZ..=MAX_TX_AUDIO_HZ).contains(&df).then_some(df)
+}
+
+/// The core keying gate `maybe_transmit` enforces, factored out so it is pure and
+/// unit-testable and shared with the run loop's boundary trigger. We may key iff:
+///   * a QSO is active,
+///   * a locked TX parity (set when answering a CQ) matches this slot's parity —
+///     `None` leaves us eligible in any slot and locks on the first transmission,
+///   * we have not already transmitted in this slot, and
+///   * we are early enough in the cycle to fit the full 12.64 s waveform before the
+///     next boundary (`into_cycle_ms <= TX_LATEST_MS`); starting later clips the
+///     leading Costas array — audible but undecodable.
+fn tx_slot_eligible(
+    active: bool,
+    tx_parity: Option<i64>,
+    slot_id: i64,
+    txed_slot: i64,
+    into_cycle_ms: i64,
+) -> bool {
+    if !active {
+        return false;
+    }
+    if let Some(p) = tx_parity {
+        if p != slot_id.rem_euclid(2) {
+            return false;
+        }
+    }
+    if txed_slot == slot_id {
+        return false;
+    }
+    into_cycle_ms <= TX_LATEST_MS
+}
+
+/// Whether any decode batch is still outstanding, gating the boundary TX trigger.
+/// Derived from the pending-decode *count* (not a single in-flight bool) so the
+/// gate stays closed until every enqueued slot has returned — see
+/// [`Engine::pending_decodes`].
+fn awaiting_any_decode(pending_decodes: usize) -> bool {
+    pending_decodes > 0
+}
+
+/// Whether the run loop should key a queued transmission at this tick. Unlike an
+/// operator command (which keys immediately), the per-tick boundary trigger waits
+/// until the current slot's decodes have been processed (`!awaiting_decode`) so it
+/// never keys a stale message ahead of a slow decode; once they are in,
+/// `handle_decoded` has set the fresh `tx_message` this fires on. This is what lets
+/// a reply computed early in the previous cycle (fast CPU) still go out early in
+/// its slot — `maybe_transmit` is otherwise only reached on decode arrival, which
+/// on a quick decode lands mid-slot, past the TX window, dropping the reply.
+///
+/// "Early in its slot" is the whole TX window, not a hard boundary: the gate only
+/// requires `into_cycle_ms <= TX_LATEST_MS` (via [`tx_slot_eligible`]). In practice
+/// the run loop ticks fast, so the first eligible tick after the decodes settle is
+/// near the top of the slot — but a reply that becomes eligible a little later in
+/// the window is still keyed rather than dropped.
+fn boundary_tx_ready(
+    active: bool,
+    awaiting_decode: bool,
+    tx_parity: Option<i64>,
+    slot_id: i64,
+    txed_slot: i64,
+    into_cycle_ms: i64,
+) -> bool {
+    !awaiting_decode && tx_slot_eligible(active, tx_parity, slot_id, txed_slot, into_cycle_ms)
 }
 // Live-waterfall FFT parameters (window/size/averaging + display constants)
 // live in `crate::wf` and are runtime-configurable via SetWaterfallConfig.
@@ -77,6 +155,17 @@ fn wf_boundary_row(corrected_now_ms: i64, last_slot: &mut i64) -> bool {
     }
 }
 
+/// The on-air text of a decode: the raw decoded line if we have it, else a
+/// reconstruction from the parsed fields. Shared by the UI publish and the
+/// WSJT-X UDP Decode broadcast so both show identical message text.
+fn decode_text(m: &DecodedMessage) -> String {
+    if m.raw_text.is_empty() {
+        format!("{} {} {}", m.call_to, m.call_from, m.extra)
+    } else {
+        m.raw_text.clone()
+    }
+}
+
 // --- messages crossing the channel boundary --------------------------------
 
 #[derive(Debug, Clone, Deserialize)]
@@ -86,6 +175,11 @@ pub struct AnswerArgs {
     pub grid: String,
     #[serde(default)]
     pub snr: i32,
+    /// Audio offset (Hz) to answer on — WSJT-X's `df`, set by an inbound UDP
+    /// Reply request. `0` (the default, and what the desktop UI's own "click to
+    /// answer" sends) means "keep the current TX offset".
+    #[serde(default)]
+    pub delta_freq: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -118,6 +212,11 @@ pub enum EngineCommand {
     ResyncTime,
     /// Apply new live-waterfall FFT parameters (developer knobs, issue #428).
     SetWaterfallConfig(WfConfig),
+    /// Apply new WSJT-X UDP settings (enable/host/port/accept-requests). Rebinds
+    /// the socket + listener live so the Settings screen takes effect at once.
+    SetUdpConfig(crate::udp::UdpConfig),
+    /// Re-broadcast this session's decodes over UDP (inbound WSJT-X Replay).
+    UdpReplay,
     Shutdown,
 }
 
@@ -268,6 +367,14 @@ struct Engine {
     /// Slot id (rx-corrected clock) most recently handed to the decode worker.
     /// Guards the once-per-slot early decode trigger in the run loop.
     last_decoded_slot: i64,
+    /// Number of decode batches handed to the worker but not yet returned. A
+    /// *count* rather than a single in-flight bool: the decoder returns exactly one
+    /// batch per enqueued slot, so if it ever falls behind by more than one slot,
+    /// the first returned batch must not clear the gate while later slots are still
+    /// pending. Gates the run loop's boundary TX trigger (via [`awaiting_any_decode`])
+    /// so it never keys a stale message ahead of a slow decode (the fresh one is
+    /// keyed by `handle_decoded` when it arrives). See [`boundary_tx_ready`].
+    pending_decodes: usize,
     /// Audio-capture latency compensation (ms). The RX decode window is sliced
     /// this much later than the UTC cycle boundary so that buffered/late-arriving
     /// input audio lands aligned — drives decoded DT toward 0. Auto-calibrated
@@ -288,6 +395,10 @@ struct Engine {
     // live waterfall FFT (plan + window table + floor state; rebuilt on config change)
     wf: WfProcessor,
     last_wf_slot: i64, // last cycle slot marked on the live waterfall (rx-corrected)
+    /// WSJT-X UDP interface (outbound broadcast + inbound request listener).
+    udp: crate::udp::UdpService,
+    /// UTC ms of the last UDP Heartbeat sent (rate-limits it to ~15 s).
+    last_udp_heartbeat_ms: i64,
 }
 
 impl Engine {
@@ -376,16 +487,35 @@ impl Engine {
             tx_audio_hz,
             tx_gain,
             last_decoded_slot: -1,
+            pending_decodes: 0,
             rx_offset_ms,
             last_tick_ms: 0,
             tx_parity: None,
             clock_offset_ms: saved_offset.unwrap_or(0),
             time_synced: saved_offset.is_some(),
+            udp: crate::udp::UdpService::new(cmd_tx.clone()),
             cmd_tx,
             ptt: false,
             tx_playback: None,
             wf,
             last_wf_slot: -1,
+            last_udp_heartbeat_ms: 0,
+        }
+    }
+
+    /// Load the persisted WSJT-X UDP settings into a config struct. Falls back to
+    /// the WSJT-X-compatible defaults (disabled, 127.0.0.1:2237) for missing keys.
+    fn read_udp_config(&self) -> crate::udp::UdpConfig {
+        let d = crate::udp::UdpConfig::default();
+        crate::udp::UdpConfig {
+            enabled: self.db.get_config("udp_enabled").as_deref() == Some("true"),
+            host: self.db.get_config("udp_host").filter(|s| !s.is_empty()).unwrap_or(d.host),
+            port: self
+                .db
+                .get_config("udp_port")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(d.port),
+            accept_requests: self.db.get_config("udp_accept_requests").as_deref() == Some("true"),
         }
     }
 
@@ -394,6 +524,15 @@ impl Engine {
     }
 
     fn run(&mut self, cmd_rx: Receiver<EngineCommand>) {
+        // Bring up the WSJT-X UDP interface from persisted settings (binds the
+        // socket + inbound listener if enabled). Non-fatal — a bad host/port just
+        // surfaces an error and leaves the feature off.
+        let udp_cfg = self.read_udp_config();
+        match self.udp.apply(udp_cfg) {
+            Ok(msg) => self.emit(EngineEvent::Info(msg)),
+            Err(e) => self.emit(EngineEvent::Error(e)),
+        }
+
         // Reconnect the last-used rig on startup (non-fatal if it can't).
         if let Some(json) = self.db.get_config("rig_config") {
             if let Ok(cfg) = serde_json::from_str::<RigConfig>(&json) {
@@ -425,6 +564,13 @@ impl Engine {
                     sequential: slot_id.rem_euclid(2),
                     ms_into_cycle: ms_into,
                 }));
+                // WSJT-X UDP Status every tick (so companions track dial/TX/decode
+                // state), Heartbeat every ~15 s (how they discover our address).
+                self.broadcast_status();
+                if now - self.last_udp_heartbeat_ms >= 15_000 {
+                    self.last_udp_heartbeat_ms = now;
+                    self.broadcast_heartbeat();
+                }
                 // RX input level + silence warning, once we're capturing. Surfaces
                 // a dead source (e.g. DAX channel not routed) that otherwise looks
                 // like a broken waterfall.
@@ -454,7 +600,14 @@ impl Engine {
                 // front-aligned (signal at sample 0) with the tail zero-padded.
                 let elapsed = (into_rx_cycle * SAMPLE_RATE as i64 / 1000) as usize;
                 let slot = self.accum.take_slot_from_start(elapsed);
-                let _ = self.slot_tx.send(slot);
+                if self.slot_tx.send(slot).is_ok() {
+                    // Hold off the boundary TX trigger until this slot's decodes
+                    // come back, so it can't key a stale message ahead of a slow
+                    // decode (the fresh one is keyed by handle_decoded on arrival).
+                    // Count it: if the decoder is already behind, the gate must
+                    // stay closed until every outstanding slot has returned.
+                    self.pending_decodes += 1;
+                }
             }
 
             // Act on any decodes the worker has finished (off-loop DSP). This is
@@ -462,7 +615,31 @@ impl Engine {
             // and then `maybe_transmit` keys up if it's our turn. Immediate keying
             // on an operator tap is handled separately, in the command handlers.
             while let Ok(msgs) = self.dec_rx.try_recv() {
+                // One batch settled — decrement, not reset, so a still-pending
+                // later slot keeps the boundary gate closed. saturating_sub guards
+                // against a stray batch arriving after a StopDecode reset.
+                self.pending_decodes = self.pending_decodes.saturating_sub(1);
                 self.handle_decoded(msgs, slot_id);
+            }
+
+            // Boundary TX trigger: key a queued reply/CQ early in its slot (anywhere
+            // within the TX window), even when this slot's decodes were processed
+            // earlier in the previous cycle. `maybe_transmit` is otherwise only
+            // reached on decode arrival, which on a fast decode lands mid-slot — past
+            // the TX window — so the queued message would never go out (auto-sequence
+            // stalls; CQ never retransmits). Gated on `!awaiting_any_decode` so a
+            // stale message is never keyed before every outstanding slot's decodes
+            // are in; `maybe_transmit` re-checks eligibility and is idempotent per
+            // slot (the `txed_slot` guard).
+            if boundary_tx_ready(
+                self.qso.active,
+                awaiting_any_decode(self.pending_decodes),
+                self.tx_parity,
+                slot_id,
+                self.txed_slot,
+                now.rem_euclid(CYCLE_MS),
+            ) {
+                self.maybe_transmit(slot_id);
             }
 
             // Drop PTT as soon as the TX waveform finishes clocking out (or a
@@ -525,11 +702,15 @@ impl Engine {
     /// what drives CQ/auto-sequence retransmits.
     fn handle_decoded(&mut self, decoded: Vec<DecodedMessage>, slot_id: i64) {
         self.publish_decodes(&decoded);
+        self.broadcast_decodes(&decoded);
         self.calibrate_dt(&decoded);
 
         if let Some(QsoOutcome::Completed(record)) = self.qso.process_rx(&decoded) {
             match self.db.insert_qso(&record) {
-                Ok(_) => self.emit(EngineEvent::QsoCompleted(record)),
+                Ok(_) => {
+                    self.broadcast_qso(&record);
+                    self.emit(EngineEvent::QsoCompleted(record));
+                }
                 Err(e) => self.emit(EngineEvent::Error(format!("log QSO failed: {e}"))),
             }
         }
@@ -542,29 +723,30 @@ impl Engine {
     /// (`txed_slot` guard), so calling it from both `handle_decoded` and a command
     /// handler in the same slot transmits at most once.
     fn maybe_transmit(&mut self, slot_id: i64) {
-        if !self.qso.active {
+        // All the keying rules — active QSO, locked-parity alternation, once per
+        // slot, and early enough in the cycle to fit the waveform — live in the pure
+        // `tx_slot_eligible` so the run loop's boundary trigger shares them exactly.
+        if !tx_slot_eligible(
+            self.qso.active,
+            self.tx_parity,
+            slot_id,
+            self.txed_slot,
+            self.now().rem_euclid(CYCLE_MS),
+        ) {
             return;
         }
-        let parity = slot_id.rem_euclid(2);
-        // Respect a locked alternation. Answering a CQ pins the parity to the
-        // operator's click slot (set in the command handler) so we always reply
-        // opposite the DX; a CQ / free-text start leaves it `None`, eligible in
-        // any slot, and locks on its first transmission below.
-        if matches!(self.tx_parity, Some(p) if p != parity) {
-            return;
-        }
-        if self.txed_slot == slot_id {
-            return;
-        }
-        // Too late in the cycle to start cleanly — wait for our next eligible
-        // slot rather than transmit a clipped, undecodable signal.
-        if self.now().rem_euclid(CYCLE_MS) > TX_LATEST_MS {
-            return;
-        }
-        self.tx_parity = Some(parity);
+        // Answering a CQ pins the parity to the operator's click slot so we always
+        // reply opposite the DX; a CQ / free-text start locks it on this first TX.
+        self.tx_parity = Some(slot_id.rem_euclid(2));
         self.txed_slot = slot_id;
         if let Some(msg) = self.qso.tx_message().map(|s| s.to_string()) {
-            self.start_transmit(&msg);
+            if self.start_transmit(&msg) {
+                // Tell the sequencer the message actually went out. This is what
+                // lets a courtesy "73" wrap the QSO up only after it's on the air;
+                // if start_transmit bailed (busy/encode error) the QSO stays armed
+                // and retransmits next slot instead of clobbering the 73.
+                self.qso.notify_transmitted();
+            }
         }
     }
 
@@ -582,16 +764,21 @@ impl Engine {
     /// loop (in `tx_playback`) so the engine keeps draining commands — that's what
     /// makes Stop TX able to interrupt mid-transmission. PTT is dropped later, when
     /// the run loop sees the playback finish (or on Stop TX).
-    fn start_transmit(&mut self, message: &str) {
+    ///
+    /// Returns `true` if a transmission was actually started (PTT keyed, playback
+    /// armed), `false` if it bailed out (already transmitting, or an encode /
+    /// device / playback error). The caller uses this to tell the sequencer the
+    /// message really went out.
+    fn start_transmit(&mut self, message: &str) -> bool {
         // Never key a second transmission over a live one.
         if self.tx_playback.is_some() {
-            return;
+            return false;
         }
         let signal = match crate::dsp::encode::generate_ft8(message, self.tx_audio_hz as f32, SAMPLE_RATE) {
             Some(s) => s,
             None => {
                 self.emit(EngineEvent::Error(format!("cannot encode '{message}'")));
-                return;
+                return false;
             }
         };
 
@@ -603,7 +790,7 @@ impl Engine {
             Ok(p) => p,
             Err(e) => {
                 self.emit(EngineEvent::Error(format!("playback failed: {e}")));
-                return;
+                return false;
             }
         };
 
@@ -621,10 +808,11 @@ impl Engine {
         if let Err(e) = prepared.start(ms_late) {
             self.emit(EngineEvent::Error(format!("playback failed: {e}")));
             self.set_ptt(false);
-            return;
+            return false;
         }
         self.tx_playback = Some(prepared);
         self.publish_tx_state();
+        true
     }
 
     /// Stop the in-flight transmission (if any): dropping the handle halts the
@@ -673,17 +861,111 @@ impl Engine {
                 snr: m.snr,
                 freq_hz: m.freq_hz,
                 time_sec: m.time_sec,
-                text: if m.raw_text.is_empty() {
-                    format!("{} {} {}", m.call_to, m.call_from, m.extra)
-                } else {
-                    m.raw_text.clone()
-                },
+                text: decode_text(m),
                 is_cq: m.call_to.eq_ignore_ascii_case("CQ"),
                 to_me: !self.qso.my_call.is_empty()
                     && m.call_to.eq_ignore_ascii_case(&self.qso.my_call),
             })
             .collect();
         self.emit(EngineEvent::Decoded(ui));
+    }
+
+    // --- WSJT-X UDP broadcast (outbound) ------------------------------------
+
+    /// Assemble a WSJT-X Status snapshot from current engine state.
+    fn udp_status(&self) -> crate::udp::codec::Status {
+        let st = self.qso.status();
+        crate::udp::codec::Status {
+            dial_freq_hz: self.dial_hz,
+            mode: "FT8".to_string(),
+            dx_call: st.target.clone().unwrap_or_default(),
+            report: st.report_sent.map(|n| format!("{n:+03}")).unwrap_or_default(),
+            tx_mode: "FT8".to_string(),
+            tx_enabled: st.active,
+            transmitting: self.tx_playback.is_some(),
+            decoding: self.decoding,
+            rx_df: self.tx_audio_hz.max(0) as u32,
+            tx_df: self.tx_audio_hz.max(0) as u32,
+            de_call: self.qso.my_call.clone(),
+            de_grid: self.qso.my_grid.clone(),
+            dx_grid: String::new(),
+            tx_watchdog: false,
+            sub_mode: String::new(),
+            fast_mode: false,
+            special_op_mode: 0,
+            freq_tolerance: 0xFFFF_FFFF,
+            tr_period: 15,
+            config_name: "Default".to_string(),
+            tx_message: st.tx_message.clone().unwrap_or_default(),
+        }
+    }
+
+    fn broadcast_status(&self) {
+        if self.udp.is_enabled() {
+            self.udp.send(&crate::udp::codec::status(&self.udp_status()));
+        }
+    }
+
+    fn broadcast_heartbeat(&self) {
+        if self.udp.is_enabled() {
+            self.udp
+                .send(&crate::udp::codec::heartbeat(env!("CARGO_PKG_VERSION"), ""));
+        }
+    }
+
+    /// Broadcast each of a slot's decodes as a WSJT-X Decode message. The `Time`
+    /// field is ms-since-UTC-midnight; `Frequency` is the audio offset in Hz.
+    fn broadcast_decodes(&mut self, decoded: &[DecodedMessage]) {
+        if !self.udp.is_enabled() {
+            return;
+        }
+        let time_ms = self.now().rem_euclid(86_400_000) as u32;
+        for m in decoded {
+            self.udp.send_decode(crate::udp::codec::Decode {
+                is_new: true,
+                time_ms,
+                snr: m.snr,
+                delta_time: m.time_sec as f64,
+                delta_freq: m.freq_hz.max(0.0) as u32,
+                mode: "FT8".to_string(),
+                message: decode_text(m),
+                low_confidence: false,
+                off_air: false,
+            });
+        }
+    }
+
+    /// Broadcast a logged QSO as both the structured QSO-Logged message and the
+    /// Logged-ADIF message (loggers consume one or the other).
+    fn broadcast_qso(&mut self, record: &QsoRecord) {
+        if !self.udp.is_enabled() {
+            return;
+        }
+        use crate::udp::codec::{qso_logged, DateTime, QsoLogged};
+        // Actual TX RF frequency = dial + audio offset (what WSJT-X reports).
+        let tx_freq_hz = self.dial_hz + self.tx_audio_hz.max(0) as u64;
+        let q = QsoLogged {
+            time_off: DateTime::from_adif(&record.qso_date_off, &record.time_off),
+            dx_call: record.call.clone(),
+            dx_grid: record.gridsquare.clone(),
+            tx_freq_hz,
+            mode: record.mode.clone(),
+            report_sent: record.rst_sent.clone(),
+            report_received: record.rst_rcvd.clone(),
+            tx_power: String::new(),
+            comments: record.comment.clone(),
+            name: String::new(),
+            time_on: DateTime::from_adif(&record.qso_date, &record.time_on),
+            operator_call: record.station_callsign.clone(),
+            my_call: record.station_callsign.clone(),
+            my_grid: record.my_gridsquare.clone(),
+            exchange_sent: String::new(),
+            exchange_received: String::new(),
+            prop_mode: String::new(),
+        };
+        self.udp.send(&qso_logged(&q));
+        self.udp
+            .send(&crate::udp::codec::logged_adif(&crate::db::adif_record(record)));
     }
 
     fn publish_tx_state(&self) {
@@ -694,6 +976,9 @@ impl Engine {
             message: self.qso.tx_message().map(|s| s.to_string()),
             status: self.qso.status(),
         }));
+        // Mirror the state change out over WSJT-X UDP so companion apps see TX
+        // start/stop and QSO progress without waiting for the next 1 Hz tick.
+        self.broadcast_status();
     }
 
     fn publish_rig_status(&self) {
@@ -721,12 +1006,40 @@ impl Engine {
         let _ = self.evt.send(e);
     }
 
+    /// Adopt an inbound WSJT-X Reply's requested `df` as the **session** TX audio
+    /// offset — in-memory only. The value arrives on an untrusted UDP socket, so
+    /// this deliberately does *not* write through to the persisted `base_freq`
+    /// config: only explicit operator actions (SetBaseFreq / the UI) change the
+    /// saved offset, and a datagram can't survive a restart. A `0`/unspecified or
+    /// out-of-band `df` is ignored (current offset kept). Returns whether the
+    /// session offset changed.
+    fn apply_reply_df(&mut self, delta_freq: u32) -> bool {
+        match reply_tx_audio_hz(delta_freq) {
+            Some(hz) => {
+                self.tx_audio_hz = hz;
+                true
+            }
+            None => false,
+        }
+    }
+
     fn handle(&mut self, cmd: EngineCommand) {
         match cmd {
             EngineCommand::StartDecode => self.start_decode(),
             EngineCommand::StopDecode => {
                 self.decoding = false;
                 self.input = None;
+                // No slot is in flight once capture stops; clear the count so a
+                // later CQ can key at its slot boundary without being blocked. Any
+                // batch still in the channel decrements from 0 via saturating_sub.
+                self.pending_decodes = 0;
+                // Tell companion apps to wipe their decode band and forget the
+                // replay history — this is a genuine reset, not a per-cycle churn.
+                if self.udp.is_enabled() {
+                    self.udp.send(&crate::udp::codec::clear());
+                }
+                self.udp.clear_replay_cache();
+                self.broadcast_status();
                 self.emit(EngineEvent::Info("decode stopped".into()));
             }
             EngineCommand::SetStation { call, grid } => {
@@ -743,10 +1056,17 @@ impl Engine {
                 if let Some(rig) = self.rig.as_mut() {
                     let _ = rig.set_frequency(hz);
                 }
+                // New band = new decode context: clear companions' band + replay
+                // history and push the fresh dial frequency in a Status.
+                if self.udp.is_enabled() {
+                    self.udp.send(&crate::udp::codec::clear());
+                }
+                self.udp.clear_replay_cache();
+                self.broadcast_status();
                 self.publish_rig_status();
             }
             EngineCommand::SetBaseFreq(hz) => {
-                self.tx_audio_hz = hz.clamp(200, 3000);
+                self.tx_audio_hz = hz.clamp(MIN_TX_AUDIO_HZ, MAX_TX_AUDIO_HZ);
                 let _ = self.db.set_config("base_freq", &self.tx_audio_hz.to_string());
             }
             EngineCommand::SetTxGain(g) => {
@@ -768,6 +1088,26 @@ impl Engine {
                     cfg.avg
                 )));
             }
+            EngineCommand::SetUdpConfig(cfg) => {
+                // Persist the four settings, then rebind live.
+                let _ = self.db.set_config("udp_enabled", if cfg.enabled { "true" } else { "false" });
+                let _ = self.db.set_config("udp_host", &cfg.host);
+                let _ = self.db.set_config("udp_port", &cfg.port.to_string());
+                let _ = self.db.set_config(
+                    "udp_accept_requests",
+                    if cfg.accept_requests { "true" } else { "false" },
+                );
+                match self.udp.apply(cfg) {
+                    Ok(msg) => {
+                        // Prime companions immediately on enable.
+                        self.broadcast_heartbeat();
+                        self.broadcast_status();
+                        self.emit(EngineEvent::Info(msg));
+                    }
+                    Err(e) => self.emit(EngineEvent::Error(e)),
+                }
+            }
+            EngineCommand::UdpReplay => self.udp.replay(),
             EngineCommand::SetInputDevice(name) => {
                 self.input_device = name.clone();
                 let _ = self.db.set_config("input_device", name.as_deref().unwrap_or(""));
@@ -811,6 +1151,15 @@ impl Engine {
                 self.publish_tx_state();
             }
             EngineCommand::Answer(args) => {
+                // Honor the audio tone the companion asked us to answer on (WSJT-X's
+                // `df`) for *this session* when it carries a plausible one, so we key
+                // up on the requested offset rather than the current TX tone —
+                // matching the Android/iOS ports. This is an in-memory-only change:
+                // the `df` arrives on an untrusted UDP socket, so it must never
+                // rewrite the operator's persisted `base_freq` (only SetBaseFreq / the
+                // UI do that, and the saved offset survives a restart). The desktop
+                // UI's own "click to answer" sends df=0 (offset unchanged).
+                self.apply_reply_df(args.delta_freq);
                 let msg = DecodedMessage {
                     call_from: args.call_from,
                     grid: args.grid,
@@ -888,8 +1237,9 @@ impl Engine {
         match RigConnection::connect(&cfg) {
             Ok(mut rig) => {
                 let _ = rig.set_frequency(self.dial_hz);
+                let name = rig.name();
                 self.rig = Some(rig);
-                self.emit(EngineEvent::Info(format!("rig connected: {:?}", cfg.model)));
+                self.emit(EngineEvent::Info(format!("rig connected: {name}")));
             }
             Err(e) => {
                 self.rig = None;
@@ -902,7 +1252,57 @@ impl Engine {
 
 #[cfg(test)]
 mod tests {
-    use super::{clamp_tx_gain, rms_dbfs, wf_boundary_row, CYCLE_MS, SILENCE_DBFS};
+    use super::{
+        clamp_tx_gain, reply_tx_audio_hz, rms_dbfs, wf_boundary_row, Engine, CYCLE_MS,
+        MAX_TX_AUDIO_HZ, MIN_TX_AUDIO_HZ, SILENCE_DBFS,
+    };
+    use crate::db::Db;
+    use std::sync::Arc;
+
+    #[test]
+    fn reply_df_updates_session_offset_without_persisting() {
+        // The operator's saved TX offset (base_freq) is what survives a restart.
+        let db = Arc::new(Db::open_in_memory().expect("in-memory db"));
+        db.set_config("base_freq", "1500").expect("seed base_freq");
+
+        let (evt_tx, _evt_rx) = std::sync::mpsc::channel();
+        let (cmd_tx, _cmd_rx) = std::sync::mpsc::channel();
+        let mut engine = Engine::new(Arc::clone(&db), evt_tx, cmd_tx);
+        assert_eq!(engine.tx_audio_hz, 1500, "restored from persisted base_freq");
+
+        // An inbound (untrusted) UDP Reply asks us to answer on 1800 Hz: the
+        // in-memory session offset moves so we key up on the requested tone...
+        assert!(engine.apply_reply_df(1800));
+        assert_eq!(engine.tx_audio_hz, 1800);
+        // ...but the operator's *persisted* offset is left exactly as they saved
+        // it — a network datagram must not change what comes back after a restart.
+        assert_eq!(db.get_config("base_freq").as_deref(), Some("1500"));
+
+        // A 0/unspecified or out-of-band df changes neither the session offset nor
+        // the persisted config.
+        assert!(!engine.apply_reply_df(0));
+        assert!(!engine.apply_reply_df(50_000));
+        assert_eq!(engine.tx_audio_hz, 1800);
+        assert_eq!(db.get_config("base_freq").as_deref(), Some("1500"));
+    }
+
+    #[test]
+    fn reply_df_honors_in_band_and_ignores_the_rest() {
+        // A plausible tone in the passband is adopted verbatim so we answer on it.
+        assert_eq!(reply_tx_audio_hz(1500), Some(1500));
+        assert_eq!(reply_tx_audio_hz(MIN_TX_AUDIO_HZ as u32), Some(MIN_TX_AUDIO_HZ));
+        assert_eq!(reply_tx_audio_hz(MAX_TX_AUDIO_HZ as u32), Some(MAX_TX_AUDIO_HZ));
+
+        // df == 0 is WSJT-X's "unspecified" — keep the current offset.
+        assert_eq!(reply_tx_audio_hz(0), None);
+        // Below/above the usable audio passband: a garbled datagram must not push
+        // the TX tone off the band, so ignore it and keep the current offset.
+        assert_eq!(reply_tx_audio_hz(MIN_TX_AUDIO_HZ as u32 - 1), None);
+        assert_eq!(reply_tx_audio_hz(MAX_TX_AUDIO_HZ as u32 + 1), None);
+        assert_eq!(reply_tx_audio_hz(50_000), None);
+        // A value past i32::MAX can't be a real audio offset either.
+        assert_eq!(reply_tx_audio_hz(u32::MAX), None);
+    }
 
     #[test]
     fn rms_dbfs_flags_silence_and_signal() {
@@ -942,5 +1342,71 @@ mod tests {
         assert!(!wf_boundary_row(CYCLE_MS + 500, &mut last));
         // And again at the following boundary.
         assert!(wf_boundary_row(2 * CYCLE_MS + 10, &mut last));
+    }
+
+    #[test]
+    fn tx_slot_eligible_enforces_active_parity_once_and_window() {
+        use super::{tx_slot_eligible, TX_LATEST_MS};
+        // Inactive QSO never keys.
+        assert!(!tx_slot_eligible(false, None, 10, -1, 0));
+        // Active, no parity lock, fresh slot, at the very top of the cycle → eligible.
+        assert!(tx_slot_eligible(true, None, 10, -1, 0));
+        // The last instant that still fits the waveform is eligible; one ms later is not.
+        assert!(tx_slot_eligible(true, None, 10, -1, TX_LATEST_MS));
+        assert!(!tx_slot_eligible(true, None, 10, -1, TX_LATEST_MS + 1));
+        // Already transmitted in this slot → no second keying.
+        assert!(!tx_slot_eligible(true, None, 10, 10, 0));
+        // A locked parity must match the slot's parity (slot 10 is even, 11 is odd).
+        assert!(tx_slot_eligible(true, Some(0), 10, -1, 0));
+        assert!(!tx_slot_eligible(true, Some(1), 10, -1, 0));
+        assert!(tx_slot_eligible(true, Some(1), 11, -1, 0));
+    }
+
+    #[test]
+    fn boundary_tx_keys_at_slot_top_only_after_this_slots_decode() {
+        use super::{boundary_tx_ready, TX_LATEST_MS};
+        // Fast decode: this slot's decodes are already processed (awaiting=false), so a
+        // reply computed in the previous cycle keys at the top of its slot. This is the
+        // case the decode-arrival trigger used to miss — it fires mid-slot, past the
+        // window, so the queued reply/CQ was silently dropped.
+        assert!(boundary_tx_ready(true, false, None, 4, -1, 0));
+        // Slow decode still pending: must NOT key a (stale) message; handle_decoded
+        // keys the fresh one when the decode lands.
+        assert!(!boundary_tx_ready(true, true, None, 4, -1, 0));
+        // Past the window, already transmitted this slot, wrong parity, or inactive all
+        // block it too (it delegates to tx_slot_eligible).
+        assert!(!boundary_tx_ready(true, false, None, 4, -1, TX_LATEST_MS + 1));
+        assert!(!boundary_tx_ready(true, false, None, 4, 4, 0));
+        assert!(!boundary_tx_ready(true, false, Some(1), 4, -1, 0)); // wants odd, slot 4 even
+        assert!(!boundary_tx_ready(false, false, None, 4, -1, 0));
+    }
+
+    #[test]
+    fn awaiting_gate_stays_closed_until_every_pending_slot_returns() {
+        use super::awaiting_any_decode;
+        // The gate is driven by the pending-decode count. Walk the "decoder falls
+        // behind by a slot" sequence a single in-flight bool would get wrong: it
+        // would clear on the first returned batch while a later slot is still out.
+        let mut pending = 0usize; // idle: nothing outstanding, gate open.
+        assert!(!awaiting_any_decode(pending));
+
+        pending += 1; // slot A enqueued
+        assert!(awaiting_any_decode(pending));
+        pending += 1; // slot B enqueued before A came back (decoder behind)
+        assert!(awaiting_any_decode(pending));
+
+        pending = pending.saturating_sub(1); // A's batch returns...
+        assert!(
+            awaiting_any_decode(pending),
+            "gate must stay closed while slot B is still decoding",
+        );
+        pending = pending.saturating_sub(1); // B's batch returns
+        assert!(!awaiting_any_decode(pending));
+
+        // A stray settle (e.g. a batch arriving after a StopDecode reset to 0)
+        // can't underflow the count and reopen/close spuriously.
+        pending = pending.saturating_sub(1);
+        assert_eq!(pending, 0);
+        assert!(!awaiting_any_decode(pending));
     }
 }

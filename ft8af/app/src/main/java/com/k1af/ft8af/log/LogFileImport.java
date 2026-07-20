@@ -4,8 +4,11 @@ import android.util.Log;
 
 import com.k1af.ft8af.html.ImportTaskList;
 
+import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 
@@ -22,6 +25,13 @@ import java.util.HashMap;
 
 public class LogFileImport {
     private static final String TAG = "LogFileImport";
+
+    // Defensive cap on a single import. This path is reachable from the built-in web-logger
+    // HTTP upload (LogHttpServer -> new LogFileImport), so an unbounded read of a huge/hostile
+    // upload could OOM the app. 50 MB comfortably fits a real-world lifetime ADIF log, matching
+    // the sibling ImportSharedLogs.MAX_IMPORT_BYTES cap.
+    static final int MAX_IMPORT_BYTES = 50 * 1024 * 1024;
+
     private final String fileContext;
     private final HashMap<Integer,String> errorLines=new HashMap<>();
     private ImportTaskList.ImportTask importTask;
@@ -35,10 +45,40 @@ public class LogFileImport {
     public LogFileImport(ImportTaskList.ImportTask task, String logFileName) throws IOException {
         importTask=task;
         try (FileInputStream logFileStream = new FileInputStream(logFileName)) {
-            byte[] bytes = new byte[logFileStream.available()];
-            logFileStream.read(bytes);
-            fileContext = new String(bytes);
+            fileContext = readFully(logFileStream);
         }
+    }
+
+    /**
+     * Read a stream to its end into a UTF-8 string.
+     *
+     * <p>The previous implementation sized a single buffer from {@link InputStream#available()}
+     * and ignored the return value of a lone {@code read(byte[])} call. Neither is a reliable
+     * measure of a stream's length: {@code available()} is only an estimate, and one
+     * {@code read} is permitted to return fewer bytes than requested. On a large ADIF log this
+     * left the tail of the buffer as NUL bytes, silently garbling or dropping the last records.
+     * Reading in a loop until EOF (mirroring {@link ImportSharedLogs}) fixes this. The loop is
+     * bounded by {@link #MAX_IMPORT_BYTES}: a stream larger than the cap throws {@link IOException}
+     * rather than growing the buffer unbounded, since this path is reachable from an HTTP upload.
+     *
+     * @param stream input to drain (not closed here — the caller owns it)
+     * @return the full stream contents decoded as UTF-8
+     * @throws IOException if the underlying read fails
+     */
+    static String readFully(InputStream stream) throws IOException {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        byte[] chunk = new byte[8192];
+        int total = 0;
+        int n;
+        while ((n = stream.read(chunk)) > 0) {
+            total += n;
+            if (total > MAX_IMPORT_BYTES) {
+                throw new IOException("log file exceeds "
+                        + (MAX_IMPORT_BYTES / (1024 * 1024)) + " MB limit");
+            }
+            buffer.write(chunk, 0, n);
+        }
+        return buffer.toString(StandardCharsets.UTF_8.name());
     }
 
     /**

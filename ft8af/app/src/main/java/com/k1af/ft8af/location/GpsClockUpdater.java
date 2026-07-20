@@ -69,7 +69,7 @@ public class GpsClockUpdater extends LocationSubscriber {
     // The interval chosen by prepareStart() for the in-flight start(); consumed by
     // subscribeProviders() and onSubscribed(). Only touched under the monitor.
     private long pendingIntervalMs = -1;
-    // The offset UtcTimer.delay held *before* GPS discipline took it over (NTP's %-15000
+    // The offset UtcTimer.delay held *before* GPS discipline took it over (an NTP
     // sync, a manual correction, or 0). Captured on the first start() and restored by stop()
     // so disabling GPS returns the clock to its pre-GPS state instead of clobbering it with
     // manualTimeCorrectionMs, which NTP never writes. NO_SAVED_DELAY means "not disciplining".

@@ -58,7 +58,17 @@ public class UsbAudioDevice {
     private volatile boolean capturing = false;
     // Non-zero when the libusb-backed capture session is live; in that case
     // captureLoop() is bypassed and stopCapture() routes through native.
-    private volatile long nativeCaptureHandle = 0;
+    // The live native capture session pointer (0 = none). AtomicLong so exactly
+    // one caller can claim it for teardown via getAndSet(0): a natural capture
+    // retire and a concurrent explicit stopCapture() must never both nativeStop
+    // the same session (that would double libusb_exit/free). See stopCapture()
+    // and the onCaptureStopped callback — the callback deliberately does NOT
+    // clear this, so the session's libusb context is freed by the follow-up
+    // stopCapture() (on the reinit worker, off the native event thread) instead
+    // of being leaked; leaking it burned a pthread TLS key per retire and
+    // eventually aborted libusb_init with a destroyed-mutex/key-exhaustion crash.
+    private final java.util.concurrent.atomic.AtomicLong nativeCaptureHandle =
+            new java.util.concurrent.atomic.AtomicLong(0);
 
     // Output (speaker)
     private UsbInterface streamingInterfaceOut;
@@ -73,12 +83,32 @@ public class UsbAudioDevice {
     public interface AudioInputCallback {
         void onAudioData(float[] data, int length);
         /**
-         * Fired on a worker thread when the capture loop exits without
-         * stopCapture() being called — e.g. the USB device was disconnected
-         * or the kernel returned a null URB. Default is a no-op so existing
-         * callers compile unchanged.
+         * Fired on a worker thread when a capture session ends. The exact
+         * contract differs by capture path:
+         *
+         * <ul>
+         *   <li><b>Native (libusb) path</b> — invoked on <em>every</em> session
+         *       end. {@code stopCode == 0} is a clean stop we requested via
+         *       {@code nativeStop()} (a reinit, band change, {@code stopRecord()},
+         *       or teardown); any non-zero value is a genuine capture failure
+         *       (transfers retired, NO_DEVICE, event-loop error).</li>
+         *   <li><b>{@code UsbRequest} fallback path</b> — invoked <em>only</em> on
+         *       an abnormal exit (the device died mid-capture), always with
+         *       {@link #CAPTURE_STOP_FALLBACK_FAILURE}. A clean stop on this path
+         *       does not fire the callback at all, so {@code stopCode == 0} is
+         *       never delivered here.</li>
+         * </ul>
+         *
+         * <p>In both paths a non-zero code is a genuine failure and a
+         * {@code 0}/absent callback is a clean stop. Callers must not treat a
+         * clean stop as a failure: doing so pinned the adapter in a reinit loop
+         * that starved the decoder (429 of 434 field stops were clean stops).
+         * Default is a no-op so existing callers compile unchanged.
+         *
+         * @param stopCode the native stop reason (see
+         *     {@link #describeCaptureStopCode})
          */
-        default void onCaptureStopped() {}
+        default void onCaptureStopped(int stopCode) {}
     }
 
     /**
@@ -538,14 +568,21 @@ public class UsbAudioDevice {
                                     "UsbAudioDevice: libusb capture stopped, "
                                             + "code=" + code + " ("
                                             + describeCaptureStopCode(code) + ")");
-                            nativeCaptureHandle = 0;
+                            // Do NOT clear nativeCaptureHandle here. This runs on
+                            // the native libusb event thread, which cannot free
+                            // its own session (nativeStop would join itself). We
+                            // leave the handle set so the follow-up stopCapture()
+                            // — driven by reinitialize() on the reinit worker,
+                            // off this thread — calls nativeStop() and releases
+                            // the libusb context (and its TLS key). Clearing it
+                            // here is what leaked the context on every retire.
                             capturing = false;
-                            if (javaCb != null) javaCb.onCaptureStopped();
+                            if (javaCb != null) javaCb.onCaptureStopped(code);
                         }
                     });
 
             if (handle != 0) {
-                nativeCaptureHandle = handle;
+                nativeCaptureHandle.set(handle);
                 com.k1af.ft8af.GeneralVariables.fileLog(
                         "UsbAudioDevice: libusb capture started OK");
                 return;
@@ -711,18 +748,33 @@ public class UsbAudioDevice {
             capturing = false;
             if (abnormalExit && callback != null) {
                 final AudioInputCallback cb = callback;
+                // Non-zero stop code: this is a genuine failure (device died),
+                // not a clean stop, so the recorder's retry path must run.
                 new Thread(() -> {
-                    try { cb.onCaptureStopped(); } catch (Exception ignored) {}
+                    try { cb.onCaptureStopped(CAPTURE_STOP_FALLBACK_FAILURE); }
+                    catch (Exception ignored) {}
                 }, "USB-Audio-Capture-Stopped").start();
             }
         }
     }
 
+    /**
+     * Atomically take ownership of the native capture handle for teardown:
+     * returns the handle to stop (and clears the field), or {@code 0} if it was
+     * already claimed/absent. Pulling the two racing teardown drivers — a
+     * natural capture retire and an explicit stopCapture() — through one atomic
+     * getAndSet guarantees exactly one nativeStop() per session, so libusb_exit
+     * (and the free) runs once. Package-visible so the single-claim guarantee is
+     * unit-testable.
+     */
+    static long claimCaptureHandleForStop(java.util.concurrent.atomic.AtomicLong handleRef) {
+        return handleRef.getAndSet(0);
+    }
+
     public void stopCapture() {
         capturing = false;
-        long h = nativeCaptureHandle;
+        long h = claimCaptureHandleForStop(nativeCaptureHandle);
         if (h != 0) {
-            nativeCaptureHandle = 0;
             try {
                 UsbAudioNative.nativeStop(h);
             } catch (Throwable t) {
@@ -879,35 +931,77 @@ public class UsbAudioDevice {
             // suspend), initialize() returns false and queue()/requestWait()
             // throw IllegalStateException. Catching here turns a fatal process
             // crash into a clean TX abort that the caller already handles.
-            UsbRequest request = new UsbRequest();
-            try {
-                if (!request.initialize(connection, endpointOut)) {
-                    Log.e(TAG, "request.initialize returned false at offset " + offset
-                            + " (USB connection likely closed)");
-                    try { request.close(); } catch (Exception ignored) {}
+            //
+            // Per-packet retry: a single dropped/naked isochronous packet — the
+            // hallmark of RFI coupling into a marginal cable during TX — used to
+            // abort the whole over. Instead re-send just the failing packet a
+            // bounded number of times (UsbTransientErrorPolicy.MAX_PACKET_RETRIES)
+            // before giving up. FT8 has ~2.36s of cycle slack, so a handful of
+            // ~1ms packet retries never pushes audio off the WSJT-X grid. Only
+            // transient stalls (queue()==false, null requestWait()) are retried;
+            // a torn-down connection (initialize()==false / IllegalStateException)
+            // is fatal and drops the over immediately.
+            boolean packetSent = false;
+            for (int attempt = 0; !packetSent; attempt++) {
+                // STOP can arrive between retries too — honour it promptly.
+                if (UsbAudioNative.writeCancelled) {
+                    Log.d(TAG, "writeAudio cancelled during retry at offset " + offset);
                     return false;
                 }
+                UsbRequest request = new UsbRequest();
+                boolean transientFailure = false;
+                try {
+                    if (!request.initialize(connection, endpointOut)) {
+                        Log.e(TAG, "request.initialize returned false at offset " + offset
+                                + " (USB connection likely closed)");
+                        try { request.close(); } catch (Exception ignored) {}
+                        return false; // torn down — fatal, no point retrying
+                    }
 
-                boolean queued;
-                if (android.os.Build.VERSION.SDK_INT >= 26) {
-                    queued = request.queue(buf);
-                } else {
-                    queued = request.queue(buf, chunkSize);
-                }
-                if (!queued) {
-                    Log.e(TAG, "Failed to queue output URB at offset " + offset);
+                    buf.rewind();
+                    boolean queued;
+                    if (android.os.Build.VERSION.SDK_INT >= 26) {
+                        queued = request.queue(buf);
+                    } else {
+                        queued = request.queue(buf, chunkSize);
+                    }
+                    if (!queued) {
+                        transientFailure = true;
+                    } else {
+                        UsbRequest completed = connection.requestWait();
+                        if (completed == null) {
+                            // A null requestWait() is a recoverable stall, not a
+                            // completed packet — retry it rather than silently
+                            // skipping this chunk of the waveform.
+                            transientFailure = true;
+                        } else {
+                            // requestWait() normally returns the same request we
+                            // queued; only close it here if it's a different instance
+                            // — the shared request.close() below handles the common case.
+                            if (completed != request) {
+                                try { completed.close(); } catch (Exception ignored) {}
+                            }
+                            packetSent = true;
+                        }
+                    }
+                } catch (IllegalStateException | NullPointerException e) {
+                    Log.e(TAG, "writeAudio aborting at offset " + offset + ": " + e.getMessage());
                     try { request.close(); } catch (Exception ignored) {}
-                    return false;
+                    return false; // connection gone — fatal
                 }
-
-                UsbRequest completed = connection.requestWait();
-                if (completed != null) {
-                    try { completed.close(); } catch (Exception ignored) {}
-                }
-            } catch (IllegalStateException | NullPointerException e) {
-                Log.e(TAG, "writeAudio aborting at offset " + offset + ": " + e.getMessage());
                 try { request.close(); } catch (Exception ignored) {}
-                return false;
+
+                if (!packetSent) {
+                    UsbTransientErrorPolicy.Kind kind =
+                            UsbTransientErrorPolicy.classifyUsbRequestFailure(transientFailure);
+                    if (!UsbTransientErrorPolicy.shouldRetryPacket(kind, attempt)) {
+                        Log.e(TAG, "writeAudio giving up on packet at offset " + offset
+                                + " after " + (attempt + 1) + " attempt(s)");
+                        return false;
+                    }
+                    Log.w(TAG, "writeAudio retrying packet at offset " + offset
+                            + " (attempt " + (attempt + 1) + ")");
+                }
             }
 
             offset += chunkSize;
@@ -980,6 +1074,7 @@ public class UsbAudioDevice {
      * <p>Package-visible for testing.
      */
     static String describeCaptureStopCode(int code) {
+        if (code == CAPTURE_STOP_FALLBACK_FAILURE) return "UsbRequest fallback capture died";
         if (code == 0) return "clean stop (nativeStop)";
         if (code == 1) return "all transfers retired (no terminal cause)";
         if (code >= 1000 && code < 2000) {
@@ -1086,6 +1181,14 @@ public class UsbAudioDevice {
      * any immediate setup failure.
      */
     static final long MAX_FALLBACK_ELAPSED_MS = 1_000;
+
+    /**
+     * Stop code reported when the {@code UsbRequest} fallback capture loop exits
+     * abnormally (device died). Distinct negative sentinel so it can't collide
+     * with a native libusb stop reason ({@code 0}, {@code 1}, {@code 1000+});
+     * any non-zero code drives the recorder's failure-retry path.
+     */
+    static final int CAPTURE_STOP_FALLBACK_FAILURE = -1;
 
     public boolean hasInput() { return endpointIn != null; }
     public boolean hasOutput() { return endpointOut != null; }

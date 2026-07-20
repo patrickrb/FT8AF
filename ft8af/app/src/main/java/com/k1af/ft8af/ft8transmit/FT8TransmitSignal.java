@@ -38,6 +38,7 @@ import com.k1af.ft8af.timer.UtcTimer;
 import com.k1af.ft8af.ui.ToastMessage;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -100,6 +101,13 @@ public class FT8TransmitSignal {
     private AudioAttributes attributes = null;
     private AudioFormat myFormat = null;
     private AudioTrack audioTrack = null;
+
+    // Held for the duration of each AudioTrack TX so other apps' sounds
+    // (touch clicks, notifications) aren't mixed into the audio feeding the
+    // rig. Acquired in playFT8Signal's sound-card branch, released in
+    // afterPlayAudio (a no-op for the CAT/USB-direct paths, which never
+    // acquire it). The tune worker uses its own instance.
+    private final TxAudioFocus txAudioFocus = new TxAudioFocus();
 
     // Milliseconds we are late into the current cycle; leading audio is clipped
     // so the TX still finishes on the cycle boundary. Set just before playback.
@@ -258,6 +266,65 @@ public class FT8TransmitSignal {
         utcTimer.start();
     }
 
+    /** Upper clamp for {@link GeneralVariables#lateStartTolerance} (matches the settings UI range). */
+    static final int MAX_LATE_START_TOLERANCE_MS = 4000;
+
+    /**
+     * The pure decision for a manual {@link #transmitNow()}: given how far into the
+     * current slot the operator tapped, decide whether we still key up <em>this</em>
+     * cycle and, if so, how much leading audio must be clipped so the waveform still
+     * ends on the slot boundary.
+     *
+     * <p>Extracted from {@code transmitNow()} so the tolerance-boundary logic is
+     * unit-testable without JNI or a running timer.
+     */
+    static final class ManualTxGate {
+        /** Whether to key up this cycle (false == defer to the next matching slot). */
+        final boolean transmit;
+        /** Leading audio to clip, in ms, so TX still ends on the boundary (0 within slack). */
+        final int clipMs;
+
+        ManualTxGate(boolean transmit, int clipMs) {
+            this.transmit = transmit;
+            this.clipMs = clipMs;
+        }
+    }
+
+    /**
+     * Decide whether a manual TX tapped {@code msInCycle} into the slot goes out now.
+     *
+     * <p>The waveform occupies {@code slotMillis - audioSlackMillis} of the slot, so any
+     * start within the slack ({@code msInCycle <= audioSlackMillis}) fits with zero
+     * clipping. Past the slack we clip the excess leading audio — the identical
+     * {@code msLate} math the transmit runnable applies before playback. The tolerance
+     * bounds how much of that leading audio we are willing to clip: TX goes out iff the
+     * clip we would take is within tolerance.
+     *
+     * <p>This mirrors the clip path exactly, so the gate is never more restrictive than
+     * the transmit it guards. The old raw {@code msInCycle < tolerance} check rejected
+     * even before the free slack was used up (default tolerance 2000 ms &lt; FT8's 2360 ms
+     * slack), which is why the setting appeared to do nothing — see issue #467.
+     *
+     * @param msInCycle       ms elapsed since the current slot boundary (>= 0)
+     * @param audioSlackMillis {@link ModeProfile#audioSlackMillis} — free slack before clipping
+     * @param slotMillis       {@link ModeProfile#slotMillis} — cycle length
+     * @param lateStartTolerance configured tolerance (clamped to 0..{@link #MAX_LATE_START_TOLERANCE_MS})
+     */
+    static ManualTxGate decideManualTx(long msInCycle, int audioSlackMillis,
+                                       int slotMillis, int lateStartTolerance) {
+        int tolerance = lateStartTolerance;
+        if (tolerance < 0) tolerance = 0;
+        if (tolerance > MAX_LATE_START_TOLERANCE_MS) tolerance = MAX_LATE_START_TOLERANCE_MS;
+
+        // How much leading audio we'd have to clip to still end on the boundary.
+        long clip = msInCycle - audioSlackMillis;
+        if (clip < 0) clip = 0;
+
+        boolean transmit = clip <= tolerance;
+        if (clip > slotMillis - 1) clip = slotMillis - 1;
+        return new ManualTxGate(transmit, (int) clip);
+    }
+
     /**
      * Transmit immediately.
      */
@@ -274,13 +341,19 @@ public class FT8TransmitSignal {
         resetTargetReport();
 
         if (UtcTimer.getNowSequential() == sequential) {
-            long msInCycle = UtcTimer.getSystemTime() % GeneralVariables.currentMode().slotMillis;
-            int tolerance = GeneralVariables.lateStartTolerance;
-            if (tolerance < 0) tolerance = 0;
-            if (tolerance > 4000) tolerance = 4000;
-            if (msInCycle < tolerance) {
+            ModeProfile mode = GeneralVariables.currentMode();
+            long msInCycle = UtcTimer.getSystemTime() % mode.slotMillis;
+            ManualTxGate gate = decideManualTx(msInCycle, mode.audioSlackMillis,
+                    mode.slotMillis, GeneralVariables.lateStartTolerance);
+            if (gate.transmit) {
                 setTransmitting(false);
                 doTransmit();
+            } else {
+                // Too late for this cycle even with the configured tolerance. Give explicit
+                // feedback instead of silently falling through to wait for the next slot.
+                ToastMessage.show(String.format(
+                        GeneralVariables.getStringFromResource(R.string.late_start_deferred),
+                        gate.clipMs));
             }
         }
     }
@@ -682,6 +755,13 @@ public class FT8TransmitSignal {
         GeneralVariables.fileLog(
                 "playFT8Signal: using AudioTrack output (Android default sink)");
 
+        // This branch shares Android's mixer with every other app, so claim
+        // exclusive focus for the transmission. Denial is log-only: TX must
+        // still go out.
+        boolean focusGranted = txAudioFocus.acquire(GeneralVariables.getMainContext());
+        GeneralVariables.fileLog("playFT8Signal: audio focus "
+                + (focusGranted ? "granted (exclusive)" : "NOT granted — other-app audio may mix into TX"));
+
         Log.d(TAG, String.format("playFT8Signal: Preparing sound card playback... bit depth: %s, sample rate: %d"
                 , GeneralVariables.audioOutput32Bit ? "Float32" : "Int16"
                 , GeneralVariables.audioSampleRate));
@@ -944,6 +1024,7 @@ public class FT8TransmitSignal {
             audioTrack.release();
             audioTrack = null;
         }
+        txAudioFocus.release();
         // One-shot free text (WSJT-X Tx5 style) just finished sending: stop here
         // instead of repeating it every cycle, and revert to standard messages so
         // the next CQ is a normal CQ. Safe to deactivate now — the audio has already
@@ -970,9 +1051,15 @@ public class FT8TransmitSignal {
 
         // look up signal report from history
         // processing signal reports here because saved reports often differ from actual QSO reports
+        // Snapshot the shared transmitMessages list once: it is mutated concurrently
+        // by the decode thread (add / trimToMessageCount remove(0) / clear), so a live
+        // size()-then-get(i) scan can throw IndexOutOfBounds when the list shrinks
+        // mid-scan. Iterating a private copy is race-free and preserves the
+        // most-recent-first (reverse index) semantics.
+        List<Ft8Message> transmitMessagesSnapshot = new ArrayList<>(GeneralVariables.transmitMessages);
         // iterate through received signal reports from the other party
-        for (int i = GeneralVariables.transmitMessages.size() - 1; i >= 0; i--) {
-            Ft8Message message = GeneralVariables.transmitMessages.get(i);
+        for (int i = transmitMessagesSnapshot.size() - 1; i >= 0; i--) {
+            Ft8Message message = transmitMessagesSnapshot.get(i);
             if ((GeneralVariables.checkFun3(message.extraInfo)
                     || GeneralVariables.checkFun2(message.extraInfo))
                     && (message.callsignFrom.equals(toCallsign.callsign)
@@ -983,8 +1070,8 @@ public class FT8TransmitSignal {
             }
         }
         // iterate through signal reports I sent to the other party
-        for (int i = GeneralVariables.transmitMessages.size() - 1; i >= 0; i--) {
-            Ft8Message message = GeneralVariables.transmitMessages.get(i);
+        for (int i = transmitMessagesSnapshot.size() - 1; i >= 0; i--) {
+            Ft8Message message = transmitMessagesSnapshot.get(i);
             if ((GeneralVariables.checkFun3(message.extraInfo)
                     || GeneralVariables.checkFun2(message.extraInfo))
                     && (message.callsignTo.equals(toCallsign.callsign)
@@ -2484,6 +2571,9 @@ public class FT8TransmitSignal {
         float offsetHz = GeneralVariables.getBaseFrequency();
         AudioTrack track = null;
         boolean keyed = false;
+        // Own instance (not the TX field): tune and FT8 playback teardowns
+        // must not release each other's focus.
+        TxAudioFocus tuneFocus = new TxAudioFocus();
         try {
             GeneralVariables.fileLog(String.format(
                     "TUNE: start offset=%.0fHz level=%d%% maxOn=%ds rate=%d",
@@ -2493,6 +2583,12 @@ public class FT8TransmitSignal {
             onDoTransmitted.onTuneKeyDown();
             keyed = true;
             mutableIsTuning.postValue(true);
+
+            // Same mixer-sharing exposure as the FT8 AudioTrack branch; keep
+            // other apps' audio out of the carrier. Denial is log-only.
+            boolean tuneFocusGranted = tuneFocus.acquire(GeneralVariables.getMainContext());
+            GeneralVariables.fileLog("TUNE: audio focus "
+                    + (tuneFocusGranted ? "granted (exclusive)" : "NOT granted"));
 
             int sampleRate = GeneralVariables.audioSampleRate;
             AudioAttributes tuneAttributes = new AudioAttributes.Builder()
@@ -2568,6 +2664,7 @@ public class FT8TransmitSignal {
                 }
                 track.release();
             }
+            tuneFocus.release();
             if (keyed) {
                 try {
                     onDoTransmitted.onTuneKeyUp();

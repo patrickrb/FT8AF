@@ -52,6 +52,20 @@ public class CallsignFileOperationTest {
     }
 
     @Test
+    public void getCallsigns_closingParenWithoutOpening_doesNotThrowAndKeepsSiblings() {
+        // A malformed cty.dat token that carries a ')' but no '(' used to crash:
+        // the guard tested for ')' yet the cut indexed '(', so indexOf("(") == -1
+        // and substring(0, -1) threw StringIndexOutOfBoundsException. Because
+        // getCallsigns runs inside CallsignDatabase's per-country try/catch, that
+        // exception silently dropped *every* callsign for the affected country.
+        // A stray ')' must not take the rest of the list down with it. Since the
+        // token has no '(' (nor '['), nothing is stripped: the malformed prefix is
+        // left intact and the sibling survives — and only those two are returned.
+        Set<String> calls = CallsignFileOperation.getCallsigns("BAD),VE7");
+        assertThat(calls).containsExactly("BAD)", "VE7");
+    }
+
+    @Test
     public void getCallsigns_removesNewlinesAndTrims() {
         // Leading newline is stripped globally; per-token whitespace is trimmed.
         Set<String> calls = CallsignFileOperation.getCallsigns("\n K , W ");

@@ -74,6 +74,8 @@ export interface QsoRecord {
   station_callsign: string;
   my_gridsquare: string;
   comment: string;
+  /** QSL confirmed status (drives the Logbook filter + ADIF QSL_RCVD). */
+  confirmed: boolean;
 }
 
 export interface AudioDevice {
@@ -97,6 +99,22 @@ export interface HamlibRig {
 export interface BandInfo {
   name: string;
   dial_hz: number;
+  /** True for operator-defined dials (issue #470), false for the built-in plan. */
+  custom: boolean;
+}
+
+/** A user-defined dial frequency (issue #470). */
+export interface CustomBand {
+  name: string;
+  dial_hz: number;
+}
+
+/** Result of resolving the operator grid from the OS location service (issue #471).
+ *  Only the coarse grid is returned — the backend derives it from the raw fix and
+ *  discards the precise coordinates, so no pinpoint location crosses the IPC. */
+export interface OsLocation {
+  /** Derived Maidenhead grid (6-char subsquare). */
+  grid: string;
 }
 
 /** Waterfall FFT window (developer setting, issue #428). */
@@ -109,17 +127,12 @@ export interface WaterfallConfig {
   avg: number;
 }
 
-export type RigBackend = "none" | "serial" | "flrig" | "hamlib";
-export type RigModel = "yaesu" | "kenwood" | "icom" | "none";
-export type PttMethod = "cat" | "rts" | "dtr" | "none";
+export type RigBackend = "none" | "flrig" | "hamlib";
 
 export interface RigConfig {
   backend: RigBackend;
-  model: RigModel;
   port: string;
   baud: number;
-  ptt: PttMethod;
-  civ_address: number;
   flrig_host: string;
   flrig_port: number;
   hamlib_model: number;
@@ -152,6 +165,12 @@ export const api = {
   listSerialPorts: () => invoke<SerialPortInfo[]>("list_serial_ports"),
   listHamlibRigs: () => invoke<HamlibRig[]>("list_hamlib_rigs"),
   listBands: () => invoke<BandInfo[]>("list_bands"),
+  listCustomBands: () => invoke<CustomBand[]>("list_custom_bands"),
+  /** Add/rename a custom dial. Rejects bad input with a message (Err string). */
+  addCustomBand: (freq: string, name: string) =>
+    invoke<BandInfo[]>("add_custom_band", { freq, name }),
+  deleteCustomBand: (dialHz: number) =>
+    invoke<BandInfo[]>("delete_custom_band", { dialHz }),
 
   startDecode: () => invoke("start_decode"),
   stopDecode: () => invoke("stop_decode"),
@@ -175,16 +194,41 @@ export const api = {
 
   listLog: (limit: number, offset: number) =>
     invoke<QsoRecord[]>("list_log", { limit, offset }),
+  /** Server-side callsign search + confirmation filter. */
+  searchLog: (
+    callsign: string,
+    filter: "all" | "confirmed" | "unconfirmed",
+    limit: number,
+    offset: number,
+  ) => invoke<QsoRecord[]>("search_log", { callsign, filter, limit, offset }),
   logCount: () => invoke<number>("log_count"),
   deleteQso: (id: number) => invoke("delete_qso", { id }),
   saveQso: (record: QsoRecord) => invoke<number>("save_qso", { record }),
-  exportAdif: () => invoke<string>("export_adif"),
+  /** Export ADIF, optionally restricted to an inclusive YYYYMMDD date range. */
+  exportAdif: (start?: string, end?: string) =>
+    invoke<string>("export_adif", { start: start ?? null, end: end ?? null }),
 
   getConfig: (key: string) => invoke<string | null>("get_config", { key }),
   setConfig: (key: string, value: string) => invoke("set_config", { key, value }),
   allConfig: () => invoke<[string, string][]>("all_config"),
 
+  /** Resolve the operator grid from the OS location service (opt-in, issue #471).
+   * Rejects unless `location_service_enabled` is on. */
+  getOsLocation: () => invoke<OsLocation>("get_os_location"),
+
   /** Apply + persist live-waterfall FFT parameters (Rust side persists). */
   setWaterfallConfig: (config: WaterfallConfig) =>
     invoke("set_waterfall_config", { config }),
+
+  /** Apply + persist WSJT-X UDP settings (Rust side persists the udp_* keys and
+   * rebinds the socket/listener live). */
+  setUdpConfig: (config: UdpConfig) => invoke("set_udp_config", { config }),
+};
+
+/** WSJT-X UDP settings. Field names match the Rust `UdpConfig` (snake_case). */
+export type UdpConfig = {
+  enabled: boolean;
+  host: string;
+  port: number;
+  accept_requests: boolean;
 };

@@ -44,8 +44,36 @@ final class AudioCaptureService: @unchecked Sendable {
         try session.setCategory(.playAndRecord, options: [.defaultToSpeaker, .allowBluetooth])
         try session.setActive(true)
 
+        try installTapAndStart()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleInterruption),
+            name: AVAudioSession.interruptionNotification,
+            object: nil
+        )
+        // The engine stops itself when the audio hardware configuration
+        // changes (output/input route change, Simulator host-device switch)
+        // and the input format may change with it. Without rebuilding the
+        // tap and restarting, RX goes silently deaf while the UI still
+        // says RX.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleConfigChange),
+            name: .AVAudioEngineConfigurationChange,
+            object: engine
+        )
+    }
+
+    /// (Re)build the converter for the current hardware input format, install
+    /// the tap, and start the engine. Used at startup and again after every
+    /// engine configuration change.
+    private func installTapAndStart() throws {
         let inputNode = engine.inputNode
         let hwFormat = inputNode.outputFormat(forBus: 0)
+        guard hwFormat.sampleRate > 0, hwFormat.channelCount > 0 else {
+            throw AudioCaptureError.formatCreationFailed
+        }
 
         // Target: 12 kHz, mono, Float32 — the FT8 codec sample rate.
         guard let targetFormat = AVAudioFormat(
@@ -76,13 +104,6 @@ final class AudioCaptureService: @unchecked Sendable {
         lock.lock()
         _isRunning = true
         lock.unlock()
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleInterruption),
-            name: AVAudioSession.interruptionNotification,
-            object: nil
-        )
     }
 
     /// Stop the audio engine and remove the tap.
@@ -99,6 +120,11 @@ final class AudioCaptureService: @unchecked Sendable {
             self,
             name: AVAudioSession.interruptionNotification,
             object: nil
+        )
+        NotificationCenter.default.removeObserver(
+            self,
+            name: .AVAudioEngineConfigurationChange,
+            object: engine
         )
     }
 
@@ -148,6 +174,22 @@ final class AudioCaptureService: @unchecked Sendable {
             start: channelData[0],
             count: Int(outBuffer.frameLength)
         ))
+    }
+
+    @objc private func handleConfigChange(_ notification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.lock.lock()
+            let wasRunning = self._isRunning
+            self.lock.unlock()
+            guard wasRunning else { return }
+
+            self.engine.inputNode.removeTap(onBus: 0)
+            // The tap is gone, so the audio thread can't touch the reusable
+            // buffer; drop it in case the chunk geometry changes.
+            self.reusableOutBuffer = nil
+            try? self.installTapAndStart()
+        }
     }
 
     @objc private func handleInterruption(_ notification: Notification) {

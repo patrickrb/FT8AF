@@ -26,10 +26,15 @@ public struct WaterfallRowBuilder {
     public static let fftSize = 2048              // ~5.86 Hz/bin at 12 kHz
     public static let segments = 6                // WF_AVG (Welch segments)
     public static let step = fftSize / 2          // WF_STEP, 50% overlap
-    public static let maxHz: Float = 3500         // displayed top of the audio band
+    /// Default displayed top of the audio band (desktop `WF_MAX_HZ`). The
+    /// operator's spectrum-width setting overrides it per call via the `maxHz`
+    /// parameter of `columns(sampleRate:maxHz:)` — display-only; the FT8
+    /// decoder's range is unaffected.
+    public static let defaultMaxHz: Float = 3500
     public static let spanDb: Float = 26          // dB above black that maps to full brightness
     public static let blackOffsetDb: Float = 4    // push black above the noise floor
     public static let noiseFloorPercentile: Float = 0.30
+    public static let floorSeedDb: Float = -60    // WfProcessor::new seeds the floor here
     private static let floorEmaUp: Float = 0.9    // previous-floor weight
     private static let floorEmaNew: Float = 0.1   // new-sample weight
 
@@ -39,18 +44,22 @@ public struct WaterfallRowBuilder {
     /// Hz per FFT bin at a given sample rate.
     public static func binHz(sampleRate: Int) -> Float { Float(sampleRate) / Float(fftSize) }
 
-    /// Number of displayed columns: bins up to `maxHz`, capped at the Nyquist half.
-    public static func columns(sampleRate: Int) -> Int {
+    /// Number of displayed columns: bins up to `maxHz` (the operator's spectrum
+    /// width; defaults to `defaultMaxHz`), capped at the Nyquist half.
+    public static func columns(sampleRate: Int, maxHz: Float = WaterfallRowBuilder.defaultMaxHz) -> Int {
         let bh = binHz(sampleRate: sampleRate)
         guard bh > 0 else { return 1 }
         return min(fftSize / 2, max(1, Int(maxHz / bh)))
     }
 
-    /// EMA state of the noise floor (dB). Seeded at 0 like the engine; it settles
-    /// onto the real floor within a few rows.
+    /// EMA state of the noise floor (dB). Seeded at -60 dB like the engine
+    /// (desktop `wf.rs` `WfProcessor::new`), then reconverges onto the real floor
+    /// within a couple of seconds. Seeding at 0 dB instead pins the black point ~4
+    /// dB — far above a real -40…-80 dB floor — so every signal renders black until
+    /// the EMA crawls down, painting the first seconds of each waterfall dark.
     public private(set) var floorDb: Float
 
-    public init(floorDb: Float = 0) { self.floorDb = floorDb }
+    public init(floorDb: Float = WaterfallRowBuilder.floorSeedDb) { self.floorDb = floorDb }
 
     /// Build one brightness row from the summed power spectrum. `summedPower[i]`
     /// is Σ over `segments` of |FFT bin i|² (length == displayed columns). Updates

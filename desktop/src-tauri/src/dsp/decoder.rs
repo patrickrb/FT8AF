@@ -95,6 +95,11 @@ impl Decoder {
             return;
         }
         unsafe { ffi::monitor_reset(&mut self.mon) };
+        // Reset the callsign hash cache per slot: hashes resolve only against
+        // calls seen "earlier in the same slot", and a never-cleared table
+        // would grow unbounded across slots on this long-lived decoder (the
+        // Android path allocates a fresh table per slot; iOS clears here too).
+        self.hashtable.clear();
         let n = samples.len();
         let mut pos = 0;
         while pos + block <= n {

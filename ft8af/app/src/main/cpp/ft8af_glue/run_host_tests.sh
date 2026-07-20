@@ -113,6 +113,21 @@ call_hash_out="$tmp/ft8_call_hash_test"
     -I "$ft8" "${call_hash_srcs[@]}" -lm -o "$call_hash_out"
 "$call_hash_out"
 
+# Callsign hash-store tests: the per-decoder open-addressing table shared by
+# ft8_decode_jni.cpp and ft2_decode_jni.cpp (ftx_hash_store.h). Guards the
+# save/lookup semantics and, crucially, that a saturated table drops the insert
+# instead of probing forever (the unbounded loop that used to hang the decode
+# thread). Header-only under test; links just the ft8_lib message path for the
+# hash-type enum.
+hash_store_srcs=(
+    "$here/test_hash_store.c"
+)
+hash_store_out="$tmp/ft8_hash_store_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${hash_store_srcs[@]}" -lm -o "$hash_store_out"
+"$hash_store_out"
+
 # EU_VHF / CONTESTING decoder tests (issue #403): the hand-rolled bit
 # extraction + direct formatting for i3=0 n3=2 and i3=0 n3=6 frames. Payloads
 # are assembled by an independent bit writer; callsign bits come from the
@@ -277,3 +292,45 @@ xslot_out="$tmp/ft8_xslot_test"
     -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
     -I "$ft8" "${xslot_srcs[@]}" -lm -o "$xslot_out"
 "$xslot_out"
+
+# GFSK output-length tests: the synth_gfsk_output_len helper (gfsk.c) that the
+# TX buffer sizing on both the Java side (GenerateFT8.waveformSampleCount) and
+# the native synth_gfsk JNI guard must agree on, plus a canary check that
+# synth_gfsk_offset writes exactly that many samples. Guards the heap OOB write a
+# non-integral audioRate (e.g. 44100) in FT4/FT2 used to trigger. No ft8_lib deps.
+gfsk_len_srcs=(
+    "$here/test_gfsk_len.c"
+    "$here/gfsk.c"
+)
+gfsk_len_out="$tmp/ft8_gfsk_len_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${gfsk_len_srcs[@]}" -lm -o "$gfsk_len_out"
+"$gfsk_len_out"
+
+# Audio-feed tests: the per-slot monitor feed shared by ft8_decode_jni.cpp and
+# ft2_decode_jni.cpp (ftx_feed.h). Guards the bounded copy into the retained
+# samples buffer and, crucially, that a NULL `data` pointer (a failed JNI array
+# pin) is a no-op instead of the native SIGSEGV the two float feed paths used to
+# take. Links the monitor + FFT + decode path monitor_process exercises.
+feed_srcs=(
+    "$here/test_feed.c"
+    "$ft8/common/monitor.c"
+    "$ft8/ft8/decode.c"
+    "$ft8/ft8/constants.c"
+    "$ft8/ft8/crc.c"
+    "$ft8/ft8/text.c"
+    "$ft8/ft8/message.c"
+    "$ft8/ft8/pack.c"
+    "$ft8/ft8/encode.c"
+    "$ft8/ft8/ldpc.c"
+    "$ft8/ft8/osd.c"
+    "$ft8/ft8/unpack.c"
+    "$ft8/fft/kiss_fft.c"
+    "$ft8/fft/kiss_fftr.c"
+)
+feed_out="$tmp/ft8_feed_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" -I "$here" "${feed_srcs[@]}" -lm -o "$feed_out"
+"$feed_out"

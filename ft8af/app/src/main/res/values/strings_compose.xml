@@ -201,6 +201,13 @@
     <string name="qso_live_step_fallback">message</string>
     <string name="qso_tx_now">TX NOW</string>
     <string name="qso_tx_next">TX NEXT</string>
+    <string name="qso_last_heard">Last heard</string>
+    <string name="qso_last_heard_unknown">--</string>
+    <string name="qso_last_heard_just_now">just now</string>
+    <string name="qso_last_heard_seconds">%1$ds ago</string>
+    <string name="qso_last_heard_minutes">%1$dm ago</string>
+    <string name="qso_last_heard_hours">%1$dh ago</string>
+    <string name="qso_last_heard_days">%1$dd ago</string>
 
     <!-- ===== Logbook ===== -->
     <string name="log_tab_stats">Stats</string>
@@ -424,6 +431,11 @@
     <string name="settings_import_success">Settings imported — restart the app to apply all changes</string>
     <string name="settings_import_failed">Import failed: %1$s</string>
 
+    <!-- ===== Settings: diagnostics (opt-in crash reporting) ===== -->
+    <string name="settings_section_diagnostics">DIAGNOSTICS</string>
+    <string name="settings_crash_reporting">Send crash reports</string>
+    <string name="settings_crash_reporting_desc">Share anonymous crash and error reports to help fix bugs. Your callsign and location are never sent.</string>
+
     <!-- ===== Settings: appearance / theme ===== -->
     <string name="settings_theme">Theme</string>
     <string name="settings_theme_desc">App color theme</string>
@@ -439,6 +451,24 @@
     <string name="settings_cat_about">About</string>
     <string name="settings_cat_time_sync">Time Sync</string>
     <string name="settings_cat_time_sync_desc">Manual clock correction for offline operating</string>
+    <string name="settings_cat_usb_diagnostics">USB Diagnostics</string>
+    <string name="settings_cat_usb_diagnostics_desc">Check USB device discovery and CAT communication</string>
+
+    <!-- ===== Settings: USB Diagnostics (issue #515) ===== -->
+    <string name="usb_diag_title">USB Diagnostics</string>
+    <string name="usb_diag_desc">Live status of USB device discovery and CAT communication. Use it to pinpoint where a rig connection is failing.</string>
+    <string name="usb_diag_device_found">Device Found</string>
+    <string name="usb_diag_vendor_id">Vendor ID</string>
+    <string name="usb_diag_product_id">Product ID</string>
+    <string name="usb_diag_permission">USB Permission</string>
+    <string name="usb_diag_cdc_serial">CDC Serial Found</string>
+    <string name="usb_diag_audio_device">Audio Device Found</string>
+    <string name="usb_diag_port_open">Port Open</string>
+    <string name="usb_diag_cat_response">CAT Response</string>
+    <string name="usb_diag_value_none">—</string>
+    <!-- Spoken status suffixes for TalkBack (e.g. "Device Found, pass") -->
+    <string name="usb_diag_status_pass">pass</string>
+    <string name="usb_diag_status_fail">fail</string>
 
     <!-- ===== Settings: Time Sync (manual clock correction) ===== -->
     <string name="settings_time_correction_section">Manual Correction</string>
@@ -519,8 +549,21 @@
     <string name="settings_highlight_new_band_desc">Highlight stations worked only on other bands</string>
     <string name="settings_highlight_pota">POTA Activators</string>
     <string name="settings_highlight_pota_desc">Highlight spotted POTA activators; new parks stand out</string>
-    <string name="settings_highlight_worked">Worked Before</string>
-    <string name="settings_highlight_worked_desc">Tag stations already in your log</string>
+    <string name="settings_highlight_worked">Worked Stations</string>
+    <string name="settings_highlight_worked_desc">Handle stations already in your log (highlight, ignore, or hide)</string>
+    <string name="settings_worked_mode">Behavior</string>
+    <string name="settings_worked_mode_desc">What to do with worked stations</string>
+    <string name="settings_worked_mode_highlight">Highlight</string>
+    <string name="settings_worked_mode_ignore">Ignore</string>
+    <string name="settings_worked_mode_hide">Hide</string>
+    <string name="settings_worked_scope">Match by</string>
+    <string name="settings_worked_scope_desc">Which stations count as worked</string>
+    <string name="settings_worked_scope_on_band">Worked on this band</string>
+    <string name="settings_worked_scope_before">Worked before (any band)</string>
+    <string name="settings_worked_scope_today">Worked today or yesterday</string>
+    <string name="settings_worked_scope_from_list">In worked list</string>
+    <string name="settings_worked_list_title">Worked List</string>
+    <string name="settings_worked_list_desc">Callsigns to treat as worked (comma-separated)</string>
     <string name="settings_distance_unit">Distance in Miles</string>
     <string name="settings_distance_unit_desc">Show distances in miles instead of kilometers</string>
 
@@ -570,6 +613,8 @@
     <string name="settings_save_swl_qsos_desc">Log QSOs detected between other stations</string>
     <string name="settings_pskreporter">PSKReporter</string>
     <string name="settings_pskreporter_desc">Upload decoded spots to pskreporter.info</string>
+    <string name="settings_adif_export">ADIF log file</string>
+    <string name="settings_adif_export_desc">Append each logged QSO to ft8af_log.adi for backup and desktop-logger (LOG4OM) monitor import</string>
     <string name="settings_qrz_com">QRZ.com</string>
     <string name="settings_qrz_com_desc">Auto-upload QSOs to QRZ Logbook (requires a Logbook API key)</string>
     <string name="settings_qrz_logbook">QRZ Logbook</string>
@@ -586,7 +631,8 @@
     <string name="settings_tx_delay">TX Delay</string>
     <string name="settings_tx_delay_desc">Delay before transmit to allow prior-cycle decode</string>
     <string name="settings_late_start_tolerance">Late-start Tolerance</string>
-    <string name="settings_late_start_tolerance_desc">Allow starting TX up to N ms into a cycle; leading audio is clipped so TX ends on the cycle boundary</string>
+    <string name="settings_late_start_tolerance_desc">Extra leading audio (ms) a late manual TX may clip so it still goes out this cycle instead of waiting for the next slot</string>
+    <string name="late_start_deferred">Too late this cycle (need %d ms clip) — waiting for next slot</string>
 
     <!-- ===== Settings: about ===== -->
     <string name="settings_faq_support">FAQ &amp; Support</string>

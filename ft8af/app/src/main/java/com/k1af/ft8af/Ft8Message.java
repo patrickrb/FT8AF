@@ -454,11 +454,16 @@ t71     Telemetry data, up to 18 hex digits
         if (callsignTo == null) {
             return "";
         }
-        if (callsignTo.length() < 2) {
-            return "";
-        }
-        if (callsignTo.substring(0, 2).equals("CQ") || callsignTo.substring(0, 2).equals("DE")
-                || callsignTo.substring(0, 3).equals("QRZ")) {
+        // A calling token (CQ / CQ DX / DE / QRZ) is not an addressable "to"
+        // callsign. Use startsWith rather than substring(0, n): the previous
+        // length<2 guard did not cover the substring(0, 3) "QRZ" comparison, so a
+        // callsignTo of exactly length 2 that was neither "CQ" nor "DE" threw
+        // StringIndexOutOfBoundsException. The decoder can render a short junk
+        // token into callsignTo on a CRC-collision false decode, and this method
+        // runs on essentially every decoded message, so that crashed the
+        // decode-handling path. startsWith is safe for any length.
+        if (callsignTo.startsWith("CQ") || callsignTo.startsWith("DE")
+                || callsignTo.startsWith("QRZ")) {
             return "";
         }
         return callsignTo.replace("<", "").replace(">", "");
