@@ -8,29 +8,44 @@ import com.k1af.ft8af.Ft8Message
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.ft8transmit.TransmitCallsign
+import com.k1af.ft8af.log.QSLRecord
 import com.k1af.ft8af.maidenhead.MaidenheadGrid
 import radio.ks3ckc.ft8af.pota.PotaSessionManager
 import radio.ks3ckc.ft8af.pskreporter.PskReporterSpot
 import radio.ks3ckc.ft8af.pskreporter.WhoHeardMeCache
+import kotlin.math.PI
+import kotlin.math.floor
+import kotlin.math.sin
 
 /**
- * DEBUG-ONLY test harness for the Android Auto QSO map. Lives in `src/debug`, so
- * it is never compiled into a release build.
+ * DEBUG-ONLY test/demo harness. Lives in `src/debug`, so it is never compiled
+ * into a release build. Originally built to exercise the Android Auto QSO map on
+ * an emulator; it doubles as the "demo data" source for Play Store screenshots —
+ * it forges the live engine state the main phone screens read, so each tab looks
+ * populated without a radio.
  *
- * The car map is a read-out of the live engine: it draws the operator dot from
- * [GeneralVariables.getMyMaidenheadGrid], the partner dot + connecting line from
- * the current QSO target, decode dots from [MainViewModel.mutableFt8MessageList],
- * and "who heard me" rings from [WhoHeardMeCache]. On an emulator there is no
- * radio, so this receiver forges that state.
+ * What it drives:
+ * - **Decode list + map**: operator dot from [GeneralVariables.getMyMaidenheadGrid],
+ *   partner dot + line from the current QSO target, decode dots from
+ *   [MainViewModel.mutableFt8MessageList], "who heard me" rings from [WhoHeardMeCache].
+ * - **Waterfall**: a stream of synthetic 12 kHz audio frames posted to
+ *   `spectrumListener.mutableDataBuffer`; the Waterfall screen FFTs each frame, so
+ *   chosen audio tones render as clean vertical FT8-style traces (`wf` extra).
+ * - **Logbook**: sample completed QSOs written into `QSLTable` via the app's own
+ *   insert path so the Logbook tab, which re-queries the DB, shows a full log
+ *   (`qsos` extra). These use obviously-fictitious demo callsigns; remove them by
+ *   reinstalling the debug build (which wipes the DB).
  *
  * Usage (app must be open so the engine singleton exists):
  * ```
  * adb shell am broadcast -a ft8af.DEBUG_INJECT \
  *   --es call W1ABC --es grid FN42 --es opgrid EM29 --es park K-1234 \
- *   --ei snr -8 --ei decodes 8 --ei psk 6
+ *   --ei snr -8 --ei decodes 8 --ei psk 6 --ei qsos 12 --ei wf 6
  * ```
- * `decodes` adds N sample US decode dots; `psk` adds N sample "who heard me"
- * rings. All extras are optional; [parseDebugInject] fills sensible defaults.
+ * `decodes` adds N sample decode dots; `psk` adds N "who heard me" rings; `qsos`
+ * adds N demo logbook entries; `wf` streams a waterfall with N tone traces (be on
+ * the Waterfall tab to see it fill). All extras are optional; [parseDebugInject]
+ * fills sensible defaults.
  */
 class DebugInjectReceiver : BroadcastReceiver() {
 
@@ -68,6 +83,33 @@ private val SAMPLE_PSK = listOf(
     "K8JKL" to "EN80", "W9MNO" to "EM69", "KH6PQR" to "BL11", "VE7STU" to "CN89",
 )
 
+/** Sample worked stations for the demo logbook — a DX-flavoured mix across continents. */
+private val SAMPLE_QSOS = listOf(
+    "DL1ABC" to "JO31", "G4XYZ" to "IO91", "JA1DEF" to "PM95", "VK3GHI" to "QF22",
+    "EA5JKL" to "IM98", "F5MNO" to "JN18", "PY2PQR" to "GG66", "ZL2STU" to "RE78",
+    "OH2VWX" to "KP20", "I2YZA" to "JN45", "SP5BCD" to "KO02", "VE1EFG" to "FN85",
+    "9A1HIJ" to "JN75", "LU3KLM" to "GF05", "ON4NOP" to "JO20", "SM3QRS" to "JP81",
+)
+
+/** FT8/FT4 dial frequencies (Hz) the demo QSOs are spread across. */
+private data class DemoBand(val mode: String, val dialHz: Long)
+private val DEMO_BANDS = listOf(
+    DemoBand("FT8", 14_074_000L), // 20m
+    DemoBand("FT8", 7_074_000L),  // 40m
+    DemoBand("FT4", 14_080_000L), // 20m FT4
+    DemoBand("FT8", 21_074_000L), // 15m
+    DemoBand("FT8", 28_074_000L), // 10m
+    DemoBand("FT8", 10_136_000L), // 30m
+)
+
+/** Waterfall passband (audio Hz) the demo tone traces are spread across. */
+private const val WF_MIN_HZ = 250.0
+private const val WF_MAX_HZ = 2750.0
+
+/** Waterfall stream length: enough frames to fill the scrolling bitmap (~3s at 22ms). */
+private const val WF_FRAMES = 140
+private const val WF_FRAME_MS = 22L
+
 /**
  * Forges the engine state a [DebugInjectSpec] describes: operator grid, a decode
  * for the QSO partner (+ optional sample decodes), an optional POTA activation,
@@ -97,9 +139,128 @@ internal fun applyDebugInject(spec: DebugInjectSpec, vm: MainViewModel) {
 
     spec.parkRef?.let { PotaSessionManager.start(listOf(it), "debug inject") }
 
+    // Demo logbook QSOs — written straight into QSLTable through the app's own
+    // insert path, so the Logbook tab (which re-queries the DB on load, not the
+    // in-memory list) shows a populated log. Uses the caller's real callsign if
+    // set, else a placeholder; the worked stations are obviously-fictitious demo
+    // calls. addQSL_Callsign runs its own background insert.
+    if (spec.qsos > 0) {
+        val myCall = GeneralVariables.myCallsign.ifEmpty { "W1AW" }
+        val myGrid = GeneralVariables.getMyMaidenheadGrid() ?: spec.opGrid
+        buildDemoQsoLog(spec.qsos, System.currentTimeMillis()).forEach { q ->
+            vm.databaseOpr.addQSL_Callsign(
+                QSLRecord(
+                    q.startMillis, q.endMillis, myCall, myGrid,
+                    q.toCall, q.toGrid, q.sendReport, q.receivedReport,
+                    q.mode, q.bandFreqHz, q.audioHz,
+                ),
+            )
+        }
+    }
+
     // Setting the target triggers the car screen's observer → re-render.
     val target = TransmitCallsign(0, 0, spec.partnerCall, 0f, 0, spec.snr)
     vm.ft8TransmitSignal.mutableToCallsign.postValue(target)
+
+    // Waterfall: post a stream of synthetic 12 kHz audio frames. The Waterfall
+    // screen FFTs each frame (mutableDataBuffer carries raw audio, not a spectrum),
+    // so the chosen tones render as vertical traces and the scrolling bitmap fills.
+    // Done LAST so its ~3s of spaced posts don't delay the other state above; the
+    // observer only runs while the Waterfall tab is on screen. postValue (not
+    // setValue) because this runs on a worker thread; the spacing keeps LiveData's
+    // coalescing from dropping most frames.
+    if (spec.waterfall > 0) {
+        val tones = demoToneFrequencies(spec.waterfall)
+        vm.spectrumListener?.let { listener ->
+            repeat(WF_FRAMES) { frame ->
+                listener.mutableDataBuffer.postValue(buildDemoAudio(tones, seed = frame))
+                try {
+                    Thread.sleep(WF_FRAME_MS)
+                } catch (_: InterruptedException) {
+                    return
+                }
+            }
+        }
+    }
+}
+
+/** Audio tone offsets (Hz) for the demo waterfall, spread evenly across the passband. */
+internal fun demoToneFrequencies(count: Int): List<Double> {
+    val n = count.coerceIn(0, 12)
+    return when {
+        n == 0 -> emptyList()
+        n == 1 -> listOf((WF_MIN_HZ + WF_MAX_HZ) / 2)
+        else -> {
+            val step = (WF_MAX_HZ - WF_MIN_HZ) / (n - 1)
+            (0 until n).map { WF_MIN_HZ + it * step }
+        }
+    }
+}
+
+/**
+ * A frame of synthetic 12 kHz mono audio: the sum of sinusoids at [tonesHz] plus a
+ * small deterministic noise floor, in the float PCM range [-1, 1] the recorder
+ * produces. The waterfall's FFT of this shows a vertical trace per tone. Kept pure
+ * (no Random — [seed] varies frame-to-frame reproducibly) so it is unit-testable.
+ */
+internal fun buildDemoAudio(
+    tonesHz: List<Double>,
+    sampleCount: Int = 1920,
+    sampleRate: Int = 12000,
+    seed: Int = 0,
+): FloatArray {
+    val out = FloatArray(sampleCount)
+    if (tonesHz.isEmpty() || sampleCount <= 0) return out
+    // Keep the summed peak inside [-1, 1] even with several tones.
+    val amp = (0.9 / tonesHz.size).coerceAtMost(0.18)
+    val noiseAmp = 0.006
+    for (i in 0 until sampleCount) {
+        var v = 0.0
+        for (f in tonesHz) v += amp * sin(2.0 * PI * f * i / sampleRate)
+        // Hash-based pseudo-noise: deterministic, phase-varied per frame by seed.
+        val h = sin((i + seed * 7919 + 1) * 12.9898) * 43758.5453
+        val noise = ((h - floor(h)) * 2.0 - 1.0) * noiseAmp
+        out[i] = (v + noise).toFloat().coerceIn(-1f, 1f)
+    }
+    return out
+}
+
+/** A single demo logbook entry; Android-free so [buildDemoQsoLog] stays unit-testable. */
+internal data class DemoQso(
+    val toCall: String,
+    val toGrid: String,
+    val mode: String,
+    val bandFreqHz: Long,
+    val audioHz: Int,
+    val sendReport: Int,
+    val receivedReport: Int,
+    val startMillis: Long,
+    val endMillis: Long,
+)
+
+/**
+ * Builds up to [count] demo QSOs (clamped to the sample-station pool) ending
+ * shortly before [nowMillis], stepping ~7 minutes further into the past per entry
+ * so the log reads as a recent operating run. Deterministic given its inputs.
+ */
+internal fun buildDemoQsoLog(count: Int, nowMillis: Long): List<DemoQso> {
+    val n = count.coerceIn(0, SAMPLE_QSOS.size)
+    return (0 until n).map { i ->
+        val (call, grid) = SAMPLE_QSOS[i]
+        val band = DEMO_BANDS[i % DEMO_BANDS.size]
+        val start = nowMillis - (i + 1) * 7L * 60_000L
+        DemoQso(
+            toCall = call,
+            toGrid = grid,
+            mode = band.mode,
+            bandFreqHz = band.dialHz,
+            audioHz = 400 + (i * 233) % 2200,
+            sendReport = -6 - (i % 12),
+            receivedReport = -3 - (i * 3) % 15,
+            startMillis = start,
+            endMillis = start + 75_000L,
+        )
+    }
 }
 
 /**
@@ -125,6 +286,8 @@ internal data class DebugInjectSpec(
     val parkRef: String?,
     val decodes: Int,
     val psk: Int,
+    val qsos: Int,
+    val waterfall: Int,
 )
 
 /**
@@ -144,6 +307,8 @@ internal fun parseDebugInject(get: (String) -> String?): DebugInjectSpec {
         parkRef = str("park")?.uppercase(),
         decodes = str("decodes")?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
         psk = str("psk")?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
+        qsos = str("qsos")?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
+        waterfall = str("wf")?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
     )
 }
 
