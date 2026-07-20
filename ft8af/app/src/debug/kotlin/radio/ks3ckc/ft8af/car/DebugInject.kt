@@ -172,8 +172,11 @@ internal fun applyDebugInject(spec: DebugInjectSpec, vm: MainViewModel) {
     if (spec.waterfall > 0) {
         val tones = demoToneFrequencies(spec.waterfall)
         vm.spectrumListener?.let { listener ->
+            val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
             repeat(WF_FRAMES) { frame ->
-                listener.mutableDataBuffer.postValue(buildDemoAudio(tones, seed = frame))
+                val buf = buildDemoAudio(tones, seed = frame)
+                // Use setValue on the main thread so each frame is delivered (no postValue coalescing).
+                mainHandler.post { listener.mutableDataBuffer.value = buf }
                 try {
                     Thread.sleep(WF_FRAME_MS)
                 } catch (_: InterruptedException) {
@@ -209,12 +212,13 @@ internal fun buildDemoAudio(
     sampleRate: Int = 12000,
     seed: Int = 0,
 ): FloatArray {
-    val out = FloatArray(sampleCount)
-    if (tonesHz.isEmpty() || sampleCount <= 0) return out
+    val n = sampleCount.coerceAtLeast(0)
+    val out = FloatArray(n)
+    if (tonesHz.isEmpty() || n == 0 || sampleRate <= 0) return out
     // Keep the summed peak inside [-1, 1] even with several tones.
     val amp = (0.9 / tonesHz.size).coerceAtMost(0.18)
     val noiseAmp = 0.006
-    for (i in 0 until sampleCount) {
+    for (i in 0 until n) {
         var v = 0.0
         for (f in tonesHz) v += amp * sin(2.0 * PI * f * i / sampleRate)
         // Hash-based pseudo-noise: deterministic, phase-varied per frame by seed.
