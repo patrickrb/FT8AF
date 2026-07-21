@@ -155,6 +155,10 @@ public class ColumnarView extends View {
 
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        // Compose layout can momentarily measure this AndroidView-hosted strip at a
+        // zero dimension; Bitmap.createBitmap(0, ...) throws IllegalArgumentException on
+        // the UI thread. Mirror the sibling WaterfallView.onSizeChanged guard.
+        if (w <= 0 || h <= 0) return;
         setClickable(true);
         super.onSizeChanged(w, h, oldw, oldh);
 
@@ -177,6 +181,10 @@ public class ColumnarView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        // _canvas/lastBitMap are assigned together only in onSizeChanged; a draw before a
+        // successful sizing (including right after the zero-dimension guard above) would
+        // otherwise NPE. Mirror the sibling WaterfallView.onDraw guard.
+        if (lastBitMap == null) return;
         _canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
         for (int i = 0; i < newData.size(); i++) {
             _canvas.drawRect(newData.get(i), paint);
