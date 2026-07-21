@@ -88,6 +88,20 @@ public class Ft8MessageTest {
     }
 
     @Test
+    public void checkIsCQ_falseWhenCallsignToNull() {
+        // A free-text / telemetry / unresolved-hash decode can reach the decode
+        // list with callsignTo still at its null default (single-arg ctor). The
+        // Compose decode screen calls checkIsCQ() unconditionally on every
+        // rendered row (DecodeRow / resolveQsoStatus / filterMessages) on the
+        // main thread with no try/catch, so a missing destination must return
+        // "not a CQ" rather than NPE. Mirrors the #254 guard already present in
+        // ActiveQsoPanel for the same deref.
+        Ft8Message msg = new Ft8Message(FT8Common.FT8_MODE);
+        assertThat(msg.callsignTo).isNull();
+        assertThat(msg.checkIsCQ()).isFalse();
+    }
+
+    @Test
     public void getMessageText_freeTextPadsToThirteen() {
         // Default i3/n3 == 0 selects the free-text branch, which upper-cases and
         // left-pads the payload to 13 chars.
