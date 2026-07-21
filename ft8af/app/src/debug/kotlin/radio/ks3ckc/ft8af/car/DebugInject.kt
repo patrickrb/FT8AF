@@ -137,7 +137,9 @@ internal fun applyDebugInject(spec: DebugInjectSpec, vm: MainViewModel) {
         }
     }
 
-    spec.parkRef?.let { PotaSessionManager.start(listOf(it), "debug inject") }
+    // notes=null matches a real no-notes activation (PotaScreen passes
+    // notes.ifBlank { null }); keeps the demo POTA card clean for screenshots.
+    spec.parkRef?.let { PotaSessionManager.start(listOf(it), null) }
 
     // Demo logbook QSOs — written straight into QSLTable through the app's own
     // insert path, so the Logbook tab (which re-queries the DB on load, not the
