@@ -755,6 +755,24 @@ public class FT8TransmitSignal {
         GeneralVariables.fileLog(
                 "playFT8Signal: using AudioTrack output (Android default sink)");
 
+        // Own the whole sound-card branch under a guaranteed single teardown.
+        // Everything below claims audio focus and keeps PTT keyed, then builds
+        // and drives an AudioTrack — any of which can throw on a bad route/rate,
+        // a DEAD_OBJECT, or an uninitialized track. DoTransmitRunnable (the TX
+        // worker) has no top-level try/catch, so an escaping exception would
+        // crash the app AND strand PTT keyed + audio focus held. Mirrors
+        // playTuneTone's try/catch/finally.
+        runPlaybackWithTeardown(() -> playViaAudioTrack(buffer), this::afterPlayAudio);
+    }
+
+    /**
+     * Sound-card (Android default sink) FT8 TX playback: claim exclusive audio
+     * focus, build and drive the streaming AudioTrack, and drain the tail. Must
+     * run under {@link #runPlaybackWithTeardown} so PTT/focus/track teardown
+     * ({@link #afterPlayAudio}) always happens, even if an AudioTrack call
+     * throws. Sibling of {@link #playViaUsbAudio}.
+     */
+    private void playViaAudioTrack(float[] buffer) {
         // This branch shares Android's mixer with every other app, so claim
         // exclusive focus for the transmission. Denial is log-only: TX must
         // still go out.
@@ -871,10 +889,33 @@ public class FT8TransmitSignal {
             }
         }
 
-        // Worker-thread-owned teardown (drops PTT + releases the track). The UI
-        // thread never releases the streaming track — it only flips txAudioCancelled
-        // and pauses/flushes — so there's no release race against this write loop.
-        afterPlayAudio();
+        // Teardown (drops PTT + releases the track + audio focus) is run by
+        // runPlaybackWithTeardown's finally, so it happens on both the normal
+        // exit here and any thrown AudioTrack failure above. The UI thread never
+        // releases the streaming track — it only flips txAudioCancelled and
+        // pauses/flushes — so there's no release race against this write loop.
+    }
+
+    /**
+     * Runs a sound-card playback {@code body}, then {@code teardown} exactly
+     * once — whether the body returns normally or throws. The AudioTrack
+     * setup/play/write in the body can throw (device route change, DEAD_OBJECT,
+     * an uninitialized track) and the TX worker ({@link DoTransmitRunnable}) has
+     * no top-level try/catch, so an escaping exception would crash the app and
+     * leave PTT keyed + audio focus held + the track leaked — a stuck carrier is
+     * never acceptable. Swallow-and-log the failure and always tear down,
+     * mirroring {@link #playTuneTone}.
+     *
+     * <p>Package-visible and free of Android types for testing.
+     */
+    static void runPlaybackWithTeardown(Runnable body, Runnable teardown) {
+        try {
+            body.run();
+        } catch (Exception e) {
+            Log.e(TAG, "FT8 AudioTrack playback failed: " + e);
+        } finally {
+            teardown.run();
+        }
     }
 
     /**
