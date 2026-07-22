@@ -2344,11 +2344,18 @@ public class DatabaseOpr extends SQLiteOpenHelper {
     static class GetAllQSLCallsign {
         public static void get(SQLiteDatabase db) {
 
+            // "Same mode only" refinement (Settings → Decode Highlights): when on,
+            // restrict every worked list to QSOs made on the current operating mode,
+            // so the "and mode" variants of the worked-station scopes work. FROM_LIST
+            // is user-maintained and unaffected. See WorkedModeFilter.
+            String meter = BaseRigOperation.getMeterFromFreq(GeneralVariables.band);
+            String mode = com.k1af.ft8af.ModeProfile.fromId(GeneralVariables.operatingMode).displayName;
+            WorkedModeFilter modeFilter = WorkedModeFilter.build(GeneralVariables.workedSameMode, mode);
+
             //String querySQL = "select distinct [call] from QSLTable where freq=?";
             //Changed to get contacted callsigns by band wavelength
-            String querySQL = "select distinct [call] from QSLTable where band=?";
-            Cursor cursor = db.rawQuery(querySQL, new String[]{
-                    BaseRigOperation.getMeterFromFreq(GeneralVariables.band)});
+            String querySQL = "select distinct [call] from QSLTable where band=?" + modeFilter.sqlSuffix;
+            Cursor cursor = db.rawQuery(querySQL, modeFilter.withArgs(meter));
             ArrayList<String> callsigns = new ArrayList<>();
             try {
                 while (cursor.moveToNext()) {
@@ -2363,9 +2370,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             }
             GeneralVariables.QSL_Callsign_list = callsigns;
 
-            querySQL = "select distinct [call] from QSLTable where band<>?";
-            cursor = db.rawQuery(querySQL, new String[]{
-                    BaseRigOperation.getMeterFromFreq(GeneralVariables.band)});
+            querySQL = "select distinct [call] from QSLTable where band<>?" + modeFilter.sqlSuffix;
+            cursor = db.rawQuery(querySQL, modeFilter.withArgs(meter));
 
             ArrayList<String> other_callsigns = new ArrayList<>();
             try {
@@ -2386,8 +2392,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             // string >= yesterday comparison selects the last two UTC days.
             long nowUtc = com.k1af.ft8af.timer.UtcTimer.getSystemTime();
             String yesterday = com.k1af.ft8af.timer.UtcTimer.getYYYYMMDD(nowUtc - 86400000L);
-            querySQL = "select distinct [call] from QSLTable where qso_date>=?";
-            cursor = db.rawQuery(querySQL, new String[]{yesterday});
+            querySQL = "select distinct [call] from QSLTable where qso_date>=?" + modeFilter.sqlSuffix;
+            cursor = db.rawQuery(querySQL, modeFilter.withArgs(yesterday));
             java.util.HashSet<String> today_callsigns = new java.util.HashSet<>();
             try {
                 while (cursor.moveToNext()) {
@@ -3079,6 +3085,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("workedStationList")) {
                     GeneralVariables.addWorkedStationList(result);
+                }
+                if (name.equalsIgnoreCase("workedSameMode")) {//Restrict worked scopes to the current mode
+                    GeneralVariables.workedSameMode = result.equals("1");
                 }
 
                 if (name.equalsIgnoreCase("distanceInMiles")) {

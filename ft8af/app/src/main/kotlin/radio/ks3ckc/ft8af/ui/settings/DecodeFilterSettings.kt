@@ -32,6 +32,7 @@ fun DecodeFilterSettings(
     var highlightWorked by remember { mutableStateOf(GeneralVariables.highlightWorked) }
     var workedStationMode by remember { mutableStateOf(GeneralVariables.workedStationMode) }
     var workedStationScope by remember { mutableStateOf(GeneralVariables.workedStationScope) }
+    var workedSameMode by remember { mutableStateOf(GeneralVariables.workedSameMode) }
     var workedStationList by remember { mutableStateOf(GeneralVariables.getWorkedStationList()) }
     var highlightPota by remember { mutableStateOf(GeneralVariables.highlightPota) }
     var distanceInMiles by remember { mutableStateOf(GeneralVariables.distanceInMiles) }
@@ -297,6 +298,25 @@ fun DecodeFilterSettings(
                             showChevron = true,
                             onClick = { showWorkedScopePicker = true },
                         )
+                        // "and mode" refinement — meaningless for the user list, so
+                        // only offer it for the band/before/today scopes.
+                        if (workedStationScope != workedScopeFromList) {
+                            SectionDivider()
+                            SettingsRow(
+                                label = stringResource(R.string.settings_worked_same_mode),
+                                description = stringResource(R.string.settings_worked_same_mode_desc),
+                                toggle = workedSameMode,
+                                onToggleChange = { checked ->
+                                    workedSameMode = checked
+                                    GeneralVariables.workedSameMode = checked
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "workedSameMode", if (checked) "1" else "0", null,
+                                    )
+                                    // Reload the worked lists so the new filter applies now.
+                                    mainViewModel.databaseOpr.getAllQSLCallsigns()
+                                },
+                            )
+                        }
                         if (workedStationScope == workedScopeFromList) {
                             SectionDivider()
                             SettingsRow(

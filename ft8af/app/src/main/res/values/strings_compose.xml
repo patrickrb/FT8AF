@@ -564,6 +564,8 @@
     <string name="settings_worked_scope_from_list">In worked list</string>
     <string name="settings_worked_list_title">Worked List</string>
     <string name="settings_worked_list_desc">Callsigns to treat as worked (comma-separated)</string>
+    <string name="settings_worked_same_mode">Same mode only</string>
+    <string name="settings_worked_same_mode_desc">Only count QSOs made on the current mode</string>
     <string name="settings_distance_unit">Distance in Miles</string>
     <string name="settings_distance_unit_desc">Show distances in miles instead of kilometers</string>
 

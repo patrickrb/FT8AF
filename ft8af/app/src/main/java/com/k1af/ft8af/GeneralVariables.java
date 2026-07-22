@@ -534,6 +534,11 @@ public class GeneralVariables {
     //         3=FROM_LIST (present in the user-maintained worked-station list).
     public static int workedStationMode = 0;   // HIGHLIGHT — preserves legacy behavior
     public static int workedStationScope = 0;   // ON_BAND — preserves legacy behavior
+    // Orthogonal "same mode only" refinement (config "workedSameMode", default off):
+    // when on, the worked lists loaded by DatabaseOpr.GetAllQSLCallsign only count
+    // QSOs made on the current operating mode, giving the "…on this band and mode"
+    // variants of the scopes above. FROM_LIST is user-maintained and unaffected.
+    public static boolean workedSameMode = false;
     // User-maintained "worked" callsign list backing the FROM_LIST scope. Upper-cased
     // whole-call tokens, same parse/join convention as the callsign blocklist.
     private static final java.util.LinkedHashSet<String> workedStationList = new java.util.LinkedHashSet<>();
