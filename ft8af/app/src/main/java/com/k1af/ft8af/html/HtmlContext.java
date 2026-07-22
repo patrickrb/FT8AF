@@ -109,6 +109,76 @@ public class HtmlContext {
     }
 
 
+    /**
+     * Encode an untrusted value for use as a URL <em>query-parameter value</em> inside a
+     * quoted {@code href} attribute.
+     *
+     * <p>{@link #htmlEscape} alone is not enough here. It makes a value safe as markup, but
+     * the browser resolves entities before parsing the URL, so an escaped {@code &amp;}
+     * becomes a real {@code &} and splits the query string — a callsign of
+     * {@code A&pageSize=9999} would silently add a parameter (and {@code =}, {@code #},
+     * {@code ?}, and spaces mangle the link in the same way). Percent-encoding first means
+     * the value can only ever be one parameter's value. The percent-encoded output contains
+     * no markup-significant characters, but it is still run through {@link #htmlEscape} so
+     * this is safe by construction wherever it is used.
+     *
+     * @param s raw value; {@code null} becomes ""
+     */
+    public static String urlQueryValue(String s) {
+        if (s == null) {
+            return "";
+        }
+        try {
+            // Form encoding: correct for a query-parameter value, where '+' means space.
+            return htmlEscape(java.net.URLEncoder.encode(s, "UTF-8"));
+        } catch (java.io.UnsupportedEncodingException e) {
+            // UTF-8 is guaranteed present on every JVM/Android runtime; if it somehow is
+            // not, drop the value rather than emit it unencoded.
+            return "";
+        }
+    }
+
+    /**
+     * Encode an untrusted value for use as a single URL <em>path segment</em> inside a
+     * quoted {@code href} attribute (e.g. {@code /delfollow/<segment>}).
+     *
+     * <p>Same reasoning as {@link #urlQueryValue}, with one difference: in a path segment
+     * {@code +} is a literal plus sign rather than a space, so the form encoder's {@code +}
+     * is rewritten to {@code %20}. A {@code /} in the value is percent-encoded too, so a
+     * value can never escape its own segment and reach a different route.
+     *
+     * @param s raw value; {@code null} becomes ""
+     */
+    public static String urlPathSegment(String s) {
+        if (s == null) {
+            return "";
+        }
+        try {
+            return htmlEscape(java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20"));
+        } catch (java.io.UnsupportedEncodingException e) {
+            return "";
+        }
+    }
+
+    /**
+     * Table cells for untrusted values: identical to {@link #tableCell} except every value is
+     * run through {@link #htmlEscape} first.
+     *
+     * <p>{@code tableCell} inserts its arguments raw, which is what the call sites building
+     * {@code <a href=…>} markup need. Straight DB columns (mode, RST, dates, band, frequency…)
+     * must not be inserted that way: the log tables are populated from decoded traffic and
+     * from imported ADIF, so a crafted value in any of those columns would be stored XSS in
+     * the LAN-reachable web logbook. Use this for anything that comes back out of the
+     * database as text.
+     */
+    public static StringBuilder tableCellEscaped(StringBuilder sb, String... s) {
+        for (String c : s) {
+            sb.append(String.format("<td>%s</td>", htmlEscape(c)));
+        }
+        sb.append("\n");
+        return sb;
+    }
+
     public static String DEFAULT_HTML() {
         return HTML_STRING("<table bgcolor=#a1a1a1 border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\">" +
                 "<tr><td class=\"default\" colspan=\"15\"><a href=/debug>"

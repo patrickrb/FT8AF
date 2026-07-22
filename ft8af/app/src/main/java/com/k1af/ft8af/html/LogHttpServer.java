@@ -424,7 +424,9 @@ public class LogHttpServer extends NanoHTTPD {
                 HtmlContext.tableCell(result
                         , HtmlContext.htmlEscape(cursor.getString(i))
                         , String.format("<a href=\"/delfollow/%s\">%s</a>"
-                                , HtmlContext.htmlEscape(cursor.getString(i).replace("/", "_"))
+                                // Path segment: percent-encode, so a space/?/#/& in the
+                                // callsign can't break the link or change the route.
+                                , HtmlContext.urlPathSegment(cursor.getString(i).replace("/", "_"))
                                 , GeneralVariables.getStringFromResource(R.string.html_delete))
                 ).append("\n");
             }
@@ -1075,9 +1077,11 @@ public class LogHttpServer extends NanoHTTPD {
             HtmlContext.tableCell(result, String.format("<b><a href=\"message?&pageSize=%d&callsign=%s\">" +
                             "%s</a>&nbsp;&nbsp;" +
                             "<a href=\"message?&pageSize=%d&callsign=%s\">%s</a>&nbsp;&nbsp;%s</b>"
-                    , pageSize, HtmlContext.htmlEscape(callTo)
+                    // href query values are percent-encoded (entity resolution would turn an
+                    // escaped &amp; back into a parameter separator); link text is HTML-escaped.
+                    , pageSize, HtmlContext.urlQueryValue(callTo)
                     , HtmlContext.htmlEscape(callTo)
-                    , pageSize, HtmlContext.htmlEscape(callFrom)
+                    , pageSize, HtmlContext.urlQueryValue(callFrom)
                     , HtmlContext.htmlEscape(callFrom), HtmlContext.htmlEscape(extra)));
             HtmlContext.tableCell(result, BaseRigOperation.getFrequencyStr(band)).append("\n");
             HtmlContext.tableRowEnd(result).append("\n");
@@ -1322,14 +1326,15 @@ public class LogHttpServer extends NanoHTTPD {
             //Generate one row of the data table
             HtmlContext.tableCell(result, String.format("%d", order + 1 + pageSize * (pageIndex - 1)));
             HtmlContext.tableCell(result, String.format("<a href=\"QSOSWLMSG?&pageSize=%d&callsign=%s\">%s</a>"
-                    , pageSize, HtmlContext.htmlEscape(call)
+                    , pageSize, HtmlContext.urlQueryValue(call)
                     , HtmlContext.htmlEscape(call)));
             HtmlContext.tableCell(result, gridsquare == null ? "" : HtmlContext.htmlEscape(gridsquare));
-            HtmlContext.tableCell(result, mode, rst_sent, rst_rcvd, qso_date, time_on, qso_date_off, time_off);
-            HtmlContext.tableCell(result, band, freq);
+            // Straight DB columns: imported ADIF can put anything in these, so escape them too.
+            HtmlContext.tableCellEscaped(result, mode, rst_sent, rst_rcvd, qso_date, time_on, qso_date_off, time_off);
+            HtmlContext.tableCellEscaped(result, band, freq);
             HtmlContext.tableCell(result, String.format("<a href=\"QSOSWLMSG?&pageSize=%d&callsign=%s\">%s</a>"
                     , pageSize
-                    , HtmlContext.htmlEscape(station_callsign)
+                    , HtmlContext.urlQueryValue(station_callsign)
                     , HtmlContext.htmlEscape(station_callsign)));
 
             HtmlContext.tableCell(result, my_gridsquare == null ? "" : HtmlContext.htmlEscape(my_gridsquare));
@@ -1637,13 +1642,14 @@ public class LogHttpServer extends NanoHTTPD {
                     , GeneralVariables.getStringFromResource(R.string.html_qso_raw)));//Whether it was imported
             HtmlContext.tableCell(result, String.format("<a href=\"QSOLogs?&pageSize=%d&callsign=%s\">%s</a>"
                     , pageSize
-                    , HtmlContext.htmlEscape(call)
+                    , HtmlContext.urlQueryValue(call)
                     , HtmlContext.htmlEscape(call)));
-            HtmlContext.tableCell(result, gridsquare == null ? "" : HtmlContext.htmlEscape(gridsquare), mode, rst_sent, rst_rcvd
+            // Straight DB columns: imported ADIF can put anything in these, so escape them too.
+            HtmlContext.tableCellEscaped(result, gridsquare == null ? "" : gridsquare, mode, rst_sent, rst_rcvd
                     , qso_date, time_on, qso_date_off, time_off, band, freq);
             HtmlContext.tableCell(result, String.format("<a href=\"QSOLogs?&pageSize=%d&callsign=%s\">%s</a>"
                     , pageSize
-                    , HtmlContext.htmlEscape(station_callsign)
+                    , HtmlContext.urlQueryValue(station_callsign)
                     , HtmlContext.htmlEscape(station_callsign)));
             HtmlContext.tableCell(result, my_gridsquare == null ? "" : HtmlContext.htmlEscape(my_gridsquare)
                     , HtmlContext.htmlEscape(comment)).append("\n");

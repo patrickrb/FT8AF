@@ -82,4 +82,77 @@ public class HtmlEscapeTest {
         assertThat(HtmlContext.htmlEscape("a & b < c > d \" e ' f"))
                 .isEqualTo("a &amp; b &lt; c &gt; d &quot; e &#39; f");
     }
+
+    // ---- URL encoding -------------------------------------------------------
+    // HTML escaping alone is wrong inside an href: the browser resolves entities
+    // BEFORE parsing the URL, so an escaped &amp; becomes a real & and splits the
+    // query string. These lock the percent-encoding that prevents that.
+
+    @Test
+    public void queryValue_percentEncodesParameterSeparators() {
+        // Parameter pollution: a callsign of A&pageSize=9999 must stay one value.
+        String encoded = HtmlContext.urlQueryValue("A&pageSize=9999");
+        assertThat(encoded).doesNotContain("&");
+        assertThat(encoded).doesNotContain("=");
+        assertThat(encoded).isEqualTo("A%26pageSize%3D9999");
+    }
+
+    @Test
+    public void queryValue_percentEncodesFragmentAndSpace() {
+        assertThat(HtmlContext.urlQueryValue("K1 ABC#frag")).isEqualTo("K1+ABC%23frag");
+    }
+
+    @Test
+    public void queryValue_leavesNoMarkupSignificantCharacters() {
+        String encoded = HtmlContext.urlQueryValue("\"><script>alert(1)</script>");
+        assertThat(encoded).doesNotContain("\"");
+        assertThat(encoded).doesNotContain("<");
+        assertThat(encoded).doesNotContain(">");
+        assertThat(encoded).doesNotContain("'");
+    }
+
+    @Test
+    public void queryValue_nullIsEmpty() {
+        assertThat(HtmlContext.urlQueryValue(null)).isEmpty();
+    }
+
+    @Test
+    public void pathSegment_encodesSpaceAsPercent20NotPlus() {
+        // In a path segment '+' is a literal plus, so the form encoder's '+' is wrong.
+        assertThat(HtmlContext.urlPathSegment("K1 ABC")).isEqualTo("K1%20ABC");
+    }
+
+    @Test
+    public void pathSegment_cannotEscapeItsOwnSegment() {
+        // A '/' must not let the value reach a different route, and '?'/'#' must not
+        // start a query or fragment.
+        String encoded = HtmlContext.urlPathSegment("../admin?x=1#y");
+        assertThat(encoded).doesNotContain("/");
+        assertThat(encoded).doesNotContain("?");
+        assertThat(encoded).doesNotContain("#");
+    }
+
+    @Test
+    public void pathSegment_nullIsEmpty() {
+        assertThat(HtmlContext.urlPathSegment(null)).isEmpty();
+    }
+
+    // ---- tableCellEscaped ---------------------------------------------------
+
+    @Test
+    public void tableCellEscaped_escapesEveryValue() {
+        // Straight DB columns (mode/RST/date/band/freq) reach the page through this;
+        // imported ADIF can carry markup in any of them.
+        StringBuilder sb = new StringBuilder();
+        HtmlContext.tableCellEscaped(sb, "FT8", "<script>alert(1)</script>");
+        assertThat(sb.toString())
+                .isEqualTo("<td>FT8</td><td>&lt;script&gt;alert(1)&lt;/script&gt;</td>\n");
+    }
+
+    @Test
+    public void tableCellEscaped_nullValueBecomesEmptyCell() {
+        StringBuilder sb = new StringBuilder();
+        HtmlContext.tableCellEscaped(sb, (String) null);
+        assertThat(sb.toString()).isEqualTo("<td></td>\n");
+    }
 }
