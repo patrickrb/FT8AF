@@ -17,10 +17,15 @@ import org.junit.Test;
  * 0120=S9, 0242=S9+60dB}) and carries the inverse mapping
  * {@link X6100Meters#getMeters(float)}. Both fix the scale as
  * <ul>
- *   <li>{@code value=0}   → S0  = -129 dBm,
+ *   <li>{@code value→0+} → S0  = -129 dBm (the linear branch's intercept),
  *   <li>{@code value=120} → S9  =  -75 dBm,
- *   <li>{@code value=242} → S9+60 = -15 dBm.
+ *   <li>{@code value=242} → S9+60 = -15 dBm — inclusive, matching
+ *       {@code getMeters(-15f) == 242}; only values <em>above</em> 242 are
+ *       out-of-scale and return the 0 sentinel.
  * </ul>
+ * Note that {@code value <= 0} does not evaluate the linear branch at all: it is
+ * clamped to a -150 dBm floor (no-signal), so the -129 dBm anchor above is the
+ * limit approached from just inside the branch, not the value returned at 0.
  * The upper branch (S9…S9+60) must therefore be continuous with the middle
  * branch at S9 = -75 dBm. It previously dropped the -75 dBm base offset, so a
  * signal above S9 read 75 dB too high — reporting physically impossible
@@ -86,18 +91,33 @@ public class X6100MetersDbmTest {
     public void upperBranchNeverReturnsPositiveDbm() {
         // A receiver S-meter can never legitimately report a positive dBm signal
         // on this scale (S9+60 == -15 dBm is the ceiling). Sweep the whole live
-        // range and assert every reading stays below 0.
-        for (float v = 1f; v < 242f; v += 1f) {
+        // range, 242 included, and assert every reading stays below 0.
+        for (float v = 1f; v <= 242f; v += 1f) {
             assertThat(X6100Meters.getMeter_dBm(v)).isLessThan(0f);
         }
     }
 
-    // ---- upper clamp ---------------------------------------------------------
+    // ---- top of scale / upper clamp -----------------------------------------
 
     @Test
-    public void atOrAbove242_isZeroSentinel() {
-        // value>=242 falls through to the 0 sentinel (out-of-scale marker).
-        assertThat(X6100Meters.getMeter_dBm(242f)).isEqualTo(0f);
+    public void exactly242_isTheS9Plus60Endpoint() {
+        // 242 is the documented top of the scale, and the inverse mapping returns
+        // exactly 242 for -15 dBm. It previously fell through to the 0 sentinel,
+        // putting a 60 dB discontinuity at the one value getMeters round-trips.
+        assertThat(X6100Meters.getMeter_dBm(242f)).isWithin(TOL).of(-15f);
+    }
+
+    @Test
+    public void topOfScaleIsContinuous() {
+        // No jump between the last in-branch value and the endpoint.
+        assertThat(X6100Meters.getMeter_dBm(242f) - X6100Meters.getMeter_dBm(241f))
+                .isWithin(0.01f).of(60f / 122f);
+    }
+
+    @Test
+    public void above242_isZeroSentinel() {
+        // Only values beyond the documented scale are the out-of-range marker.
+        assertThat(X6100Meters.getMeter_dBm(243f)).isEqualTo(0f);
         assertThat(X6100Meters.getMeter_dBm(300f)).isEqualTo(0f);
     }
 }
