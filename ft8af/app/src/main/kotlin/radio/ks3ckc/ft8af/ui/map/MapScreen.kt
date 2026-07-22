@@ -183,6 +183,18 @@ internal fun azProject(opLat: Double, opLon: Double, lat: Double, lon: Double): 
     )
 }
 
+// Great-circle distance (km) to the map disc edge. The antipode sits at angular
+// distance PI, so it is PI * 6371 km away; [azProject] projects it to a normalized
+// radius of 1 (c / PI), i.e. exactly the disc radius `r`. Range rings must be scaled
+// against this same maximum so they line up with the station markers.
+internal val MAP_EDGE_KM = PI * 6371.0
+
+// Screen radius (px) for a range ring at great-circle distance [km], using the SAME
+// factor [azProject] applies to markers (normalized radius = distKm / MAP_EDGE_KM),
+// so rings align with the marks instead of ballooning past them.
+internal fun rangeRingRadiusPx(km: Double, r: Float, scale: Float): Float =
+    (km / MAP_EDGE_KM).toFloat() * r * scale
+
 // ---------------------------------------------------------------------------
 // Map Screen
 // ---------------------------------------------------------------------------
@@ -1395,13 +1407,12 @@ private fun DrawScope.drawAzimuthalLand(
 }
 
 private fun DrawScope.drawRangeRings(cx: Float, cy: Float, r: Float, scale: Float = 1f) {
-    val maxKm = 20015.0
     val rings = listOf(2500, 5000, 10000, 15000, 20000)
     val ringColor = Color(0x1894A3B8)
     val dashEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 6f))
 
     for (km in rings) {
-        val ringR = (km.toFloat() / maxKm.toFloat()) * r * (PI.toFloat() / 2f) * scale
+        val ringR = rangeRingRadiusPx(km.toDouble(), r, scale)
         drawCircle(
             color = ringColor,
             radius = ringR,
