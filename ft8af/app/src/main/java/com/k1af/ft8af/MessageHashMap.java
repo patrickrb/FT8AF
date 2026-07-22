@@ -13,11 +13,15 @@ public class MessageHashMap extends HashMap<Long,String> {
     private static final String TAG = "MessageHashMap";
 
     /**
-     * Add a callsign and its hash code to the list
+     * Add a callsign and its hash code to the list.
+     *
+     * <p>Silently ignores anything that is not a real call to hash: a null/empty
+     * callsign, the CQ/QRZ/DE tokens, an already-stored hash, a zero hash, or a
+     * still-unresolved {@code <...>} placeholder. There is no return value —
+     * callers cannot distinguish "added" from "skipped".
      *
      * @param hashCode hash code
      * @param callsign callsign
-     * @return false means it already exists
      */
     public synchronized void addHash(long hashCode, String callsign) {
         // A null or empty callsign is never a real call to hash. It reaches here
