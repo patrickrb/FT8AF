@@ -300,6 +300,39 @@ final class PskReporterTests: XCTestCase {
             audioFreqHz: 0, dialFreqHz: 0, myCall: "KD2OGR", utcSeconds: 0))
     }
 
+    // MARK: reportableLocator / RR73 policy
+
+    func testReportableLocatorAcceptsRealGrids() {
+        XCTAssertEqual(PskReporter.reportableLocator("FN42"), "FN42")
+        XCTAssertEqual(PskReporter.reportableLocator("IO91wm"), "IO91wm")
+    }
+
+    func testReportableLocatorRejectsShortTokens() {
+        XCTAssertNil(PskReporter.reportableLocator(""))
+        XCTAssertNil(PskReporter.reportableLocator("FN"))
+        XCTAssertNil(PskReporter.reportableLocator("RR")) // bare sign-off, < 4 chars
+    }
+
+    func testReportableLocatorRejectsRR73SignOff() {
+        // "RR73" is the FT8 roger-73 report, never a grid — even though it is a
+        // 4-char Maidenhead look-alike. Case-insensitive.
+        XCTAssertNil(PskReporter.reportableLocator("RR73"))
+        XCTAssertNil(PskReporter.reportableLocator("rr73"))
+        XCTAssertNil(PskReporter.reportableLocator("Rr73"))
+    }
+
+    func testMakeSpotDropsRR73Locator() {
+        // A decode whose grid field carries the RR73 sign-off must still be
+        // spotted (the call is real), but never with RR73 as the locator.
+        let s = PskReporter.makeSpot(
+            callFrom: "K1ABC", i3: 1, n3: 0, grid: "RR73", snr: -3,
+            audioFreqHz: 1200, dialFreqHz: 14_074_000, myCall: "KD2OGR",
+            utcSeconds: 1_700_000_000)
+        XCTAssertEqual(s?.senderCallsign, "K1ABC")
+        XCTAssertEqual(s?.frequencyHz, 14_075_200)
+        XCTAssertNil(s?.senderLocator)
+    }
+
     // MARK: software string
 
     func testBuildSoftwareString() {
