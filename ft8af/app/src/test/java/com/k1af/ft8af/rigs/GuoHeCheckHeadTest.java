@@ -34,8 +34,9 @@ public class GuoHeCheckHeadTest {
     @Test
     public void nonConsecutiveA5_isNotMistakenForSync() {
         // Three scattered 0xA5 payload bytes then a *real* 4-byte sync run.
-        // The old counter reached 4 mid-way and returned an index into a run of
-        // 0xA5 length bytes; the fixed counter resets on every non-0xA5 byte.
+        // The old counter reached 4 on the scattered bytes and returned an index
+        // pointing *into* the sync run, so the caller read a 0xA5 sync byte as
+        // the length byte; the fixed counter resets on every non-0xA5 byte.
         byte[] data = {
                 (byte) 0xA5, (byte) 0x01, (byte) 0xA5, (byte) 0x02, (byte) 0xA5,
                 (byte) 0xA5, (byte) 0xA5, (byte) 0xA5, (byte) 0xA5, // 4-byte sync

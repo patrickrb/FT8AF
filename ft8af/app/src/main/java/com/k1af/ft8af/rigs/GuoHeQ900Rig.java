@@ -85,8 +85,12 @@ public class GuoHeQ900Rig extends BaseRig {
     /**
      * Locate the frame length byte, i.e. the first byte after the mandatory
      * FOUR CONSECUTIVE 0xA5 sync bytes that begin every GuoHe frame (see
-     * {@link GuoHeRigConstant}). Returns the index of that length byte, or -1 if
-     * no sync run is present.
+     * {@link GuoHeRigConstant}). Returns the index of that length byte, or -1
+     * when this buffer does not contain one — either because no run of four
+     * 0xA5 bytes is present at all, or because the run is present but the byte
+     * that follows it has not arrived yet (a read that ends inside the sync
+     * run). Both cases mean "no complete frame header here"; the caller simply
+     * waits for more data.
      *
      * <p>The 0xA5 bytes must be consecutive: the payload of a status frame
      * carries two big-endian VFO frequencies that are frequently 0xA5, and when
