@@ -160,12 +160,11 @@ public class HelpDialog extends Dialog {
 
     public String getTextFromAssets(String fileName) {
         AssetManager assetManager = context.getAssets();
-        try {
-            InputStream inputStream = assetManager.open(fileName);
-            byte[] bytes = Streams.readAllBytes(inputStream);
-            inputStream.close();
-
-            return new String(bytes);
+        // try-with-resources: readAllBytes can throw part-way through a read, and a
+        // manual close() after it would be skipped on that path, leaking the
+        // AssetInputStream.
+        try (InputStream inputStream = assetManager.open(fileName)) {
+            return new String(Streams.readAllBytes(inputStream));
 
         } catch (IOException e) {
             e.printStackTrace();
