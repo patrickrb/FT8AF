@@ -27,12 +27,12 @@ static def getCurrentTime() {
 
 android {
 
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId "radio.ks3ckc.ft8af"
         minSdk 23
-        targetSdk 35
+        targetSdk 36
         // Required for the androidTest suite to actually run: our instrumented
         // tests use @RunWith(AndroidJUnit4::class). Without this, AGP falls back
         // to the legacy android.test.InstrumentationTestRunner, which discovers
