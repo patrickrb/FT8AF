@@ -37,6 +37,7 @@ import com.k1af.ft8af.log.QSLRecord;
 import com.k1af.ft8af.log.QSLRecordStr;
 import com.k1af.ft8af.rigs.BaseRigOperation;
 import com.k1af.ft8af.timer.UtcTimer;
+import com.k1af.ft8af.util.Streams;
 import com.k1af.ft8af.wave.InputAudioLevel;
 
 import org.jetbrains.annotations.Nullable;
@@ -609,8 +610,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 "VALUES(?,?)";
         try {
             inputStream = assetManager.open("ituzone.json");
-            byte[] bytes = new byte[inputStream.available()];
-            inputStream.read(bytes);
+            byte[] bytes = Streams.readAllBytes(inputStream);
             JSONObject jsonObject = new JSONObject(new String(bytes));
             JSONArray array = jsonObject.names();
             for (int i = 0; i < array.length(); i++) {
@@ -635,8 +635,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 "VALUES(?,?)";
         try {
             inputStream = assetManager.open("cqzone.json");
-            byte[] bytes = new byte[inputStream.available()];
-            inputStream.read(bytes);
+            byte[] bytes = Streams.readAllBytes(inputStream);
             JSONObject jsonObject = new JSONObject(new String(bytes));
             JSONArray array = jsonObject.names();
             for (int i = 0; i < array.length(); i++) {
@@ -660,8 +659,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         ArrayList<DxccObject> dxccObjects = new ArrayList<>();
         try {
             inputStream = assetManager.open("dxcc_list.json");
-            byte[] bytes = new byte[inputStream.available()];
-            inputStream.read(bytes);
+            byte[] bytes = Streams.readAllBytes(inputStream);
             JSONObject jsonObject = new JSONObject(new String(bytes));
             JSONArray array = jsonObject.names();
 

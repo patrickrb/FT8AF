@@ -27,6 +27,7 @@ import com.k1af.ft8af.GeneralVariables;
 import com.k1af.ft8af.R;
 import com.k1af.ft8af.database.DatabaseOpr;
 import com.k1af.ft8af.database.OnAfterQueryFollowCallsigns;
+import com.k1af.ft8af.util.Streams;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -217,13 +218,11 @@ public class ClearCacheDataDialog extends Dialog {
 
     public String getTextFromAssets(String fileName) {
         AssetManager assetManager = context.getAssets();
-        try {
-            InputStream inputStream = assetManager.open(fileName);
-            byte[] bytes = new byte[inputStream.available()];
-            inputStream.read(bytes);
-            inputStream.close();
-
-            return new String(bytes);
+        // try-with-resources: readAllBytes can throw part-way through a read, and a
+        // manual close() after it would be skipped on that path, leaking the
+        // AssetInputStream.
+        try (InputStream inputStream = assetManager.open(fileName)) {
+            return new String(Streams.readAllBytes(inputStream));
 
         } catch (IOException e) {
             e.printStackTrace();
