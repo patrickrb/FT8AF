@@ -162,6 +162,26 @@ public class LogHttpServer extends NanoHTTPD {
         return String.format("log%s.adi", month != null ? month : "");
     }
 
+    /**
+     * The temp-file path NanoHTTPD stored for the {@code file1} upload part of a POST/PUT
+     * to {@code /IMPORTLOGDATA}, or {@code null} when the request carried no such part.
+     *
+     * <p>{@link IHTTPSession#parseBody} fills the supplied map with one entry per uploaded
+     * file, keyed by the form field name. A malformed or non-form request — or a bare LAN
+     * probe of the always-on logbook port — leaves the map without {@code file1}. The
+     * handler used to dereference the missing value directly
+     * ({@code files.get("file1").hashCode()}), so a request without the part threw a
+     * {@link NullPointerException}. That throw escaped {@link #serve} <em>before</em> its
+     * try/catch (the {@code IMPORTLOGDATA} branch runs in the leading dispatch chain), so
+     * NanoHTTPD's worker aborted the request with no useful response. Callers must treat
+     * {@code null} as "no upload" and reject the request the way a non-POST method already
+     * does. Mirrors the {@link #uriSegment} / {@link #parseQueryInt} guards that already
+     * harden the sibling handlers in this file.
+     */
+    static String uploadedFilePath(Map<String, String> files) {
+        return files == null ? null : files.get("file1");
+    }
+
     @Override
     public Response serve(IHTTPSession session) {
         String[] uriList = session.getUri().split("/");
@@ -283,7 +303,12 @@ public class LogHttpServer extends NanoHTTPD {
                 session.parseBody(files);
 
                 Log.e(TAG, "doImportLogFile: information:" + files.toString());
-                String param = files.get("file1");//this is the key for the POST or PUT file
+                String param = uploadedFilePath(files);//temp-file path of the file1 upload part (null if absent)
+                if (param == null) {
+                    // No file1 part: reject like an illegal command instead of NPE-ing on
+                    // the missing upload (see uploadedFilePath).
+                    return GeneralVariables.getStringFromResource(R.string.html_illegal_command);
+                }
 
                 ImportTaskList.ImportTask task = importTaskList.addTask(param.hashCode());//create a new task
 
