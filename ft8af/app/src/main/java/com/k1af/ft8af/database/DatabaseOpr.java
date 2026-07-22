@@ -2705,7 +2705,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
 
                 if (name.equalsIgnoreCase("decodeSortMode")) {
-                    GeneralVariables.decodeSortMode = result.equals("") ? 0 : Integer.parseInt(result);
+                    // parseConfigInt, not Integer.parseInt: a whitespace/non-numeric value in
+                    // the config table would otherwise throw during startup hydration.
+                    GeneralVariables.decodeSortMode = parseConfigInt(result, 0);
                 }
 
                 if (name.equalsIgnoreCase("clearOnBandModeChange")) {

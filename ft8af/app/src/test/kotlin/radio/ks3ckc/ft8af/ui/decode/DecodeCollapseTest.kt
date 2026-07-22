@@ -47,15 +47,68 @@ class DecodeCollapseTest {
 
     @Test
     fun collapse_isCaseInsensitiveByCallsign() {
-        // callsignFrom is uppercased on construction, but guard against callers
-        // handing us mixed case anyway.
-        val a = msg("k1abc", utc = 1000)
+        // The 3-arg Ft8Message constructor upper-cases callFrom, so passing "k1abc"
+        // through msg() would NOT exercise mixed case — the field has to be set
+        // directly. It genuinely can be mixed case in production: the 5-arg
+        // constructor assigns callFrom verbatim, and the hashed-callsign resolution
+        // path fills callsignFrom from the hash table.
+        val a = msg("K1ABC", utc = 1000).apply { callsignFrom = " k1abc " }
         val b = msg("K1ABC", utc = 2000)
 
         val result = collapseByStation(listOf(a, b), DecodeSortMode.LAST_HEARD)
 
         assertThat(result).hasSize(1)
         assertThat(result.first().utcTime).isEqualTo(2000)
+    }
+
+    @Test
+    fun stationKey_normalisesCaseAndPadding() {
+        assertThat(stationKey(msg("K1ABC", utc = 1).apply { callsignFrom = " k1abc " }))
+            .isEqualTo("K1ABC")
+        assertThat(stationKey(msg("K1ABC", utc = 1).apply { callsignFrom = null })).isNull()
+    }
+
+    @Test
+    fun rowAnimationKey_isStableAcrossCallsignCasing() {
+        // The bug this guards: a row key built from the raw callsignFrom churns when
+        // the same station arrives as "k1abc" then "K1ABC", recreating the row
+        // instead of updating it in place.
+        val lower = msg("K1ABC", utc = 2000).apply { callsignFrom = "k1abc" }
+        val upper = msg("K1ABC", utc = 2000)
+        assertThat(rowAnimationKey(lower)).isEqualTo(rowAnimationKey(upper))
+    }
+
+    // ---- entry-animation bookkeeping ----------------------------------------
+
+    @Test
+    fun advanceRowAnimation_reportsOnlyKeysNotSeenBefore() {
+        val state = advanceRowAnimation(
+            previousSeen = setOf("K1ABC_1000"),
+            current = setOf("K1ABC_1000", "K2DEF_1100"),
+        )
+        assertThat(state.new).containsExactly("K2DEF_1100")
+    }
+
+    @Test
+    fun advanceRowAnimation_retainsOnlyTheVisibleKeys() {
+        // Regression: the previous union grew one entry per station per cycle and
+        // never shrank, so a screen left open for hours leaked. Retention must be
+        // bounded by what's actually on screen.
+        var seen = emptySet<String>()
+        repeat(1000) { cycle ->
+            val current = setOf("K1ABC_$cycle", "K2DEF_$cycle")
+            seen = advanceRowAnimation(seen, current).seen
+        }
+        assertThat(seen).hasSize(2)
+        assertThat(seen).containsExactly("K1ABC_999", "K2DEF_999")
+    }
+
+    @Test
+    fun advanceRowAnimation_reAnimatesAStationThatComesBack() {
+        val first = advanceRowAnimation(emptySet(), setOf("K1ABC_1000"))
+        val gone = advanceRowAnimation(first.seen, setOf("K2DEF_1100"))
+        val back = advanceRowAnimation(gone.seen, setOf("K1ABC_2000"))
+        assertThat(back.new).containsExactly("K1ABC_2000")
     }
 
     @Test

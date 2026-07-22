@@ -181,16 +181,18 @@ fun DecodeScreen(
     }
 
     // Track which station rows are new-or-just-updated since the previous render
-    // (animated once). Keyed by callsign + utcTime so a station re-decoded in a
-    // later cycle (new utcTime, same callsign) re-triggers the highlight — that's
-    // the "row just updated in place" cue.
+    // (animated once). Keyed by normalized station + utcTime so a station
+    // re-decoded in a later cycle (new utcTime, same station) re-triggers the
+    // highlight — that's the "row just updated in place" cue. Only the visible
+    // keys are retained: accumulating them would grow one entry per station per
+    // cycle for as long as the screen is open. See advanceRowAnimation.
     var seenKeys by remember { mutableStateOf(emptySet<String>()) }
     val currentKeys = remember(collapsedMessages) {
-        collapsedMessages.map { "${it.callsignFrom}_${it.utcTime}" }.toSet()
+        collapsedMessages.map { rowAnimationKey(it) }.toSet()
     }
-    val newKeys = remember(currentKeys) { currentKeys - seenKeys }
+    val newKeys = remember(currentKeys) { advanceRowAnimation(seenKeys, currentKeys).new }
     LaunchedEffect(currentKeys) {
-        seenKeys = seenKeys + currentKeys
+        seenKeys = advanceRowAnimation(seenKeys, currentKeys).seen
     }
 
     // Auto-scroll state. Only "last heard" ordering auto-scrolls (to the top,
@@ -336,9 +338,12 @@ fun DecodeScreen(
                         // Key on the station callsign (stable across cycles) so
                         // Compose reuses the same row and updates it in place when
                         // a station is re-decoded, rather than adding a new row.
-                        key = { index, msg -> msg.callsignFrom ?: "row_$index" },
+                        // Normalized via stationKey so a station whose callsign
+                        // arrives with different case/padding across cycles keeps
+                        // the same key (and so the same row) — see stationKey.
+                        key = { index, msg -> stationKey(msg) ?: "row_$index" },
                     ) { index, message ->
-                        val rowKey = "${message.callsignFrom}_${message.utcTime}"
+                        val rowKey = rowAnimationKey(message)
 
                         // Group rows by receive slot (mode-aware: 15s FT8, 7.5s
                         // FT4, 3.75s FT2), but only in "last heard" ordering where

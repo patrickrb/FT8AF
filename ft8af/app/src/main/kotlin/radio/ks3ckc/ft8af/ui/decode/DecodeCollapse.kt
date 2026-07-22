@@ -58,7 +58,7 @@ internal fun collapseByStation(
     // tiebreak. Overwrite with the newer decode (>= keeps later-on-tie).
     val latest = LinkedHashMap<String, Ft8Message>()
     for (m in messages) {
-        val cs = m.callsignFrom?.trim()?.uppercase()
+        val cs = stationKey(m)
         if (cs.isNullOrEmpty()) continue
         val existing = latest[cs]
         if (existing == null || m.utcTime >= existing.utcTime) {
@@ -75,6 +75,56 @@ internal fun collapseByStation(
         }
     }
 }
+
+/**
+ * The station identity a decode collapses onto: [Ft8Message.callsignFrom] trimmed
+ * and upper-cased, or null when there is nothing to coalesce on.
+ *
+ * [collapseByStation] returns the original [Ft8Message] objects, whose
+ * `callsignFrom` field is *not* rewritten to this normalized form — the decode
+ * objects are shared with the rest of the app and must not be mutated here. Only
+ * one constructor of `Ft8Message` upper-cases the callsign; the others (and the
+ * hashed-callsign resolution path) can leave mixed case or padding in place. Any
+ * caller that keys UI state off a station must therefore route through this same
+ * function, or a station arriving as "k1abc" one cycle and "K1ABC" the next would
+ * collapse to one row while its row key churned — recreating the row and
+ * defeating the update-in-place behaviour this file exists to provide.
+ */
+internal fun stationKey(message: Ft8Message): String? =
+    message.callsignFrom?.trim()?.uppercase()
+
+/**
+ * The per-render bookkeeping behind the "row is new or just updated" entry
+ * animation: [seen] is what to retain for the next render, [new] is what to
+ * animate now.
+ */
+internal data class RowAnimationState(
+    val seen: Set<String>,
+    val new: Set<String>,
+)
+
+/**
+ * Advance the entry-animation state for a render whose visible rows are [current].
+ *
+ * Retains exactly [current] rather than accumulating every key ever seen. The
+ * keys embed a timestamp (see [rowAnimationKey]), so a union would add one entry
+ * per station per cycle and grow without bound over a long session even though
+ * the visible list stays small — a slow leak in a screen that is left running for
+ * hours. Anything absent from [current] can no longer be on screen, so dropping
+ * it is safe; if that station returns later it animates again, which is the
+ * intended "just updated" cue.
+ */
+internal fun advanceRowAnimation(
+    previousSeen: Set<String>,
+    current: Set<String>,
+): RowAnimationState = RowAnimationState(seen = current, new = current - previousSeen)
+
+/**
+ * Entry-animation key for one collapsed row: normalized station plus the decode's
+ * timestamp, so re-decoding a station in a later cycle re-triggers the highlight.
+ */
+internal fun rowAnimationKey(message: Ft8Message): String =
+    "${stationKey(message).orEmpty()}_${message.utcTime}"
 
 /**
  * Whether the per-cycle time-group dividers make sense for [sortMode]. They only

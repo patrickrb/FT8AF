@@ -68,12 +68,28 @@ class DecodeScreenTest {
     }
 
     @Test
-    fun sortLabel_lastHeardShowsTimeLabel() {
+    fun sortLabel_lastHeardShowsTimeLabelAndDescription() {
         composeRule.setContent {
             SortModeLabel(sortMode = DecodeSortMode.LAST_HEARD)
         }
 
         composeRule.onNodeWithText(context.getString(R.string.decode_sort_label_last_heard))
+            .assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.decode_sort_cd_last_heard))
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun sortLabel_callsignShowsTextAndDescription() {
+        // The third mode: without this, CALLSIGN was the one option whose label and
+        // accessibility description nothing verified.
+        composeRule.setContent {
+            SortModeLabel(sortMode = DecodeSortMode.CALLSIGN)
+        }
+
+        composeRule.onNodeWithText(context.getString(R.string.decode_sort_label_callsign))
+            .assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.decode_sort_cd_callsign))
             .assertIsDisplayed()
     }
 }
