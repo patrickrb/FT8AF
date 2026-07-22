@@ -23,17 +23,20 @@ import org.robolectric.RobolectricTestRunner;
  *   <li>{@code onSizeChanged} called {@code Bitmap.createBitmap(w, h, ARGB_8888)} with no
  *       {@code w > 0 && h > 0} check → {@code IllegalArgumentException}
  *       ("width and height must be > 0") on a transient zero-dimension Compose
- *       measurement pass (WaterfallView:112 guards exactly this).</li>
+ *       measurement pass ({@code WaterfallView.onSizeChanged} guards exactly this).</li>
  *   <li>{@code onDraw} dereferenced {@code _canvas}/{@code lastBitMap} (assigned only in
  *       {@code onSizeChanged}) with no null check → {@code NullPointerException} if a
  *       draw runs before a successful sizing, including right after guard (1) would have
- *       fired (WaterfallView:213 guards exactly this).</li>
+ *       fired ({@code WaterfallView.onDraw} guards exactly this).</li>
  * </ol>
  *
  * <p>Both run on the UI-thread layout/draw traversal with no surrounding try/catch, so
- * either one is a whole-app crash. Robolectric (native graphics) reproduces the real
- * {@code Bitmap}/{@code Canvas} behaviour; the tests call the {@code protected}
- * {@code onSizeChanged}/{@code onDraw} directly (same package).
+ * either one is a whole-app crash. Robolectric's {@code Bitmap}/{@code Canvas} enforce the
+ * same preconditions the device does, so these tests reproduce both crashes for real:
+ * reverting either guard fails five of the six cases below with the exact
+ * {@code IllegalArgumentException}/{@code NullPointerException} seen in the field. The
+ * tests call the {@code protected} {@code onSizeChanged}/{@code onDraw} directly (same
+ * package).
  */
 @RunWith(RobolectricTestRunner.class)
 public class ColumnarViewSizeGuardTest {
