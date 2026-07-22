@@ -210,17 +210,45 @@ public class MaidenheadGrid {
     }
 
     /**
-     * This function calculates a 6-character Maidenhead grid from latitude/longitude.
-     * Latitude/longitude use NMEA format. In other words, west longitude and south latitude are negative. They are specified as double type.
+     * Calculates the 4-character Maidenhead grid (field pair + square pair, e.g. {@code "EM48"})
+     * containing the given position. Latitude/longitude are decimal degrees, signed: west
+     * longitude and south latitude are negative.
      *
-     * @param location latitude/longitude
-     * @return String Maidenhead grid string
+     * <p>Boundary coordinates are clamped to a legal locator — see {@link #gridSquareFor} for
+     * the math and why the clamp matters.
+     *
+     * @param location latitude/longitude in decimal degrees
+     * @return 4-character Maidenhead grid string
      */
     public static String getGridSquare(LatLng location) {
+        return gridSquareFor(location.latitude, location.longitude);
+    }
+
+    /**
+     * Latitude/longitude (decimal degrees) -> 4-character Maidenhead grid. Extracted from
+     * {@link #getGridSquare(LatLng)} so the boundary math is unit-testable without a
+     * Play-Services {@code LatLng} (which additionally clamps latitude to [-90, 90] and
+     * normalizes longitude to [-180, 180)).
+     *
+     * <p>Each field/digit/subsquare index is clamped to its legal Maidenhead range via
+     * {@link #clampIndex}. Without the clamp, a fix on the {@code +180} antimeridian
+     * ({@code lon == 180}) or the North Pole ({@code lat == 90}) drove the first-pair index
+     * to 18 — one past the legal A-R field range — emitting the letter {@code 'S'}, i.e. an
+     * invalid locator such as {@code "JS09"}. That grid is written to config as the
+     * operator's own grid, transmitted in FT8 messages and uploaded to PSKReporter, so a
+     * pole/antimeridian fix polluted the QSO and the shared spot database with a
+     * non-existent locator. Clamping folds the boundary onto the northernmost/easternmost
+     * cell (field {@code R}) — the standard Maidenhead convention — and is a no-op for every
+     * in-range coordinate (which never reaches a clamp ceiling), so ordinary fixes are
+     * byte-identical. This mirrors the defensive clamps already used elsewhere in this class
+     * ({@link #gridToLatLng}'s ±85° map clamp, {@link #greatCircleDistanceKm}'s acos domain
+     * clamp).
+     */
+    static String gridSquareFor(double lat, double lon) {
         double tempNumber;//For intermediate calculation
         int index;//Determines the character to display
-        double _long = location.longitude;
-        double _lat = location.latitude;
+        double _long = lon;
+        double _lat = lat;
         StringBuilder buff = new StringBuilder();
 
         /*
@@ -228,13 +256,13 @@ public class MaidenheadGrid {
          */
         _long += 180;                    // Start from the middle of the Pacific
         tempNumber = _long / 20;            // Each major square is 20 degrees wide
-        index = (int) tempNumber;            // Index for uppercase letter
+        index = clampIndex((int) tempNumber, 17);   // Field letters A-R (0..17)
         buff.append(String.valueOf((char) (index + 'A')));  // Set the first character
         _long = _long - (index * 20);            // Remainder for step 2
 
         _lat += 90;                    // Start from the South Pole, 180 degrees
         tempNumber = _lat / 10;                // Each major square is 10 degrees tall
-        index = (int) tempNumber;            // Index for uppercase letter
+        index = clampIndex((int) tempNumber, 17);   // Field letters A-R (0..17)
         buff.append(String.valueOf((char) (index + 'A')));//Set the second character
         _lat = _lat - (index * 10);            // Remainder for step 2
 
@@ -242,12 +270,12 @@ public class MaidenheadGrid {
          *	Now the second pair of two digits:
          */
         tempNumber = _long / 2;                // Remainder from step 1 divided by 2
-        index = (int) tempNumber;            // Digit index
+        index = clampIndex((int) tempNumber, 9);    // Square digits 0-9
         buff.append(String.valueOf((char) (index + '0')));//Set the third character
         _long = _long - (index * 2);            // Remainder for step 3
 
         tempNumber = _lat;                // Remainder from step 1 divided by 1
-        index = (int) tempNumber;            // Digit index
+        index = clampIndex((int) tempNumber, 9);    // Square digits 0-9
         buff.append(String.valueOf((char) (index + '0')));//Set the fourth character
         _lat = _lat - index;                // Remainder for step 3
 
@@ -255,14 +283,26 @@ public class MaidenheadGrid {
          * Now the third pair of two lowercase characters:
          */
         tempNumber = _long / 0.083333;            // Remainder from step 2 divided by 0.083333
-        index = (int) tempNumber;            // Index for lowercase letter
+        index = clampIndex((int) tempNumber, 23);   // Subsquare letters a-x (0..23)
         buff.append(String.valueOf((char) (index + 'a')));//Set the fifth character
 
         tempNumber = _lat / 0.0416665;            // Remainder from step 2 divided by 0.0416665
-        index = (int) tempNumber;            // Index for lowercase letter
+        index = clampIndex((int) tempNumber, 23);   // Subsquare letters a-x (0..23)
         buff.append(String.valueOf((char) (index + 'a')));//Set the sixth character
 
         return buff.toString().substring(0, 4);
+    }
+
+    /**
+     * Clamp a Maidenhead character index to {@code [0, max]}. A pole/antimeridian fix (or an
+     * out-of-range coordinate) would otherwise index one past the pair's legal range and emit
+     * a character outside it (e.g. {@code 'S'} for the A-R field letters). For every in-range
+     * coordinate the index already lands inside {@code [0, max]}, so this is a no-op there.
+     */
+    private static int clampIndex(int value, int max) {
+        if (value < 0) return 0;
+        if (value > max) return max;
+        return value;
     }
 
     /**

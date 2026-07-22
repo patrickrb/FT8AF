@@ -127,6 +127,22 @@ public class MaidenheadGridTest {
         assertThat(grid).isEqualTo("FN42");
     }
 
+    @Test
+    public void getGridSquare_northPoleStaysWithinFieldRange() {
+        // A GPS fix at the North Pole (lat == 90) drove the latitude field index
+        // to 18 — one past the legal A-R range — emitting the letter 'S', i.e. an
+        // invalid locator that was then written to config as the operator's grid,
+        // transmitted in FT8 messages, and uploaded to PSKReporter. (Play-Services
+        // LatLng clamps latitude to [-90, 90] so 90 survives; it normalizes
+        // longitude 180 -> -180, so the antimeridian overflow is only reachable in
+        // the raw math — see MaidenheadGridSquareTest.) The field letters must stay
+        // in A-R.
+        String grid = MaidenheadGrid.getGridSquare(new LatLng(90.0, 0.0));
+        assertThat(MaidenheadGrid.checkMaidenhead(grid)).isTrue();
+        assertThat(grid.charAt(0)).isAtMost('R');
+        assertThat(grid.charAt(1)).isAtMost('R');
+    }
+
     // ---------- getDist ----------
 
     @Test
