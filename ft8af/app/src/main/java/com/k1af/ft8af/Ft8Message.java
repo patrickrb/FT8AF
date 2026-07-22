@@ -502,12 +502,18 @@ t71     Telemetry data, up to 18 hex digits
      * @return boolean Returns true if CQ.
      */
     public boolean checkIsCQ() {
-        String s = callsignTo.trim().split(" ")[0];
-        if (s == null) {
+        // callsignTo defaults to null and stays null for free-text/telemetry
+        // frames and unresolved-hash decodes that still reach the decode list.
+        // The Compose decode screen calls this unconditionally on the main
+        // thread (DecodeRow / resolveQsoStatus / filterMessages), so a missing
+        // destination must be treated as "not a CQ" rather than NPE on trim().
+        // (The previous `s == null` check was dead: String.split()[0] is never
+        // null; the deref that actually throws is callsignTo above.)
+        if (callsignTo == null) {
             return false;
-        } else {
-            return (s.equals("CQ") || s.equals("DE") || s.equals("QRZ"));
         }
+        String s = callsignTo.trim().split(" ")[0];
+        return (s.equals("CQ") || s.equals("DE") || s.equals("QRZ"));
     }
 
     /**
