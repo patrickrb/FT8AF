@@ -20,8 +20,17 @@ public class MessageHashMap extends HashMap<Long,String> {
      * @return false means it already exists
      */
     public synchronized void addHash(long hashCode, String callsign) {
-        //if (callsign.length()<2){return;}
-        //if (){return;}
+        // A null or empty callsign is never a real call to hash. It reaches here
+        // from the Ft8Message copy-constructor for a DXpedition (Fox/Hound)
+        // decode, which sets callsignFrom="" while still carrying a non-zero
+        // call-from hash (derived from the invited callsign) — so the hashCode==0
+        // short-circuit below does NOT catch it, and callsign.charAt(0) would
+        // throw StringIndexOutOfBoundsException (empty) or callsign.equals(...)
+        // an NPE (null). That exception fired inside the decode loop's try/catch
+        // and silently dropped the whole Fox message.
+        if (callsign == null || callsign.isEmpty()) {
+            return;
+        }
         if (callsign.equals("CQ")||callsign.equals("QRZ")||callsign.equals("DE")){
             return;
         }
