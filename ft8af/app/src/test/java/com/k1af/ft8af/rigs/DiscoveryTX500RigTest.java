@@ -55,7 +55,7 @@ public class DiscoveryTX500RigTest {
     }
 
     @Test
-    public void catToNormalizedSwr_trippsHaltAboveDefaultThreshold() {
+    public void catToNormalizedSwr_tripsHaltAboveDefaultThreshold() {
         // Default swr-halt threshold is 120 (~3.0:1); a reading of 23 (~8.7:1) must halt.
         int normalized = DiscoveryTX500Rig.tx500CatToNormalizedSwr(23);
         assertThat(MeterProtectionController.shouldHaltForSwr(normalized, true, 120)).isTrue();
