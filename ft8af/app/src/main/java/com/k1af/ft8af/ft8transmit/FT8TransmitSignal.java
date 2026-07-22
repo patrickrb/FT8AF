@@ -906,13 +906,16 @@ public class FT8TransmitSignal {
      * never acceptable. Swallow-and-log the failure and always tear down,
      * mirroring {@link #playTuneTone}.
      *
-     * <p>Package-visible and free of Android types for testing.
+     * <p>Package-visible for testing. Its parameters are plain {@link Runnable}s,
+     * so a test can drive it with no Android dependency beyond the
+     * {@link Log} call below — which is a no-op stub under the module's
+     * {@code unitTests.returnDefaultValues} setting.
      */
     static void runPlaybackWithTeardown(Runnable body, Runnable teardown) {
         try {
             body.run();
         } catch (Exception e) {
-            Log.e(TAG, "FT8 AudioTrack playback failed: " + e);
+            Log.e(TAG, "FT8 AudioTrack playback failed", e);
         } finally {
             teardown.run();
         }
