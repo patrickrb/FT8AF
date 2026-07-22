@@ -92,7 +92,8 @@ class ComposeMainActivity : AppCompatActivity() {
         val permissions = buildPermissionsList()
         checkPermission(permissions)
 
-        // Edge-to-edge is mandatory on Android 15 (targetSdk 35) and the old
+        // Edge-to-edge has been mandatory since Android 15 (API 35) — and stays
+        // enforced on our current target — while the old
         // FLAG_FULLSCREEN / window.statusBarColor APIs are deprecated. Opt into
         // edge-to-edge, then preserve the app's original full-screen look by
         // hiding the system bars immersively (transient reveal on swipe) instead
