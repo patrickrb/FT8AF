@@ -110,6 +110,27 @@ public class CableSerialPort {
                 && GeneralVariables.controlMode == ControlMode.CAT;
     }
 
+    /**
+     * Whether {@code portNum} is a valid 0-based index into a driver port list
+     * of {@code portCount} ports, i.e. in {@code 0 .. portCount-1}.
+     *
+     * <p>{@link #prepare()} calls {@code driver.getPorts().get(portNum)} right
+     * after this check. The previous guard was {@code portCount < portNum},
+     * which is off by one: it let {@code portNum == portCount} (a persisted
+     * multi-port selection replayed against a device that now enumerates fewer
+     * ports, or an empty port list with the default {@code portNum == 0}) pass,
+     * so {@code get(portNum)} threw {@link IndexOutOfBoundsException} out of
+     * {@code prepare()} → {@code connect()}. On the CAT auto-reconnect worker
+     * that exception is uncaught and crashes the app. Requiring
+     * {@code portNum < portCount} (and non-negative) makes the guard actually
+     * cover the index it protects.
+     *
+     * <p>Package-visible for testing.
+     */
+    static boolean isValidPortIndex(int portCount, int portNum) {
+        return portNum >= 0 && portNum < portCount;
+    }
+
     private boolean prepare() {
         registerRigSerialPort(context);
         UsbDevice device = null;
@@ -137,7 +158,7 @@ public class CableSerialPort {
             //Try adding the unknown device to the CDC driver
             driver = new CdcAcmSerialDriver(device);
         }
-        if (driver.getPorts().size() < portNum) {
+        if (!isValidPortIndex(driver.getPorts().size(), portNum)) {
             Log.e(TAG, "Serial port number does not exist, cannot open.");
             return false;
         }
