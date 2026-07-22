@@ -210,11 +210,15 @@ public class MaidenheadGrid {
     }
 
     /**
-     * This function calculates a 6-character Maidenhead grid from latitude/longitude.
-     * Latitude/longitude use NMEA format. In other words, west longitude and south latitude are negative. They are specified as double type.
+     * Calculates the 4-character Maidenhead grid (field pair + square pair, e.g. {@code "EM48"})
+     * containing the given position. Latitude/longitude are decimal degrees, signed: west
+     * longitude and south latitude are negative.
      *
-     * @param location latitude/longitude
-     * @return String Maidenhead grid string
+     * <p>Boundary coordinates are clamped to a legal locator — see {@link #gridSquareFor} for
+     * the math and why the clamp matters.
+     *
+     * @param location latitude/longitude in decimal degrees
+     * @return 4-character Maidenhead grid string
      */
     public static String getGridSquare(LatLng location) {
         return gridSquareFor(location.latitude, location.longitude);
