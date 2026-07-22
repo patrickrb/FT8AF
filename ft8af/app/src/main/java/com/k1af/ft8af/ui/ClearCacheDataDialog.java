@@ -27,6 +27,7 @@ import com.k1af.ft8af.GeneralVariables;
 import com.k1af.ft8af.R;
 import com.k1af.ft8af.database.DatabaseOpr;
 import com.k1af.ft8af.database.OnAfterQueryFollowCallsigns;
+import com.k1af.ft8af.util.Streams;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -219,8 +220,7 @@ public class ClearCacheDataDialog extends Dialog {
         AssetManager assetManager = context.getAssets();
         try {
             InputStream inputStream = assetManager.open(fileName);
-            byte[] bytes = new byte[inputStream.available()];
-            inputStream.read(bytes);
+            byte[] bytes = Streams.readAllBytes(inputStream);
             inputStream.close();
 
             return new String(bytes);

@@ -9,6 +9,7 @@ import android.util.Log;
 import com.k1af.ft8af.FT8Common;
 import com.k1af.ft8af.ModeProfile;
 import com.k1af.ft8af.rigs.BaseRigOperation;
+import com.k1af.ft8af.util.Streams;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -365,8 +366,7 @@ public class OperationBand {
      */
     public static String[] getLinesFromInputStream(InputStream inputStream, String deLimited) {
         try {
-            byte[] bytes = new byte[inputStream.available()];
-            inputStream.read(bytes);
+            byte[] bytes = Streams.readAllBytes(inputStream);
             return (new String(bytes)).split(deLimited);
         }catch (IOException e){
             return null;
