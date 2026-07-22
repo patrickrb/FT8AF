@@ -311,7 +311,7 @@ public class LogHttpServer extends NanoHTTPD {
         String html = String.format("<form >%s<input type=text name=callsign value=\"%s\">" +
                         "<input type=submit value=\"%s\"></form><br>\n"
                 , GeneralVariables.getStringFromResource(R.string.html_callsign)
-                , callsign
+                , HtmlContext.htmlEscape(callsign)
                 , GeneralVariables.getStringFromResource(R.string.html_message_query));
 
         Cursor cursor = mainViewModel.databaseOpr.getDb()
@@ -361,9 +361,9 @@ public class LogHttpServer extends NanoHTTPD {
                         "%s<input type=text name=grid value=\"%s\">\n" +
                         "<input type=submit value=\"%s\"></form><br><br>\n"
                 , GeneralVariables.getStringFromResource(R.string.html_callsign)
-                , callsign
+                , HtmlContext.htmlEscape(callsign)
                 , GeneralVariables.getStringFromResource(R.string.html_qsl_grid)
-                , grid
+                , HtmlContext.htmlEscape(grid)
                 , GeneralVariables.getStringFromResource(R.string.html_message_query)));
         //Write column names
         HtmlContext.tableRowBegin(result).append("\n");
@@ -383,8 +383,8 @@ public class LogHttpServer extends NanoHTTPD {
             Date date = new Date(cursor.getLong(cursor.getColumnIndex("updateTime")));
 
             HtmlContext.tableCell(result
-                    , cursor.getString(cursor.getColumnIndex("callsign"))
-                    , cursor.getString(cursor.getColumnIndex("grid"))
+                    , HtmlContext.htmlEscape(cursor.getString(cursor.getColumnIndex("callsign")))
+                    , HtmlContext.htmlEscape(cursor.getString(cursor.getColumnIndex("grid")))
                     , MaidenheadGrid.getDistStr(GeneralVariables.getMyMaidenhead4Grid()
                             , cursor.getString(cursor.getColumnIndex("grid")))
                     , formatTime.format(date)
@@ -422,9 +422,9 @@ public class LogHttpServer extends NanoHTTPD {
             HtmlContext.tableRowBegin(result, true, order % 2 != 0).append("\n");
             for (int i = 0; i < cursor.getColumnCount(); i++) {
                 HtmlContext.tableCell(result
-                        , cursor.getString(i)
-                        , String.format("<a href=/delfollow/%s>%s</a>"
-                                , cursor.getString(i).replace("/", "_")
+                        , HtmlContext.htmlEscape(cursor.getString(i))
+                        , String.format("<a href=\"/delfollow/%s\">%s</a>"
+                                , HtmlContext.htmlEscape(cursor.getString(i).replace("/", "_"))
                                 , GeneralVariables.getStringFromResource(R.string.html_delete))
                 ).append("\n");
             }
@@ -484,10 +484,10 @@ public class LogHttpServer extends NanoHTTPD {
             HtmlContext.tableCell(result
                     , cursor.getString(cursor.getColumnIndex("startTime"))
                     , cursor.getString(cursor.getColumnIndex("finishTime"))
-                    , cursor.getString(cursor.getColumnIndex("callsign"))
-                    , cursor.getString(cursor.getColumnIndex("mode"))
-                    , cursor.getString(cursor.getColumnIndex("grid"))
-                    , cursor.getString(cursor.getColumnIndex("band"))
+                    , HtmlContext.htmlEscape(cursor.getString(cursor.getColumnIndex("callsign")))
+                    , HtmlContext.htmlEscape(cursor.getString(cursor.getColumnIndex("mode")))
+                    , HtmlContext.htmlEscape(cursor.getString(cursor.getColumnIndex("grid")))
+                    , HtmlContext.htmlEscape(cursor.getString(cursor.getColumnIndex("band")))
                     , cursor.getString(cursor.getColumnIndex("band_i")) + "Hz"
                     , (cursor.getInt(cursor.getColumnIndex("isQSL")) == 1)
                             ? "<font color=green>√</font>" : "<font color=red>×</font>"
@@ -1074,14 +1074,11 @@ public class LogHttpServer extends NanoHTTPD {
             HtmlContext.tableCell(result, String.format("%dHz", freq));
             HtmlContext.tableCell(result, String.format("<b><a href=\"message?&pageSize=%d&callsign=%s\">" +
                             "%s</a>&nbsp;&nbsp;" +
-                            "<a href=\"message?&pageSize=%d&callsign=%s\">%s</a>&nbsp;&nbsp;%s</b>", pageSize, callTo.replace("<", "")
-                            .replace(">", "")
-                    , callTo.replace("<", "&lt;")
-                            .replace(">", "&gt;")
-                    , pageSize, callFrom.replace("<", "")
-                            .replace(">", "")
-                    , callFrom.replace("<", "&lt;")
-                            .replace(">", "&gt;"), extra));
+                            "<a href=\"message?&pageSize=%d&callsign=%s\">%s</a>&nbsp;&nbsp;%s</b>"
+                    , pageSize, HtmlContext.htmlEscape(callTo)
+                    , HtmlContext.htmlEscape(callTo)
+                    , pageSize, HtmlContext.htmlEscape(callFrom)
+                    , HtmlContext.htmlEscape(callFrom), HtmlContext.htmlEscape(extra)));
             HtmlContext.tableCell(result, BaseRigOperation.getFrequencyStr(band)).append("\n");
             HtmlContext.tableRowEnd(result).append("\n");
 
@@ -1325,22 +1322,18 @@ public class LogHttpServer extends NanoHTTPD {
             //Generate one row of the data table
             HtmlContext.tableCell(result, String.format("%d", order + 1 + pageSize * (pageIndex - 1)));
             HtmlContext.tableCell(result, String.format("<a href=\"QSOSWLMSG?&pageSize=%d&callsign=%s\">%s</a>"
-                    , pageSize, call.replace("<", "")
-                            .replace(">", "")
-                    , call.replace("<", "&lt;")
-                            .replace(">", "&gt;")));
-            HtmlContext.tableCell(result, gridsquare == null ? "" : gridsquare);
+                    , pageSize, HtmlContext.htmlEscape(call)
+                    , HtmlContext.htmlEscape(call)));
+            HtmlContext.tableCell(result, gridsquare == null ? "" : HtmlContext.htmlEscape(gridsquare));
             HtmlContext.tableCell(result, mode, rst_sent, rst_rcvd, qso_date, time_on, qso_date_off, time_off);
             HtmlContext.tableCell(result, band, freq);
             HtmlContext.tableCell(result, String.format("<a href=\"QSOSWLMSG?&pageSize=%d&callsign=%s\">%s</a>"
                     , pageSize
-                    , station_callsign.replace("<", "")
-                            .replace(">", "")
-                    , station_callsign.replace("<", "&lt;")
-                            .replace(">", "&gt;")));
+                    , HtmlContext.htmlEscape(station_callsign)
+                    , HtmlContext.htmlEscape(station_callsign)));
 
-            HtmlContext.tableCell(result, my_gridsquare == null ? "" : my_gridsquare);
-            HtmlContext.tableCell(result, operator == null ? "" : operator, comment).append("\n");
+            HtmlContext.tableCell(result, my_gridsquare == null ? "" : HtmlContext.htmlEscape(my_gridsquare));
+            HtmlContext.tableCell(result, operator == null ? "" : HtmlContext.htmlEscape(operator), HtmlContext.htmlEscape(comment)).append("\n");
             HtmlContext.tableRowEnd(result).append("\n");
             order++;
         }
@@ -1644,20 +1637,16 @@ public class LogHttpServer extends NanoHTTPD {
                     , GeneralVariables.getStringFromResource(R.string.html_qso_raw)));//Whether it was imported
             HtmlContext.tableCell(result, String.format("<a href=\"QSOLogs?&pageSize=%d&callsign=%s\">%s</a>"
                     , pageSize
-                    , call.replace("<", "")
-                            .replace(">", "")
-                    , call.replace("<", "&lt;")
-                            .replace(">", "&gt;")));
-            HtmlContext.tableCell(result, gridsquare == null ? "" : gridsquare, mode, rst_sent, rst_rcvd
+                    , HtmlContext.htmlEscape(call)
+                    , HtmlContext.htmlEscape(call)));
+            HtmlContext.tableCell(result, gridsquare == null ? "" : HtmlContext.htmlEscape(gridsquare), mode, rst_sent, rst_rcvd
                     , qso_date, time_on, qso_date_off, time_off, band, freq);
             HtmlContext.tableCell(result, String.format("<a href=\"QSOLogs?&pageSize=%d&callsign=%s\">%s</a>"
                     , pageSize
-                    , station_callsign.replace("<", "")
-                            .replace(">", "")
-                    , station_callsign.replace("<", "&lt;")
-                            .replace(">", "&gt;")));
-            HtmlContext.tableCell(result, my_gridsquare == null ? "" : my_gridsquare
-                    , comment).append("\n");
+                    , HtmlContext.htmlEscape(station_callsign)
+                    , HtmlContext.htmlEscape(station_callsign)));
+            HtmlContext.tableCell(result, my_gridsquare == null ? "" : HtmlContext.htmlEscape(my_gridsquare)
+                    , HtmlContext.htmlEscape(comment)).append("\n");
 
             HtmlContext.tableRowEnd(result).append("\n");
 

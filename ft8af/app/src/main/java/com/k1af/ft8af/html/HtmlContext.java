@@ -66,6 +66,48 @@ public class HtmlContext {
         return HTML_HEAD + HTML_BODY(context);
     }
 
+    /**
+     * Escape a request-derived value for safe inclusion in generated HTML, in
+     * both element content and quoted-attribute contexts. Escapes the five
+     * markup-significant characters {@code & < > " '}; {@code null} becomes "".
+     *
+     * <p>This is the single central escaper for user-supplied web-logbook input.
+     * It replaces the ad-hoc {@code .replace("<", "&lt;")} calls scattered
+     * through {@link LogHttpServer}, which missed {@code "}, {@code >}, and
+     * {@code &} and so left attribute-context breakout (e.g. a
+     * {@code "><script>} callsign param) exploitable. Apply it to every
+     * untrusted value before it enters markup.
+     */
+    public static String htmlEscape(String s) {
+        if (s == null) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder(s.length() + 16);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '&':
+                    out.append("&amp;");
+                    break;
+                case '<':
+                    out.append("&lt;");
+                    break;
+                case '>':
+                    out.append("&gt;");
+                    break;
+                case '"':
+                    out.append("&quot;");
+                    break;
+                case '\'':
+                    out.append("&#39;");
+                    break;
+                default:
+                    out.append(c);
+            }
+        }
+        return out.toString();
+    }
+
 
     public static String DEFAULT_HTML() {
         return HTML_STRING("<table bgcolor=#a1a1a1 border=\"0\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\">" +
