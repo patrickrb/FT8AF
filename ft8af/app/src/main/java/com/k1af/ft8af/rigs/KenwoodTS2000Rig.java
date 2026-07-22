@@ -59,17 +59,26 @@ public class KenwoodTS2000Rig extends BaseRig {
     /**
      * Read Meter RM;
      */
-    private void readMeters() {
+    protected void readMeters() {
         if (getConnector() != null) {
             clearBufferData();//clear buffer
-            getConnector().sendData(KenwoodTK90RigConstant.setRead590Meters());
+            sendMeterReadCommand();
         }
+    }
+
+    /**
+     * Send the CAT command(s) that request a meter reading. The TS-2000/TS-590
+     * just polls {@code RM;}; subclasses whose rig needs a meter-select first
+     * (e.g. the TX-500's {@code RM1;} SWR select) override this. Issue #599.
+     */
+    protected void sendMeterReadCommand() {
+        getConnector().sendData(KenwoodTK90RigConstant.setRead590Meters());
     }
 
     /**
      * Clear buffer data
      */
-    private void clearBufferData() {
+    protected void clearBufferData() {
         buffer.setLength(0);
     }
 
@@ -151,18 +160,28 @@ public class KenwoodTS2000Rig extends BaseRig {
                     setFreq(Yaesu3Command.getFrequency(yaesu3Command));
                 }
             } else if (cmd.equalsIgnoreCase("RM")) {//meter
-                if (Yaesu3Command.is590MeterSWR(yaesu3Command)) {
-                    swr = Yaesu3Command.get590ALCOrSWR(yaesu3Command);
-                }
-                if (Yaesu3Command.is590MeterALC(yaesu3Command)) {
-                    alc = Yaesu3Command.get590ALCOrSWR(yaesu3Command);
-                }
-                showAlert();
-                notifyMeterData(Math.min(alc * 8, 255), Math.min(swr * 8, 255));
+                handleMeterReply(yaesu3Command);
             }
 
         }
 
+    }
+
+    /**
+     * Parse an RM meter reply and forward the result to the protection
+     * controller. The TS-2000/TS-590 layout puts the selector at index 2 and the
+     * value at {@code substring(1,5)}; rigs with a different RM layout (e.g. the
+     * TX-500) override this. Issue #599.
+     */
+    protected void handleMeterReply(Yaesu3Command yaesu3Command) {
+        if (Yaesu3Command.is590MeterSWR(yaesu3Command)) {
+            swr = Yaesu3Command.get590ALCOrSWR(yaesu3Command);
+        }
+        if (Yaesu3Command.is590MeterALC(yaesu3Command)) {
+            alc = Yaesu3Command.get590ALCOrSWR(yaesu3Command);
+        }
+        showAlert();
+        notifyMeterData(Math.min(alc * 8, 255), Math.min(swr * 8, 255));
     }
 
     private void showAlert() {

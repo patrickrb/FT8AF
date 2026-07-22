@@ -120,4 +120,36 @@ public class Yaesu3CommandTest {
         assertThat(Yaesu3Command.is590MeterALC(c)).isFalse();
         assertThat(Yaesu3Command.is590MeterSWR(c)).isFalse();
     }
+
+    // ---------- Lab599 Discovery TX-500 (#599) ----------
+
+    @Test
+    public void tx500_swrSelectorAtIndex0AndValue() {
+        // RM10023 -> data "10023": selector '1' at index 0 = SWR; value substring(1,5) = 23.
+        Yaesu3Command swr = Yaesu3Command.getCommand("RM10023");
+        assertThat(Yaesu3Command.isTX500MeterSWR(swr)).isTrue();
+        assertThat(Yaesu3Command.getTX500MeterValue(swr)).isEqualTo(23);
+    }
+
+    @Test
+    public void tx500_zeroValueParsed() {
+        Yaesu3Command swr = Yaesu3Command.getCommand("RM10000");
+        assertThat(Yaesu3Command.isTX500MeterSWR(swr)).isTrue();
+        assertThat(Yaesu3Command.getTX500MeterValue(swr)).isEqualTo(0);
+    }
+
+    @Test
+    public void tx500_nonSwrSelectorRejected() {
+        // A reply that does not lead with '1' is not the SWR meter (unlike the TS-590,
+        // whose selector sits at index 2 — here index 2 being '1' must NOT match).
+        Yaesu3Command notSwr = Yaesu3Command.getCommand("RM00123");
+        assertThat(Yaesu3Command.isTX500MeterSWR(notSwr)).isFalse();
+    }
+
+    @Test
+    public void tx500_shortDataDefaults() {
+        Yaesu3Command c = Yaesu3Command.getCommand("RM10"); // data "10" len 2
+        assertThat(Yaesu3Command.isTX500MeterSWR(c)).isFalse();
+        assertThat(Yaesu3Command.getTX500MeterValue(c)).isEqualTo(0);
+    }
 }

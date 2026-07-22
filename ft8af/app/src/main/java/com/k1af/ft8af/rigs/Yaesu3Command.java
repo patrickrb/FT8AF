@@ -148,6 +148,32 @@ public class Yaesu3Command {
         return command.data.charAt(2) == '1';
     }
 
+    /**
+     * Lab599 Discovery TX-500 SWR meter reply. Unlike the TS-590 layout (meter
+     * selector at index 2), the TX-500 answers {@code RM;} with {@code RM1vvvv}
+     * where the leading digit is the meter selector ({@code '1'} = SWR) and the
+     * four following digits are the meter value (0000-0030). Issue #599.
+     *
+     * @param command RM command
+     * @return true when the reply carries the SWR meter
+     */
+    public static boolean isTX500MeterSWR(Yaesu3Command command) {
+        if (command.data.length() < 5) return false;
+        return command.data.charAt(0) == '1';
+    }
+
+    /**
+     * Value of the TX-500 SWR meter reply: the four digits after the selector
+     * ({@code substring(1,5)}), a raw 0000-0030 field. Callers map it to an SWR
+     * ratio; see {@link DiscoveryTX500Rig#tx500CatToSwrRatio(int)}.
+     *
+     * @param command RM command in {@code RM1vvvv} form
+     * @return the raw 0-30 meter value, or 0 when the reply is too short
+     */
+    public static int getTX500MeterValue(Yaesu3Command command) {
+        if (command.data.length() < 5) return 0;
+        return Integer.parseInt(command.data.substring(1, 5));
+    }
 
 
 }
