@@ -502,6 +502,36 @@ class PskReporterSenderTest {
     }
 
     // ---------------------------------------------------------------
+    // Sender locator sanitation (reportableLocator)
+    // ---------------------------------------------------------------
+
+    @Test
+    fun `reportableLocator keeps a genuine 4-char grid`() {
+        assertThat(PskReporterSender.reportableLocator("FN31")).isEqualTo("FN31")
+    }
+
+    @Test
+    fun `reportableLocator keeps a 6-char grid`() {
+        assertThat(PskReporterSender.reportableLocator("IO91wm")).isEqualTo("IO91wm")
+    }
+
+    @Test
+    fun `reportableLocator drops the RR73 signoff token`() {
+        // "RR73" is a syntactic grid look-alike (R,R + 7,3) but is the roger-73
+        // sign-off, never a Maidenhead locator. It must not be uploaded to the
+        // global PSKReporter database. The old `length >= 4` check let it through.
+        assertThat(PskReporterSender.reportableLocator("RR73")).isNull()
+        assertThat(PskReporterSender.reportableLocator("rr73")).isNull()
+    }
+
+    @Test
+    fun `reportableLocator drops absent or too-short grids`() {
+        assertThat(PskReporterSender.reportableLocator(null)).isNull()
+        assertThat(PskReporterSender.reportableLocator("")).isNull()
+        assertThat(PskReporterSender.reportableLocator("FN")).isNull()
+    }
+
+    // ---------------------------------------------------------------
     // Dedup window bookkeeping (markIfFresh) + thread-safety
     // ---------------------------------------------------------------
 
