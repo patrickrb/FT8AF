@@ -917,7 +917,8 @@ public class UsbAudioDevice {
     }
 
     /**
-     * Band-limited TX resampler (12 kHz FT8 generator rate -> the device's 48 kHz output rate).
+     * Band-limited TX resampler (12 kHz FT8 generator rate -> whatever rate the USB device
+     * streams at — commonly 48 kHz, but 44.1 kHz and other rates take the same path).
      *
      * <p>Delegates to {@link TxUpsampler}, which uses the same polyphase windowed-sinc kernel as
      * the capture path. The previous naive linear interpolator left the 12 kHz sampling images

@@ -7,7 +7,9 @@ import org.junit.Test;
 /**
  * Guards the band-limited TX upsampler used by the USB-direct (libusb) output path in
  * {@link UsbAudioDevice#writeAudio}. The FT8 waveform is generated at 12 kHz and the USB audio
- * device streams at 48 kHz, so writeAudio() must upsample 4x.
+ * device streams at a higher rate — commonly 48 kHz (a 4x upsample), which is what most of the
+ * cases below use; {@code handlesNonIntegerRatio44100} covers a 44.1 kHz device, where the ratio
+ * reduces to 147/40.
  *
  * <p>The bug this covers (distorted TX audio with the Yaesu FT-710): the old path used naive
  * linear interpolation, whose triangular kernel leaves the spectral images of the 12 kHz-sampled

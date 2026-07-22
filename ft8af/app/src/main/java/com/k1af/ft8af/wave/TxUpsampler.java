@@ -5,7 +5,8 @@ package com.k1af.ft8af.wave;
  * {@link UsbAudioDevice#writeAudio}.
  *
  * <p>Why it exists (distorted TX audio with the Yaesu FT-710): the FT8 waveform is generated at
- * 12 kHz and the USB audio device streams at 48 kHz, so writeAudio() must upsample 4x. The old
+ * 12 kHz and the USB audio device streams at a higher rate — commonly 48 kHz, so writeAudio()
+ * upsamples 4x, though 44.1 kHz devices (a 147/40 ratio) go through the same path. The old
  * path did this with naive linear interpolation. A linear interpolator is a convolution with a
  * triangular kernel, whose frequency response ({@code sinc^2}) only lightly attenuates the
  * spectral images of the 12 kHz-sampled tone. For a ~1500 Hz FT8 tone the first images land at
@@ -16,9 +17,11 @@ package com.k1af.ft8af.wave;
  *
  * <p>The fix reuses the same Blackman-windowed-sinc polyphase kernel already used (and
  * host-tested) on the capture side ({@link RationalResampler}): interpolate by L, low-pass,
- * decimate by M for the exact reduced ratio {@code toRate/fromRate}. The stopband sits well below
- * FT8's ~3 kHz top, so the images are rejected by > 40 dB and the transmitted tone is clean.
- * Covered by {@code TxUpsamplerTest}.
+ * decimate by M for the exact reduced ratio {@code toRate/fromRate}. The low-pass cutoff is
+ * {@code 0.45 / max(L, M)} of the interpolated rate — about 5.4 kHz for a 12 kHz source — so the
+ * passband clears FT8's ~3 kHz top with room to spare while the images at 10.5/13.5 kHz sit deep
+ * in the stopband and are rejected by > 40 dB, leaving the transmitted tone clean. Covered by
+ * {@code TxUpsamplerTest}.
  */
 public final class TxUpsampler {
 
@@ -29,8 +32,11 @@ public final class TxUpsampler {
      * band-limited polyphase filter. Returns a buffer of exactly {@code input.length * L / M}
      * samples, where {@code L/M} is the reduced {@code toRate/fromRate} ratio, group-delay
      * compensated so output sample 0 lines up with input sample 0 (the FT8 leading Costas sync
-     * array must not be shifted or clipped). Returns the input array unchanged when the rates
-     * match or either rate is non-positive.
+     * array must not be shifted or clipped). The compensation is a whole number of output
+     * samples, so for a non-integer ratio (e.g. 12 kHz -> 44.1 kHz, L/M = 147/40) the residual
+     * FIR group delay is fractional and the alignment holds to within one output sample rather
+     * than exactly — far below what the decoder's sync search cares about. Returns the input
+     * array unchanged when the rates match or either rate is non-positive.
      */
     public static float[] resample(float[] input, int fromRate, int toRate) {
         if (fromRate <= 0 || toRate <= 0 || fromRate == toRate || input.length == 0) {
