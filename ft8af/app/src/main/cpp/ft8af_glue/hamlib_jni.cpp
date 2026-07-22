@@ -36,6 +36,8 @@
 
 #include <hamlib/rig.h>
 
+#include "hamlib_feed.h"
+
 #define TAG "HamlibJNI"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN,  TAG, __VA_ARGS__)
@@ -202,16 +204,19 @@ JNIEXPORT void JNICALL
 Java_com_k1af_ft8af_wave_HamlibNative_nativeFeedFromRig(JNIEnv *env, jclass,
                                                         jlong handle, jbyteArray data) {
     auto *b = handle_to_bridge(handle);
-    if (b == nullptr || b->srv_fd < 0) return;
+    if (b == nullptr || data == nullptr || b->srv_fd < 0) return;
     jsize len = env->GetArrayLength(data);
     if (len <= 0) return;
     jbyte *bytes = env->GetByteArrayElements(data, nullptr);
-    ssize_t off = 0;
-    while (off < len) {
-        ssize_t w = write(b->srv_fd, bytes + off, (size_t) (len - off));
-        if (w <= 0) break;
-        off += w;
+    if (bytes == nullptr) {
+        // The pin failed (OOM / heap pressure) and left a pending exception.
+        // Clear it so the serial read thread's next JNI call isn't poisoned,
+        // and drop this frame instead of dereferencing NULL in write().
+        env->ExceptionClear();
+        return;
     }
+    hamlib_feed_write(b->srv_fd.load(),
+                      reinterpret_cast<const unsigned char *>(bytes), (long) len);
     env->ReleaseByteArrayElements(data, bytes, JNI_ABORT);
 }
 
@@ -238,8 +243,15 @@ JNIEXPORT jint JNICALL
 Java_com_k1af_ft8af_wave_HamlibNative_nativeSetMode(JNIEnv *env, jclass,
                                                     jlong handle, jstring mode) {
     auto *b = handle_to_bridge(handle);
-    if (b == nullptr || b->rig == nullptr) return -1;
+    if (b == nullptr || b->rig == nullptr || mode == nullptr) return -1;
     const char *s = env->GetStringUTFChars(mode, nullptr);
+    if (s == nullptr) {
+        // GetStringUTFChars can return NULL (with a pending exception) when the
+        // JVM cannot allocate the UTF-8 copy. Clear it and bail rather than pass
+        // NULL to rig_parse_mode().
+        env->ExceptionClear();
+        return -1;
+    }
     rmode_t m = rig_parse_mode(s);
     env->ReleaseStringUTFChars(mode, s);
     if (m == RIG_MODE_NONE) return -2;

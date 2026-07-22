@@ -359,6 +359,14 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_feed)." }
 & $outFeed
 $feedExit = $LASTEXITCODE
 
+# ---------------------------------------------------------------------------
+# NOTE: test_hamlib_feed.c (hamlib_feed.h — the nativeFeedFromRig write loop) is
+# intentionally NOT built here. Both it and the code it covers are POSIX-only:
+# hamlib_jni.cpp uses BSD sockets + pthreads and only compiles for Android
+# (bionic), and the test drives a real pipe fd via unistd/pthread. It is built
+# and run by run_host_tests.sh (Linux/macOS — the CI host).
+# ---------------------------------------------------------------------------
+
 if ($goldenExit -ne 0) { exit $goldenExit }
 if ($dev625Exit -ne 0) { exit $dev625Exit }
 if ($fftWinExit -ne 0) { exit $fftWinExit }

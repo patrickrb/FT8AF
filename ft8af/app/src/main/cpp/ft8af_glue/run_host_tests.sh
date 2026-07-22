@@ -334,3 +334,17 @@ feed_out="$tmp/ft8_feed_test"
     -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
     -I "$ft8" -I "$here" "${feed_srcs[@]}" -lm -o "$feed_out"
 "$feed_out"
+
+# Hamlib feed tests: the byte-forwarding write loop of the hamlib loopback
+# bridge (hamlib_feed.h, used by nativeFeedFromRig). Guards that a large frame
+# drains through short socket writes and, crucially, that a NULL pointer (a
+# failed JNI array pin on the CAT read thread) is a no-op instead of the native
+# SIGSEGV the old inline loop took. Header-only, no ft8_lib deps; needs pthread.
+hamlib_feed_srcs=(
+    "$here/test_hamlib_feed.c"
+)
+hamlib_feed_out="$tmp/ft8_hamlib_feed_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$here" "${hamlib_feed_srcs[@]}" -lpthread -o "$hamlib_feed_out"
+"$hamlib_feed_out"
