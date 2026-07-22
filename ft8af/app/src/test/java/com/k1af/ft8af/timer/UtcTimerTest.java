@@ -1,8 +1,14 @@
 package com.k1af.ft8af.timer;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 
 import org.junit.Test;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * Static time-formatting helpers on UtcTimer. Inputs are epoch milliseconds and
@@ -295,6 +301,49 @@ public class UtcTimerTest {
         int truncated = full % 15_000;
         for (int slot : new int[]{15_000, 7_500, 3_750, 1_000}) {
             assertThat(Math.floorMod(full, slot)).isEqualTo(Math.floorMod(truncated, slot));
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Teardown race: delete() shuts down the heartbeat/cycle thread pools,
+    // but Timer.cancel() does not wait for a TimerTask already running, so a
+    // tick can submit to the pool the instant it is shut down. The default
+    // AbortPolicy turns that into an uncaught RejectedExecutionException on
+    // the Timer thread -> process crash. newDiscardingCachedThreadPool()
+    // discards the late submit instead. (Every app exit and every FT8/FT4/FT2
+    // mode switch calls delete() while the 1s heartbeat is live.)
+    // ------------------------------------------------------------------
+
+    @Test
+    public void discardingPool_doesNotThrowWhenSubmittingAfterShutdown() {
+        ThreadPoolExecutor pool = UtcTimer.newDiscardingCachedThreadPool();
+        pool.shutdownNow();
+        // This is exactly what secTask()/heartBeatTask() do (pool.execute(runnable))
+        // when they lose the race with delete(): it must NOT throw.
+        pool.execute(() -> { });
+    }
+
+    @Test
+    public void defaultCachedPool_throwsWhenSubmittingAfterShutdown_documentingTheBug() {
+        // The pre-fix pool (Executors.newCachedThreadPool()) uses AbortPolicy, so the
+        // same submit-after-shutdown that the fix tolerates would throw here — the
+        // exception that escaped the TimerTask and crashed the app.
+        ExecutorService legacy = Executors.newCachedThreadPool();
+        legacy.shutdownNow();
+        assertThrows(RejectedExecutionException.class, () -> legacy.execute(() -> { }));
+    }
+
+    @Test
+    public void discardingPool_stillRunsSubmittedWorkBeforeShutdown() throws Exception {
+        // In normal operation the discarding pool behaves like a cached pool: work
+        // submitted before shutdown runs. Only post-shutdown submits are dropped.
+        ThreadPoolExecutor pool = UtcTimer.newDiscardingCachedThreadPool();
+        try {
+            final java.util.concurrent.CountDownLatch ran = new java.util.concurrent.CountDownLatch(1);
+            pool.execute(ran::countDown);
+            assertThat(ran.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        } finally {
+            pool.shutdownNow();
         }
     }
 
