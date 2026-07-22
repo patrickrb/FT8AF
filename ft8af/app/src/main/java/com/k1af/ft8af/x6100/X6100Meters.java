@@ -54,8 +54,10 @@ public class X6100Meters {
         } else if (value <= 120f) {
             return (value * 54f / 120f - 129f);
         } else if (value < 242) {
-            return (value * 60f) / (242f - 120f) - 120f * 60f / (242f - 120f);
-
+            // S9..S9+60: continue up from the S9 = -75 dBm base the middle branch
+            // (and the inverse getMeters) fix. The base offset was previously
+            // dropped, reading 75 dB too high (even positive dBm) above S9.
+            return (value - 120f) * 60f / (242f - 120f) - 75f;
         } else {
             return 0;
         }
