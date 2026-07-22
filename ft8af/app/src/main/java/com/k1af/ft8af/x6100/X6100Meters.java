@@ -68,8 +68,12 @@ public class X6100Meters {
      * @return voltage
      */
     public static float getMeter_volt(float value) {
+        // Calibration (see class header): 0000=0V, 0075=5V, 0241=16V.
+        // Low segment 0..75 is linear 0V..5V (slope 5/75 = 1/15); the previous
+        // 1/25 divisor under-read the supply (75 -> 3V, not 5V) and left a
+        // discontinuity with the upper segment at value == 75.
         if (value <= 75) {
-            return value / 25f;
+            return value / 15f;
         } else {
             return (value - 75f) * 11 / 166f + 5;
         }
