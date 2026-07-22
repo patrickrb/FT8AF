@@ -41,11 +41,30 @@ public enum PskReporter {
         return base
     }
 
+    /// A decoded `grid` token is reportable as a PSKReporter `senderLocator`
+    /// only when it is a real Maidenhead locator: at least the 4-char
+    /// field/square, and not the "RR73" QSO sign-off. The decoder copies the
+    /// end-of-QSO roger-73 report into `grid` because it matches the Maidenhead
+    /// field/square shape (`looksLikeGrid("RR73")` is true — R,R are valid A–R
+    /// field letters and 7,3 valid digits), but no protocol-compliant
+    /// transmitter ever means grid RR73: FT8 always packs "RR73" as the report,
+    /// never as a grid. The rest of the app already excludes it (`gridToLatLon`
+    /// returns nil, `QsoEngine` classifies it as the `.rr73` stage) — PSKReporter
+    /// is the one consumer that would otherwise upload a phantom Arctic locator
+    /// (83.5°N, 175°E) to the shared spot database, breaking WSJT-X interop.
+    /// Mirrors the Android fix in `PskReporterSender.reportableLocator`.
+    static func reportableLocator(_ grid: String) -> String? {
+        guard grid.count >= 4 else { return nil }
+        if grid.uppercased() == "RR73" { return nil }
+        return grid
+    }
+
     /// Convert one decode into a spot, applying the Android sender's policy:
     /// drop empty/unresolved-hash calls and free text (i3=0, n3=0), strip
     /// angle brackets from hashed callsigns, never report our own callsign,
-    /// require a >= 4-char locator (else omit it), and report the RF frequency
-    /// as dial + audio offset. Returns nil when the decode must not be spotted.
+    /// require a real >= 4-char Maidenhead locator (else omit it), and report
+    /// the RF frequency as dial + audio offset. Returns nil when the decode
+    /// must not be spotted.
     public static func makeSpot(
         callFrom: String, i3: UInt8, n3: UInt8, grid: String, snr: Int,
         audioFreqHz: Float, dialFreqHz: Int64, myCall: String, utcSeconds: Int64
@@ -62,7 +81,7 @@ public enum PskReporter {
             frequencyHz: dialFreqHz + Int64(audioFreqHz),
             snr: snr,
             mode: "FT8",
-            senderLocator: grid.count >= 4 ? grid : nil,
+            senderLocator: reportableLocator(grid),
             flowStartSeconds: utcSeconds
         )
     }
