@@ -348,6 +348,38 @@ public class UtcTimerTest {
     }
 
     @Test
+    public void discardOnShutdownPolicy_stillAbortsWhenRejectionIsNotShutdown() throws Exception {
+        // Only the teardown race is safe to swallow. A rejection while the pool is still
+        // running (here: a saturated bounded pool standing in for a thread-creation
+        // failure) must surface as RejectedExecutionException rather than silently
+        // dropping the cycle/heartbeat callback with nothing in the log.
+        ThreadPoolExecutor bounded = new ThreadPoolExecutor(
+                1, 1, 0L, java.util.concurrent.TimeUnit.SECONDS,
+                new java.util.concurrent.SynchronousQueue<Runnable>());
+        bounded.setRejectedExecutionHandler(new UtcTimer.DiscardOnShutdownPolicy());
+        final java.util.concurrent.CountDownLatch occupied = new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        try {
+            bounded.execute(() -> {
+                occupied.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            assertThat(occupied.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            // The single worker is busy and the SynchronousQueue has no capacity, so this
+            // submit is rejected while the pool is very much still running.
+            assertThat(bounded.isShutdown()).isFalse();
+            assertThrows(RejectedExecutionException.class, () -> bounded.execute(() -> { }));
+        } finally {
+            release.countDown();
+            bounded.shutdownNow();
+        }
+    }
+
+    @Test
     public void ntpClockOffsetMs_clampsAbsurdErrorsToIntRange() {
         // A wildly wrong device clock (> ~24.8 days off) must not overflow the int
         // field. Clamp instead of wrapping to a bogus small value.

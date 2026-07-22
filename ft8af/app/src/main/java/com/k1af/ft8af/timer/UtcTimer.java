@@ -28,6 +28,7 @@ import java.util.TimeZone;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -285,13 +286,40 @@ public class UtcTimer {
      * submit is the correct behaviour during teardown (the cycle/heartbeat callback is moot once we
      * are shutting down) and is a no-op in normal operation: with an unbounded maximum pool size over
      * a {@link SynchronousQueue}, a submit is only ever rejected once the pool has been shut down.
+     *
+     * <p>The rejection handler discards <em>only</em> while the pool is shutting down. A rejection
+     * for any other reason (e.g. the JVM/OS refusing a new thread under resource exhaustion) still
+     * aborts with the usual {@code RejectedExecutionException} rather than silently swallowing the
+     * callback, so a real failure stays visible instead of turning into a mysteriously dead
+     * heartbeat.
      */
     static ThreadPoolExecutor newDiscardingCachedThreadPool() {
-        // Mirrors Executors.newCachedThreadPool() exactly, then swaps in DiscardPolicy.
+        // Mirrors Executors.newCachedThreadPool() exactly, then swaps in the teardown policy.
         ThreadPoolExecutor pool = new ThreadPoolExecutor(
                 0, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<Runnable>());
-        pool.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
+        pool.setRejectedExecutionHandler(new DiscardOnShutdownPolicy());
         return pool;
+    }
+
+    /**
+     * Discards a task rejected because the executor is shutting down; delegates every other
+     * rejection to {@link ThreadPoolExecutor.AbortPolicy}.
+     *
+     * <p>{@link ThreadPoolExecutor.DiscardPolicy} would drop <em>all</em> rejections, including one
+     * caused by thread-creation failure during normal operation — a silent loss of the cycle or
+     * heartbeat callback with nothing in the log to explain it. Only the teardown race that
+     * {@link #newDiscardingCachedThreadPool()} exists to fix is safe to ignore.
+     */
+    static final class DiscardOnShutdownPolicy implements RejectedExecutionHandler {
+        private static final ThreadPoolExecutor.AbortPolicy ABORT = new ThreadPoolExecutor.AbortPolicy();
+
+        @Override
+        public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+            if (executor.isShutdown()) {
+                return; // teardown in progress: the cycle/heartbeat callback is moot
+            }
+            ABORT.rejectedExecution(r, executor);
+        }
     }
 
     /**
