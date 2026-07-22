@@ -1,6 +1,7 @@
 package radio.ks3ckc.ft8af.qrz
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
@@ -126,13 +127,33 @@ class LruCacheTest {
                 } catch (th: Throwable) {
                     failures.add(th)
                 }
-            }.also { it.start() }
+            }.also {
+                // Daemon so a genuinely wedged worker can never keep the JVM (and the
+                // Gradle test worker) alive after this test has reported its verdict.
+                it.isDaemon = true
+                it.start()
+            }
         }
 
         start.countDown()
-        workers.forEach { it.join(TimeUnit.SECONDS.toMillis(30)) }
-        stop.set(true)
 
+        // One shared deadline across all joins, not 30s per thread. A worker still alive
+        // when it expires is a failure, not something to shrug off: `stop` is only the
+        // fallback that asks the loops to bail out so the test doesn't leave them running.
+        val deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(30)
+        val stalled = workers.filter { worker ->
+            val remainingMs = TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime())
+            if (remainingMs > 0) worker.join(remainingMs)
+            worker.isAlive
+        }
+        if (stalled.isNotEmpty()) {
+            stop.set(true)
+            stalled.forEach { it.join(TimeUnit.SECONDS.toMillis(5)) }
+        }
+
+        assertWithMessage("workers still running after the join deadline")
+            .that(stalled.map { it.name })
+            .isEmpty()
         assertThat(failures).isEmpty()
     }
 }
