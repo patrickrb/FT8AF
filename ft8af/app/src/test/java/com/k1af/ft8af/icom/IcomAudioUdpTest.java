@@ -36,6 +36,25 @@ public class IcomAudioUdpTest {
         }
     }
 
+    /**
+     * Adds a count of how many times the PCM conversion actually ran, so the tests
+     * can pin that an overlapping (dropped) request never pays for it, and can force
+     * the conversion to fail.
+     */
+    private static class CountingIcomAudioUdp extends RecordingIcomAudioUdp {
+        int conversions = 0;
+        Error conversionFailure = null;
+
+        @Override
+        short[] convertForTransmit(float[] audioData) {
+            conversions++;
+            if (conversionFailure != null) {
+                throw conversionFailure;
+            }
+            return super.convertForTransmit(audioData);
+        }
+    }
+
     // ---- floatToPcm16 conversion ----
 
     @Test
@@ -77,6 +96,51 @@ public class IcomAudioUdpTest {
         rig.transmitting.set(false);
         rig.sendTxAudioData(new float[10]);
         assertThat(rig.submitted).hasSize(2);
+    }
+
+    @Test
+    public void sendTxAudioData_droppedRequestSkipsTheConversionEntirely() {
+        // The guard is claimed before the PCM conversion, so an overlapping request
+        // costs nothing: no full-buffer short[] allocation and no per-sample loop for
+        // audio that is about to be thrown away.
+        CountingIcomAudioUdp rig = new CountingIcomAudioUdp();
+
+        rig.sendTxAudioData(new float[10]);   // claims the guard, converts once
+        assertThat(rig.conversions).isEqualTo(1);
+        assertThat(rig.transmitting.get()).isTrue();
+
+        rig.sendTxAudioData(new float[10]);   // overlapping: dropped before converting
+        assertThat(rig.submitted).hasSize(1);
+        assertThat(rig.conversions).isEqualTo(1);
+
+        // ...and once the slot frees up, the next TX converts again as normal.
+        rig.transmitting.set(false);
+        rig.sendTxAudioData(new float[10]);
+        assertThat(rig.conversions).isEqualTo(2);
+    }
+
+    @Test
+    public void sendTxAudioData_conversionFailureReleasesTheGuard() {
+        // If the conversion blows up (OOM on the ~12.6 s buffer is the realistic
+        // case) we still hold the guard and never submitted. Leaving it latched
+        // would block every future transmission for the life of the process.
+        CountingIcomAudioUdp rig = new CountingIcomAudioUdp();
+        rig.conversionFailure = new OutOfMemoryError("simulated");
+
+        try {
+            rig.sendTxAudioData(new float[10]);
+            throw new AssertionError("expected the conversion failure to propagate");
+        } catch (OutOfMemoryError expected) {
+            // propagated to the caller, as before
+        }
+
+        assertThat(rig.submitted).isEmpty();
+        assertThat(rig.transmitting.get()).isFalse();
+
+        // A later TX still works.
+        rig.conversionFailure = null;
+        rig.sendTxAudioData(new float[10]);
+        assertThat(rig.submitted).hasSize(1);
     }
 
     @Test

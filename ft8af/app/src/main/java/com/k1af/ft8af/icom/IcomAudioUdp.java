@@ -42,11 +42,10 @@ public class IcomAudioUdp extends AudioUdp {
     public void sendTxAudioData(float[] audioData) {
         if (audioData==null) return;
 
-        //Incoming audio is LPCM, 32-bit float, 12000Hz
-        //iCOM audio format is LPCM 16-bit Int, 12000Hz
-        //Need to convert from float to 16-bit int
-        short[] temp = floatToPcm16(audioData);
-
+        // Claim the transmit slot BEFORE converting. The conversion allocates a
+        // short[] the length of a full ~12.6 s FT8 buffer and walks every sample;
+        // doing it first meant an overlapping TX — the exact case this guard exists
+        // for — paid that cost only to throw the result away.
         if (!transmitting.compareAndSet(false, true)) {
             // A transmission is already running on the pool. Starting another here
             // would run a concurrent DoTXAudioRunnable that interleaves PCM on the
@@ -54,7 +53,32 @@ public class IcomAudioUdp extends AudioUdp {
             Log.w(TAG, "sendTxAudioData: transmit already in progress, dropping overlapping request");
             return;
         }
+
+        //Incoming audio is LPCM, 32-bit float, 12000Hz
+        //iCOM audio format is LPCM 16-bit Int, 12000Hz
+        //Need to convert from float to 16-bit int
+        short[] temp;
+        try {
+            temp = convertForTransmit(audioData);
+        } catch (RuntimeException | Error e) {
+            // We hold the guard and never submitted, so release it here — a latched
+            // guard would block every future transmission for the process lifetime.
+            // (Deliberately not a finally around submitTransmit: that already
+            // releases on a pool rejection, and re-clearing afterwards could clear a
+            // guard a different thread had since claimed.)
+            transmitting.set(false);
+            throw e;
+        }
         submitTransmit(temp);
+    }
+
+    /**
+     * Instance seam over {@link #floatToPcm16} so tests can observe whether the
+     * conversion ran at all (an overlapping request must be dropped before paying
+     * for it) — same pattern as {@link #submitTransmit}.
+     */
+    short[] convertForTransmit(float[] audioData) {
+        return floatToPcm16(audioData);
     }
 
     /**
@@ -105,7 +129,10 @@ public class IcomAudioUdp extends AudioUdp {
                 if (audioData == null) return;
 
                 final int partialLen = IComPacketTypes.TX_BUFFER_SIZE * 2;//Packet data length
-                //Convert to BYTE, little-endian
+                // Samples go out little-endian (low byte first), which is what the
+                // helper below emits despite being named shortToBigEndian — see its
+                // Javadoc in IComPacketTypes. Don't "fix" the byte order to match the
+                // name; the wire format is little-endian.
 
                 //byte[] data = new byte[audioData.length * 2 + partialLen * 4];//Extra silence padding: 20ms*2 = 80ms total before and after
                 //Play silence first before audio; the for-i loop handles leading silence, the for-j loop handles trailing silence
