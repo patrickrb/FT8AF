@@ -191,10 +191,37 @@ object PskReporterSender {
             frequencyHz = freqHz,
             snr = if (msg.hasSnr()) msg.snr else 0,
             mode = mode,
-            senderLocator = msg.maidenGrid?.takeIf { it.length >= 4 },
+            senderLocator = reportableLocator(msg.maidenGrid),
             flowStartSeconds = msg.utcTime / 1000,
         )
     }
+
+    /**
+     * Decide whether a decoded message's grid slot is a genuine Maidenhead
+     * locator worth reporting to PSKReporter, or a value that must be dropped.
+     *
+     * A standard/non-standard FT8 message ends a QSO with the sign-off token
+     * "RR73", which the JNI decoder stores into [Ft8Message.maidenGrid] because
+     * it is a syntactic 4-char grid look-alike (R,R in field range A–R; 7,3 in
+     * square range 0–9). It is NOT a location: the FT8 encoder always packs
+     * "RR73" as the roger-73 report, never as a grid (see ft8_lib `packgrid`),
+     * so no compliant transmitter ever means grid RR73 (a phantom cell in the
+     * Arctic Ocean). Reporting it would inject bogus locators into the global
+     * PSKReporter spot database and break interoperability with WSJT-X, which
+     * never treats RR73 as a grid.
+     *
+     * This mirrors the RR73 exclusion the rest of the app already applies when
+     * classifying a grid — [GeneralVariables.checkFun1],
+     * `MaidenheadGrid.gridToLatLng`, and `CountDbOpr` — which the naive
+     * `length >= 4` check here previously missed. Pure function — testable
+     * without Android.
+     *
+     * @return the locator to report, or null when the grid is absent, too short
+     *         to be a locator, or the RR73 sign-off token.
+     */
+    @VisibleForTesting
+    internal fun reportableLocator(maidenGrid: String?): String? =
+        maidenGrid?.takeIf { it.length >= 4 && !it.equals("RR73", ignoreCase = true) }
 
     /**
      * Atomically test the per-band dedup window for [dedupKey] ("CALL|BAND") and,
