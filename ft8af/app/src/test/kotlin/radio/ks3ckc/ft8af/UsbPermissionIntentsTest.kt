@@ -16,7 +16,8 @@ import org.robolectric.Shadows
  * implicit intent (no package set). That combination throws
  * `IllegalArgumentException` at runtime.
  *
- * Robolectric runs at the default SDK level (matching compileSdk 35).
+ * Robolectric is pinned to API 35 via src/test/resources/robolectric.properties
+ * (the app targets a newer API; see that file for the JDK-version reason).
  * The utility function branches on `Build.VERSION.SDK_INT` at runtime,
  * so these tests verify the structural invariants that hold at *every*
  * API level: the intent is always explicit, and the action is propagated.
