@@ -12,9 +12,9 @@ import org.junit.Test;
  * sequence with weights 1e8, 1e7, 1e6, 1e5, 1e4, 1e3, 1e2, 1e1 (10 Hz LSB).
  *
  * This inverts {@link Yaesu2RigConstant#setOperationFreq} exactly for
- * 100 Hz-aligned dials. The encoder packs the last nibble as {@code freq % 100}
- * rather than a clean tens-of-Hz digit, so for frequencies with a non-zero
- * sub-100 Hz remainder the encoder and decoder are not exact inverses.
+ * 10 Hz-aligned dials. The encoder packs the last nibble as the tens-of-Hz digit
+ * ({@code freq % 100 / 10}); only the sub-10 Hz remainder (below the rig's CAT
+ * resolution) is dropped, so the two are exact inverses for any 10 Hz-aligned VFO.
  */
 public class Yaesu2CommandTest {
 
@@ -41,12 +41,20 @@ public class Yaesu2CommandTest {
 
     @Test
     public void getFrequency_roundTripsSetOperationFreqEncoding() {
-        // The decoder must invert the encoder. Use a 100 Hz-aligned dial so the
-        // round trip isolates the decoder weights (the encoder packs the two
-        // sub-100 Hz digits into a single nibble, an unrelated limitation).
-        long dial = 14_074_300L; // 14.074 MHz + 300 Hz, exercises the low nibbles
+        // The decoder must invert the encoder for any 10 Hz-aligned dial. This dial
+        // has non-zero hundreds- and tens-of-Hz digits, exercising both nibbles of
+        // the last byte (which previously desynced: 50 packed raw read back as 320).
+        long dial = 14_074_350L; // 14.074 MHz + 350 Hz
         byte[] encoded = Yaesu2RigConstant.setOperationFreq(dial);
         assertThat(Yaesu2Command.getFrequency(encoded)).isEqualTo(dial);
+    }
+
+    @Test
+    public void getFrequency_dropsOnlySub10HzOnRoundTrip() {
+        // The rig CAT frame has 10 Hz resolution, so the sub-10 Hz remainder is the
+        // only part not preserved; everything at or above 10 Hz round-trips exactly.
+        byte[] encoded = Yaesu2RigConstant.setOperationFreq(14_074_058L);
+        assertThat(Yaesu2Command.getFrequency(encoded)).isEqualTo(14_074_050L);
     }
 
     @Test
