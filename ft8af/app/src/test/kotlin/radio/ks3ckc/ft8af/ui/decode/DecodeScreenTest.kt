@@ -3,6 +3,7 @@ package radio.ks3ckc.ft8af.ui.decode
 import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -52,5 +53,27 @@ class DecodeScreenTest {
         }
 
         composeRule.onNodeWithText(title).assertIsDisplayed()
+    }
+
+    @Test
+    fun sortLabel_showsActiveModeTextAndDescription() {
+        composeRule.setContent {
+            SortModeLabel(sortMode = DecodeSortMode.SNR)
+        }
+
+        composeRule.onNodeWithText(context.getString(R.string.decode_sort_label_snr))
+            .assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.decode_sort_cd_snr))
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun sortLabel_lastHeardShowsTimeLabel() {
+        composeRule.setContent {
+            SortModeLabel(sortMode = DecodeSortMode.LAST_HEARD)
+        }
+
+        composeRule.onNodeWithText(context.getString(R.string.decode_sort_label_last_heard))
+            .assertIsDisplayed()
     }
 }

@@ -159,6 +159,15 @@
     <string name="decode_clear_list">Clear decode list</string>
     <string name="decode_utc_placeholder">UTC : --:--:--</string>
     <string name="decode_time_group_utc">%1$s UTC</string>
+    <!-- Sort control: cycles the collapsed one-row-per-station decode list. The
+         short _label_ strings render inside the top-bar button; the _cd_ strings
+         are the accessibility content descriptions announcing the active mode. -->
+    <string name="decode_sort_label_last_heard">TIME</string>
+    <string name="decode_sort_label_callsign">CALL</string>
+    <string name="decode_sort_label_snr">SNR</string>
+    <string name="decode_sort_cd_last_heard">Sort: last heard</string>
+    <string name="decode_sort_cd_callsign">Sort: callsign</string>
+    <string name="decode_sort_cd_snr">Sort: SNR</string>
     <string name="decode_filter_all">All</string>
     <string name="decode_filter_cq_calls">CQ Calls</string>
     <string name="decode_filter_cq_pota">CQ POTA</string>

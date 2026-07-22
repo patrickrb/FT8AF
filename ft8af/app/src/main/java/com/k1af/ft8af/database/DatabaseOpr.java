@@ -2704,6 +2704,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.clearDecodesEveryCycle = result.equals("1");
                 }
 
+                if (name.equalsIgnoreCase("decodeSortMode")) {
+                    GeneralVariables.decodeSortMode = result.equals("") ? 0 : Integer.parseInt(result);
+                }
+
                 if (name.equalsIgnoreCase("clearOnBandModeChange")) {
                     GeneralVariables.clearOnBandModeChange = result.equals("1");
                 }
