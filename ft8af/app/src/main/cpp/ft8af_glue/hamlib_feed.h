@@ -21,21 +21,27 @@
 // This header collapses the write loop into one null-safe, host-tested
 // implementation (test_hamlib_feed.c). It takes plain POSIX types (no JNI
 // dependency) so it links with no NDK. The behaviour is identical to the old
-// inline loop for every valid buffer; the only change is that a NULL pointer, a
-// non-positive length, or a closed socket (fd < 0) is now a no-op instead of a
-// crash.
+// inline loop for every valid buffer, save two hardening changes: a NULL
+// pointer, a non-positive length, or a closed socket (fd < 0) is now a no-op
+// instead of a crash, and a write() interrupted by a signal (EINTR) is retried
+// instead of ending the loop — the old loop treated that as "socket gone" and
+// silently dropped the rest of a CAT reply on a still-healthy fd.
 
 #ifndef FT8AF_HAMLIB_FEED_H
 #define FT8AF_HAMLIB_FEED_H
 
+#include <errno.h>
 #include <stddef.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 // Write all `len` bytes of `bytes` to socket `fd`, tolerating short writes
 // (loops until the whole buffer is sent). A NULL `bytes`, a non-positive `len`,
-// or a negative `fd` is a no-op — never a dereference. Stops early if write()
-// returns <= 0 (closed/errored socket), mirroring the original loop.
+// or a negative `fd` is a no-op — never a dereference. A write() interrupted by
+// a signal (EINTR) is retried — the fd is still healthy, so bailing there would
+// silently truncate a CAT reply. Stops early only when write() actually fails or
+// the peer is gone (return <= 0 for any other reason), mirroring the original
+// loop.
 //
 // Returns the number of bytes actually written (0 on any of the guarded cases).
 static inline long hamlib_feed_write(int fd, const unsigned char *bytes, long len)
@@ -48,7 +54,11 @@ static inline long hamlib_feed_write(int fd, const unsigned char *bytes, long le
     {
         ssize_t w = write(fd, bytes + off, (size_t)(len - off));
         if (w <= 0)
+        {
+            if (w < 0 && errno == EINTR)
+                continue; // interrupted before any byte moved — retry, don't truncate
             break;
+        }
         off += w;
     }
     return off;
