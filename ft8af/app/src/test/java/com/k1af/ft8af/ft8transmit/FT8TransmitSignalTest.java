@@ -2,6 +2,10 @@ package com.k1af.ft8af.ft8transmit;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.k1af.ft8af.ModeProfile;
+import com.k1af.ft8af.timer.OnUtcTimer;
+import com.k1af.ft8af.timer.UtcTimer;
+
 import org.junit.Test;
 
 /**
@@ -642,5 +646,57 @@ public class FT8TransmitSignalTest {
                 FT8TransmitSignal.decideManualTx(FT8_SLOT + 5000, FT8_SLACK, FT8_SLOT, 4000);
         assertThat(g.transmit).isFalse();
         assertThat(g.clipMs).isEqualTo(FT8_SLOT - 1);
+    }
+
+    // ---- rebuildTimerPreservingOffset ---------------------------------------
+    // A mode change (or the applyLoadedOperatingMode() call at startup) rebuilds
+    // the cycle timer. A fresh UtcTimer starts with time_sec = 0, so before this
+    // fix the saved TX Delay loaded into the running signal was silently wiped
+    // and the offset fell back to 0 ms until the operator re-edited the value —
+    // the reported "TX Delay is not applied until I change its value" bug. The
+    // rebuild must carry the outgoing timer's offset onto the new one.
+    //
+    // UtcTimer construction only schedules java.util.Timer tasks (no JNI / no
+    // Android framework), so this runs on the bare JVM; delete() the timers to
+    // avoid leaking their heartbeat threads between tests.
+
+    private static final OnUtcTimer NOOP_CALLBACK = new OnUtcTimer() {
+        @Override public void doHeartBeatTimer(long utc) { }
+        @Override public void doOnSecTimer(long utc) { }
+    };
+
+    @Test
+    public void rebuildTimer_carriesOffsetOntoNewTimer() {
+        UtcTimer old = new UtcTimer(ModeProfile.FT8.slotMillis, false, NOOP_CALLBACK);
+        try {
+            old.setTime_sec(1800); // saved TX Delay, in ms
+            UtcTimer rebuilt = FT8TransmitSignal.rebuildTimerPreservingOffset(
+                    old, ModeProfile.FT4, NOOP_CALLBACK);
+            try {
+                // The core fix: the offset survives the rebuild instead of resetting to 0.
+                assertThat(rebuilt.getTime_sec()).isEqualTo(1800);
+            } finally {
+                rebuilt.delete();
+            }
+        } finally {
+            old.delete();
+        }
+    }
+
+    @Test
+    public void rebuildTimer_zeroOffsetStaysZero() {
+        // No TX Delay set: the rebuild must not invent one.
+        UtcTimer old = new UtcTimer(ModeProfile.FT8.slotMillis, false, NOOP_CALLBACK);
+        try {
+            UtcTimer rebuilt = FT8TransmitSignal.rebuildTimerPreservingOffset(
+                    old, ModeProfile.FT8, NOOP_CALLBACK);
+            try {
+                assertThat(rebuilt.getTime_sec()).isEqualTo(0);
+            } finally {
+                rebuilt.delete();
+            }
+        } finally {
+            old.delete();
+        }
     }
 }

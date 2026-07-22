@@ -261,8 +261,7 @@ public class FT8TransmitSignal {
      * timer is always restarted; callers should ensure we are not mid-transmit first.
      */
     public void rebuildTimer(ModeProfile mode) {
-        utcTimer.delete();
-        utcTimer = new UtcTimer(mode.slotMillis, false, makeTimerCallback());
+        utcTimer = rebuildTimerPreservingOffset(utcTimer, mode, makeTimerCallback());
         utcTimer.start();
     }
 
@@ -323,6 +322,32 @@ public class FT8TransmitSignal {
         boolean transmit = clip <= tolerance;
         if (clip > slotMillis - 1) clip = slotMillis - 1;
         return new ManualTxGate(transmit, (int) clip);
+    }
+
+    /**
+     * Build the replacement cycle timer for a new operating mode, carrying the manual
+     * TX-delay offset ({@link UtcTimer#getTime_sec()}) from the outgoing timer onto the
+     * fresh one. A new {@link UtcTimer} starts with {@code time_sec = 0}, so without this
+     * carry-over the saved TX Delay loaded at startup (or set before a mode switch) is
+     * silently discarded — the running signal falls back to a 0 ms offset until the value
+     * is edited again. Preserving it here fixes both the startup case and FT8/FT4/FT2
+     * runtime mode switches.
+     *
+     * <p>Package-visible and static so the offset carry-over is unit-testable via
+     * {@code getTime_sec()} without constructing a full {@link FT8TransmitSignal}.
+     *
+     * @param oldTimer the timer being retired (its offset is read, then it is deleted)
+     * @param mode     the mode whose {@link ModeProfile#slotMillis} sets the new period
+     * @param callback the cycle-trigger callback for the new timer
+     * @return the new, not-yet-started timer with the carried-over offset applied
+     */
+    static UtcTimer rebuildTimerPreservingOffset(UtcTimer oldTimer, ModeProfile mode,
+            OnUtcTimer callback) {
+        int prevDelay = oldTimer.getTime_sec();
+        oldTimer.delete();
+        UtcTimer next = new UtcTimer(mode.slotMillis, false, callback);
+        next.setTime_sec(prevDelay);
+        return next;
     }
 
     /**
