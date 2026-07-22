@@ -141,11 +141,15 @@ public class Yaesu3Command {
 
     public static boolean is590MeterALC(Yaesu3Command command){
         if (command.data.length() < 5) return false;
-        return command.data.charAt(2) == '3';
+        // Kenwood "RM" reply is "mvvvv": meter-type selector at index 0
+        // (3 = ALC), 4-digit value at indices 1..4. Reading the selector at
+        // index 2 (a value digit) mis-detected the meter type -- see get590ALCOrSWR.
+        return command.data.charAt(0) == '3';
     }
     public static boolean is590MeterSWR(Yaesu3Command command){
         if (command.data.length() < 5) return false;
-        return command.data.charAt(2) == '1';
+        // Meter-type selector is at index 0 (1 = SWR); see is590MeterALC.
+        return command.data.charAt(0) == '1';
     }
 
 

@@ -10,7 +10,8 @@ import org.junit.Test;
  *
  * Frames are {@code <2-letter ID><data>}; frequency replies are FA/FB with an
  * integer Hz string. Meter replies are RM frames whose first data char selects
- * the meter (6=SWR, 4=ALC for 38/39; index 2 = 3 ALC / 1 SWR for the 590).
+ * the meter (6=SWR, 4=ALC for 38/39; 1=SWR, 3=ALC at index 0 for the 590, with
+ * the 4-digit value in the following chars).
  */
 public class Yaesu3CommandTest {
 
@@ -98,20 +99,20 @@ public class Yaesu3CommandTest {
 
     @Test
     public void ts590_alcSelectorAndValue() {
-        // data "01300": index2 == '3' -> ALC; value = substring(1,5) = "1300".
-        Yaesu3Command alc = Yaesu3Command.getCommand("RM01300");
+        // data "30020": index0 == '3' -> ALC; value = substring(1,5) = "0020".
+        Yaesu3Command alc = Yaesu3Command.getCommand("RM30020");
         assertThat(Yaesu3Command.is590MeterALC(alc)).isTrue();
         assertThat(Yaesu3Command.is590MeterSWR(alc)).isFalse();
-        assertThat(Yaesu3Command.get590ALCOrSWR(alc)).isEqualTo(1300);
+        assertThat(Yaesu3Command.get590ALCOrSWR(alc)).isEqualTo(20);
     }
 
     @Test
     public void ts590_swrSelector() {
-        // data "01100": index2 == '1' -> SWR.
-        Yaesu3Command swr = Yaesu3Command.getCommand("RM01100");
+        // data "10015": index0 == '1' -> SWR; value = substring(1,5) = "0015".
+        Yaesu3Command swr = Yaesu3Command.getCommand("RM10015");
         assertThat(Yaesu3Command.is590MeterSWR(swr)).isTrue();
         assertThat(Yaesu3Command.is590MeterALC(swr)).isFalse();
-        assertThat(Yaesu3Command.get590ALCOrSWR(swr)).isEqualTo(1100);
+        assertThat(Yaesu3Command.get590ALCOrSWR(swr)).isEqualTo(15);
     }
 
     @Test
