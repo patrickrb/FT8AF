@@ -47,6 +47,23 @@ public final class WorkedModeFilter {
     }
 
     /**
+     * Whether an operating-mode switch has invalidated the cached worked lists.
+     *
+     * <p>{@link DatabaseOpr.GetAllQSLCallsign} builds those lists per band and — when the
+     * "same mode only" refinement is on — per operating mode. {@code MainViewModel.setOperatingMode}
+     * historically reloaded them only when the switch also retuned the dial, which is not
+     * guaranteed: the new mode may have no band entry, or the dial may already sit on the target
+     * frequency. In that case the lists kept the previous mode's stations and the highlighting
+     * (or hiding) stayed wrong until an unrelated reload ran.
+     *
+     * @param retuned  whether the mode switch also moved the dial (band-keyed lists are stale)
+     * @param sameMode whether the "same mode only" refinement is on (mode-keyed lists are stale)
+     */
+    public static boolean reloadNeededOnModeChange(boolean retuned, boolean sameMode) {
+        return retuned || sameMode;
+    }
+
+    /**
      * Combine a base set of query arguments with this filter's extra args.
      *
      * @param baseArgs the arguments already required by the query (e.g. band)

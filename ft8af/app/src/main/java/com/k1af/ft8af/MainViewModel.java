@@ -68,6 +68,7 @@ import com.k1af.ft8af.database.DatabaseOpr;
 import com.k1af.ft8af.database.OnAfterQueryFollowCallsigns;
 import com.k1af.ft8af.database.OperationBand;
 import com.k1af.ft8af.database.RigNameList;
+import com.k1af.ft8af.database.WorkedModeFilter;
 import com.k1af.ft8af.flex.FlexRadio;
 import com.k1af.ft8af.flex.RadioTcpClient;
 import com.k1af.ft8af.ft8listener.FT8SignalListener;
@@ -1533,13 +1534,24 @@ public class MainViewModel extends ViewModel {
         // Retune within the SAME band to the new mode's dial (see safety note above).
         String waveLength = BaseRigOperation.getMeterFromFreq(GeneralVariables.band);
         long newFreq = OperationBand.getModeBandFreq(waveLength, normId);
+        boolean retuned = false;
         if (newFreq > 0 && newFreq != GeneralVariables.band) {
             GeneralVariables.band = newFreq;
             GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(newFreq);
             databaseOpr.writeConfig("bandFreq", String.valueOf(newFreq), null);
-            databaseOpr.getAllQSLCallsigns();
+            retuned = true;
             GeneralVariables.mutableBandChange.postValue(GeneralVariables.bandListIndex);
             setOperationBand();//push the new dial to the rig over CAT (no-op if not connected)
+        }
+
+        // Reload the worked lists when this switch invalidated them. A retune always
+        // does (they are built per band), but with "same mode only" on they are also
+        // built per operating mode — so a mode switch that does NOT move the dial
+        // (no band entry for the new mode, or the dial is already on target) would
+        // otherwise leave the previous mode's worked stations highlighted/hidden
+        // until some unrelated reload happened to run. See WorkedModeFilter.
+        if (WorkedModeFilter.reloadNeededOnModeChange(retuned, GeneralVariables.workedSameMode)) {
+            databaseOpr.getAllQSLCallsigns();
         }
 
         // Mode changed (and possibly retuned within the band) — optionally wipe the

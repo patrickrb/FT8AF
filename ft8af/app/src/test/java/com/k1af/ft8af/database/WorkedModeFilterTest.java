@@ -42,4 +42,30 @@ public class WorkedModeFilterTest {
         WorkedModeFilter f = WorkedModeFilter.build(false, "FT8");
         assertThat(f.withArgs("40m")).asList().containsExactly("40m");
     }
+
+    // ---- reloadNeededOnModeChange -------------------------------------------
+    // setOperatingMode used to reload the worked lists only when the switch also
+    // retuned the dial. With "same mode only" on, the lists are keyed by mode too,
+    // so a mode switch that leaves the dial where it is (no band entry for the new
+    // mode, or already on target) must still reload — otherwise the previous mode's
+    // worked stations stay highlighted/hidden.
+
+    @Test
+    public void reloadNeeded_whenRetuned_regardlessOfSameMode() {
+        assertThat(WorkedModeFilter.reloadNeededOnModeChange(true, false)).isTrue();
+        assertThat(WorkedModeFilter.reloadNeededOnModeChange(true, true)).isTrue();
+    }
+
+    @Test
+    public void reloadNeeded_whenSameModeOn_evenWithoutARetune() {
+        // The regression this guards: no dial change + "same mode only" on.
+        assertThat(WorkedModeFilter.reloadNeededOnModeChange(false, true)).isTrue();
+    }
+
+    @Test
+    public void reloadNotNeeded_whenNeitherDialNorModeFilterApplies() {
+        // Same-mode off and no retune: the band-keyed lists are still valid, so
+        // skip the DB work.
+        assertThat(WorkedModeFilter.reloadNeededOnModeChange(false, false)).isFalse();
+    }
 }

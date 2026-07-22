@@ -25,9 +25,13 @@ import org.robolectric.RobolectricTestRunner;
 public class GetAllQSLCallsignModeTest {
 
     private SQLiteDatabase db;
+    private long savedBand;
+    private int savedMode;
 
     @Before
     public void setUp() {
+        savedBand = GeneralVariables.band;
+        savedMode = GeneralVariables.operatingMode;
         db = SQLiteDatabase.create(null);
         db.execSQL("CREATE TABLE QSLTable (id INTEGER PRIMARY KEY, [call] TEXT, band TEXT, "
                 + "mode TEXT, qso_date TEXT, gridsquare TEXT, sig TEXT, sig_info TEXT)");
@@ -52,7 +56,15 @@ public class GetAllQSLCallsignModeTest {
         if (db != null) {
             db.close();
         }
+        // GetAllQSLCallsign.get() populates process-global lists, and band/mode/toggle are
+        // global too. Restore every one of them so this class is self-contained and can't
+        // leak worked stations (or an FT8-only filter) into whatever test runs next.
         GeneralVariables.workedSameMode = false;
+        GeneralVariables.QSL_Callsign_list.clear();
+        GeneralVariables.QSL_Callsign_list_other_band.clear();
+        GeneralVariables.QSL_Callsign_list_today.clear();
+        GeneralVariables.band = savedBand;
+        GeneralVariables.operatingMode = savedMode;
     }
 
     private void insert(String call, String band, String mode, String date) {
