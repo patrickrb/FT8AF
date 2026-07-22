@@ -14,6 +14,8 @@ import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import androidx.core.view.ViewCompat;
+import androidx.core.view.accessibility.AccessibilityViewCommand;
 import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentManager;
 
@@ -243,6 +245,18 @@ public class ExportLogSheet extends Dialog {
                 return false;
             }
         });
+        // The trailing calendar icon is a touch-only hit target, so also expose the
+        // picker as a custom accessibility action — TalkBack users get an "Open
+        // calendar" entry in the field's actions menu rather than only being able
+        // to type.
+        ViewCompat.addAccessibilityAction(field, "Open calendar date picker",
+                new AccessibilityViewCommand() {
+                    @Override
+                    public boolean perform(View view, AccessibilityViewCommand.CommandArguments args) {
+                        openDatePicker(field, tag);
+                        return true;
+                    }
+                });
     }
 
     private void openDatePicker(final EditText field, String tag) {
