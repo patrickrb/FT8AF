@@ -73,6 +73,17 @@ public class GetAllQSLCallsignModeTest {
     }
 
     @Test
+    public void reloadPublishesThreadSafeCopyOnWriteList() {
+        // The list is read on the NanoHTTPD worker while it is reassigned here on the DB
+        // thread and appended to on the decode thread, so the reload must publish a
+        // thread-safe CopyOnWriteArrayList (not a plain ArrayList that races those readers).
+        DatabaseOpr.GetAllQSLCallsign.get(db);
+
+        assertThat(GeneralVariables.QSL_Callsign_list)
+                .isInstanceOf(java.util.concurrent.CopyOnWriteArrayList.class);
+    }
+
+    @Test
     public void sameModeOffLoadsAllModes() {
         DatabaseOpr.GetAllQSLCallsign.get(db);
 

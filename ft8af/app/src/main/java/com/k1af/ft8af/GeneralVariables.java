@@ -509,7 +509,11 @@ public class GeneralVariables {
     //Posted each time a GPS fix disciplines the clock, so the Time Sync screen can recompose
     //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.
     public static MutableLiveData<Long> mutableGpsClockSync = new MutableLiveData<>();
-    public static ArrayList<String> QSL_Callsign_list = new ArrayList<>();//Successfully QSL'd callsigns
+    // Successfully QSL'd callsigns. Read on the NanoHTTPD worker thread (web logbook),
+    // appended to on the decode thread (addQSLCallsign) and reassigned wholesale on the DB
+    // thread (GetAllQSLCallsign). CopyOnWriteArrayList so those readers/writers never race,
+    // and volatile so a reassignment is published safely to the other threads.
+    public static volatile List<String> QSL_Callsign_list = new CopyOnWriteArrayList<>();
     public static ArrayList<String> QSL_Callsign_list_other_band = new ArrayList<>();//Successfully QSL'd callsigns on other bands
     public static HashSet<String> QSL_Callsign_list_today = new HashSet<>();//Callsigns worked today or yesterday (any band); a set for O(1) membership checks
     public static HashSet<String> QSL_Grid_list = new HashSet<>();//Distinct worked 4-char Maidenhead grids (any band)

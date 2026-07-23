@@ -32,6 +32,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -125,6 +126,35 @@ public class LogHttpServer extends NanoHTTPD {
      */
     static int normalizePageSize(int pageSize) {
         return pageSize > 0 ? pageSize : 100;
+    }
+
+    /**
+     * Render the successful-callsign table body: every worked callsign, comma-separated,
+     * ten per table row.
+     *
+     * <p>Takes the list as a parameter (rather than re-reading the shared
+     * {@link GeneralVariables#QSL_Callsign_list} field on each loop step) so the render
+     * works off a single stable snapshot. The field is reassigned wholesale on the DB
+     * thread ({@code DatabaseOpr.GetAllQSLCallsign}) and appended to on the decode thread;
+     * the old inline {@code size()}/{@code get(i)} loop re-dereferenced the field every
+     * iteration, so a mid-render reassignment to a shorter list made {@code get(i)} run off
+     * the end. The field is now a {@link java.util.concurrent.CopyOnWriteArrayList}, so the
+     * for-each below also never races a concurrent append.
+     */
+    static String qslCallsignBlock(List<String> callsigns) {
+        StringBuilder result = new StringBuilder();
+        result.append("<tr><td class=\"default\" >");
+        int i = 0;
+        for (String callsign : callsigns) {
+            result.append(callsign);
+            result.append(",&nbsp;");
+            if (((i + 1) % 10) == 0) {
+                result.append("</td></tr><tr><td class=\"default\" >\n");
+            }
+            i++;
+        }
+        result.append("</td></tr>\n");
+        return result.toString();
     }
 
     /**
@@ -907,15 +937,7 @@ public class LogHttpServer extends NanoHTTPD {
                 , String.format(GeneralVariables.getStringFromResource(R.string.html_successful_callsign)
                         , GeneralVariables.getBandString())));
 
-        result.append("<tr><td class=\"default\" >");
-        for (int i = 0; i < GeneralVariables.QSL_Callsign_list.size(); i++) {
-            result.append(GeneralVariables.QSL_Callsign_list.get(i));
-            result.append(",&nbsp;");
-            if (((i + 1) % 10) == 0) {
-                result.append("</td></tr><tr><td class=\"default\" >\n");
-            }
-        }
-        result.append("</td></tr>\n");
+        result.append(qslCallsignBlock(GeneralVariables.QSL_Callsign_list));
         HtmlContext.tableEnd(result).append("<br>\n");
 
         HtmlContext.tableBegin(result, false, 0, true).append("\n");

@@ -2370,7 +2370,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             } finally {
                 cursor.close();
             }
-            GeneralVariables.QSL_Callsign_list = callsigns;
+            GeneralVariables.QSL_Callsign_list = new java.util.concurrent.CopyOnWriteArrayList<>(callsigns);
 
             querySQL = "select distinct [call] from QSLTable where band<>?" + modeFilter.sqlSuffix;
             cursor = db.rawQuery(querySQL, modeFilter.withArgs(meter));
