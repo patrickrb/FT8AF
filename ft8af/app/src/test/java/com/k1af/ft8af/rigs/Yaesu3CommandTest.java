@@ -153,4 +153,20 @@ public class Yaesu3CommandTest {
         assertThat(Yaesu3Command.isTX500MeterSWR(c)).isFalse();
         assertThat(Yaesu3Command.getTX500MeterValue(c)).isEqualTo(0);
     }
+
+    @Test
+    public void tx500_garbledValueReturnsZeroNotThrow() {
+        // isTX500MeterSWR only gates on length>=5 and index0=='1'; it does NOT
+        // verify chars 1..4 are digits. A garbled/partial RM frame (noise byte,
+        // or a ';' terminator sliding into substring(1,5)) reaches
+        // getTX500MeterValue and previously crashed with NumberFormatException on
+        // the read thread. It must now return 0, like every other meter getter.
+        Yaesu3Command noise = Yaesu3Command.getCommand("RM1x023"); // data "1x023"
+        assertThat(Yaesu3Command.isTX500MeterSWR(noise)).isTrue();
+        assertThat(Yaesu3Command.getTX500MeterValue(noise)).isEqualTo(0);
+
+        Yaesu3Command terminator = Yaesu3Command.getCommand("RM1030;"); // data "1030;"
+        assertThat(Yaesu3Command.isTX500MeterSWR(terminator)).isTrue();
+        assertThat(Yaesu3Command.getTX500MeterValue(terminator)).isEqualTo(0);
+    }
 }

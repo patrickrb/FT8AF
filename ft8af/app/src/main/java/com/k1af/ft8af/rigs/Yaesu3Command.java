@@ -172,11 +172,17 @@ public class Yaesu3Command {
      * ratio; see {@link DiscoveryTX500Rig#tx500CatToSwrRatio(int)}.
      *
      * @param command RM command in {@code RM1vvvv} form
-     * @return the raw 0-30 meter value, or 0 when the reply is too short
+     * @return the raw 0-30 meter value, or 0 when the reply is too short or the
+     *         value chars are non-numeric (garbled frame)
      */
     public static int getTX500MeterValue(Yaesu3Command command) {
         if (command.data.length() < 5) return 0;
-        return Integer.parseInt(command.data.substring(1, 5));
+        // Route through parseMeterValue like every other meter getter: a garbled
+        // or partial RM frame whose value chars aren't all digits (e.g. a ';'
+        // terminator or noise byte landing in substring(1,5)) must return 0
+        // rather than throw NumberFormatException — onReceiveData runs on the
+        // serial/Bluetooth read thread with no surrounding try/catch.
+        return parseMeterValue(command.data.substring(1, 5));
     }
 
 
