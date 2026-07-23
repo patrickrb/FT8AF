@@ -2,6 +2,7 @@ package radio.ks3ckc.ft8af.ui.decode
 
 import com.google.common.truth.Truth.assertThat
 import com.k1af.ft8af.Ft8Message
+import com.k1af.ft8af.GeneralVariables
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -242,7 +243,8 @@ class DecodeCollapseTest {
     fun nextSortMode_cyclesThroughAllThenWraps() {
         assertThat(nextSortMode(DecodeSortMode.LAST_HEARD)).isEqualTo(DecodeSortMode.CALLSIGN)
         assertThat(nextSortMode(DecodeSortMode.CALLSIGN)).isEqualTo(DecodeSortMode.SNR)
-        assertThat(nextSortMode(DecodeSortMode.SNR)).isEqualTo(DecodeSortMode.LAST_HEARD)
+        assertThat(nextSortMode(DecodeSortMode.SNR)).isEqualTo(DecodeSortMode.DISTANCE)
+        assertThat(nextSortMode(DecodeSortMode.DISTANCE)).isEqualTo(DecodeSortMode.LAST_HEARD)
     }
 
     @Test
@@ -250,6 +252,133 @@ class DecodeCollapseTest {
         assertThat(showTimeGroupDividers(DecodeSortMode.LAST_HEARD)).isTrue()
         assertThat(showTimeGroupDividers(DecodeSortMode.CALLSIGN)).isFalse()
         assertThat(showTimeGroupDividers(DecodeSortMode.SNR)).isFalse()
+        assertThat(showTimeGroupDividers(DecodeSortMode.DISTANCE)).isFalse()
+    }
+
+    // ---- distance sort -------------------------------------------------------
+
+    @Test
+    fun sort_distance_farthestFirst_unknownSinks() {
+        // Distance is injected so the ordering logic is exercised without any
+        // grid math. Farthest station first; a null (unknown) distance sinks last.
+        val messages = listOf(
+            msg("NEAR", utc = 1000),
+            msg("FAR", utc = 1000),
+            msg("UNK", utc = 1000),
+            msg("MID", utc = 1000),
+        )
+        val distances = mapOf(
+            "NEAR" to 200.0,
+            "FAR" to 9000.0,
+            "UNK" to null,
+            "MID" to 3000.0,
+        )
+
+        val result = collapseByStation(messages, DecodeSortMode.DISTANCE) {
+            distances[it.callsignFrom]
+        }
+
+        assertThat(result.map { it.callsignFrom })
+            .containsExactly("FAR", "MID", "NEAR", "UNK").inOrder()
+    }
+
+    @Test
+    fun sort_distance_stableOnTiedDistance() {
+        val messages = listOf(
+            msg("AA", utc = 1000),
+            msg("BB", utc = 2000),
+            msg("CC", utc = 3000),
+        )
+
+        val result = collapseByStation(messages, DecodeSortMode.DISTANCE) { 5000.0 }
+
+        // Equal distances keep first-appearance order (stable sort).
+        assertThat(result.map { it.callsignFrom }).containsExactly("AA", "BB", "CC").inOrder()
+    }
+
+    @Test
+    fun sort_distance_allUnknownKeepsFirstAppearanceOrder() {
+        val messages = listOf(
+            msg("AA", utc = 3000),
+            msg("BB", utc = 1000),
+            msg("CC", utc = 2000),
+        )
+
+        val result = collapseByStation(messages, DecodeSortMode.DISTANCE) { null }
+
+        assertThat(result.map { it.callsignFrom }).containsExactly("AA", "BB", "CC").inOrder()
+    }
+
+    @Test
+    fun sort_distance_collapsesToLatestDecodeBeforeSorting() {
+        // A station re-decoded closer/farther still collapses to one row keyed on
+        // the latest decode, then sorts by that row's distance.
+        val messages = listOf(
+            msg("K1ABC", utc = 1000),
+            msg("W9XYZ", utc = 1100),
+            msg("K1ABC", utc = 2000),
+        )
+        val distances = mapOf("K1ABC" to 8000.0, "W9XYZ" to 1000.0)
+
+        val result = collapseByStation(messages, DecodeSortMode.DISTANCE) {
+            distances[it.callsignFrom]
+        }
+
+        assertThat(result.map { it.callsignFrom }).containsExactly("K1ABC", "W9XYZ").inOrder()
+        assertThat(result.first { it.callsignFrom == "K1ABC" }.utcTime).isEqualTo(2000)
+    }
+
+    // ---- gridDistanceKm (live distance provider) -----------------------------
+
+    @Test
+    fun gridDistanceKm_nullWhenEitherGridMissingOrUnparseable() {
+        assertThat(gridDistanceKm(null, "FN42")).isNull()
+        assertThat(gridDistanceKm("FN42", null)).isNull()
+        assertThat(gridDistanceKm("", "FN42")).isNull()
+        assertThat(gridDistanceKm("FN42", "")).isNull()
+        // "ABC" is an unsupported grid length -> unparseable -> unknown distance.
+        assertThat(gridDistanceKm("FN42", "ABC")).isNull()
+    }
+
+    @Test
+    fun gridDistanceKm_identicalGridsIsZeroNotNull() {
+        // A real, computable ~0 (closest possible, modulo great-circle rounding)
+        // must stay distinct from the null used to sink grid-less stations.
+        val d = gridDistanceKm("FN42", "FN42")
+        assertThat(d).isNotNull()
+        assertThat(d!!).isWithin(1.0).of(0.0)
+    }
+
+    @Test
+    fun gridDistanceKm_distinctGridsIsPositive_andFartherIsLarger() {
+        // FN42 (New England) -> IO91 (England) is a few thousand km; -> RE78
+        // (New Zealand) is much farther. The order must reflect real distance.
+        val toEngland = gridDistanceKm("FN42", "IO91")!!
+        val toNewZealand = gridDistanceKm("FN42", "RE78")!!
+        assertThat(toEngland).isGreaterThan(0.0)
+        assertThat(toNewZealand).isGreaterThan(toEngland)
+    }
+
+    // ---- stationDistanceKm (live provider off GeneralVariables) ---------------
+
+    @Test
+    fun stationDistanceKm_usesOperatorGridAndMessageGrid() {
+        GeneralVariables.setMyMaidenheadGrid("FN42")
+        // Sanity: matches computing straight from the two grids.
+        val expected = gridDistanceKm("FN42", "IO91")!!
+        assertThat(stationDistanceKm(msg("G4ABC", utc = 1000).apply { maidenGrid = "IO91" }))
+            .isWithin(0.001).of(expected)
+    }
+
+    @Test
+    fun stationDistanceKm_nullWhenOperatorGridUnsetOrMessageHasNoGrid() {
+        GeneralVariables.setMyMaidenheadGrid("")
+        assertThat(stationDistanceKm(msg("G4ABC", utc = 1000).apply { maidenGrid = "IO91" }))
+            .isNull()
+
+        GeneralVariables.setMyMaidenheadGrid("FN42")
+        assertThat(stationDistanceKm(msg("G4ABC", utc = 1000).apply { maidenGrid = null }))
+            .isNull()
     }
 
     @Test

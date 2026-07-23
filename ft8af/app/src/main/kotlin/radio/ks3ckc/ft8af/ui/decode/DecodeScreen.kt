@@ -476,7 +476,7 @@ private fun TimeGroupDivider(utcTime: Long, compact: Boolean = false) {
 
 /**
  * Compact label rendered inside the top-bar sort button, showing the active
- * [DecodeSortMode] (TIME / CALL / SNR). The button cycles modes on tap; the
+ * [DecodeSortMode] (TIME / CALL / SNR / DX). The button cycles modes on tap; the
  * accessibility content description announces the current mode.
  */
 @Composable
@@ -486,6 +486,7 @@ internal fun SortModeLabel(sortMode: DecodeSortMode) {
             DecodeSortMode.LAST_HEARD -> R.string.decode_sort_label_last_heard
             DecodeSortMode.CALLSIGN -> R.string.decode_sort_label_callsign
             DecodeSortMode.SNR -> R.string.decode_sort_label_snr
+            DecodeSortMode.DISTANCE -> R.string.decode_sort_label_distance
         },
     )
     val cd = stringResource(
@@ -493,6 +494,7 @@ internal fun SortModeLabel(sortMode: DecodeSortMode) {
             DecodeSortMode.LAST_HEARD -> R.string.decode_sort_cd_last_heard
             DecodeSortMode.CALLSIGN -> R.string.decode_sort_cd_callsign
             DecodeSortMode.SNR -> R.string.decode_sort_cd_snr
+            DecodeSortMode.DISTANCE -> R.string.decode_sort_cd_distance
         },
     )
     Text(
