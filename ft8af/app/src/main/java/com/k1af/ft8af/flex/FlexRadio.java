@@ -489,6 +489,40 @@ public class FlexRadio {
      * FlexRadio transmits at 24000 sample rate; also converts mono to stereo
      * @param data audio
      */
+    /**
+     * Fill one stereo TX packet from {@code stereo} starting at sample index
+     * {@code from}, and return the index one past the last sample copied.
+     *
+     * <p>Copies at most {@code packet.length} samples; when fewer remain in
+     * {@code stereo} the tail of {@code packet} is zero-filled (silence padding
+     * for the final, partial packet). It never reads past the end of
+     * {@code stereo}.
+     *
+     * <p>The historic inline loop read {@code stereo[from]} and only tested the
+     * bound <em>after</em> the read, so a {@code stereo} length that was not a
+     * whole multiple of {@code packet.length} ran one element past the array and
+     * threw {@link ArrayIndexOutOfBoundsException} on the TX send thread
+     * (uncaught → whole-app crash). That happens for any waveform whose sample
+     * count is not a multiple of {@code packet.length / 2}; e.g. FT2 at 24 kHz
+     * generates 60480 samples → 120960 interleaved stereo values, which is not a
+     * multiple of 256, so the last packet overran.
+     *
+     * @param stereo interleaved L/R sample buffer
+     * @param from   index of the first sample to copy ({@code 0 <= from <= stereo.length})
+     * @param packet destination packet buffer, fully (over)written
+     * @return {@code min(from + packet.length, stereo.length)}
+     */
+    static int fillVoicePacket(float[] stereo, int from, float[] packet) {
+        int i = 0;
+        for (; i < packet.length && from < stereo.length; i++, from++) {
+            packet[i] = stereo[from];
+        }
+        for (; i < packet.length; i++) {
+            packet[i] = 0f;
+        }
+        return from;
+    }
+
     public void sendWaveData(float[] data) {
 
         float[] temp = new float[data.length * 2];
@@ -521,11 +555,7 @@ public class FlexRadio {
 
 
                     //for (int j = 0; j <3 ; j++) {
-                        for (int i = 0; i < voice.length; i++) {
-                            voice[i] = temp[count];
-                            count++;
-                            if (count > temp.length) break;
-                        }
+                        count = fillVoicePacket(temp, count, voice);
 
                         //byte[] send = vita.audioDataToVita(packetCount, streamTxId,0x534c2d, voice);
                         //daxTxAudioStreamId=0x0084000001&0x00000000ffffffff;
@@ -542,7 +572,7 @@ public class FlexRadio {
                         } catch (UnknownHostException e) {
                             throw new RuntimeException(e);
                         }
-                        if (count>temp.length) break;
+                        if (count>=temp.length) break;
                     //}
                     while (isPttOn) {
                         if (System.currentTimeMillis() - now >= 5) {//5ms per cycle, 256 floats per cycle
