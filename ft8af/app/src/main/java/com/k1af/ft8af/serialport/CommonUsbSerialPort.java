@@ -134,6 +134,29 @@ public abstract class CommonUsbSerialPort implements UsbSerialPort {
 
     protected abstract void openInt(UsbDeviceConnection connection) throws IOException;
 
+    /**
+     * Whether the port is ready for I/O on the given endpoint.
+     *
+     * <p>A port is usable only once {@link #open} has BOTH published the
+     * connection and {@code openInt()} has assigned the endpoint. {@code open()}
+     * deliberately sets {@link #mConnection} (line "mConnection = connection")
+     * <em>before</em> calling {@code openInt()} — {@code openInt}/{@code close}
+     * need the connection during setup — so there is a window where
+     * {@code mConnection != null} but the endpoint is still {@code null}. A
+     * {@code read()}/{@code write()} from another thread during that window
+     * (e.g. a TX PTT firing while CAT auto-reconnect is re-opening a freshly
+     * allocated port) would pass a bare {@code mConnection == null} check and
+     * then NPE dereferencing the endpoint. Treating a missing connection OR
+     * endpoint as "not open" turns that crash into a recoverable
+     * {@link IOException} the CAT/TX layer already handles.
+     *
+     * <p>Extracted as a package-private static so the readiness decision is
+     * unit-testable without a live {@link UsbDeviceConnection}/{@link UsbEndpoint}.
+     */
+    static boolean ioEndpointReady(Object connection, Object endpoint) {
+        return connection != null && endpoint != null;
+    }
+
     @Override
     public void close() throws IOException {
         if (mConnection == null) {
@@ -170,7 +193,10 @@ public abstract class CommonUsbSerialPort implements UsbSerialPort {
     }
 
     protected int read(final byte[] dest, final int timeout, boolean testConnection) throws IOException {
-        if(mConnection == null) {
+        // mReadEndpoint (like mWriteEndpoint) is null until openInt() runs, which
+        // open() calls only after publishing mConnection — guard both so a read
+        // racing an in-progress (re)open throws instead of NPEing. See ioEndpointReady.
+        if (!ioEndpointReady(mConnection, mReadEndpoint)) {
             throw new IOException("Connection closed");
         }
         if(dest.length <= 0) {
@@ -218,7 +244,11 @@ public abstract class CommonUsbSerialPort implements UsbSerialPort {
         int offset = 0;
         final long endTime = (timeout == 0) ? 0 : (MonotonicClock.millis() + timeout);
 
-        if(mConnection == null) {
+        // Guard the endpoint, not just the connection: open() publishes
+        // mConnection before openInt() assigns mWriteEndpoint, so a write racing
+        // an in-progress (re)open would otherwise NPE on mWriteEndpoint below.
+        // See ioEndpointReady.
+        if (!ioEndpointReady(mConnection, mWriteEndpoint)) {
             throw new IOException("Connection closed");
         }
         while (offset < src.length) {
