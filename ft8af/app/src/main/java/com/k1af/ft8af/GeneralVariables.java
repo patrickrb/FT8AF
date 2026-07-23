@@ -712,11 +712,12 @@ public class GeneralVariables {
 
     /**
      * Inclusive bounds (ms) for the manual clock correction ({@link #manualTimeCorrectionMs}
-     * / {@code UtcTimer.delay}). Must stay in sync with the live settings UI's own
-     * {@code TIME_CORRECTION_MIN_MS}/{@code TIME_CORRECTION_MAX_MS} in
-     * {@code TimeCorrection.kt}: that is the authoritative range (±5 s, widened from
-     * ±2 s so an offline phone that has drifted several seconds — a field-reported
-     * Samsung A50 needed over 3 s — can be pulled back).
+     * / {@code UtcTimer.delay}). This is the single source of truth for the range:
+     * the live settings UI's {@code TIME_CORRECTION_MIN_MS}/{@code TIME_CORRECTION_MAX_MS}
+     * in {@code TimeCorrection.kt} now reference these constants, so the UI slider and
+     * the reload-time clamp ({@link #clampManualTimeCorrectionMs}) can't drift apart.
+     * The range is ±5 s (widened from ±2 s so an offline phone that has drifted several
+     * seconds — a field-reported Samsung A50 needed over 3 s — can be pulled back).
      */
     public static final int MANUAL_TIME_CORRECTION_MIN_MS = -5000;
     public static final int MANUAL_TIME_CORRECTION_MAX_MS = 5000;
