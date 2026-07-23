@@ -449,7 +449,7 @@ public class GeneralVariables {
     public static int transmitDelay = 500;//Transmit delay; also allows decoding time for the previous cycle
     public static int pttDelay = 100;//PTT response time; radios typically need some response time after PTT command, default 100ms
     public static int lateStartTolerance = 2000;//Max ms of leading audio a late manual TX may clip past the per-mode audio slack (ModeProfile.audioSlackMillis) and still go out this cycle. Effective start budget is slack+tolerance. 0-4000. See issue #467.
-    public static int manualTimeCorrectionMs = 0;//Manual clock correction (ms) applied to UtcTimer.delay; for field use without internet NTP. Range -2000..2000. See TimeSyncSettings.
+    public static int manualTimeCorrectionMs = 0;//Manual clock correction (ms) applied to UtcTimer.delay; for field use without internet NTP. Range [MANUAL_TIME_CORRECTION_MIN_MS, MANUAL_TIME_CORRECTION_MAX_MS]. See TimeSyncSettings.
     public static boolean earlyDecode = true;//Fast turnaround: decode a shorter RX window so CQ decodes appear ~1s before the cycle boundary, enabling a next-slot reply.
     public static int operatingMode = FT8Common.FT8_MODE;//Current operating mode (FT8Common.FT8_MODE / FT4_MODE); persisted as config "operatingMode".
     public static int iaruRegion = 2;//Operator's IARU region (1/2/3), used to gate Message-Creator QSY frequency options to legal band edges. Default 2 (the Americas). See com.k1af.ft8af.message.SpecialMessage.
@@ -708,6 +708,36 @@ public class GeneralVariables {
         int clamped = Math.max(MIN_SPECTRUM_WIDTH_HZ, Math.min(MAX_SPECTRUM_WIDTH_HZ, width));
         mutableSpectrumWidth.postValue(clamped);
         GeneralVariables.spectrumWidth = clamped;
+    }
+
+    /**
+     * Inclusive bounds (ms) for the manual clock correction ({@link #manualTimeCorrectionMs}
+     * / {@code UtcTimer.delay}). Must stay in sync with the live settings UI's own
+     * {@code TIME_CORRECTION_MIN_MS}/{@code TIME_CORRECTION_MAX_MS} in
+     * {@code TimeCorrection.kt}: that is the authoritative range (±5 s, widened from
+     * ±2 s so an offline phone that has drifted several seconds — a field-reported
+     * Samsung A50 needed over 3 s — can be pulled back).
+     */
+    public static final int MANUAL_TIME_CORRECTION_MIN_MS = -5000;
+    public static final int MANUAL_TIME_CORRECTION_MAX_MS = 5000;
+
+    /**
+     * Clamp a manual clock correction to
+     * [{@link #MANUAL_TIME_CORRECTION_MIN_MS}, {@link #MANUAL_TIME_CORRECTION_MAX_MS}] ms.
+     *
+     * <p>The live settings UI already clamps to this range before persisting
+     * ({@code TimeSyncSettings.apply} → {@code clampCorrectionMs}), but config
+     * hydration on every launch ({@code DatabaseOpr}'s {@code timeCorrectionMs}
+     * branch) re-applies the persisted value to {@code UtcTimer.delay} and must
+     * clamp with the <em>same</em> bounds. The reload path used to clamp to ±2000
+     * while the UI allowed ±5000, so any correction beyond ±2 s was silently
+     * truncated back to 2 s at startup — leaving the operator's carefully-set
+     * offline clock offset wrong by up to 3 s and degrading decodes. Byte-identical
+     * for every in-range value.
+     */
+    public static int clampManualTimeCorrectionMs(int ms) {
+        return Math.max(MANUAL_TIME_CORRECTION_MIN_MS,
+                Math.min(MANUAL_TIME_CORRECTION_MAX_MS, ms));
     }
 
     public static int getFftWindowType() {

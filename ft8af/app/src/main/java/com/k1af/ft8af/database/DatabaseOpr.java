@@ -2677,7 +2677,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     } catch (NumberFormatException e) {
                         ms = 0;
                     }
-                    ms = Math.max(-2000, Math.min(2000, ms));
+                    // Clamp with the SAME bounds the live settings UI uses when it
+                    // persists this value (±5 s). The reload clamp used to be ±2 s,
+                    // silently truncating any correction beyond ±2 s on every launch.
+                    ms = GeneralVariables.clampManualTimeCorrectionMs(ms);
                     GeneralVariables.manualTimeCorrectionMs = ms;
                     UtcTimer.delay = ms;
                 }
