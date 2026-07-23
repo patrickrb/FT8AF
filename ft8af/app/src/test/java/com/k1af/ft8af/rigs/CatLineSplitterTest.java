@@ -91,6 +91,23 @@ public class CatLineSplitterTest {
     }
 
     @Test
+    public void yaesuGen3MeterPoll_swrSurvivesCoalescedAndPartialReads() {
+        // Models the FT-450 / DX10 / Wolf-SDR meter poll: setRead39Meters_ALC()
+        // then _SWR() sent back-to-back. The transport first delivers the ALC
+        // reply plus the leading bytes of the SWR reply, then the tail. Draining
+        // must surface the ALC frame on the first read and the SWR frame on the
+        // second -- the old parse would have dropped the coalesced SWR reply and
+        // then poisoned the follow-up read with the retained ';'.
+        CatLineSplitter.Result first = CatLineSplitter.split("", "RM4100;RM6", ';');
+        assertThat(first.frames).containsExactly("RM4100");
+        assertThat(first.remainder).isEqualTo("RM6");
+
+        CatLineSplitter.Result second = CatLineSplitter.split(first.remainder, "020;", ';');
+        assertThat(second.frames).containsExactly("RM6020");
+        assertThat(second.remainder).isEmpty();
+    }
+
+    @Test
     public void carriageReturnTerminator_supportedForSiblingRigs() {
         // The splitter is terminator-parameterised so the Kenwood/Elecraft '\r'
         // handlers can adopt it too.
