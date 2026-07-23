@@ -649,7 +649,7 @@
     <string name="settings_keep_screen_on">Keep screen on</string>
     <string name="settings_keep_screen_on_desc">Hold the display awake while the app is open. Turn off for long portable sessions — receive keeps running in the background and the phone runs much cooler</string>
     <string name="settings_deep_decode">Deep decode</string>
-    <string name="settings_deep_decode_desc">Subtract-and-redecode pass that digs weak signals out from under strong ones. Uses up to 75%% of every slot at full CPU — the biggest single heat source. Turn off to run cooler at the cost of some weak decodes</string>
+    <string name="settings_deep_decode_desc" formatted="false">Subtract-and-redecode pass that digs weak signals out from under strong ones. Uses up to 75% of every slot at full CPU — the biggest single heat source. Turn off to run cooler at the cost of some weak decodes</string>
     <string name="late_start_deferred">Too late this cycle (need %d ms clip) — waiting for next slot</string>
 
     <!-- ===== Settings: about ===== -->

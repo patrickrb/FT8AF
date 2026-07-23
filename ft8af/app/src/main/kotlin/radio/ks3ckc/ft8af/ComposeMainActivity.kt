@@ -139,6 +139,17 @@ class ComposeMainActivity : AppCompatActivity() {
             if (v != null) UsbAudioNative.setTxVolume(v)
         }
 
+        // Re-apply the screen-awake preference once config hydration finishes.
+        // onCreate/onResume both run before initData()'s async config load
+        // completes, so they apply the default (on); if the stored value is
+        // actually false the screen would stay awake until the next resume or a
+        // manual toggle. Observing mutableConfigLoaded catches the moment the real
+        // value lands. Lifecycle-bound and delivered on the main thread, so the
+        // window flag is set safely.
+        mainViewModel.mutableConfigLoaded.observe(this) { loaded ->
+            if (loaded == true) ScreenWake.apply(window, GeneralVariables.keepScreenOn)
+        }
+
         // Register back press handler. Priority: dismiss the QSO sheet if
         // it's open, otherwise show exit confirm. Without this, back-from-
         // sheet tries to exit the whole app, which surprises users who
