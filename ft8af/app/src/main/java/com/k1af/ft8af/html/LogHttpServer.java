@@ -145,12 +145,17 @@ public class LogHttpServer extends NanoHTTPD {
     static String successfulCallsignBlock(List<String> callsigns) {
         StringBuilder sb = new StringBuilder();
         sb.append("<tr><td class=\"default\" >");
-        for (int i = 0; i < callsigns.size(); i++) {
-            sb.append(callsigns.get(i));
+        // for-each, not size()/get(i): this uses CopyOnWriteArrayList's snapshot
+        // iterator, so a concurrent clear()/remove() (or a different List impl
+        // passed in) can't reintroduce a size/get TOCTOU IndexOutOfBoundsException.
+        int i = 0;
+        for (String callsign : callsigns) {
+            sb.append(callsign);
             sb.append(",&nbsp;");
             if (((i + 1) % 10) == 0) {
                 sb.append("</td></tr><tr><td class=\"default\" >\n");
             }
+            i++;
         }
         sb.append("</td></tr>\n");
         return sb.toString();

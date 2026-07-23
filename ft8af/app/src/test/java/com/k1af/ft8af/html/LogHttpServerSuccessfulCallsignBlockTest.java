@@ -81,9 +81,16 @@ public class LogHttpServerSuccessfulCallsignBlockTest {
         AtomicReference<Throwable> failure = new AtomicReference<>();
 
         Thread writer = new Thread(() -> {
+            // Bound the writes and yield between them: CopyOnWriteArrayList copies
+            // its entire backing array on every add(), so an unbounded tight add
+            // loop balloons memory (and render time, since each render walks the
+            // whole list) and makes the test slow/flaky. A few thousand bounded
+            // adds still overlap the reader's 2000 renders and exercise concurrent
+            // mutation.
             int n = 0;
-            while (!stop.get()) {
+            while (!stop.get() && n < 5000) {
                 shared.add("NEW" + (n++));
+                Thread.yield();
             }
         });
         writer.start();
