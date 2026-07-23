@@ -76,6 +76,55 @@ public class AdifFormatTest {
         assertThat(AdifFormat.mfskSubmode(null)).isNull();
     }
 
+    // ---- resolveImportMode: the reader-side inverse of mfskSubmode ----
+
+    @Test
+    public void resolveImportMode_mfskSubmodeBecomesTheSubmode() {
+        // The bug: an FT4/FT2 QSO is written as MODE=MFSK + SUBMODE=FT4; reading only
+        // MODE stored "MFSK", losing FT4/FT2 and breaking export->import round-trip.
+        assertThat(AdifFormat.resolveImportMode("MFSK", "FT4")).isEqualTo("FT4");
+        assertThat(AdifFormat.resolveImportMode("MFSK", "FT2")).isEqualTo("FT2");
+    }
+
+    @Test
+    public void resolveImportMode_isCaseInsensitiveAndTrimmedAndUpperCased() {
+        assertThat(AdifFormat.resolveImportMode(" mfsk ", " ft4 ")).isEqualTo("FT4");
+        assertThat(AdifFormat.resolveImportMode("Mfsk", "Ft2")).isEqualTo("FT2");
+    }
+
+    @Test
+    public void resolveImportMode_mfskWithoutSubmodeStaysMfsk() {
+        // Plain MFSK (no SUBMODE) is a real mode on its own; leave it untouched.
+        assertThat(AdifFormat.resolveImportMode("MFSK", null)).isEqualTo("MFSK");
+        assertThat(AdifFormat.resolveImportMode("MFSK", "")).isEqualTo("MFSK");
+        assertThat(AdifFormat.resolveImportMode("MFSK", "   ")).isEqualTo("MFSK");
+    }
+
+    @Test
+    public void resolveImportMode_standaloneModesPassThroughVerbatim() {
+        // Non-MFSK modes are returned exactly as stored (no case change, no trim) so
+        // existing imports are byte-for-byte unchanged, even with a stray SUBMODE.
+        assertThat(AdifFormat.resolveImportMode("FT8", null)).isEqualTo("FT8");
+        assertThat(AdifFormat.resolveImportMode("FT4", null)).isEqualTo("FT4"); // bare FT4
+        assertThat(AdifFormat.resolveImportMode("SSB", "USB")).isEqualTo("SSB");
+        assertThat(AdifFormat.resolveImportMode("CW", null)).isEqualTo("CW");
+    }
+
+    @Test
+    public void resolveImportMode_nullModeReturnedVerbatim() {
+        assertThat(AdifFormat.resolveImportMode(null, "FT4")).isNull();
+    }
+
+    @Test
+    public void resolveImportMode_isTheInverseOfMfskSubmode() {
+        // Every mode that exports as MODE=MFSK + SUBMODE must import back to itself.
+        for (String mode : new String[] { "FT4", "FT2" }) {
+            String submode = AdifFormat.mfskSubmode(mode);
+            assertThat(submode).isNotNull();
+            assertThat(AdifFormat.resolveImportMode("MFSK", submode)).isEqualTo(mode);
+        }
+    }
+
     @Test
     public void formatReport_alwaysSignedAndTwoDigits() {
         // The bug: bare String.valueOf(int) gave "5"/"-5"/"0" — no sign on positives, no padding.
