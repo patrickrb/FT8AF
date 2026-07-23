@@ -2960,6 +2960,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("deepMode")) {//Deep decode mode
                     GeneralVariables.deepDecodeMode =result.equals("1");
                 }
+                if (name.equalsIgnoreCase("keepScreenOn")) {//Hold the screen awake in foreground
+                    GeneralVariables.keepScreenOn = result.equals("1");
+                }
                 if (name.equalsIgnoreCase("debugModeEnabled")) {//Hidden debug screen unlock
                     GeneralVariables.debugModeEnabled = result.equals("1");
                 }

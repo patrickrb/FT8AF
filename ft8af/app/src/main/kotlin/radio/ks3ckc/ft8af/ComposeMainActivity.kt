@@ -16,7 +16,6 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
-import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -99,7 +98,11 @@ class ComposeMainActivity : AppCompatActivity() {
         // hiding the system bars immersively (transient reveal on swipe) instead
         // of the deprecated fullscreen flag. Keep the screen on as before.
         enableEdgeToEdge()
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Screen-awake is now a setting (default on, matching the previous
+        // hard-coded behaviour). Config has not hydrated yet at this point, so
+        // this applies the default; onResume re-applies once the stored value is
+        // loaded, and the settings toggle applies it live.
+        ScreenWake.apply(window, GeneralVariables.keepScreenOn)
 
         super.onCreate(savedInstanceState)
 
@@ -615,6 +618,14 @@ class ComposeMainActivity : AppCompatActivity() {
             try { unregisterReceiver(it) } catch (_: Exception) {}
             usbDetachReceiver = null
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Re-apply the screen-awake preference. onCreate runs before config
+        // hydration, so the stored value may differ from the default it applied;
+        // this also covers returning from the settings screen.
+        ScreenWake.apply(window, GeneralVariables.keepScreenOn)
     }
 
     override fun onStop() {

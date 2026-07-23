@@ -40,6 +40,7 @@ import com.k1af.ft8af.database.OnAfterQueryConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import radio.ks3ckc.ft8af.ScreenWake
 import radio.ks3ckc.ft8af.crash.CrashReporting
 import radio.ks3ckc.ft8af.theme.Accent
 import radio.ks3ckc.ft8af.theme.BgSurface2
@@ -159,6 +160,11 @@ fun AdvancedSettings(
     var txDelay by remember { mutableIntStateOf(GeneralVariables.transmitDelay) }
     var lateStartMs by remember { mutableIntStateOf(GeneralVariables.lateStartTolerance) }
     var currentTheme by remember { mutableStateOf(loadTheme(context)) }
+
+    // Power & heat knobs. Seeded from GeneralVariables, which config hydration
+    // has already populated by the time settings can be opened.
+    var keepScreenOn by remember { mutableStateOf(GeneralVariables.keepScreenOn) }
+    var deepDecode by remember { mutableStateOf(GeneralVariables.deepDecodeMode) }
 
     // Opt-in crash reporting (Sentry). Only surfaced when a DSN was compiled in.
     var crashReportingEnabled by remember { mutableStateOf(CrashReporting.isOptedIn(context)) }
@@ -555,6 +561,54 @@ fun AdvancedSettings(
                         value = stringResource(binAggregationLabelRes(binAggregation)),
                         showChevron = true,
                         onClick = { showBinAggregationPicker = true },
+                    )
+                }
+            }
+        }
+
+        // =====================================================================
+        // POWER & HEAT
+        // =====================================================================
+        // Both knobs exist because a long portable session cooks the phone until
+        // it browns out its own OTG accessory rail and drops the CAT link (field
+        // log 2026-07-23: 48.6C battery, twelve USB re-enumerations). The screen
+        // flag used to be hard-coded on; deep decode was only reachable from the
+        // retired legacy settings fragment, so neither was adjustable in the
+        // shipping UI.
+        SettingsSection(title = stringResource(R.string.settings_section_power)) {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    SettingsRow(
+                        label = stringResource(R.string.settings_keep_screen_on),
+                        description = stringResource(R.string.settings_keep_screen_on_desc),
+                        toggle = keepScreenOn,
+                        onToggleChange = { on ->
+                            keepScreenOn = on
+                            GeneralVariables.keepScreenOn = on
+                            mainViewModel.databaseOpr.writeConfig(
+                                "keepScreenOn", if (on) "1" else "0", null,
+                            )
+                            // Apply live rather than waiting for the next onResume,
+                            // so the effect is visible from the settings screen.
+                            (context as? android.app.Activity)?.let {
+                                ScreenWake.apply(it.window, on)
+                            }
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_deep_decode),
+                        description = stringResource(R.string.settings_deep_decode_desc),
+                        toggle = deepDecode,
+                        onToggleChange = { on ->
+                            deepDecode = on
+                            GeneralVariables.deepDecodeMode = on
+                            // Same "deepMode" key the retired legacy fragment wrote,
+                            // so an existing preference carries over unchanged.
+                            mainViewModel.databaseOpr.writeConfig(
+                                "deepMode", if (on) "1" else "0", null,
+                            )
+                        },
                     )
                 }
             }
