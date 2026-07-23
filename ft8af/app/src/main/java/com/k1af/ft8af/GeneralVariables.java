@@ -642,7 +642,19 @@ public class GeneralVariables {
     }
 
 
-    public static final ArrayList<String> followCallsign = new ArrayList<>();//Followed callsigns
+    // The followed-callsigns list. Mutated concurrently with no external lock:
+    // the decode/DB threads add (MainViewModel.addFollowCallsign,
+    // getFollowCallsignsFromDataBase) and the UI thread clears it
+    // (ClearCacheDataDialog), while the web logbook renders it on a NanoHTTPD
+    // worker thread (LogHttpServer). A plain ArrayList corrupts its backing
+    // array / throws IndexOutOfBounds under that contention, so this is a
+    // CopyOnWriteArrayList: every add/clear is atomic. Readers must iterate the
+    // list itself (for-each snapshots the array) rather than size()+get(i),
+    // which can still race a concurrent clear.
+    // final: the thread-safety invariant depends on this always being the
+    // CopyOnWriteArrayList — never reassign it to a plain List. Mutate in place
+    // (add/clear) only.
+    public static final List<String> followCallsign = new CopyOnWriteArrayList<>();//Followed callsigns
 
     // The calling-UI "followed entries" list. Mutated concurrently from three
     // threads with no external lock: the decode thread (findIncludedCallsigns

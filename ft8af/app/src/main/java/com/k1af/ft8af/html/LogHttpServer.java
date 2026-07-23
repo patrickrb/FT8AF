@@ -923,13 +923,7 @@ public class LogHttpServer extends NanoHTTPD {
                 , GeneralVariables.getStringFromResource(R.string.html_tracking_callsign)));
 
         result.append("<tr><td class=\"default\" >");
-        for (int i = 0; i < GeneralVariables.followCallsign.size(); i++) {
-            result.append(GeneralVariables.followCallsign.get(i));
-            result.append(",&nbsp;");
-            if (((i + 1) % 10) == 0) {
-                result.append("</td></tr><tr><td class=\"default\" >\n");
-            }
-        }
+        result.append(followCallsignBlock(GeneralVariables.followCallsign));
         result.append("</td></tr>\n");
         HtmlContext.tableEnd(result).append("\n");
 
@@ -942,6 +936,33 @@ public class LogHttpServer extends NanoHTTPD {
         result.append("</td></tr>\n");
         HtmlContext.tableEnd(result).append("\n");
 
+        return result.toString();
+    }
+
+    /**
+     * Render the followed-callsign block as comma-separated cells, ten per row.
+     *
+     * <p>This runs on a NanoHTTPD worker thread while the decode/DB threads add
+     * to and the UI thread clears {@link GeneralVariables#followCallsign}. It
+     * iterates the list with a for-each so a {@link java.util.concurrent.CopyOnWriteArrayList}
+     * hands back a stable array snapshot — never a {@code size()}/{@code get(i)}
+     * scan, which can race a concurrent clear into an
+     * {@link IndexOutOfBoundsException}.
+     *
+     * @param callsigns the followed callsigns (never mutated here)
+     * @return the inner HTML for the tracking-callsign table cell
+     */
+    static String followCallsignBlock(java.util.List<String> callsigns) {
+        StringBuilder result = new StringBuilder();
+        int index = 0;
+        for (String callsign : callsigns) {
+            result.append(callsign);
+            result.append(",&nbsp;");
+            if (((index + 1) % 10) == 0) {
+                result.append("</td></tr><tr><td class=\"default\" >\n");
+            }
+            index++;
+        }
         return result.toString();
     }
 
