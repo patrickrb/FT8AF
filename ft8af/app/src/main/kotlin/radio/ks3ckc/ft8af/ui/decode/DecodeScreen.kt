@@ -67,7 +67,7 @@ fun DecodeScreen(
     // Filter state. Backed by the ViewModel so the chosen filter survives
     // navigation away from Decode and back (the screen is recreated by the
     // tab switch, which would otherwise reset a local rememberSaveable).
-    val filterOptions = listOf("All", "CQ Calls", "CQ POTA", "New DXCC", "Needed", "For Me")
+    val filterOptions = listOf("All", "CQ Calls", "CQ POTA", "New DXCC", "New Grid", "Needed", "For Me")
     val selectedFilter by mainViewModel.decodeFilter.observeAsState("All")
 
     // Couple the "CQ POTA" display filter to Hunt: while it's selected, the auto-call
@@ -522,6 +522,7 @@ private fun filterLabel(key: String): String = when (key) {
     "CQ Calls" -> stringResource(R.string.decode_filter_cq_calls)
     "CQ POTA" -> stringResource(R.string.decode_filter_cq_pota)
     "New DXCC" -> stringResource(R.string.decode_filter_new_dxcc)
+    "New Grid" -> stringResource(R.string.decode_filter_new_grid)
     "Needed" -> stringResource(R.string.decode_filter_needed)
     "For Me" -> stringResource(R.string.decode_filter_for_me)
     else -> stringResource(R.string.decode_filter_all)
@@ -538,6 +539,7 @@ private fun filterLabel(key: String): String = when (key) {
  *  - All: no filtering
  *  - CQ Calls: only CQ messages
  *  - New DXCC: CQ from a DXCC entity not yet in the operator's worked list
+ *  - New Grid: CQ from a Maidenhead grid field not yet in the operator's worked list
  *  - Needed: need QSL confirmation (not in QSL callsign list)
  *  - For Me: callsignTo matches operator's callsign
  */
@@ -586,6 +588,10 @@ internal fun filterMessages(
         // this filter and hunting agree on who counts as a POTA station — see issue #333.
         "CQ POTA" -> base.filter { radio.ks3ckc.ft8af.pota.PotaCqClassifier.isPotaCq(it) }
         "New DXCC" -> base.filter { it.checkIsCQ() && it.fromDxcc }
+        // Mirror of "New DXCC" for grid chasers (VUCC / grid hunting): only CQ
+        // stations whose grid field the operator hasn't logged yet, so the list
+        // becomes a one-tap "who's calling from a grid I still need" view.
+        "New Grid" -> base.filter { it.checkIsCQ() && isNewGridStation(it) }
         "Needed" -> base.filter {
             !it.isQSL_Callsign &&
                 !GeneralVariables.checkQSLCallsign(it.callsignFrom ?: "")
@@ -610,6 +616,7 @@ internal fun EmptyState(
         "CQ Calls" -> stringResource(R.string.decode_empty_cq_title) to stringResource(R.string.decode_empty_cq_body)
         "CQ POTA" -> stringResource(R.string.decode_empty_pota_title) to stringResource(R.string.decode_empty_pota_body)
         "New DXCC" -> stringResource(R.string.decode_empty_dxcc_title) to stringResource(R.string.decode_empty_dxcc_body)
+        "New Grid" -> stringResource(R.string.decode_empty_grid_title) to stringResource(R.string.decode_empty_grid_body)
         "Needed" -> stringResource(R.string.decode_empty_needed_title) to stringResource(R.string.decode_empty_needed_body)
         "For Me" -> stringResource(R.string.decode_empty_forme_title) to stringResource(R.string.decode_empty_forme_body)
         else -> stringResource(R.string.decode_empty_default_title) to stringResource(R.string.decode_empty_default_body, GeneralVariables.currentMode().displayName)

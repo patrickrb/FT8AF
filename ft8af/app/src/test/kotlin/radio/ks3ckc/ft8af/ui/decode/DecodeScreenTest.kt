@@ -56,6 +56,17 @@ class DecodeScreenTest {
     }
 
     @Test
+    fun newGridFilter_showsGridEmptyCopy() {
+        val title = context.getString(R.string.decode_empty_grid_title)
+        composeRule.mainClock.autoAdvance = false
+        composeRule.setContent {
+            EmptyState(selectedFilter = "New Grid")
+        }
+
+        composeRule.onNodeWithText(title).assertIsDisplayed()
+    }
+
+    @Test
     fun sortLabel_showsActiveModeTextAndDescription() {
         composeRule.setContent {
             SortModeLabel(sortMode = DecodeSortMode.SNR)
