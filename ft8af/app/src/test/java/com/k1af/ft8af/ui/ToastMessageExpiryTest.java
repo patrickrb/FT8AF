@@ -2,6 +2,9 @@ package com.k1af.ft8af.ui;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -72,13 +75,38 @@ public class ToastMessageExpiryTest {
     }
 
     @Test
-    public void expireDoesNotCrashOnANullElement() {
-        // Defence in depth: even if a null slot exists, walking past it must not
-        // throw on the main thread.
+    public void expireDoesNotCrashOnANullElement() throws Exception {
+        // Defence in depth: even if a null slot exists (an older build stored
+        // nulls), walking past it must not throw on the main thread. Force the
+        // exact crash scenario by injecting a null ahead of a real entry, then
+        // expire the real entry: the walk must pass the null slot and remove the
+        // match. Comparing from the remembered message (info.equals(element))
+        // rather than element.equals(info) is what makes this safe.
+        injectNullSlot();
         ToastMessage.show("alpha");
-        ToastMessage.snapshot();// no-op, documents ordering
+        assertThat(ToastMessage.snapshot()).containsExactly(null, "alpha").inOrder();
+
         ToastMessage.expire("alpha");
-        assertThat(ToastMessage.snapshot()).isEmpty();
+
+        assertThat(ToastMessage.snapshot()).containsExactly((String) null);
+    }
+
+    @Test
+    public void expireWithNullMessageIsHarmless() {
+        // expire() is package-visible and can be called directly; a null argument
+        // must no-op instead of NPEing on info.equals(...).
+        ToastMessage.show("alpha");
+        ToastMessage.expire(null);
+        assertThat(ToastMessage.snapshot()).containsExactly("alpha");
+    }
+
+    /** Reflectively drop a null into the private static debugList to model an
+     *  older build that stored nulls, so expire() truly walks a null slot. */
+    @SuppressWarnings("unchecked")
+    private static void injectNullSlot() throws Exception {
+        Field f = ToastMessage.class.getDeclaredField("debugList");
+        f.setAccessible(true);
+        ((ArrayList<String>) f.get(null)).add(null);
     }
 
     @Test

@@ -80,6 +80,10 @@ public class ToastMessage {
      * which is exactly what {@code debugList.get(i).equals(info)} did.
      */
     static synchronized void expire(String info){
+        // addDebugInfo() rejects nulls, but expire() is package-visible and can be
+        // called directly (tests, future call sites), so no-op on a null message
+        // rather than NPE on info.equals(...) below and kill the main thread.
+        if (info == null) return;
         for (int i = 0; i < debugList.size(); i++) {
             if (info.equals(debugList.get(i))) {
                 debugList.remove(i);

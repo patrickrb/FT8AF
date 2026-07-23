@@ -201,8 +201,15 @@ public abstract class CommonUsbSerialPort implements UsbSerialPort {
                 testConnection();
 
         } else {
+            // mUsbRequest (like mReadEndpoint above) can be null after a concurrent
+            // close()/re-enumeration; the timeout==0 path dereferences it, so guard
+            // it here too rather than NPE on the IO thread.
+            final UsbRequest request = mUsbRequest;
+            if (request == null) {
+                throw new IOException("Connection closed");
+            }
             final ByteBuffer buf = ByteBuffer.wrap(dest);
-            if (!mUsbRequest.queue(buf, dest.length)) {
+            if (!request.queue(buf, dest.length)) {
                 throw new IOException("Queueing USB request failed");
             }
             final UsbRequest response = mConnection.requestWait();
