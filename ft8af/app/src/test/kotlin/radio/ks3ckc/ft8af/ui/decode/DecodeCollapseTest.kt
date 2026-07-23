@@ -2,6 +2,7 @@ package radio.ks3ckc.ft8af.ui.decode
 
 import com.google.common.truth.Truth.assertThat
 import com.k1af.ft8af.Ft8Message
+import com.k1af.ft8af.GeneralVariables
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -356,6 +357,28 @@ class DecodeCollapseTest {
         val toNewZealand = gridDistanceKm("FN42", "RE78")!!
         assertThat(toEngland).isGreaterThan(0.0)
         assertThat(toNewZealand).isGreaterThan(toEngland)
+    }
+
+    // ---- stationDistanceKm (live provider off GeneralVariables) ---------------
+
+    @Test
+    fun stationDistanceKm_usesOperatorGridAndMessageGrid() {
+        GeneralVariables.setMyMaidenheadGrid("FN42")
+        // Sanity: matches computing straight from the two grids.
+        val expected = gridDistanceKm("FN42", "IO91")!!
+        assertThat(stationDistanceKm(msg("G4ABC", utc = 1000).apply { maidenGrid = "IO91" }))
+            .isWithin(0.001).of(expected)
+    }
+
+    @Test
+    fun stationDistanceKm_nullWhenOperatorGridUnsetOrMessageHasNoGrid() {
+        GeneralVariables.setMyMaidenheadGrid("")
+        assertThat(stationDistanceKm(msg("G4ABC", utc = 1000).apply { maidenGrid = "IO91" }))
+            .isNull()
+
+        GeneralVariables.setMyMaidenheadGrid("FN42")
+        assertThat(stationDistanceKm(msg("G4ABC", utc = 1000).apply { maidenGrid = null }))
+            .isNull()
     }
 
     @Test
