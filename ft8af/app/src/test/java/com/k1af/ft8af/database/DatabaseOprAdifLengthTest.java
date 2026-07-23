@@ -7,6 +7,7 @@ import android.database.MatrixCursor;
 import androidx.test.core.app.ApplicationProvider;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -106,5 +107,23 @@ public class DatabaseOprAdifLengthTest {
         // Previously comment.length() NPE'd on a NULL comment, aborting the whole download.
         String adif = export(null, null, null);
         assertThat(adif).contains("<comment:0> <eor>");
+    }
+
+    @Test
+    public void arabicDefaultLocale_stillEmitsAsciiDigitLengths() {
+        // %d under a default locale whose numbering system is Arabic-Indic (e.g. "ar")
+        // emits ٠١٢٣… digits, making every <field:len> header unparseable to ADIF
+        // consumers. The export must format with Locale.US regardless of device locale.
+        Locale saved = Locale.getDefault();
+        Locale.setDefault(new Locale("ar"));
+        try {
+            String adif = export("Café QSO", "JÜRGEN", null);
+            assertThat(adif).contains("<comment:9>Café QSO <eor>");
+            assertDeclaredLenIsUtf8ByteLen(adif, "operator", "JÜRGEN");
+            // No non-ASCII digits anywhere in the export.
+            assertThat(adif.matches("(?s).*[\\u0660-\\u0669].*")).isFalse();
+        } finally {
+            Locale.setDefault(saved);
+        }
     }
 }
