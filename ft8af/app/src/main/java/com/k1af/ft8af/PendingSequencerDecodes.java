@@ -19,9 +19,9 @@ import java.util.List;
  * {@code FT8TransmitSignal.parseMessageToFunction(list, true)}.
  *
  * <p>Entries older than {@link #MAX_AGE_MS} are evicted on every stash/drain:
- * a reply is only evidence for the QSO it belongs to, and after two full
- * cycles the fast pass has since made its own calls — acting on an older
- * stashed report could advance a state it no longer describes. Matching is
+ * a reply is only evidence for the QSO it belongs to, and after one full
+ * cycle (two slots) the fast pass has since made its own calls — acting on an
+ * older stashed report could advance a state it no longer describes. Matching is
  * additionally guarded by the sequencer itself (from/to callsign and slot
  * parity checks), so the age cap is a backstop, not the primary filter.
  *
@@ -32,11 +32,20 @@ import java.util.List;
 public final class PendingSequencerDecodes {
     /**
      * Maximum age of a stashed decode, measured from the message's slot time
-     * ({@code Ft8Message.utcTime}). Two full FT8 cycles (4 slots) — long enough
-     * to survive TX plus one silent delivery gap, short enough that a stale
-     * report can't leak into a later QSO.
+     * ({@code Ft8Message.utcTime}). One full FT8 cycle (2 slots) — long enough to
+     * survive the transmission it was stashed behind and be replayed at the next
+     * key-down gap, short enough that it cannot describe a QSO state the fast
+     * pass has already moved past.
+     *
+     * <p>This was two cycles (60s). At that age a decode outlives a whole
+     * exchange: the partner's opening grid, stashed behind our report, was still
+     * "fresh" a cycle later when the fast pass had already advanced us to RR73 on
+     * their R-report. Replaying it rewound the QSO and re-sent the report. The
+     * sequencer refuses to rewind now
+     * ({@link com.k1af.ft8af.ft8transmit.FT8TransmitSignal#isStaleEvidence}); this
+     * cap keeps such decodes from reaching it at all.
      */
-    static final long MAX_AGE_MS = 60_000;
+    static final long MAX_AGE_MS = 30_000;
 
     private final ArrayList<Ft8Message> pending = new ArrayList<>();
 
