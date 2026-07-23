@@ -138,6 +138,7 @@ private data class LogbookStats(
     val dxccEntities: Int = 0,
     val cqZones: Int = 0,
     val ituZones: Int = 0,
+    val gridSquares: Int = 0,
     val bandCounts: List<Pair<String, Int>> = emptyList(),
     // Raw continent codes worked (e.g. "NA", "EU"), for the WAC award. Reduced
     // to award progress by [workedAllContinents]; empty when nothing resolves.
@@ -278,11 +279,16 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
                     UsStateLookup.stateFromGrid(appContext, it)
                 }
 
+                // VUCC grid squares — unique 4-char Maidenhead squares across all
+                // logged QSOs (computed from the already-loaded records).
+                val gridSquareCount = gridSquaresWorked(loaded.map { it.grid })
+
                 stats = LogbookStats(
                     totalQsos = totalQsos,
                     dxccEntities = dxccCount,
                     cqZones = cqCount,
                     ituZones = ituCount,
+                    gridSquares = gridSquareCount,
                     bandCounts = bandCounts,
                     continentCodes = continentCodes,
                     statesWorked = worked.size,
@@ -724,7 +730,7 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
         )
         AwardProgressBar(
             label = stringResource(R.string.log_award_vucc_grid_squares),
-            current = gridSquaresWorked(records),
+            current = gridSquaresWorked(records.map { it.grid }),
             total = 100,
             gradientColors = listOf(StatusNew, Band12m),
             progress = chartProgress,
@@ -1263,13 +1269,26 @@ private fun DrawScope.drawSparkline(
 }
 
 // ---------------------------------------------------------------------------
-// Helper: count unique grid squares worked
+// Helper: count unique grid squares worked (VUCC)
 // ---------------------------------------------------------------------------
 
-private fun gridSquaresWorked(records: List<QSLCallsignRecord>): Int =
-    records.mapNotNull { record ->
-        val grid = record.grid
-        if (!grid.isNullOrBlank() && grid.length >= 4) grid.substring(0, 4).uppercase() else null
+/**
+ * The number of distinct Maidenhead grid squares worked — the VUCC metric shown
+ * on both the Stats-tab progress bar and the Awards-tab card. A square is the
+ * first four grid characters (e.g. "FN31"); longer grids are truncated to their
+ * square and blank/partial grids are ignored.
+ *
+ * Locale.ROOT: grid letters are ASCII A..R, so upper-casing must be
+ * locale-insensitive — a default-locale uppercase() would map "i" to "İ" under a
+ * Turkish locale, counting "io91" and "IO91" as two squares instead of one.
+ */
+internal fun gridSquaresWorked(grids: List<String?>): Int =
+    grids.mapNotNull { grid ->
+        if (!grid.isNullOrBlank() && grid.length >= 4) {
+            grid.substring(0, 4).uppercase(Locale.ROOT)
+        } else {
+            null
+        }
     }.distinct().size
 
 // ---------------------------------------------------------------------------
@@ -1873,7 +1892,7 @@ private fun AwardsTab(stats: LogbookStats) {
             AwardProgress(
                 name = vuccName,
                 description = vuccDesc,
-                current = 0, // Would need per-band grid counting
+                current = stats.gridSquares,
                 total = 100,
                 color = Band12m,
             ),
