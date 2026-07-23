@@ -38,7 +38,10 @@ public class BluetoothSerialSocket implements Runnable {
     // on the CAT/TX thread (write()). Readers MUST snapshot it into a local before
     // check-and-use — see write()/writeIfConnected.
     private volatile BluetoothSocket socket;
-    private boolean connected;
+    // volatile for the same reason as socket: set on the connect thread, cleared on
+    // the disconnect thread, read on the CAT/TX thread (write()) — without it those
+    // reads can see a stale value under the Java memory model.
+    private volatile boolean connected;
 
     public BluetoothSerialSocket(Context context, BluetoothDevice device) {
         if(context instanceof Activity)

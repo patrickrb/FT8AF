@@ -43,7 +43,10 @@ public class BluetoothSerialService extends Service implements BluetoothSerialLi
     // local before check-and-use — see write().
     private volatile BluetoothSerialSocket socket;
     private BluetoothSerialListener listener;
-    private boolean connected;
+    // volatile for the same reason as socket: written by connect()/disconnect() and
+    // the background onSerial* callbacks, read by binder callers (write()) — without
+    // it the writeIfConnected guard can see a stale value under the Java memory model.
+    private volatile boolean connected;
 
     /**
      * Lifecylce
