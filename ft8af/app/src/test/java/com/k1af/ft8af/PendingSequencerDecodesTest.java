@@ -108,12 +108,13 @@ public class PendingSequencerDecodesTest {
     }
 
     @Test
-    public void decodeFromTwoCyclesAgoIsEvicted() {
+    public void decodeOlderThanOneCycleIsEvicted() {
         PendingSequencerDecodes pending = new PendingSequencerDecodes();
-        Ft8Message twoCyclesOld = msgAt(0);
-        pending.stash(list(twoCyclesOld), 0);
+        Ft8Message oldDecode = msgAt(0);
+        pending.stash(list(oldDecode), 0);
 
-        // 30s later == two FT8 slots == the exchange has moved on.
+        // 30_001 ms == one full FT8 cycle (two 15s slots) past MAX_AGE_MS, so the
+        // decode is evicted: the exchange it belonged to has moved on.
         assertThat(pending.drain(30_001)).isEmpty();
     }
 }

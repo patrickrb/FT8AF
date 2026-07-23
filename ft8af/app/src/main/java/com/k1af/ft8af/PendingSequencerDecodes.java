@@ -19,9 +19,9 @@ import java.util.List;
  * {@code FT8TransmitSignal.parseMessageToFunction(list, true)}.
  *
  * <p>Entries older than {@link #MAX_AGE_MS} are evicted on every stash/drain:
- * a reply is only evidence for the QSO it belongs to, and after two full
- * cycles the fast pass has since made its own calls — acting on an older
- * stashed report could advance a state it no longer describes. Matching is
+ * a reply is only evidence for the QSO it belongs to, and after one full
+ * cycle (two slots) the fast pass has since made its own calls — acting on an
+ * older stashed report could advance a state it no longer describes. Matching is
  * additionally guarded by the sequencer itself (from/to callsign and slot
  * parity checks), so the age cap is a backstop, not the primary filter.
  *
