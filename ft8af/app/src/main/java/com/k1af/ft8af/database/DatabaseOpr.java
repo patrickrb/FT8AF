@@ -2370,7 +2370,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             } finally {
                 cursor.close();
             }
-            GeneralVariables.QSL_Callsign_list = callsigns;
+            // Publish as a CopyOnWriteArrayList so the wholesale swap is atomic for the
+            // decode/UI/web-logbook readers racing this background reload (see the field's note).
+            GeneralVariables.QSL_Callsign_list = new java.util.concurrent.CopyOnWriteArrayList<>(callsigns);
 
             querySQL = "select distinct [call] from QSLTable where band<>?" + modeFilter.sqlSuffix;
             cursor = db.rawQuery(querySQL, modeFilter.withArgs(meter));

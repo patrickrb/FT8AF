@@ -32,6 +32,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -125,6 +126,34 @@ public class LogHttpServer extends NanoHTTPD {
      */
     static int normalizePageSize(int pageSize) {
         return pageSize > 0 ? pageSize : 100;
+    }
+
+    /**
+     * Render the "successfully contacted callsigns" cell block for the debug page, ten
+     * callsigns per table row.
+     *
+     * <p>Extracted so the caller reads the shared
+     * {@link GeneralVariables#QSL_Callsign_list} exactly once — passing the reference in as
+     * {@code callsigns} — and iterates that single snapshot. The old inline loop re-read the
+     * static field on every {@code size()} and {@code get(i)}, so a background DB reload
+     * ({@link com.k1af.ft8af.database.DatabaseOpr.GetAllQSLCallsign}) that swaps the list
+     * wholesale between the two reads could hand {@code get(i)} an index past the end of a
+     * now-shorter list and throw {@link IndexOutOfBoundsException} mid-render (the page
+     * auto-refreshes every 5 s, so the window is hit often). With the list published as a
+     * CopyOnWriteArrayList a concurrent in-place add() can't tear this iteration either.
+     */
+    static String successfulCallsignBlock(List<String> callsigns) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<tr><td class=\"default\" >");
+        for (int i = 0; i < callsigns.size(); i++) {
+            sb.append(callsigns.get(i));
+            sb.append(",&nbsp;");
+            if (((i + 1) % 10) == 0) {
+                sb.append("</td></tr><tr><td class=\"default\" >\n");
+            }
+        }
+        sb.append("</td></tr>\n");
+        return sb.toString();
     }
 
     /**
@@ -907,15 +936,7 @@ public class LogHttpServer extends NanoHTTPD {
                 , String.format(GeneralVariables.getStringFromResource(R.string.html_successful_callsign)
                         , GeneralVariables.getBandString())));
 
-        result.append("<tr><td class=\"default\" >");
-        for (int i = 0; i < GeneralVariables.QSL_Callsign_list.size(); i++) {
-            result.append(GeneralVariables.QSL_Callsign_list.get(i));
-            result.append(",&nbsp;");
-            if (((i + 1) % 10) == 0) {
-                result.append("</td></tr><tr><td class=\"default\" >\n");
-            }
-        }
-        result.append("</td></tr>\n");
+        result.append(successfulCallsignBlock(GeneralVariables.QSL_Callsign_list));
         HtmlContext.tableEnd(result).append("<br>\n");
 
         HtmlContext.tableBegin(result, false, 0, true).append("\n");

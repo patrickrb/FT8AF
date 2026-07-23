@@ -85,6 +85,18 @@ public class GetAllQSLCallsignModeTest {
     }
 
     @Test
+    public void loadPublishesCopyOnWriteList() {
+        DatabaseOpr.GetAllQSLCallsign.get(db);
+
+        // The worked list is read from decode/UI threads and the NanoHTTPD web-logbook worker
+        // while this background reload swaps it wholesale; publishing a CopyOnWriteArrayList (not
+        // a plain ArrayList) is what keeps those readers on a stable snapshot. See the field note
+        // in GeneralVariables and LogHttpServer.successfulCallsignBlock.
+        assertThat(GeneralVariables.QSL_Callsign_list)
+                .isInstanceOf(java.util.concurrent.CopyOnWriteArrayList.class);
+    }
+
+    @Test
     public void sameModeOnDropsOtherModeAcrossAllLists() {
         GeneralVariables.workedSameMode = true;
 
