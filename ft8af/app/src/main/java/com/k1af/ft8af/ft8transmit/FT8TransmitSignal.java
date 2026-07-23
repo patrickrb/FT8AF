@@ -1679,6 +1679,17 @@ public class FT8TransmitSignal {
 
 
         if (newOrder != -1) {//message received but QSO not yet complete
+            // A deep/late/stashed pass may re-deliver a decode we already acted on
+            // (e.g. the partner's opening grid replayed a cycle after we advanced to
+            // RR73). Applying it would walk the QSO backwards and re-send a message
+            // the partner has already answered. Evidence-only passes advance, never rewind.
+            if (isStaleEvidence(evidenceOnly, functionOrder, newOrder)) {
+                GeneralVariables.fileLog("QSO: ignore stale evidence order " + functionOrder
+                        + " newOrder=" + newOrder
+                        + " with " + (toCallsign != null ? toCallsign.callsign : "?"));
+                return;
+            }
+
             // originally newOrder == 1, but sometimes the other party sends a signal report directly, i.e. message 2
             if (newOrder == 1 || newOrder == 2) {// this is the first reply from the other party
                 resetTargetReport();// reset the signal reports
@@ -2337,6 +2348,35 @@ public class FT8TransmitSignal {
                 && (noReplyLimit > 0))// I am at RR73, no-reply threshold reached, limit enabled
                 || (functionOrder == 4 && (noReplyCount > RR73_GIVEUP_CYCLES)
                 && (noReplyLimit == 0));// no-reply "ignore" at RR73: QSO already logged, don't hold the run frequency for minutes
+    }
+
+    /**
+     * Whether a deep/late-pass decode describes a QSO state we have already moved
+     * past, and must therefore be ignored.
+     *
+     * <p>Deep, subtraction and stashed passes re-deliver decodes out of order: a
+     * pass finishing during our transmission is replayed after key-up, by which
+     * time the fast pass may already have advanced the QSO on newer evidence. The
+     * partner's opening grid (order 1) replayed after we reached RR73 (order 4)
+     * would otherwise set us back to order 2 and re-send a signal report the
+     * partner already answered — the sequencer walking backwards mid-QSO.
+     *
+     * <p>Only evidence-only passes are gated. The fast pass observes the current
+     * cycle and its verdict is authoritative even when it lowers the order (the
+     * partner really did fall back a step). Order 6 is the CQ baseline rather
+     * than the top of the ladder, so a QSO starting from CQ is never "stale".
+     *
+     * <p>Package-visible for testing.
+     *
+     * @param evidenceOnly  this is a deep/late/stashed parse (positive evidence only)
+     * @param functionOrder my current message order (1-6)
+     * @param newOrder      order of the partner's message this pass (never -1 here)
+     * @return true when the pass would move the QSO backwards and should be dropped
+     */
+    static boolean isStaleEvidence(boolean evidenceOnly, int functionOrder, int newOrder) {
+        if (!evidenceOnly) return false;// fast pass is authoritative for its own cycle
+        if (functionOrder == 6) return false;// CQ baseline: any reply legitimately starts a QSO
+        return newOrder + 1 < functionOrder;// would rewind the sequence
     }
 
     /**

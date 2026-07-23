@@ -105,8 +105,10 @@ public class ClearCacheDataDialog extends Dialog {
         StringBuilder msg = new StringBuilder();
         if (cache_mode == CACHE_MODE.FOLLOW_DATA) {
             msg.append(GeneralVariables.getStringFromResource(R.string.html_tracking_callsign));
-            for (int i = 0; i < GeneralVariables.followCallsign.size(); i++) {
-                msg.append("\n" + GeneralVariables.followCallsign.get(i));
+            // for-each snapshots the CopyOnWriteArrayList; a size()+get(i) scan
+            // could race a concurrent add/clear into IndexOutOfBounds.
+            for (String callsign : GeneralVariables.followCallsign) {
+                msg.append("\n" + callsign);
             }
             cacheHelpMessage.setText(msg.toString());
         }

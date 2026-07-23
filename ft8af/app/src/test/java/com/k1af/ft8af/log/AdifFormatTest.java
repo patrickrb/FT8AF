@@ -76,6 +76,55 @@ public class AdifFormatTest {
         assertThat(AdifFormat.mfskSubmode(null)).isNull();
     }
 
+    // ---- resolveImportMode: the reader-side inverse of mfskSubmode ----
+
+    @Test
+    public void resolveImportMode_mfskSubmodeBecomesTheSubmode() {
+        // The bug: an FT4/FT2 QSO is written as MODE=MFSK + SUBMODE=FT4; reading only
+        // MODE stored "MFSK", losing FT4/FT2 and breaking export->import round-trip.
+        assertThat(AdifFormat.resolveImportMode("MFSK", "FT4")).isEqualTo("FT4");
+        assertThat(AdifFormat.resolveImportMode("MFSK", "FT2")).isEqualTo("FT2");
+    }
+
+    @Test
+    public void resolveImportMode_isCaseInsensitiveAndTrimmedAndUpperCased() {
+        assertThat(AdifFormat.resolveImportMode(" mfsk ", " ft4 ")).isEqualTo("FT4");
+        assertThat(AdifFormat.resolveImportMode("Mfsk", "Ft2")).isEqualTo("FT2");
+    }
+
+    @Test
+    public void resolveImportMode_mfskWithoutSubmodeStaysMfsk() {
+        // Plain MFSK (no SUBMODE) is a real mode on its own; leave it untouched.
+        assertThat(AdifFormat.resolveImportMode("MFSK", null)).isEqualTo("MFSK");
+        assertThat(AdifFormat.resolveImportMode("MFSK", "")).isEqualTo("MFSK");
+        assertThat(AdifFormat.resolveImportMode("MFSK", "   ")).isEqualTo("MFSK");
+    }
+
+    @Test
+    public void resolveImportMode_standaloneModesPassThroughVerbatim() {
+        // Non-MFSK modes are returned exactly as stored (no case change, no trim) so
+        // existing imports are byte-for-byte unchanged, even with a stray SUBMODE.
+        assertThat(AdifFormat.resolveImportMode("FT8", null)).isEqualTo("FT8");
+        assertThat(AdifFormat.resolveImportMode("FT4", null)).isEqualTo("FT4"); // bare FT4
+        assertThat(AdifFormat.resolveImportMode("SSB", "USB")).isEqualTo("SSB");
+        assertThat(AdifFormat.resolveImportMode("CW", null)).isEqualTo("CW");
+    }
+
+    @Test
+    public void resolveImportMode_nullModeReturnedVerbatim() {
+        assertThat(AdifFormat.resolveImportMode(null, "FT4")).isNull();
+    }
+
+    @Test
+    public void resolveImportMode_isTheInverseOfMfskSubmode() {
+        // Every mode that exports as MODE=MFSK + SUBMODE must import back to itself.
+        for (String mode : new String[] { "FT4", "FT2" }) {
+            String submode = AdifFormat.mfskSubmode(mode);
+            assertThat(submode).isNotNull();
+            assertThat(AdifFormat.resolveImportMode("MFSK", submode)).isEqualTo(mode);
+        }
+    }
+
     @Test
     public void formatReport_alwaysSignedAndTwoDigits() {
         // The bug: bare String.valueOf(int) gave "5"/"-5"/"0" — no sign on positives, no padding.
@@ -133,5 +182,44 @@ public class AdifFormatTest {
     @Test
     public void utf8Length_nullIsZero() {
         assertThat(AdifFormat.utf8Length(null)).isEqualTo(0);
+    }
+
+    // ---- sliceByUtf8Length: the reader-side counterpart ----
+
+    @Test
+    public void sliceByUtf8Length_asciiBehavesLikeSubstring() {
+        assertThat(AdifFormat.sliceByUtf8Length("K1ABC extra", 5)).isEqualTo("K1ABC");
+    }
+
+    @Test
+    public void sliceByUtf8Length_countsBytesNotChars() {
+        // "Café QSO" is 8 chars but 9 UTF-8 bytes; a correct writer declares LEN=9.
+        // Slicing 9 CHARS from "Café QSO <eor..." would keep the trailing space.
+        assertThat(AdifFormat.sliceByUtf8Length("Café QSO ", 9)).isEqualTo("Café QSO");
+    }
+
+    @Test
+    public void sliceByUtf8Length_neverSplitsACodePoint() {
+        // LEN=5 covers "café" exactly (5 bytes); LEN=4 would end mid-'é' and must
+        // keep only the complete chars that fit.
+        assertThat(AdifFormat.sliceByUtf8Length("caféX", 5)).isEqualTo("café");
+        assertThat(AdifFormat.sliceByUtf8Length("caféX", 4)).isEqualTo("caf");
+    }
+
+    @Test
+    public void sliceByUtf8Length_clampsToAvailableText() {
+        assertThat(AdifFormat.sliceByUtf8Length("FN31", 10)).isEqualTo("FN31");
+        assertThat(AdifFormat.sliceByUtf8Length("", 3)).isEqualTo("");
+        assertThat(AdifFormat.sliceByUtf8Length(null, 3)).isEqualTo("");
+        assertThat(AdifFormat.sliceByUtf8Length("abc", 0)).isEqualTo("");
+    }
+
+    @Test
+    public void sliceByUtf8Length_roundTripsUtf8LengthForAstralChars() {
+        // 4-byte (astral, surrogate-pair) chars: slicing by the declared utf8Length
+        // must return the whole value.
+        String emoji = "hi\uD83D\uDE00";  // "hi" + U+1F600
+        assertThat(AdifFormat.sliceByUtf8Length(emoji, AdifFormat.utf8Length(emoji)))
+                .isEqualTo(emoji);
     }
 }

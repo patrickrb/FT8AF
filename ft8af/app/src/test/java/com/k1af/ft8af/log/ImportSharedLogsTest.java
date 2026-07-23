@@ -6,6 +6,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Locale;
 
 /**
  * Pure-JVM coverage for the ADIF field-length handling in the shared-log
@@ -52,18 +53,16 @@ public class ImportSharedLogsTest {
 
     @Test
     public void zeroLengthValue_doesNotDiscardRecordOrCrash() {
-        // A stray '>' yields an empty value token under a positive declared
-        // length. The old code computed valueLen = -1 and threw
-        // StringIndexOutOfBoundsException from substring(0, -1); because the
-        // exception was caught at record scope, the WHOLE record (including the
-        // valid gridsquare) was lost. It must now keep the record with the good
-        // field intact. extractFieldValue clamps the empty value to "" rather
-        // than omitting the field, so CALL is present but empty.
+        // A stray '>' immediately after the header. The parser now splits only at
+        // the first '>', so the declared length (3) slices ">X" out of the two
+        // characters available before the next field — the '>' is data, not a
+        // delimiter. The point of this case remains: a malformed field must not
+        // crash or discard the surrounding valid gridsquare record.
         ArrayList<HashMap<String, String>> records =
                 ImportSharedLogs.parseLogRecords("<call:3>>X<gridsquare:4>FN42<eor>");
         assertThat(records).hasSize(1);
         assertThat(records.get(0).get("GRIDSQUARE")).isEqualTo("FN42");
-        assertThat(records.get(0).get("CALL")).isEqualTo("");
+        assertThat(records.get(0).get("CALL")).isEqualTo(">X");
     }
 
     @Test
@@ -82,6 +81,27 @@ public class ImportSharedLogsTest {
         assertThat(records).hasSize(2);
         assertThat(records.get(0).get("CALL")).isEqualTo("K1ABC");
         assertThat(records.get(1).get("CALL")).isEqualTo("W1AW");
+    }
+
+    @Test
+    public void fieldValueContainingGreaterThan_isPreserved() {
+        // ADIF stores a field as <NAME:LEN>VALUE and LEN is the authoritative byte
+        // length, so a value may legally contain '>' (e.g. free-text COMMENT/NOTES).
+        // The old parser split each field on EVERY '>' and kept the token before the
+        // second one, silently truncating "hello>world" to "hello". Splitting only at
+        // the first '>' and honouring the declared length keeps the whole value.
+        HashMap<String, String> first = ImportSharedLogs.parseLogRecords(
+                "<comment:11>hello>world<eor>").get(0);
+        assertThat(first.get("COMMENT")).isEqualTo("hello>world");
+    }
+
+    @Test
+    public void fieldValueWithMultipleGreaterThan_isClampedToDeclaredLength() {
+        HashMap<String, String> first = ImportSharedLogs.parseLogRecords(
+                "<comment:5>a>b>c<call:5>K1ABC<eor>").get(0);
+        assertThat(first.get("COMMENT")).isEqualTo("a>b>c");
+        // A '>' in an earlier field's value must not corrupt later fields.
+        assertThat(first.get("CALL")).isEqualTo("K1ABC");
     }
 
     @Test
@@ -135,5 +155,32 @@ public class ImportSharedLogsTest {
     public void singleCharacterValueShorterThanDeclared_isNotEmptied() {
         // Old clamp turned this into "" (length 1 - 1 = 0); the value must survive.
         assertThat(ImportSharedLogs.extractFieldValue("X", 5)).isEqualTo("X");
+    }
+
+    @Test
+    public void nonAsciiValue_slicedByUtf8Bytes_notChars() {
+        // LEN counts UTF-8 bytes: 9 bytes cover the 8-char "Caf\u00e9 QSO"; slicing 9
+        // chars kept the field-separator space as part of the value.
+        assertThat(ImportSharedLogs.extractFieldValue("Caf\u00e9 QSO ", 9)).isEqualTo("Caf\u00e9 QSO");
+
+        HashMap<String, String> first = ImportSharedLogs.parseLogRecords(
+                "<comment:9>Caf\u00e9 QSO <call:5>K1ABC<eor>").get(0);
+        assertThat(first.get("COMMENT")).isEqualTo("Caf\u00e9 QSO");
+        assertThat(first.get("CALL")).isEqualTo("K1ABC");
+    }
+
+    @Test
+    public void turkishDefaultLocale_keysStillAsciiUppercase() {
+        // Default-locale toUpperCase maps 'i' -> '\u0130' under Turkish locales, turning
+        // the "gridsquare" key into "GR\u0130DSQUARE" and losing the field.
+        Locale saved = Locale.getDefault();
+        Locale.setDefault(new Locale("tr", "TR"));
+        try {
+            HashMap<String, String> first = ImportSharedLogs.parseLogRecords(
+                    "<gridsquare:4>FN42<eor>").get(0);
+            assertThat(first.get("GRIDSQUARE")).isEqualTo("FN42");
+        } finally {
+            Locale.setDefault(saved);
+        }
     }
 }

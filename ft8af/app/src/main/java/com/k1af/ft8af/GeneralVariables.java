@@ -65,6 +65,16 @@ public class GeneralVariables {
     // time bound.
     public static boolean deepDecodeMode = true;//Whether deep decode mode is enabled
 
+    // Hold the screen awake while the app is in the foreground. On by default —
+    // that was the hard-coded behaviour before this became a setting — but a long
+    // portable session is the case where you want it off: an always-on panel at
+    // outdoor brightness is one of the two biggest heat sources on the phone, and
+    // a hot phone browns out its own OTG accessory rail (see the 2026-07-23 field
+    // log: 48.6C battery, twelve USB re-enumerations). RX keeps running with the
+    // screen off via RxForegroundService, so turning this off costs nothing but
+    // having to wake the phone to look at the waterfall.
+    public static boolean keepScreenOn = true;
+
     public static boolean audioOutput32Bit = true;//Audio output type: true=float, false=int16
     public static int audioSampleRate = 12000;//Transmit audio sample rate
 
@@ -449,7 +459,7 @@ public class GeneralVariables {
     public static int transmitDelay = 500;//Transmit delay; also allows decoding time for the previous cycle
     public static int pttDelay = 100;//PTT response time; radios typically need some response time after PTT command, default 100ms
     public static int lateStartTolerance = 2000;//Max ms of leading audio a late manual TX may clip past the per-mode audio slack (ModeProfile.audioSlackMillis) and still go out this cycle. Effective start budget is slack+tolerance. 0-4000. See issue #467.
-    public static int manualTimeCorrectionMs = 0;//Manual clock correction (ms) applied to UtcTimer.delay; for field use without internet NTP. Range -2000..2000. See TimeSyncSettings.
+    public static int manualTimeCorrectionMs = 0;//Manual clock correction (ms) applied to UtcTimer.delay; for field use without internet NTP. Range [MANUAL_TIME_CORRECTION_MIN_MS, MANUAL_TIME_CORRECTION_MAX_MS]. See TimeSyncSettings.
     public static boolean earlyDecode = true;//Fast turnaround: decode a shorter RX window so CQ decodes appear ~1s before the cycle boundary, enabling a next-slot reply.
     public static int operatingMode = FT8Common.FT8_MODE;//Current operating mode (FT8Common.FT8_MODE / FT4_MODE); persisted as config "operatingMode".
     public static int iaruRegion = 2;//Operator's IARU region (1/2/3), used to gate Message-Creator QSY frequency options to legal band edges. Default 2 (the Americas). See com.k1af.ft8af.message.SpecialMessage.
@@ -632,7 +642,19 @@ public class GeneralVariables {
     }
 
 
-    public static final ArrayList<String> followCallsign = new ArrayList<>();//Followed callsigns
+    // The followed-callsigns list. Mutated concurrently with no external lock:
+    // the decode/DB threads add (MainViewModel.addFollowCallsign,
+    // getFollowCallsignsFromDataBase) and the UI thread clears it
+    // (ClearCacheDataDialog), while the web logbook renders it on a NanoHTTPD
+    // worker thread (LogHttpServer). A plain ArrayList corrupts its backing
+    // array / throws IndexOutOfBounds under that contention, so this is a
+    // CopyOnWriteArrayList: every add/clear is atomic. Readers must iterate the
+    // list itself (for-each snapshots the array) rather than size()+get(i),
+    // which can still race a concurrent clear.
+    // final: the thread-safety invariant depends on this always being the
+    // CopyOnWriteArrayList — never reassign it to a plain List. Mutate in place
+    // (add/clear) only.
+    public static final List<String> followCallsign = new CopyOnWriteArrayList<>();//Followed callsigns
 
     // The calling-UI "followed entries" list. Mutated concurrently from three
     // threads with no external lock: the decode thread (findIncludedCallsigns
@@ -708,6 +730,37 @@ public class GeneralVariables {
         int clamped = Math.max(MIN_SPECTRUM_WIDTH_HZ, Math.min(MAX_SPECTRUM_WIDTH_HZ, width));
         mutableSpectrumWidth.postValue(clamped);
         GeneralVariables.spectrumWidth = clamped;
+    }
+
+    /**
+     * Inclusive bounds (ms) for the manual clock correction ({@link #manualTimeCorrectionMs}
+     * / {@code UtcTimer.delay}). This is the single source of truth for the range:
+     * the live settings UI's {@code TIME_CORRECTION_MIN_MS}/{@code TIME_CORRECTION_MAX_MS}
+     * in {@code TimeCorrection.kt} now reference these constants, so the UI slider and
+     * the reload-time clamp ({@link #clampManualTimeCorrectionMs}) can't drift apart.
+     * The range is ±5 s (widened from ±2 s so an offline phone that has drifted several
+     * seconds — a field-reported Samsung A50 needed over 3 s — can be pulled back).
+     */
+    public static final int MANUAL_TIME_CORRECTION_MIN_MS = -5000;
+    public static final int MANUAL_TIME_CORRECTION_MAX_MS = 5000;
+
+    /**
+     * Clamp a manual clock correction to
+     * [{@link #MANUAL_TIME_CORRECTION_MIN_MS}, {@link #MANUAL_TIME_CORRECTION_MAX_MS}] ms.
+     *
+     * <p>The live settings UI already clamps to this range before persisting
+     * ({@code TimeSyncSettings.apply} → {@code clampCorrectionMs}), but config
+     * hydration on every launch ({@code DatabaseOpr}'s {@code timeCorrectionMs}
+     * branch) re-applies the persisted value to {@code UtcTimer.delay} and must
+     * clamp with the <em>same</em> bounds. The reload path used to clamp to ±2000
+     * while the UI allowed ±5000, so any correction beyond ±2 s was silently
+     * truncated back to 2 s at startup — leaving the operator's carefully-set
+     * offline clock offset wrong by up to 3 s and degrading decodes. Byte-identical
+     * for every in-range value.
+     */
+    public static int clampManualTimeCorrectionMs(int ms) {
+        return Math.max(MANUAL_TIME_CORRECTION_MIN_MS,
+                Math.min(MANUAL_TIME_CORRECTION_MAX_MS, ms));
     }
 
     public static int getFftWindowType() {

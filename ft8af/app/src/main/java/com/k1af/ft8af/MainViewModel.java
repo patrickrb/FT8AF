@@ -595,6 +595,16 @@ public class MainViewModel extends ViewModel {
             @Override
             public void afterDecode(long utc, float time_sec, int sequential
                     , ArrayList<Ft8Message> decoded, boolean isDeep) {
+                // Replay decodes stashed during the last transmission at the first
+                // delivery with TX idle. This must run before the early returns
+                // below: the delivery that follows key-up is our own TX slot, which
+                // is silent except for the loopback echo and so filters down to zero
+                // kept messages every single time. Draining below those returns meant
+                // the stash never emptied on our own slot at all — it survived into
+                // the next receive slot and landed on top of that slot's fresh, newer
+                // evidence, rewinding the QSO a step.
+                drainStashedSequencerDecodes();
+
                 if (decoded.size() == 0) {
                     // beforeListen set mutableIsDecoding=true at the start of this cycle;
                     // clear it here so a silent slot doesn't leave the spectrum-display
@@ -701,15 +711,12 @@ public class MainViewModel extends ViewModel {
                         ft8TransmitSignal.parseMessageToFunction(messages, true);
                     }
                 }
-                // First delivery with TX idle (typically the own-slot fast pass
-                // ~1s after key-up): replay anything stashed mid-TX.
-                if (!ft8TransmitSignal.isTransmitting() && !pendingSequencerDecodes.isEmpty()) {
-                    ArrayList<Ft8Message> stashed =
-                            pendingSequencerDecodes.drain(UtcTimer.getSystemTime());
-                    if (!stashed.isEmpty()) {
-                        ft8TransmitSignal.parseMessageToFunction(stashed, true);
-                    }
-                }
+                // Fast path for a delivery that began mid-TX and stashed above, but
+                // whose transmission finished before we got here: replay it now
+                // rather than waiting for the next delivery. drain() empties the
+                // stash, so this can never re-apply what the call at the top of
+                // afterDecode already handled.
+                drainStashedSequencerDecodes();
 
                 decodeCycleState.labelsAfterPass(messages, isDeep);
 
@@ -1271,6 +1278,30 @@ public class MainViewModel extends ViewModel {
                 15,                           // T/R period (s)
                 "Default",                    // config name
                 "");                          // tx message
+    }
+
+    /**
+     * Replay decodes stashed during a transmission into the QSO sequencer, if any
+     * are pending and TX is idle.
+     *
+     * <p>Called at the top of every decode delivery and again after the deep-pass
+     * handling. The first call is the one that matters: the delivery right after
+     * key-up is our own transmit slot, whose only decode is the loopback echo of
+     * our own signal, so it filters down to zero kept messages and returns early.
+     * Draining only after that return left the stash to be replayed a full cycle
+     * later, on top of newer evidence — rewinding the QSO
+     * (see {@link PendingSequencerDecodes}).
+     *
+     * <p>{@link PendingSequencerDecodes#drain} empties the stash and drops entries
+     * past its age cap, so repeat calls are cheap and cannot double-apply.
+     */
+    private void drainStashedSequencerDecodes() {
+        if (ft8TransmitSignal == null || ft8TransmitSignal.isTransmitting()) return;
+        if (pendingSequencerDecodes.isEmpty()) return;
+        ArrayList<Ft8Message> stashed = pendingSequencerDecodes.drain(UtcTimer.getSystemTime());
+        if (!stashed.isEmpty()) {
+            ft8TransmitSignal.parseMessageToFunction(stashed, true);
+        }
     }
 
     /** Broadcast a slot's decodes as WSJT-X Decode messages. */

@@ -148,6 +148,110 @@ public class CivFrameSplitterTest {
         assertThat(r.remainder).hasLength(0);
     }
 
+    // The reassembly buffer must not grow without bound. The remainder holds a
+    // command still in progress (no terminator yet), so under normal operation it
+    // stays tiny; but a stream that never sends 0xFD — a rig on the wrong baud,
+    // line noise, or a misbehaving network peer — would otherwise accumulate every
+    // byte forever and eventually OOM the app. The cap below (1 KiB) is orders of
+    // magnitude above any real CI-V command, so these tests only exercise the
+    // malformed-stream guard and never affect well-formed traffic.
+    private static final int MAX_BUFFERED_BYTES = 1024;
+
+    @Test
+    public void terminatorlessStream_remainderStaysBounded() {
+        // Simulate a rig streaming garbage that never contains a terminator across
+        // many callbacks. Without the cap the carried buffer would grow to megabytes.
+        byte[] buffered = new byte[0];
+        byte[] noise = new byte[512]; // no 0xFD, no FE FE
+        for (int i = 0; i < noise.length; i++) {
+            noise[i] = (byte) (i & 0x7F); // 0x00..0x7F, never 0xFD or 0xFE
+        }
+        for (int call = 0; call < 100; call++) {
+            CivFrameSplitter.Result r = CivFrameSplitter.split(buffered, noise);
+            assertThat(r.commands).isEmpty();
+            assertThat(r.remainder.length).isAtMost(MAX_BUFFERED_BYTES);
+            buffered = r.remainder;
+        }
+    }
+
+    @Test
+    public void overflow_resyncsToMostRecentPreamble() {
+        // Garbage with no terminator, then a fresh command's preamble and start.
+        byte[] garbage = new byte[1100]; // all 0x00: no FD, no FE
+        byte[] partialNext = {(byte) 0xFE, (byte) 0xFE, (byte) 0xE0, (byte) 0xA4, (byte) 0x03};
+        CivFrameSplitter.Result r = CivFrameSplitter.split(new byte[0], concat(garbage, partialNext));
+
+        assertThat(r.commands).isEmpty();
+        // Everything before the last FE FE is unparseable and is dropped; the live
+        // command-in-progress is preserved so the next chunk completes it.
+        assertThat(r.remainder).isEqualTo(partialNext);
+    }
+
+    @Test
+    public void overflow_resyncedFrameStillCompletesOnNextChunk() {
+        byte[] garbage = new byte[1100];
+        byte[] frame = freqFrame();
+        byte[] frameFirst = java.util.Arrays.copyOfRange(frame, 0, 5);
+        byte[] frameRest = java.util.Arrays.copyOfRange(frame, 5, frame.length);
+
+        CivFrameSplitter.Result r1 = CivFrameSplitter.split(new byte[0], concat(garbage, frameFirst));
+        assertThat(r1.commands).isEmpty();
+        assertThat(r1.remainder).isEqualTo(frameFirst);
+
+        CivFrameSplitter.Result r2 = CivFrameSplitter.split(r1.remainder, frameRest);
+        assertThat(r2.commands).hasSize(1);
+        assertThat(r2.commands.get(0)).isEqualTo(frame);
+        assertThat(r2.remainder).hasLength(0);
+    }
+
+    @Test
+    public void overflow_noPreambleDropsNoiseButKeepsTrailingPreambleByte() {
+        byte[] noiseEndingInFe = new byte[1100];
+        noiseEndingInFe[noiseEndingInFe.length - 1] = (byte) 0xFE; // possible split preamble
+        CivFrameSplitter.Result r = CivFrameSplitter.split(new byte[0], noiseEndingInFe);
+
+        assertThat(r.commands).isEmpty();
+        // Keep the lone trailing 0xFE so a preamble split across the read boundary
+        // still reassembles; everything else was pure noise.
+        assertThat(r.remainder).isEqualTo(new byte[]{(byte) 0xFE});
+    }
+
+    @Test
+    public void overflow_pureNoiseDropsEverything() {
+        byte[] noise = new byte[1100]; // all 0x00: no FD, no FE
+        CivFrameSplitter.Result r = CivFrameSplitter.split(new byte[0], noise);
+
+        assertThat(r.commands).isEmpty();
+        assertThat(r.remainder).hasLength(0);
+    }
+
+    @Test
+    public void overflow_lonePreambleWithHugeTail_isHardCapped() {
+        // Pathological: a preamble at the very start followed by a terminator-less
+        // run longer than the cap. Resync alone can't shrink it, so the trailing
+        // window clamp guarantees boundedness.
+        byte[] buf = new byte[2200];
+        buf[0] = (byte) 0xFE;
+        buf[1] = (byte) 0xFE; // FE FE at index 0, nothing else notable, no FD
+        CivFrameSplitter.Result r = CivFrameSplitter.split(new byte[0], buf);
+
+        assertThat(r.commands).isEmpty();
+        assertThat(r.remainder.length).isEqualTo(MAX_BUFFERED_BYTES);
+    }
+
+    @Test
+    public void largeButUnderCapPartial_isCarriedUnchanged() {
+        // A big-but-legitimate partial command (still under the cap) must pass
+        // through untouched — the guard only trims genuinely oversized buffers.
+        byte[] partial = new byte[MAX_BUFFERED_BYTES];
+        partial[0] = (byte) 0xFE;
+        partial[1] = (byte) 0xFE; // valid-looking start, no terminator yet
+        CivFrameSplitter.Result r = CivFrameSplitter.split(new byte[0], partial);
+
+        assertThat(r.commands).isEmpty();
+        assertThat(r.remainder).isEqualTo(partial);
+    }
+
     private static byte[] concat(byte[] a, byte[] b) {
         byte[] out = new byte[a.length + b.length];
         System.arraycopy(a, 0, out, 0, a.length);

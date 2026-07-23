@@ -1,6 +1,8 @@
 package radio.ks3ckc.ft8af.ui.decode
 
 import com.k1af.ft8af.Ft8Message
+import com.k1af.ft8af.GeneralVariables
+import com.k1af.ft8af.maidenhead.MaidenheadGrid
 
 /**
  * How the collapsed (one-row-per-station) decode list is ordered.
@@ -19,6 +21,9 @@ internal enum class DecodeSortMode(val configValue: Int) {
 
     /** Strongest signal (highest SNR) first. */
     SNR(2),
+
+    /** Farthest station first — surfaces the best DX on the band at a glance. */
+    DISTANCE(3),
     ;
 
     companion object {
@@ -32,7 +37,8 @@ internal enum class DecodeSortMode(val configValue: Int) {
 internal fun nextSortMode(current: DecodeSortMode): DecodeSortMode = when (current) {
     DecodeSortMode.LAST_HEARD -> DecodeSortMode.CALLSIGN
     DecodeSortMode.CALLSIGN -> DecodeSortMode.SNR
-    DecodeSortMode.SNR -> DecodeSortMode.LAST_HEARD
+    DecodeSortMode.SNR -> DecodeSortMode.DISTANCE
+    DecodeSortMode.DISTANCE -> DecodeSortMode.LAST_HEARD
 }
 
 /**
@@ -49,10 +55,16 @@ internal fun nextSortMode(current: DecodeSortMode): DecodeSortMode = when (curre
  *
  * Callers should collapse **after** filtering so the visible-station count
  * agrees with the active chip filter (see `filterMessages`).
+ *
+ * [distanceKm] resolves the great-circle distance (km) from the operator to a
+ * station for [DecodeSortMode.DISTANCE]; it defaults to the live
+ * [stationDistanceKm] but is injectable so the sort ordering can be unit-tested
+ * without Android/Play-Services grid math. It is only invoked in DISTANCE mode.
  */
 internal fun collapseByStation(
     messages: List<Ft8Message>,
     sortMode: DecodeSortMode,
+    distanceKm: (Ft8Message) -> Double? = ::stationDistanceKm,
 ): List<Ft8Message> {
     // LinkedHashMap preserves first-appearance order, which is our stable
     // tiebreak. Overwrite with the newer decode (>= keeps later-on-tie).
@@ -73,8 +85,45 @@ internal fun collapseByStation(
         DecodeSortMode.SNR -> collapsed.sortedByDescending {
             if (it.hasSnr()) it.snr else Int.MIN_VALUE
         }
+        // Farthest first. A station with no usable grid has an unknown distance
+        // and sinks to the bottom (like unknown SNR) rather than pretending to be
+        // near. Distance is resolved once per station up front so the comparator
+        // doesn't recompute the (grid → LatLng → great-circle) math repeatedly.
+        DecodeSortMode.DISTANCE ->
+            collapsed
+                .map { it to (distanceKm(it) ?: Double.NEGATIVE_INFINITY) }
+                .sortedByDescending { it.second }
+                .map { it.first }
     }
 }
+
+/**
+ * Great-circle distance in km from grid [myGrid] to grid [theirGrid], or null
+ * when either grid is missing or can't be parsed to a location. Kept as a plain
+ * function (mirroring `computeDistanceText`) so it's directly unit-testable with
+ * explicit grids under Robolectric.
+ *
+ * Identical, parseable grids yield a real 0.0 (the closest possible), which is
+ * distinct from the null "unknown distance" used to sink grid-less stations.
+ */
+internal fun gridDistanceKm(myGrid: String?, theirGrid: String?): Double? {
+    if (myGrid.isNullOrEmpty() || theirGrid.isNullOrEmpty()) return null
+    return try {
+        val mine = MaidenheadGrid.gridToLatLng(myGrid) ?: return null
+        val theirs = MaidenheadGrid.gridToLatLng(theirGrid) ?: return null
+        MaidenheadGrid.getDist(mine, theirs)
+    } catch (_: Exception) {
+        null
+    }
+}
+
+/**
+ * Live distance provider for [DecodeSortMode.DISTANCE]: the km from the
+ * operator's configured grid to [message]'s sender grid, or null when the
+ * distance can't be computed (no operator grid, or the decode carried no grid).
+ */
+internal fun stationDistanceKm(message: Ft8Message): Double? =
+    gridDistanceKm(GeneralVariables.getMyMaidenheadGrid(), message.maidenGrid)
 
 /**
  * The station identity a decode collapses onto: [Ft8Message.callsignFrom] trimmed
