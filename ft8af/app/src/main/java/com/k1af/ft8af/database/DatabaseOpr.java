@@ -51,6 +51,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Locale;
 
 public class DatabaseOpr extends SQLiteOpenHelper {
     private static final String TAG = "DatabaseOpr";
@@ -1198,7 +1199,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
      * @param isSWL whether in SWL mode
      * @return ADIF text content
      */
-    @SuppressLint({"Range", "DefaultLocale"})
+    @SuppressLint("Range")
     public String downQSLTable(Cursor cursor, boolean isSWL) {
         StringBuilder logStr = new StringBuilder();
 
@@ -1223,8 +1224,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             }
 
             if (cursor.getString(cursor.getColumnIndex("gridsquare")) != null) {
-                logStr.append(String.format("<gridsquare:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("gridsquare")).length()
+                logStr.append(String.format(Locale.US, "<gridsquare:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("gridsquare")))
                         , cursor.getString(cursor.getColumnIndex("gridsquare"))));
             }
 
@@ -1234,78 +1235,78 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 String mode = cursor.getString(cursor.getColumnIndex("mode"));
                 String submode = AdifFormat.mfskSubmode(mode);
                 if (submode != null) {
-                    logStr.append(String.format("<mode:4>MFSK <submode:%d>%s "
-                            , submode.length(), submode));
+                    logStr.append(String.format(Locale.US, "<mode:4>MFSK <submode:%d>%s "
+                            , AdifFormat.utf8Length(submode), submode));
                 } else {
-                    logStr.append(String.format("<mode:%d>%s "
-                            , mode.length(), mode));
+                    logStr.append(String.format(Locale.US, "<mode:%d>%s "
+                            , AdifFormat.utf8Length(mode), mode));
                 }
             }
 
             if (cursor.getString(cursor.getColumnIndex("rst_sent")) != null) {
-                logStr.append(String.format("<rst_sent:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("rst_sent")).length()
+                logStr.append(String.format(Locale.US, "<rst_sent:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("rst_sent")))
                         , cursor.getString(cursor.getColumnIndex("rst_sent"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("rst_rcvd")) != null) {
-                logStr.append(String.format("<rst_rcvd:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("rst_rcvd")).length()
+                logStr.append(String.format(Locale.US, "<rst_rcvd:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("rst_rcvd")))
                         , cursor.getString(cursor.getColumnIndex("rst_rcvd"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("qso_date")) != null) {
-                logStr.append(String.format("<qso_date:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("qso_date")).length()
+                logStr.append(String.format(Locale.US, "<qso_date:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("qso_date")))
                         , cursor.getString(cursor.getColumnIndex("qso_date"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("time_on")) != null) {
-                logStr.append(String.format("<time_on:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("time_on")).length()
+                logStr.append(String.format(Locale.US, "<time_on:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("time_on")))
                         , cursor.getString(cursor.getColumnIndex("time_on"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("qso_date_off")) != null) {
-                logStr.append(String.format("<qso_date_off:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("qso_date_off")).length()
+                logStr.append(String.format(Locale.US, "<qso_date_off:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("qso_date_off")))
                         , cursor.getString(cursor.getColumnIndex("qso_date_off"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("time_off")) != null) {
-                logStr.append(String.format("<time_off:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("time_off")).length()
+                logStr.append(String.format(Locale.US, "<time_off:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("time_off")))
                         , cursor.getString(cursor.getColumnIndex("time_off"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("band")) != null) {
-                logStr.append(String.format("<band:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("band")).length()
+                logStr.append(String.format(Locale.US, "<band:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("band")))
                         , cursor.getString(cursor.getColumnIndex("band"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("freq")) != null) {
-                logStr.append(String.format("<freq:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("freq")).length()
+                logStr.append(String.format(Locale.US, "<freq:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("freq")))
                         , cursor.getString(cursor.getColumnIndex("freq"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("station_callsign")) != null) {
-                logStr.append(String.format("<station_callsign:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("station_callsign")).length()
+                logStr.append(String.format(Locale.US, "<station_callsign:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("station_callsign")))
                         , cursor.getString(cursor.getColumnIndex("station_callsign"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("my_gridsquare")) != null) {
-                logStr.append(String.format("<my_gridsquare:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("my_gridsquare")).length()
+                logStr.append(String.format(Locale.US, "<my_gridsquare:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("my_gridsquare")))
                         , cursor.getString(cursor.getColumnIndex("my_gridsquare"))));
             }
 
             if (cursor.getColumnIndex("operator") != -1) {
                 if (cursor.getString(cursor.getColumnIndex("operator")) != null) {
-                    logStr.append(String.format("<operator:%d>%s "
-                            , cursor.getString(cursor.getColumnIndex("operator")).length()
+                    logStr.append(String.format(Locale.US, "<operator:%d>%s "
+                            , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("operator")))
                             , cursor.getString(cursor.getColumnIndex("operator"))));
                 }
             }
@@ -1318,11 +1319,14 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             appendPotaField(logStr, cursor, "sig_info", "SIG_INFO");
 
             String comment = cursor.getString(cursor.getColumnIndex("comment"));
+            if (comment == null) {
+                comment = "";
+            }
 
             //<comment:15>Distance: 99 km <eor>
             //When writing to db, must append " km"
-            logStr.append(String.format("<comment:%d>%s <eor>\n"
-                    , comment.length()
+            logStr.append(String.format(Locale.US, "<comment:%d>%s <eor>\n"
+                    , AdifFormat.utf8Length(comment)
                     , comment));
         }
 
@@ -1336,7 +1340,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         if (idx < 0) return;
         String value = cursor.getString(idx);
         if (value == null || value.isEmpty()) return;
-        sb.append(String.format("<%s:%d>%s ", adifName, value.length(), value));
+        sb.append(String.format(Locale.US, "<%s:%d>%s ", adifName, AdifFormat.utf8Length(value), value));
     }
 
     /**
