@@ -110,6 +110,30 @@ public class MaidenheadGridTest {
         assertThat(MaidenheadGrid.gridToLatLng("ABCDEFG")).isNull();
     }
 
+    @Test
+    public void gridToLatLng_rightLengthWrongAlphabet_returnsNull() {
+        // A token of a legal length (2/4/6) but that is not a Maidenhead locator
+        // must be rejected, not coerced into an arbitrary LatLng. Before this
+        // guard an ADIF GRIDSQUARE of "1234" (or any 4-char junk) decoded to a
+        // bogus point that was plotted on the map and fed into distance stats.
+        assertThat(MaidenheadGrid.gridToLatLng("1234")).isNull(); // digits in field slots
+        assertThat(MaidenheadGrid.gridToLatLng("FN4X")).isNull(); // letter in a digit slot
+        assertThat(MaidenheadGrid.gridToLatLng("ZZ99")).isNull(); // field letters past R
+        assertThat(MaidenheadGrid.gridToLatLng("AB1@")).isNull(); // symbol in a digit slot
+        assertThat(MaidenheadGrid.gridToLatLng("FN42zz")).isNull(); // subsquare past x
+        assertThat(MaidenheadGrid.gridToLatLng("1A")).isNull();   // 2-char field with a digit
+    }
+
+    @Test
+    public void gridToLatLng_validGridsStillDecode() {
+        // Regression guard: the alphabet check must be a no-op for real locators
+        // of every supported length and case.
+        assertThat(MaidenheadGrid.gridToLatLng("FN")).isNotNull();
+        assertThat(MaidenheadGrid.gridToLatLng("FN42")).isNotNull();
+        assertThat(MaidenheadGrid.gridToLatLng("IO91wm")).isNotNull();
+        assertThat(MaidenheadGrid.gridToLatLng("io91WM")).isNotNull(); // mixed case
+    }
+
     // ---------- getGridSquare ----------
 
     @Test
@@ -330,6 +354,23 @@ public class MaidenheadGridTest {
     public void gridToPolygon_badLength_returnsNull() {
         assertThat(MaidenheadGrid.gridToPolygon("ABC")).isNull();
         assertThat(MaidenheadGrid.gridToPolygon("ABCDE")).isNull();
+    }
+
+    @Test
+    public void gridToPolygon_nullReturnsNullNotNPE() {
+        // Unlike its sibling gridToLatLng, gridToPolygon had no null guard and
+        // NPE'd on grid.length(). A null gridsquare reaching the GridPolygon
+        // overlay must yield null, not throw.
+        assertThat(MaidenheadGrid.gridToPolygon(null)).isNull();
+    }
+
+    @Test
+    public void gridToPolygon_rightLengthWrongAlphabet_returnsNull() {
+        // Same alphabet contract as gridToLatLng: a legal-length non-locator
+        // token must be rejected rather than drawn as a bogus cell outline.
+        assertThat(MaidenheadGrid.gridToPolygon("1234")).isNull();
+        assertThat(MaidenheadGrid.gridToPolygon("FN4X")).isNull();
+        assertThat(MaidenheadGrid.gridToPolygon("ZZ99")).isNull();
     }
 
     @Test
