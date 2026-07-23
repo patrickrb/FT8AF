@@ -31,6 +31,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -153,39 +155,56 @@ fun DecodeScreen(
         ArrayList(messageList ?: arrayListOf())
     }
 
-    // Apply filter
+    // Sort mode for the collapsed list — persisted via GeneralVariables.decodeSortMode
+    // / DB key "decodeSortMode" (same pattern as msgMode / clearDecodesEveryCycle).
+    var sortMode by rememberSaveable { mutableStateOf(DecodeSortMode.fromConfig(GeneralVariables.decodeSortMode)) }
+
+    // Apply filter, THEN collapse to one row per station. Filtering first keeps
+    // the visible-station count consistent with the active chip (a station whose
+    // latest decode is directed but earlier one was a CQ still shows under
+    // "CQ Calls"). See collapseByStation / filterMessages.
     val filteredMessages = remember(messages, selectedFilter) {
         filterMessages(messages, selectedFilter)
     }
+    val collapsedMessages = remember(filteredMessages, sortMode) {
+        collapseByStation(filteredMessages, sortMode)
+    }
 
     // Precompute, once per list change, where the mode-aware time-group dividers
-    // fall so each row looks its flag up by index instead of recomputing a
-    // hard-coded 15s slot boundary inline (which collapsed 2-4 FT4/FT2 cycles
-    // under one divider).
-    val timeGroupDividers = remember(filteredMessages) {
-        computeTimeGroupDividers(filteredMessages)
+    // fall (FT8 15s, FT4 7.5s, FT2 3.75s) so each row looks its flag up by index
+    // instead of recomputing a slot boundary inline. Computed over the collapsed
+    // list this LazyColumn iterates, so index is always in bounds. The dividers
+    // only render in last-heard order (see showTimeGroupDividers) — that gate is
+    // applied at draw time below.
+    val timeGroupDividers = remember(collapsedMessages) {
+        computeTimeGroupDividers(collapsedMessages)
     }
 
-    // Track which keys are new since the previous render (animated on entry only once).
+    // Track which station rows are new-or-just-updated since the previous render
+    // (animated once). Keyed by normalized station + utcTime so a station
+    // re-decoded in a later cycle (new utcTime, same station) re-triggers the
+    // highlight — that's the "row just updated in place" cue. Only the visible
+    // keys are retained: accumulating them would grow one entry per station per
+    // cycle for as long as the screen is open. See advanceRowAnimation.
     var seenKeys by remember { mutableStateOf(emptySet<String>()) }
-    val currentKeys = remember(filteredMessages) {
-        filteredMessages.mapIndexed { i, m ->
-            "${m.utcTime}_${m.callsignFrom}_${m.freq_hz}_$i"
-        }.toSet()
+    val currentKeys = remember(collapsedMessages) {
+        collapsedMessages.map { rowAnimationKey(it) }.toSet()
     }
-    val newKeys = remember(currentKeys) { currentKeys - seenKeys }
+    val newKeys = remember(currentKeys) { advanceRowAnimation(seenKeys, currentKeys).new }
     LaunchedEffect(currentKeys) {
-        seenKeys = seenKeys + currentKeys
+        seenKeys = advanceRowAnimation(seenKeys, currentKeys).seen
     }
 
-    // Auto-scroll state
+    // Auto-scroll state. Only "last heard" ordering auto-scrolls (to the top,
+    // where the newest station sits); the other sorts would yank the viewport.
     val listState = rememberLazyListState()
     var previousCount by remember { mutableIntStateOf(0) }
-    LaunchedEffect(filteredMessages.size) {
-        if (filteredMessages.size > previousCount && filteredMessages.isNotEmpty()) {
-            listState.animateScrollToItem(filteredMessages.size - 1)
+    LaunchedEffect(collapsedMessages.size, sortMode) {
+        val target = autoScrollTargetIndex(sortMode, collapsedMessages.size, previousCount)
+        if (target != null) {
+            listState.animateScrollToItem(target)
         }
-        previousCount = filteredMessages.size
+        previousCount = collapsedMessages.size
     }
 
     // A tapped Needed-DX notification asks us to pre-select that station: reset to the
@@ -234,6 +253,17 @@ fun DecodeScreen(
                     )
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            sortMode = nextSortMode(sortMode)
+                            GeneralVariables.decodeSortMode = sortMode.configValue
+                            mainViewModel.databaseOpr.writeConfig(
+                                "decodeSortMode", sortMode.configValue.toString(), null,
+                            )
+                        },
+                    ) {
+                        SortModeLabel(sortMode)
+                    }
                     IconButton(
                         onClick = {
                             clearEachCycle = !clearEachCycle
@@ -288,7 +318,7 @@ fun DecodeScreen(
             )
 
             // Message list or empty state
-            if (filteredMessages.isEmpty()) {
+            if (collapsedMessages.isEmpty()) {
                 EmptyState(
                     selectedFilter = selectedFilter,
                     modifier = Modifier
@@ -304,19 +334,24 @@ fun DecodeScreen(
                     verticalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
                     itemsIndexed(
-                        items = filteredMessages,
-                        key = { index, msg -> "${msg.utcTime}_${msg.callsignFrom}_${msg.freq_hz}_$index" },
+                        items = collapsedMessages,
+                        // Key on the station callsign (stable across cycles) so
+                        // Compose reuses the same row and updates it in place when
+                        // a station is re-decoded, rather than adding a new row.
+                        // Normalized via stationKey so a station whose callsign
+                        // arrives with different case/padding across cycles keeps
+                        // the same key (and so the same row) — see stationKey.
+                        key = { index, msg -> stationKey(msg) ?: "row_$index" },
                     ) { index, message ->
-                        val rowKey = "${message.utcTime}_${message.callsignFrom}_${message.freq_hz}_$index"
+                        val rowKey = rowAnimationKey(message)
 
-                        // Group messages by receive slot (mode-aware: 15s FT8,
-                        // 7.5s FT4, 3.75s FT2). Draw a labeled divider at the first
-                        // row of each new slot; the boundaries were precomputed in
-                        // timeGroupDividers above. It is keyed on the same
-                        // filteredMessages this list iterates, so index is always
-                        // in bounds — index directly rather than masking a
-                        // size mismatch with a getOrElse default.
-                        if (timeGroupDividers[index]) {
+                        // Group rows by receive slot (mode-aware: 15s FT8, 7.5s
+                        // FT4, 3.75s FT2), but only in "last heard" ordering where
+                        // rows stay time-ordered — the other sorts would scatter
+                        // the dividers. Boundaries were precomputed in
+                        // timeGroupDividers above over this same collapsed list, so
+                        // index is always in bounds.
+                        if (showTimeGroupDividers(sortMode) && timeGroupDividers[index]) {
                             TimeGroupDivider(utcTime = message.utcTime, compact = compactMode)
                         }
 
@@ -433,6 +468,42 @@ private fun TimeGroupDivider(utcTime: Long, compact: Boolean = false) {
                 .background(Border),
         )
     }
+}
+
+// ---------------------------------------------------------------------------
+// Sort control
+// ---------------------------------------------------------------------------
+
+/**
+ * Compact label rendered inside the top-bar sort button, showing the active
+ * [DecodeSortMode] (TIME / CALL / SNR). The button cycles modes on tap; the
+ * accessibility content description announces the current mode.
+ */
+@Composable
+internal fun SortModeLabel(sortMode: DecodeSortMode) {
+    val label = stringResource(
+        when (sortMode) {
+            DecodeSortMode.LAST_HEARD -> R.string.decode_sort_label_last_heard
+            DecodeSortMode.CALLSIGN -> R.string.decode_sort_label_callsign
+            DecodeSortMode.SNR -> R.string.decode_sort_label_snr
+        },
+    )
+    val cd = stringResource(
+        when (sortMode) {
+            DecodeSortMode.LAST_HEARD -> R.string.decode_sort_cd_last_heard
+            DecodeSortMode.CALLSIGN -> R.string.decode_sort_cd_callsign
+            DecodeSortMode.SNR -> R.string.decode_sort_cd_snr
+        },
+    )
+    Text(
+        text = label,
+        modifier = Modifier.semantics { contentDescription = cd },
+        color = Accent,
+        fontFamily = GeistMonoFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 11.sp,
+        letterSpacing = 0.04.sp,
+    )
 }
 
 // ---------------------------------------------------------------------------
