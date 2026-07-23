@@ -56,6 +56,7 @@ import com.k1af.ft8af.callsign.CallsignDatabase;
 import com.k1af.ft8af.callsign.CallsignInfo;
 import com.k1af.ft8af.callsign.OnAfterQueryCallsignLocation;
 import com.k1af.ft8af.bluetooth.ScoPolicy;
+import com.k1af.ft8af.connector.BaseRigConnector;
 import com.k1af.ft8af.connector.BluetoothRigConnector;
 import com.k1af.ft8af.connector.CableConnector;
 import com.k1af.ft8af.connector.CableSerialPort;
@@ -237,6 +238,9 @@ public class MainViewModel extends ViewModel {
     public FT8TransmitSignal ft8TransmitSignal;//object for transmitting signals
     // Deep-pass decodes that arrived mid-TX, replayed to the sequencer after key-up
     private final PendingSequencerDecodes pendingSequencerDecodes = new PendingSequencerDecodes();
+    // "We keyed the rig and haven't confirmed it back off" — settled by
+    // retryPendingUnkey() on reconnect and at slot boundaries.
+    private final PttSafetyLatch pttSafetyLatch = new PttSafetyLatch();
     public MeterProtectionController meterProtectionController;//ALC auto-volume + SWR halt
     public SpectrumListener spectrumListener;//object for drawing the spectrum
     public boolean markMessage = true;//whether to mark messages toggle
@@ -578,6 +582,13 @@ public class MainViewModel extends ViewModel {
                     mutable_Decoded_Counter.postValue(0);
                     publishFt8MessageList();
                 }
+                // Backstop for the unkey latch. The reconnect path is the fast
+                // route (~2s), but it only fires when the USB attach broadcast
+                // arrives; this bounds a stuck key at one slot even if the link
+                // recovered without one.
+                if (!ft8TransmitSignal.isTransmitting()) {
+                    retryPendingUnkey();
+                }
                 mutableIsDecoding.postValue(true);
             }
 
@@ -798,6 +809,10 @@ public class MainViewModel extends ViewModel {
                     if (baseRig != null) {
                         //if (GeneralVariables.connectMode != ConnectMode.NETWORK) stopSco();
                         if (needControlSco()) stopSco();
+                        // Arm before the write, not after: if setPTT throws or the
+                        // process dies mid-key, we still recorded that the rig may
+                        // be keyed and the next reconnect settles it.
+                        pttSafetyLatch.onKeyed();
                         baseRig.setPTT(true);
                     }
                 }
@@ -810,6 +825,11 @@ public class MainViewModel extends ViewModel {
                         || GeneralVariables.controlMode == ControlMode.DTR) {
                     if (baseRig != null) {
                         baseRig.setPTT(false);
+                        // Only a confirmed write clears the latch. A PTT-off issued
+                        // at a port that has already gone away leaves the rig keyed,
+                        // so keep the debt and let retryPendingUnkey() settle it when
+                        // the link is back.
+                        pttSafetyLatch.onUnkeyAttempted(lastPttWriteReachedRig());
                         //if (GeneralVariables.connectMode != ConnectMode.NETWORK) startSco();
                         if (needControlSco()) startSco();
                     }
@@ -1637,6 +1657,11 @@ public class MainViewModel extends ViewModel {
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
+                // Settle any unkey owed from before the link dropped BEFORE
+                // retuning. If a brown-out killed the port mid-transmission the
+                // rig is still keyed, and sending frequency/mode to a keyed rig
+                // is exactly what makes it click and mis-set.
+                retryPendingUnkey();
                 setOperationBand();//set carrier frequency
             }
         }, 1000);
@@ -1982,6 +2007,40 @@ public class MainViewModel extends ViewModel {
         } else {
             return baseRig.isConnected();
         }
+    }
+
+    /** Whether the rig's connector believes the last PTT write was delivered. */
+    private boolean lastPttWriteReachedRig() {
+        if (baseRig == null) return false;
+        BaseRigConnector connector = baseRig.getConnector();
+        // No connector at all means nothing was written; treat as undelivered so
+        // the latch stays armed rather than silently forgiving a lost unkey.
+        return connector != null && connector.isLastPttWriteOk();
+    }
+
+    /**
+     * Send PTT-off if we still owe the rig one, and clear the debt when it lands.
+     *
+     * <p>Called wherever a CAT link may have just come back: after a cable
+     * reconnect, and at every slot boundary as a backstop. Safe to call at any
+     * time — it is a no-op unless an unkey is actually outstanding, and CAT
+     * PTT-off is idempotent on a rig that is already receiving.
+     *
+     * <p>This is the recovery for the field failure where a USB brown-out killed
+     * the port mid-transmission and the rig stayed keyed for 97 seconds while the
+     * port itself was back within two.
+     *
+     * @return true if an unkey was owed and has now been sent successfully
+     */
+    public boolean retryPendingUnkey() {
+        if (!pttSafetyLatch.needsUnkey()) return false;
+        if (baseRig == null || !baseRig.isConnected()) return false;
+        fileLog("PTT: unkey still owed after link loss — re-sending PTT-off");
+        baseRig.setPTT(false);
+        boolean ok = lastPttWriteReachedRig();
+        pttSafetyLatch.onUnkeyAttempted(ok);
+        fileLog("PTT: unkey retry " + (ok ? "delivered" : "FAILED, still owed"));
+        return ok;
     }
 
     /**
