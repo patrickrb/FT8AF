@@ -15,6 +15,7 @@ import com.k1af.ft8af.R;
 import com.google.android.gms.maps.model.LatLng;
 
 import java.util.List;
+import java.util.Locale;
 
 public class MaidenheadGrid {
     private static final String TAG = "MaidenheadGrid";
@@ -89,6 +90,10 @@ public class MaidenheadGrid {
      */
     public static LatLng gridToLatLng(String grid) {
         if (!isDecodableGrid(grid)) return null;
+        // Normalize once with a fixed locale: the default-locale toUpperCase() below
+        // breaks under Turkish-style locales ('i' -> 'İ', a multi-byte char that shifts
+        // every getBytes() index). After this, those calls are locale-safe no-ops.
+        grid = grid.toUpperCase(Locale.ROOT);
         double x=0;
         double y=0;
         double z=0;
@@ -151,6 +156,9 @@ public class MaidenheadGrid {
 
     public static LatLng[] gridToPolygon(String grid) {
         if (!isDecodableGrid(grid)) return null;
+        // See gridToLatLng: fixed-locale normalization keeps the byte arithmetic
+        // correct on devices whose default locale re-maps ASCII case ('i' -> 'İ').
+        grid = grid.toUpperCase(Locale.ROOT);
         LatLng[] latLngs = new LatLng[4];
 
         //Latitude 1

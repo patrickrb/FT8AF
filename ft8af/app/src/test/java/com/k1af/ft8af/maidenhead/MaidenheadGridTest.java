@@ -8,6 +8,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
+import java.util.Locale;
+
 /**
  * Exercise the Maidenhead grid math: grid->LatLng, LatLng->grid, distance,
  * and the format validator. Robolectric is required because the production
@@ -458,5 +460,29 @@ public class MaidenheadGridTest {
     public void checkMaidenhead_rejectsTwoCharField() {
         // Unlike gridToLatLng, the validator does not accept 2-char fields.
         assertThat(MaidenheadGrid.checkMaidenhead("FN")).isFalse();
+    }
+
+    // ---------- locale safety ----------
+
+    @Test
+    public void gridToLatLng_lowerCase_turkishDefaultLocale_decodesCorrectly() {
+        // Default-locale toUpperCase() maps 'i' to dotted-capital 'İ' (U+0130) under
+        // Turkish locales — a multi-byte UTF-8 char that shifts every getBytes()
+        // index and breaks the byte arithmetic. The decoders must normalize with a
+        // fixed locale so "io91wm" decodes identically everywhere.
+        Locale saved = Locale.getDefault();
+        Locale.setDefault(new Locale("tr", "TR"));
+        try {
+            LatLng p = MaidenheadGrid.gridToLatLng("io91wm");
+            assertThat(p).isNotNull();
+            assertThat(p.latitude).isWithin(POS_TOL).of(51.521);
+            assertThat(p.longitude).isWithin(POS_TOL).of(-0.125);
+
+            LatLng[] poly = MaidenheadGrid.gridToPolygon("io91wm");
+            assertThat(poly).isNotNull();
+            assertThat(poly[0].latitude).isWithin(POS_TOL).of(51.5);
+        } finally {
+            Locale.setDefault(saved);
+        }
     }
 }
