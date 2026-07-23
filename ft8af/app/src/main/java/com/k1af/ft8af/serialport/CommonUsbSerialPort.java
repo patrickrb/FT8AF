@@ -134,6 +134,29 @@ public abstract class CommonUsbSerialPort implements UsbSerialPort {
 
     protected abstract void openInt(UsbDeviceConnection connection) throws IOException;
 
+    /**
+     * Whether the port is ready for I/O on the given endpoint.
+     *
+     * <p>A port is usable only once {@link #open} has BOTH published the
+     * connection and {@code openInt()} has assigned the endpoint. {@code open()}
+     * deliberately sets {@link #mConnection} (line "mConnection = connection")
+     * <em>before</em> calling {@code openInt()} — {@code openInt}/{@code close}
+     * need the connection during setup — so there is a window where
+     * {@code mConnection != null} but the endpoint is still {@code null}. A
+     * {@code read()}/{@code write()} from another thread during that window
+     * (e.g. a TX PTT firing while CAT auto-reconnect is re-opening a freshly
+     * allocated port) would pass a bare {@code mConnection == null} check and
+     * then NPE dereferencing the endpoint. Treating a missing connection OR
+     * endpoint as "not open" turns that crash into a recoverable
+     * {@link IOException} the CAT/TX layer already handles.
+     *
+     * <p>Extracted as a package-private static so the readiness decision is
+     * unit-testable without a live {@link UsbDeviceConnection}/{@link UsbEndpoint}.
+     */
+    static boolean ioEndpointReady(Object connection, Object endpoint) {
+        return connection != null && endpoint != null;
+    }
+
     @Override
     public void close() throws IOException {
         if (mConnection == null) {
@@ -170,7 +193,15 @@ public abstract class CommonUsbSerialPort implements UsbSerialPort {
     }
 
     protected int read(final byte[] dest, final int timeout, boolean testConnection) throws IOException {
-        if(mConnection == null) {
+        // Snapshot the connection and endpoint into locals so a concurrent close()
+        // (cable yanked on another thread) nulling the fields mid-read can't NPE
+        // here — it stays a recoverable IOException. mReadEndpoint (like
+        // mWriteEndpoint) is also null until openInt() runs, which open() calls
+        // only after publishing mConnection, so the guard covers the (re)open race
+        // too. See ioEndpointReady.
+        final UsbDeviceConnection connection = mConnection;
+        final UsbEndpoint readEndpoint = mReadEndpoint;
+        if (!ioEndpointReady(connection, readEndpoint)) {
             throw new IOException("Connection closed");
         }
         if(dest.length <= 0) {
@@ -188,7 +219,7 @@ public abstract class CommonUsbSerialPort implements UsbSerialPort {
             // data loss / crashes were observed with timeout up to 200 msec
             long endTime = testConnection ? MonotonicClock.millis() + timeout : 0;
             int readMax = Math.min(dest.length, MAX_READ_SIZE);
-            nread = mConnection.bulkTransfer(mReadEndpoint, dest, readMax, timeout);
+            nread = connection.bulkTransfer(readEndpoint, dest, readMax, timeout);
             // Android error propagation is improvable:
             //  nread == -1 can be: timeout, connection lost, buffer to small, ???
             if(nread == -1 && testConnection && MonotonicClock.millis() < endTime)
@@ -199,7 +230,7 @@ public abstract class CommonUsbSerialPort implements UsbSerialPort {
             if (!mUsbRequest.queue(buf, dest.length)) {
                 throw new IOException("Queueing USB request failed");
             }
-            final UsbRequest response = mConnection.requestWait();
+            final UsbRequest response = connection.requestWait();
             if (response == null) {
                 throw new IOException("Waiting for USB request failed");
             }
@@ -218,7 +249,17 @@ public abstract class CommonUsbSerialPort implements UsbSerialPort {
         int offset = 0;
         final long endTime = (timeout == 0) ? 0 : (MonotonicClock.millis() + timeout);
 
-        if(mConnection == null) {
+        // Snapshot the connection and endpoint into locals: close() (called from
+        // another thread when the cable is yanked) nulls the mConnection /
+        // mWriteEndpoint fields, so reading them once here — rather than
+        // dereferencing the live fields through the loop below — means a
+        // concurrent close can't turn an in-flight write into an NPE. It stays a
+        // recoverable IOException instead. The guard also covers the (re)open
+        // window where open() publishes mConnection before openInt() assigns
+        // mWriteEndpoint. See ioEndpointReady.
+        final UsbDeviceConnection connection = mConnection;
+        final UsbEndpoint writeEndpoint = mWriteEndpoint;
+        if (!ioEndpointReady(connection, writeEndpoint)) {
             throw new IOException("Connection closed");
         }
         while (offset < src.length) {
@@ -230,7 +271,7 @@ public abstract class CommonUsbSerialPort implements UsbSerialPort {
                 final byte[] writeBuffer;
 
                 if (mWriteBuffer == null) {
-                    mWriteBuffer = new byte[mWriteEndpoint.getMaxPacketSize()];
+                    mWriteBuffer = new byte[writeEndpoint.getMaxPacketSize()];
                 }
                 requestLength = Math.min(src.length - offset, mWriteBuffer.length);
                 if (offset == 0) {
@@ -250,7 +291,7 @@ public abstract class CommonUsbSerialPort implements UsbSerialPort {
                 if (requestTimeout < 0) {
                     actualLength = -2;
                 } else {
-                    actualLength = mConnection.bulkTransfer(mWriteEndpoint, writeBuffer, requestLength, requestTimeout);
+                    actualLength = connection.bulkTransfer(writeEndpoint, writeBuffer, requestLength, requestTimeout);
                 }
             }
             if (DEBUG) {
