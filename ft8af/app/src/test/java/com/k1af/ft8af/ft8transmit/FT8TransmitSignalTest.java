@@ -699,4 +699,52 @@ public class FT8TransmitSignalTest {
             old.delete();
         }
     }
+
+    // ---- isStaleEvidence -----------------------------------------------------
+    // Deep/late/stashed passes re-deliver decodes out of order: a pass finishing
+    // during our transmission is replayed after key-up, by which time the fast
+    // pass may already have advanced the QSO on newer evidence. Such a pass may
+    // move the sequence forward but never back — a partner's opening grid
+    // replayed after we reached RR73 must not rewind us to sending a report.
+    // Field case (POTA 2026-07-23, K0OBX/N8GK/K0OTC): "advance order 4->2".
+
+    @Test
+    public void stale_fastPassIsNeverStale() {
+        // The fast pass observes the current cycle; its verdict stands even when
+        // it lowers the order (the partner really did fall back a step).
+        assertThat(FT8TransmitSignal.isStaleEvidence(
+                /*evidenceOnly*/ false, /*order*/ 4, /*newOrder*/ 1)).isFalse();
+        assertThat(FT8TransmitSignal.isStaleEvidence(false, 5, 1)).isFalse();
+    }
+
+    @Test
+    public void stale_deepGridAfterRR73_isStale() {
+        // The exact field failure: at RR73 (4), a replayed opening grid (1)
+        // would set order back to 2 and re-send the signal report.
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 4, 1)).isTrue();
+    }
+
+    @Test
+    public void stale_deepEvidenceThatAdvances_isNotStale() {
+        // At order 2 the partner's R-report (3) advances to RR73 (4).
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 2, 3)).isFalse();
+        // At RR73 (4) their 73 (5) completes.
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 4, 5)).isFalse();
+    }
+
+    @Test
+    public void stale_deepEvidenceHoldingSameOrder_isNotStale() {
+        // Partner repeats the message we already acted on: newOrder+1 == order.
+        // Not a rewind, and re-affirming resets the no-reply count, so allow it.
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 4, 3)).isFalse();
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 2, 1)).isFalse();
+    }
+
+    @Test
+    public void stale_cqBaselineIsNeverStale() {
+        // Order 6 is the CQ baseline, not the top of the ladder: a reply
+        // arriving there legitimately starts a QSO at a lower order.
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 6, 1)).isFalse();
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 6, 2)).isFalse();
+    }
 }

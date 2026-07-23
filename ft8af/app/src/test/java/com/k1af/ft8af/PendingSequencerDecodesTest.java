@@ -94,4 +94,26 @@ public class PendingSequencerDecodesTest {
 
         assertThat(pending.drain(now)).containsExactly(fresh);
     }
+
+    @Test
+    public void maxAgeIsAtMostOneFt8Cycle() {
+        // The cap must not outlive the exchange the decode belongs to. At the
+        // old two-cycle (60s) setting, a partner's opening grid stashed behind
+        // our report was still "fresh" a cycle later, when the fast pass had
+        // already advanced us to RR73 on their R-report -- replaying it rewound
+        // the QSO (POTA field report 2026-07-23). One 15s slot must survive so
+        // a decode stashed mid-TX still replays after key-up.
+        assertThat(PendingSequencerDecodes.MAX_AGE_MS).isAtLeast(15_000L);
+        assertThat(PendingSequencerDecodes.MAX_AGE_MS).isAtMost(30_000L);
+    }
+
+    @Test
+    public void decodeFromTwoCyclesAgoIsEvicted() {
+        PendingSequencerDecodes pending = new PendingSequencerDecodes();
+        Ft8Message twoCyclesOld = msgAt(0);
+        pending.stash(list(twoCyclesOld), 0);
+
+        // 30s later == two FT8 slots == the exchange has moved on.
+        assertThat(pending.drain(30_001)).isEmpty();
+    }
 }
