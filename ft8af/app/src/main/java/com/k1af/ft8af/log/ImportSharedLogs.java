@@ -113,11 +113,17 @@ public class ImportSharedLogs {
                 for (String field : fields) {//Parse each raw record
 
                     if (field.length() > 1) {//If it can be parsed
-                        String[] values = field.split(">");//Split field name and value
+                        // Split at the FIRST '>' only: <NAME:LEN[:TYPE]> then the value.
+                        // The value's length is governed by the declared LEN, so it may
+                        // itself contain '>' (e.g. free-text COMMENT/NOTES); splitting on
+                        // every '>' truncated such values at the first interior one.
+                        int gt = field.indexOf('>');//End of the field header
 
-                        if (values.length > 1) {//If it can be parsed
-                            if (values[0].contains(":")) {//Split field name and field length; field name before colon, length after
-                                String[] ttt = values[0].split(":");
+                        if (gt > 0) {//If it can be parsed
+                            String header = field.substring(0, gt);//NAME:LEN[:TYPE]
+                            String rawValue = field.substring(gt + 1);//Everything after the header
+                            if (header.contains(":")) {//Split field name and field length; field name before colon, length after
+                                String[] ttt = header.split(":");
                                 if (ttt.length > 1) {
                                     String name = ttt[0];//Field name
                                     int valueLen = Integer.parseInt(ttt[1]);//Field length
@@ -125,7 +131,7 @@ public class ImportSharedLogs {
                                         continue;//Skip pathological field lengths
                                     }
                                     if (valueLen > 0) {
-                                        String value = extractFieldValue(values[1], valueLen);//Field value
+                                        String value = extractFieldValue(rawValue, valueLen);//Field value
                                         record.put(name.toUpperCase(), value);//Save field, key must be uppercase
                                     }
                                 }

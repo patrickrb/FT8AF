@@ -114,42 +114,63 @@ public class LogFileImport {
                 continue;
             }//No tags found, skip parsing
             try {
-                HashMap<String, String> record = new HashMap<>();//Create a record
-                String[] fields = s.split("<");//Split each field of the record
-
-                for (String field : fields) {//Parse each raw record
-
-                    if (field.length() > 1) {//If it can be parsed
-                        String[] values = field.split(">");//Split field name and value
-
-                        if (values.length > 1) {//If it can be parsed
-                            if (values[0].contains(":")) {//Split field name and field length; field name before colon, length after
-                                String[] ttt = values[0].split(":");
-                                if (ttt.length > 1) {
-                                    String name = ttt[0];//Field name
-                                    int valueLen = Integer.parseInt(ttt[1]);//Field length
-                                    if (valueLen > 0) {
-                                        if (values[1].length() < valueLen) {
-                                            valueLen = values[1].length();
-                                        }
-                                        if (valueLen > 0) {
-                                            String value = values[1].substring(0, valueLen);//Field value
-                                            record.put(name.toUpperCase(), value);//Save field, key must be uppercase
-                                        }
-                                    }
-                                }
-
-                            }
-                        }
-                    }
-                }
-                records.add(record);//Save record
+                records.add(parseRecord(s));//Save record
             }catch (Exception e){
                 errorLines.put(count,s.replace("<","&lt;"));//Save the erroneous content.
                 importTask.readErrorCount=errorLines.size();
             }
         }
         return records;
+    }
+
+    /**
+     * Parse one raw ADIF record (the text between two {@code <eor>} markers) into a
+     * field map keyed by upper-case field name.
+     *
+     * <p>Extracted as a static, Android-free helper so the field parsing can be
+     * unit-tested without the file-reading constructor. Each field is
+     * {@code <NAME:LEN[:TYPE]>VALUE}; the value is sliced to the declared LEN.
+     * Splitting only at the <em>first</em> {@code '>'} (rather than on every
+     * {@code '>'} and keeping the second token) means a value that legally
+     * contains {@code '>'} — free-text COMMENT/NOTES and similar — is no longer
+     * truncated at its first interior {@code '>'}.
+     *
+     * @param rawRecord raw record text, e.g. {@code <call:5>K1ABC<mode:3>FT8}
+     * @return the parsed fields (may be empty when nothing parses)
+     */
+    static HashMap<String, String> parseRecord(String rawRecord) {
+        HashMap<String, String> record = new HashMap<>();//Create a record
+        String[] fields = rawRecord.split("<");//Split each field of the record
+
+        for (String field : fields) {//Parse each raw record
+
+            if (field.length() > 1) {//If it can be parsed
+                int gt = field.indexOf('>');//End of the field header
+
+                if (gt > 0) {//If it can be parsed
+                    String header = field.substring(0, gt);//NAME:LEN[:TYPE]
+                    String rawValue = field.substring(gt + 1);//Everything after the header
+                    if (header.contains(":")) {//Split field name and field length; field name before colon, length after
+                        String[] ttt = header.split(":");
+                        if (ttt.length > 1) {
+                            String name = ttt[0];//Field name
+                            int valueLen = Integer.parseInt(ttt[1]);//Field length
+                            if (valueLen > 0) {
+                                if (rawValue.length() < valueLen) {
+                                    valueLen = rawValue.length();
+                                }
+                                if (valueLen > 0) {
+                                    String value = rawValue.substring(0, valueLen);//Field value
+                                    record.put(name.toUpperCase(), value);//Save field, key must be uppercase
+                                }
+                            }
+                        }
+
+                    }
+                }
+            }
+        }
+        return record;
     }
     public int getErrorCount(){
         return errorLines.size();
