@@ -2965,7 +2965,12 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.usbAudioOutputProductId = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("deepMode")) {//Deep decode mode
-                    GeneralVariables.deepDecodeMode =result.equals("1");
+                    GeneralVariables.deepDecodeMode = "1".equals(result);
+                }
+                if (name.equalsIgnoreCase("keepScreenOn")) {//Hold the screen awake in foreground
+                    // "1".equals(result), not result.equals("1"): a null config value
+                    // (missing/blank column from an imported backup) must not NPE here.
+                    GeneralVariables.keepScreenOn = "1".equals(result);
                 }
                 if (name.equalsIgnoreCase("debugModeEnabled")) {//Hidden debug screen unlock
                     GeneralVariables.debugModeEnabled = result.equals("1");

@@ -65,6 +65,16 @@ public class GeneralVariables {
     // time bound.
     public static boolean deepDecodeMode = true;//Whether deep decode mode is enabled
 
+    // Hold the screen awake while the app is in the foreground. On by default —
+    // that was the hard-coded behaviour before this became a setting — but a long
+    // portable session is the case where you want it off: an always-on panel at
+    // outdoor brightness is one of the two biggest heat sources on the phone, and
+    // a hot phone browns out its own OTG accessory rail (see the 2026-07-23 field
+    // log: 48.6C battery, twelve USB re-enumerations). RX keeps running with the
+    // screen off via RxForegroundService, so turning this off costs nothing but
+    // having to wake the phone to look at the waterfall.
+    public static boolean keepScreenOn = true;
+
     public static boolean audioOutput32Bit = true;//Audio output type: true=float, false=int16
     public static int audioSampleRate = 12000;//Transmit audio sample rate
 
