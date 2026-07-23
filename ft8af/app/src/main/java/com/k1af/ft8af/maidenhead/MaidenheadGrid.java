@@ -15,6 +15,7 @@ import com.k1af.ft8af.R;
 import com.google.android.gms.maps.model.LatLng;
 
 import java.util.List;
+import java.util.Locale;
 
 public class MaidenheadGrid {
     private static final String TAG = "MaidenheadGrid";
@@ -31,20 +32,68 @@ public class MaidenheadGrid {
     private static final float SUBSQUARES = 24f;
 
     /**
+     * Gate shared by {@link #gridToLatLng} and {@link #gridToPolygon}: a token is only decoded
+     * into coordinates when it is a genuine Maidenhead locator. It must be non-null, of a
+     * supported length (2/4/6), not the {@code RR}/{@code RR73} sign-off greeting (which collides
+     * with the locator parser), and use the Maidenhead alphabet at every position — see
+     * {@link #hasValidGridChars}.
+     *
+     * <p>Without the alphabet check both decoders happily converted any right-length string
+     * (an ADIF {@code GRIDSQUARE} of "1234", a garbled report) into an arbitrary LatLng: the
+     * field-letter subtraction {@code byte - 'A'} silently went negative for a digit, producing
+     * an off-planet coordinate that Play-Services {@code LatLng} then normalised into a plausible
+     * but wrong point — plotting a bogus map pin and polluting the distance statistics. Callers
+     * such as {@code GridOsmMapView} explicitly rely on a {@code null} return to <em>validate</em>
+     * the locator (see its "Validate if it is a valid grid locator" call site), so returning a
+     * coordinate for a non-locator defeated that contract.
+     */
+    private static boolean isDecodableGrid(String grid) {
+        if (grid == null) return false;
+        int len = grid.length();
+        if (len != 2 && len != 4 && len != 6) return false;
+        if (grid.equalsIgnoreCase("RR73") || grid.equalsIgnoreCase("RR")) return false;
+        return hasValidGridChars(grid);
+    }
+
+    /**
+     * Check that {@code grid} uses the Maidenhead alphabet at each position (case-insensitive):
+     * field pair {@code A-R}, square pair {@code 0-9}, and subsquare pair {@code A-X}. The length
+     * is assumed already validated to 2/4/6 by {@link #isDecodableGrid}. This mirrors the
+     * {@code [A-Ra-r]{2}[0-9]{2}[A-Xa-x]{2}} locator grammar documented in
+     * {@code GridOsmMapView} and the shape checks in {@link #checkMaidenhead}.
+     */
+    private static boolean hasValidGridChars(String grid) {
+        for (int i = 0; i < grid.length(); i++) {
+            char c = Character.toUpperCase(grid.charAt(i));
+            switch (i) {
+                case 0:
+                case 1:
+                    if (c < 'A' || c > 'R') return false;
+                    break;
+                case 2:
+                case 3:
+                    if (c < '0' || c > '9') return false;
+                    break;
+                default: // 4, 5
+                    if (c < 'A' || c > 'X') return false;
+                    break;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Calculate latitude/longitude from a 4-character or 6-character Maidenhead grid. Returns null if grid data is invalid. For 4-character grids, 'll' is appended to use the center position.
      *
      * @param grid Maidenhead grid data
      * @return LatLng latitude/longitude, or null if data is invalid
      */
     public static LatLng gridToLatLng(String grid) {
-        if (grid==null) return null;
-        if (grid.length()==0) return null;
-        //Check if it conforms to Maidenhead grid rules
-        if (grid.length() != 2&&grid.length() != 4 && grid.length() != 6) {
-            return null;
-        }
-        if (grid.equalsIgnoreCase("RR73")) return null;
-        if (grid.equalsIgnoreCase("RR")) return null;
+        if (!isDecodableGrid(grid)) return null;
+        // Normalize once with a fixed locale: the default-locale toUpperCase() below
+        // breaks under Turkish-style locales ('i' -> 'İ', a multi-byte char that shifts
+        // every getBytes() index). After this, those calls are locale-safe no-ops.
+        grid = grid.toUpperCase(Locale.ROOT);
         double x=0;
         double y=0;
         double z=0;
@@ -106,9 +155,10 @@ public class MaidenheadGrid {
 
 
     public static LatLng[] gridToPolygon(String grid) {
-        if (grid.length() != 2 && grid.length() != 4 && grid.length() != 6) {
-            return null;
-        }
+        if (!isDecodableGrid(grid)) return null;
+        // See gridToLatLng: fixed-locale normalization keeps the byte arithmetic
+        // correct on devices whose default locale re-maps ASCII case ('i' -> 'İ').
+        grid = grid.toUpperCase(Locale.ROOT);
         LatLng[] latLngs = new LatLng[4];
 
         //Latitude 1
