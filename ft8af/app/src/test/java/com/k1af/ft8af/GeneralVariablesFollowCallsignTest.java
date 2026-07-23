@@ -54,11 +54,17 @@ public class GeneralVariablesFollowCallsignTest {
         final int rounds = 5000;
 
         Thread writer = new Thread(() -> {
-            for (int r = 0; r < rounds; r++) {
-                GeneralVariables.followCallsign.add("W" + (r % 64));
-                if ((r % 25) == 0) {
-                    GeneralVariables.followCallsign.clear();
+            try {
+                for (int r = 0; r < rounds; r++) {
+                    GeneralVariables.followCallsign.add("W" + (r % 64));
+                    if ((r % 25) == 0) {
+                        GeneralVariables.followCallsign.clear();
+                    }
                 }
+            } catch (Throwable t) {
+                // Record writer-side failures too; a bare thread throw would be
+                // swallowed by the JVM and let this test pass despite a crash.
+                failure.compareAndSet(null, t);
             }
         });
         writer.start();
@@ -74,7 +80,7 @@ public class GeneralVariablesFollowCallsignTest {
                 }
             }
         } catch (Throwable t) {
-            failure.set(t);
+            failure.compareAndSet(null, t);
         }
         writer.join();
 

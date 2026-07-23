@@ -100,11 +100,17 @@ public class LogHttpServerFollowBlockTest {
         final int rounds = 5000;
 
         Thread writer = new Thread(() -> {
-            for (int r = 0; r < rounds; r++) {
-                shared.add("X" + (r % 64));
-                if ((r % 32) == 0) {
-                    shared.clear();
+            try {
+                for (int r = 0; r < rounds; r++) {
+                    shared.add("X" + (r % 64));
+                    if ((r % 32) == 0) {
+                        shared.clear();
+                    }
                 }
+            } catch (Throwable t) {
+                // Record writer-side failures too; a bare thread throw would be
+                // swallowed by the JVM and let this test pass despite a crash.
+                failure.compareAndSet(null, t);
             }
         });
         writer.start();
@@ -115,7 +121,7 @@ public class LogHttpServerFollowBlockTest {
                 LogHttpServer.followCallsignBlock(shared);
             }
         } catch (Throwable t) {
-            failure.set(t);
+            failure.compareAndSet(null, t);
         }
         writer.join();
 
