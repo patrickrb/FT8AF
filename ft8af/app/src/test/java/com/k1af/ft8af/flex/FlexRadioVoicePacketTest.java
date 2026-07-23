@@ -19,7 +19,7 @@ import org.junit.Test;
  */
 public class FlexRadioVoicePacketTest {
 
-    /** Packet size used by {@code sendWaveData} (240 samples, stereo). */
+    /** Packet size used by {@code sendWaveData} (256 interleaved stereo floats — 128 L/R frames). */
     private static final int PACKET = 256;
 
     @Test

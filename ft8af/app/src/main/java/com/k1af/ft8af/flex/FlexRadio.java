@@ -486,10 +486,6 @@ public class FlexRadio {
     }
 
     /**
-     * FlexRadio transmits at 24000 sample rate; also converts mono to stereo
-     * @param data audio
-     */
-    /**
      * Fill one stereo TX packet from {@code stereo} starting at sample index
      * {@code from}, and return the index one past the last sample copied.
      *
@@ -523,6 +519,10 @@ public class FlexRadio {
         return from;
     }
 
+    /**
+     * FlexRadio transmits at 24000 sample rate; also converts mono to stereo
+     * @param data audio
+     */
     public void sendWaveData(float[] data) {
 
         float[] temp = new float[data.length * 2];
@@ -551,7 +551,7 @@ public class FlexRadio {
 
 
 
-                    float[] voice=new float[256];//Because it's stereo, 240*2
+                    float[] voice=new float[256];//256 interleaved stereo floats (128 L/R frames) per packet
 
 
                     //for (int j = 0; j <3 ; j++) {
