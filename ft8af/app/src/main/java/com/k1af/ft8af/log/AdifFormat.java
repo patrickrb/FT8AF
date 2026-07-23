@@ -58,6 +58,35 @@ public final class AdifFormat {
         return null;
     }
 
+    /**
+     * The effective stored mode for an imported ADIF record, resolving ADIF's
+     * MODE/SUBMODE split back to the single mode string FT8AF stores. This is the
+     * reader-side inverse of {@link #mfskSubmode}.
+     *
+     * <p>ADIF models FT4 and FT2 as SUBMODEs of the generic {@code MFSK} MODE, not as
+     * standalone modes. FT8AF — and WSJT-X, JTDX and pota.app — therefore export those
+     * QSOs as {@code MODE=MFSK} with {@code SUBMODE=FT4} (or {@code FT2}). Reading only
+     * MODE on import stored {@code "MFSK"}, silently losing the FT4/FT2 distinction:
+     * that corrupts mode-keyed dedup and band/mode filtering and breaks FT8AF's own
+     * export→import round-trip. When MODE is the generic {@code MFSK} and a non-empty
+     * SUBMODE is present, the SUBMODE is the more specific mode and is used (trimmed and
+     * upper-cased, mirroring {@link #mfskSubmode}); otherwise MODE is returned verbatim,
+     * so every other value (FT8, SSB, CW, a bare {@code <mode>FT4}, …) is unaffected.
+     *
+     * @param mode    the ADIF MODE field value (may be null)
+     * @param submode the ADIF SUBMODE field value, or {@code null} when absent
+     * @return the mode string to store
+     */
+    public static String resolveImportMode(String mode, String submode) {
+        if (mode != null && "MFSK".equalsIgnoreCase(mode.trim()) && submode != null) {
+            String s = submode.trim();
+            if (!s.isEmpty()) {
+                return s.toUpperCase(Locale.US);
+            }
+        }
+        return mode;
+    }
+
     /** "No report" sentinels stored in the SNR int fields; left unformatted so the logbook's
      * empty-report check still recognises them. */
     private static final int NO_REPORT = -100;

@@ -96,6 +96,60 @@ public class QSLRecordTest {
     }
 
     @Test
+    public void mapConstructor_mfskSubmodeResolvesToFt4() {
+        // The bug: FT4/FT2 are exported as MODE=MFSK + SUBMODE=FT4 (both by FT8AF and
+        // by WSJT-X/JTDX/pota.app). Reading only MODE stored "MFSK", losing the FT4
+        // distinction and breaking mode-keyed dedup, band/mode filtering and re-export.
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("MODE", "MFSK");
+        map.put("SUBMODE", "FT4");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.getMode()).isEqualTo("FT4");
+    }
+
+    @Test
+    public void mapConstructor_mfskSubmodeResolvesToFt2() {
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("MODE", "MFSK");
+        map.put("SUBMODE", "FT2");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.getMode()).isEqualTo("FT2");
+    }
+
+    @Test
+    public void mapConstructor_plainMfskWithoutSubmodeStaysMfsk() {
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("MODE", "MFSK");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.getMode()).isEqualTo("MFSK");
+    }
+
+    @Test
+    public void mapConstructor_ft8ModeUnaffectedBySubmodeResolution() {
+        // Regression guard: a first-class MODE (FT8) is stored verbatim.
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("MODE", "FT8");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.getMode()).isEqualTo("FT8");
+    }
+
+    @Test
     public void mapConstructor_qslAndPotaFields() {
         HashMap<String, String> map = new HashMap<>();
         map.put("CALL", "W1AW");
