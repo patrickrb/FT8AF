@@ -72,4 +72,28 @@ public class MessageHashMapTest {
         map.addHash(0x10L, "K1ABC");
         assertThat(map.getCallsign(new long[]{1L, 2L, 3L})).isEqualTo("<...>");
     }
+
+    @Test
+    public void addHash_emptyCallsignWithNonZeroHash_isIgnoredNotCrash() {
+        // Regression: a DXpedition (Fox/Hound) decode leaves callsignFrom = ""
+        // yet carries a non-zero call-from hash (derived from the invited call),
+        // so the zero-hash short-circuit does NOT fire and addHash reached
+        // "".charAt(0) -> StringIndexOutOfBoundsException. That threw inside the
+        // decode loop's try/catch, silently dropping the whole Fox message.
+        MessageHashMap map = new MessageHashMap();
+        map.addHash(0xABCDL, "");
+        // No crash, and an empty callsign is never stored.
+        assertThat(map.checkHash(0xABCDL)).isFalse();
+        assertThat(map).isEmpty();
+    }
+
+    @Test
+    public void addHash_nullCallsign_isIgnoredNotCrash() {
+        // Ft8Message.extraInfo/callsign defaults are null; a null callsign must
+        // not NPE at the reserved-callsign equals() check either.
+        MessageHashMap map = new MessageHashMap();
+        map.addHash(0x1234L, null);
+        assertThat(map.checkHash(0x1234L)).isFalse();
+        assertThat(map).isEmpty();
+    }
 }
