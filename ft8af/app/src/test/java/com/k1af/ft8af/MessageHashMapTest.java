@@ -132,12 +132,15 @@ public class MessageHashMapTest {
         List<Map.Entry<Long, String>> snap = map.snapshotEntries();
         assertThat(snap).hasSize(2);
 
-        // Structurally modify the live map while iterating the snapshot; a live
+        // Structurally modify the live map via the production writer path
+        // (addHash with fresh keys) while iterating the snapshot; a live
         // entrySet() would throw ConcurrentModificationException here.
+        long freshKey = 100L;
         for (Map.Entry<Long, String> ignored : snap) {
-            map.addHash(3L, "N0CALL");
-            map.clear();
+            map.addHash(freshKey, "N0CALL" + freshKey);
+            freshKey++;
         }
+        // The live map grew, but the point-in-time snapshot is unchanged.
         assertThat(snap).hasSize(2);
     }
 
