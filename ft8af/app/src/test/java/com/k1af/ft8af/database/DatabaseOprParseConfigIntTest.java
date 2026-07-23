@@ -125,4 +125,30 @@ public class DatabaseOprParseConfigIntTest {
         assertThat(DatabaseOpr.parseConfigFloat("loud", 100f) / 100f).isEqualTo(1.0f); // garbage
         assertThat(DatabaseOpr.parseConfigFloat("50", 100f) / 100f).isEqualTo(0.5f);   // valid honored
     }
+
+    /**
+     * The "iaruRegion" config key is hydrated as
+     * {@code regionFromNumber(parseConfigInt(value, 2)).number}. Pin that composition:
+     * any stored value — absent, junk, or out of the 1..3 range — must land on a legal
+     * region rather than throwing or leaving the field with a nonsense number that the
+     * QSY band gating would then read.
+     */
+    @Test
+    public void iaruRegionHydrationAlwaysYieldsALegalRegion() {
+        assertThat(hydrateIaruRegion("1")).isEqualTo(1);
+        assertThat(hydrateIaruRegion("3")).isEqualTo(3);
+        // Unset / junk / out of range all degrade to region 2 (the Americas).
+        assertThat(hydrateIaruRegion("")).isEqualTo(2);
+        assertThat(hydrateIaruRegion(null)).isEqualTo(2);
+        assertThat(hydrateIaruRegion("region one")).isEqualTo(2);
+        assertThat(hydrateIaruRegion("0")).isEqualTo(2);
+        assertThat(hydrateIaruRegion("7")).isEqualTo(2);
+        assertThat(hydrateIaruRegion("-1")).isEqualTo(2);
+    }
+
+    /** Mirrors the "iaruRegion" branch of DatabaseOpr's config hydration loop. */
+    private static int hydrateIaruRegion(String stored) {
+        return com.k1af.ft8af.message.SpecialMessage
+                .regionFromNumber(DatabaseOpr.parseConfigInt(stored, 2)).number;
+    }
 }

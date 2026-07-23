@@ -2787,6 +2787,15 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                         GeneralVariables.operatingMode = FT8Common.FT8_MODE;
                     }
                 }
+                if (name.equalsIgnoreCase("iaruRegion")) {//Operator's IARU region (1/2/3), defaults 2
+                    // Load side only for now: the Settings row that writes this key lands
+                    // with the Message-Creator UI. Wiring the read here means a value
+                    // persisted by that follow-up survives relaunch without a second edit
+                    // to this hydration block. regionFromNumber maps anything out of range
+                    // back to region 2, so a junk config value degrades instead of throwing.
+                    GeneralVariables.iaruRegion = com.k1af.ft8af.message.SpecialMessage
+                            .regionFromNumber(parseConfigInt(result, 2)).number;
+                }
                 if (name.equalsIgnoreCase("autoCQAfterQSO")) {//Auto-CQ after each completed QSO, defaults off
                     GeneralVariables.autoCQAfterQSO = result.equals("1");
                 }
