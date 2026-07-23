@@ -165,9 +165,11 @@
     <string name="decode_sort_label_last_heard">TIME</string>
     <string name="decode_sort_label_callsign">CALL</string>
     <string name="decode_sort_label_snr">SNR</string>
+    <string name="decode_sort_label_distance">DX</string>
     <string name="decode_sort_cd_last_heard">Sort: last heard</string>
     <string name="decode_sort_cd_callsign">Sort: callsign</string>
     <string name="decode_sort_cd_snr">Sort: SNR</string>
+    <string name="decode_sort_cd_distance">Sort: distance, farthest first</string>
     <string name="decode_filter_all">All</string>
     <string name="decode_filter_cq_calls">CQ Calls</string>
     <string name="decode_filter_cq_pota">CQ POTA</string>
