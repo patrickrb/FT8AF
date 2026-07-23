@@ -107,11 +107,14 @@ final class CivFrameSplitter {
         }
         for (int i = remainder.length - 2; i >= 0; i--) {
             if (remainder[i] == PREAMBLE && remainder[i + 1] == PREAMBLE) {
-                byte[] resynced = Arrays.copyOfRange(remainder, i, remainder.length);
-                if (resynced.length <= MAX_BUFFERED_BYTES) {
-                    return resynced;
-                }
-                return Arrays.copyOfRange(resynced, resynced.length - MAX_BUFFERED_BYTES, resynced.length);
+                // Resynchronise to this preamble. If the tail from here still
+                // exceeds the cap (a lone preamble ahead of a huge terminator-less
+                // run) keep only its trailing window. Compute the copy start first
+                // so we allocate at most MAX_BUFFERED_BYTES bytes rather than the
+                // full oversized remainder — this guard fires precisely in the
+                // malformed-stream case, where the extra copy would hurt most.
+                int from = Math.max(i, remainder.length - MAX_BUFFERED_BYTES);
+                return Arrays.copyOfRange(remainder, from, remainder.length);
             }
         }
         if (remainder[remainder.length - 1] == PREAMBLE) {
