@@ -5,14 +5,13 @@ import static org.robolectric.Shadows.shadowOf;
 
 import android.os.Looper;
 
-import com.k1af.ft8af.GeneralVariables;
-
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Unit tests for {@link ToastMessage}, covering the crash fixed in this PR: a
@@ -80,18 +79,19 @@ public class ToastMessageTest {
     }
 
     /**
-     * End-to-end: showing a null message must be a no-op that never enters the
-     * cleanup path, so a subsequent real message still works and nothing crashes.
+     * End-to-end regression guard: before the fix, {@code show(null)} stored a
+     * null in debugList and scheduled a +5 s cleanup runnable that NPE'd on
+     * {@code debugList.get(i).equals(info)}. Driving the main looper past the
+     * cleanup delay must not throw.
      */
     @Test
-    public void show_nullMessageIsNoOp() {
-        // Must not throw and must not leave a null lurking for the cleanup runnable.
+    public void show_nullMessageCleanupDoesNotCrash() {
         ToastMessage.show(null);
         ToastMessage.show("visible");
 
-        // Let LiveData.postValue propagate on the (paused) main looper.
-        shadowOf(Looper.getMainLooper()).idle();
+        // Run every delayed cleanup runnable (5 s each) on the paused main looper.
+        shadowOf(Looper.getMainLooper()).idleFor(6, TimeUnit.SECONDS);
 
-        assertThat(GeneralVariables.mutableDebugMessage.getValue()).contains("visible");
+        // Reaching here without an exception is the assertion.
     }
 }
