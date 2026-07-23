@@ -88,11 +88,13 @@ public class ClosedEndpointWriteTest {
 
     @Test
     public void writeWithClosedEndpointThrowsIoExceptionNotNpe() {
-        // The regression: this used to be a fatal NullPointerException.
+        // The regression: this used to be a fatal NullPointerException. The
+        // ioEndpointReady guard treats a null endpoint the same as a missing
+        // connection, so the message is "Connection closed".
         TestPort port = portWithConnectionButNoEndpoints();
         IOException e = assertThrows(IOException.class,
                 () -> port.write(new byte[]{'T', 'X', '0', ';'}, 100));
-        assertThat(e).hasMessageThat().contains("Write endpoint closed");
+        assertThat(e).hasMessageThat().contains("Connection closed");
     }
 
     @Test
@@ -100,7 +102,7 @@ public class ClosedEndpointWriteTest {
         TestPort port = portWithConnectionButNoEndpoints();
         IOException e = assertThrows(IOException.class,
                 () -> port.read(new byte[64], 100));
-        assertThat(e).hasMessageThat().contains("Read endpoint closed");
+        assertThat(e).hasMessageThat().contains("Connection closed");
     }
 
     @Test

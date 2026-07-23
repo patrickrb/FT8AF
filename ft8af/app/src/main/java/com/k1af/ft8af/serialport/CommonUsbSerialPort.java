@@ -207,12 +207,6 @@ public abstract class CommonUsbSerialPort implements UsbSerialPort {
         if(dest.length <= 0) {
             throw new IllegalArgumentException("Read buffer to small");
         }
-        // Same yanked-device guard as write(): mReadEndpoint/mUsbRequest can be
-        // null after the bus re-enumerates, and the read loop runs on the serial
-        // IO thread where an NPE is equally fatal.
-        if (mReadEndpoint == null) {
-            throw new IOException("Read endpoint closed");
-        }
         final int nread;
         if (timeout != 0) {
             // bulkTransfer will cause data loss with short timeout + high baud rates + continuous transfer
@@ -274,16 +268,6 @@ public abstract class CommonUsbSerialPort implements UsbSerialPort {
         final UsbEndpoint writeEndpoint = mWriteEndpoint;
         if (!ioEndpointReady(connection, writeEndpoint)) {
             throw new IOException("Connection closed");
-        }
-        // The endpoint goes null when the device is yanked mid-flight (an OTG
-        // brown-out re-enumerates the bus). Without this check the first write
-        // of a fresh port NPEs on mWriteEndpoint.getMaxPacketSize() below, and
-        // an NPE is not an IOException — it escapes CableSerialPort.sendData's
-        // catch and kills the process. Fatal on the PTT path: the app dies with
-        // the rig keyed and nothing left alive to send TX0. Fail as IOException
-        // so the caller's existing error handling runs.
-        if (mWriteEndpoint == null) {
-            throw new IOException("Write endpoint closed");
         }
         while (offset < src.length) {
             int requestTimeout;
