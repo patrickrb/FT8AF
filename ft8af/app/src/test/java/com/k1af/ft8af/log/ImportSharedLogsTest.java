@@ -6,6 +6,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Locale;
 
 /**
  * Pure-JVM coverage for the ADIF field-length handling in the shared-log
@@ -154,5 +155,32 @@ public class ImportSharedLogsTest {
     public void singleCharacterValueShorterThanDeclared_isNotEmptied() {
         // Old clamp turned this into "" (length 1 - 1 = 0); the value must survive.
         assertThat(ImportSharedLogs.extractFieldValue("X", 5)).isEqualTo("X");
+    }
+
+    @Test
+    public void nonAsciiValue_slicedByUtf8Bytes_notChars() {
+        // LEN counts UTF-8 bytes: 9 bytes cover the 8-char "Caf\u00e9 QSO"; slicing 9
+        // chars kept the field-separator space as part of the value.
+        assertThat(ImportSharedLogs.extractFieldValue("Caf\u00e9 QSO ", 9)).isEqualTo("Caf\u00e9 QSO");
+
+        HashMap<String, String> first = ImportSharedLogs.parseLogRecords(
+                "<comment:9>Caf\u00e9 QSO <call:5>K1ABC<eor>").get(0);
+        assertThat(first.get("COMMENT")).isEqualTo("Caf\u00e9 QSO");
+        assertThat(first.get("CALL")).isEqualTo("K1ABC");
+    }
+
+    @Test
+    public void turkishDefaultLocale_keysStillAsciiUppercase() {
+        // Default-locale toUpperCase maps 'i' -> '\u0130' under Turkish locales, turning
+        // the "gridsquare" key into "GR\u0130DSQUARE" and losing the field.
+        Locale saved = Locale.getDefault();
+        Locale.setDefault(new Locale("tr", "TR"));
+        try {
+            HashMap<String, String> first = ImportSharedLogs.parseLogRecords(
+                    "<gridsquare:4>FN42<eor>").get(0);
+            assertThat(first.get("GRIDSQUARE")).isEqualTo("FN42");
+        } finally {
+            Locale.setDefault(saved);
+        }
     }
 }

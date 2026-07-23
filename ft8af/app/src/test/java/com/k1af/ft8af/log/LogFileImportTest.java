@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Locale;
 
 /**
  * Drive {@link LogFileImport} against on-disk ADIF fixtures. The production
@@ -314,6 +315,37 @@ public class LogFileImportTest {
                 LogFileImport.parseRecord("<comment:5>a>b>c<call:5>K1ABC");
         assertThat(r.get("COMMENT")).isEqualTo("a>b>c");
         assertThat(r.get("CALL")).isEqualTo("K1ABC");
+    }
+
+    @Test
+    public void parseRecord_nonAsciiValue_slicedByUtf8Bytes_notChars() {
+        // LEN is a UTF-8 byte count (this app's own export writes
+        // "<comment:9>Caf\u00e9 QSO <eor>"): 9 bytes cover the 8-char "Caf\u00e9 QSO".
+        // Slicing 9 CHARS kept the field separator space as part of the value.
+        HashMap<String, String> r = LogFileImport.parseRecord("<comment:9>Caf\u00e9 QSO <call:5>K1ABC");
+        assertThat(r.get("COMMENT")).isEqualTo("Caf\u00e9 QSO");
+        assertThat(r.get("CALL")).isEqualTo("K1ABC");
+    }
+
+    @Test
+    public void parseRecord_nonAsciiValue_truncatedRecordKeepsWhatIsThere() {
+        // Declared byte length exceeds the bytes present (truncated record).
+        HashMap<String, String> r = LogFileImport.parseRecord("<comment:20>Caf\u00e9");
+        assertThat(r.get("COMMENT")).isEqualTo("Caf\u00e9");
+    }
+
+    @Test
+    public void parseRecord_turkishDefaultLocale_keysStillAsciiUppercase() {
+        // Default-locale toUpperCase maps 'i' -> '\u0130' under Turkish locales, turning
+        // the "gridsquare" key into "GR\u0130DSQUARE" and losing the field.
+        Locale saved = Locale.getDefault();
+        Locale.setDefault(new Locale("tr", "TR"));
+        try {
+            HashMap<String, String> r = LogFileImport.parseRecord("<gridsquare:4>FN42");
+            assertThat(r.get("GRIDSQUARE")).isEqualTo("FN42");
+        } finally {
+            Locale.setDefault(saved);
+        }
     }
 
     @Test

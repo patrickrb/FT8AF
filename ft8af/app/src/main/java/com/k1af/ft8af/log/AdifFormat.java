@@ -103,4 +103,32 @@ public final class AdifFormat {
         }
         return len;
     }
+
+    /**
+     * The longest prefix of {@code raw} whose UTF-8 encoding fits in {@code byteLen}
+     * bytes — the reader-side counterpart of {@link #utf8Length}. ADIF's
+     * {@code <field:len>} declares a UTF-8 <em>byte</em> count, so an importer that
+     * slices {@code len} UTF-16 chars over-reads past any non-ASCII value into the
+     * whitespace/text that follows it (e.g. LEN=9 for "Café QSO" keeps a trailing
+     * space). Never splits a code point: a LEN that ends mid-character keeps only the
+     * complete characters that fit. A LEN larger than the whole string returns the
+     * whole string (a truncated record keeps what is there).
+     */
+    public static String sliceByUtf8Length(String raw, int byteLen) {
+        if (raw == null || byteLen <= 0) {
+            return "";
+        }
+        int bytes = 0;
+        int i = 0;
+        while (i < raw.length()) {
+            int cp = raw.codePointAt(i);
+            int cpBytes = cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+            if (bytes + cpBytes > byteLen) {
+                break;
+            }
+            bytes += cpBytes;
+            i += Character.charCount(cp);
+        }
+        return raw.substring(0, i);
+    }
 }

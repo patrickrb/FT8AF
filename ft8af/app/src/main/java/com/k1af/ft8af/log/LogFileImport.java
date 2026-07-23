@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Locale;
 
 /**
  * Log file import.
@@ -154,14 +155,14 @@ public class LogFileImport {
                         String[] ttt = header.split(":");
                         if (ttt.length > 1) {
                             String name = ttt[0];//Field name
-                            int valueLen = Integer.parseInt(ttt[1]);//Field length
+                            int valueLen = Integer.parseInt(ttt[1]);//Field length (UTF-8 bytes)
                             if (valueLen > 0) {
-                                if (rawValue.length() < valueLen) {
-                                    valueLen = rawValue.length();
-                                }
-                                if (valueLen > 0) {
-                                    String value = rawValue.substring(0, valueLen);//Field value
-                                    record.put(name.toUpperCase(), value);//Save field, key must be uppercase
+                                // LEN counts UTF-8 bytes (see AdifFormat.utf8Length), not
+                                // UTF-16 chars: slicing by chars over-reads past a
+                                // non-ASCII value into the whitespace that follows it.
+                                String value = AdifFormat.sliceByUtf8Length(rawValue, valueLen);//Field value
+                                if (!value.isEmpty()) {
+                                    record.put(name.toUpperCase(Locale.US), value);//Save field, key must be uppercase
                                 }
                             }
                         }

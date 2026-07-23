@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Locale;
 
 public class ImportSharedLogs {
     private static final String TAG = "ImportSharedLogs";
@@ -132,7 +133,7 @@ public class ImportSharedLogs {
                                     }
                                     if (valueLen > 0) {
                                         String value = extractFieldValue(rawValue, valueLen);//Field value
-                                        record.put(name.toUpperCase(), value);//Save field, key must be uppercase
+                                        record.put(name.toUpperCase(Locale.US), value);//Save field, key must be uppercase
                                     }
                                 }
 
@@ -150,22 +151,26 @@ public class ImportSharedLogs {
     }
 
     /**
-     * Slice an ADIF field value to its declared length, clamping the length down to the
-     * characters actually present. ADIF stores a field as {@code <NAME:LEN>VALUE}, and the
-     * declared LEN can exceed the value that follows when a record is truncated or the writer
-     * padded the length. In that case the whole (shorter) value must be kept — the previous
+     * Slice an ADIF field value to its declared length, clamping the length down to what is
+     * actually present. ADIF stores a field as {@code <NAME:LEN>VALUE} where LEN counts UTF-8
+     * <em>bytes</em> (see {@link AdifFormat#utf8Length}), and the declared LEN can exceed the
+     * value that follows when a record is truncated or the writer padded the length. In that
+     * case the whole (shorter) value must be kept — the previous
      * {@code values[1].length() - 1} clamp silently dropped the last character (turning a value
-     * such as "FN31" into "FN3"), and reduced a single-character value to "". This mirrors the
-     * clamp used by {@link LogFileImport#getLogRecords()}.
+     * such as "FN31" into "FN3"), and reduced a single-character value to "". Slicing by
+     * {@link String#length()} chars instead of bytes over-read past non-ASCII values into the
+     * whitespace that follows them. This mirrors the slicing used by
+     * {@link LogFileImport#parseRecord}.
      *
      * @param raw         the raw field value (everything after the first {@code >} up to the
      *                    next {@code <})
-     * @param declaredLen the length declared in the field header (already known to be &gt; 0)
-     * @return the value clamped to the declared length or to the raw length, whichever is smaller
+     * @param declaredLen the UTF-8 byte length declared in the field header (already known to
+     *                    be &gt; 0)
+     * @return the value clamped to the declared byte length or to the raw length, whichever is
+     *         smaller
      */
     static String extractFieldValue(String raw, int declaredLen) {
-        int len = Math.min(declaredLen, raw.length());
-        return len > 0 ? raw.substring(0, len) : "";
+        return AdifFormat.sliceByUtf8Length(raw, declaredLen);
     }
 
     public void doImport(InputStream logFileStream, OnShareLogEvents onShareLogEvents) {

@@ -134,4 +134,43 @@ public class AdifFormatTest {
     public void utf8Length_nullIsZero() {
         assertThat(AdifFormat.utf8Length(null)).isEqualTo(0);
     }
+
+    // ---- sliceByUtf8Length: the reader-side counterpart ----
+
+    @Test
+    public void sliceByUtf8Length_asciiBehavesLikeSubstring() {
+        assertThat(AdifFormat.sliceByUtf8Length("K1ABC extra", 5)).isEqualTo("K1ABC");
+    }
+
+    @Test
+    public void sliceByUtf8Length_countsBytesNotChars() {
+        // "Café QSO" is 8 chars but 9 UTF-8 bytes; a correct writer declares LEN=9.
+        // Slicing 9 CHARS from "Café QSO <eor..." would keep the trailing space.
+        assertThat(AdifFormat.sliceByUtf8Length("Café QSO ", 9)).isEqualTo("Café QSO");
+    }
+
+    @Test
+    public void sliceByUtf8Length_neverSplitsACodePoint() {
+        // LEN=5 covers "café" exactly (5 bytes); LEN=4 would end mid-'é' and must
+        // keep only the complete chars that fit.
+        assertThat(AdifFormat.sliceByUtf8Length("caféX", 5)).isEqualTo("café");
+        assertThat(AdifFormat.sliceByUtf8Length("caféX", 4)).isEqualTo("caf");
+    }
+
+    @Test
+    public void sliceByUtf8Length_clampsToAvailableText() {
+        assertThat(AdifFormat.sliceByUtf8Length("FN31", 10)).isEqualTo("FN31");
+        assertThat(AdifFormat.sliceByUtf8Length("", 3)).isEqualTo("");
+        assertThat(AdifFormat.sliceByUtf8Length(null, 3)).isEqualTo("");
+        assertThat(AdifFormat.sliceByUtf8Length("abc", 0)).isEqualTo("");
+    }
+
+    @Test
+    public void sliceByUtf8Length_roundTripsUtf8LengthForAstralChars() {
+        // 4-byte (astral, surrogate-pair) chars: slicing by the declared utf8Length
+        // must return the whole value.
+        String emoji = "hi\uD83D\uDE00";  // "hi" + U+1F600
+        assertThat(AdifFormat.sliceByUtf8Length(emoji, AdifFormat.utf8Length(emoji)))
+                .isEqualTo(emoji);
+    }
 }
