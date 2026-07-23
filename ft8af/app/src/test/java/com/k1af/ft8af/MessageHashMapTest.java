@@ -1,8 +1,15 @@
 package com.k1af.ft8af;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 
 import org.junit.Test;
+
+import java.util.ConcurrentModificationException;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Exercise {@link MessageHashMap}'s callsign-hash bookkeeping. The class
@@ -95,5 +102,109 @@ public class MessageHashMapTest {
         map.addHash(0x1234L, null);
         assertThat(map.checkHash(0x1234L)).isFalse();
         assertThat(map).isEmpty();
+    }
+
+    @Test
+    public void snapshotEntries_returnsAllCurrentEntries() {
+        MessageHashMap map = new MessageHashMap();
+        map.addHash(0x10L, "K1ABC");
+        map.addHash(0x20L, "VE3XYZ");
+        map.addHash(0x30L, "JA1AA");
+
+        List<Map.Entry<Long, String>> snap = map.snapshotEntries();
+        assertThat(snap).hasSize(3);
+        // Every stored (hash, callsign) pair is present in the snapshot.
+        for (Map.Entry<Long, String> e : snap) {
+            assertThat(map.get(e.getKey())).isEqualTo(e.getValue());
+        }
+    }
+
+    @Test
+    public void snapshotEntries_isDecoupledFromLaterMutation() {
+        // The snapshot is a point-in-time copy: mutating the live map afterwards
+        // must neither change the snapshot's contents nor throw while it is
+        // iterated. This is the property the web-logger's hash-table page relies
+        // on to render safely off the decode thread.
+        MessageHashMap map = new MessageHashMap();
+        map.addHash(1L, "K1ABC");
+        map.addHash(2L, "W1AW");
+
+        List<Map.Entry<Long, String>> snap = map.snapshotEntries();
+        assertThat(snap).hasSize(2);
+
+        // Structurally modify the live map via the production writer path
+        // (addHash with fresh keys) while iterating the snapshot; a live
+        // entrySet() would throw ConcurrentModificationException here.
+        long freshKey = 100L;
+        for (Map.Entry<Long, String> ignored : snap) {
+            map.addHash(freshKey, "N0CALL" + freshKey);
+            freshKey++;
+        }
+        // The live map grew, but the point-in-time snapshot is unchanged.
+        assertThat(snap).hasSize(2);
+    }
+
+    @Test
+    public void liveEntrySetIteration_throwsOnConcurrentStructuralModification() {
+        // Documents the hazard snapshotEntries() exists to remove: iterating the
+        // live map while another writer put()s (as addHash does on the decode/DB/
+        // TX threads) is a fail-fast ConcurrentModificationException. Reproduced
+        // deterministically single-threaded via a structural modification during
+        // iteration.
+        MessageHashMap map = new MessageHashMap();
+        for (long h = 1; h <= 50; h++) {
+            map.addHash(h, "K" + h);
+        }
+        try {
+            for (Map.Entry<Long, String> e : map.entrySet()) {
+                map.put(1000L + e.getKey(), "X");
+            }
+            fail("expected ConcurrentModificationException from live entrySet iteration");
+        } catch (ConcurrentModificationException expected) {
+            // exactly the failure mode the web logger hit off-thread
+        }
+    }
+
+    @Test
+    public void snapshotEntries_survivesConcurrentWrites() throws Exception {
+        // Stress the real cross-thread scenario: a writer thread hammers addHash
+        // (the sole production writer path — decode/DB/TX side) while this thread
+        // repeatedly snapshots and iterates (web-logger side). addHash and
+        // snapshotEntries both hold the map's monitor, so the reader must never
+        // observe a ConcurrentModificationException or a corrupted iteration.
+        // Iterating the live entrySet() here instead would throw within a handful
+        // of rounds as the writer's put()s resize the table.
+        MessageHashMap map = new MessageHashMap();
+        AtomicBoolean writerDone = new AtomicBoolean(false);
+        AtomicReference<Throwable> writerError = new AtomicReference<>();
+
+        Thread writer = new Thread(() -> {
+            try {
+                // Fresh keys keep the table growing/resizing (the structural
+                // change that trips a live iterator). Bounded so the map size and
+                // runtime stay modest.
+                for (long h = 1; h <= 20000; h++) {
+                    map.addHash(h, "K" + h);
+                }
+            } catch (Throwable t) {
+                writerError.set(t);
+            } finally {
+                writerDone.set(true);
+            }
+        });
+        writer.start();
+
+        try {
+            while (!writerDone.get()) {
+                for (Map.Entry<Long, String> entry : map.snapshotEntries()) {
+                    // touch both accessors exactly like showCallsignHash() does
+                    entry.getKey();
+                    entry.getValue();
+                }
+            }
+        } finally {
+            writer.join();
+        }
+        assertThat(writerError.get()).isNull();
     }
 }

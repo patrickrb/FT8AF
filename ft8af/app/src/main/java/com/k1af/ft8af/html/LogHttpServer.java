@@ -968,7 +968,12 @@ public class LogHttpServer extends NanoHTTPD {
 
 
         int order = 0;
-        for (Map.Entry<Long, String> entry : Ft8Message.hashList.entrySet()) {
+        // Iterate a snapshot taken under hashList's monitor: this page is served
+        // on a NanoHTTPD worker thread and auto-refreshes every 5 s, while the
+        // decode/DB/TX threads add hashes throughout a cycle. Iterating the live
+        // map here raced those synchronized writers (ConcurrentModificationException,
+        // or a resize corrupting the shared hash table).
+        for (Map.Entry<Long, String> entry : Ft8Message.hashList.snapshotEntries()) {
             HtmlContext.tableRowBegin(result, false, (order / 3) % 2 != 0);
 
             HtmlContext.tableCell(result, entry.getValue());
