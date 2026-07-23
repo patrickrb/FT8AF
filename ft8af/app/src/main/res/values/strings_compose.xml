@@ -235,6 +235,8 @@
     <string name="log_award_dxcc_mixed">DXCC Mixed</string>
     <string name="log_award_vucc_grid_squares">VUCC Grid Squares</string>
     <string name="log_award_dxcc_challenge">DXCC Challenge</string>
+    <string name="log_award_was_states">Worked All States</string>
+    <string name="log_award_states_needed">STATES NEEDED</string>
     <string name="log_section_grid_coverage">Grid Coverage</string>
     <string name="log_section_signal_trend">Signal Trend</string>
     <string name="log_no_qsos_yet">No QSOs yet</string>
