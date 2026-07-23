@@ -32,7 +32,12 @@ public class BluetoothSerialSocket implements Runnable {
     private final Context context;
     private BluetoothSerialListener listener;
     private final BluetoothDevice device;
-    private BluetoothSocket socket;
+    // volatile: assigned on the RFCOMM connect thread (run()), cleared to null on
+    // the disconnect thread (disconnect(), driven by the background
+    // INTENT_ACTION_DISCONNECT receiver or the read loop's error path), and read
+    // on the CAT/TX thread (write()). Readers MUST snapshot it into a local before
+    // check-and-use — see write()/writeIfConnected.
+    private volatile BluetoothSocket socket;
     private boolean connected;
 
     public BluetoothSerialSocket(Context context, BluetoothDevice device) {
@@ -89,9 +94,45 @@ public class BluetoothSerialSocket implements Runnable {
     }
 
     void write(byte[] data) throws IOException {
-        if (!connected)
+        // Snapshot the volatile socket ONCE. disconnect() (the background
+        // INTENT_ACTION_DISCONNECT receiver, or the read loop's error path) may
+        // null `socket` on another thread between the connected check and the
+        // getOutputStream() call. Reading the field twice let that concurrent
+        // disconnect turn a passed null-check into a null dereference — an NPE
+        // that escapes BluetoothRigConnector.sendCommand's IOException-only catch
+        // and crashes the CAT/TX worker mid-QSO. Passing the single snapshot to
+        // writeIfConnected reports a torn-down link as the "not connected"
+        // IOException the caller already handles instead. Mirrors the USB-serial
+        // fix in CableSerialPort.writeIfOpen.
+        final BluetoothSocket s = socket;
+        writeIfConnected(connected, s == null ? null : d -> s.getOutputStream().write(d), data);
+    }
+
+    /**
+     * A sink that writes one frame to the live link — the socket's output stream
+     * in production, a capture in tests.
+     */
+    @FunctionalInterface
+    interface ByteSink {
+        void write(byte[] data) throws IOException;
+    }
+
+    /**
+     * Issue a write only if the link is still up. {@code sink} is the caller's
+     * single snapshot of the (volatile) socket's writer, so a concurrent
+     * {@link #disconnect()} that nulls the field afterwards cannot affect this
+     * call. When the link is down ({@code !connected}) or the snapshot was
+     * already null (disconnect() ran first, before {@code connected} was cleared),
+     * throw the {@code "not connected"} {@link IOException} the CAT connector
+     * already handles ({@code BluetoothRigConnector.sendCommand}) rather than
+     * NPEing on a nulled socket and crashing the CAT/TX worker thread. Mirrors
+     * {@code CableSerialPort.writeIfOpen} on the USB-serial path.
+     */
+    static void writeIfConnected(boolean connected, ByteSink sink, byte[] data) throws IOException {
+        if (!connected || sink == null) {
             throw new IOException("not connected");
-        socket.getOutputStream().write(data);
+        }
+        sink.write(data);
     }
 
     /**
