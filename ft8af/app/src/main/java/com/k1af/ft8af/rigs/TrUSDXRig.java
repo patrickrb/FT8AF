@@ -155,7 +155,7 @@ public class TrUSDXRig extends BaseRig {
      * {@code leftoverLen} of its bytes already arrived in the previous read, so
      * only {@code 2 - leftoverLen} of the marker sit at the head of this
      * segment. The result is clamped to {@code [0, segmentLen]} so the caller's
-     * {@link Arrays#copyOfRange} is always given {@code from <= from <= to}: a
+     * {@link Arrays#copyOfRange} is always given {@code 0 <= from <= to}: a
      * boundary split that leaves this segment shorter than the un-consumed
      * marker yields an empty payload instead of throwing
      * {@code IllegalArgumentException}.
