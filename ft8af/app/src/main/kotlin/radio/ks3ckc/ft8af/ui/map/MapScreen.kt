@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -97,13 +98,13 @@ private data class StationMarker(
 // PSK Reporter overlay (issue #33) — the other station in a reception report
 // (a receiver that heard us, or a sender we heard, per the direction filter).
 private data class PskSpotMarker(
-    val callsign: String,
+    override val callsign: String,
     val grid: String,
-    val lat: Double,
-    val lon: Double,
-    val snr: Int,
+    override val lat: Double,
+    override val lon: Double,
+    override val snr: Int,
     override val frequencyHz: Long,
-) : HasFrequencyHz
+) : HasFrequencyHz, ReachSpot
 
 private const val PSK_POLL_INTERVAL_MS = 5L * 60L * 1000L
 
@@ -553,7 +554,15 @@ fun MapScreen(mainViewModel: MainViewModel) {
         }
 
         // Bottom: the PSK filter sheet takes the bottom slot when open; otherwise the
-        // selected-station card. (Mutually exclusive so they don't stack.)
+        // selected-station card, or — when the "Heard me" overlay is on and nothing is
+        // selected — the signal-reach summary. (Mutually exclusive so they don't stack.)
+        val reach = remember(pskSpots, opLatLng, pskFilter.direction) {
+            if (pskFilter.direction == PskDirection.WHO_HEARD_ME) {
+                summarizeSignalReach(pskSpots, opLatLng?.latitude, opLatLng?.longitude)
+            } else {
+                null
+            }
+        }
         if (pskOverlayEnabled && filterSheetOpen) {
             PskFilterSheet(
                 filter = pskFilter,
@@ -570,6 +579,14 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 opLat = opLat,
                 opLon = opLon,
                 onDismiss = { selectedCallsign = null },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(12.dp)
+                    .fillMaxWidth(),
+            )
+        } else if (pskOverlayEnabled && reach != null) {
+            SignalReachCard(
+                reach = reach,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(12.dp)
@@ -1636,6 +1653,59 @@ private fun SelectedStationCard(
                 InfoChip(MaidenheadGrid.formatDist(distKm), stringResource(R.string.map_info_distance))
                 InfoChip("${String.format("%.0f", bearing)}\u00B0", stringResource(R.string.map_info_bearing))
                 InfoChip("${station.snr} dB", stringResource(R.string.map_info_snr))
+            }
+        }
+    }
+}
+
+/**
+ * Bottom card summarising how far the operator's own signal is reaching, derived
+ * from PSK Reporter "heard me" spots by [summarizeSignalReach]. Shown when the
+ * overlay is on in the "Heard me" direction and no individual station is
+ * selected — the glanceable answer to "is my signal getting out, and how far?".
+ */
+@Composable
+private fun SignalReachCard(reach: SignalReach, modifier: Modifier = Modifier) {
+    GlassCard(modifier = modifier) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.map_reach_title),
+                    color = Signal,
+                    fontFamily = GeistMonoFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                )
+                Text(
+                    text = pluralStringResource(
+                        R.plurals.map_reach_receivers,
+                        reach.receivers,
+                        reach.receivers,
+                    ),
+                    color = TextMuted,
+                    fontSize = 11.sp,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                if (reach.furthestCall.isNotEmpty()) {
+                    InfoChip(
+                        MaidenheadGrid.formatDist(reach.furthestKm),
+                        stringResource(R.string.map_reach_furthest, reach.furthestCall),
+                    )
+                }
+                if (reach.strongestCall.isNotEmpty()) {
+                    InfoChip(
+                        "${reach.strongestSnr} dB",
+                        stringResource(R.string.map_reach_best, reach.strongestCall),
+                    )
+                }
             }
         }
     }
