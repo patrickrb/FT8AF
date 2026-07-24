@@ -2730,6 +2730,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("noReplyLimit")) {//
                     GeneralVariables.noReplyLimit = parseConfigInt(result, 0);
                 }
+                if (name.equalsIgnoreCase("max73Sends")) {//Max RR73/73 sends per QSO; 0==Auto
+                    GeneralVariables.max73Sends = parseConfigInt(result, 0);
+                }
                 if (name.equalsIgnoreCase("autoFollowCQ")) {//Auto-follow CQ
                     GeneralVariables.autoFollowCQ = result.equals("1");
                 }

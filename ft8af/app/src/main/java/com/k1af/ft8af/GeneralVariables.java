@@ -481,6 +481,13 @@ public class GeneralVariables {
 
     public static int noReplyCount = 0;//Number of times with no reply
 
+    // Hard cap on RR73/73 transmissions per QSO before moving on; 0==Auto
+    // (classic behavior: RR73 repeats until the no-reply caps fire, 73 re-sends
+    // for every RR73 received). Unlike the no-reply caps this counts actual
+    // sends, so it also bounds the loops where the partner keeps transmitting
+    // (re-sent R+report / RR73) and the no-reply counter never accumulates.
+    public static int max73Sends = 0;
+
     //The following 4 parameters are for ICOM network connection
     public static String icomIp = "255.255.255.255";
     public static int icomUdpPort = 50001;

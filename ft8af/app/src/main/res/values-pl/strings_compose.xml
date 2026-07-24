@@ -395,6 +395,9 @@
     <string name="settings_tx_watchdog_desc">Automatyczne zatrzymanie nadawania po przekroczeniu czasu</string>
     <string name="settings_stop_after">Zatrzymaj po</string>
     <string name="settings_stop_after_desc">Przestań wywoływać po N nieodebranych próbach</string>
+    <string name="settings_max_73">Maks. wysłań 73</string>
+    <string name="settings_max_73_desc">Maksymalna liczba transmisji RR73/73 na łączność przed przejściem dalej</string>
+    <string name="settings_max_73_auto">Auto</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Polowanie (auto-odpowiedź na CQ)</string>

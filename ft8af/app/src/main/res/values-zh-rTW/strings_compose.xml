@@ -329,6 +329,9 @@
     <string name="settings_tx_watchdog_desc">逾時後自動停止發射</string>
     <string name="settings_stop_after">停止於</string>
     <string name="settings_stop_after_desc">於 N 次無回應嘗試後停止呼叫</string>
+    <string name="settings_max_73">73 發送上限</string>
+    <string name="settings_max_73_desc">每次通聯中 RR73/73 的最大發送次數，達到後轉往下一個</string>
+    <string name="settings_max_73_auto">自動</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">獵取（自動回應 CQ）</string>
