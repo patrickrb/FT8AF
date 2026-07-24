@@ -191,15 +191,16 @@ public class DxAlertNotifier {
      */
     private void fire(String dedupKey, String channelId, String title, String body,
                       String callsignExtra, long bandExtra) {
-        if (!alerted.add(dedupKey)) return;                         // already alerted this session
+        // Gate on notification permission BEFORE consuming the dedup key. If we burned the
+        // key here while notifications are denied, the per-session `alerted` set (never
+        // cleared) would suppress this station forever — even after the user later grants
+        // POST_NOTIFICATIONS. claimAlert() checks `canPost` first, then dedups.
+        boolean canPost = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                || ContextCompat.checkSelfPermission(appContext,
+                        Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+        if (!AlertDecisions.claimAlert(alerted, dedupKey, canPost)) return;
 
         GeneralVariables.fileLog("ALERT fire key=[" + dedupKey + "] " + title);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                && ContextCompat.checkSelfPermission(appContext,
-                        Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            return;                                                 // no permission → skip silently
-        }
 
         int id = dedupKey.hashCode();
 
@@ -228,7 +229,10 @@ public class DxAlertNotifier {
         try {
             NotificationManagerCompat.from(appContext).notify(id, builder.build());
         } catch (SecurityException ignored) {
-            // Permission revoked between the check and notify(); ignore.
+            // Permission revoked between the check and notify(): nothing was posted, so
+            // release the key to let a later decode of the same station retry rather than
+            // stay suppressed for the session.
+            alerted.remove(dedupKey);
         }
     }
 }
