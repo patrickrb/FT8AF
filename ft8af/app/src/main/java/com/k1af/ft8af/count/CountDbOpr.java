@@ -78,16 +78,15 @@ public class CountDbOpr {
     @SuppressLint("Range")
     public static java.util.List<String> queryWorkedContinents(SQLiteDatabase db){
         java.util.ArrayList<String> continents=new java.util.ArrayList<>();
-        String querySQL="SELECT dl.continent AS cont FROM dxcc_grid dg\n" +
+        String querySQL="SELECT DISTINCT dl.continent AS cont FROM dxcc_grid dg\n" +
                 "inner join QSLTable q on dg.grid = UPPER(SUBSTR(q.gridsquare,1,4))\n" +
                 "left join dxccList dl on dg.dxcc = dl.dxcc\n" +
-                "WHERE dl.continent IS NOT NULL AND TRIM(dl.continent) <> ''\n" +
-                "GROUP BY dl.continent";
-        Cursor cursor=db.rawQuery(querySQL,null);
-        while (cursor.moveToNext()){
-            continents.add(cursor.getString(cursor.getColumnIndex("cont")));
+                "WHERE dl.continent IS NOT NULL AND TRIM(dl.continent) <> ''";
+        try (Cursor cursor=db.rawQuery(querySQL,null)){
+            while (cursor.moveToNext()){
+                continents.add(cursor.getString(cursor.getColumnIndex("cont")));
+            }
         }
-        cursor.close();
         return continents;
     }
 
