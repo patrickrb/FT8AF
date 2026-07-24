@@ -329,6 +329,9 @@
     <string name="settings_tx_watchdog_desc">超时后自动停止发射</string>
     <string name="settings_stop_after">停止条件</string>
     <string name="settings_stop_after_desc">呼叫 N 次无应答后停止</string>
+    <string name="settings_max_73">73 发送上限</string>
+    <string name="settings_max_73_desc">每次通联中 RR73/73 的最大发送次数，达到后转向下一个</string>
+    <string name="settings_max_73_auto">自动</string>
 
     <!-- ===== 设置：自动流程 ===== -->
     <string name="settings_hunt">猎台（自动应答 CQ）</string>

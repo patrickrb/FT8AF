@@ -395,6 +395,9 @@
     <string name="settings_tx_watchdog_desc">Zaman aşımından sonra yayını otomatik durdur</string>
     <string name="settings_stop_after">Şundan Sonra Durdur</string>
     <string name="settings_stop_after_desc">N yanıtsız denemeden sonra çağrıyı durdur</string>
+    <string name="settings_max_73">Maks. 73 gönderimi</string>
+    <string name="settings_max_73_desc">Devam etmeden önce görüşme başına en fazla RR73/73 gönderim sayısı</string>
+    <string name="settings_max_73_auto">Otomatik</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Av (CQ\'lara otomatik yanıt)</string>

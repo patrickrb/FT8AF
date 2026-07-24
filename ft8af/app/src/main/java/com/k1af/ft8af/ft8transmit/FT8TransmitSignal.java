@@ -134,6 +134,25 @@ public class FT8TransmitSignal {
     // benefit, then return to CQ / next caller.
     private static final int RR73_GIVEUP_CYCLES = 3;
 
+    // Actual RR73/73 (order 4/5) transmissions for the current target, counted
+    // at doTransmit() time. The no-reply caps above can't bound the loops where
+    // the partner keeps transmitting (re-sent R+report at our RR73, repeated
+    // RR73 at our 73) because every decode from them resets noReplyCount; when
+    // the user sets GeneralVariables.max73Sends (> 0), this counter caps those
+    // too. Reset wherever the target changes (generateFun) and on TX stop.
+    // Package-visible for testing.
+    volatile int finalAckSends = 0;
+
+    // Callsign whose QSO the Max 73 Sends cap just ended. Their leftover (and
+    // subsequent) R+report/RR73 continuation messages to me must not re-answer
+    // the very loop the cap ended — without this the same-cycle continuation
+    // scan (checkCQMeOrFollowCQMessage / enqueueCaller) restarts the QSO
+    // immediately, because those messages are addressed to me and are not an
+    // exact "73" (checkFun5). A fresh CQ/grid/report from them still gets
+    // answered, which also clears the gate (see setTransmit). Cleared on TX
+    // stop as well. Package-visible for testing.
+    volatile String cappedCallsign = "";
+
     // Caller queue: stations that called us while we're in an active QSO
     private static final int MAX_QUEUE_SIZE = 10;
     private final ArrayList<QueuedCaller> callerQueue = new ArrayList<>();
@@ -398,6 +417,9 @@ public class FT8TransmitSignal {
             return;
         }
         Log.d(TAG, "doTransmit: Starting transmit...");
+        if (functionOrder == 4 || functionOrder == 5) {
+            finalAckSends++;
+        }
         // Record exactly what goes on the air this cycle, alongside the existing
         // serial.send TX1/TX0 keying lines, so the QSO trace shows the message text.
         GeneralVariables.fileLog("QSO: TX slot=" + sequential + " order=" + functionOrder
@@ -430,6 +452,12 @@ public class FT8TransmitSignal {
         mutableToCallsign.postValue(transmitCallsign);// set the call target (includes report, sequence, frequency, callsign)
         toCallsign = transmitCallsign;// set the call target
         //mutableToCallsign.postValue(toCallsign);// set the call target
+
+        // Starting a fresh QSO with the station the Max 73 Sends cap gated
+        // (their new CQ/grid, or the user tapping their decode) lifts the gate.
+        if (!cappedCallsign.isEmpty() && cappedCallsign.equals(transmitCallsign.callsign)) {
+            cappedCallsign = "";
+        }
 
         if (functionOrder == -1) {// this is a reply message
             // at this point toMaidenheadGrid is extraInfo
@@ -566,6 +594,7 @@ public class FT8TransmitSignal {
         String currentTarget = (toCallsign != null && toCallsign.callsign != null) ? toCallsign.callsign : "";
         if (shouldResetNoReplyCount(currentTarget, lastNoReplyTarget)) {
             GeneralVariables.noReplyCount = 0;
+            finalAckSends = 0;
             lastNoReplyTarget = currentTarget;
         }
         synchronized (functionList) {
@@ -1382,6 +1411,8 @@ public class FT8TransmitSignal {
         for (int i = messages.size() - 1; i >= 0; i--) {// check if anyone is CQing me (TO:ME, not 73)
             Ft8Message msg = messages.get(i);
             if (isExcludeMessage(msg)) continue;// check if this is an excluded message
+            if (isCappedContinuation(cappedCallsign, msg.getCallsignFrom(),
+                    GeneralVariables.checkFunOrder(msg))) continue;// Max 73 Sends: don't restart the capped loop
             if (toCallsign == null) break;
 
             //if (msg.getCallsignTo().equals(GeneralVariables.myCallsign)
@@ -1401,6 +1432,8 @@ public class FT8TransmitSignal {
         for (int i = messages.size() - 1; i >= 0; i--) {// check if anyone is CQing me (TO:ME, not 73)
             Ft8Message msg = messages.get(i);
             if (isExcludeMessage(msg)) continue;// check if this is an excluded message
+            if (isCappedContinuation(cappedCallsign, msg.getCallsignFrom(),
+                    GeneralVariables.checkFunOrder(msg))) continue;// Max 73 Sends: don't restart the capped loop
             //if ((msg.getCallsignTo().equals(GeneralVariables.myCallsign)
             if ((GeneralVariables.checkIsMyCallsign(msg.getCallsignTo())
                     && !GeneralVariables.checkFun5(msg.extraInfo))) {// CQ me, not 73
@@ -1614,11 +1647,12 @@ public class FT8TransmitSignal {
         int newOrder = checkFunctionOrdFromMessages(messages);// check reply message sequence from the other party; -1 means not received
         // Per-cycle spine of the QSO trace: current state, what (if anything) the
         // other party sent us this cycle, who we're working, and the no-reply count.
-        GeneralVariables.fileLog(String.format("QSO: cycle%s slot=%d order=%d newOrder=%d to=%s noReply=%d/%d",
+        GeneralVariables.fileLog(String.format("QSO: cycle%s slot=%d order=%d newOrder=%d to=%s noReply=%d/%d 73tx=%d/%d",
                 evidenceOnly ? "(deep)" : "",
                 sequential, functionOrder, newOrder,
                 toCallsign != null ? toCallsign.callsign : "null",
-                GeneralVariables.noReplyCount, GeneralVariables.noReplyLimit));
+                GeneralVariables.noReplyCount, GeneralVariables.noReplyLimit,
+                finalAckSends, GeneralVariables.max73Sends));
         if (newOrder != -1) {// if there is a message sequence, reply received; reset error counter
             GeneralVariables.noReplyCount = 0;
         }
@@ -1626,10 +1660,20 @@ public class FT8TransmitSignal {
         // update the QSO list; if not already recorded, save it
         updateQSlRecordList(newOrder, toCallsign);
 
+        // User cap on RR73/73 transmissions (Max 73 Sends setting). Based on our
+        // own send count — deterministic, not partner silence — so it applies on
+        // every pass and also bounds the loops the no-reply caps can't reach:
+        // the partner re-sending R+report at our RR73, or repeating RR73 at our
+        // 73 (each received RR73 would otherwise re-trigger a 73 reply forever).
+        boolean ackCapReached = hasReachedMax73Sends(
+                GeneralVariables.max73Sends, finalAckSends, functionOrder);
+
         // FT8 protocol: when we receive RR73/RRR (order 4), always reply with
         // 73 (order 5) before completing the QSO. This handler fires before
-        // the completion check so that we never skip the 73 reply.
-        if (newOrder == 4) {
+        // the completion check so that we never skip the 73 reply — unless the
+        // Max 73 Sends cap is reached, in which case we fall through and
+        // complete instead of re-sending yet another 73.
+        if (newOrder == 4 && !ackCapReached) {
             GeneralVariables.fileLog("QSO: rx RR73 from "
                     + (toCallsign != null ? toCallsign.callsign : "?") + " -> reply 73");
             functionOrder = 5;
@@ -1642,9 +1686,18 @@ public class FT8TransmitSignal {
         // determine QSO success: other party replied 73 (5) || I am at 73 (5) and other party did not reply (-1)
         // or I am at RR73 (4) and no-reply threshold reached with no-reply limit enabled
         // or I am at RR73 (4) and the other party started calling someone else, to prevent RR73 deadlock
-        if (shouldCompleteQso(evidenceOnly, functionOrder, newOrder,
+        if (ackCapReached || shouldCompleteQso(evidenceOnly, functionOrder, newOrder,
                 GeneralVariables.noReplyCount, GeneralVariables.noReplyLimit,
                 functionOrder == 4 && checkTargetCallMe(messages) > 1)) {
+            if (ackCapReached) {
+                GeneralVariables.fileLog("QSO: max 73 sends reached ("
+                        + finalAckSends + "/" + GeneralVariables.max73Sends + ")");
+                // Gate this station's continuation messages out of the
+                // caller-pickup scans below, or their leftover RR73/R+report
+                // would restart the QSO in this very cycle.
+                cappedCallsign = toCallsign != null && toCallsign.callsign != null
+                        ? toCallsign.callsign : "";
+            }
             GeneralVariables.fileLog("QSO: complete with "
                     + (toCallsign != null ? toCallsign.callsign : "?")
                     + " (order=" + functionOrder + " newOrder=" + newOrder + ") -> reset to CQ");
@@ -2007,6 +2060,8 @@ public class FT8TransmitSignal {
             // Reset retry counters so a fresh run to the same callsign
             // doesn't inherit a stale noReplyCount from the previous session.
             GeneralVariables.noReplyCount = 0;
+            finalAckSends = 0;
+            cappedCallsign = "";
             lastNoReplyTarget = "";
         }
         mutableIsActivated.postValue(activated);
@@ -2351,6 +2406,48 @@ public class FT8TransmitSignal {
     }
 
     /**
+     * Whether the user's "Max 73 Sends" cap ends the QSO this cycle. The cap
+     * counts actual RR73/73 (order 4/5) transmissions — unlike the no-reply
+     * caps in {@link #shouldCompleteQso}, it therefore also bounds the loops
+     * where the partner keeps transmitting (re-sent R+report, repeated RR73)
+     * and {@code noReplyCount} keeps getting reset. 0 == Auto: cap disabled,
+     * classic no-reply-based behavior only. Deterministic own-send evidence,
+     * so it applies to fast and deep passes alike.
+     *
+     * <p>Package-visible for testing.
+     *
+     * @param max73Sends    user cap on RR73/73 transmissions (0 = Auto/off)
+     * @param finalAckSends RR73/73 transmissions so far for the current target
+     * @param functionOrder my current message order (1-6)
+     */
+    static boolean hasReachedMax73Sends(int max73Sends, int finalAckSends, int functionOrder) {
+        return max73Sends > 0
+                && (functionOrder == 4 || functionOrder == 5)
+                && finalAckSends >= max73Sends;
+    }
+
+    /**
+     * Whether a message is a continuation (R+report / RR73, order 3-4) of the
+     * QSO the Max 73 Sends cap just ended, and must therefore be ignored by the
+     * caller-pickup scans instead of restarting the capped loop. Only orders 3
+     * and 4 are gated: a fresh CQ from the capped station (order 6) is a new QSO
+     * attempt and must still be answered, and an exact "73" (order 5) is a QSO
+     * end already filtered by the scans — so neither is treated as a
+     * continuation here.
+     *
+     * <p>Package-visible for testing.
+     *
+     * @param cappedCallsign station the cap ended a QSO with ("" = none)
+     * @param fromCallsign   sender of the candidate message
+     * @param msgOrder       the message's sequence order (GeneralVariables.checkFunOrder)
+     */
+    static boolean isCappedContinuation(String cappedCallsign, String fromCallsign, int msgOrder) {
+        return cappedCallsign != null && !cappedCallsign.isEmpty()
+                && cappedCallsign.equals(fromCallsign)
+                && (msgOrder == 3 || msgOrder == 4);
+    }
+
+    /**
      * Whether a deep/late-pass decode describes a QSO state we have already moved
      * past, and must therefore be ignored.
      *
@@ -2404,6 +2501,8 @@ public class FT8TransmitSignal {
         if (GeneralVariables.checkIsMyCallsign(callsign)) return;
         if (GeneralVariables.checkIsExcludeCallsign(callsign)) return;
         if (GeneralVariables.checkQSLCallsign(callsign)) return;
+        if (isCappedContinuation(cappedCallsign, callsign,
+                GeneralVariables.checkFunOrder(msg))) return;// Max 73 Sends: don't queue the capped loop
 
         synchronized (callerQueue) {
             // Update existing entry if callsign already queued

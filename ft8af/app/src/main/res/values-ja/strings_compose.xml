@@ -329,6 +329,9 @@
     <string name="settings_tx_watchdog_desc">タイムアウト後に送信を自動停止します</string>
     <string name="settings_stop_after">停止条件</string>
     <string name="settings_stop_after_desc">N 回応答がなければ呼出を停止します</string>
+    <string name="settings_max_73">73送信の上限</string>
+    <string name="settings_max_73_desc">次へ進む前のQSOごとのRR73/73送信回数の上限</string>
+    <string name="settings_max_73_auto">自動</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">ハント (CQ 自動応答)</string>
