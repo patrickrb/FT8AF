@@ -2435,7 +2435,12 @@ public class FT8TransmitSignal {
     public boolean dequeueNextCaller() {
         synchronized (callerQueue) {
             while (!callerQueue.isEmpty()) {
-                QueuedCaller caller = callerQueue.remove(0);
+                // Pileup pick order: FIFO by default, or the strongest waiting
+                // caller when the operator has turned that on (issue #333 sibling).
+                int idx = CallerQueueOrdering.pickNextIndex(
+                        callerQueue, GeneralVariables.pileupStrongestFirst);
+                if (idx < 0) break;
+                QueuedCaller caller = callerQueue.remove(idx);
                 mutableCallerQueue.postValue(new ArrayList<>(callerQueue));
 
                 // Skip if caller is now excluded or already worked

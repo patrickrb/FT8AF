@@ -571,6 +571,8 @@
     <string name="settings_fast_turnaround_desc">Decode ~1s earlier so you can answer a CQ on the next slot instead of waiting. May miss stations with a large clock offset.</string>
     <string name="settings_auto_cq_after_qso">Auto-CQ after QSO</string>
     <string name="settings_auto_cq_after_qso_desc">Keep calling CQ automatically after each completed contact — no re-tap. Stays on your frequency (ignores Hunt). Runs until you stop or the TX Watchdog times out with no answers.</string>
+    <string name="settings_pileup_strongest">Work strongest caller first</string>
+    <string name="settings_pileup_strongest_desc">In a pileup, auto-work the strongest waiting caller next instead of the one who called earliest. Completes the best-copy contacts first on a busy run. The caller queue lists callers strongest-first to match.</string>
 
     <!-- ===== Settings: decode highlights ===== -->
     <string name="settings_highlight_new_dxcc">New DXCC</string>
