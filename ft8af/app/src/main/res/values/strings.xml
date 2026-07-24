@@ -318,6 +318,7 @@
     <string name="count_total_cqzone">Total CQ Zone : %d \n Completed : %d(%.1f%%)</string>
     <string name="count_cqzone_proportion">CQ Zone Statistics</string>
     <string name="dxcc_completion_statistics">DXCC statistics</string>
+    <string name="continent_completion_statistics">Continent statistics</string>
     <string name="count_total_dxcc">Total DXCC : %d \nCompleted : %d(%.1f%%)</string>
     <string name="count_dxcc_proportion">DXCC statistics</string>
     <string name="callsign_info">Callsign:%s\nLocation:%s\nCQ zone:%d\nITU zone:%d\nContinent:%s\nLongitude and latitude:%.2f,%.2f\nTime zone:%.0f\nDxcc prefix:%s</string>

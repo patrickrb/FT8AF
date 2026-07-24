@@ -139,6 +139,9 @@ private data class LogbookStats(
     val cqZones: Int = 0,
     val ituZones: Int = 0,
     val bandCounts: List<Pair<String, Int>> = emptyList(),
+    // Raw continent codes worked (e.g. "NA", "EU"), for the WAC award. Reduced
+    // to award progress by [workedAllContinents]; empty when nothing resolves.
+    val continentCodes: List<String> = emptyList(),
 )
 
 private data class AwardProgress(
@@ -246,12 +249,24 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
                 val bandCounts = bandInfo?.values?.map { (it.name ?: "") to it.value }
                     ?: emptyList()
 
+                // Worked continents for the WAC award (single-fire callback).
+                val continentInfo = suspendCancellableCoroutine { cont ->
+                    val resumed = AtomicBoolean(false)
+                    CountDbOpr.getContinentCount(db) { info ->
+                        if (resumed.compareAndSet(false, true)) cont.resume(info)
+                    }
+                }
+                val continentCodes = continentInfo?.values
+                    ?.mapNotNull { it.name }
+                    ?: emptyList()
+
                 stats = LogbookStats(
                     totalQsos = totalQsos,
                     dxccEntities = dxccCount,
                     cqZones = cqCount,
                     ituZones = ituCount,
                     bandCounts = bandCounts,
+                    continentCodes = continentCodes,
                 )
             } catch (_: Exception) {
                 // Leave records/stats at defaults on error
@@ -654,6 +669,13 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
             BestDxCard(bestDx = bestDx, modifier = Modifier.fillMaxWidth())
         }
 
+        // Worked All Continents — the six-continent award, one chip per continent.
+        SectionHeader(stringResource(R.string.log_section_wac))
+        WorkedAllContinentsCard(
+            wac = remember(stats.continentCodes) { workedAllContinents(stats.continentCodes) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
         // Band donut chart
         if (stats.bandCounts.isNotEmpty()) {
             SectionHeader(stringResource(R.string.log_section_band_distribution))
@@ -785,6 +807,94 @@ private fun BestDxCard(bestDx: BestDx, modifier: Modifier = Modifier) {
                 fontFamily = GeistMonoFamily,
             )
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Worked All Continents (WAC) card
+// ---------------------------------------------------------------------------
+
+/** Localized full name for a continent code, for chip accessibility labels. */
+@Composable
+private fun continentName(code: String): String = when (code) {
+    "NA" -> stringResource(R.string.continent_na)
+    "SA" -> stringResource(R.string.continent_sa)
+    "EU" -> stringResource(R.string.continent_eu)
+    "AF" -> stringResource(R.string.continent_af)
+    "AS" -> stringResource(R.string.continent_as)
+    "OC" -> stringResource(R.string.continent_oc)
+    else -> code
+}
+
+@Composable
+private fun WorkedAllContinentsCard(wac: WacProgress, modifier: Modifier = Modifier) {
+    GlassCard(modifier = modifier) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = if (wac.isComplete) {
+                        stringResource(R.string.log_wac_complete)
+                    } else {
+                        stringResource(R.string.log_wac_progress, wac.workedCount, wac.total)
+                    },
+                    color = if (wac.isComplete) StatusConfirmed else TextPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = "${wac.workedCount} / ${wac.total}",
+                    color = TextMuted,
+                    fontSize = 11.sp,
+                    fontFamily = GeistMonoFamily,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                for (chip in wac.chips) {
+                    ContinentChipView(chip = chip, modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContinentChipView(chip: ContinentChip, modifier: Modifier = Modifier) {
+    val name = continentName(chip.code)
+    val label = if (chip.worked) {
+        stringResource(R.string.log_wac_continent_worked, name)
+    } else {
+        stringResource(R.string.log_wac_continent_needed, name)
+    }
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (chip.worked) StatusNew.copy(alpha = 0.16f) else BgSurface3)
+            .border(
+                1.dp,
+                if (chip.worked) StatusNew.copy(alpha = 0.5f) else Border,
+                RoundedCornerShape(8.dp),
+            )
+            .padding(vertical = 8.dp)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = chip.code,
+            color = if (chip.worked) StatusNew else TextDim,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = GeistMonoFamily,
+        )
     }
 }
 
@@ -1697,9 +1807,12 @@ private fun AwardsTab(stats: LogbookStats) {
     val wazDesc = stringResource(R.string.log_award_waz_desc)
     val vuccName = stringResource(R.string.log_award_vucc)
     val vuccDesc = stringResource(R.string.log_award_vucc_desc)
+    val wacName = stringResource(R.string.log_award_wac)
+    val wacDesc = stringResource(R.string.log_award_wac_desc)
     val iotaName = stringResource(R.string.log_award_iota)
     val iotaDesc = stringResource(R.string.log_award_iota_desc)
     val awards = remember(stats) {
+        val wac = workedAllContinents(stats.continentCodes)
         listOf(
             AwardProgress(
                 name = dxccMixedName,
@@ -1721,6 +1834,13 @@ private fun AwardsTab(stats: LogbookStats) {
                 current = stats.cqZones,
                 total = 40,
                 color = StatusNew,
+            ),
+            AwardProgress(
+                name = wacName,
+                description = wacDesc,
+                current = wac.workedCount,
+                total = wac.total,
+                color = Band10m,
             ),
             AwardProgress(
                 name = vuccName,

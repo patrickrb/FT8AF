@@ -248,6 +248,11 @@
     <string name="log_award_vucc_grid_squares">VUCC Grid Squares</string>
     <string name="log_award_dxcc_challenge">DXCC Challenge</string>
     <string name="log_section_best_dx">Best DX</string>
+    <string name="log_section_wac">Worked All Continents</string>
+    <string name="log_wac_progress">%1$d / %2$d continents</string>
+    <string name="log_wac_complete">All six continents worked 🌍</string>
+    <string name="log_wac_continent_worked">%1$s worked</string>
+    <string name="log_wac_continent_needed">%1$s not yet worked</string>
     <string name="log_section_grid_coverage">Grid Coverage</string>
     <string name="log_section_signal_trend">Signal Trend</string>
     <string name="log_no_qsos_yet">No QSOs yet</string>
@@ -267,6 +272,8 @@
     <string name="log_award_waz_desc">Work all 40 CQ zones confirmed</string>
     <string name="log_award_vucc">VUCC</string>
     <string name="log_award_vucc_desc">VHF/UHF Century Club -- 100 grid squares on a single band</string>
+    <string name="log_award_wac">WAC</string>
+    <string name="log_award_wac_desc">Worked All Continents -- contact all six continents</string>
     <string name="log_award_iota">IOTA</string>
     <string name="log_award_iota_desc">Islands on the Air -- work stations on designated islands</string>
     <string name="log_edit_qso">Edit QSO</string>
