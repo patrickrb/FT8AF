@@ -33,6 +33,8 @@ public class QSLRecord {
 
     private final String myCallsign;//My callsign
     private String myMaidenGrid;//My grid
+    private Double myLat;//My latitude at QSO time, decimal degrees; null when location was unavailable
+    private Double myLon;//My longitude at QSO time, decimal degrees; null when location was unavailable
     private String toCallsign;//Other party's callsign
     private String toMaidenGrid;//Other party's grid
     private int sendReport;//Report received by other party (i.e., signal strength I sent)
@@ -204,6 +206,9 @@ public class QSLRecord {
             toMaidenGrid = "";
         }
 
+        if (map.containsKey("MY_LAT")) myLat = AdifFormat.parseLocation(map.get("MY_LAT"));
+        if (map.containsKey("MY_LON")) myLon = AdifFormat.parseLocation(map.get("MY_LON"));
+
 
         if (map.containsKey("RST_RCVD")) {//Received report. Signal report present in N1MM, Log32, JTDX, but not in LoTW
             try {//Convert float to Long
@@ -341,6 +346,20 @@ public class QSLRecord {
 
     public void setMyMaidenGrid(String myMaidenGrid) {
         this.myMaidenGrid = myMaidenGrid;
+    }
+
+    public Double getMyLat() {
+        return myLat;
+    }
+
+    public Double getMyLon() {
+        return myLon;
+    }
+
+    /** Set the device location captured at QSO time; either may be null when unavailable. */
+    public void setMyLatLon(Double myLat, Double myLon) {
+        this.myLat = myLat;
+        this.myLon = myLon;
     }
 
     public int getSendReport() {

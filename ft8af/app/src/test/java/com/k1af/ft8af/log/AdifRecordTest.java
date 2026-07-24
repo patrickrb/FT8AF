@@ -110,6 +110,23 @@ public class AdifRecordTest {
     }
 
     @Test
+    public void myLatLon_emittedWhenSet() {
+        String out = new AdifRecord().call("W1AW")
+                .myLat(AdifFormat.formatLat(40.858333))
+                .myLon(AdifFormat.formatLon(-73.925))
+                .build();
+        assertThat(out).contains("<my_lat:11>N040 51.500 ");
+        assertThat(out).contains("<my_lon:11>W073 55.500 ");
+    }
+
+    @Test
+    public void myLatLon_omittedWhenLocationUnavailable() {
+        String out = new AdifRecord().call("W1AW").build();
+        assertThat(out).doesNotContain("my_lat");
+        assertThat(out).doesNotContain("my_lon");
+    }
+
+    @Test
     public void comment_isAlwaysEmittedEvenWhenNull() {
         assertThat(new AdifRecord().call("W1AW").comment(null).build())
                 .contains("<comment:0> <eor>\n");

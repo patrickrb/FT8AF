@@ -222,4 +222,46 @@ public class AdifFormatTest {
         assertThat(AdifFormat.sliceByUtf8Length(emoji, AdifFormat.utf8Length(emoji)))
                 .isEqualTo(emoji);
     }
+
+    // ---- formatLat / formatLon / parseLocation: ADIF MY_LAT / MY_LON ----
+
+    @Test
+    public void formatLat_northAndSouth() {
+        assertThat(AdifFormat.formatLat(40.858333)).isEqualTo("N040 51.500");
+        assertThat(AdifFormat.formatLat(-40.858333)).isEqualTo("S040 51.500");
+        assertThat(AdifFormat.formatLat(0.0)).isEqualTo("N000 00.000");
+    }
+
+    @Test
+    public void formatLon_eastAndWest() {
+        assertThat(AdifFormat.formatLon(-73.925)).isEqualTo("W073 55.500");
+        assertThat(AdifFormat.formatLon(73.925)).isEqualTo("E073 55.500");
+    }
+
+    @Test
+    public void formatLon_threeDigitDegrees() {
+        // Longitude can reach 180, so degrees must be zero-padded to 3 digits like latitude.
+        assertThat(AdifFormat.formatLon(-179.5)).isEqualTo("W179 30.000");
+    }
+
+    @Test
+    public void formatLocation_roundsMinutesWithoutOverflowingTo60() {
+        // 40 degrees + 59.9997 minutes rounds to 60.000 minutes, which must carry into
+        // the next whole degree rather than rendering the invalid "MM.MMM" == "60.000".
+        assertThat(AdifFormat.formatLat(40.0 + 59.9997 / 60.0)).isEqualTo("N041 00.000");
+    }
+
+    @Test
+    public void parseLocation_isTheInverseOfFormat() {
+        assertThat(AdifFormat.parseLocation(AdifFormat.formatLat(40.858333))).isWithin(1e-3).of(40.858333);
+        assertThat(AdifFormat.parseLocation(AdifFormat.formatLon(-73.925))).isWithin(1e-3).of(-73.925);
+    }
+
+    @Test
+    public void parseLocation_handlesMalformedInput() {
+        assertThat(AdifFormat.parseLocation(null)).isNull();
+        assertThat(AdifFormat.parseLocation("")).isNull();
+        assertThat(AdifFormat.parseLocation("garbage")).isNull();
+        assertThat(AdifFormat.parseLocation("X040 51.500")).isNull();
+    }
 }

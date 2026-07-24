@@ -314,6 +314,8 @@ public class ShareLogs {
                 .freq(col(cursor, "freq"))
                 .stationCallsign(col(cursor, "station_callsign"))
                 .myGridsquare(col(cursor, "my_gridsquare"))
+                .myLat(formatLocationOrNull(colDouble(cursor, "my_lat"), true))
+                .myLon(formatLocationOrNull(colDouble(cursor, "my_lon"), false))
                 .operator(col(cursor, "operator"))
                 // POTA fields. Only emitted when populated so non-POTA QSOs stay clean.
                 .mySig(col(cursor, "my_sig"))
@@ -334,6 +336,19 @@ public class ShareLogs {
         int idx = cursor.getColumnIndex(column);
         if (idx < 0) return null;
         return cursor.getString(idx);
+    }
+
+    /** Cursor nullable double value (e.g. my_lat/my_lon), or null when absent/column-missing. */
+    private static Double colDouble(android.database.Cursor cursor, String column) {
+        int idx = cursor.getColumnIndex(column);
+        if (idx < 0 || cursor.isNull(idx)) return null;
+        return cursor.getDouble(idx);
+    }
+
+    /** {@code value} formatted as an ADIF Location (MY_LAT/MY_LON), or null when unavailable. */
+    private static String formatLocationOrNull(Double value, boolean isLatitude) {
+        if (value == null) return null;
+        return isLatitude ? AdifFormat.formatLat(value) : AdifFormat.formatLon(value);
     }
 
     /** Cursor int value, or 0 when the column is absent. */

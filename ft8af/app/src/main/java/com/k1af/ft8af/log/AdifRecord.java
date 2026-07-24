@@ -49,6 +49,8 @@ public final class AdifRecord {
     private String freq;
     private String stationCallsign;
     private String myGridsquare;
+    private String myLat;
+    private String myLon;
     private String operator;
     private String mySig;
     private String mySigInfo;
@@ -88,6 +90,12 @@ public final class AdifRecord {
     public AdifRecord stationCallsign(String v) { this.stationCallsign = v; return this; }
 
     public AdifRecord myGridsquare(String v) { this.myGridsquare = v; return this; }
+
+    /** MY_LAT, already formatted as the ADIF {@code Location} type (e.g. via {@link AdifFormat#formatLat}). */
+    public AdifRecord myLat(String v) { this.myLat = v; return this; }
+
+    /** MY_LON, already formatted as the ADIF {@code Location} type (e.g. via {@link AdifFormat#formatLon}). */
+    public AdifRecord myLon(String v) { this.myLon = v; return this; }
 
     public AdifRecord operator(String v) { this.operator = v; return this; }
 
@@ -136,6 +144,8 @@ public final class AdifRecord {
         appendIfNotNull(sb, "freq", freq);
         appendIfNotNull(sb, "station_callsign", stationCallsign);
         appendIfNotNull(sb, "my_gridsquare", myGridsquare);
+        appendIfNotNull(sb, "my_lat", myLat);
+        appendIfNotNull(sb, "my_lon", myLon);
         appendIfNotNull(sb, "operator", operator);
         // POTA fields. Only emit when populated so non-POTA QSOs stay clean.
         appendIfNotEmpty(sb, "MY_SIG", mySig);

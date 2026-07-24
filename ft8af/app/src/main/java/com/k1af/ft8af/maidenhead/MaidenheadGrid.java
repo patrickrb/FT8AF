@@ -5,10 +5,14 @@ package com.k1af.ft8af.maidenhead;
  * @date 2023-03-20
  */
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationManager;
+
+import androidx.core.content.ContextCompat;
 
 import com.k1af.ft8af.GeneralVariables;
 import com.k1af.ft8af.R;
@@ -486,6 +490,19 @@ public class MaidenheadGrid {
      * @return latitude/longitude
      */
     public static LatLng getLocalLocation(Context context) {
+        if (context == null) {
+            return null;
+        }
+        // LocationManager#getLastKnownLocation throws SecurityException without this
+        // permission (the @SuppressLint below only silences the lint warning, it doesn't
+        // make the call safe), so callers outside the permission-gated GPS-grid-update flow
+        // need this checked here rather than crashing.
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED
+                && ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            return null;
+        }
         // Get location service
         String serviceName = Context.LOCATION_SERVICE;
         // Call getSystemService() to obtain the LocationManager object

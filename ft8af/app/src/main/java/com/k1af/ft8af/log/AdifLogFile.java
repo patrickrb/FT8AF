@@ -89,6 +89,8 @@ public final class AdifLogFile {
                 .freq(BaseRigOperation.getFrequencyFloat(record.getBandFreq()))
                 .stationCallsign(record.getMyCallsign())
                 .myGridsquare(record.getMyMaidenGrid())
+                .myLat(record.getMyLat() != null ? AdifFormat.formatLat(record.getMyLat()) : null)
+                .myLon(record.getMyLon() != null ? AdifFormat.formatLon(record.getMyLon()) : null)
                 .mySig(record.getMySig())
                 .mySigInfo(record.getMySigInfo())
                 .sig(record.getSig())

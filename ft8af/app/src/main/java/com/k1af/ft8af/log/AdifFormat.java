@@ -107,6 +107,85 @@ public final class AdifFormat {
     }
 
     /**
+     * Format a latitude as the ADIF {@code Location} type ({@code XDDD MM.MMM}), e.g.
+     * {@code 40.858333 -> "N040 51.500"}, {@code -40.858333 -> "S040 51.500"}.
+     */
+    public static String formatLat(double lat) {
+        return formatLocation(lat, 'N', 'S');
+    }
+
+    /**
+     * Format a longitude as the ADIF {@code Location} type ({@code XDDD MM.MMM}), e.g.
+     * {@code -73.925 -> "W073 55.500"}, {@code 73.925 -> "E073 55.500"}.
+     */
+    public static String formatLon(double lon) {
+        return formatLocation(lon, 'E', 'W');
+    }
+
+    /**
+     * The ADIF {@code Location} data type: a direction letter, 3-digit zero-padded degrees
+     * (used for both latitude, 0-90, and longitude, 0-180, per the ADIF spec), a space, and
+     * minutes to 3 decimal places, e.g. {@code "N040 51.500"}. {@code positive}/{@code negative}
+     * are the direction letters for a non-negative/negative {@code value} (N/S for latitude,
+     * E/W for longitude).
+     */
+    private static String formatLocation(double value, char positive, char negative) {
+        char dir = value >= 0 ? positive : negative;
+        double abs = Math.abs(value);
+        int degrees = (int) abs;
+        double minutes = (abs - degrees) * 60.0;
+        // Rounding minutes to 3 decimals can carry into 60.000 (e.g. 40.999999 degrees);
+        // normalize so it never renders as "MM.MMM" == "60.000".
+        if (minutes >= 59.9995) {
+            minutes = 0;
+            degrees++;
+        }
+        return String.format(Locale.US, "%c%03d %06.3f", dir, degrees, minutes);
+    }
+
+    /**
+     * Parse an ADIF {@code Location} value ({@code XDDD MM.MMM}) back to signed decimal
+     * degrees, the inverse of {@link #formatLat}/{@link #formatLon}. Returns {@code null} for
+     * {@code null}, empty, or malformed input rather than throwing, since this is used on
+     * import of files this app did not necessarily write.
+     */
+    public static Double parseLocation(String value) {
+        if (value == null) {
+            return null;
+        }
+        String v = value.trim();
+        if (v.length() < 2) {
+            return null;
+        }
+        char dir = Character.toUpperCase(v.charAt(0));
+        int sign;
+        switch (dir) {
+            case 'N':
+            case 'E':
+                sign = 1;
+                break;
+            case 'S':
+            case 'W':
+                sign = -1;
+                break;
+            default:
+                return null;
+        }
+        String rest = v.substring(1).trim();
+        int space = rest.indexOf(' ');
+        if (space < 0) {
+            return null;
+        }
+        try {
+            int degrees = Integer.parseInt(rest.substring(0, space));
+            double minutes = Double.parseDouble(rest.substring(space + 1).trim());
+            return sign * (degrees + minutes / 60.0);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
      * The number of UTF-8 <em>bytes</em> in {@code value} — the length an ADIF
      * {@code <field:len>value } declaration must carry, not the UTF-16
      * {@link String#length()} (char count). The two differ for any non-ASCII content

@@ -19,6 +19,7 @@ import android.util.Log;
 
 import com.k1af.ft8af.wave.UsbAudioDevice;
 import com.k1af.ft8af.wave.UsbAudioNative;
+import com.google.android.gms.maps.model.LatLng;
 
 import androidx.lifecycle.MutableLiveData;
 
@@ -32,6 +33,7 @@ import com.k1af.ft8af.connector.ConnectMode;
 import com.k1af.ft8af.database.ControlMode;
 import com.k1af.ft8af.database.DatabaseOpr;
 import com.k1af.ft8af.log.QSLRecord;
+import com.k1af.ft8af.maidenhead.MaidenheadGrid;
 import com.k1af.ft8af.rigs.BaseRigOperation;
 import com.k1af.ft8af.timer.OnUtcTimer;
 import com.k1af.ft8af.timer.UtcTimer;
@@ -1183,7 +1185,7 @@ public class FT8TransmitSignal {
 
         messageEndTime = UtcTimer.getSystemTime();
         if (onDoTransmitted != null) {// for saving QSO records
-            onTransmitSuccess.doAfterTransmit(new QSLRecord(
+            QSLRecord newRecord = new QSLRecord(
                     messageStartTime,
                     messageEndTime,
                     GeneralVariables.myCallsign,
@@ -1195,7 +1197,11 @@ public class FT8TransmitSignal {
                     GeneralVariables.currentMode().displayName,
                     GeneralVariables.band,
                     Math.round(GeneralVariables.getBaseFrequency())
-            ));
+            );
+            LatLng myLocation = MaidenheadGrid.getLocalLocation(GeneralVariables.getMainContext());
+            newRecord.setMyLatLon(myLocation != null ? myLocation.latitude : null
+                    , myLocation != null ? myLocation.longitude : null);
+            onTransmitSuccess.doAfterTransmit(newRecord);
 
             GeneralVariables.addQSLCallsign(toCallsign.callsign);// add successfully contacted callsign to the list
             ToastMessage.show(String.format("QSO : %s , at %s", toCallsign.callsign
@@ -1523,7 +1529,7 @@ public class FT8TransmitSignal {
         QSLRecord record = GeneralVariables.qslRecordList.getRecordByCallsign(toCall.callsign);
         if (record == null) {
             toMaidenheadGrid = GeneralVariables.getGridByCallsign(toCallsign.callsign, databaseOpr);
-            record = GeneralVariables.qslRecordList.addQSLRecord(new QSLRecord(
+            QSLRecord newRecord = new QSLRecord(
                     messageStartTime,
                     messageEndTime,
                     GeneralVariables.myCallsign,
@@ -1535,7 +1541,11 @@ public class FT8TransmitSignal {
                     GeneralVariables.currentMode().displayName,
                     GeneralVariables.band,
                     Math.round(GeneralVariables.getBaseFrequency()
-                    )));
+                    ));
+            LatLng myLocation = MaidenheadGrid.getLocalLocation(GeneralVariables.getMainContext());
+            newRecord.setMyLatLon(myLocation != null ? myLocation.latitude : null
+                    , myLocation != null ? myLocation.longitude : null);
+            record = GeneralVariables.qslRecordList.addQSLRecord(newRecord);
         }
         // update content based on message sequence
         switch (order) {

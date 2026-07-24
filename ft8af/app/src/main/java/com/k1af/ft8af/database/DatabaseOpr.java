@@ -63,7 +63,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
     public static synchronized DatabaseOpr getInstance(@Nullable Context context, @Nullable String databaseName) {
         if (instance == null) {
-            instance = new DatabaseOpr(context, databaseName, null, 19);
+            instance = new DatabaseOpr(context, databaseName, null, 20);
         }
         return instance;
     }
@@ -272,6 +272,12 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     , "sig TEXT");
             alterTable(sqLiteDatabase, "QSLTable", "sig_info"
                     , "sig_info TEXT");
+            // Device lat/lon captured at QSO time, decimal degrees; NULL when location was
+            // unavailable. Exported as ADIF MY_LAT/MY_LON.
+            alterTable(sqLiteDatabase, "QSLTable", "my_lat"
+                    , "my_lat REAL");
+            alterTable(sqLiteDatabase, "QSLTable", "my_lon"
+                    , "my_lon REAL");
 
         } else {
             sqLiteDatabase.execSQL("CREATE TABLE QSLTable (\n" +
@@ -300,7 +306,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     "my_sig TEXT,\n" +//POTA: activator's program ("POTA")
                     "my_sig_info TEXT,\n" +//POTA: activator's park ref
                     "sig TEXT,\n" +//POTA: worked station's program
-                    "sig_info TEXT)");//POTA: worked station's park ref
+                    "sig_info TEXT,\n" +//POTA: worked station's park ref
+                    "my_lat REAL,\n" +//device lat at QSO time, decimal degrees; NULL if unavailable
+                    "my_lon REAL)");//device lon at QSO time, decimal degrees; NULL if unavailable
         }
 
 
@@ -1597,9 +1605,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         if (!checkIsQSL(record)) {//If log data doesn't exist, add it
             querySQL = "INSERT INTO QSLTable(call, isQSL,isLotW_import,isLotW_QSL,gridsquare, mode, rst_sent, rst_rcvd, qso_date, " +
                     "time_on, qso_date_off, time_off, band, freq, station_callsign, my_gridsquare," +
-                    "comment,my_sig,my_sig_info,sig,sig_info)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+                    "comment,my_sig,my_sig_info,sig,sig_info,my_lat,my_lon)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
-            db.execSQL(querySQL, new String[]{record.getToCallsign()
+            // Object[] (not String[]) so a null myLat/myLon binds as SQL NULL rather than the
+            // literal string "null" — the rest of the fields are never null here.
+            db.execSQL(querySQL, new Object[]{record.getToCallsign()
                     , String.valueOf(record.isQSL ? 1 : 0)
                     , String.valueOf(record.isLotW_import ? 1 : 0)
                     , String.valueOf(record.isLotW_QSL ? 1 : 0)
@@ -1620,7 +1630,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     , record.getMySig()
                     , record.getMySigInfo()
                     , record.getSig()
-                    , record.getSigInfo()});
+                    , record.getSigInfo()
+                    , record.getMyLat()
+                    , record.getMyLon()});
             // If this QSO was logged during an active POTA activation, bump its qso_count.
             if (record.getMySigInfo() != null && !record.getMySigInfo().isEmpty()) {
                 db.execSQL("UPDATE pota_activation SET qso_count = qso_count + 1 "
