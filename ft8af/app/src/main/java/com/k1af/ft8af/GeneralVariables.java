@@ -451,6 +451,7 @@ public class GeneralVariables {
     public static String qrzXmlUsername = ""; //QRZ XML API username (for callsign lookups)
     public static String qrzXmlPassword = ""; //QRZ XML API password
     public static boolean pskOverlayEnabled = false; //PSK Reporter map overlay (issue #33)
+    public static boolean grayLineEnabled = true; //Day/night terminator (gray line) map overlay — on by default
     public static boolean synFrequency = false;//Same-frequency transmit
     // Hold TX freq: don't move the TX offset to a station you answer (WSJT-X
     // "Hold Tx Freq"). Enabled by default (issue #498) to keep the TX frequency

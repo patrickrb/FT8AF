@@ -53,6 +53,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -116,6 +118,12 @@ internal enum class MapViewMode { STANDARD, AZIMUTHAL }
 private const val MAP_MIN_ZOOM = 1f
 private const val MAP_MAX_ZOOM = 8f
 private const val MAP_ZOOM_STEP = 2f
+
+// Gray-line overlay colors. The night side is a translucent navy wash so land
+// and markers stay legible beneath it; the terminator itself is a soft amber
+// stroke — the "gray line" HF operators chase for enhanced propagation.
+private val GrayLineNightFill = Color(0x4A0B1220)
+private val GrayLineTerminator = Color(0xB3F5B44A)
 
 // Persists the PSK filter across config changes / process death. band == "" means all.
 private val PskFilterSaver = listSaver<PskFilter, Any>(
@@ -222,6 +230,24 @@ fun MapScreen(mainViewModel: MainViewModel) {
     // changes via PskFilterSaver. Changing it re-runs the fetch (force-once below).
     var pskFilter by rememberSaveable(stateSaver = PskFilterSaver) { mutableStateOf(PskFilter()) }
     var filterSheetOpen by rememberSaveable { mutableStateOf(false) }
+
+    // Gray-line (day/night terminator) overlay. On by default — it's a passive,
+    // translucent shade that HF operators use to spot enhanced-propagation paths.
+    // `nowMillis` ticks once a minute so the terminator creeps across the map in
+    // real time; the Sun moves ~0.25°/min, far slower than the tick.
+    var grayLineEnabled by rememberSaveable { mutableStateOf(GeneralVariables.grayLineEnabled) }
+    var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(grayLineEnabled) {
+        while (grayLineEnabled) {
+            nowMillis = System.currentTimeMillis()
+            delay(60_000L)
+        }
+    }
+    // The night region as a lat/lon ring, recomputed only when the minute ticks
+    // (not every animation frame). The canvas just projects + fills it.
+    val nightRing = remember(grayLineEnabled, nowMillis) {
+        if (grayLineEnabled) nightPolygonLatLon(subsolarPoint(nowMillis)) else null
+    }
 
     // Zoom + pan (issue #51). Scale is clamped to [1, MAX_ZOOM]; pan is clamped so the
     // scaled map can't be dragged entirely off-screen. Both reset whenever the projection
@@ -412,6 +438,7 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 stations = stations,
                 pskSpots = pskSpots,
                 connectionLines = connectionLines,
+                nightRing = nightRing,
                 selectedCallsign = selectedCallsign,
                 onStationSelected = { selectedCallsign = it },
                 scale = mapScale,
@@ -487,6 +514,22 @@ fun MapScreen(mainViewModel: MainViewModel) {
         ) {
             if (pskOverlayEnabled) {
                 FilterPill(active = filterSheetOpen, onClick = { filterSheetOpen = !filterSheetOpen })
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+            // Gray-line toggle — only the equirectangular map draws the terminator.
+            if (viewMode == MapViewMode.STANDARD) {
+                GrayLineToggle(
+                    enabled = grayLineEnabled,
+                    onToggle = { newVal ->
+                        grayLineEnabled = newVal
+                        GeneralVariables.grayLineEnabled = newVal
+                        mainViewModel.databaseOpr.writeConfig(
+                            "grayLineEnabled",
+                            if (newVal) "1" else "0",
+                            null,
+                        )
+                    },
+                )
                 Spacer(modifier = Modifier.width(6.dp))
             }
             PskOverlayToggle(
@@ -763,6 +806,28 @@ internal fun PskOverlayToggle(enabled: Boolean, onToggle: (Boolean) -> Unit) {
     ) {
         Text(
             text = stringResource(R.string.map_overlay_psk),
+            color = if (enabled) BgApp else TextMuted,
+            fontFamily = GeistMonoFamily,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+internal fun GrayLineToggle(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    val cd = stringResource(R.string.map_overlay_grayline_cd)
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (enabled) GrayLineTerminator else BgSurface3)
+            .clickable { onToggle(!enabled) }
+            .semantics { contentDescription = cd }
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = stringResource(R.string.map_overlay_grayline),
             color = if (enabled) BgApp else TextMuted,
             fontFamily = GeistMonoFamily,
             fontSize = 11.sp,
@@ -1059,6 +1124,7 @@ private fun StandardMapCanvas(
     stations: List<StationMarker>,
     pskSpots: List<PskSpotMarker>,
     connectionLines: List<ConnectionLine>,
+    nightRing: FloatArray?,
     selectedCallsign: String?,
     onStationSelected: (String?) -> Unit,
     scale: Float,
@@ -1093,6 +1159,10 @@ private fun StandardMapCanvas(
 
         // Lat/lon grid (over land so it stays visible across continents)
         drawEquirectGrid(vp)
+
+        // Gray-line (day/night terminator) — translucent night wash + amber
+        // terminator stroke, drawn over land/grid but under the markers.
+        nightRing?.let { ring -> drawGrayLine(ring, vp) }
 
         // Operator marker (at projected lat/lon, scaled + panned with map)
         val opPos = vp.projectLatLon(opLat, opLon)
@@ -1366,6 +1436,47 @@ private fun DrawScope.drawWorldLand(rings: List<FloatArray>, vp: EquirectViewpor
     }
     drawPath(path, color = Color(0x4094A3B8))                                  // fill
     drawPath(path, color = Color(0x9094A3B8), style = Stroke(width = 0.75f))   // outline
+}
+
+/**
+ * Draw the gray-line overlay on the equirectangular map: fill the night side
+ * with a translucent wash and stroke the terminator itself. [ring] is the flat
+ * `[lon, lat, …]` night polygon from [nightPolygonLatLon] — its last two
+ * vertices close the ring along the dark pole, so the terminator stroke uses
+ * everything but those two.
+ */
+private fun DrawScope.drawGrayLine(ring: FloatArray, vp: EquirectViewport) {
+    if (ring.size < 8) return
+    val cx = vp.canvasW / 2f
+    val cy = vp.canvasH / 2f
+    val sxUnit = vp.worldPxW / 2f
+    val syUnit = vp.worldPxH / 2f
+    fun px(lon: Float) = cx + (lon / 180f) * sxUnit + vp.panX
+    fun py(lat: Float) = cy + (-lat / 90f) * syUnit + vp.panY
+
+    // Filled night region (the whole closed ring).
+    val fill = Path()
+    var i = 0
+    while (i + 1 < ring.size) {
+        val x = px(ring[i])
+        val y = py(ring[i + 1])
+        if (i == 0) fill.moveTo(x, y) else fill.lineTo(x, y)
+        i += 2
+    }
+    fill.close()
+    drawPath(fill, color = GrayLineNightFill)
+
+    // Terminator stroke — the curve only, dropping the two pole-closing vertices.
+    val curveFloats = ring.size - 4
+    val stroke = Path()
+    var j = 0
+    while (j < curveFloats) {
+        val x = px(ring[j])
+        val y = py(ring[j + 1])
+        if (j == 0) stroke.moveTo(x, y) else stroke.lineTo(x, y)
+        j += 2
+    }
+    drawPath(stroke, color = GrayLineTerminator, style = Stroke(width = 1.5f))
 }
 
 // ---------------------------------------------------------------------------
