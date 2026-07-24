@@ -152,6 +152,10 @@ private fun QsoSheetContent(
 
         Spacer(modifier = Modifier.height(12.dp))
 
+        // -- Worked before: prior-QSO history with this station (renders nothing
+        // for a never-worked station, so first contacts stay uncluttered) --
+        WorkedBeforeCard(callsign = callsign)
+
         // -- Path map: operator grid -> remote grid, with a connecting line.
         // Renders nothing (and no trailing spacer) when either grid is unknown.
         QsoPathMap(

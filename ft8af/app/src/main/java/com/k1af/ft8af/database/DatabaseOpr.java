@@ -576,6 +576,43 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         return out;
     }
 
+    /**
+     * Every prior logged QSO with {@code callsign}, oldest first, as lightweight
+     * {@link com.k1af.ft8af.log.PriorQso} rows (date/time/band/mode only). Powers
+     * the decode sheet's "Worked before" card. Returns an empty list when the
+     * station has never been worked, on a blank callsign, or on any read error.
+     *
+     * <p>The exact-match on {@code "call"} is served by the {@code QSLTable_call_IDX}
+     * index, so this stays cheap even on a large log. Decoded callsigns are already
+     * upper-cased (as are stored ones), so no case-folding is needed — folding here
+     * would only defeat the index.
+     */
+    public java.util.List<com.k1af.ft8af.log.PriorQso> getPriorQsos(String callsign) {
+        java.util.List<com.k1af.ft8af.log.PriorQso> out = new ArrayList<>();
+        if (db == null || callsign == null) {
+            return out;
+        }
+        String c = callsign.trim();
+        if (c.isEmpty()) {
+            return out;
+        }
+        try (Cursor cursor = db.rawQuery(
+                "SELECT qso_date, time_on, band, mode FROM QSLTable "
+                        + "WHERE \"call\" = ? ORDER BY qso_date, time_on",
+                new String[]{c})) {
+            while (cursor.moveToNext()) {
+                out.add(new com.k1af.ft8af.log.PriorQso(
+                        cursor.getString(0),
+                        cursor.getString(1),
+                        cursor.getString(2),
+                        cursor.getString(3)));
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "getPriorQsos failed: " + e.getClass().getSimpleName());
+        }
+        return out;
+    }
+
     /** Drop every cached signature mapping (e.g. on server/logbook switch). */
     public void clearLocationStationCache() {
         if (db == null) {

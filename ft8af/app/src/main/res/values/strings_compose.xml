@@ -215,6 +215,13 @@
     <string name="qso_live_step_fallback">message</string>
     <string name="qso_tx_now">TX NOW</string>
     <string name="qso_tx_next">TX NEXT</string>
+    <string name="qso_worked_before_title">Worked before</string>
+    <plurals name="qso_worked_before_count">
+        <item quantity="one">%1$d QSO</item>
+        <item quantity="other">%1$d QSOs</item>
+    </plurals>
+    <string name="qso_worked_before_last">last %1$s</string>
+    <string name="qso_worked_before_bands">Bands: %1$s</string>
     <string name="qso_last_heard">Last heard</string>
     <string name="qso_last_heard_unknown">--</string>
     <string name="qso_last_heard_just_now">just now</string>
