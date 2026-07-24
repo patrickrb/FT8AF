@@ -13,7 +13,8 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 /**
- * KENWOOD TS590, similar to YAESU gen-3 commands. Uses Yaesu3Command structure, commands in KenwoodTK90RigConstant.
+ * FLEX 6000 series. Replies are {@code ';'}-terminated {@code ZZ}-prefixed
+ * commands (e.g. {@code ZZFA00014074000;}); parsed via {@link Flex6000Command}.
  */
 public class Flex6000Rig extends BaseRig {
     private static final String TAG = "KenwoodTS590Rig";
@@ -95,33 +96,47 @@ public class Flex6000Rig extends BaseRig {
     public void onReceiveData(byte[] data) {
         String s = new String(data);
 
-        if (!s.contains(";"))
-        {
-            buffer.append(s);
-            if (buffer.length()>1000) clearBufferData();
-            return;//data reception not yet complete.
-        }else {
-            if (s.indexOf(";")>0){//received end-of-data, and ';' is not the first character
-              buffer.append(s.substring(0,s.indexOf(";")));
-            }
-            //begin parsing data
-            Flex6000Command flex6000Command = Flex6000Command.getCommand(buffer.toString());
-            clearBufferData();//clear buffer
-            //put remaining data into buffer
-            buffer.append(s.substring(s.indexOf(";")+1));
+        // FlexRadio 6000 frames every reply as <ID><data>';' (e.g. ZZFA00014074000;).
+        // The old parser consumed only the FIRST ';'-terminated command in a read
+        // and re-buffered the rest WITH its terminator, where the next poll's
+        // clearBufferData() wiped it -- so when the network/serial transport
+        // coalesced two replies into one read (common on the TCP SmartSDR link),
+        // the second frequency reply was permanently lost and the retained
+        // terminator poisoned the next parse. Drain every complete ';'-terminated
+        // command in this read and carry only the trailing, unterminated fragment.
+        CatLineSplitter.Result result = CatLineSplitter.split(buffer.toString(), s, ';');
+        clearBufferData();
+        buffer.append(result.remainder);
+        // A runaway unterminated buffer must not grow without bound.
+        if (buffer.length() > 1000) clearBufferData();
 
-            if (flex6000Command == null) {
-                return;
+        for (String frame : result.frames) {
+            long freq = frequencyFromFrame(frame);
+            if (freq != -1) {
+                setFreq(freq);
             }
-            if (flex6000Command.getCommandID().equalsIgnoreCase("ZZFA")) {
-                long tempFreq=Flex6000Command.getFrequency(flex6000Command);
-                if (tempFreq!=0) {//if tempFreq==0, frequency is invalid
-                    setFreq(Flex6000Command.getFrequency(flex6000Command));
-                }
-            }
-
         }
+    }
 
+    /**
+     * Pure dispatch for a single drained command frame: the frequency this frame
+     * asks the rig to tune to, or {@code -1} when the frame carries no valid
+     * frequency update (unparseable frame, a non-ZZFA command, or an invalid
+     * {@code 0} read-back). Extracted so the coalesced-drain and freq-selection
+     * logic is unit-testable without rig/Android state.
+     */
+    static long frequencyFromFrame(String frame) {
+        Flex6000Command flex6000Command = Flex6000Command.getCommand(frame);
+        if (flex6000Command == null) {
+            return -1;
+        }
+        if (flex6000Command.getCommandID().equalsIgnoreCase("ZZFA")) {
+            long tempFreq = Flex6000Command.getFrequency(flex6000Command);
+            if (tempFreq != 0) {//if tempFreq==0, frequency is invalid
+                return tempFreq;
+            }
+        }
+        return -1;
     }
 
     @Override
