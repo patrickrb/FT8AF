@@ -974,8 +974,14 @@ private fun grayLineStatusText(display: GrayLineDisplay): String {
         GrayLinePhase.NIGHT -> stringResource(R.string.qso_grayline_night)
     }
     val detailText = when (display.detail) {
-        GrayLineDetail.SUNRISE -> stringResource(R.string.qso_grayline_sunrise_in, display.countdown)
-        GrayLineDetail.SUNSET -> stringResource(R.string.qso_grayline_sunset_in, display.countdown)
+        // An empty countdown flags the "happening now" case: use a grammatical,
+        // localized "at sunrise/sunset" string instead of "sunrise in now".
+        GrayLineDetail.SUNRISE ->
+            if (display.countdown.isEmpty()) stringResource(R.string.qso_grayline_sunrise_now)
+            else stringResource(R.string.qso_grayline_sunrise_in, display.countdown)
+        GrayLineDetail.SUNSET ->
+            if (display.countdown.isEmpty()) stringResource(R.string.qso_grayline_sunset_now)
+            else stringResource(R.string.qso_grayline_sunset_in, display.countdown)
         GrayLineDetail.MIDNIGHT_SUN -> stringResource(R.string.qso_grayline_midnight_sun)
         GrayLineDetail.POLAR_NIGHT -> stringResource(R.string.qso_grayline_polar_night)
     }

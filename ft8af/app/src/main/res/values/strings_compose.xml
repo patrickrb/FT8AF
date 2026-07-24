@@ -236,6 +236,8 @@
     <string name="qso_grayline_night">Night</string>
     <string name="qso_grayline_sunrise_in">sunrise in %1$s</string>
     <string name="qso_grayline_sunset_in">sunset in %1$s</string>
+    <string name="qso_grayline_sunrise_now">at sunrise</string>
+    <string name="qso_grayline_sunset_now">at sunset</string>
     <string name="qso_grayline_midnight_sun">midnight sun</string>
     <string name="qso_grayline_polar_night">polar night</string>
 

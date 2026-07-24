@@ -147,14 +147,16 @@ internal fun grayLineDisplay(s: SolarSnapshot): GrayLineDisplay {
 }
 
 /**
- * Format a whole-minute countdown as a compact "1h 20m" / "45m" / "now" string.
- * Used for the "sunset in …" / "sunrise in …" gray-line hint. Kept pure (no
- * Android resources) so it is unit-tested directly; the surrounding "sunset
- * in {x}" wording is supplied by the caller via string resources.
+ * Format a whole-minute countdown as a compact "1h 20m" / "45m" string, or the
+ * empty string when the event is happening now (< 1 minute away). Used for the
+ * "sunset in …" / "sunrise in …" gray-line hint; the empty return flags the
+ * "now" case so the caller can pick a grammatical, localized "at sunrise" /
+ * "at sunset" resource instead of interpolating a hardcoded "now" into
+ * "sunrise in …". Kept pure (no Android resources) so it is unit-tested directly.
  */
 internal fun formatSolarCountdown(minutes: Int): String {
     val m = minutes.coerceAtLeast(0)
-    if (m < 1) return "now"
+    if (m < 1) return ""
     val hours = m / 60
     val mins = m % 60
     return when {

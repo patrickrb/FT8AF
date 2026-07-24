@@ -151,9 +151,11 @@ class SolarStatusTest {
     }
 
     @Test
-    fun countdown_zeroOrNegative_isNow() {
-        assertThat(formatSolarCountdown(0)).isEqualTo("now")
-        assertThat(formatSolarCountdown(-5)).isEqualTo("now")
+    fun countdown_zeroOrNegative_isEmptyNowFlag() {
+        // < 1 minute away returns "" so the caller can render a grammatical,
+        // localized "at sunrise/sunset" instead of "sunrise in now".
+        assertThat(formatSolarCountdown(0)).isEmpty()
+        assertThat(formatSolarCountdown(-5)).isEmpty()
     }
 
     // -----------------------------------------------------------------------
@@ -184,6 +186,20 @@ class SolarStatusTest {
         assertThat(d.phase).isEqualTo(GrayLinePhase.NIGHT)
         assertThat(d.detail).isEqualTo(GrayLineDetail.SUNRISE)
         assertThat(d.countdown).isEqualTo("45m")
+    }
+
+    @Test
+    fun display_eventImminent_hasEmptyCountdownForNowRendering() {
+        // Sunset < 1 minute away: detail is still SUNSET, but the countdown is
+        // empty so the QSO sheet renders the localized "at sunset" now-string.
+        val d = grayLineDisplay(
+            SolarSnapshot(
+                elevationDeg = 0.5, isDay = true, onGrayLine = true,
+                nextKind = SolarEventKind.SUNSET, minutesToNext = 0,
+            ),
+        )
+        assertThat(d.detail).isEqualTo(GrayLineDetail.SUNSET)
+        assertThat(d.countdown).isEmpty()
     }
 
     @Test
