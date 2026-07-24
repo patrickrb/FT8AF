@@ -618,6 +618,11 @@
     <string name="settings_alert_qso_complete_desc">Sound + vibrate + notify when a QSO is logged</string>
     <string name="alert_cq_reply_title">Calling you: %1$s</string>
     <string name="alert_qso_complete_title">QSO complete</string>
+    <string name="settings_alert_watchlist">Callsign watchlist</string>
+    <string name="settings_alert_watchlist_desc">Sound + vibrate + notify the moment a watched callsign or prefix is decoded, on any band</string>
+    <string name="settings_watch_dialog_title">Callsign watchlist</string>
+    <string name="settings_watch_dialog_desc">Comma-separated calls or prefixes (e.g. 3Y0, W1AW, TX7). An alert fires the instant a match is decoded — matched by prefix, so a DXpedition prefix catches every variant.</string>
+    <string name="alert_watch_title">Watchlist: %1$s</string>
     <string name="rx_service_channel_name">Background receiving</string>
     <string name="rx_service_channel_desc">Keeps FT8 decoding running while the app is in the background or the screen is off</string>
     <string name="rx_service_title">FT8AF is receiving</string>

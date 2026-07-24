@@ -2891,6 +2891,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("blockedKeywords")) {//Blocklist: keyword substrings
                     GeneralVariables.addBlockedKeywords(result);
                 }
+                if (name.equalsIgnoreCase("watchCallsigns")) {//Watchlist: alert on these call(prefix)es
+                    GeneralVariables.addWatchCallsigns(result);
+                }
                 if (name.equalsIgnoreCase("filterShowOnlyCQ")) {//Decode filter: CQ only
                     GeneralVariables.filterShowOnlyCQ = result.equals("1");
                 }

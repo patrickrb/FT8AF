@@ -30,7 +30,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * <ul>
  *   <li>{@code dx_alerts} — a station calling CQ that is a NEW (unworked) entity in a
  *       user-enabled category: a new DXCC ({@link GeneralVariables#alertNewDxcc}) or US
- *       state ({@link GeneralVariables#alertNewState}). Driven from
+ *       state ({@link GeneralVariables#alertNewState}); and any decode from a station on
+ *       the user's callsign watchlist ({@link GeneralVariables#checkIsWatchedCallsign},
+ *       not CQ-gated). Driven from
  *       {@code MainViewModel.GetQTHRunnable.run()} once the {@code from*} flags are set.</li>
  *   <li>{@code qso_alerts} — someone calling YOU
  *       ({@link GeneralVariables#alertOnCqReply}, also driven from {@code processDecodes})
@@ -65,7 +67,7 @@ public class DxAlertNotifier {
                 appContext.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
         createHighChannel(nm, CHANNEL_ID, "Needed-DX alerts",
-                "New DXCC / US state stations calling CQ");
+                "New DXCC / US state stations calling CQ, and watchlist callsigns");
         createHighChannel(nm, QSO_CHANNEL_ID, "QSO & CQ alerts",
                 "Someone calling you, and completed-QSO alerts");
     }
@@ -95,13 +97,26 @@ public class DxAlertNotifier {
     public void processDecodes(List<Ft8Message> messages) {
         if (appContext == null || messages == null) return;
         if (!GeneralVariables.alertNewDxcc && !GeneralVariables.alertNewState
-                && !GeneralVariables.alertOnCqReply) {
+                && !GeneralVariables.alertOnCqReply && !GeneralVariables.hasWatchCallsigns()) {
             return;
         }
 
         for (Ft8Message msg : messages) {
             if (msg == null) continue;
             if (GeneralVariables.checkIsBlockedMessage(msg)) continue;
+
+            // Watchlist: any decode from a station on the user's watchlist — a rare
+            // DXpedition, a needed prefix, a friend. NOT CQ-gated (checked before the
+            // CQ-only continue below) so an in-QSO watched station still alerts the
+            // instant it's on the air. Blocked messages already `continue`d above.
+            boolean watched = GeneralVariables.checkIsWatchedCallsign(msg.getCallsignFrom());
+            if (AlertDecisions.shouldAlertWatch(
+                    GeneralVariables.hasWatchCallsigns(), watched, false)) {
+                fire(AlertDecisions.watchDedupKey(msg.getCallsignFrom()),
+                        CHANNEL_ID,
+                        appContext.getString(R.string.alert_watch_title, msg.getCallsignFrom()),
+                        defaultBody(msg), msg.getCallsignFrom(), msg.band);
+            }
 
             // CQ reply: any decoded message addressed to my callsign. The batch is already
             // own-TX-echo filtered upstream, so a message to my call is another station

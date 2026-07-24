@@ -53,4 +53,39 @@ public class AlertDecisionsTest {
         assertThat(k).isEqualTo("QSO:W5XYZ|20231114-123456");
         assertThat(k).isNotEqualTo(AlertDecisions.qsoCompleteDedupKey("W5XYZ", "20231114-123457"));
     }
+
+    @Test
+    public void watch_firesOnlyWhenListNonEmptyMatchedAndNotBlocked() {
+        assertThat(AlertDecisions.shouldAlertWatch(true, true, false)).isTrue();
+    }
+
+    @Test
+    public void watch_suppressedWhenListEmpty() {
+        assertThat(AlertDecisions.shouldAlertWatch(false, true, false)).isFalse();
+    }
+
+    @Test
+    public void watch_suppressedWhenNotMatched() {
+        assertThat(AlertDecisions.shouldAlertWatch(true, false, false)).isFalse();
+    }
+
+    @Test
+    public void watch_suppressedWhenBlocked() {
+        assertThat(AlertDecisions.shouldAlertWatch(true, true, true)).isFalse();
+    }
+
+    @Test
+    public void watchDedupKey_isStableAndCaseInsensitive() {
+        String a = AlertDecisions.watchDedupKey(" 3y0j ");
+        String b = AlertDecisions.watchDedupKey("3Y0J");
+        assertThat(a).isEqualTo(b);
+        assertThat(a).isEqualTo("WATCH:3Y0J");
+    }
+
+    @Test
+    public void watchDedupKey_differsPerCallAndHandlesNull() {
+        assertThat(AlertDecisions.watchDedupKey("W1AW"))
+                .isNotEqualTo(AlertDecisions.watchDedupKey("W2AW"));
+        assertThat(AlertDecisions.watchDedupKey(null)).isEqualTo("WATCH:");
+    }
 }
