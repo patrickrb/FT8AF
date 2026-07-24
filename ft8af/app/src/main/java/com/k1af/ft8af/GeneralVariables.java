@@ -220,6 +220,15 @@ public class GeneralVariables {
     private static final java.util.LinkedHashSet<String> blockedExactCallsigns = new java.util.LinkedHashSet<>();
     private static final java.util.LinkedHashSet<String> blockedKeywords = new java.util.LinkedHashSet<>();
 
+    // Callsign watchlist (Settings → Needed-DX Alerts → Watchlist). When non-empty,
+    // a decoded message from a matching station fires a high-priority alert (sound +
+    // vibrate + notification) via DxAlertNotifier — the "tell me the instant this
+    // station is on the air" hunt tool for a rare DXpedition, a needed prefix, or a
+    // friend. Entries match by callsign PREFIX (so "3Y0" catches 3Y0J and 3Y0J/MM,
+    // and a full call like "W1AW" also matches "W1AW/P"), mirroring the excluded-
+    // callsign prefix semantics. Unlike the needed-DX alerts it is not CQ-gated.
+    private static final java.util.LinkedHashSet<String> watchCallsigns = new java.util.LinkedHashSet<>();
+
     /**
      * Split a user-entered list on comma / space / pipe / Chinese comma and
      * collect the non-empty, upper-cased tokens into {@code target}.
@@ -295,6 +304,37 @@ public class GeneralVariables {
 
     public static synchronized String getBlockedKeywords() {
         return joinBlockTokens(blockedKeywords);
+    }
+
+    /** Replace the callsign watchlist from a user-entered comma/space/pipe list. */
+    public static synchronized void addWatchCallsigns(String callsigns) {
+        parseBlockTokens(callsigns, watchCallsigns);
+    }
+
+    /** The watchlist in canonical comma-separated form (for persistence + display). */
+    public static synchronized String getWatchCallsigns() {
+        return joinBlockTokens(watchCallsigns);
+    }
+
+    /** Whether the user has any watchlist entries (gates the watchlist alert). */
+    public static synchronized boolean hasWatchCallsigns() {
+        return !watchCallsigns.isEmpty();
+    }
+
+    /**
+     * Whether {@code callsign} matches the watchlist by PREFIX (case-insensitive):
+     * "3Y0" matches 3Y0J / 3Y0J/MM, "W1AW" matches W1AW / W1AW/P. Anchored at the
+     * start, so "W1AW" does not match "KW1AW". Empty list matches nothing.
+     */
+    public static synchronized boolean checkIsWatchedCallsign(String callsign) {
+        if (callsign == null || watchCallsigns.isEmpty()) return false;
+        String up = callsign.toUpperCase();
+        for (String prefix : watchCallsigns) {
+            if (up.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

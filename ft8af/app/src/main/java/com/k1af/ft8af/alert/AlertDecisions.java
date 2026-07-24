@@ -42,6 +42,27 @@ public final class AlertDecisions {
         return "QSO:" + norm(toCallsign) + "|" + norm(endTime);
     }
 
+    /**
+     * Watchlist alert — fire when a decoded station matches the user's callsign
+     * watchlist (a rare DXpedition prefix, a needed call, a friend). Unlike the
+     * needed-DX alerts this is not CQ-gated: the point is to know the instant the
+     * station is on the air, whatever it's transmitting.
+     *
+     * @param hasWatchlist whether the user has any watchlist entries (the feature is
+     *                     active purely by having a non-empty list — no separate toggle)
+     * @param matched      whether the decoded sender matches a watchlist entry
+     *                     (resolved by the caller via {@code checkIsWatchedCallsign})
+     * @param blocked      whether the message is filtered by the user's block list
+     */
+    public static boolean shouldAlertWatch(boolean hasWatchlist, boolean matched, boolean blocked) {
+        return hasWatchlist && matched && !blocked;
+    }
+
+    /** Dedup key for a watchlist alert: alert once per session per watched station. */
+    public static String watchDedupKey(String fromCallsign) {
+        return "WATCH:" + norm(fromCallsign);
+    }
+
     private static String norm(String s) {
         return s == null ? "" : s.trim().toUpperCase();
     }
