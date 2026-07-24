@@ -743,6 +743,15 @@
     <string name="input_level_too_high">High</string>
     <string name="input_level_clipping">Clip</string>
 
+    <!-- ===== Clock-sync (DT) indicator on the slot-timer bar ===== -->
+    <string name="clock_sync_label" translatable="false">DT</string>
+    <string name="clock_sync_good">in sync</string>
+    <string name="clock_sync_fair">check clock</string>
+    <string name="clock_sync_poor">clock off</string>
+    <string name="clock_sync_unknown">no decodes</string>
+    <!-- %1$s = signed offset e.g. "+0.1 s"; %2$s = status word e.g. "in sync" -->
+    <string name="clock_sync_cd">Clock sync: average decode offset %1$s, %2$s</string>
+
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Language</string>
     <string name="settings_language_desc">App display language</string>
