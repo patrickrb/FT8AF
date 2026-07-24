@@ -168,16 +168,23 @@ public class DxAlertNotifier {
                 body.toString(), call, qslRecord.getBandFreq());
     }
 
-    private static String defaultBody(Ft8Message msg) {
+    static String defaultBody(Ft8Message msg) {
         StringBuilder body = new StringBuilder(msg.getCallsignFrom());
         if (msg.maidenGrid != null && !msg.maidenGrid.isEmpty()) {
             body.append("  ").append(msg.maidenGrid);
         }
-        body.append("  ").append(msg.snr).append(" dB");
+        // The decoder can emit a valid message with no SNR (FT8SignalListener logs
+        // "SNR not set by decoder" and still adds it to the decode list), so snr may be
+        // the SNR_UNKNOWN sentinel (Integer.MIN_VALUE). Appending it unconditionally
+        // rendered "-2147483648 dB" in the notification body — mirror cqReplyBody and
+        // drop the SNR line when it is unknown.
+        if (msg.snr != Ft8Message.SNR_UNKNOWN) {
+            body.append("  ").append(msg.snr).append(" dB");
+        }
         return body.toString();
     }
 
-    private static String cqReplyBody(Ft8Message msg) {
+    static String cqReplyBody(Ft8Message msg) {
         StringBuilder body = new StringBuilder(msg.getMessageText());
         if (msg.snr != Ft8Message.SNR_UNKNOWN) {
             body.append("  ").append(msg.snr).append(" dB");
