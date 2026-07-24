@@ -139,6 +139,11 @@ private data class LogbookStats(
     val cqZones: Int = 0,
     val ituZones: Int = 0,
     val bandCounts: List<Pair<String, Int>> = emptyList(),
+    // Worked All States (WAS): distinct US states worked (0..50) and the
+    // canonically-ordered list of states still needed. Derived from each QSO's
+    // grid via UsStateLookup — see WorkedAllStates.kt.
+    val statesWorked: Int = 0,
+    val neededStates: List<String> = emptyList(),
 )
 
 private data class AwardProgress(
@@ -147,6 +152,10 @@ private data class AwardProgress(
     val current: Int,
     val total: Int,
     val color: Color,
+    // When non-empty and the award is incomplete, the remaining targets are
+    // surfaced as chips under the progress bar (used by WAS to show the states
+    // still needed). Empty for awards without an enumerable "needed" list.
+    val remaining: List<String> = emptyList(),
 )
 
 // ---------------------------------------------------------------------------
@@ -174,6 +183,9 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
     var syncDialogState by remember { mutableStateOf<SyncDialogState?>(null) }
 
     val scope = rememberCoroutineScope()
+    // Captured for off-thread grid->state resolution (WAS). UsStateLookup caches
+    // the asset table, so calling it from the IO loader below is cheap.
+    val appContext = LocalContext.current.applicationContext
 
     // Load records and stats from the database. Re-runs when refreshKey changes
     // (e.g. after the user edits or deletes a QSO).
@@ -246,12 +258,20 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
                 val bandCounts = bandInfo?.values?.map { (it.name ?: "") to it.value }
                     ?: emptyList()
 
+                // Worked All States: resolve each QSO's grid to a US state and
+                // collapse to the distinct set (see WorkedAllStates.kt).
+                val worked = workedStates(loaded.map { it.grid }) {
+                    UsStateLookup.stateFromGrid(appContext, it)
+                }
+
                 stats = LogbookStats(
                     totalQsos = totalQsos,
                     dxccEntities = dxccCount,
                     cqZones = cqCount,
                     ituZones = ituCount,
                     bandCounts = bandCounts,
+                    statesWorked = worked.size,
+                    neededStates = neededStates(worked),
                 )
             } catch (_: Exception) {
                 // Leave records/stats at defaults on error
@@ -671,6 +691,13 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
             current = stats.dxccEntities,
             total = 340,
             gradientColors = listOf(Signal, StatusConfirmed),
+            progress = chartProgress,
+        )
+        AwardProgressBar(
+            label = stringResource(R.string.log_award_was_states),
+            current = stats.statesWorked,
+            total = 50,
+            gradientColors = listOf(Accent, StatusConfirmed),
             progress = chartProgress,
         )
         AwardProgressBar(
@@ -1711,9 +1738,10 @@ private fun AwardsTab(stats: LogbookStats) {
             AwardProgress(
                 name = wasName,
                 description = wasDesc,
-                current = (stats.dxccEntities * 50 / 340.coerceAtLeast(1)).coerceAtMost(50),
+                current = stats.statesWorked,
                 total = 50,
                 color = Accent,
+                remaining = stats.neededStates,
             ),
             AwardProgress(
                 name = wazName,
@@ -1844,10 +1872,73 @@ private fun AwardCard(award: AwardProgress) {
                             ),
                     )
                 }
+
+                // States still needed (WAS): a capped preview of remaining
+                // targets so a chaser can see at a glance what's left to work.
+                if (award.remaining.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    NeededStatesRow(remaining = award.remaining, accent = award.color)
+                }
             }
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Needed-states chip row (WAS award card)
+// ---------------------------------------------------------------------------
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun NeededStatesRow(remaining: List<String>, accent: Color) {
+    // Cap the visible chips so a fresh log (up to 50 remaining) never floods the
+    // card; the rest collapse into a trailing "+N" chip.
+    val (shown, overflow) = neededStatesPreview(remaining, NEEDED_STATES_PREVIEW_MAX)
+    Text(
+        text = stringResource(R.string.log_award_states_needed),
+        color = TextFaint,
+        fontSize = 9.5.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.06.sp,
+    )
+    Spacer(modifier = Modifier.height(5.dp))
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        for (state in shown) {
+            StateChip(text = state, accent = accent)
+        }
+        if (overflow > 0) {
+            StateChip(text = "+$overflow", accent = accent)
+        }
+    }
+}
+
+@Composable
+private fun StateChip(text: String, accent: Color) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(accent.copy(alpha = 0.12f))
+            .border(1.dp, accent.copy(alpha = 0.26f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 5.dp, vertical = 2.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            color = accent,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = GeistMonoFamily,
+            maxLines = 1,
+        )
+    }
+}
+
+/** Max needed-state chips shown before collapsing the rest into a "+N" chip. */
+private const val NEEDED_STATES_PREVIEW_MAX = 16
 
 // ===========================================================================
 // Per-row QSO edit / delete dialogs (Recent tab)
