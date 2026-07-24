@@ -80,6 +80,7 @@ import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.count.CountDbOpr
 import com.k1af.ft8af.log.QSLCallsignRecord
 import com.k1af.ft8af.log.ThirdPartyService
+import com.k1af.ft8af.maidenhead.MaidenheadGrid
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
@@ -631,6 +632,24 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
             )
         }
 
+        // Best DX highlight — the furthest station worked, great-circle from the
+        // operator's grid. Only shown once there's a measurable contact (operator
+        // grid configured and at least one logged grid that parses).
+        val myGrid = GeneralVariables.getMyMaidenheadGrid()
+        val bestDx = remember(records, myGrid) {
+            computeBestDx(records) { grid ->
+                if (myGrid.isNullOrEmpty()) {
+                    null
+                } else {
+                    MaidenheadGrid.getDist(myGrid, grid)
+                }
+            }
+        }
+        if (bestDx != null) {
+            SectionHeader(stringResource(R.string.log_section_best_dx))
+            BestDxCard(bestDx = bestDx, modifier = Modifier.fillMaxWidth())
+        }
+
         // Band donut chart
         if (stats.bandCounts.isNotEmpty()) {
             SectionHeader(stringResource(R.string.log_section_band_distribution))
@@ -714,6 +733,52 @@ private fun BigStatCard(
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 letterSpacing = 0.04.sp,
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Best DX card
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun BestDxCard(bestDx: BestDx, modifier: Modifier = Modifier) {
+    // MaidenheadGrid.formatDist already renders in the operator's preferred unit
+    // (mi/km) with its abbreviated label, so this stays unit-agnostic here.
+    val distanceText = MaidenheadGrid.formatDist(bestDx.distanceKm)
+    GlassCard(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = bestDx.callsign,
+                    color = Signal,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = GeistMonoFamily,
+                )
+                if (bestDx.grid.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = bestDx.grid,
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 0.04.sp,
+                    )
+                }
+            }
+            Text(
+                text = distanceText,
+                color = Accent,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GeistMonoFamily,
             )
         }
     }
@@ -1065,6 +1130,40 @@ private fun gridSquaresWorked(records: List<QSLCallsignRecord>): Int =
         val grid = record.grid
         if (!grid.isNullOrBlank() && grid.length >= 4) grid.substring(0, 4).uppercase() else null
     }.distinct().size
+
+// ---------------------------------------------------------------------------
+// Helper: furthest station worked ("Best DX")
+// ---------------------------------------------------------------------------
+
+/** The furthest logged station and its great-circle distance from the operator. */
+internal data class BestDx(val callsign: String, val grid: String, val distanceKm: Double)
+
+/**
+ * The furthest-worked station across [records], measured great-circle from the
+ * operator's grid. [distanceKm] maps a remote grid to its distance in km, or
+ * null when it can't be measured (unparseable grid, or the operator's own grid
+ * isn't configured). Records with a blank callsign/grid, an un-measurable grid,
+ * or a non-positive / NaN distance are skipped — the last mirrors
+ * MaidenheadGrid's 0-km result for two stations sharing a grid, which is a
+ * distance floor, never a "best DX". Returns null when nothing is measurable.
+ *
+ * The distance function is injected so this reducer stays a pure, JVM-only unit
+ * (the real card passes a MaidenheadGrid-backed lambda).
+ */
+internal fun computeBestDx(
+    records: List<QSLCallsignRecord>,
+    distanceKm: (String) -> Double?,
+): BestDx? =
+    records.asSequence()
+        .mapNotNull { record ->
+            val callsign = record.callsign?.trim().orEmpty()
+            val grid = record.grid?.trim().orEmpty()
+            if (callsign.isEmpty() || grid.isEmpty()) return@mapNotNull null
+            val dist = distanceKm(grid) ?: return@mapNotNull null
+            if (dist.isNaN() || dist <= 0.0) return@mapNotNull null
+            BestDx(callsign, grid, dist)
+        }
+        .maxByOrNull { it.distanceKm }
 
 // ===========================================================================
 // RECENT TAB
