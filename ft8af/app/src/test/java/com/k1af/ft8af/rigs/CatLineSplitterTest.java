@@ -108,6 +108,28 @@ public class CatLineSplitterTest {
     }
 
     @Test
+    public void elecraftCoalescedSwrMeterPolls_bothReadingsSurvive() {
+        // During TX the Elecraft SWR meter is polled repeatedly and two "SW"
+        // replies routinely coalesce into one read. The old per-rig reassembly
+        // kept only the first and dropped the second (higher, i.e. worse) reading,
+        // so the SWR alert could miss a spike. Both must now be delivered.
+        CatLineSplitter.Result r = CatLineSplitter.split("", "SW030;SW045;", ';');
+        assertThat(r.frames).containsExactly("SW030", "SW045").inOrder();
+        assertThat(r.remainder).isEmpty();
+    }
+
+    @Test
+    public void elecraftFreqThenMeter_retainedTerminatorCannotPoisonNextParse() {
+        // A freq reply coalesced with a meter reply: the old code parsed FA, then
+        // re-buffered "SW045;" WITH its ';'. If a further read arrived before the
+        // buffer was cleared, "SW045;" + next command concatenated into a single
+        // poisoned parse. The splitter yields both as clean, separate frames.
+        CatLineSplitter.Result r = CatLineSplitter.split("", "FA00014074000;SW045;", ';');
+        assertThat(r.frames).containsExactly("FA00014074000", "SW045").inOrder();
+        assertThat(r.remainder).isEmpty();
+    }
+
+    @Test
     public void carriageReturnTerminator_supportedForSiblingRigs() {
         // The splitter is terminator-parameterised so the Kenwood/Elecraft '\r'
         // handlers can adopt it too.
