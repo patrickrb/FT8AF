@@ -2325,11 +2325,13 @@ public class FT8TransmitSignal {
     }
 
     /**
-     * Whether a message is a continuation (R+report / RR73-RRR, order 3-4) of
-     * the QSO the Max 73 Sends cap just ended, and must therefore be ignored by
-     * the caller-pickup scans instead of restarting the capped loop. Messages
-     * below order 3 (CQ, grid, plain report — a fresh QSO attempt) still get
-     * answered; an exact "73" (order 5) is already filtered by the scans.
+     * Whether a message is a continuation (R+report / RR73, order 3-4) of the
+     * QSO the Max 73 Sends cap just ended, and must therefore be ignored by the
+     * caller-pickup scans instead of restarting the capped loop. Only orders 3
+     * and 4 are gated: a fresh CQ from the capped station (order 6) is a new QSO
+     * attempt and must still be answered, and an exact "73" (order 5) is a QSO
+     * end already filtered by the scans — so neither is treated as a
+     * continuation here.
      *
      * <p>Package-visible for testing.
      *
@@ -2340,7 +2342,7 @@ public class FT8TransmitSignal {
     static boolean isCappedContinuation(String cappedCallsign, String fromCallsign, int msgOrder) {
         return cappedCallsign != null && !cappedCallsign.isEmpty()
                 && cappedCallsign.equals(fromCallsign)
-                && msgOrder >= 3;
+                && (msgOrder == 3 || msgOrder == 4);
     }
 
     /**

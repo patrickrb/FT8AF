@@ -521,7 +521,7 @@
     <string name="settings_stop_after">Stop After</string>
     <string name="settings_stop_after_desc">Stop calling after N unanswered attempts</string>
     <string name="settings_max_73">Max 73 Sends</string>
-    <string name="settings_max_73_desc">Most RR73/73 transmissions per contact before moving on</string>
+    <string name="settings_max_73_desc">Maximum RR73/73 transmissions per contact before moving on</string>
     <string name="settings_max_73_auto">Auto</string>
 
     <!-- ===== Settings: auto-sequence ===== -->

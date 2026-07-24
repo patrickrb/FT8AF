@@ -79,6 +79,12 @@ public class Max73SendsTest {
         // A fresh QSO attempt (grid/report) still deserves an answer.
         assertThat(FT8TransmitSignal.isCappedContinuation("N2JFD", "N2JFD", 1)).isFalse();
         assertThat(FT8TransmitSignal.isCappedContinuation("N2JFD", "N2JFD", 2)).isFalse();
+        // A fresh CQ from the capped station (order 6) is a new QSO attempt and
+        // must still be answered, not gated as a continuation.
+        assertThat(FT8TransmitSignal.isCappedContinuation("N2JFD", "N2JFD", 6)).isFalse();
+        // An exact "73" (order 5) is a QSO end already filtered by the scans; it
+        // is not a continuation, so it is not gated here.
+        assertThat(FT8TransmitSignal.isCappedContinuation("N2JFD", "N2JFD", 5)).isFalse();
         // Other stations are never gated.
         assertThat(FT8TransmitSignal.isCappedContinuation("N2JFD", "W1XYZ", 4)).isFalse();
     }
