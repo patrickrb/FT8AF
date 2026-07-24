@@ -2754,6 +2754,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.clearDecodesEveryCycle = result.equals("1");
                 }
 
+                if (name.equalsIgnoreCase("pileupStrongestFirst")) {
+                    GeneralVariables.pileupStrongestFirst = result.equals("1");
+                }
+
                 if (name.equalsIgnoreCase("decodeSortMode")) {
                     // parseConfigInt, not Integer.parseInt: a whitespace/non-numeric value in
                     // the config table would otherwise throw during startup hydration.

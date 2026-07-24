@@ -114,6 +114,7 @@ fun TransmissionSettings(
     var autoCallFollow by remember { mutableStateOf(GeneralVariables.autoCallFollow) }
     var earlyDecode by remember { mutableStateOf(GeneralVariables.earlyDecode) }
     var autoCQAfterQSO by remember { mutableStateOf(GeneralVariables.autoCQAfterQSO) }
+    var pileupStrongestFirst by remember { mutableStateOf(GeneralVariables.pileupStrongestFirst) }
 
     var showWatchdog by remember { mutableStateOf(false) }
     var showStopAfter by remember { mutableStateOf(false) }
@@ -677,6 +678,19 @@ fun TransmissionSettings(
                             GeneralVariables.autoCQAfterQSO = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "autoCQAfterQSO", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_pileup_strongest),
+                        description = stringResource(R.string.settings_pileup_strongest_desc),
+                        toggle = pileupStrongestFirst,
+                        onToggleChange = { checked ->
+                            pileupStrongestFirst = checked
+                            GeneralVariables.pileupStrongestFirst = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "pileupStrongestFirst", if (checked) "1" else "0", null,
                             )
                         },
                     )

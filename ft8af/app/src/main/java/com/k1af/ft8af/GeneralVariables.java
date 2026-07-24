@@ -550,6 +550,9 @@ public class GeneralVariables {
     // transmit/decode processing thread (FT8TransmitSignal), like zoneMapReady above.
     public static volatile boolean huntPotaOnly = false;//Mirror of the "CQ POTA" decode filter: Hunt only calls POTA CQs (issue #333)
     public static boolean autoCallFollow = true;//Auto-call followed callsigns
+    // volatile: written from the Compose settings UI thread and read from the
+    // transmit thread (FT8TransmitSignal.dequeueNextCaller), like huntPotaOnly above.
+    public static volatile boolean pileupStrongestFirst = false;//Pileup: auto-work the strongest waiting caller next instead of the oldest (FIFO)
     public static boolean autoUpdateGridFromGPS = false;//Use device GPS to keep Maidenhead grid current
     public static boolean disciplineClockFromGPS = false;//Discipline the app clock (UtcTimer.delay) from GPS satellite time (issue #373). Off by default — consensual.
     public static int gpsClockIntervalMinutes = 5;//How often to re-read GPS time for clock discipline. Clamped 1-30 by GpsClockUpdater.
