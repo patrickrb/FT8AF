@@ -6,8 +6,6 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 import radio.ks3ckc.ft8af.ui.components.QsoStatus
 
 /**
@@ -17,10 +15,10 @@ import radio.ks3ckc.ft8af.ui.components.QsoStatus
  * [DecodeFilterTest]; this keeps the two in agreement on what counts as an
  * unworked US state.
  *
- * Robolectric is needed only because [Ft8Message] reaches android.util.Log on
- * construction; the logic under test is pure.
+ * Pure JVM — the [Ft8Message] 3-arg constructor only uppercases its fields and
+ * the [resolveQsoStatus] path reads plain [GeneralVariables] state, so no
+ * Android framework is touched and no Robolectric runner is needed.
  */
-@RunWith(RobolectricTestRunner::class)
 class NewStateTest {
 
     private var savedHighlightPota = false
