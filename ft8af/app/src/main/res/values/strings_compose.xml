@@ -229,6 +229,15 @@
     <string name="qso_last_heard_minutes">%1$dm ago</string>
     <string name="qso_last_heard_hours">%1$dh ago</string>
     <string name="qso_last_heard_days">%1$dd ago</string>
+    <!-- Gray-line / sun status for a tapped station -->
+    <string name="qso_grayline_label">Gray line</string>
+    <string name="qso_grayline_now">On the gray line now</string>
+    <string name="qso_grayline_daylight">Daylight</string>
+    <string name="qso_grayline_night">Night</string>
+    <string name="qso_grayline_sunrise_in">sunrise in %1$s</string>
+    <string name="qso_grayline_sunset_in">sunset in %1$s</string>
+    <string name="qso_grayline_midnight_sun">midnight sun</string>
+    <string name="qso_grayline_polar_night">polar night</string>
 
     <!-- ===== Logbook ===== -->
     <string name="log_tab_stats">Stats</string>
