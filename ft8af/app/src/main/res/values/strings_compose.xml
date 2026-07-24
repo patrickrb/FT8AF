@@ -391,6 +391,13 @@
     <string name="map_info_distance">Distance</string>
     <string name="map_info_bearing">Bearing</string>
     <string name="map_info_snr">SNR</string>
+    <string name="map_reach_title">Your signal reach</string>
+    <plurals name="map_reach_receivers">
+        <item quantity="one">%1$d heard you</item>
+        <item quantity="other">%1$d heard you</item>
+    </plurals>
+    <string name="map_reach_furthest">Furthest · %1$s</string>
+    <string name="map_reach_best">Best · %1$s</string>
     <string name="waterfall_title">Waterfall</string>
     <string name="waterfall_toggle_nr">NR</string>
     <string name="waterfall_toggle_msg">MSG</string>
