@@ -21,8 +21,9 @@ import kotlin.math.sin
 internal data class BeamHeadings(val shortPathDeg: Int, val longPathDeg: Int)
 
 /**
- * Initial great-circle bearing (degrees, `0..360`) from point 1 to point 2 using
- * the standard forward-azimuth formula. Pure math — no Android types.
+ * Initial great-circle bearing (degrees, `[0, 360)`) from point 1 to point 2
+ * using the standard forward-azimuth formula. The final `% 360.0` means 360 is
+ * never returned (a due-north bearing is 0). Pure math — no Android types.
  */
 internal fun greatCircleBearing(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
     val phi1 = Math.toRadians(lat1)
