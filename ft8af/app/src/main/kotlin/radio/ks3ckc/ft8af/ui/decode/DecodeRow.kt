@@ -415,6 +415,12 @@ internal fun resolveQsoStatus(message: Ft8Message): QsoStatus? {
         // is set at decode time in CallsignDatabase (unworked-zone lookup) and
         // only ever true once the zone map is ready — same gating as fromDxcc.
         GeneralVariables.highlightNewZone && message.fromCq -> QsoStatus.NEW_ZONE
+        // A new US state (Worked All States) outranks a new grid: WAS is one of
+        // the most-chased US awards, so an unworked state is more prized than a
+        // bare new grid field. message.fromNewState is set at decode time in
+        // CallsignDatabase (US-grid → unworked-state lookup); null/non-US grids
+        // leave it false.
+        GeneralVariables.highlightNewState && message.fromNewState -> QsoStatus.NEW_STATE
         GeneralVariables.highlightNewGrid && newGrid -> QsoStatus.NEW_GRID
         GeneralVariables.highlightNewBand && newBand -> QsoStatus.NEW_BAND
         effectiveWorkedMode() == WorkedStationMode.HIGHLIGHT &&
