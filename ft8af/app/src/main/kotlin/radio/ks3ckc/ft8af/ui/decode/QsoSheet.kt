@@ -373,8 +373,15 @@ private fun StatCardsRow(message: Ft8Message) {
     val myGrid = GeneralVariables.getMyMaidenheadGrid()
     val theirGrid = message.maidenGrid ?: ""
 
-    // Compute azimuth + distance from the operator's grid to the remote station.
-    val azimuthText = computeAzimuthText(myGrid, theirGrid)
+    // Compute beam heading + distance from the operator's grid to the remote
+    // station. The azimuth card leads with the short-path heading and carries the
+    // long-path (reciprocal) heading as a subtitle, so DXers with a beam can see
+    // both ways to point the antenna.
+    val headings = computeBeamHeadings(myGrid, theirGrid)
+    val azimuthText = headings?.let { formatHeading(it.shortPathDeg) } ?: "--"
+    val longPathText = headings?.let {
+        stringResource(R.string.qso_stat_azimuth_long_path, formatHeading(it.longPathDeg))
+    }
     val distanceText = computeDistanceText(myGrid, theirGrid)
 
     // Derive band label from message carrier frequency
@@ -401,6 +408,7 @@ private fun StatCardsRow(message: Ft8Message) {
         StatCard(
             label = stringResource(R.string.qso_stat_azimuth),
             value = azimuthText,
+            subtitle = longPathText,
             modifier = Modifier.weight(1f),
         )
         StatCard(
@@ -416,6 +424,7 @@ private fun StatCard(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
+    subtitle: String? = null,
 ) {
     GlassCard(
         modifier = modifier,
@@ -445,6 +454,18 @@ private fun StatCard(
                 maxLines = 1,
                 softWrap = false,
             )
+            if (subtitle != null) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    color = TextFaint,
+                    fontFamily = GeistMonoFamily,
+                    fontSize = 10.sp,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
         }
     }
 }
@@ -919,29 +940,6 @@ private fun LastHeardRow(utcTimeMillis: Long, mainViewModel: MainViewModel) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Compute the bearing/azimuth (in degrees) from the operator's grid to the
- * remote station's grid. Returns "--" if either grid is unavailable.
- */
-private fun computeAzimuthText(myGrid: String?, theirGrid: String?): String {
-    if (myGrid.isNullOrEmpty() || theirGrid.isNullOrEmpty()) return "--"
-    return try {
-        val myLatLng = MaidenheadGrid.gridToLatLng(myGrid) ?: return "--"
-        val theirLatLng = MaidenheadGrid.gridToLatLng(theirGrid) ?: return "--"
-
-        val lat1 = Math.toRadians(myLatLng.latitude)
-        val lat2 = Math.toRadians(theirLatLng.latitude)
-        val dLon = Math.toRadians(theirLatLng.longitude - myLatLng.longitude)
-
-        val y = Math.sin(dLon) * Math.cos(lat2)
-        val x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon)
-        val bearing = (Math.toDegrees(Math.atan2(y, x)) + 360) % 360
-        "${String.format("%.0f", bearing)}\u00B0"
-    } catch (_: Exception) {
-        "--"
-    }
-}
 
 /**
  * Distance from the operator's grid to the remote station's grid, formatted in

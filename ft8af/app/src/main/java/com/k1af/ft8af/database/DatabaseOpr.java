@@ -3170,6 +3170,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("distanceInMiles")) {
                     GeneralVariables.distanceInMiles = !result.equals("0");
                 }
+                if (name.equalsIgnoreCase("showBeamHeading")) {
+                    GeneralVariables.showBeamHeading = result.equals("1");
+                }
 
             }
 

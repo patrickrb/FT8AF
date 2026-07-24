@@ -37,6 +37,7 @@ fun DecodeFilterSettings(
     var workedStationList by remember { mutableStateOf(GeneralVariables.getWorkedStationList()) }
     var highlightPota by remember { mutableStateOf(GeneralVariables.highlightPota) }
     var distanceInMiles by remember { mutableStateOf(GeneralVariables.distanceInMiles) }
+    var showBeamHeading by remember { mutableStateOf(GeneralVariables.showBeamHeading) }
 
     // Callsign blocklist (comma-separated entries) + decode display filters
     var blockedExact by remember { mutableStateOf(GeneralVariables.getBlockedExactCallsigns()) }
@@ -372,6 +373,19 @@ fun DecodeFilterSettings(
                             GeneralVariables.distanceInMiles = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "distanceInMiles", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_show_beam_heading),
+                        description = stringResource(R.string.settings_show_beam_heading_desc),
+                        toggle = showBeamHeading,
+                        onToggleChange = { checked ->
+                            showBeamHeading = checked
+                            GeneralVariables.showBeamHeading = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "showBeamHeading", if (checked) "1" else "0", null,
                             )
                         },
                     )

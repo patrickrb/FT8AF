@@ -227,6 +227,16 @@ fun DecodeRow(
                     MetaText(distanceText)
                 }
 
+                // Beam heading (short-path bearing) — opt-in, for beam operators
+                // who want to know which way to turn the antenna without opening
+                // the QSO sheet first.
+                if (GeneralVariables.showBeamHeading) {
+                    val headingText = computeBeamHeadingText(message)
+                    if (headingText.isNotEmpty()) {
+                        MetaText(headingText)
+                    }
+                }
+
                 Spacer(modifier = Modifier.weight(1f))
 
                 // Relative "ago" time
@@ -428,4 +438,15 @@ private fun computeDistanceText(message: Ft8Message): String {
     } catch (_: Exception) {
         ""
     }
+}
+
+/**
+ * Short-path beam heading (e.g. "47°") from the operator's grid to the message
+ * sender's grid, or "" when either grid is unknown. Shared with the QSO sheet
+ * via [computeBeamHeadings] so the row and the sheet never disagree.
+ */
+internal fun computeBeamHeadingText(message: Ft8Message): String {
+    val headings = computeBeamHeadings(GeneralVariables.getMyMaidenheadGrid(), message.maidenGrid)
+        ?: return ""
+    return formatHeading(headings.shortPathDeg)
 }
