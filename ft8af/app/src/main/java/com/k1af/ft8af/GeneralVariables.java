@@ -577,6 +577,7 @@ public class GeneralVariables {
     // status pill shown for each worked-before category in resolveQsoStatus().
     public static boolean highlightNewDxcc = true;//Highlight stations from an unworked DXCC entity
     public static boolean highlightNewZone = true;//Highlight stations from an unworked CQ zone (Worked All Zones)
+    public static boolean highlightNewState = false;//Off by default — US-only (Worked All States); noise for non-US ops
     public static boolean highlightNewGrid = false;//Off by default — most grids are "new", so it's noisy
     public static boolean highlightNewBand = true;//Highlight stations worked only on other bands
     public static boolean highlightWorked = true;//Master enable for worked-station handling (see workedStationMode)

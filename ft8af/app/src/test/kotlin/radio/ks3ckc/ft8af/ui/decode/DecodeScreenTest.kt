@@ -67,6 +67,17 @@ class DecodeScreenTest {
     }
 
     @Test
+    fun newStateFilter_showsStateEmptyCopy() {
+        val title = context.getString(R.string.decode_empty_state_title)
+        composeRule.mainClock.autoAdvance = false
+        composeRule.setContent {
+            EmptyState(selectedFilter = "New State")
+        }
+
+        composeRule.onNodeWithText(title).assertIsDisplayed()
+    }
+
+    @Test
     fun newGridFilter_showsGridEmptyCopy() {
         val title = context.getString(R.string.decode_empty_grid_title)
         composeRule.mainClock.autoAdvance = false

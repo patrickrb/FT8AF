@@ -28,6 +28,7 @@ fun DecodeFilterSettings(
     // Decode-list highlight toggles
     var highlightNewDxcc by remember { mutableStateOf(GeneralVariables.highlightNewDxcc) }
     var highlightNewZone by remember { mutableStateOf(GeneralVariables.highlightNewZone) }
+    var highlightNewState by remember { mutableStateOf(GeneralVariables.highlightNewState) }
     var highlightNewGrid by remember { mutableStateOf(GeneralVariables.highlightNewGrid) }
     var highlightNewBand by remember { mutableStateOf(GeneralVariables.highlightNewBand) }
     var highlightWorked by remember { mutableStateOf(GeneralVariables.highlightWorked) }
@@ -254,6 +255,19 @@ fun DecodeFilterSettings(
                             GeneralVariables.highlightNewZone = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "highlightNewZone", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_highlight_new_state),
+                        description = stringResource(R.string.settings_highlight_new_state_desc),
+                        toggle = highlightNewState,
+                        onToggleChange = { checked ->
+                            highlightNewState = checked
+                            GeneralVariables.highlightNewState = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "highlightNewState", if (checked) "1" else "0", null,
                             )
                         },
                     )
