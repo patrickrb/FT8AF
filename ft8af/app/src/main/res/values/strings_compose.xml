@@ -370,6 +370,8 @@
     <string name="map_mode_standard">STD</string>
     <string name="map_mode_azimuthal">AZ</string>
     <string name="map_overlay_psk">PSK</string>
+    <string name="map_overlay_grayline">GRAY</string>
+    <string name="map_overlay_grayline_cd">Gray line (day/night terminator) overlay</string>
     <string name="map_filter">Filter</string>
     <string name="map_filter_title">PSK filters</string>
     <string name="map_filter_done">Done</string>
