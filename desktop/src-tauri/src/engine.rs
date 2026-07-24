@@ -58,6 +58,80 @@ fn reply_tx_audio_hz(delta_freq: u32) -> Option<i32> {
     let df = i32::try_from(delta_freq).ok()?;
     (MIN_TX_AUDIO_HZ..=MAX_TX_AUDIO_HZ).contains(&df).then_some(df)
 }
+
+/// The core keying gate `maybe_transmit` enforces, factored out so it is pure and
+/// unit-testable and shared with the run loop's boundary trigger. We may key iff:
+///   * a QSO is active,
+///   * a locked TX parity (set when answering a CQ) matches this slot's parity —
+///     `None` leaves us eligible in any slot and locks on the first transmission,
+///   * we have not already transmitted in this slot, and
+///   * we are early enough in the cycle to fit the full 12.64 s waveform before the
+///     next boundary (`into_cycle_ms <= TX_LATEST_MS`); starting later clips the
+///     leading Costas array — audible but undecodable.
+fn tx_slot_eligible(
+    active: bool,
+    tx_parity: Option<i64>,
+    slot_id: i64,
+    txed_slot: i64,
+    into_cycle_ms: i64,
+) -> bool {
+    if !active {
+        return false;
+    }
+    if let Some(p) = tx_parity {
+        if p != slot_id.rem_euclid(2) {
+            return false;
+        }
+    }
+    if txed_slot == slot_id {
+        return false;
+    }
+    into_cycle_ms <= TX_LATEST_MS
+}
+
+/// Whether any decode batch is still outstanding, gating the boundary TX trigger.
+/// Derived from the pending-decode *count* (not a single in-flight bool) so the
+/// gate stays closed until every enqueued slot has returned — see
+/// [`Engine::pending_decodes`].
+fn awaiting_any_decode(pending_decodes: usize) -> bool {
+    pending_decodes > 0
+}
+
+/// Whether the run loop should key a queued transmission at this tick. Unlike an
+/// operator command (which keys immediately), the per-tick boundary trigger waits
+/// until the current slot's decodes have been processed (`!awaiting_decode`) so it
+/// never keys a stale message ahead of a slow decode; once they are in,
+/// `handle_decoded` has set the fresh `tx_message` this fires on. This is what lets
+/// a reply computed early in the previous cycle (fast CPU) still go out early in
+/// its slot — `maybe_transmit` is otherwise only reached on decode arrival, which
+/// on a quick decode lands mid-slot, past the TX window, dropping the reply.
+///
+/// "Early in its slot" is the whole TX window, not a hard boundary: the gate only
+/// requires `into_cycle_ms <= TX_LATEST_MS` (via [`tx_slot_eligible`]). In practice
+/// the run loop ticks fast, so the first eligible tick after the decodes settle is
+/// near the top of the slot — but a reply that becomes eligible a little later in
+/// the window is still keyed rather than dropped.
+///
+/// The trigger is part of the decode-driven RX/TX cycle, so it is dormant while the
+/// decoder is stopped (`decoding == false`) — matching the sibling per-tick actions
+/// (the decode trigger and the waterfall row, both already gated on `self.decoding`).
+/// Without this a QSO/CQ left `active` when the operator stops decoding would keep
+/// auto-keying the rig every eligible slot with the receiver off — the radio would
+/// transmit unattended, since `pending_decodes` drops to 0 on `StopDecode` so the
+/// awaiting gate no longer holds it back.
+fn boundary_tx_ready(
+    decoding: bool,
+    active: bool,
+    awaiting_decode: bool,
+    tx_parity: Option<i64>,
+    slot_id: i64,
+    txed_slot: i64,
+    into_cycle_ms: i64,
+) -> bool {
+    decoding
+        && !awaiting_decode
+        && tx_slot_eligible(active, tx_parity, slot_id, txed_slot, into_cycle_ms)
+}
 // Live-waterfall FFT parameters (window/size/averaging + display constants)
 // live in `crate::wf` and are runtime-configurable via SetWaterfallConfig.
 // Input RMS at/below this (dBFS) counts as silence — no audio reaching the app.
@@ -304,6 +378,14 @@ struct Engine {
     /// Slot id (rx-corrected clock) most recently handed to the decode worker.
     /// Guards the once-per-slot early decode trigger in the run loop.
     last_decoded_slot: i64,
+    /// Number of decode batches handed to the worker but not yet returned. A
+    /// *count* rather than a single in-flight bool: the decoder returns exactly one
+    /// batch per enqueued slot, so if it ever falls behind by more than one slot,
+    /// the first returned batch must not clear the gate while later slots are still
+    /// pending. Gates the run loop's boundary TX trigger (via [`awaiting_any_decode`])
+    /// so it never keys a stale message ahead of a slow decode (the fresh one is
+    /// keyed by `handle_decoded` when it arrives). See [`boundary_tx_ready`].
+    pending_decodes: usize,
     /// Audio-capture latency compensation (ms). The RX decode window is sliced
     /// this much later than the UTC cycle boundary so that buffered/late-arriving
     /// input audio lands aligned — drives decoded DT toward 0. Auto-calibrated
@@ -416,6 +498,7 @@ impl Engine {
             tx_audio_hz,
             tx_gain,
             last_decoded_slot: -1,
+            pending_decodes: 0,
             rx_offset_ms,
             last_tick_ms: 0,
             tx_parity: None,
@@ -528,7 +611,14 @@ impl Engine {
                 // front-aligned (signal at sample 0) with the tail zero-padded.
                 let elapsed = (into_rx_cycle * SAMPLE_RATE as i64 / 1000) as usize;
                 let slot = self.accum.take_slot_from_start(elapsed);
-                let _ = self.slot_tx.send(slot);
+                if self.slot_tx.send(slot).is_ok() {
+                    // Hold off the boundary TX trigger until this slot's decodes
+                    // come back, so it can't key a stale message ahead of a slow
+                    // decode (the fresh one is keyed by handle_decoded on arrival).
+                    // Count it: if the decoder is already behind, the gate must
+                    // stay closed until every outstanding slot has returned.
+                    self.pending_decodes += 1;
+                }
             }
 
             // Act on any decodes the worker has finished (off-loop DSP). This is
@@ -536,7 +626,32 @@ impl Engine {
             // and then `maybe_transmit` keys up if it's our turn. Immediate keying
             // on an operator tap is handled separately, in the command handlers.
             while let Ok(msgs) = self.dec_rx.try_recv() {
+                // One batch settled — decrement, not reset, so a still-pending
+                // later slot keeps the boundary gate closed. saturating_sub guards
+                // against a stray batch arriving after a StopDecode reset.
+                self.pending_decodes = self.pending_decodes.saturating_sub(1);
                 self.handle_decoded(msgs, slot_id);
+            }
+
+            // Boundary TX trigger: key a queued reply/CQ early in its slot (anywhere
+            // within the TX window), even when this slot's decodes were processed
+            // earlier in the previous cycle. `maybe_transmit` is otherwise only
+            // reached on decode arrival, which on a fast decode lands mid-slot — past
+            // the TX window — so the queued message would never go out (auto-sequence
+            // stalls; CQ never retransmits). Gated on `!awaiting_any_decode` so a
+            // stale message is never keyed before every outstanding slot's decodes
+            // are in; `maybe_transmit` re-checks eligibility and is idempotent per
+            // slot (the `txed_slot` guard).
+            if boundary_tx_ready(
+                self.decoding,
+                self.qso.active,
+                awaiting_any_decode(self.pending_decodes),
+                self.tx_parity,
+                slot_id,
+                self.txed_slot,
+                now.rem_euclid(CYCLE_MS),
+            ) {
+                self.maybe_transmit(slot_id);
             }
 
             // Drop PTT as soon as the TX waveform finishes clocking out (or a
@@ -620,26 +735,21 @@ impl Engine {
     /// (`txed_slot` guard), so calling it from both `handle_decoded` and a command
     /// handler in the same slot transmits at most once.
     fn maybe_transmit(&mut self, slot_id: i64) {
-        if !self.qso.active {
+        // All the keying rules — active QSO, locked-parity alternation, once per
+        // slot, and early enough in the cycle to fit the waveform — live in the pure
+        // `tx_slot_eligible` so the run loop's boundary trigger shares them exactly.
+        if !tx_slot_eligible(
+            self.qso.active,
+            self.tx_parity,
+            slot_id,
+            self.txed_slot,
+            self.now().rem_euclid(CYCLE_MS),
+        ) {
             return;
         }
-        let parity = slot_id.rem_euclid(2);
-        // Respect a locked alternation. Answering a CQ pins the parity to the
-        // operator's click slot (set in the command handler) so we always reply
-        // opposite the DX; a CQ / free-text start leaves it `None`, eligible in
-        // any slot, and locks on its first transmission below.
-        if matches!(self.tx_parity, Some(p) if p != parity) {
-            return;
-        }
-        if self.txed_slot == slot_id {
-            return;
-        }
-        // Too late in the cycle to start cleanly — wait for our next eligible
-        // slot rather than transmit a clipped, undecodable signal.
-        if self.now().rem_euclid(CYCLE_MS) > TX_LATEST_MS {
-            return;
-        }
-        self.tx_parity = Some(parity);
+        // Answering a CQ pins the parity to the operator's click slot so we always
+        // reply opposite the DX; a CQ / free-text start locks it on this first TX.
+        self.tx_parity = Some(slot_id.rem_euclid(2));
         self.txed_slot = slot_id;
         if let Some(msg) = self.qso.tx_message().map(|s| s.to_string()) {
             if self.start_transmit(&msg) {
@@ -931,6 +1041,10 @@ impl Engine {
             EngineCommand::StopDecode => {
                 self.decoding = false;
                 self.input = None;
+                // No slot is in flight once capture stops; clear the count so a
+                // later CQ can key at its slot boundary without being blocked. Any
+                // batch still in the channel decrements from 0 via saturating_sub.
+                self.pending_decodes = 0;
                 // Tell companion apps to wipe their decode band and forget the
                 // replay history — this is a genuine reset, not a per-cycle churn.
                 if self.udp.is_enabled() {
@@ -1240,5 +1354,88 @@ mod tests {
         assert!(!wf_boundary_row(CYCLE_MS + 500, &mut last));
         // And again at the following boundary.
         assert!(wf_boundary_row(2 * CYCLE_MS + 10, &mut last));
+    }
+
+    #[test]
+    fn tx_slot_eligible_enforces_active_parity_once_and_window() {
+        use super::{tx_slot_eligible, TX_LATEST_MS};
+        // Inactive QSO never keys.
+        assert!(!tx_slot_eligible(false, None, 10, -1, 0));
+        // Active, no parity lock, fresh slot, at the very top of the cycle → eligible.
+        assert!(tx_slot_eligible(true, None, 10, -1, 0));
+        // The last instant that still fits the waveform is eligible; one ms later is not.
+        assert!(tx_slot_eligible(true, None, 10, -1, TX_LATEST_MS));
+        assert!(!tx_slot_eligible(true, None, 10, -1, TX_LATEST_MS + 1));
+        // Already transmitted in this slot → no second keying.
+        assert!(!tx_slot_eligible(true, None, 10, 10, 0));
+        // A locked parity must match the slot's parity (slot 10 is even, 11 is odd).
+        assert!(tx_slot_eligible(true, Some(0), 10, -1, 0));
+        assert!(!tx_slot_eligible(true, Some(1), 10, -1, 0));
+        assert!(tx_slot_eligible(true, Some(1), 11, -1, 0));
+    }
+
+    #[test]
+    fn boundary_tx_keys_at_slot_top_only_after_this_slots_decode() {
+        use super::{boundary_tx_ready, TX_LATEST_MS};
+        // Fast decode: this slot's decodes are already processed (awaiting=false), so a
+        // reply computed in the previous cycle keys at the top of its slot. This is the
+        // case the decode-arrival trigger used to miss — it fires mid-slot, past the
+        // window, so the queued reply/CQ was silently dropped. (First arg is `decoding`,
+        // true throughout here — the normal case.)
+        assert!(boundary_tx_ready(true, true, false, None, 4, -1, 0));
+        // Slow decode still pending: must NOT key a (stale) message; handle_decoded
+        // keys the fresh one when the decode lands.
+        assert!(!boundary_tx_ready(true, true, true, None, 4, -1, 0));
+        // Past the window, already transmitted this slot, wrong parity, or inactive all
+        // block it too (it delegates to tx_slot_eligible).
+        assert!(!boundary_tx_ready(true, true, false, None, 4, -1, TX_LATEST_MS + 1));
+        assert!(!boundary_tx_ready(true, true, false, None, 4, 4, 0));
+        assert!(!boundary_tx_ready(true, true, false, Some(1), 4, -1, 0)); // wants odd, slot 4 even
+        assert!(!boundary_tx_ready(true, false, false, None, 4, -1, 0));
+    }
+
+    #[test]
+    fn boundary_tx_is_dormant_while_decoding_is_stopped() {
+        use super::boundary_tx_ready;
+        // Regression for the StopDecode runaway-TX bug: after the operator stops
+        // decoding, `pending_decodes` is reset to 0 (so the awaiting gate opens) but a
+        // CQ/QSO left `active` keeps `qso.active` and `tx_parity` set. The per-tick
+        // boundary trigger must stay dormant with the decoder off — otherwise the rig
+        // keys every eligible slot with the receiver muted (transmitting unattended).
+        // Every other input here is exactly the "would key" case from the test above;
+        // only `decoding == false` must hold it back.
+        assert!(!boundary_tx_ready(false, true, false, None, 4, -1, 0));
+        assert!(!boundary_tx_ready(false, true, false, Some(0), 4, -1, 0));
+        // Turning decoding back on restores keying (the fix changes nothing else).
+        assert!(boundary_tx_ready(true, true, false, None, 4, -1, 0));
+    }
+
+    #[test]
+    fn awaiting_gate_stays_closed_until_every_pending_slot_returns() {
+        use super::awaiting_any_decode;
+        // The gate is driven by the pending-decode count. Walk the "decoder falls
+        // behind by a slot" sequence a single in-flight bool would get wrong: it
+        // would clear on the first returned batch while a later slot is still out.
+        let mut pending = 0usize; // idle: nothing outstanding, gate open.
+        assert!(!awaiting_any_decode(pending));
+
+        pending += 1; // slot A enqueued
+        assert!(awaiting_any_decode(pending));
+        pending += 1; // slot B enqueued before A came back (decoder behind)
+        assert!(awaiting_any_decode(pending));
+
+        pending = pending.saturating_sub(1); // A's batch returns...
+        assert!(
+            awaiting_any_decode(pending),
+            "gate must stay closed while slot B is still decoding",
+        );
+        pending = pending.saturating_sub(1); // B's batch returns
+        assert!(!awaiting_any_decode(pending));
+
+        // A stray settle (e.g. a batch arriving after a StopDecode reset to 0)
+        // can't underflow the count and reopen/close spuriously.
+        pending = pending.saturating_sub(1);
+        assert_eq!(pending, 0);
+        assert!(!awaiting_any_decode(pending));
     }
 }

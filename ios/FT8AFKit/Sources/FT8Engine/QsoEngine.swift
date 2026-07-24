@@ -60,6 +60,15 @@ public final class QsoEngine {
     private var reportRcvd: Int?
     private var pendingTx: String?
     private var startedMs: Int64 = 0
+    /// True once `complete()` has emitted the record for the current QSO —
+    /// guards the courtesy-73 window (`stage == .bye73`, target still set)
+    /// against a second identical record from `forceLog()`.
+    private var recordEmitted = false
+    /// True once the courtesy "73" queued in `.bye73` has actually been handed to
+    /// the transmitter (via `notifyTransmitted`). Guards `finishQso` so a Bye73
+    /// that missed its slot (late TX window, rig busy, encode failure) is
+    /// retransmitted next slot instead of being clobbered by the wrap-up.
+    private var bye73Sent = false
 
     public init(myCall: String, myGrid: String) {
         self.myCall = myCall.uppercased()
@@ -73,6 +82,16 @@ public final class QsoEngine {
 
     /// The message queued for the next TX slot (nil when idle).
     public var txMessage: String? { pendingTx }
+
+    /// The scheduler calls this after the current `txMessage` has actually been
+    /// handed to the transmitter. It only matters for the courtesy "73": it marks
+    /// the Bye73 as sent so the next `processRx` may wrap the QSO up. For every
+    /// other stage the sequencer advances on received replies, so this is a no-op.
+    public func notifyTransmitted() {
+        if stage == .bye73 {
+            bye73Sent = true
+        }
+    }
 
     /// Begin calling CQ.
     public func startCq() {
@@ -115,6 +134,7 @@ public final class QsoEngine {
         case .bye73:
             pendingTx = "\(dx) \(myCall) 73"
             stage = .bye73
+            bye73Sent = false
         case .cq, .idle: break // handled above
         }
     }
@@ -139,7 +159,9 @@ public final class QsoEngine {
         gridRcvd = nil
         reportSent = nil
         reportRcvd = nil
+        recordEmitted = false
         startedMs = FT8Time.nowUnixMs()
+        bye73Sent = false
     }
 
     /// Process the decoded messages of a finished RX slot. Updates the queued TX
@@ -147,10 +169,16 @@ public final class QsoEngine {
     public func processRx(_ messages: [DecodedMessage]) -> QsoOutcome? {
         if !active || stage == .idle { return nil }
 
-        // The courtesy "73" queued on the previous slot has now had its TX slot;
-        // wrap up (return to CQ / stop) regardless of incoming traffic this slot.
+        // A courtesy "73" is queued (RReport -> RR73, or a manual Tx5). Only wrap
+        // up (return to CQ / stop) once it has *actually* been transmitted — the
+        // scheduler signals that via `notifyTransmitted`. If it hasn't gone out yet
+        // (missed TX window, rig busy, encode failure), leave the message queued so
+        // the scheduler retransmits it next slot instead of clobbering it. Either
+        // way we don't act on incoming traffic while a 73 is pending.
         if stage == .bye73 {
-            finishQso()
+            if bye73Sent {
+                finishQso()
+            }
             return nil
         }
 
@@ -208,6 +236,7 @@ public final class QsoEngine {
                 // Acknowledge with 73, then log.
                 pendingTx = "\(dx) \(myCall) 73"
                 stage = .bye73
+                bye73Sent = false
                 return complete(dx)
             default: break
             }
@@ -240,8 +269,45 @@ public final class QsoEngine {
         stage = .rr73
     }
 
+    /// Force-log the current QSO and move on without waiting for the partner's
+    /// 73 (the Active QSO panel's LOG action; port of Android
+    /// `forceLogAndMoveOn`). Only produces a record when the QSO progressed far
+    /// enough to be a real contact — both reports known, i.e. we have sent
+    /// R-report or beyond (Android `shouldForceLog`: order >= 3) — and
+    /// `complete()` hasn't already emitted it (the courtesy-73 window keeps
+    /// the target set after completion; a LOG tap there must not double-log).
+    /// Either way the QSO context is cleared and we return to CQ / stop per
+    /// `autoReturnToCq`.
+    public func forceLog() -> QsoOutcome? {
+        guard let dx = target else { return nil }
+        let progressed = stage == .rReport || stage == .rr73 || stage == .bye73
+        let outcome: QsoOutcome? = (progressed && !recordEmitted)
+            ? .completed(makeRecord(dx)) : nil
+        finishQso()
+        return outcome
+    }
+
+    /// Abandon the current target and return to the CQ baseline (the Active QSO
+    /// panel's ✕ action; port of Android `userResetToCQ`). Nothing is logged.
+    public func abandonToCq() {
+        finishQso()
+    }
+
     private func complete(_ dx: String) -> QsoOutcome {
-        let record = QsoRecord(
+        let record = makeRecord(dx)
+        recordEmitted = true
+
+        // If a courtesy "73" is queued (the .rReport path set stage = .bye73),
+        // leave pendingTx/stage so the scheduler transmits it; the next slot's
+        // .bye73 handler in processRx then wraps up. Otherwise finish now.
+        if stage != .bye73 {
+            finishQso()
+        }
+        return .completed(record)
+    }
+
+    private func makeRecord(_ dx: String) -> QsoRecord {
+        QsoRecord(
             call: dx,
             gridsquare: gridRcvd ?? "",
             mode: "FT8",
@@ -257,14 +323,6 @@ public final class QsoEngine {
             myGridsquare: myGrid,
             comment: ""
         )
-
-        // If a courtesy "73" is queued (the .rReport path set stage = .bye73),
-        // leave pendingTx/stage so the scheduler transmits it; the next slot's
-        // .bye73 handler in processRx then wraps up. Otherwise finish now.
-        if stage != .bye73 {
-            finishQso()
-        }
-        return .completed(record)
     }
 
     /// Return to calling CQ, or stop, per `autoReturnToCq`.
@@ -286,7 +344,15 @@ func clampReport(_ snr: Int) -> Int { min(30, max(-30, snr)) }
 func fmtReport(_ n: Int) -> String { String(format: "%+03d", Int32(n)) }
 
 private func classify(_ msg: DecodedMessage) -> Content {
-    if !msg.grid.isEmpty { return .grid(msg.grid) }
+    // Recognize the QSO sign-offs before treating the message as a grid report.
+    // "RR73" is a valid 4-char Maidenhead-shaped token (R,R in A..R + two
+    // digits), so the decoder copies it into `grid` (looksLikeGrid("RR73") is
+    // true). Checking grid first would classify a partner's standard RR73
+    // sign-off as Content.grid, stranding the auto-sequencer at the RReport
+    // stage — it would retransmit our R-report forever and never complete/log
+    // the QSO. Matching the sign-offs first fixes that without touching
+    // looksLikeGrid (the map/distance code relies on its shape test). Mirrors
+    // the desktop (qso.rs) and Android (GeneralVariables) reference ports.
     let extra = msg.extra.trimmingCharacters(in: .whitespacesAndNewlines)
     switch extra {
     case "RR73": return .rr73
@@ -294,6 +360,7 @@ private func classify(_ msg: DecodedMessage) -> Content {
     case "73": return .bye73
     default: break
     }
+    if !msg.grid.isEmpty { return .grid(msg.grid) }
     if extra.hasPrefix("R") {
         let rest = String(extra.dropFirst())
         if let n = Int(rest) { return .rReport(n) }

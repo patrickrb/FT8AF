@@ -143,6 +143,40 @@ public class TrUSDXRig extends BaseRig {
         return -1;
     }
 
+    /**
+     * Byte offset within the current ';'-terminated segment where the (tr)uSDX
+     * {@code "US"} stream-start marker's raw-audio payload begins.
+     *
+     * <p>The 2-byte {@code "US"} marker is recognised against the accumulated
+     * command buffer — any un-terminated leftover from a previous serial read
+     * plus this segment — but the audio payload must be sliced from this
+     * segment's raw bytes (decoding audio through a String corrupts it, see
+     * {@link #indexOfByte}). When the marker straddles a read boundary,
+     * {@code leftoverLen} of its bytes already arrived in the previous read, so
+     * only {@code 2 - leftoverLen} of the marker sit at the head of this
+     * segment. The result is clamped to {@code [0, segmentLen]} so the caller's
+     * {@link Arrays#copyOfRange} is always given {@code 0 <= from <= to}: a
+     * boundary split that leaves this segment shorter than the un-consumed
+     * marker yields an empty payload instead of throwing
+     * {@code IllegalArgumentException}.
+     *
+     * @param leftoverLen bytes of buffered, un-terminated command text that
+     *                    preceded this segment (0 when the marker is wholly in
+     *                    this segment)
+     * @param segmentLen  length of this segment's byte slice
+     * @return a start offset in {@code [0, segmentLen]}
+     */
+    static int waveStartOffset(int leftoverLen, int segmentLen) {
+        int start = 2 - leftoverLen;
+        if (start < 0) {
+            start = 0;
+        }
+        if (start > segmentLen) {
+            start = segmentLen;
+        }
+        return start;
+    }
+
     @Override
     public void onReceiveData(byte[] data) {
         byte[] remain = data;
@@ -166,6 +200,12 @@ public class TrUSDXRig extends BaseRig {
                 onReceivedWaveData(cutted, true);
                 rxStreaming = false;
             } else {
+                // Remember how many bytes of any un-terminated command text
+                // preceded this segment: the "US" marker below is matched
+                // against leftover + this segment, but its audio payload is
+                // sliced from this segment alone, so the split point depends on
+                // how much of the marker already arrived earlier.
+                int leftoverLen = buffer.length();
                 buffer.append(new String(cutted));
                 //begin parsing data
                 Yaesu3Command yaesu3Command = Yaesu3Command.getCommand(buffer.toString());
@@ -182,7 +222,14 @@ public class TrUSDXRig extends BaseRig {
                     }
                 } else if (cmd.equalsIgnoreCase("US")) {
                     rxStreaming = true;
-                    byte[] wave = Arrays.copyOfRange(cutted, 2, cutted.length);
+                    // Slice the audio from just past the "US" marker. When the
+                    // marker straddled a read boundary the marker head is in
+                    // `leftoverLen`, so the payload can start before index 2 (or
+                    // this segment may be shorter than the un-consumed marker);
+                    // waveStartOffset keeps the range valid instead of letting
+                    // copyOfRange throw. See waveStartOffset / PR notes.
+                    int waveStart = waveStartOffset(leftoverLen, cutted.length);
+                    byte[] wave = Arrays.copyOfRange(cutted, waveStart, cutted.length);
                     onReceivedWaveData(wave);
                 }
             }

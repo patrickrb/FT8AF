@@ -37,6 +37,7 @@ import com.k1af.ft8af.log.QSLRecord;
 import com.k1af.ft8af.log.QSLRecordStr;
 import com.k1af.ft8af.rigs.BaseRigOperation;
 import com.k1af.ft8af.timer.UtcTimer;
+import com.k1af.ft8af.util.Streams;
 import com.k1af.ft8af.wave.InputAudioLevel;
 
 import org.jetbrains.annotations.Nullable;
@@ -50,6 +51,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Locale;
 
 public class DatabaseOpr extends SQLiteOpenHelper {
     private static final String TAG = "DatabaseOpr";
@@ -574,6 +576,43 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         return out;
     }
 
+    /**
+     * Every prior logged QSO with {@code callsign}, oldest first, as lightweight
+     * {@link com.k1af.ft8af.log.PriorQso} rows (date/time/band/mode only). Powers
+     * the decode sheet's "Worked before" card. Returns an empty list when the
+     * station has never been worked, on a blank callsign, or on any read error.
+     *
+     * <p>The exact-match on {@code "call"} is served by the {@code QSLTable_call_IDX}
+     * index, so this stays cheap even on a large log. Decoded callsigns are already
+     * upper-cased (as are stored ones), so no case-folding is needed — folding here
+     * would only defeat the index.
+     */
+    public java.util.List<com.k1af.ft8af.log.PriorQso> getPriorQsos(String callsign) {
+        java.util.List<com.k1af.ft8af.log.PriorQso> out = new ArrayList<>();
+        if (db == null || callsign == null) {
+            return out;
+        }
+        String c = callsign.trim();
+        if (c.isEmpty()) {
+            return out;
+        }
+        try (Cursor cursor = db.rawQuery(
+                "SELECT qso_date, time_on, band, mode FROM QSLTable "
+                        + "WHERE \"call\" = ? ORDER BY qso_date, time_on",
+                new String[]{c})) {
+            while (cursor.moveToNext()) {
+                out.add(new com.k1af.ft8af.log.PriorQso(
+                        cursor.getString(0),
+                        cursor.getString(1),
+                        cursor.getString(2),
+                        cursor.getString(3)));
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "getPriorQsos failed: " + e.getClass().getSimpleName());
+        }
+        return out;
+    }
+
     /** Drop every cached signature mapping (e.g. on server/logbook switch). */
     public void clearLocationStationCache() {
         if (db == null) {
@@ -609,8 +648,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 "VALUES(?,?)";
         try {
             inputStream = assetManager.open("ituzone.json");
-            byte[] bytes = new byte[inputStream.available()];
-            inputStream.read(bytes);
+            byte[] bytes = Streams.readAllBytes(inputStream);
             JSONObject jsonObject = new JSONObject(new String(bytes));
             JSONArray array = jsonObject.names();
             for (int i = 0; i < array.length(); i++) {
@@ -635,8 +673,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 "VALUES(?,?)";
         try {
             inputStream = assetManager.open("cqzone.json");
-            byte[] bytes = new byte[inputStream.available()];
-            inputStream.read(bytes);
+            byte[] bytes = Streams.readAllBytes(inputStream);
             JSONObject jsonObject = new JSONObject(new String(bytes));
             JSONArray array = jsonObject.names();
             for (int i = 0; i < array.length(); i++) {
@@ -660,8 +697,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         ArrayList<DxccObject> dxccObjects = new ArrayList<>();
         try {
             inputStream = assetManager.open("dxcc_list.json");
-            byte[] bytes = new byte[inputStream.available()];
-            inputStream.read(bytes);
+            byte[] bytes = Streams.readAllBytes(inputStream);
             JSONObject jsonObject = new JSONObject(new String(bytes));
             JSONArray array = jsonObject.names();
 
@@ -1200,7 +1236,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
      * @param isSWL whether in SWL mode
      * @return ADIF text content
      */
-    @SuppressLint({"Range", "DefaultLocale"})
+    @SuppressLint("Range")
     public String downQSLTable(Cursor cursor, boolean isSWL) {
         StringBuilder logStr = new StringBuilder();
 
@@ -1225,8 +1261,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             }
 
             if (cursor.getString(cursor.getColumnIndex("gridsquare")) != null) {
-                logStr.append(String.format("<gridsquare:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("gridsquare")).length()
+                logStr.append(String.format(Locale.US, "<gridsquare:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("gridsquare")))
                         , cursor.getString(cursor.getColumnIndex("gridsquare"))));
             }
 
@@ -1236,78 +1272,78 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 String mode = cursor.getString(cursor.getColumnIndex("mode"));
                 String submode = AdifFormat.mfskSubmode(mode);
                 if (submode != null) {
-                    logStr.append(String.format("<mode:4>MFSK <submode:%d>%s "
-                            , submode.length(), submode));
+                    logStr.append(String.format(Locale.US, "<mode:4>MFSK <submode:%d>%s "
+                            , AdifFormat.utf8Length(submode), submode));
                 } else {
-                    logStr.append(String.format("<mode:%d>%s "
-                            , mode.length(), mode));
+                    logStr.append(String.format(Locale.US, "<mode:%d>%s "
+                            , AdifFormat.utf8Length(mode), mode));
                 }
             }
 
             if (cursor.getString(cursor.getColumnIndex("rst_sent")) != null) {
-                logStr.append(String.format("<rst_sent:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("rst_sent")).length()
+                logStr.append(String.format(Locale.US, "<rst_sent:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("rst_sent")))
                         , cursor.getString(cursor.getColumnIndex("rst_sent"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("rst_rcvd")) != null) {
-                logStr.append(String.format("<rst_rcvd:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("rst_rcvd")).length()
+                logStr.append(String.format(Locale.US, "<rst_rcvd:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("rst_rcvd")))
                         , cursor.getString(cursor.getColumnIndex("rst_rcvd"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("qso_date")) != null) {
-                logStr.append(String.format("<qso_date:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("qso_date")).length()
+                logStr.append(String.format(Locale.US, "<qso_date:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("qso_date")))
                         , cursor.getString(cursor.getColumnIndex("qso_date"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("time_on")) != null) {
-                logStr.append(String.format("<time_on:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("time_on")).length()
+                logStr.append(String.format(Locale.US, "<time_on:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("time_on")))
                         , cursor.getString(cursor.getColumnIndex("time_on"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("qso_date_off")) != null) {
-                logStr.append(String.format("<qso_date_off:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("qso_date_off")).length()
+                logStr.append(String.format(Locale.US, "<qso_date_off:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("qso_date_off")))
                         , cursor.getString(cursor.getColumnIndex("qso_date_off"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("time_off")) != null) {
-                logStr.append(String.format("<time_off:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("time_off")).length()
+                logStr.append(String.format(Locale.US, "<time_off:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("time_off")))
                         , cursor.getString(cursor.getColumnIndex("time_off"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("band")) != null) {
-                logStr.append(String.format("<band:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("band")).length()
+                logStr.append(String.format(Locale.US, "<band:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("band")))
                         , cursor.getString(cursor.getColumnIndex("band"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("freq")) != null) {
-                logStr.append(String.format("<freq:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("freq")).length()
+                logStr.append(String.format(Locale.US, "<freq:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("freq")))
                         , cursor.getString(cursor.getColumnIndex("freq"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("station_callsign")) != null) {
-                logStr.append(String.format("<station_callsign:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("station_callsign")).length()
+                logStr.append(String.format(Locale.US, "<station_callsign:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("station_callsign")))
                         , cursor.getString(cursor.getColumnIndex("station_callsign"))));
             }
 
             if (cursor.getString(cursor.getColumnIndex("my_gridsquare")) != null) {
-                logStr.append(String.format("<my_gridsquare:%d>%s "
-                        , cursor.getString(cursor.getColumnIndex("my_gridsquare")).length()
+                logStr.append(String.format(Locale.US, "<my_gridsquare:%d>%s "
+                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("my_gridsquare")))
                         , cursor.getString(cursor.getColumnIndex("my_gridsquare"))));
             }
 
             if (cursor.getColumnIndex("operator") != -1) {
                 if (cursor.getString(cursor.getColumnIndex("operator")) != null) {
-                    logStr.append(String.format("<operator:%d>%s "
-                            , cursor.getString(cursor.getColumnIndex("operator")).length()
+                    logStr.append(String.format(Locale.US, "<operator:%d>%s "
+                            , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("operator")))
                             , cursor.getString(cursor.getColumnIndex("operator"))));
                 }
             }
@@ -1320,11 +1356,14 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             appendPotaField(logStr, cursor, "sig_info", "SIG_INFO");
 
             String comment = cursor.getString(cursor.getColumnIndex("comment"));
+            if (comment == null) {
+                comment = "";
+            }
 
             //<comment:15>Distance: 99 km <eor>
             //When writing to db, must append " km"
-            logStr.append(String.format("<comment:%d>%s <eor>\n"
-                    , comment.length()
+            logStr.append(String.format(Locale.US, "<comment:%d>%s <eor>\n"
+                    , AdifFormat.utf8Length(comment)
                     , comment));
         }
 
@@ -1338,7 +1377,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         if (idx < 0) return;
         String value = cursor.getString(idx);
         if (value == null || value.isEmpty()) return;
-        sb.append(String.format("<%s:%d>%s ", adifName, value.length(), value));
+        sb.append(String.format(Locale.US, "<%s:%d>%s ", adifName, AdifFormat.utf8Length(value), value));
     }
 
     /**
@@ -2344,11 +2383,18 @@ public class DatabaseOpr extends SQLiteOpenHelper {
     static class GetAllQSLCallsign {
         public static void get(SQLiteDatabase db) {
 
+            // "Same mode only" refinement (Settings → Decode Highlights): when on,
+            // restrict every worked list to QSOs made on the current operating mode,
+            // so the "and mode" variants of the worked-station scopes work. FROM_LIST
+            // is user-maintained and unaffected. See WorkedModeFilter.
+            String meter = BaseRigOperation.getMeterFromFreq(GeneralVariables.band);
+            String mode = com.k1af.ft8af.ModeProfile.fromId(GeneralVariables.operatingMode).displayName;
+            WorkedModeFilter modeFilter = WorkedModeFilter.build(GeneralVariables.workedSameMode, mode);
+
             //String querySQL = "select distinct [call] from QSLTable where freq=?";
             //Changed to get contacted callsigns by band wavelength
-            String querySQL = "select distinct [call] from QSLTable where band=?";
-            Cursor cursor = db.rawQuery(querySQL, new String[]{
-                    BaseRigOperation.getMeterFromFreq(GeneralVariables.band)});
+            String querySQL = "select distinct [call] from QSLTable where band=?" + modeFilter.sqlSuffix;
+            Cursor cursor = db.rawQuery(querySQL, modeFilter.withArgs(meter));
             ArrayList<String> callsigns = new ArrayList<>();
             try {
                 while (cursor.moveToNext()) {
@@ -2361,11 +2407,12 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             } finally {
                 cursor.close();
             }
-            GeneralVariables.QSL_Callsign_list = callsigns;
+            // Publish as a CopyOnWriteArrayList so the wholesale swap is atomic for the
+            // decode/UI/web-logbook readers racing this background reload (see the field's note).
+            GeneralVariables.QSL_Callsign_list = new java.util.concurrent.CopyOnWriteArrayList<>(callsigns);
 
-            querySQL = "select distinct [call] from QSLTable where band<>?";
-            cursor = db.rawQuery(querySQL, new String[]{
-                    BaseRigOperation.getMeterFromFreq(GeneralVariables.band)});
+            querySQL = "select distinct [call] from QSLTable where band<>?" + modeFilter.sqlSuffix;
+            cursor = db.rawQuery(querySQL, modeFilter.withArgs(meter));
 
             ArrayList<String> other_callsigns = new ArrayList<>();
             try {
@@ -2386,8 +2433,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             // string >= yesterday comparison selects the last two UTC days.
             long nowUtc = com.k1af.ft8af.timer.UtcTimer.getSystemTime();
             String yesterday = com.k1af.ft8af.timer.UtcTimer.getYYYYMMDD(nowUtc - 86400000L);
-            querySQL = "select distinct [call] from QSLTable where qso_date>=?";
-            cursor = db.rawQuery(querySQL, new String[]{yesterday});
+            querySQL = "select distinct [call] from QSLTable where qso_date>=?" + modeFilter.sqlSuffix;
+            cursor = db.rawQuery(querySQL, modeFilter.withArgs(yesterday));
             java.util.HashSet<String> today_callsigns = new java.util.HashSet<>();
             try {
                 while (cursor.moveToNext()) {
@@ -2669,7 +2716,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     } catch (NumberFormatException e) {
                         ms = 0;
                     }
-                    ms = Math.max(-2000, Math.min(2000, ms));
+                    // Clamp with the SAME bounds the live settings UI uses when it
+                    // persists this value (±5 s). The reload clamp used to be ±2 s,
+                    // silently truncating any correction beyond ±2 s on every launch.
+                    ms = GeneralVariables.clampManualTimeCorrectionMs(ms);
                     GeneralVariables.manualTimeCorrectionMs = ms;
                     UtcTimer.delay = ms;
                 }
@@ -2702,6 +2752,12 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
                 if (name.equalsIgnoreCase("clearDecodesEveryCycle")) {
                     GeneralVariables.clearDecodesEveryCycle = result.equals("1");
+                }
+
+                if (name.equalsIgnoreCase("decodeSortMode")) {
+                    // parseConfigInt, not Integer.parseInt: a whitespace/non-numeric value in
+                    // the config table would otherwise throw during startup hydration.
+                    GeneralVariables.decodeSortMode = parseConfigInt(result, 0);
                 }
 
                 if (name.equalsIgnoreCase("clearOnBandModeChange")) {
@@ -2779,6 +2835,15 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     } catch (NumberFormatException nfe) {
                         GeneralVariables.operatingMode = FT8Common.FT8_MODE;
                     }
+                }
+                if (name.equalsIgnoreCase("iaruRegion")) {//Operator's IARU region (1/2/3), defaults 2
+                    // Load side only for now: the Settings row that writes this key lands
+                    // with the Message-Creator UI. Wiring the read here means a value
+                    // persisted by that follow-up survives relaunch without a second edit
+                    // to this hydration block. regionFromNumber maps anything out of range
+                    // back to region 2, so a junk config value degrades instead of throwing.
+                    GeneralVariables.iaruRegion = com.k1af.ft8af.message.SpecialMessage
+                            .regionFromNumber(parseConfigInt(result, 2)).number;
                 }
                 if (name.equalsIgnoreCase("autoCQAfterQSO")) {//Auto-CQ after each completed QSO, defaults off
                     GeneralVariables.autoCQAfterQSO = result.equals("1");
@@ -2866,6 +2931,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("blockedKeywords")) {//Blocklist: keyword substrings
                     GeneralVariables.addBlockedKeywords(result);
                 }
+                if (name.equalsIgnoreCase("watchCallsigns")) {//Watchlist: alert on these call(prefix)es
+                    GeneralVariables.addWatchCallsigns(result);
+                }
                 if (name.equalsIgnoreCase("filterShowOnlyCQ")) {//Decode filter: CQ only
                     GeneralVariables.filterShowOnlyCQ = result.equals("1");
                 }
@@ -2942,7 +3010,12 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.usbAudioOutputProductId = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("deepMode")) {//Deep decode mode
-                    GeneralVariables.deepDecodeMode =result.equals("1");
+                    GeneralVariables.deepDecodeMode = "1".equals(result);
+                }
+                if (name.equalsIgnoreCase("keepScreenOn")) {//Hold the screen awake in foreground
+                    // "1".equals(result), not result.equals("1"): a null config value
+                    // (missing/blank column from an imported backup) must not NPE here.
+                    GeneralVariables.keepScreenOn = "1".equals(result);
                 }
                 if (name.equalsIgnoreCase("debugModeEnabled")) {//Hidden debug screen unlock
                     GeneralVariables.debugModeEnabled = result.equals("1");
@@ -3019,6 +3092,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("pskOverlayEnabled")) {
                     GeneralVariables.pskOverlayEnabled = result.equals("1");
                 }
+                if (name.equalsIgnoreCase("grayLineEnabled")) {
+                    GeneralVariables.grayLineEnabled = result.equals("1");
+                }
 
                 if (name.equalsIgnoreCase("swrSwitch")) {
                     GeneralVariables.swr_switch_on = result.equals("1");
@@ -3062,6 +3138,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("highlightNewDxcc")) {
                     GeneralVariables.highlightNewDxcc = result.equals("1");
                 }
+                if (name.equalsIgnoreCase("highlightNewZone")) {
+                    GeneralVariables.highlightNewZone = result.equals("1");
+                }
                 if (name.equalsIgnoreCase("highlightNewGrid")) {
                     GeneralVariables.highlightNewGrid = result.equals("1");
                 }
@@ -3082,6 +3161,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("workedStationList")) {
                     GeneralVariables.addWorkedStationList(result);
+                }
+                if (name.equalsIgnoreCase("workedSameMode")) {//Restrict worked scopes to the current mode
+                    GeneralVariables.workedSameMode = result.equals("1");
                 }
 
                 if (name.equalsIgnoreCase("distanceInMiles")) {

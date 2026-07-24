@@ -52,6 +52,8 @@ public class DatabaseOprConfigHydrationTest {
     private int origIcomUdpPort;
     private float origVolumePercent;
     private int origAlcTargetLow;
+    private boolean origDeepDecodeMode;
+    private boolean origKeepScreenOn;
 
     @Before
     public void setUp() {
@@ -67,6 +69,8 @@ public class DatabaseOprConfigHydrationTest {
         origIcomUdpPort = GeneralVariables.icomUdpPort;
         origVolumePercent = GeneralVariables.volumePercent;
         origAlcTargetLow = GeneralVariables.alcTargetLow;
+        origDeepDecodeMode = GeneralVariables.deepDecodeMode;
+        origKeepScreenOn = GeneralVariables.keepScreenOn;
 
         opr = new DatabaseOpr(ApplicationProvider.getApplicationContext(), null, null, 18);
     }
@@ -88,6 +92,8 @@ public class DatabaseOprConfigHydrationTest {
             GeneralVariables.icomUdpPort = origIcomUdpPort;
             GeneralVariables.volumePercent = origVolumePercent;
             GeneralVariables.alcTargetLow = origAlcTargetLow;
+            GeneralVariables.deepDecodeMode = origDeepDecodeMode;
+            GeneralVariables.keepScreenOn = origKeepScreenOn;
         }
     }
 
@@ -223,5 +229,76 @@ public class DatabaseOprConfigHydrationTest {
         } finally {
             GeneralVariables.udpPort = orig;
         }
+    }
+
+    // ---- power & heat toggles ------------------------------------------------
+    // Both are surfaced in the Compose settings for the first time. deepMode
+    // reuses the key the retired legacy fragment wrote, so an existing preference
+    // must still hydrate; keepScreenOn is new and must default to the previous
+    // hard-coded behaviour (on) when absent.
+
+    @Test
+    public void powerToggles_hydrateFromStoredValues() {
+        GeneralVariables.deepDecodeMode = true;
+        GeneralVariables.keepScreenOn = true;
+
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("deepMode", "0");
+        config.put("keepScreenOn", "0");
+        opr.writeConfigSync(config);
+
+        hydrate();
+
+        assertThat(GeneralVariables.deepDecodeMode).isFalse();
+        assertThat(GeneralVariables.keepScreenOn).isFalse();
+    }
+
+    @Test
+    public void powerToggles_hydrateBackOn() {
+        GeneralVariables.deepDecodeMode = false;
+        GeneralVariables.keepScreenOn = false;
+
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("deepMode", "1");
+        config.put("keepScreenOn", "1");
+        opr.writeConfigSync(config);
+
+        hydrate();
+
+        assertThat(GeneralVariables.deepDecodeMode).isTrue();
+        assertThat(GeneralVariables.keepScreenOn).isTrue();
+    }
+
+    @Test
+    public void keepScreenOn_absentFromConfigKeepsThePreviousBehaviour() {
+        // An install that predates the setting has no row; the screen must keep
+        // behaving as it did when the flag was hard-coded on.
+        GeneralVariables.keepScreenOn = true;
+
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("deepMode", "1");
+        opr.writeConfigSync(config);
+
+        hydrate();
+
+        assertThat(GeneralVariables.keepScreenOn).isTrue();
+    }
+
+    @Test
+    public void powerToggles_nonBooleanValueReadsAsOff() {
+        // Hydration compares against "1", so anything else is off rather than a
+        // parse crash (the failure mode this test class exists for).
+        GeneralVariables.deepDecodeMode = true;
+        GeneralVariables.keepScreenOn = true;
+
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("deepMode", "");
+        config.put("keepScreenOn", "yes");
+        opr.writeConfigSync(config);
+
+        hydrate(); // must not throw
+
+        assertThat(GeneralVariables.deepDecodeMode).isFalse();
+        assertThat(GeneralVariables.keepScreenOn).isFalse();
     }
 }

@@ -16,7 +16,6 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
-import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -92,13 +91,18 @@ class ComposeMainActivity : AppCompatActivity() {
         val permissions = buildPermissionsList()
         checkPermission(permissions)
 
-        // Edge-to-edge is mandatory on Android 15 (targetSdk 35) and the old
+        // Edge-to-edge has been mandatory since Android 15 (API 35) — and stays
+        // enforced on our current target — while the old
         // FLAG_FULLSCREEN / window.statusBarColor APIs are deprecated. Opt into
         // edge-to-edge, then preserve the app's original full-screen look by
         // hiding the system bars immersively (transient reveal on swipe) instead
         // of the deprecated fullscreen flag. Keep the screen on as before.
         enableEdgeToEdge()
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Screen-awake is now a setting (default on, matching the previous
+        // hard-coded behaviour). Config has not hydrated yet at this point, so
+        // this applies the default; onResume re-applies once the stored value is
+        // loaded, and the settings toggle applies it live.
+        ScreenWake.apply(window, GeneralVariables.keepScreenOn)
 
         super.onCreate(savedInstanceState)
 
@@ -133,6 +137,17 @@ class ComposeMainActivity : AppCompatActivity() {
         UsbAudioNative.setTxVolume(GeneralVariables.volumePercent)
         GeneralVariables.mutableVolumePercent.observe(this) { v ->
             if (v != null) UsbAudioNative.setTxVolume(v)
+        }
+
+        // Re-apply the screen-awake preference once config hydration finishes.
+        // onCreate/onResume both run before initData()'s async config load
+        // completes, so they apply the default (on); if the stored value is
+        // actually false the screen would stay awake until the next resume or a
+        // manual toggle. Observing mutableConfigLoaded catches the moment the real
+        // value lands. Lifecycle-bound and delivered on the main thread, so the
+        // window flag is set safely.
+        mainViewModel.mutableConfigLoaded.observe(this) { loaded ->
+            if (loaded == true) ScreenWake.apply(window, GeneralVariables.keepScreenOn)
         }
 
         // Register back press handler. Priority: dismiss the QSO sheet if
@@ -614,6 +629,14 @@ class ComposeMainActivity : AppCompatActivity() {
             try { unregisterReceiver(it) } catch (_: Exception) {}
             usbDetachReceiver = null
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Re-apply the screen-awake preference. onCreate runs before config
+        // hydration, so the stored value may differ from the default it applied;
+        // this also covers returning from the settings screen.
+        ScreenWake.apply(window, GeneralVariables.keepScreenOn)
     }
 
     override fun onStop() {

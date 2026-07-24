@@ -15,6 +15,7 @@ import com.k1af.ft8af.R;
 import com.google.android.gms.maps.model.LatLng;
 
 import java.util.List;
+import java.util.Locale;
 
 public class MaidenheadGrid {
     private static final String TAG = "MaidenheadGrid";
@@ -31,20 +32,68 @@ public class MaidenheadGrid {
     private static final float SUBSQUARES = 24f;
 
     /**
+     * Gate shared by {@link #gridToLatLng} and {@link #gridToPolygon}: a token is only decoded
+     * into coordinates when it is a genuine Maidenhead locator. It must be non-null, of a
+     * supported length (2/4/6), not the {@code RR}/{@code RR73} sign-off greeting (which collides
+     * with the locator parser), and use the Maidenhead alphabet at every position — see
+     * {@link #hasValidGridChars}.
+     *
+     * <p>Without the alphabet check both decoders happily converted any right-length string
+     * (an ADIF {@code GRIDSQUARE} of "1234", a garbled report) into an arbitrary LatLng: the
+     * field-letter subtraction {@code byte - 'A'} silently went negative for a digit, producing
+     * an off-planet coordinate that Play-Services {@code LatLng} then normalised into a plausible
+     * but wrong point — plotting a bogus map pin and polluting the distance statistics. Callers
+     * such as {@code GridOsmMapView} explicitly rely on a {@code null} return to <em>validate</em>
+     * the locator (see its "Validate if it is a valid grid locator" call site), so returning a
+     * coordinate for a non-locator defeated that contract.
+     */
+    private static boolean isDecodableGrid(String grid) {
+        if (grid == null) return false;
+        int len = grid.length();
+        if (len != 2 && len != 4 && len != 6) return false;
+        if (grid.equalsIgnoreCase("RR73") || grid.equalsIgnoreCase("RR")) return false;
+        return hasValidGridChars(grid);
+    }
+
+    /**
+     * Check that {@code grid} uses the Maidenhead alphabet at each position (case-insensitive):
+     * field pair {@code A-R}, square pair {@code 0-9}, and subsquare pair {@code A-X}. The length
+     * is assumed already validated to 2/4/6 by {@link #isDecodableGrid}. This mirrors the
+     * {@code [A-Ra-r]{2}[0-9]{2}[A-Xa-x]{2}} locator grammar documented in
+     * {@code GridOsmMapView} and the shape checks in {@link #checkMaidenhead}.
+     */
+    private static boolean hasValidGridChars(String grid) {
+        for (int i = 0; i < grid.length(); i++) {
+            char c = Character.toUpperCase(grid.charAt(i));
+            switch (i) {
+                case 0:
+                case 1:
+                    if (c < 'A' || c > 'R') return false;
+                    break;
+                case 2:
+                case 3:
+                    if (c < '0' || c > '9') return false;
+                    break;
+                default: // 4, 5
+                    if (c < 'A' || c > 'X') return false;
+                    break;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Calculate latitude/longitude from a 4-character or 6-character Maidenhead grid. Returns null if grid data is invalid. For 4-character grids, 'll' is appended to use the center position.
      *
      * @param grid Maidenhead grid data
      * @return LatLng latitude/longitude, or null if data is invalid
      */
     public static LatLng gridToLatLng(String grid) {
-        if (grid==null) return null;
-        if (grid.length()==0) return null;
-        //Check if it conforms to Maidenhead grid rules
-        if (grid.length() != 2&&grid.length() != 4 && grid.length() != 6) {
-            return null;
-        }
-        if (grid.equalsIgnoreCase("RR73")) return null;
-        if (grid.equalsIgnoreCase("RR")) return null;
+        if (!isDecodableGrid(grid)) return null;
+        // Normalize once with a fixed locale: the default-locale toUpperCase() below
+        // breaks under Turkish-style locales ('i' -> 'İ', a multi-byte char that shifts
+        // every getBytes() index). After this, those calls are locale-safe no-ops.
+        grid = grid.toUpperCase(Locale.ROOT);
         double x=0;
         double y=0;
         double z=0;
@@ -106,9 +155,10 @@ public class MaidenheadGrid {
 
 
     public static LatLng[] gridToPolygon(String grid) {
-        if (grid.length() != 2 && grid.length() != 4 && grid.length() != 6) {
-            return null;
-        }
+        if (!isDecodableGrid(grid)) return null;
+        // See gridToLatLng: fixed-locale normalization keeps the byte arithmetic
+        // correct on devices whose default locale re-maps ASCII case ('i' -> 'İ').
+        grid = grid.toUpperCase(Locale.ROOT);
         LatLng[] latLngs = new LatLng[4];
 
         //Latitude 1
@@ -210,17 +260,45 @@ public class MaidenheadGrid {
     }
 
     /**
-     * This function calculates a 6-character Maidenhead grid from latitude/longitude.
-     * Latitude/longitude use NMEA format. In other words, west longitude and south latitude are negative. They are specified as double type.
+     * Calculates the 4-character Maidenhead grid (field pair + square pair, e.g. {@code "EM48"})
+     * containing the given position. Latitude/longitude are decimal degrees, signed: west
+     * longitude and south latitude are negative.
      *
-     * @param location latitude/longitude
-     * @return String Maidenhead grid string
+     * <p>Boundary coordinates are clamped to a legal locator — see {@link #gridSquareFor} for
+     * the math and why the clamp matters.
+     *
+     * @param location latitude/longitude in decimal degrees
+     * @return 4-character Maidenhead grid string
      */
     public static String getGridSquare(LatLng location) {
+        return gridSquareFor(location.latitude, location.longitude);
+    }
+
+    /**
+     * Latitude/longitude (decimal degrees) -> 4-character Maidenhead grid. Extracted from
+     * {@link #getGridSquare(LatLng)} so the boundary math is unit-testable without a
+     * Play-Services {@code LatLng} (which additionally clamps latitude to [-90, 90] and
+     * normalizes longitude to [-180, 180)).
+     *
+     * <p>Each field/digit/subsquare index is clamped to its legal Maidenhead range via
+     * {@link #clampIndex}. Without the clamp, a fix on the {@code +180} antimeridian
+     * ({@code lon == 180}) or the North Pole ({@code lat == 90}) drove the first-pair index
+     * to 18 — one past the legal A-R field range — emitting the letter {@code 'S'}, i.e. an
+     * invalid locator such as {@code "JS09"}. That grid is written to config as the
+     * operator's own grid, transmitted in FT8 messages and uploaded to PSKReporter, so a
+     * pole/antimeridian fix polluted the QSO and the shared spot database with a
+     * non-existent locator. Clamping folds the boundary onto the northernmost/easternmost
+     * cell (field {@code R}) — the standard Maidenhead convention — and is a no-op for every
+     * in-range coordinate (which never reaches a clamp ceiling), so ordinary fixes are
+     * byte-identical. This mirrors the defensive clamps already used elsewhere in this class
+     * ({@link #gridToLatLng}'s ±85° map clamp, {@link #greatCircleDistanceKm}'s acos domain
+     * clamp).
+     */
+    static String gridSquareFor(double lat, double lon) {
         double tempNumber;//For intermediate calculation
         int index;//Determines the character to display
-        double _long = location.longitude;
-        double _lat = location.latitude;
+        double _long = lon;
+        double _lat = lat;
         StringBuilder buff = new StringBuilder();
 
         /*
@@ -228,13 +306,13 @@ public class MaidenheadGrid {
          */
         _long += 180;                    // Start from the middle of the Pacific
         tempNumber = _long / 20;            // Each major square is 20 degrees wide
-        index = (int) tempNumber;            // Index for uppercase letter
+        index = clampIndex((int) tempNumber, 17);   // Field letters A-R (0..17)
         buff.append(String.valueOf((char) (index + 'A')));  // Set the first character
         _long = _long - (index * 20);            // Remainder for step 2
 
         _lat += 90;                    // Start from the South Pole, 180 degrees
         tempNumber = _lat / 10;                // Each major square is 10 degrees tall
-        index = (int) tempNumber;            // Index for uppercase letter
+        index = clampIndex((int) tempNumber, 17);   // Field letters A-R (0..17)
         buff.append(String.valueOf((char) (index + 'A')));//Set the second character
         _lat = _lat - (index * 10);            // Remainder for step 2
 
@@ -242,12 +320,12 @@ public class MaidenheadGrid {
          *	Now the second pair of two digits:
          */
         tempNumber = _long / 2;                // Remainder from step 1 divided by 2
-        index = (int) tempNumber;            // Digit index
+        index = clampIndex((int) tempNumber, 9);    // Square digits 0-9
         buff.append(String.valueOf((char) (index + '0')));//Set the third character
         _long = _long - (index * 2);            // Remainder for step 3
 
         tempNumber = _lat;                // Remainder from step 1 divided by 1
-        index = (int) tempNumber;            // Digit index
+        index = clampIndex((int) tempNumber, 9);    // Square digits 0-9
         buff.append(String.valueOf((char) (index + '0')));//Set the fourth character
         _lat = _lat - index;                // Remainder for step 3
 
@@ -255,14 +333,26 @@ public class MaidenheadGrid {
          * Now the third pair of two lowercase characters:
          */
         tempNumber = _long / 0.083333;            // Remainder from step 2 divided by 0.083333
-        index = (int) tempNumber;            // Index for lowercase letter
+        index = clampIndex((int) tempNumber, 23);   // Subsquare letters a-x (0..23)
         buff.append(String.valueOf((char) (index + 'a')));//Set the fifth character
 
         tempNumber = _lat / 0.0416665;            // Remainder from step 2 divided by 0.0416665
-        index = (int) tempNumber;            // Index for lowercase letter
+        index = clampIndex((int) tempNumber, 23);   // Subsquare letters a-x (0..23)
         buff.append(String.valueOf((char) (index + 'a')));//Set the sixth character
 
         return buff.toString().substring(0, 4);
+    }
+
+    /**
+     * Clamp a Maidenhead character index to {@code [0, max]}. A pole/antimeridian fix (or an
+     * out-of-range coordinate) would otherwise index one past the pair's legal range and emit
+     * a character outside it (e.g. {@code 'S'} for the A-R field letters). For every in-range
+     * coordinate the index already lands inside {@code [0, max]}, so this is a no-op there.
+     */
+    private static int clampIndex(int value, int max) {
+        if (value < 0) return 0;
+        if (value > max) return max;
+        return value;
     }
 
     /**

@@ -23,16 +23,42 @@ struct LogbookScreen: View {
             // Top bar
             HStack {
                 Text("Logbook")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.ft8afUI(size: 18, weight: .bold))
                     .foregroundStyle(textPrimary)
                 Spacer()
+
+                // Catch-up sync to Cloudlog/QRZ (shown when a service is enabled)
+                if appState.settings.cloudlogEnabled || appState.settings.qrzLogbookEnabled {
+                    let service = OnlineLogService.shared
+                    Button {
+                        runCatchUpSync()
+                    } label: {
+                        if service.isSyncing {
+                            HStack(spacing: 5) {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                    .tint(accent)
+                                Text("\(service.syncDone)/\(service.syncTotal)")
+                                    .font(.ft8afMono(size: 11, weight: .medium))
+                                    .foregroundStyle(textMuted)
+                            }
+                        } else {
+                            Image(systemName: "icloud.and.arrow.up")
+                                .font(.ft8afUI(size: 14, weight: .medium))
+                                .foregroundStyle(textMuted)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(service.isSyncing)
+                    .padding(.trailing, 4)
+                }
 
                 // Import button
                 Button {
                     showImportPicker = true
                 } label: {
                     Image(systemName: "square.and.arrow.down")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.ft8afUI(size: 14, weight: .medium))
                         .foregroundStyle(textMuted)
                 }
                 .buttonStyle(.plain)
@@ -43,14 +69,14 @@ struct LogbookScreen: View {
                     showExportSheet = true
                 } label: {
                     Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.ft8afUI(size: 14, weight: .medium))
                         .foregroundStyle(textMuted)
                 }
                 .buttonStyle(.plain)
                 .padding(.trailing, 8)
 
                 Text("\(logbook.totalCount) QSOs")
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .font(.ft8afMono(size: 12, weight: .medium))
                     .foregroundStyle(textMuted)
             }
             .padding(.horizontal, 16)
@@ -109,10 +135,10 @@ struct LogbookScreen: View {
         // Search bar
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 13))
+                .font(.ft8afUI(size: 13))
                 .foregroundStyle(textFaint)
             TextField("Search callsign, band, date...", text: $searchText)
-                .font(.system(size: 14, design: .monospaced))
+                .font(.ft8afMono(size: 14))
                 .foregroundStyle(textPrimary)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
@@ -121,7 +147,7 @@ struct LogbookScreen: View {
                     searchText = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 13))
+                        .font(.ft8afUI(size: 13))
                         .foregroundStyle(textFaint)
                 }
                 .buttonStyle(.plain)
@@ -152,7 +178,11 @@ struct LogbookScreen: View {
                 } else {
                     LazyVStack(spacing: 0) {
                         ForEach(filteredRecords, id: \.id) { record in
-                            LogbookRow(record: record)
+                            LogbookRow(
+                                record: record,
+                                showCloudlogChip: appState.settings.cloudlogEnabled,
+                                showQrzChip: appState.settings.qrzLogbookEnabled
+                            )
                                 .onTapGesture {
                                     editingRecord = record
                                 }
@@ -187,17 +217,35 @@ struct LogbookScreen: View {
     private var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "book.closed")
-                .font(.system(size: 40))
+                .font(.ft8afUI(size: 40))
                 .foregroundStyle(textFaint)
             Text("No QSOs logged")
-                .font(.system(size: 16, weight: .medium))
+                .font(.ft8afUI(size: 16, weight: .medium))
                 .foregroundStyle(textMuted)
             Text("Completed contacts will appear here")
-                .font(.system(size: 13))
+                .font(.ft8afUI(size: 13))
                 .foregroundStyle(textFaint)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 60)
+    }
+
+    /// Upload every unsynced QSO to the enabled services, then toast the result.
+    private func runCatchUpSync() {
+        Task {
+            let s = appState.settings
+            let result = await OnlineLogService.shared.syncAll(appState: appState)
+            if result.attempted == 0 {
+                appState.toast.show("All QSOs already synced", icon: "checkmark.icloud")
+                return
+            }
+            var parts: [String] = []
+            if s.cloudlogEnabled { parts.append("CL \(result.cloudlogOk)") }
+            if s.qrzLogbookEnabled { parts.append("QRZ \(result.qrzOk)") }
+            appState.toast.show(
+                "Synced \(parts.joined(separator: ", ")) of \(result.attempted)",
+                icon: "icloud.and.arrow.up")
+        }
     }
 
     private func importAdif(result: Result<[URL], Error>) {
@@ -238,13 +286,13 @@ struct LogbookScreen: View {
     private var noResultsState: some View {
         VStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 40))
+                .font(.ft8afUI(size: 40))
                 .foregroundStyle(textFaint)
             Text("No matches")
-                .font(.system(size: 16, weight: .medium))
+                .font(.ft8afUI(size: 16, weight: .medium))
                 .foregroundStyle(textMuted)
             Text("No QSOs match \"\(searchText)\"")
-                .font(.system(size: 13))
+                .font(.ft8afUI(size: 13))
                 .foregroundStyle(textFaint)
         }
         .frame(maxWidth: .infinity)
@@ -256,6 +304,8 @@ struct LogbookScreen: View {
 
 private struct LogbookRow: View {
     let record: QsoRecord
+    var showCloudlogChip = false
+    var showQrzChip = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -265,15 +315,23 @@ private struct LogbookRow: View {
                 .frame(width: 3, height: 36)
                 .padding(.trailing, 10)
 
-            // Call + grid
+            // Call + grid + sync chips
             VStack(alignment: .leading, spacing: 2) {
                 Text(record.call)
-                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .font(.ft8afMono(size: 14, weight: .bold))
                     .foregroundStyle(textPrimary)
-                if !record.gridsquare.isEmpty {
-                    Text(record.gridsquare)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(textFaint)
+                HStack(spacing: 4) {
+                    if !record.gridsquare.isEmpty {
+                        Text(record.gridsquare)
+                            .font(.ft8afMono(size: 10, weight: .medium))
+                            .foregroundStyle(textFaint)
+                    }
+                    if showCloudlogChip {
+                        syncChip("CL", synced: record.syncedCloudlog, color: signal)
+                    }
+                    if showQrzChip {
+                        syncChip("QRZ", synced: record.syncedQrz, color: statusConfirmed)
+                    }
                 }
             }
 
@@ -282,7 +340,7 @@ private struct LogbookRow: View {
             // Band pill + freq
             VStack(spacing: 2) {
                 Text(record.band)
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.ft8afMono(size: 10, weight: .bold))
                     .foregroundStyle(bandColor(for: record.band))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -292,7 +350,7 @@ private struct LogbookRow: View {
                     )
                 if !record.freq.isEmpty {
                     Text(record.freq)
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .font(.ft8afMono(size: 8, weight: .medium))
                         .foregroundStyle(textDim)
                 }
             }
@@ -300,7 +358,7 @@ private struct LogbookRow: View {
 
             // SNR
             Text(record.rstRcvd)
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .font(.ft8afMono(size: 11, weight: .semibold))
                 .foregroundStyle(snrColor)
                 .frame(width: 30, alignment: .trailing)
                 .padding(.trailing, 10)
@@ -308,10 +366,10 @@ private struct LogbookRow: View {
             // Date/time
             VStack(alignment: .trailing, spacing: 1) {
                 Text(formatDate(record.qsoDate))
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .font(.ft8afMono(size: 10, weight: .medium))
                     .foregroundStyle(textFaint)
                 Text(formatTime(record.timeOn))
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .font(.ft8afMono(size: 10, weight: .medium))
                     .foregroundStyle(textFaint)
             }
         }
@@ -323,6 +381,19 @@ private struct LogbookRow: View {
                 .fill(borderSubtle)
                 .frame(height: 1)
         }
+    }
+
+    /// Tiny "uploaded to <service>" badge — colored once the record is synced.
+    private func syncChip(_ label: String, synced: Bool, color: Color) -> some View {
+        Text(label)
+            .font(.ft8afMono(size: 8, weight: .bold))
+            .foregroundStyle(synced ? color : textDim)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(synced ? color.opacity(0.14) : bgSurface2)
+            )
     }
 
     private var snrColor: Color {
@@ -388,7 +459,7 @@ private struct QsoEditSheet: View {
                             .foregroundStyle(textPrimary)
                         Spacer()
                         Text(record.band)
-                            .font(.system(.body, design: .monospaced))
+                            .font(.ft8afMono(size: 17))
                             .foregroundStyle(textMuted)
                     }
                     HStack {
@@ -396,7 +467,7 @@ private struct QsoEditSheet: View {
                             .foregroundStyle(textPrimary)
                         Spacer()
                         Text(record.freq.isEmpty ? "—" : "\(record.freq) MHz")
-                            .font(.system(.body, design: .monospaced))
+                            .font(.ft8afMono(size: 17))
                             .foregroundStyle(textMuted)
                     }
                 } header: {
@@ -439,7 +510,7 @@ private struct QsoEditSheet: View {
                 .foregroundStyle(textPrimary)
             Spacer()
             TextField("", text: text)
-                .font(.system(.body, design: .monospaced))
+                .font(.ft8afMono(size: 17))
                 .multilineTextAlignment(.trailing)
                 .foregroundStyle(textPrimary)
                 .textInputAutocapitalization(.characters)

@@ -1011,28 +1011,17 @@ public class UsbAudioDevice {
     }
 
     /**
-     * Linear interpolation resampler.
+     * Band-limited TX resampler (12 kHz FT8 generator rate -> whatever rate the USB device
+     * streams at — commonly 48 kHz, but 44.1 kHz and other rates take the same path).
+     *
+     * <p>Delegates to {@link TxUpsampler}, which uses the same polyphase windowed-sinc kernel as
+     * the capture path. The previous naive linear interpolator left the 12 kHz sampling images
+     * (e.g. 10.5/13.5 kHz for a 1500 Hz tone) only lightly attenuated, which the radio's
+     * modulator turned into audible harmonic distortion on TX even though the OS-resampled phone
+     * speaker stayed clean.
      */
     private float[] resample(float[] input, int fromRate, int toRate) {
-        if (fromRate == toRate) return input;
-
-        double ratio = (double) toRate / fromRate;
-        int outputLen = (int) (input.length * ratio);
-        float[] output = new float[outputLen];
-
-        for (int i = 0; i < outputLen; i++) {
-            double srcIndex = i / ratio;
-            int idx = (int) srcIndex;
-            double frac = srcIndex - idx;
-
-            if (idx + 1 < input.length) {
-                output[i] = (float) (input[idx] * (1 - frac) + input[idx + 1] * frac);
-            } else if (idx < input.length) {
-                output[i] = input[idx];
-            }
-        }
-
-        return output;
+        return TxUpsampler.resample(input, fromRate, toRate);
     }
 
     public void close() {

@@ -27,11 +27,13 @@ fun DecodeFilterSettings(
 ) {
     // Decode-list highlight toggles
     var highlightNewDxcc by remember { mutableStateOf(GeneralVariables.highlightNewDxcc) }
+    var highlightNewZone by remember { mutableStateOf(GeneralVariables.highlightNewZone) }
     var highlightNewGrid by remember { mutableStateOf(GeneralVariables.highlightNewGrid) }
     var highlightNewBand by remember { mutableStateOf(GeneralVariables.highlightNewBand) }
     var highlightWorked by remember { mutableStateOf(GeneralVariables.highlightWorked) }
     var workedStationMode by remember { mutableStateOf(GeneralVariables.workedStationMode) }
     var workedStationScope by remember { mutableStateOf(GeneralVariables.workedStationScope) }
+    var workedSameMode by remember { mutableStateOf(GeneralVariables.workedSameMode) }
     var workedStationList by remember { mutableStateOf(GeneralVariables.getWorkedStationList()) }
     var highlightPota by remember { mutableStateOf(GeneralVariables.highlightPota) }
     var distanceInMiles by remember { mutableStateOf(GeneralVariables.distanceInMiles) }
@@ -51,6 +53,7 @@ fun DecodeFilterSettings(
     var alertNewState by remember { mutableStateOf(GeneralVariables.alertNewState) }
     var alertOnCqReply by remember { mutableStateOf(GeneralVariables.alertOnCqReply) }
     var alertOnQsoComplete by remember { mutableStateOf(GeneralVariables.alertOnQsoComplete) }
+    var watchCallsigns by remember { mutableStateOf(GeneralVariables.getWatchCallsigns()) }
 
     // Continent codes (stored on the message) and their display names, parallel lists.
     val continentCodes = listOf("NA", "SA", "EU", "AF", "AS", "OC", "AN")
@@ -87,6 +90,7 @@ fun DecodeFilterSettings(
     var showWorkedModePicker by remember { mutableStateOf(false) }
     var showWorkedScopePicker by remember { mutableStateOf(false) }
     var showWorkedListDialog by remember { mutableStateOf(false) }
+    var showWatchDialog by remember { mutableStateOf(false) }
 
     // -- Blocklist: exact whole-call dialog --
     if (showBlockExactDialog) {
@@ -202,6 +206,22 @@ fun DecodeFilterSettings(
         )
     }
 
+    // -- Needed-DX alerts: callsign watchlist editor --
+    if (showWatchDialog) {
+        TextListDialog(
+            title = stringResource(R.string.settings_watch_dialog_title),
+            description = stringResource(R.string.settings_watch_dialog_desc),
+            initialValue = watchCallsigns,
+            onDismiss = { showWatchDialog = false },
+            onSave = { text ->
+                GeneralVariables.addWatchCallsigns(text)
+                watchCallsigns = GeneralVariables.getWatchCallsigns()
+                mainViewModel.databaseOpr.writeConfig("watchCallsigns", watchCallsigns, null)
+                showWatchDialog = false
+            },
+        )
+    }
+
     SettingsDetailScaffold(
         title = stringResource(R.string.settings_cat_decode_filters),
         onBack = onBack,
@@ -221,6 +241,19 @@ fun DecodeFilterSettings(
                             GeneralVariables.highlightNewDxcc = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "highlightNewDxcc", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_highlight_new_zone),
+                        description = stringResource(R.string.settings_highlight_new_zone_desc),
+                        toggle = highlightNewZone,
+                        onToggleChange = { checked ->
+                            highlightNewZone = checked
+                            GeneralVariables.highlightNewZone = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "highlightNewZone", if (checked) "1" else "0", null,
                             )
                         },
                     )
@@ -297,6 +330,25 @@ fun DecodeFilterSettings(
                             showChevron = true,
                             onClick = { showWorkedScopePicker = true },
                         )
+                        // "and mode" refinement — meaningless for the user list, so
+                        // only offer it for the band/before/today scopes.
+                        if (workedStationScope != workedScopeFromList) {
+                            SectionDivider()
+                            SettingsRow(
+                                label = stringResource(R.string.settings_worked_same_mode),
+                                description = stringResource(R.string.settings_worked_same_mode_desc),
+                                toggle = workedSameMode,
+                                onToggleChange = { checked ->
+                                    workedSameMode = checked
+                                    GeneralVariables.workedSameMode = checked
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "workedSameMode", if (checked) "1" else "0", null,
+                                    )
+                                    // Reload the worked lists so the new filter applies now.
+                                    mainViewModel.databaseOpr.getAllQSLCallsigns()
+                                },
+                            )
+                        }
                         if (workedStationScope == workedScopeFromList) {
                             SectionDivider()
                             SettingsRow(
@@ -464,6 +516,14 @@ fun DecodeFilterSettings(
         SettingsSection(title = stringResource(R.string.settings_section_needed_dx_alerts)) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
+                    SettingsRow(
+                        label = stringResource(R.string.settings_alert_watchlist),
+                        description = stringResource(R.string.settings_alert_watchlist_desc),
+                        value = watchCallsigns.ifBlank { stringResource(R.string.common_none) },
+                        showChevron = true,
+                        onClick = { showWatchDialog = true },
+                    )
+                    SectionDivider()
                     SettingsRow(
                         label = stringResource(R.string.settings_alert_new_dxcc),
                         description = stringResource(R.string.settings_alert_new_dxcc_desc),

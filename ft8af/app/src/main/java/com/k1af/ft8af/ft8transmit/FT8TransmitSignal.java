@@ -38,6 +38,7 @@ import com.k1af.ft8af.timer.UtcTimer;
 import com.k1af.ft8af.ui.ToastMessage;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -100,6 +101,13 @@ public class FT8TransmitSignal {
     private AudioAttributes attributes = null;
     private AudioFormat myFormat = null;
     private AudioTrack audioTrack = null;
+
+    // Held for the duration of each AudioTrack TX so other apps' sounds
+    // (touch clicks, notifications) aren't mixed into the audio feeding the
+    // rig. Acquired in playFT8Signal's sound-card branch, released in
+    // afterPlayAudio (a no-op for the CAT/USB-direct paths, which never
+    // acquire it). The tune worker uses its own instance.
+    private final TxAudioFocus txAudioFocus = new TxAudioFocus();
 
     // Milliseconds we are late into the current cycle; leading audio is clipped
     // so the TX still finishes on the cycle boundary. Set just before playback.
@@ -272,8 +280,7 @@ public class FT8TransmitSignal {
      * timer is always restarted; callers should ensure we are not mid-transmit first.
      */
     public void rebuildTimer(ModeProfile mode) {
-        utcTimer.delete();
-        utcTimer = new UtcTimer(mode.slotMillis, false, makeTimerCallback());
+        utcTimer = rebuildTimerPreservingOffset(utcTimer, mode, makeTimerCallback());
         utcTimer.start();
     }
 
@@ -334,6 +341,32 @@ public class FT8TransmitSignal {
         boolean transmit = clip <= tolerance;
         if (clip > slotMillis - 1) clip = slotMillis - 1;
         return new ManualTxGate(transmit, (int) clip);
+    }
+
+    /**
+     * Build the replacement cycle timer for a new operating mode, carrying the manual
+     * TX-delay offset ({@link UtcTimer#getTime_sec()}) from the outgoing timer onto the
+     * fresh one. A new {@link UtcTimer} starts with {@code time_sec = 0}, so without this
+     * carry-over the saved TX Delay loaded at startup (or set before a mode switch) is
+     * silently discarded — the running signal falls back to a 0 ms offset until the value
+     * is edited again. Preserving it here fixes both the startup case and FT8/FT4/FT2
+     * runtime mode switches.
+     *
+     * <p>Package-visible and static so the offset carry-over is unit-testable via
+     * {@code getTime_sec()} without constructing a full {@link FT8TransmitSignal}.
+     *
+     * @param oldTimer the timer being retired (its offset is read, then it is deleted)
+     * @param mode     the mode whose {@link ModeProfile#slotMillis} sets the new period
+     * @param callback the cycle-trigger callback for the new timer
+     * @return the new, not-yet-started timer with the carried-over offset applied
+     */
+    static UtcTimer rebuildTimerPreservingOffset(UtcTimer oldTimer, ModeProfile mode,
+            OnUtcTimer callback) {
+        int prevDelay = oldTimer.getTime_sec();
+        oldTimer.delete();
+        UtcTimer next = new UtcTimer(mode.slotMillis, false, callback);
+        next.setTime_sec(prevDelay);
+        return next;
     }
 
     /**
@@ -776,6 +809,31 @@ public class FT8TransmitSignal {
         GeneralVariables.fileLog(
                 "playFT8Signal: using AudioTrack output (Android default sink)");
 
+        // Own the whole sound-card branch under a guaranteed single teardown.
+        // Everything below claims audio focus and keeps PTT keyed, then builds
+        // and drives an AudioTrack — any of which can throw on a bad route/rate,
+        // a DEAD_OBJECT, or an uninitialized track. DoTransmitRunnable (the TX
+        // worker) has no top-level try/catch, so an escaping exception would
+        // crash the app AND strand PTT keyed + audio focus held. Mirrors
+        // playTuneTone's try/catch/finally.
+        runPlaybackWithTeardown(() -> playViaAudioTrack(buffer), this::afterPlayAudio);
+    }
+
+    /**
+     * Sound-card (Android default sink) FT8 TX playback: claim exclusive audio
+     * focus, build and drive the streaming AudioTrack, and drain the tail. Must
+     * run under {@link #runPlaybackWithTeardown} so PTT/focus/track teardown
+     * ({@link #afterPlayAudio}) always happens, even if an AudioTrack call
+     * throws. Sibling of {@link #playViaUsbAudio}.
+     */
+    private void playViaAudioTrack(float[] buffer) {
+        // This branch shares Android's mixer with every other app, so claim
+        // exclusive focus for the transmission. Denial is log-only: TX must
+        // still go out.
+        boolean focusGranted = txAudioFocus.acquire(GeneralVariables.getMainContext());
+        GeneralVariables.fileLog("playFT8Signal: audio focus "
+                + (focusGranted ? "granted (exclusive)" : "NOT granted — other-app audio may mix into TX"));
+
         Log.d(TAG, String.format("playFT8Signal: Preparing sound card playback... bit depth: %s, sample rate: %d"
                 , GeneralVariables.audioOutput32Bit ? "Float32" : "Int16"
                 , GeneralVariables.audioSampleRate));
@@ -885,10 +943,36 @@ public class FT8TransmitSignal {
             }
         }
 
-        // Worker-thread-owned teardown (drops PTT + releases the track). The UI
-        // thread never releases the streaming track — it only flips txAudioCancelled
-        // and pauses/flushes — so there's no release race against this write loop.
-        afterPlayAudio();
+        // Teardown (drops PTT + releases the track + audio focus) is run by
+        // runPlaybackWithTeardown's finally, so it happens on both the normal
+        // exit here and any thrown AudioTrack failure above. The UI thread never
+        // releases the streaming track — it only flips txAudioCancelled and
+        // pauses/flushes — so there's no release race against this write loop.
+    }
+
+    /**
+     * Runs a sound-card playback {@code body}, then {@code teardown} exactly
+     * once — whether the body returns normally or throws. The AudioTrack
+     * setup/play/write in the body can throw (device route change, DEAD_OBJECT,
+     * an uninitialized track) and the TX worker ({@link DoTransmitRunnable}) has
+     * no top-level try/catch, so an escaping exception would crash the app and
+     * leave PTT keyed + audio focus held + the track leaked — a stuck carrier is
+     * never acceptable. Swallow-and-log the failure and always tear down,
+     * mirroring {@link #playTuneTone}.
+     *
+     * <p>Package-visible for testing. Its parameters are plain {@link Runnable}s,
+     * so a test can drive it with no Android dependency beyond the
+     * {@link Log} call below — which is a no-op stub under the module's
+     * {@code unitTests.returnDefaultValues} setting.
+     */
+    static void runPlaybackWithTeardown(Runnable body, Runnable teardown) {
+        try {
+            body.run();
+        } catch (Exception e) {
+            Log.e(TAG, "FT8 AudioTrack playback failed", e);
+        } finally {
+            teardown.run();
+        }
     }
 
     /**
@@ -1038,6 +1122,7 @@ public class FT8TransmitSignal {
             audioTrack.release();
             audioTrack = null;
         }
+        txAudioFocus.release();
         // One-shot free text (WSJT-X Tx5 style) just finished sending: stop here
         // instead of repeating it every cycle, and revert to standard messages so
         // the next CQ is a normal CQ. Safe to deactivate now — the audio has already
@@ -1064,9 +1149,15 @@ public class FT8TransmitSignal {
 
         // look up signal report from history
         // processing signal reports here because saved reports often differ from actual QSO reports
+        // Snapshot the shared transmitMessages list once: it is mutated concurrently
+        // by the decode thread (add / trimToMessageCount remove(0) / clear), so a live
+        // size()-then-get(i) scan can throw IndexOutOfBounds when the list shrinks
+        // mid-scan. Iterating a private copy is race-free and preserves the
+        // most-recent-first (reverse index) semantics.
+        List<Ft8Message> transmitMessagesSnapshot = new ArrayList<>(GeneralVariables.transmitMessages);
         // iterate through received signal reports from the other party
-        for (int i = GeneralVariables.transmitMessages.size() - 1; i >= 0; i--) {
-            Ft8Message message = GeneralVariables.transmitMessages.get(i);
+        for (int i = transmitMessagesSnapshot.size() - 1; i >= 0; i--) {
+            Ft8Message message = transmitMessagesSnapshot.get(i);
             if ((GeneralVariables.checkFun3(message.extraInfo)
                     || GeneralVariables.checkFun2(message.extraInfo))
                     && (message.callsignFrom.equals(toCallsign.callsign)
@@ -1077,8 +1168,8 @@ public class FT8TransmitSignal {
             }
         }
         // iterate through signal reports I sent to the other party
-        for (int i = GeneralVariables.transmitMessages.size() - 1; i >= 0; i--) {
-            Ft8Message message = GeneralVariables.transmitMessages.get(i);
+        for (int i = transmitMessagesSnapshot.size() - 1; i >= 0; i--) {
+            Ft8Message message = transmitMessagesSnapshot.get(i);
             if ((GeneralVariables.checkFun3(message.extraInfo)
                     || GeneralVariables.checkFun2(message.extraInfo))
                     && (message.callsignTo.equals(toCallsign.callsign)
@@ -1641,6 +1732,17 @@ public class FT8TransmitSignal {
 
 
         if (newOrder != -1) {//message received but QSO not yet complete
+            // A deep/late/stashed pass may re-deliver a decode we already acted on
+            // (e.g. the partner's opening grid replayed a cycle after we advanced to
+            // RR73). Applying it would walk the QSO backwards and re-send a message
+            // the partner has already answered. Evidence-only passes advance, never rewind.
+            if (isStaleEvidence(evidenceOnly, functionOrder, newOrder)) {
+                GeneralVariables.fileLog("QSO: ignore stale evidence order " + functionOrder
+                        + " newOrder=" + newOrder
+                        + " with " + (toCallsign != null ? toCallsign.callsign : "?"));
+                return;
+            }
+
             // originally newOrder == 1, but sometimes the other party sends a signal report directly, i.e. message 2
             if (newOrder == 1 || newOrder == 2) {// this is the first reply from the other party
                 resetTargetReport();// reset the signal reports
@@ -2346,6 +2448,35 @@ public class FT8TransmitSignal {
     }
 
     /**
+     * Whether a deep/late-pass decode describes a QSO state we have already moved
+     * past, and must therefore be ignored.
+     *
+     * <p>Deep, subtraction and stashed passes re-deliver decodes out of order: a
+     * pass finishing during our transmission is replayed after key-up, by which
+     * time the fast pass may already have advanced the QSO on newer evidence. The
+     * partner's opening grid (order 1) replayed after we reached RR73 (order 4)
+     * would otherwise set us back to order 2 and re-send a signal report the
+     * partner already answered — the sequencer walking backwards mid-QSO.
+     *
+     * <p>Only evidence-only passes are gated. The fast pass observes the current
+     * cycle and its verdict is authoritative even when it lowers the order (the
+     * partner really did fall back a step). Order 6 is the CQ baseline rather
+     * than the top of the ladder, so a QSO starting from CQ is never "stale".
+     *
+     * <p>Package-visible for testing.
+     *
+     * @param evidenceOnly  this is a deep/late/stashed parse (positive evidence only)
+     * @param functionOrder my current message order (1-6)
+     * @param newOrder      order of the partner's message this pass (never -1 here)
+     * @return true when the pass would move the QSO backwards and should be dropped
+     */
+    static boolean isStaleEvidence(boolean evidenceOnly, int functionOrder, int newOrder) {
+        if (!evidenceOnly) return false;// fast pass is authoritative for its own cycle
+        if (functionOrder == 6) return false;// CQ baseline: any reply legitimately starts a QSO
+        return newOrder + 1 < functionOrder;// would rewind the sequence
+    }
+
+    /**
      * Whether a force-log should actually save the QSO record and trigger the
      * celebration. A QSO that never progressed past order 2 (no report
      * exchanged) is not a real contact.
@@ -2648,6 +2779,9 @@ public class FT8TransmitSignal {
         float offsetHz = GeneralVariables.getBaseFrequency();
         AudioTrack track = null;
         boolean keyed = false;
+        // Own instance (not the TX field): tune and FT8 playback teardowns
+        // must not release each other's focus.
+        TxAudioFocus tuneFocus = new TxAudioFocus();
         try {
             GeneralVariables.fileLog(String.format(
                     "TUNE: start offset=%.0fHz level=%d%% maxOn=%ds rate=%d",
@@ -2657,6 +2791,12 @@ public class FT8TransmitSignal {
             onDoTransmitted.onTuneKeyDown();
             keyed = true;
             mutableIsTuning.postValue(true);
+
+            // Same mixer-sharing exposure as the FT8 AudioTrack branch; keep
+            // other apps' audio out of the carrier. Denial is log-only.
+            boolean tuneFocusGranted = tuneFocus.acquire(GeneralVariables.getMainContext());
+            GeneralVariables.fileLog("TUNE: audio focus "
+                    + (tuneFocusGranted ? "granted (exclusive)" : "NOT granted"));
 
             int sampleRate = GeneralVariables.audioSampleRate;
             AudioAttributes tuneAttributes = new AudioAttributes.Builder()
@@ -2732,6 +2872,7 @@ public class FT8TransmitSignal {
                 }
                 track.release();
             }
+            tuneFocus.release();
             if (keyed) {
                 try {
                     onDoTransmitted.onTuneKeyUp();

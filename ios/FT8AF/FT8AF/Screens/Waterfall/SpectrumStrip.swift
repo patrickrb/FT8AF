@@ -3,10 +3,18 @@ import FT8Audio
 
 /// Vertical bar chart of live FFT magnitudes with a TX frequency marker.
 /// Reads normalized magnitudes (0...1) from `appState.waterfall.spectrum`.
-/// Tap or drag to set the TX frequency.
+/// Tap or drag to set the TX frequency. All frequency ↔ x mappings use the
+/// span the drawn data actually covers so overlays track the drawn bars.
 struct SpectrumStrip: View {
     @Environment(AppState.self) private var appState
     @State private var touchFreq: Float?
+
+    /// Top of the displayed band — the span the drawn rows/spectrum actually
+    /// cover (`waterfall.displayMaxHz`, maintained by the waterfall loop).
+    /// NOT the settings width: when the loop isn't running, a settings change
+    /// hasn't been applied to the data yet, and mapping against it would put
+    /// overlays and tap-to-tune on the wrong frequencies.
+    private var displayMaxHz: Float { appState.waterfall.displayMaxHz }
 
     var body: some View {
         GeometryReader { geo in
@@ -28,19 +36,23 @@ struct SpectrumStrip: View {
                 }
 
                 // TX frequency marker line
-                let txX = CGFloat(WaterfallAxis.clampedFraction(forHz: appState.waterfall.txFreqHz)) * size.width
+                let txX = CGFloat(WaterfallAxis.clampedFraction(
+                    forHz: appState.waterfall.txFreqHz, displayMaxHz: displayMaxHz
+                )) * size.width
                 let markerRect = CGRect(x: txX - 0.5, y: 0, width: 1, height: size.height)
                 context.fill(Path(markerRect), with: .color(accent))
 
                 // Touch frequency indicator
                 if let tf = touchFreq {
-                    let touchX = CGFloat(WaterfallAxis.fraction(forHz: tf)) * size.width
+                    let touchX = CGFloat(WaterfallAxis.fraction(
+                        forHz: tf, displayMaxHz: displayMaxHz
+                    )) * size.width
                     let touchRect = CGRect(x: touchX - 0.5, y: 0, width: 1, height: size.height)
                     context.fill(Path(touchRect), with: .color(target.opacity(0.7)))
 
                     // Frequency label
                     let label = context.resolve(Text("\(Int(tf)) Hz")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .font(.ft8afMono(size: 9, weight: .bold))
                         .foregroundStyle(textPrimary))
                     let labelX = min(max(touchX, 30), size.width - 30)
                     context.draw(label, at: CGPoint(x: labelX, y: 8), anchor: .top)
@@ -57,11 +69,15 @@ struct SpectrumStrip: View {
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
                         let fraction = Float(value.location.x / geo.size.width)
-                        touchFreq = WaterfallAxis.tunedTxHz(forFraction: fraction)
+                        touchFreq = WaterfallAxis.tunedTxHz(
+                            forFraction: fraction, displayMaxHz: displayMaxHz
+                        )
                     }
                     .onEnded { value in
                         let fraction = Float(value.location.x / geo.size.width)
-                        let clamped = WaterfallAxis.tunedTxHz(forFraction: fraction)
+                        let clamped = WaterfallAxis.tunedTxHz(
+                            forFraction: fraction, displayMaxHz: displayMaxHz
+                        )
                         appState.waterfall.txFreqHz = clamped
                         // Clear touch indicator after short delay
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {

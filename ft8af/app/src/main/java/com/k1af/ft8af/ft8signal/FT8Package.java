@@ -109,6 +109,12 @@ public class FT8Package {
     public static String getStdCall(String compoundCallsign) {
         if (!compoundCallsign.contains("/")) return compoundCallsign;
         String[] callsigns = compoundCallsign.split("/");
+        // An all-slash string ("/", "//", ...) splits to a zero-length array
+        // because Java strips trailing empty tokens; there is no segment to
+        // extract, so fall back to the input rather than indexing callsigns[0]
+        // below and throwing ArrayIndexOutOfBoundsException. Mirrors the same
+        // guard in GeneralVariables.getShortCallsign.
+        if (callsigns.length == 0) return compoundCallsign;
         for (String callsign : callsigns) {// extract standard callsign using regex
             // FT8 definition: a standard amateur callsign consists of a one or two character prefix (at least one must be a letter), followed by a decimal digit and up to three letter suffix.
             if (callsign.matches("[A-Z0-9]?[A-Z0-9][0-9][A-Z][A-Z0-9]?[A-Z]?")) {

@@ -2,6 +2,10 @@ package com.k1af.ft8af.ft8transmit;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.k1af.ft8af.ModeProfile;
+import com.k1af.ft8af.timer.OnUtcTimer;
+import com.k1af.ft8af.timer.UtcTimer;
+
 import org.junit.Test;
 
 /**
@@ -642,5 +646,105 @@ public class FT8TransmitSignalTest {
                 FT8TransmitSignal.decideManualTx(FT8_SLOT + 5000, FT8_SLACK, FT8_SLOT, 4000);
         assertThat(g.transmit).isFalse();
         assertThat(g.clipMs).isEqualTo(FT8_SLOT - 1);
+    }
+
+    // ---- rebuildTimerPreservingOffset ---------------------------------------
+    // A mode change (or the applyLoadedOperatingMode() call at startup) rebuilds
+    // the cycle timer. A fresh UtcTimer starts with time_sec = 0, so before this
+    // fix the saved TX Delay loaded into the running signal was silently wiped
+    // and the offset fell back to 0 ms until the operator re-edited the value —
+    // the reported "TX Delay is not applied until I change its value" bug. The
+    // rebuild must carry the outgoing timer's offset onto the new one.
+    //
+    // UtcTimer construction only schedules java.util.Timer tasks (no JNI / no
+    // Android framework), so this runs on the bare JVM; delete() the timers to
+    // avoid leaking their heartbeat threads between tests.
+
+    private static final OnUtcTimer NOOP_CALLBACK = new OnUtcTimer() {
+        @Override public void doHeartBeatTimer(long utc) { }
+        @Override public void doOnSecTimer(long utc) { }
+    };
+
+    @Test
+    public void rebuildTimer_carriesOffsetOntoNewTimer() {
+        UtcTimer old = new UtcTimer(ModeProfile.FT8.slotMillis, false, NOOP_CALLBACK);
+        try {
+            old.setTime_sec(1800); // saved TX Delay, in ms
+            UtcTimer rebuilt = FT8TransmitSignal.rebuildTimerPreservingOffset(
+                    old, ModeProfile.FT4, NOOP_CALLBACK);
+            try {
+                // The core fix: the offset survives the rebuild instead of resetting to 0.
+                assertThat(rebuilt.getTime_sec()).isEqualTo(1800);
+            } finally {
+                rebuilt.delete();
+            }
+        } finally {
+            old.delete();
+        }
+    }
+
+    @Test
+    public void rebuildTimer_zeroOffsetStaysZero() {
+        // No TX Delay set: the rebuild must not invent one.
+        UtcTimer old = new UtcTimer(ModeProfile.FT8.slotMillis, false, NOOP_CALLBACK);
+        try {
+            UtcTimer rebuilt = FT8TransmitSignal.rebuildTimerPreservingOffset(
+                    old, ModeProfile.FT8, NOOP_CALLBACK);
+            try {
+                assertThat(rebuilt.getTime_sec()).isEqualTo(0);
+            } finally {
+                rebuilt.delete();
+            }
+        } finally {
+            old.delete();
+        }
+    }
+
+    // ---- isStaleEvidence -----------------------------------------------------
+    // Deep/late/stashed passes re-deliver decodes out of order: a pass finishing
+    // during our transmission is replayed after key-up, by which time the fast
+    // pass may already have advanced the QSO on newer evidence. Such a pass may
+    // move the sequence forward but never back — a partner's opening grid
+    // replayed after we reached RR73 must not rewind us to sending a report.
+    // Field case (POTA 2026-07-23, K0OBX/N8GK/K0OTC): "advance order 4->2".
+
+    @Test
+    public void stale_fastPassIsNeverStale() {
+        // The fast pass observes the current cycle; its verdict stands even when
+        // it lowers the order (the partner really did fall back a step).
+        assertThat(FT8TransmitSignal.isStaleEvidence(
+                /*evidenceOnly*/ false, /*order*/ 4, /*newOrder*/ 1)).isFalse();
+        assertThat(FT8TransmitSignal.isStaleEvidence(false, 5, 1)).isFalse();
+    }
+
+    @Test
+    public void stale_deepGridAfterRR73_isStale() {
+        // The exact field failure: at RR73 (4), a replayed opening grid (1)
+        // would set order back to 2 and re-send the signal report.
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 4, 1)).isTrue();
+    }
+
+    @Test
+    public void stale_deepEvidenceThatAdvances_isNotStale() {
+        // At order 2 the partner's R-report (3) advances to RR73 (4).
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 2, 3)).isFalse();
+        // At RR73 (4) their 73 (5) completes.
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 4, 5)).isFalse();
+    }
+
+    @Test
+    public void stale_deepEvidenceHoldingSameOrder_isNotStale() {
+        // Partner repeats the message we already acted on: newOrder+1 == order.
+        // Not a rewind, and re-affirming resets the no-reply count, so allow it.
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 4, 3)).isFalse();
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 2, 1)).isFalse();
+    }
+
+    @Test
+    public void stale_cqBaselineIsNeverStale() {
+        // Order 6 is the CQ baseline, not the top of the ladder: a reply
+        // arriving there legitimately starts a QSO at a lower order.
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 6, 1)).isFalse();
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 6, 2)).isFalse();
     }
 }

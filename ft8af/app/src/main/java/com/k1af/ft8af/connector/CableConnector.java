@@ -140,6 +140,9 @@ public class CableConnector extends BaseRigConnector {
     }
 
 
+    /** See {@link #isLastPttWriteOk()}. Optimistic until a write actually fails. */
+    private volatile boolean lastPttWriteOk = true;
+
     @Override
     public void setPttOn(boolean on) {
         //Only handle RTS and DTR
@@ -154,6 +157,7 @@ public class CableConnector extends BaseRigConnector {
         for (int attempt = 0; CatReconnectPolicy.shouldRetryPtt(on, ok, attempt); attempt++) {
             ok = toggleControlLine(mode, on);
         }
+        lastPttWriteOk = ok;
         if (!on && !ok) {
             Log.e(TAG, "PTT-off write failed after retries; port likely dropped");
         }
@@ -174,6 +178,21 @@ public class CableConnector extends BaseRigConnector {
         for (int attempt = 0; CatReconnectPolicy.shouldRetryPtt(false, ok, attempt); attempt++) {
             ok = cableSerialPort.sendData(command);
         }
+        lastPttWriteOk = ok;
+        if (!ok) {
+            Log.e(TAG, "CAT PTT write failed after retries; port likely dropped");
+        }
+    }
+
+    /**
+     * Result of the last {@link #setPttOn} write. False means the port was closed
+     * or the write threw, so the rig never saw the command — if that command was
+     * PTT-off, the transmitter is still keyed and the caller owes it a retry once
+     * the link is back (see {@code PttSafetyLatch}).
+     */
+    @Override
+    public boolean isLastPttWriteOk() {
+        return lastPttWriteOk;
     }
 
 

@@ -110,6 +110,27 @@ public class CableSerialPort {
                 && GeneralVariables.controlMode == ControlMode.CAT;
     }
 
+    /**
+     * Whether {@code portNum} is a valid 0-based index into a driver port list
+     * of {@code portCount} ports, i.e. in {@code 0 .. portCount-1}.
+     *
+     * <p>{@link #prepare()} calls {@code driver.getPorts().get(portNum)} right
+     * after this check. The previous guard was {@code portCount < portNum},
+     * which is off by one: it let {@code portNum == portCount} (a persisted
+     * multi-port selection replayed against a device that now enumerates fewer
+     * ports, or an empty port list with the default {@code portNum == 0}) pass,
+     * so {@code get(portNum)} threw {@link IndexOutOfBoundsException} out of
+     * {@code prepare()} → {@code connect()}. On the CAT auto-reconnect worker
+     * that exception is uncaught and crashes the app. Requiring
+     * {@code portNum < portCount} (and non-negative) makes the guard actually
+     * cover the index it protects.
+     *
+     * <p>Package-visible for testing.
+     */
+    static boolean isValidPortIndex(int portCount, int portNum) {
+        return portNum >= 0 && portNum < portCount;
+    }
+
     private boolean prepare() {
         registerRigSerialPort(context);
         UsbDevice device = null;
@@ -137,7 +158,7 @@ public class CableSerialPort {
             //Try adding the unknown device to the CDC driver
             driver = new CdcAcmSerialDriver(device);
         }
-        if (driver.getPorts().size() < portNum) {
+        if (!isValidPortIndex(driver.getPorts().size(), portNum)) {
             Log.e(TAG, "Serial port number does not exist, cannot open.");
             return false;
         }
@@ -293,6 +314,19 @@ public class CableSerialPort {
         } catch (IOException e) {
             e.printStackTrace();
             fileLog("serial.send ERROR: " + e.getMessage());
+            return false;
+        } catch (RuntimeException e) {
+            // Backstop. A CAT write must never be fatal: sendData runs on the TX
+            // pool thread via the PTT path, so an uncaught RuntimeException takes
+            // the whole process down — and if it happens between TX1 and TX0 the
+            // rig is left keyed with nothing alive to unkey it (observed in the
+            // field: process died 3ms after TX1, transmitter keyed for 89s).
+            // The known case is an NPE from a yanked USB endpoint, now also
+            // guarded at source in CommonUsbSerialPort; this catch covers the
+            // rest of the driver stack, which is third-party and NPEs freely
+            // once the device disappears mid-transfer.
+            e.printStackTrace();
+            fileLog("serial.send ERROR (runtime, port died mid-write): " + e);
             return false;
         }
         return true;

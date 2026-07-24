@@ -6,7 +6,8 @@ import androidx.core.view.WindowInsetsControllerCompat
 /**
  * Immersive system-bar configuration for the edge-to-edge migration.
  *
- * Android 15 (targetSdk 35) forces edge-to-edge and deprecates the old
+ * Android 15 (API 35) made edge-to-edge mandatory — still enforced on newer
+ * targets — and deprecated the old
  * FLAG_FULLSCREEN flag plus window.statusBarColor / navigationBarColor setters.
  * The app's original look is full-screen with the system bars hidden, so instead
  * of those deprecated APIs we hide the bars via the insets controller and let

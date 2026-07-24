@@ -339,6 +339,21 @@ private fun MetaText(text: String) {
 }
 
 /**
+ * Whether [message] carries a Maidenhead grid field the operator hasn't logged
+ * yet — i.e. a "new grid" for grid-chasing (VUCC). Requires a full 4-character
+ * field (the two-letter field + two-digit square that `checkQSLGrid` keys on);
+ * bare-callsign or sub-square-only frames don't count. Shared by the row's
+ * NEW_GRID highlight and the Decode screen's "New Grid" filter so the pill and
+ * the chip always agree on what counts as new.
+ */
+internal fun isNewGridStation(message: Ft8Message): Boolean {
+    val grid = message.maidenGrid
+    return !grid.isNullOrEmpty() &&
+        grid.length >= 4 &&
+        !GeneralVariables.checkQSLGrid(grid)
+}
+
+/**
  * Resolve the [QsoStatus] for a given [Ft8Message] based on its state.
  *
  * Returns null when there is no useful state to surface (e.g. a station
@@ -357,11 +372,8 @@ internal fun resolveQsoStatus(message: Ft8Message): QsoStatus? {
         GeneralVariables.checkQSLCallsign(message.getCallsignFrom())
     val isToMe = GeneralVariables.checkIsMyCallsign(message.callsignTo ?: "")
     val modifier = message.modifier
-    val grid = message.maidenGrid
 
-    val newGrid = !grid.isNullOrEmpty() &&
-        grid.length >= 4 &&
-        !GeneralVariables.checkQSLGrid(grid)
+    val newGrid = isNewGridStation(message)
     val newBand = !isWorked &&
         GeneralVariables.checkQSLCallsign_OtherBand(message.callsignFrom ?: "")
 
@@ -388,6 +400,11 @@ internal fun resolveQsoStatus(message: Ft8Message): QsoStatus? {
             if (newPota) QsoStatus.NEW_POTA else QsoStatus.POTA
         isCQ && modifier == "SOTA" -> QsoStatus.SOTA
         GeneralVariables.highlightNewDxcc && message.fromDxcc -> QsoStatus.NEW
+        // A new CQ zone (Worked All Zones) outranks a new grid: only 40 zones
+        // exist, so an unworked one is a rarer, more prized catch. message.fromCq
+        // is set at decode time in CallsignDatabase (unworked-zone lookup) and
+        // only ever true once the zone map is ready — same gating as fromDxcc.
+        GeneralVariables.highlightNewZone && message.fromCq -> QsoStatus.NEW_ZONE
         GeneralVariables.highlightNewGrid && newGrid -> QsoStatus.NEW_GRID
         GeneralVariables.highlightNewBand && newBand -> QsoStatus.NEW_BAND
         effectiveWorkedMode() == WorkedStationMode.HIGHLIGHT &&

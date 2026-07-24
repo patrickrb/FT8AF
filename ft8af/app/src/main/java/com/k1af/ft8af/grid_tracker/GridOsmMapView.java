@@ -14,7 +14,6 @@ import static java.lang.Math.floor;
 import static java.lang.Math.sin;
 import static java.lang.Math.tan;
 
-import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Color;
@@ -223,6 +222,7 @@ public class GridOsmMapView {
     public void clearSelectedLines() {
         if (selectedLine != null) {
             selectedLine.closeInfoWindow();
+            selectedLine.stopAnimation();// removed from the map for good: cancel its animator
             gridMapView.getOverlays().remove(selectedLine);
             selectedLine = null;
 
@@ -244,12 +244,25 @@ public class GridOsmMapView {
         }
         for (GridPolyLine line : gridLines) {
             line.closeInfoWindow();
+            // Cancel each discarded line's infinite direction animator before dropping it;
+            // otherwise every decode cycle's lines pile up as orphaned animators that pin
+            // the MapView and repaint ~60x/s forever (see DirectionLineAnimator). Skip the
+            // retained selectedLine (re-added just below and still visible) so it keeps
+            // animating.
+            if (line != selectedLine) {
+                line.stopAnimation();
+            }
             gridMapView.getOverlays().remove(line);
         }
         gridLines.clear();
         if (selectedLine != null && selectLineTimeOut > 0) {
             gridMapView.getOverlays().add(selectedLine);
             if (isOpening) selectedLine.showInfoWindow();
+        } else if (selectedLine != null) {
+            // Its retention window has elapsed and it was not re-added above: it is gone
+            // from the map for good, so cancel its animator too rather than leak it.
+            selectedLine.stopAnimation();
+            selectedLine = null;
         }
         gridMapView.invalidate();
     }
@@ -568,6 +581,13 @@ public class GridOsmMapView {
         public QSLRecordStr recorder;
         //public boolean marked = false;
 
+        // The infinite direction-highlight animator for a decoded line (null for a
+        // QSL-history line, which has none). Retained so it can be cancelled when the
+        // line is removed from the map — see stopAnimation() and clearLines(). Without
+        // this the animator was a bare local that ran forever and leaked. Package-private
+        // for GridOsmMapView's line-cleanup paths.
+        private DirectionLineAnimator pathAnimator;
+
         @SuppressLint("DefaultLocale")
         public GridPolyLine(MapView mapView, LatLng fromLatLng, LatLng toLatLng, QSLRecordStr recordStr) {
             super(mapView);
@@ -648,24 +668,31 @@ public class GridOsmMapView {
             setMilestoneManagers(managers);
 
 
-            //Set up directional animation
-            final ValueAnimator percentageCompletion = ValueAnimator.ofFloat(0, 1); // 10 kilometers
-
-            percentageCompletion.setRepeatCount(ValueAnimator.INFINITE);
-            percentageCompletion.setDuration(1000); // 1 seconds
-            percentageCompletion.setStartDelay(0); // 1 second
-
-            percentageCompletion.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-                @Override
-                public void onAnimationUpdate(ValueAnimator animation) {
-                    double dist = ((float) animation.getAnimatedValue()) * lineLen;
-                    double distStart = dist - pointLen;
-                    if (distStart < 0) distStart = 0;
-                    slicerForPath.setMeterDistanceSlice(distStart, dist);
-                    mapView.invalidate();
-                }
+            //Set up directional animation. Retained in pathAnimator (not a bare local as
+            //before) so clearLines() can cancel it when the line leaves the map; an
+            //un-cancelled INFINITE animator leaks the line + MapView and repaints ~60x/s
+            //forever (see DirectionLineAnimator).
+            this.pathAnimator = new DirectionLineAnimator(1000, fraction -> {
+                double dist = fraction * lineLen;
+                double distStart = dist - pointLen;
+                if (distStart < 0) distStart = 0;
+                slicerForPath.setMeterDistanceSlice(distStart, dist);
+                mapView.invalidate();
             });
-            percentageCompletion.start();
+            this.pathAnimator.start();
+        }
+
+        /**
+         * Stop and release this line's direction animation, if it has one. Called when
+         * the line is removed from the map (see {@link GridOsmMapView#clearLines()} and
+         * {@link GridOsmMapView#clearSelectedLines()}) so its infinite animator does not
+         * outlive the line. Idempotent; a QSL-history line has no animator, making this a
+         * no-op there.
+         */
+        public void stopAnimation() {
+            if (pathAnimator != null) {
+                pathAnimator.stop();
+            }
         }
 
         /**

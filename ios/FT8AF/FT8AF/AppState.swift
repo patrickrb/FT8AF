@@ -53,6 +53,12 @@ struct DecodeMessage: Identifiable, Equatable {
     var grid: String
     var extra: String
     var slotIndex: Int
+    /// Wall-clock arrival of the decode. Defaulted to construction time so
+    /// every existing `DecodeMessage(...)` call site (LiveEngine creates
+    /// messages the moment a slot decodes) gets the correct arrival without
+    /// changes; the decode list derives the relative "now / 32s / 5m" age
+    /// from it.
+    var arrival: Date = Date()
 
     static let mock: [DecodeMessage] = [
         DecodeMessage(utcTime: "12:30:00", callFrom: "W1AW", callTo: "CQ", snr: -5, freqHz: 1120, grid: "FN31", extra: "FN31", slotIndex: 0),
@@ -75,7 +81,22 @@ struct DecodeMessage: Identifiable, Equatable {
 @Observable @MainActor
 final class WaterfallState {
     var rows: [[UInt8]] = []
+    /// Optional UTC boundary label per row, kept in lockstep with `rows`:
+    /// non-nil on the first row of each 15 s FT8 period ("HH:mm:ss" of the
+    /// period start), nil elsewhere. `WaterfallCanvas` draws a divider + label
+    /// at these rows.
+    var rowTimestamps: [String?] = []
     var spectrum: [Float] = []
+    /// Top of the audio band the current `rows`/`spectrum` were built to, in
+    /// Hz. Maintained by the LiveEngine waterfall loop from the operator's
+    /// spectrum-width setting; on a live width change the loop clears the
+    /// old-width history and updates this.
+    var displayMaxHz: Float = 3000
+    /// RX input level of the most recent metering window (linear, 0..~1), for
+    /// the level indicator in the waterfall info bar. Classified via
+    /// `AudioInputLevel.fromPeakRms` in the view.
+    var inputPeak: Float = 0
+    var inputRms: Float = 0
     var txFreqHz: Float = 1500
     var isLive: Bool = false
     var noiseReduction: Bool = false
@@ -192,13 +213,35 @@ final class SettingsState {
     var txWatchdogMin: Int = 0          // 0 = off
     var stopAfterAttempts: Int = 0      // 0 = off
     // Radio
-    var spectrumWidthHz: Int = 3000
+    // Default 3500 matches the pre-configurable fixed span (desktop WF_MAX_HZ)
+    // so updating doesn't silently narrow the displayed band.
+    var spectrumWidthHz: Int = 3500
     var enabledBands: [String] = ["160M","80M","40M","30M","20M","17M","15M","12M","10M","6M"]
     // WSJT-X UDP interface (GridTracker / JTAlert / N1MM / Log4OM interop).
     var udpEnabled: Bool = false
     var udpHost: String = "127.0.0.1"
     var udpPort: Int = 2237
     var udpAcceptRequests: Bool = false
+    // Online logging (Cloudlog/Wavelog family + QRZ.com logbook + PSK Reporter)
+    var cloudlogEnabled: Bool = false
+    var cloudlogUrl: String = ""
+    var cloudlogApiKey: String = ""
+    var cloudlogStationId: String = ""
+    var qrzLogbookEnabled: Bool = false
+    var qrzLogbookApiKey: String = ""
+    var pskReporterEnabled: Bool = false
+    // Decode highlights & filters
+    var highlightNewDxcc: Bool = true
+    var highlightNewGrid: Bool = true
+    var highlightNewBand: Bool = true
+    var highlightWorked: Bool = true
+    var continentFilter: String = "All"   // All / NA / SA / EU / AF / AS / OC / AN
+    var distanceInMiles: Bool = false
+    // Tune
+    var tuneTimeoutSec: Int = 30
+    // Preferred audio input port name ("" = system default); matched by name
+    // so the choice survives replug/relaunch.
+    var preferredInputPort: String = ""
 }
 
 // MARK: - Rig
@@ -242,18 +285,37 @@ final class TxState {
     var conversationLog: [QsoLogEntry] = []
     /// Set by the engine when our CQ is answered, to auto-open QsoSheet.
     var autoOpenMessage: DecodeMessage?
+    /// The QSO engine's raw sequencer stage, mirrored by LiveEngine for the
+    /// TX message-selector chips (`TxStageSelector`).
+    var qsoStage: TxStage = .idle
+    /// Last SNR heard from the current target (for the Active QSO header).
+    var targetSnr: Int?
+    /// Callsigns waiting their turn (mirror of LiveEngine's `CallerQueue`).
+    var queuedCallers: [String] = []
+    /// TUNE carrier state: latched steady tone at the TX audio frequency.
+    var isTuning: Bool = false
+    var tuneRemainingSec: Int = 0
 }
 
 // MARK: - POTA
 
 @Observable @MainActor
 final class PotaState {
+    /// Start-form inputs (park reference + optional notes).
     var parkInput: String = ""
-    var parkRefs: [String] = []
     var notes: String = ""
-    var isActivating: Bool = false
-    var activationQsoCount: Int = 0
-    var activationStartTime: Date?
+    /// All activation sessions (past + at most one active). Loaded from
+    /// `PotaActivationStore` the first time the POTA screen appears and
+    /// persisted on every change; an unfinished activation therefore survives
+    /// app restarts.
+    var activations: [PotaActivationRecord] = []
+    /// Whether `activations` has been loaded from disk yet (the POTA screen
+    /// loads lazily on first appearance).
+    var activationsLoaded: Bool = false
+
+    /// The in-progress activation, if any (endedAtMs == nil).
+    var current: PotaActivationRecord? { activations.first { $0.isActive } }
+    var isActivating: Bool { current != nil }
 }
 
 // MARK: - Settings Persistence
@@ -289,6 +351,21 @@ enum SettingsPersistence {
         d.set(s.udpHost, forKey: key("udpHost"))
         d.set(s.udpPort, forKey: key("udpPort"))
         d.set(s.udpAcceptRequests, forKey: key("udpAcceptRequests"))
+        d.set(s.cloudlogEnabled, forKey: key("cloudlogEnabled"))
+        d.set(s.cloudlogUrl, forKey: key("cloudlogUrl"))
+        d.set(s.cloudlogApiKey, forKey: key("cloudlogApiKey"))
+        d.set(s.cloudlogStationId, forKey: key("cloudlogStationId"))
+        d.set(s.qrzLogbookEnabled, forKey: key("qrzLogbookEnabled"))
+        d.set(s.qrzLogbookApiKey, forKey: key("qrzLogbookApiKey"))
+        d.set(s.pskReporterEnabled, forKey: key("pskReporterEnabled"))
+        d.set(s.highlightNewDxcc, forKey: key("highlightNewDxcc"))
+        d.set(s.highlightNewGrid, forKey: key("highlightNewGrid"))
+        d.set(s.highlightNewBand, forKey: key("highlightNewBand"))
+        d.set(s.highlightWorked, forKey: key("highlightWorked"))
+        d.set(s.continentFilter, forKey: key("continentFilter"))
+        d.set(s.distanceInMiles, forKey: key("distanceInMiles"))
+        d.set(s.tuneTimeoutSec, forKey: key("tuneTimeoutSec"))
+        d.set(s.preferredInputPort, forKey: key("preferredInputPort"))
     }
 
     @MainActor static func load(into s: SettingsState) {
@@ -361,6 +438,43 @@ enum SettingsPersistence {
         }
         if d.object(forKey: key("udpAcceptRequests")) != nil {
             s.udpAcceptRequests = d.bool(forKey: key("udpAcceptRequests"))
+        }
+        if d.object(forKey: key("cloudlogEnabled")) != nil {
+            s.cloudlogEnabled = d.bool(forKey: key("cloudlogEnabled"))
+        }
+        if let v = d.string(forKey: key("cloudlogUrl")) { s.cloudlogUrl = v }
+        if let v = d.string(forKey: key("cloudlogApiKey")) { s.cloudlogApiKey = v }
+        if let v = d.string(forKey: key("cloudlogStationId")) { s.cloudlogStationId = v }
+        if d.object(forKey: key("qrzLogbookEnabled")) != nil {
+            s.qrzLogbookEnabled = d.bool(forKey: key("qrzLogbookEnabled"))
+        }
+        if let v = d.string(forKey: key("qrzLogbookApiKey")) { s.qrzLogbookApiKey = v }
+        if d.object(forKey: key("pskReporterEnabled")) != nil {
+            s.pskReporterEnabled = d.bool(forKey: key("pskReporterEnabled"))
+        }
+        if d.object(forKey: key("highlightNewDxcc")) != nil {
+            s.highlightNewDxcc = d.bool(forKey: key("highlightNewDxcc"))
+        }
+        if d.object(forKey: key("highlightNewGrid")) != nil {
+            s.highlightNewGrid = d.bool(forKey: key("highlightNewGrid"))
+        }
+        if d.object(forKey: key("highlightNewBand")) != nil {
+            s.highlightNewBand = d.bool(forKey: key("highlightNewBand"))
+        }
+        if d.object(forKey: key("highlightWorked")) != nil {
+            s.highlightWorked = d.bool(forKey: key("highlightWorked"))
+        }
+        if let v = d.string(forKey: key("continentFilter")), !v.isEmpty {
+            s.continentFilter = v
+        }
+        if d.object(forKey: key("distanceInMiles")) != nil {
+            s.distanceInMiles = d.bool(forKey: key("distanceInMiles"))
+        }
+        if d.object(forKey: key("tuneTimeoutSec")) != nil {
+            s.tuneTimeoutSec = d.integer(forKey: key("tuneTimeoutSec"))
+        }
+        if let v = d.string(forKey: key("preferredInputPort")) {
+            s.preferredInputPort = v
         }
     }
 

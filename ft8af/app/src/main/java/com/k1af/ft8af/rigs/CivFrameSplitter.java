@@ -23,10 +23,28 @@ import java.util.List;
  * every earlier fragment of a split command, and (b) appended two stray
  * {@code 0x00} bytes to the carried-over remainder after every frame, corrupting
  * the next command when it was reassembled from more than one chunk.
+ *
+ * <p>The carried-over remainder is also bounded: a stream that never delivers the
+ * {@code 0xFD} terminator (a rig on the wrong baud, line noise, a misbehaving
+ * network peer) would otherwise grow it without limit and eventually exhaust
+ * memory. See {@link #boundRemainder}.
  */
 final class CivFrameSplitter {
     /** CI-V end-of-message terminator. */
     private static final byte END_MARKER = (byte) 0xFD;
+    /** CI-V preamble byte; a command opens with two of these ({@code FE FE}). */
+    private static final byte PREAMBLE = (byte) 0xFE;
+
+    /**
+     * Hard cap on the carried-over remainder. A well-formed CI-V command this app
+     * exchanges is a few to a few dozen bytes, so the reassembly buffer should
+     * never approach this. It only matters when the terminator {@code 0xFD} never
+     * arrives — a rig on the wrong baud, line noise, or a misbehaving network peer
+     * streaming garbage — which would otherwise grow {@code dataBuffer} without
+     * bound and eventually OOM the app. 1 KiB is orders of magnitude above any
+     * real frame yet keeps memory firmly bounded.
+     */
+    private static final int MAX_BUFFERED_BYTES = 1024;
 
     private CivFrameSplitter() {
     }
@@ -65,6 +83,43 @@ final class CivFrameSplitter {
                 start = i + 1;
             }
         }
-        return new Result(commands, Arrays.copyOfRange(combined, start, combined.length));
+        return new Result(commands, boundRemainder(Arrays.copyOfRange(combined, start, combined.length)));
+    }
+
+    /**
+     * Keep the trailing remainder from growing without bound when the terminator
+     * never arrives. A remainder holds a command still in progress (it contains no
+     * {@code 0xFD}, or it would have been split off already), so under normal
+     * operation it stays tiny. Only a malformed stream lets it exceed
+     * {@link #MAX_BUFFERED_BYTES}; when it does, resynchronise to the most recent
+     * {@code FE FE} preamble — the earliest point a valid command could still begin
+     * — discarding the unparseable bytes before it. Bytes preceding that preamble
+     * can never complete a frame (a valid one would have ended in {@code 0xFD} and
+     * been emitted), so dropping them is lossless for well-formed traffic and only
+     * ever trims garbage. If no preamble is present the buffer is pure noise: keep
+     * at most a trailing {@code 0xFE} in case a preamble is split across the read
+     * boundary. A final trailing-window clamp guarantees boundedness even in the
+     * pathological case of a lone preamble followed by a huge terminator-less run.
+     */
+    private static byte[] boundRemainder(byte[] remainder) {
+        if (remainder.length <= MAX_BUFFERED_BYTES) {
+            return remainder;
+        }
+        for (int i = remainder.length - 2; i >= 0; i--) {
+            if (remainder[i] == PREAMBLE && remainder[i + 1] == PREAMBLE) {
+                // Resynchronise to this preamble. If the tail from here still
+                // exceeds the cap (a lone preamble ahead of a huge terminator-less
+                // run) keep only its trailing window. Compute the copy start first
+                // so we allocate at most MAX_BUFFERED_BYTES bytes rather than the
+                // full oversized remainder — this guard fires precisely in the
+                // malformed-stream case, where the extra copy would hurt most.
+                int from = Math.max(i, remainder.length - MAX_BUFFERED_BYTES);
+                return Arrays.copyOfRange(remainder, from, remainder.length);
+            }
+        }
+        if (remainder[remainder.length - 1] == PREAMBLE) {
+            return new byte[]{PREAMBLE};
+        }
+        return new byte[0];
     }
 }

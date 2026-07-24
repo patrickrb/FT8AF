@@ -85,6 +85,56 @@ public class CatMeterParserTest {
         assertThat(Yaesu3Command.get590ALCOrSWR(c)).isEqualTo(0);
     }
 
+    // ---- Yaesu3Command.is590MeterSWR / is590MeterALC (Kenwood TS-590/2000/570) ----
+    //
+    // The Kenwood "RM" (read-meter) reply is "RM P1 P2;": after the "RM" command
+    // id is stripped, data = "mvvvv" where P1 (index 0) is the meter-type selector
+    // (1 = SWR, 3 = ALC) and P2 (indices 1..4) is the 4-digit value. The value
+    // extractor get590ALCOrSWR already reads substring(1,5), so the type selector
+    // is data.charAt(0) -- matching the sibling isSWRMeter38/39 which use charAt(0).
+
+    @Test
+    public void is590MeterSWR_trueForSwrFrame() {
+        // "RM10015;" -> data "10015": P1 = '1' (SWR), value "0015".
+        Yaesu3Command c = new Yaesu3Command("RM", "10015");
+        assertThat(Yaesu3Command.is590MeterSWR(c)).isTrue();
+    }
+
+    @Test
+    public void is590MeterALC_trueForAlcFrame() {
+        // "RM30020;" -> data "30020": P1 = '3' (ALC), value "0020".
+        Yaesu3Command c = new Yaesu3Command("RM", "30020");
+        assertThat(Yaesu3Command.is590MeterALC(c)).isTrue();
+    }
+
+    @Test
+    public void is590MeterSWR_falseForAlcFrame() {
+        Yaesu3Command c = new Yaesu3Command("RM", "30020");
+        assertThat(Yaesu3Command.is590MeterSWR(c)).isFalse();
+    }
+
+    @Test
+    public void is590MeterALC_falseForSwrFrame() {
+        Yaesu3Command c = new Yaesu3Command("RM", "10015");
+        assertThat(Yaesu3Command.is590MeterALC(c)).isFalse();
+    }
+
+    @Test
+    public void is590Meter_selectorNotConfusedWithValueDigits() {
+        // An SWR frame whose value happens to contain a '3' at index 2 must not
+        // be misread as ALC (the pre-fix charAt(2) bug classified this as ALC).
+        Yaesu3Command c = new Yaesu3Command("RM", "10300");
+        assertThat(Yaesu3Command.is590MeterSWR(c)).isTrue();
+        assertThat(Yaesu3Command.is590MeterALC(c)).isFalse();
+    }
+
+    @Test
+    public void is590Meter_returnsFalseOnShortData() {
+        Yaesu3Command c = new Yaesu3Command("RM", "10");
+        assertThat(Yaesu3Command.is590MeterSWR(c)).isFalse();
+        assertThat(Yaesu3Command.is590MeterALC(c)).isFalse();
+    }
+
     // ---- ElecraftCommand.getSWRMeter (substring(0,3)) ----
 
     @Test

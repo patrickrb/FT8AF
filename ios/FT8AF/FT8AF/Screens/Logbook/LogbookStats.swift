@@ -11,16 +11,16 @@ struct LogbookStats: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Total QSOs")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.ft8afUI(size: 11, weight: .medium))
                         .foregroundStyle(textFaint)
                         .textCase(.uppercase)
                     Text("\(totalQsos)")
-                        .font(.system(size: 28, weight: .bold, design: .monospaced))
+                        .font(.ft8afMono(size: 28, weight: .bold))
                         .foregroundStyle(textPrimary)
                 }
                 Spacer()
                 Image(systemName: "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 24))
+                    .font(.ft8afUI(size: 24))
                     .foregroundStyle(accent.opacity(0.5))
             }
             .padding(14)
@@ -65,10 +65,10 @@ private struct BandStatCard: View {
     var body: some View {
         VStack(spacing: 4) {
             Text(band)
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .font(.ft8afMono(size: 11, weight: .bold))
                 .foregroundStyle(bandColor(for: band))
             Text("\(count)")
-                .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                .font(.ft8afMono(size: 16, weight: .semibold))
                 .foregroundStyle(textPrimary)
         }
         .frame(maxWidth: .infinity)
