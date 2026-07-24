@@ -2754,6 +2754,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.clearDecodesEveryCycle = result.equals("1");
                 }
 
+                if (name.equalsIgnoreCase("pileupStrongestFirst")) {
+                    GeneralVariables.pileupStrongestFirst = result.equals("1");
+                }
+
                 if (name.equalsIgnoreCase("decodeSortMode")) {
                     // parseConfigInt, not Integer.parseInt: a whitespace/non-numeric value in
                     // the config table would otherwise throw during startup hydration.
@@ -2785,6 +2789,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("noReplyLimit")) {//
                     GeneralVariables.noReplyLimit = parseConfigInt(result, 0);
+                }
+                if (name.equalsIgnoreCase("max73Sends")) {//Max RR73/73 sends per QSO; 0==Auto
+                    GeneralVariables.max73Sends = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("autoFollowCQ")) {//Auto-follow CQ
                     GeneralVariables.autoFollowCQ = result.equals("1");
@@ -3135,6 +3142,12 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("highlightNewDxcc")) {
                     GeneralVariables.highlightNewDxcc = result.equals("1");
                 }
+                if (name.equalsIgnoreCase("highlightNewZone")) {
+                    GeneralVariables.highlightNewZone = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("highlightNewState")) {
+                    GeneralVariables.highlightNewState = result.equals("1");
+                }
                 if (name.equalsIgnoreCase("highlightNewGrid")) {
                     GeneralVariables.highlightNewGrid = result.equals("1");
                 }
@@ -3162,6 +3175,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
                 if (name.equalsIgnoreCase("distanceInMiles")) {
                     GeneralVariables.distanceInMiles = !result.equals("0");
+                }
+                if (name.equalsIgnoreCase("showBeamHeading")) {
+                    GeneralVariables.showBeamHeading = result.equals("1");
                 }
 
             }

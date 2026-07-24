@@ -168,16 +168,23 @@ public class DxAlertNotifier {
                 body.toString(), call, qslRecord.getBandFreq());
     }
 
-    private static String defaultBody(Ft8Message msg) {
+    static String defaultBody(Ft8Message msg) {
         StringBuilder body = new StringBuilder(msg.getCallsignFrom());
         if (msg.maidenGrid != null && !msg.maidenGrid.isEmpty()) {
             body.append("  ").append(msg.maidenGrid);
         }
-        body.append("  ").append(msg.snr).append(" dB");
+        // The decoder can emit a valid message with no SNR (FT8SignalListener logs
+        // "SNR not set by decoder" and still adds it to the decode list), so snr may be
+        // the SNR_UNKNOWN sentinel (Integer.MIN_VALUE). Appending it unconditionally
+        // rendered "-2147483648 dB" in the notification body — mirror cqReplyBody and
+        // drop the SNR line when it is unknown.
+        if (msg.snr != Ft8Message.SNR_UNKNOWN) {
+            body.append("  ").append(msg.snr).append(" dB");
+        }
         return body.toString();
     }
 
-    private static String cqReplyBody(Ft8Message msg) {
+    static String cqReplyBody(Ft8Message msg) {
         StringBuilder body = new StringBuilder(msg.getMessageText());
         if (msg.snr != Ft8Message.SNR_UNKNOWN) {
             body.append("  ").append(msg.snr).append(" dB");
@@ -191,15 +198,16 @@ public class DxAlertNotifier {
      */
     private void fire(String dedupKey, String channelId, String title, String body,
                       String callsignExtra, long bandExtra) {
-        if (!alerted.add(dedupKey)) return;                         // already alerted this session
+        // Gate on notification permission BEFORE consuming the dedup key. If we burned the
+        // key here while notifications are denied, the per-session `alerted` set (never
+        // cleared) would suppress this station forever — even after the user later grants
+        // POST_NOTIFICATIONS. claimAlert() checks `canPost` first, then dedups.
+        boolean canPost = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                || ContextCompat.checkSelfPermission(appContext,
+                        Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+        if (!AlertDecisions.claimAlert(alerted, dedupKey, canPost)) return;
 
         GeneralVariables.fileLog("ALERT fire key=[" + dedupKey + "] " + title);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                && ContextCompat.checkSelfPermission(appContext,
-                        Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            return;                                                 // no permission → skip silently
-        }
 
         int id = dedupKey.hashCode();
 
@@ -228,7 +236,10 @@ public class DxAlertNotifier {
         try {
             NotificationManagerCompat.from(appContext).notify(id, builder.build());
         } catch (SecurityException ignored) {
-            // Permission revoked between the check and notify(); ignore.
+            // Permission revoked between the check and notify(): nothing was posted, so
+            // release the key to let a later decode of the same station retry rather than
+            // stay suppressed for the session.
+            alerted.remove(dedupKey);
         }
     }
 }

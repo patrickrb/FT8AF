@@ -58,6 +58,12 @@ public class GeneralVariables {
 
     public static boolean distanceInMiles = true;//Display distances in miles (true) or kilometers (false)
 
+    // Show the great-circle beam heading (bearing to the station) next to the
+    // distance on each decode row, for operators pointing a directional antenna.
+    // Off by default — only useful with a beam, and it adds a column most ops
+    // (verticals/wires) don't need.
+    public static boolean showBeamHeading = false;
+
     // Deep decode (subtract-and-redecode + extra LDPC iterations) is on by default so the app
     // pulls weak signals out from under strong ones the way WSJT-X does at its default depth.
     // A persisted "deepMode" config row still overrides this; only installs that never touched
@@ -537,6 +543,13 @@ public class GeneralVariables {
 
     public static int noReplyCount = 0;//Number of times with no reply
 
+    // Hard cap on RR73/73 transmissions per QSO before moving on; 0==Auto
+    // (classic behavior: RR73 repeats until the no-reply caps fire, 73 re-sends
+    // for every RR73 received). Unlike the no-reply caps this counts actual
+    // sends, so it also bounds the loops where the partner keeps transmitting
+    // (re-sent R+report / RR73) and the no-reply counter never accumulates.
+    public static int max73Sends = 0;
+
     //The following 4 parameters are for ICOM network connection
     public static String icomIp = "255.255.255.255";
     public static int icomUdpPort = 50001;
@@ -550,6 +563,9 @@ public class GeneralVariables {
     // transmit/decode processing thread (FT8TransmitSignal), like zoneMapReady above.
     public static volatile boolean huntPotaOnly = false;//Mirror of the "CQ POTA" decode filter: Hunt only calls POTA CQs (issue #333)
     public static boolean autoCallFollow = true;//Auto-call followed callsigns
+    // volatile: written from the Compose settings UI thread and read from the
+    // transmit thread (FT8TransmitSignal.dequeueNextCaller), like huntPotaOnly above.
+    public static volatile boolean pileupStrongestFirst = false;//Pileup: auto-work the strongest waiting caller next instead of the oldest (FIFO)
     public static boolean autoUpdateGridFromGPS = false;//Use device GPS to keep Maidenhead grid current
     public static boolean disciplineClockFromGPS = false;//Discipline the app clock (UtcTimer.delay) from GPS satellite time (issue #373). Off by default — consensual.
     public static int gpsClockIntervalMinutes = 5;//How often to re-read GPS time for clock discipline. Clamped 1-30 by GpsClockUpdater.
@@ -576,6 +592,8 @@ public class GeneralVariables {
     // Decode-list highlight toggles (Settings → Decode Highlights). Gate the
     // status pill shown for each worked-before category in resolveQsoStatus().
     public static boolean highlightNewDxcc = true;//Highlight stations from an unworked DXCC entity
+    public static boolean highlightNewZone = true;//Highlight stations from an unworked CQ zone (Worked All Zones)
+    public static boolean highlightNewState = false;//Off by default — US-only (Worked All States); noise for non-US ops
     public static boolean highlightNewGrid = false;//Off by default — most grids are "new", so it's noisy
     public static boolean highlightNewBand = true;//Highlight stations worked only on other bands
     public static boolean highlightWorked = true;//Master enable for worked-station handling (see workedStationMode)

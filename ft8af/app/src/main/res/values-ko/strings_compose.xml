@@ -406,6 +406,9 @@
     <string name="settings_tx_watchdog_desc">시간 초과 후 송신 자동 중지</string>
     <string name="settings_stop_after">중지 기준</string>
     <string name="settings_stop_after_desc">N회 응답 없는 호출 후 중지</string>
+    <string name="settings_max_73">73 송신 최대 횟수</string>
+    <string name="settings_max_73_desc">다음으로 넘어가기 전 교신당 RR73/73 송신 최대 횟수</string>
+    <string name="settings_max_73_auto">자동</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Hunt (CQ 자동 응답)</string>

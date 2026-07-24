@@ -209,8 +209,6 @@ public class MainViewModel extends ViewModel {
 
     private final ExecutorService getQTHThreadPool = Executors.newCachedThreadPool();
     private final ExecutorService sendWaveDataThreadPool = Executors.newCachedThreadPool();
-    private final GetQTHRunnable getQTHRunnable = new GetQTHRunnable(this);
-    private final SendWaveDataRunnable sendWaveDataRunnable = new SendWaveDataRunnable();
 
 
     //variables for displaying shared log generation progress
@@ -728,12 +726,19 @@ public class MainViewModel extends ViewModel {
                 mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), messages.size()));
 
 
-                getQTHRunnable.messages = messages;
+                // A fresh task per dispatch, bound to *this* pass's messages. slot N's
+                // late/deep pass and slot N+1's early pass enter afterDecode concurrently
+                // (#398, same reason ft8Messages/decodeCycleState are synchronized above):
+                // a single shared Runnable whose `messages` field is overwritten per call
+                // and re-submitted to the pool loses one pass's list — that pass's QTH
+                // lookup (country/grid flags) and Needed-DX alerts are silently dropped,
+                // and two pool workers race on the one non-volatile field.
                 // Guard against the ViewModel-teardown race: a late deep-decode
                 // pass can deliver here after onCleared() shut the pool down,
                 // and a raw execute() on a terminated pool throws
                 // RejectedExecutionException on this decode thread (crash).
-                SafeExecutor.tryExecute(getQTHThreadPool, getQTHRunnable);//query location via thread pool
+                SafeExecutor.tryExecute(getQTHThreadPool,
+                        new GetQTHRunnable(MainViewModel.this, messages));//query location via thread pool
 
                 //this variable also notifies message list changes
                 mutable_Decoded_Counter.postValue(
@@ -873,10 +878,11 @@ public class MainViewModel extends ViewModel {
                 if (GeneralVariables.connectMode == ConnectMode.NETWORK) {
                     if (baseRig != null) {
                         if (baseRig.isConnected()) {
-                            sendWaveDataRunnable.baseRig = baseRig;
-                            sendWaveDataRunnable.message = msg;
-                            //send network data packets via thread pool
-                            SafeExecutor.tryExecute(sendWaveDataThreadPool, sendWaveDataRunnable);
+                            //send network data packets via thread pool. A fresh task per
+                            //dispatch (not a shared, per-call-mutated instance) so a re-entrant
+                            //transmit/tune can't race the baseRig/message fields on the pool.
+                            SafeExecutor.tryExecute(sendWaveDataThreadPool,
+                                    new SendWaveDataRunnable(baseRig, msg));
                         }
                     }
                 }
@@ -902,9 +908,8 @@ public class MainViewModel extends ViewModel {
                 if (!supportTransmitOverCAT()) {
                     return;
                 }
-                sendWaveDataRunnable.baseRig = baseRig;
-                sendWaveDataRunnable.message = msg;
-                SafeExecutor.tryExecute(sendWaveDataThreadPool, sendWaveDataRunnable);
+                SafeExecutor.tryExecute(sendWaveDataThreadPool,
+                        new SendWaveDataRunnable(baseRig, msg));
             }
 
         }, new OnTransmitSuccess() {//when QSO is successful
@@ -2211,14 +2216,22 @@ public class MainViewModel extends ViewModel {
         }
     }
 
-    private static class GetQTHRunnable implements Runnable {
-        MainViewModel mainViewModel;
-        ArrayList<Ft8Message> messages;
+    // Per-dispatch, immutable payload. One instance per afterDecode() call — never shared
+    // and mutated between submissions — so overlapping decode passes (#398) each get their
+    // own message list processed instead of racing/clobbering a single shared field.
+    static final class GetQTHRunnable implements Runnable {
+        private final MainViewModel mainViewModel;
+        private final ArrayList<Ft8Message> messages;
 
-        public GetQTHRunnable(MainViewModel mainViewModel) {
+        GetQTHRunnable(MainViewModel mainViewModel, ArrayList<Ft8Message> messages) {
             this.mainViewModel = mainViewModel;
+            this.messages = messages;
         }
 
+        /** The decode pass this task resolves locations for (bound at construction). */
+        ArrayList<Ft8Message> messages() {
+            return messages;
+        }
 
         @Override
         public void run() {
@@ -2230,10 +2243,22 @@ public class MainViewModel extends ViewModel {
         }
     }
 
-    private static class SendWaveDataRunnable implements Runnable {
-        BaseRig baseRig;
-        //float[] data;
-        Ft8Message message;
+    // Per-dispatch, immutable payload (see GetQTHRunnable): a fresh instance per transmit so
+    // a re-entrant TX/tune can't clobber baseRig/message on a worker still playing the prior
+    // waveform (the same shared-Runnable hazard fixed in IcomAudioUdp).
+    static final class SendWaveDataRunnable implements Runnable {
+        private final BaseRig baseRig;
+        private final Ft8Message message;
+
+        SendWaveDataRunnable(BaseRig baseRig, Ft8Message message) {
+            this.baseRig = baseRig;
+            this.message = message;
+        }
+
+        /** The message whose waveform this task sends (bound at construction). */
+        Ft8Message message() {
+            return message;
+        }
 
         @Override
         public void run() {

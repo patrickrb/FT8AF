@@ -108,11 +108,97 @@ public class CatLineSplitterTest {
     }
 
     @Test
+    public void elecraftCoalescedSwrMeterPolls_bothReadingsSurvive() {
+        // During TX the Elecraft SWR meter is polled repeatedly and two "SW"
+        // replies routinely coalesce into one read. The old per-rig reassembly
+        // kept only the first and dropped the second (higher, i.e. worse) reading,
+        // so the SWR alert could miss a spike. Both must now be delivered.
+        CatLineSplitter.Result r = CatLineSplitter.split("", "SW030;SW045;", ';');
+        assertThat(r.frames).containsExactly("SW030", "SW045").inOrder();
+        assertThat(r.remainder).isEmpty();
+    }
+
+    @Test
+    public void elecraftFreqThenMeter_retainedTerminatorCannotPoisonNextParse() {
+        // A freq reply coalesced with a meter reply: the old code parsed FA, then
+        // re-buffered "SW045;" WITH its ';'. If a further read arrived before the
+        // buffer was cleared, "SW045;" + next command concatenated into a single
+        // poisoned parse. The splitter yields both as clean, separate frames.
+        CatLineSplitter.Result r = CatLineSplitter.split("", "FA00014074000;SW045;", ';');
+        assertThat(r.frames).containsExactly("FA00014074000", "SW045").inOrder();
+        assertThat(r.remainder).isEmpty();
+    }
+
+    @Test
     public void carriageReturnTerminator_supportedForSiblingRigs() {
         // The splitter is terminator-parameterised so the Kenwood/Elecraft '\r'
         // handlers can adopt it too.
         CatLineSplitter.Result r = CatLineSplitter.split("", "IF00014074000\rFA1\r", '\r');
         assertThat(r.frames).containsExactly("IF00014074000", "FA1").inOrder();
         assertThat(r.remainder).isEmpty();
+    }
+
+    // --- Multi-terminator overload: the Kenwood family (TS-570/590/2000, TX-500)
+    // frames replies with ';' but the old per-rig handlers split on '\r', so no
+    // reply ever parsed (freq read-back + SWR/ALC protection dead, issues
+    // #599/#589). These rigs adopt split(..., ";\r") to parse the real ';' stream
+    // while still tolerating a stray '\r'.
+
+    @Test
+    public void kenwoodSemicolonReply_parsedByMultiTerminatorSplit() {
+        // The exact reply the TX-500 reporter documented in #599: RM10023; -- a
+        // ';'-terminated meter frame with no '\r'. The old '\r' split never saw a
+        // terminator and buffered it forever, so SWR stayed 0 and protection never
+        // tripped. The ";\r" split yields the frame.
+        CatLineSplitter.Result r = CatLineSplitter.split("", "RM10023;", ";\r");
+        assertThat(r.frames).containsExactly("RM10023");
+        assertThat(r.remainder).isEmpty();
+    }
+
+    @Test
+    public void kenwoodMeterPoll_swrAndAlcCoalesced_bothSurvive() {
+        // A single RM; poll on the TS-590 answers the SWR (RM1) and ALC (RM3)
+        // meters back-to-back; both must be delivered so neither reading is stale.
+        CatLineSplitter.Result r = CatLineSplitter.split("", "RM10023;RM30150;", ";\r");
+        assertThat(r.frames).containsExactly("RM10023", "RM30150").inOrder();
+        assertThat(r.remainder).isEmpty();
+    }
+
+    @Test
+    public void kenwoodFreqThenMeterCoalesced_bothParsedInOrder() {
+        CatLineSplitter.Result r = CatLineSplitter.split("", "FA00014074000;RM10023;", ";\r");
+        assertThat(r.frames).containsExactly("FA00014074000", "RM10023").inOrder();
+        assertThat(r.remainder).isEmpty();
+    }
+
+    @Test
+    public void multiTerminator_semicolonSplitAcrossReads_reassembled() {
+        CatLineSplitter.Result first = CatLineSplitter.split("", "FA000140", ";\r");
+        assertThat(first.frames).isEmpty();
+        assertThat(first.remainder).isEqualTo("FA000140");
+
+        CatLineSplitter.Result second = CatLineSplitter.split(first.remainder, "74000;", ";\r");
+        assertThat(second.frames).containsExactly("FA00014074000");
+        assertThat(second.remainder).isEmpty();
+    }
+
+    @Test
+    public void multiTerminator_toleratesStrayCarriageReturnAroundSemicolon() {
+        // If a transport ever interleaves a '\r' (CR/LF-style framing), the empty
+        // span between ';' and '\r' is an empty frame the rig treats as a no-op
+        // (Yaesu3Command.getCommand returns null for <2 chars), and the real
+        // command is still delivered intact -- so accepting both cannot regress a
+        // '\r'-influenced stream.
+        CatLineSplitter.Result r = CatLineSplitter.split("", "RM10023;\r", ";\r");
+        assertThat(r.frames).containsExactly("RM10023", "").inOrder();
+        assertThat(r.remainder).isEmpty();
+    }
+
+    @Test
+    public void charAndStringOverloadsAgree_forSingleTerminator() {
+        CatLineSplitter.Result viaChar = CatLineSplitter.split("", "FA1;FB2;", ';');
+        CatLineSplitter.Result viaString = CatLineSplitter.split("", "FA1;FB2;", ";");
+        assertThat(viaString.frames).containsExactlyElementsIn(viaChar.frames).inOrder();
+        assertThat(viaString.remainder).isEqualTo(viaChar.remainder);
     }
 }

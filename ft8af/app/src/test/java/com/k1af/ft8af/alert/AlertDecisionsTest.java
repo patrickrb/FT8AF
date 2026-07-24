@@ -4,8 +4,48 @@ import static com.google.common.truth.Truth.assertThat;
 
 import org.junit.Test;
 
+import java.util.Collections;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
 /** Pure-JVM tests for {@link AlertDecisions} (no Android runtime needed). */
 public class AlertDecisionsTest {
+
+    private static Set<String> newAlertedSet() {
+        return Collections.newSetFromMap(new ConcurrentHashMap<>());
+    }
+
+    @Test
+    public void claimAlert_firesAndConsumesKeyWhenPostable() {
+        Set<String> alerted = newAlertedSet();
+        assertThat(AlertDecisions.claimAlert(alerted, "DXCC:Japan", true)).isTrue();
+        assertThat(alerted).contains("DXCC:Japan");
+    }
+
+    @Test
+    public void claimAlert_dedupesRepeatKeyWhenPostable() {
+        Set<String> alerted = newAlertedSet();
+        assertThat(AlertDecisions.claimAlert(alerted, "DXCC:Japan", true)).isTrue();
+        assertThat(AlertDecisions.claimAlert(alerted, "DXCC:Japan", true)).isFalse();
+    }
+
+    @Test
+    public void claimAlert_doesNotBurnKeyWhenNotPostable() {
+        Set<String> alerted = newAlertedSet();
+        assertThat(AlertDecisions.claimAlert(alerted, "DXCC:Japan", false)).isFalse();
+        // The permission gate must run BEFORE the dedup set is touched, so the key is
+        // untouched and the station can still alert once permission is granted.
+        assertThat(alerted).isEmpty();
+    }
+
+    @Test
+    public void claimAlert_firesAfterPermissionGrantedForStationHeardWhileDenied() {
+        Set<String> alerted = newAlertedSet();
+        // Station first heard while notifications are denied — must not be suppressed.
+        assertThat(AlertDecisions.claimAlert(alerted, "WATCH:3Y0J", false)).isFalse();
+        // User grants permission; the same station decodes again and now alerts.
+        assertThat(AlertDecisions.claimAlert(alerted, "WATCH:3Y0J", true)).isTrue();
+    }
 
     @Test
     public void cqReply_firesOnlyWhenEnabledAddressedAndNotBlocked() {

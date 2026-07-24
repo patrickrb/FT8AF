@@ -27,6 +27,8 @@ fun DecodeFilterSettings(
 ) {
     // Decode-list highlight toggles
     var highlightNewDxcc by remember { mutableStateOf(GeneralVariables.highlightNewDxcc) }
+    var highlightNewZone by remember { mutableStateOf(GeneralVariables.highlightNewZone) }
+    var highlightNewState by remember { mutableStateOf(GeneralVariables.highlightNewState) }
     var highlightNewGrid by remember { mutableStateOf(GeneralVariables.highlightNewGrid) }
     var highlightNewBand by remember { mutableStateOf(GeneralVariables.highlightNewBand) }
     var highlightWorked by remember { mutableStateOf(GeneralVariables.highlightWorked) }
@@ -36,6 +38,7 @@ fun DecodeFilterSettings(
     var workedStationList by remember { mutableStateOf(GeneralVariables.getWorkedStationList()) }
     var highlightPota by remember { mutableStateOf(GeneralVariables.highlightPota) }
     var distanceInMiles by remember { mutableStateOf(GeneralVariables.distanceInMiles) }
+    var showBeamHeading by remember { mutableStateOf(GeneralVariables.showBeamHeading) }
 
     // Callsign blocklist (comma-separated entries) + decode display filters
     var blockedExact by remember { mutableStateOf(GeneralVariables.getBlockedExactCallsigns()) }
@@ -245,6 +248,32 @@ fun DecodeFilterSettings(
                     )
                     SectionDivider()
                     SettingsRow(
+                        label = stringResource(R.string.settings_highlight_new_zone),
+                        description = stringResource(R.string.settings_highlight_new_zone_desc),
+                        toggle = highlightNewZone,
+                        onToggleChange = { checked ->
+                            highlightNewZone = checked
+                            GeneralVariables.highlightNewZone = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "highlightNewZone", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_highlight_new_state),
+                        description = stringResource(R.string.settings_highlight_new_state_desc),
+                        toggle = highlightNewState,
+                        onToggleChange = { checked ->
+                            highlightNewState = checked
+                            GeneralVariables.highlightNewState = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "highlightNewState", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
                         label = stringResource(R.string.settings_highlight_new_grid),
                         description = stringResource(R.string.settings_highlight_new_grid_desc),
                         toggle = highlightNewGrid,
@@ -358,6 +387,19 @@ fun DecodeFilterSettings(
                             GeneralVariables.distanceInMiles = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "distanceInMiles", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_show_beam_heading),
+                        description = stringResource(R.string.settings_show_beam_heading_desc),
+                        toggle = showBeamHeading,
+                        onToggleChange = { checked ->
+                            showBeamHeading = checked
+                            GeneralVariables.showBeamHeading = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "showBeamHeading", if (checked) "1" else "0", null,
                             )
                         },
                     )

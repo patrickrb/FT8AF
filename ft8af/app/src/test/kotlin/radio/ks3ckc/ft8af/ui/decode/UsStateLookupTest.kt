@@ -1,6 +1,7 @@
 package radio.ks3ckc.ft8af.ui.decode
 
 import com.google.common.truth.Truth.assertThat
+import java.util.Locale
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -64,5 +65,20 @@ class UsStateLookupTest {
     fun stateFromGrid_unknownGrid_returnsNull() {
         // A syntactically valid grid that is not in the US table.
         assertThat(UsStateLookup.stateFromGrid(context, "ZZ99")).isNull()
+    }
+
+    @Test
+    fun stateFromGrid_isLocaleIndependent_underTurkishDefault() {
+        // The grid is uppercased before lookup. Under the Turkish locale a
+        // lower-case 'i' uppercases to the dotted 'İ' (U+0130), which would miss
+        // the ASCII keys — so the lookup must normalize with Locale.ROOT. Guard
+        // that a lower-case grid still resolves regardless of the default locale.
+        val previous = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale("tr", "TR"))
+            assertThat(UsStateLookup.stateFromGrid(context, "bk08")).isEqualTo("HI")
+        } finally {
+            Locale.setDefault(previous)
+        }
     }
 }

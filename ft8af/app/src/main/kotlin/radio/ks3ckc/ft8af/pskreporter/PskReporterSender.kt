@@ -250,8 +250,45 @@ object PskReporterSender {
         }
     }
 
+    /**
+     * Evict dedup entries whose age has reached or passed [DEDUP_WINDOW_MS].
+     *
+     * The dedup map records a last-seen timestamp per "CALL|BAND" so a station is
+     * uploaded at most once per window. Entries are added on every fresh spot, but
+     * were never removed — so over a long monitoring session (the common
+     * PSKReporter use case: leave the app decoding a busy band for hours or days)
+     * the map grew without bound, one entry per distinct callsign/band ever heard.
+     * Because this is a process-lifetime singleton, that is a slow, unbounded leak.
+     *
+     * An entry at or past the window boundary carries no information: [markIfFresh]
+     * would report that key as fresh again regardless (it treats age
+     * `>= DEDUP_WINDOW_MS` as no longer a duplicate), so dropping it is
+     * behavior-neutral.
+     * Called from [flush] (once per send interval), which keeps the map bounded to
+     * roughly the distinct stations seen within the last window. Pure w.r.t.
+     * [nowMs] so it is deterministically testable.
+     */
+    @VisibleForTesting
+    internal fun pruneDedup(nowMs: Long) {
+        synchronized(dedup) {
+            val it = dedup.entries.iterator()
+            while (it.hasNext()) {
+                if (nowMs - it.next().value >= DEDUP_WINDOW_MS) it.remove()
+            }
+        }
+    }
+
+    /** For testing: current number of live dedup entries. */
+    @VisibleForTesting
+    internal fun dedupSize(): Int = synchronized(dedup) { dedup.size }
+
     @VisibleForTesting
     internal suspend fun flush() {
+        // Keep the dedup map bounded: drop keys that have aged out of the window
+        // (see pruneDedup). Runs every send interval, before draining the queue, so
+        // it fires even when the band is quiet and no spots are pending.
+        pruneDedup(System.currentTimeMillis())
+
         val spots = mutableListOf<SpotRecord>()
         while (true) {
             val s = spotQueue.poll() ?: break

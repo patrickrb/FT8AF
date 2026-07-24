@@ -329,6 +329,9 @@
     <string name="settings_tx_watchdog_desc">Автоостановка передачи по тайм-ауту</string>
     <string name="settings_stop_after">Остановка после</string>
     <string name="settings_stop_after_desc">Прекратить вызов после N неотвеченных попыток</string>
+    <string name="settings_max_73">Макс. передач 73</string>
+    <string name="settings_max_73_desc">Максимум передач RR73/73 за связь, прежде чем перейти дальше</string>
+    <string name="settings_max_73_auto">Авто</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Охота (автоответ на CQ)</string>

@@ -669,6 +669,26 @@ private fun TxSelector(
     }
 }
 
+/**
+ * Order the pileup caller chips for display. When [strongestFirst] the queue is
+ * sorted by SNR descending (best copy first) — matching the auto-dequeue policy
+ * in [com.k1af.ft8af.ft8transmit.CallerQueueOrdering] — so the chip the operator
+ * is nudged to tap next is the same station the engine would pick. [sortedByDescending]
+ * is stable, so equal-SNR callers keep their first-heard order. Off preserves the
+ * raw queue (first-heard) order. Extracted for unit testing.
+ */
+internal fun orderCallerQueue(
+    queue: List<QueuedCaller>,
+    strongestFirst: Boolean,
+): List<QueuedCaller> =
+    if (strongestFirst) queue.sortedByDescending { it.snr } else queue
+
+/**
+ * Signed SNR label for a queued caller chip (e.g. "+5", "-12"). A queued caller
+ * with no reported SNR carries 0, which renders as "+0".
+ */
+internal fun callerSnrLabel(snr: Int): String = if (snr >= 0) "+$snr" else "$snr"
+
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun CallerQueueBar(
@@ -678,6 +698,12 @@ private fun CallerQueueBar(
     if (queue.isEmpty()) return
 
     Spacer(modifier = Modifier.height(6.dp))
+
+    // Display order tracks the auto-dequeue policy so the leftmost chip is the
+    // station the engine would work next. Computed inline (the queue is capped at
+    // ~10 callers) rather than remember()d, so an SNR update that mutates a queued
+    // caller in place still re-sorts on the next recomposition.
+    val ordered = orderCallerQueue(queue, GeneralVariables.pileupStrongestFirst)
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -697,8 +723,8 @@ private fun CallerQueueBar(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            queue.forEach { caller ->
-                Box(
+            ordered.forEach { caller ->
+                Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
                         .background(SignalSoft)
@@ -707,13 +733,20 @@ private fun CallerQueueBar(
                             else Modifier
                         )
                         .padding(horizontal = 6.dp, vertical = 2.dp),
-                    contentAlignment = Alignment.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(
                         text = caller.callsign,
                         color = Signal,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Medium,
+                        fontFamily = GeistMonoFamily,
+                    )
+                    Text(
+                        text = callerSnrLabel(caller.snr),
+                        color = Signal.copy(alpha = 0.65f),
+                        fontSize = 9.sp,
                         fontFamily = GeistMonoFamily,
                     )
                 }

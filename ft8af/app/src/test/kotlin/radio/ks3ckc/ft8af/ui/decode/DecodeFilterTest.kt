@@ -58,6 +58,28 @@ class DecodeFilterTest {
     }
 
     @Test
+    fun newState_keepsCqFromUnworkedState() {
+        // fromNewState is the decode-time "unworked US state" flag; the filter
+        // keeps only CQ stations that carry it.
+        val fresh = cq("K1ABC").apply { fromNewState = true }
+        val worked = cq("K2DEF").apply { fromNewState = false }
+
+        val result = filterMessages(listOf(fresh, worked), "New State")
+
+        assertThat(result).containsExactly(fresh)
+    }
+
+    @Test
+    fun newState_dropsDirectedMessages() {
+        // A directed reply isn't a callable CQ even if it's from a new state.
+        val directedNewState = directed("W1AW", "K2DEF").apply { fromNewState = true }
+
+        val result = filterMessages(listOf(directedNewState), "New State")
+
+        assertThat(result).isEmpty()
+    }
+
+    @Test
     fun newGrid_keepsCqFromUnworkedGrid() {
         // No grids worked yet, so every 4-char grid counts as new.
         val cqMsg = cqFromGrid("K1ABC", "FN42")
@@ -76,6 +98,28 @@ class DecodeFilterTest {
         val result = filterMessages(listOf(worked, fresh), "New Grid")
 
         assertThat(result).containsExactly(fresh)
+    }
+
+    @Test
+    fun newZone_keepsCqFromUnworkedZone() {
+        // fromCq is the decode-time "unworked CQ zone" flag; the filter keeps
+        // only CQ stations that carry it.
+        val fresh = cq("K1ABC").apply { fromCq = true }
+        val worked = cq("K2DEF").apply { fromCq = false }
+
+        val result = filterMessages(listOf(fresh, worked), "New Zone")
+
+        assertThat(result).containsExactly(fresh)
+    }
+
+    @Test
+    fun newZone_dropsDirectedMessages() {
+        // A directed reply isn't a callable CQ even if it's from a new zone.
+        val directedNewZone = directed("W1AW", "K2DEF").apply { fromCq = true }
+
+        val result = filterMessages(listOf(directedNewZone), "New Zone")
+
+        assertThat(result).isEmpty()
     }
 
     @Test

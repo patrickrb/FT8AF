@@ -62,13 +62,36 @@ final class CatLineSplitter {
      * @return the complete commands and the bytes to carry into the next call
      */
     static Result split(String buffered, String incoming, char terminator) {
+        return split(buffered, incoming, String.valueOf(terminator));
+    }
+
+    /**
+     * Multi-terminator variant: any character in {@code terminators} ends a
+     * command.
+     *
+     * <p>Some rigs' framing terminator is uncertain or historically inconsistent.
+     * The Kenwood family (TS-570/590/2000, Lab599 TX-500) sends {@code ';'}-framed
+     * commands and replies (per the Kenwood/Lab599 CAT protocol — e.g. the meter
+     * reply {@code RM10023;} documented in issue #599), yet the old per-rig
+     * reassembly split replies on {@code '\r'}, so no reply ever parsed:
+     * frequency read-back and — critically — SWR/ALC over-power protection were
+     * dead. Accepting {@code ";\r"} parses the real {@code ';'}-framed stream
+     * without regressing any transport that might interleave a {@code '\r'}.
+     *
+     * @param buffered    bytes left over from the previous call (never null; may be empty)
+     * @param incoming    newly received bytes (never null; may be empty)
+     * @param terminators the set of end-of-command characters (e.g. {@code ";\r"})
+     * @return the complete commands and the bytes to carry into the next call
+     */
+    static Result split(String buffered, String incoming, String terminators) {
         String combined = buffered + incoming;
         List<String> frames = new ArrayList<>();
         int start = 0;
-        int idx;
-        while ((idx = combined.indexOf(terminator, start)) >= 0) {
-            frames.add(combined.substring(start, idx));
-            start = idx + 1;
+        for (int i = 0; i < combined.length(); i++) {
+            if (terminators.indexOf(combined.charAt(i)) >= 0) {
+                frames.add(combined.substring(start, i));
+                start = i + 1;
+            }
         }
         return new Result(frames, combined.substring(start));
     }

@@ -41,6 +41,9 @@ import radio.ks3ckc.ft8af.ui.components.SettingsRow
 // keep a [ALC_GAP]-unit gap between the two values; clampAlcLow/clampAlcHigh use
 // these both to bound each slider and to keep the coerceIn range non-empty when a
 // restored/corrupted config persists an out-of-order pair.
+// Upper bound of the "Max 73 Sends" picker (1..MAX; 0 = Auto, cap disabled).
+private const val MAX_73_SENDS_MAX = 10
+
 private const val ALC_LOW_MIN = 10
 private const val ALC_LOW_MAX = 200
 private const val ALC_HIGH_MAX = 250
@@ -93,6 +96,7 @@ fun TransmissionSettings(
     var clearOnBandModeChange by remember { mutableStateOf(GeneralVariables.clearOnBandModeChange) }
     var watchdogMs by remember { mutableIntStateOf(GeneralVariables.launchSupervision) }
     var noReplyLimit by remember { mutableIntStateOf(GeneralVariables.noReplyLimit) }
+    var max73Sends by remember { mutableIntStateOf(GeneralVariables.max73Sends) }
 
     // TX Protection state
     var autoVolumeEnabled by remember { mutableStateOf(GeneralVariables.autoVolumeEnabled) }
@@ -114,9 +118,11 @@ fun TransmissionSettings(
     var autoCallFollow by remember { mutableStateOf(GeneralVariables.autoCallFollow) }
     var earlyDecode by remember { mutableStateOf(GeneralVariables.earlyDecode) }
     var autoCQAfterQSO by remember { mutableStateOf(GeneralVariables.autoCQAfterQSO) }
+    var pileupStrongestFirst by remember { mutableStateOf(GeneralVariables.pileupStrongestFirst) }
 
     var showWatchdog by remember { mutableStateOf(false) }
     var showStopAfter by remember { mutableStateOf(false) }
+    var showMax73 by remember { mutableStateOf(false) }
     var showTuneMethod by remember { mutableStateOf(false) }
 
     // Index == TuneMethod.AUTOMATIC/INTERNAL/TONE
@@ -203,6 +209,28 @@ fun TransmissionSettings(
         )
     }
 
+    // -- Max 73 Sends Picker --
+    if (showMax73) {
+        val max73Options = mutableListOf(stringResource(R.string.settings_max_73_auto))
+        for (i in 1..MAX_73_SENDS_MAX) {
+            max73Options.add(i.toString())
+        }
+        ListPickerDialog(
+            title = stringResource(R.string.settings_max_73),
+            items = max73Options,
+            selectedIndex = max73Sends.coerceIn(0, MAX_73_SENDS_MAX),
+            onDismiss = { showMax73 = false },
+            onSelect = { index ->
+                showMax73 = false
+                GeneralVariables.max73Sends = index
+                max73Sends = index
+                mainViewModel.databaseOpr.writeConfig(
+                    "max73Sends", index.toString(), null,
+                )
+            },
+        )
+    }
+
     SettingsDetailScaffold(
         title = stringResource(R.string.settings_cat_transmission),
         onBack = onBack,
@@ -267,6 +295,15 @@ fun TransmissionSettings(
                         else stringResource(R.string.settings_tries_format, noReplyLimit),
                         showChevron = true,
                         onClick = { showStopAfter = true },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_max_73),
+                        description = stringResource(R.string.settings_max_73_desc),
+                        value = if (max73Sends == 0) stringResource(R.string.settings_max_73_auto)
+                        else max73Sends.toString(),
+                        showChevron = true,
+                        onClick = { showMax73 = true },
                     )
                 }
             }
@@ -677,6 +714,19 @@ fun TransmissionSettings(
                             GeneralVariables.autoCQAfterQSO = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "autoCQAfterQSO", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_pileup_strongest),
+                        description = stringResource(R.string.settings_pileup_strongest_desc),
+                        toggle = pileupStrongestFirst,
+                        onToggleChange = { checked ->
+                            pileupStrongestFirst = checked
+                            GeneralVariables.pileupStrongestFirst = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "pileupStrongestFirst", if (checked) "1" else "0", null,
                             )
                         },
                     )
