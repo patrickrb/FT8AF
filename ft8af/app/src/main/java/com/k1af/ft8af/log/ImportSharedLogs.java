@@ -65,12 +65,10 @@ public class ImportSharedLogs {
     }
 
     public String getLogBody() {
-        String[] temp = fileContext.split("[<][Ee][Oo][Hh][>]");
-        if (temp.length > 1) {
-            return temp[temp.length - 1];
-        } else {
-            return "";
-        }
+        // ADIF's Header is optional: a file that begins with '<' is headerless and is
+        // entirely records. AdifFormat.stripHeader handles both cases; the previous
+        // "return '' when no <eoh>" dropped every QSO of a valid headerless log.
+        return AdifFormat.stripHeader(fileContext);
     }
 
     /**

@@ -17,7 +17,7 @@ import java.util.Locale;
  * Log file import.
  * The constructor requires a log file name; the file here is posted from NanoHTTPd's session.
  * getFileContext returns the entire file content.
- * getLogBody returns all raw record content from the log file, i.e., all data after the &lt;eoh&gt; tag.
+ * getLogBody returns all raw record content from the log file: the data after the &lt;eoh&gt; tag, or the whole file when it is a headerless ADIF log (see AdifFormat.stripHeader).
  * getLogRecords returns a list of all parsed records stored as HashMaps, where the Key is the field name (uppercase) and the value is the actual value.
  *
  * @author BGY70Z
@@ -92,12 +92,10 @@ public class LogFileImport {
     }
 
     public String getLogBody() {
-        String[] temp = fileContext.split("[<][Ee][Oo][Hh][>]");
-        if (temp.length > 1) {
-            return temp[temp.length - 1];
-        } else {
-            return "";
-        }
+        // ADIF's Header is optional: a file that begins with '<' is headerless and is
+        // entirely records. AdifFormat.stripHeader handles both cases; the previous
+        // "return '' when no <eoh>" dropped every QSO of a valid headerless log.
+        return AdifFormat.stripHeader(fileContext);
     }
 
     /**

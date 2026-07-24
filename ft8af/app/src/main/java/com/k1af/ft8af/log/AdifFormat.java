@@ -2,6 +2,8 @@ package com.k1af.ft8af.log;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Small helpers for writing ADIF fields safely.
@@ -247,5 +249,62 @@ public final class AdifFormat {
             return null;
         }
         return String.format(Locale.US, "%.6f", value);
+    }
+
+    /** The ADIF header terminator {@code <eoh>}, matched case-insensitively. */
+    private static final Pattern EOH = Pattern.compile("<[Ee][Oo][Hh]>");
+
+    /**
+     * The data-record body of a full {@code .adi} file — everything after the optional
+     * header — ready to be split on {@code <eor>}.
+     *
+     * <p>Per the ADI file format a Header is <em>optional</em>: it is present only when the
+     * file does <b>not</b> begin with {@code '<'}. When present it is arbitrary text
+     * terminated by an {@code <eoh>} tag, and the data records follow that tag. A file that
+     * begins with {@code '<'} is headerless and consists entirely of data records.
+     *
+     * <p>Both importers previously split on {@code <eoh>} and returned {@code ""} whenever no
+     * marker was found. That silently dropped every QSO of a valid <em>headerless</em> ADIF
+     * log on import (0 records, and 0 errors surfaced to the user) — a common export shape,
+     * and exactly what a WSJT-X {@code wsjtx_log.adi} whose header was written with the
+     * v2.2.2 {@code <eh>} bug looks like once opened. This helper returns:
+     * <ul>
+     *   <li>the whole content when the file is headerless (first non-blank char is {@code '<'});</li>
+     *   <li>the text after the first {@code <eoh>} when a header is present and terminated;</li>
+     *   <li>{@code ""} only when a header is present but unterminated (no {@code <eoh>}) or the
+     *       input is null — there is genuinely no parseable record body.</li>
+     * </ul>
+     *
+     * @param fileContext the full {@code .adi} file text (null → {@code ""})
+     * @return the record-body text to split on {@code <eor>}
+     */
+    public static String stripHeader(String fileContext) {
+        if (fileContext == null) {
+            return "";
+        }
+        if (beginsWithField(fileContext)) {
+            // Headerless file: the whole content is data records.
+            return fileContext;
+        }
+        // Header present (does not begin with '<'); records start after its <eoh> terminator.
+        Matcher m = EOH.matcher(fileContext);
+        return m.find() ? fileContext.substring(m.end()) : "";
+    }
+
+    /**
+     * True when the first non-whitespace character of {@code content} (after an optional
+     * leading UTF-8 BOM) is {@code '<'} — i.e. the file opens with an ADIF field and so,
+     * per the spec, carries no header.
+     */
+    private static boolean beginsWithField(String content) {
+        int i = 0;
+        int n = content.length();
+        if (n > 0 && content.charAt(0) == '\uFEFF') { // skip a UTF-8 BOM if present
+            i = 1;
+        }
+        while (i < n && Character.isWhitespace(content.charAt(i))) {
+            i++;
+        }
+        return i < n && content.charAt(i) == '<';
     }
 }

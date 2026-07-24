@@ -193,13 +193,34 @@ public class LogFileImportTest {
     }
 
     @Test
-    public void getLogBody_returnsEmptyWhenNoEoh() throws IOException {
-        File f = tmp.newFile("noeoh.adi");
+    public void headerlessAdif_importsRecords() throws IOException {
+        // Per the ADI spec a file that begins with '<' has no header and is entirely
+        // data records (WSJT-X's v2.2.2 <eh>-header bug, and many loggers/hand exports,
+        // produce headerless .adi files). The old code split on <eoh>, found none, and
+        // returned "" — silently dropping every QSO with no error surfaced.
+        File f = tmp.newFile("headerless.adi");
         try (FileOutputStream out = new FileOutputStream(f)) {
-            out.write("<call:5>K1ABC<eor>".getBytes(StandardCharsets.UTF_8));
+            out.write("<call:5>K1ABC<gridsquare:4>FN42<eor>\n<call:4>W1AW<eor>"
+                    .getBytes(StandardCharsets.UTF_8));
         }
         LogFileImport imp = new LogFileImport(task, f.getAbsolutePath());
-        // No <eoh> marker → split produces a single element → body is "".
+        assertThat(imp.getLogBody()).contains("<call:5>K1ABC");
+        ArrayList<HashMap<String, String>> records = imp.getLogRecords();
+        assertThat(records).hasSize(2);
+        assertThat(records.get(0).get("CALL")).isEqualTo("K1ABC");
+        assertThat(records.get(0).get("GRIDSQUARE")).isEqualTo("FN42");
+        assertThat(records.get(1).get("CALL")).isEqualTo("W1AW");
+    }
+
+    @Test
+    public void headerPresentButUnterminated_yieldsNoRecords() throws IOException {
+        // A file that does NOT begin with '<' has a header; without an <eoh> terminator
+        // it is malformed and carries no parseable record body.
+        File f = tmp.newFile("badheader.adi");
+        try (FileOutputStream out = new FileOutputStream(f)) {
+            out.write("header only, no eoh marker".getBytes(StandardCharsets.UTF_8));
+        }
+        LogFileImport imp = new LogFileImport(task, f.getAbsolutePath());
         assertThat(imp.getLogBody()).isEmpty();
         assertThat(imp.getLogRecords()).isEmpty();
     }
