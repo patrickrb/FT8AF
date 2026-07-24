@@ -251,7 +251,7 @@ object PskReporterSender {
     }
 
     /**
-     * Evict dedup entries whose last-seen time has aged past [DEDUP_WINDOW_MS].
+     * Evict dedup entries whose age has reached or passed [DEDUP_WINDOW_MS].
      *
      * The dedup map records a last-seen timestamp per "CALL|BAND" so a station is
      * uploaded at most once per window. Entries are added on every fresh spot, but
@@ -260,8 +260,10 @@ object PskReporterSender {
      * the map grew without bound, one entry per distinct callsign/band ever heard.
      * Because this is a process-lifetime singleton, that is a slow, unbounded leak.
      *
-     * An entry older than the window carries no information: [markIfFresh] would
-     * report that key as fresh again regardless, so dropping it is behavior-neutral.
+     * An entry at or past the window boundary carries no information: [markIfFresh]
+     * would report that key as fresh again regardless (it treats age
+     * `>= DEDUP_WINDOW_MS` as no longer a duplicate), so dropping it is
+     * behavior-neutral.
      * Called from [flush] (once per send interval), which keeps the map bounded to
      * roughly the distinct stations seen within the last window. Pure w.r.t.
      * [nowMs] so it is deterministically testable.
