@@ -157,6 +157,9 @@ val StatusWorked = Color(0xFF5CD6E8)
 val StatusConfirmed = Color(0xFF4ADE80)
 val StatusCq = Color(0xFFFFAF5E)
 val StatusWarn = Color(0xFFFACC15)
+// Sky-blue, distinct from the purple NEW-DXCC and cyan NEW-BAND pills, for the
+// NEW-ZONE (Worked All Zones) badge.
+val StatusZone = Color(0xFF60A5FA)
 val StatusBad = Color(0xFFEF4444)
 
 // Band colors (for donut chart / logbook)

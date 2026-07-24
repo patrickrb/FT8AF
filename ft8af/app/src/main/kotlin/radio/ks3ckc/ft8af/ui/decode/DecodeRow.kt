@@ -400,6 +400,11 @@ internal fun resolveQsoStatus(message: Ft8Message): QsoStatus? {
             if (newPota) QsoStatus.NEW_POTA else QsoStatus.POTA
         isCQ && modifier == "SOTA" -> QsoStatus.SOTA
         GeneralVariables.highlightNewDxcc && message.fromDxcc -> QsoStatus.NEW
+        // A new CQ zone (Worked All Zones) outranks a new grid: only 40 zones
+        // exist, so an unworked one is a rarer, more prized catch. message.fromCq
+        // is set at decode time in CallsignDatabase (unworked-zone lookup) and
+        // only ever true once the zone map is ready — same gating as fromDxcc.
+        GeneralVariables.highlightNewZone && message.fromCq -> QsoStatus.NEW_ZONE
         GeneralVariables.highlightNewGrid && newGrid -> QsoStatus.NEW_GRID
         GeneralVariables.highlightNewBand && newBand -> QsoStatus.NEW_BAND
         effectiveWorkedMode() == WorkedStationMode.HIGHLIGHT &&

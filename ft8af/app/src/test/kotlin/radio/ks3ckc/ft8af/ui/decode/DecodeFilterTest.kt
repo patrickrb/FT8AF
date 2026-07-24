@@ -79,6 +79,28 @@ class DecodeFilterTest {
     }
 
     @Test
+    fun newZone_keepsCqFromUnworkedZone() {
+        // fromCq is the decode-time "unworked CQ zone" flag; the filter keeps
+        // only CQ stations that carry it.
+        val fresh = cq("K1ABC").apply { fromCq = true }
+        val worked = cq("K2DEF").apply { fromCq = false }
+
+        val result = filterMessages(listOf(fresh, worked), "New Zone")
+
+        assertThat(result).containsExactly(fresh)
+    }
+
+    @Test
+    fun newZone_dropsDirectedMessages() {
+        // A directed reply isn't a callable CQ even if it's from a new zone.
+        val directedNewZone = directed("W1AW", "K2DEF").apply { fromCq = true }
+
+        val result = filterMessages(listOf(directedNewZone), "New Zone")
+
+        assertThat(result).isEmpty()
+    }
+
+    @Test
     fun newGrid_dropsDirectedAndGridlessMessages() {
         val directedNewGrid = directed("W1AW", "K2DEF").apply { maidenGrid = "EN37" }
         val cqNoGrid = cq("K3GHI").apply { maidenGrid = null }

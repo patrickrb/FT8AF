@@ -46,6 +46,7 @@
 
     <!-- ===== Status pills (decode list badges) ===== -->
     <string name="status_new_dxcc">NEW DXCC</string>
+    <string name="status_new_zone">NEW ZONE</string>
     <string name="status_new_grid">NEW GRID</string>
     <string name="status_new_band">NEW BAND</string>
     <string name="status_pota">POTA</string>
@@ -174,6 +175,7 @@
     <string name="decode_filter_cq_calls">CQ Calls</string>
     <string name="decode_filter_cq_pota">CQ POTA</string>
     <string name="decode_filter_new_dxcc">New DXCC</string>
+    <string name="decode_filter_new_zone">New Zone</string>
     <string name="decode_filter_new_grid">New Grid</string>
     <string name="decode_filter_needed">Needed</string>
     <string name="decode_filter_for_me">For Me</string>
@@ -183,6 +185,8 @@
     <string name="decode_empty_pota_body">No park activations decoded on this band yet — open POTA → Hunt for the spot list.</string>
     <string name="decode_empty_dxcc_title">No new DXCC</string>
     <string name="decode_empty_dxcc_body">No unworked DXCC entities have been decoded yet.</string>
+    <string name="decode_empty_zone_title">No new zones</string>
+    <string name="decode_empty_zone_body">No stations calling from an unworked CQ zone have been decoded yet.</string>
     <string name="decode_empty_grid_title">No new grids</string>
     <string name="decode_empty_grid_body">No stations calling from an unworked grid square have been decoded yet.</string>
     <string name="decode_empty_needed_title">Nothing needed</string>
@@ -571,6 +575,8 @@
     <!-- ===== Settings: decode highlights ===== -->
     <string name="settings_highlight_new_dxcc">New DXCC</string>
     <string name="settings_highlight_new_dxcc_desc">Highlight stations from an unworked DXCC entity</string>
+    <string name="settings_highlight_new_zone">New Zone</string>
+    <string name="settings_highlight_new_zone_desc">Highlight not-yet-worked CQ zones (Worked All Zones)</string>
     <string name="settings_highlight_new_grid">New Grid</string>
     <string name="settings_highlight_new_grid_desc">Highlight not-yet-worked Maidenhead grids</string>
     <string name="settings_highlight_new_band">New Band</string>
