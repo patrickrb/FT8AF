@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -57,7 +58,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -1185,6 +1189,35 @@ internal fun sortQsosByDateTimeDesc(
     records: List<QSLCallsignRecord>,
 ): List<QSLCallsignRecord> = records.sortedByDescending { qsoSortKey(it) }
 
+/**
+ * Filter the recent-QSO list by a free-text [query] typed into the logbook search
+ * box. A blank/whitespace query returns the list unchanged (no filtering).
+ *
+ * Otherwise the trimmed query is matched case-insensitively as a *substring*
+ * against the fields an operator actually searches a log by — callsign (the
+ * primary target), grid, band, DXCC entity, and the stored "where" location — so
+ * typing a partial call ("K1A"), a grid ("FN42"), a band ("40M"), or a country
+ * narrows the log to the matching contacts. Matching a substring (rather than a
+ * prefix) means "PA" finds both "PA3XYZ" and "W1PA". Extracted as a pure function
+ * so the search behavior is unit-tested without Compose.
+ */
+internal fun filterQsoRecords(
+    records: List<QSLCallsignRecord>,
+    query: String,
+): List<QSLCallsignRecord> {
+    val q = query.trim().uppercase()
+    if (q.isEmpty()) return records
+    return records.filter { record ->
+        sequenceOf(
+            record.callsign,
+            record.grid,
+            record.band,
+            record.dxccStr,
+            record.where,
+        ).any { it != null && it.uppercase().contains(q) }
+    }
+}
+
 internal fun qsoSortKey(record: QSLCallsignRecord): String {
     val date = (record.lastTime ?: "").padEnd(8, '0')
     return date + normalizeTimeOn(record.timeOn)
@@ -1235,28 +1268,126 @@ private fun RecentTab(
         return
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        items(
-            items = sortQsosByDateTimeDesc(records),
-            // Include id so an edit that changes other fields still maps to a stable key,
-            // and so two grouped rows with otherwise identical display fields don't collide.
-            key = { "${it.id}_${it.callsign}_${it.lastTime}_${it.band}" },
-        ) { record ->
-            QsoRow(
-                record = record,
-                onEdit = { onEdit(record) },
-                onDelete = { onDelete(record) },
-            )
-        }
+    // Free-text search over the log (callsign / grid / band / DXCC). Kept in a
+    // rememberSaveable so the query survives recomposition and rotation; it resets
+    // when the operator leaves the Logbook, which matches the expectation that
+    // search is a transient "find this contact" action, not a persisted filter.
+    var query by rememberSaveable { mutableStateOf("") }
+    val filtered = remember(records, query) { filterQsoRecords(records, query) }
 
-        // Bottom spacer for safe area
-        item { Spacer(modifier = Modifier.height(16.dp)) }
+    Column(modifier = Modifier.fillMaxSize()) {
+        LogSearchBar(
+            query = query,
+            onQueryChange = { query = it },
+            modifier = Modifier
+                .padding(horizontal = 18.dp)
+                .padding(bottom = 6.dp),
+        )
+
+        if (filtered.isEmpty()) {
+            // Records exist but none match — keep the search bar above so the
+            // operator can refine or clear the query.
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 32.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                EmptyStateWaves(size = 140.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.log_search_no_results_title),
+                    color = TextMuted,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.log_search_no_results_body, query.trim()),
+                    color = TextFaint,
+                    fontSize = 12.sp,
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(
+                    items = sortQsosByDateTimeDesc(filtered),
+                    // Include id so an edit that changes other fields still maps to a stable key,
+                    // and so two grouped rows with otherwise identical display fields don't collide.
+                    key = { "${it.id}_${it.callsign}_${it.lastTime}_${it.band}" },
+                ) { record ->
+                    QsoRow(
+                        record = record,
+                        onEdit = { onEdit(record) },
+                        onDelete = { onDelete(record) },
+                    )
+                }
+
+                // Bottom spacer for safe area
+                item { Spacer(modifier = Modifier.height(16.dp)) }
+            }
+        }
     }
+}
+
+/**
+ * Search field for the Logbook Recent tab. A thin Compose wrapper around an
+ * [OutlinedTextField]; all match logic lives in the pure [filterQsoRecords].
+ */
+@Composable
+private fun LogSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = modifier.fillMaxWidth(),
+        singleLine = true,
+        placeholder = {
+            Text(
+                text = stringResource(R.string.log_search_hint),
+                color = TextFaint,
+                fontSize = 13.sp,
+                fontFamily = GeistMonoFamily,
+            )
+        },
+        leadingIcon = {
+            radio.ks3ckc.ft8af.ui.components.FT8AFIcons.Search(color = TextMuted, size = 18.dp)
+        },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                val clearLabel = stringResource(R.string.log_search_clear)
+                IconButton(onClick = { onQueryChange("") }) {
+                    radio.ks3ckc.ft8af.ui.components.FT8AFIcons.Close(
+                        modifier = Modifier.semantics { contentDescription = clearLabel },
+                        color = TextMuted,
+                        size = 18.dp,
+                    )
+                }
+            }
+        },
+        textStyle = TextStyle(
+            color = TextPrimary,
+            fontSize = 14.sp,
+            fontFamily = GeistMonoFamily,
+        ),
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = TextPrimary,
+            unfocusedTextColor = TextPrimary,
+            cursorColor = Accent,
+            focusedBorderColor = Accent,
+            unfocusedBorderColor = Border,
+        ),
+    )
 }
 
 // ---------------------------------------------------------------------------

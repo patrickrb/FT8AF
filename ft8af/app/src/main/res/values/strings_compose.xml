@@ -252,6 +252,10 @@
     <string name="log_section_signal_trend">Signal Trend</string>
     <string name="log_no_qsos_yet">No QSOs yet</string>
     <string name="log_no_qsos_recorded_yet">No QSOs recorded yet</string>
+    <string name="log_search_hint">Search callsign, grid, band…</string>
+    <string name="log_search_clear">Clear search</string>
+    <string name="log_search_no_results_title">No matching QSOs</string>
+    <string name="log_search_no_results_body">Nothing in your log matches “%1$s”</string>
     <string name="log_state_usa">%1$s, USA</string>
     <string name="log_cd_qso_actions">QSO actions</string>
     <string name="log_action_edit">Edit</string>
