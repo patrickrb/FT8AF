@@ -364,6 +364,19 @@ internal fun isNewGridStation(message: Ft8Message): Boolean {
 }
 
 /**
+ * Whether [message]'s sender carries a CQ WPX prefix (e.g. "W1", "DL0") the
+ * operator hasn't logged yet — a "new prefix" for Worked-All-Prefixes chasing.
+ * The prefix is derived from the callsign via [com.k1af.ft8af.callsign.WpxPrefix]
+ * (the same helper that builds the worked-prefix set in the log loader), so the
+ * NEW_PREFIX pill and the "New Prefix" filter always agree. Callsigns that don't
+ * yield a prefix (grids, reports, hashed calls) are never counted as new.
+ */
+internal fun isNewPrefixStation(message: Ft8Message): Boolean {
+    val prefix = com.k1af.ft8af.callsign.WpxPrefix.of(message.callsignFrom) ?: return false
+    return !GeneralVariables.checkQSLPrefix(prefix)
+}
+
+/**
  * Resolve the [QsoStatus] for a given [Ft8Message] based on its state.
  *
  * Returns null when there is no useful state to surface (e.g. a station
@@ -371,7 +384,7 @@ internal fun isNewGridStation(message: Ft8Message): Boolean {
  * should skip rendering the pill in that case.
  *
  * Priority (highest first): calling me, POTA/SOTA activation, new DXCC,
- * new grid, new band, plain CQ, already worked.
+ * new zone, new state, new grid, new prefix, new band, plain CQ, already worked.
  */
 internal fun resolveQsoStatus(message: Ft8Message): QsoStatus? {
     val isCQ = message.checkIsCQ()
@@ -384,6 +397,7 @@ internal fun resolveQsoStatus(message: Ft8Message): QsoStatus? {
     val modifier = message.modifier
 
     val newGrid = isNewGridStation(message)
+    val newPrefix = isNewPrefixStation(message)
     val newBand = !isWorked &&
         GeneralVariables.checkQSLCallsign_OtherBand(message.callsignFrom ?: "")
 
@@ -422,6 +436,9 @@ internal fun resolveQsoStatus(message: Ft8Message): QsoStatus? {
         // leave it false.
         GeneralVariables.highlightNewState && message.fromNewState -> QsoStatus.NEW_STATE
         GeneralVariables.highlightNewGrid && newGrid -> QsoStatus.NEW_GRID
+        // A new WPX prefix (Worked All Prefixes) ranks just below a new grid: both
+        // are common early on, so they sit under the rarer DXCC/zone/state catches.
+        GeneralVariables.highlightNewPrefix && newPrefix -> QsoStatus.NEW_PREFIX
         GeneralVariables.highlightNewBand && newBand -> QsoStatus.NEW_BAND
         effectiveWorkedMode() == WorkedStationMode.HIGHLIGHT &&
             isWorkedStation(message) -> QsoStatus.WORKED

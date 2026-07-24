@@ -163,6 +163,9 @@ val StatusZone = Color(0xFF60A5FA)
 // Teal, distinct from the blue NEW-ZONE, cyan NEW-BAND and green POTA pills, for
 // the NEW-STATE (Worked All States) badge.
 val StatusState = Color(0xFF2DD4BF)
+// Rose/pink, distinct from the purple NEW-DXCC, blue NEW-ZONE, teal NEW-STATE and
+// yellow NEW-GRID badges, for the NEW-PREFIX (Worked All Prefixes / WPX) badge.
+val StatusPrefix = Color(0xFFF472B6)
 val StatusBad = Color(0xFFEF4444)
 
 // Band colors (for donut chart / logbook)
