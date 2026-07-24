@@ -36,6 +36,12 @@ enum class QsoStatus(
         Color(0x1FC084FC),  // rgba(192,132,252,0.12)
         Color(0x47C084FC),  // rgba(192,132,252,0.28)
     ),
+    NEW_ZONE(
+        R.string.status_new_zone,
+        StatusZone,
+        Color(0x1F60A5FA),  // rgba(96,165,250,0.12)
+        Color(0x4760A5FA),  // rgba(96,165,250,0.28)
+    ),
     NEW_GRID(
         R.string.status_new_grid,
         StatusWarn,

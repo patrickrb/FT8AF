@@ -3135,6 +3135,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("highlightNewDxcc")) {
                     GeneralVariables.highlightNewDxcc = result.equals("1");
                 }
+                if (name.equalsIgnoreCase("highlightNewZone")) {
+                    GeneralVariables.highlightNewZone = result.equals("1");
+                }
                 if (name.equalsIgnoreCase("highlightNewGrid")) {
                     GeneralVariables.highlightNewGrid = result.equals("1");
                 }
