@@ -46,6 +46,7 @@
 
     <!-- ===== Status pills (decode list badges) ===== -->
     <string name="status_new_dxcc">NEW DXCC</string>
+    <string name="status_new_zone">NEW ZONE</string>
     <string name="status_new_grid">NEW GRID</string>
     <string name="status_new_band">NEW BAND</string>
     <string name="status_pota">POTA</string>
@@ -165,13 +166,17 @@
     <string name="decode_sort_label_last_heard">TIME</string>
     <string name="decode_sort_label_callsign">CALL</string>
     <string name="decode_sort_label_snr">SNR</string>
+    <string name="decode_sort_label_distance">DX</string>
     <string name="decode_sort_cd_last_heard">Sort: last heard</string>
     <string name="decode_sort_cd_callsign">Sort: callsign</string>
     <string name="decode_sort_cd_snr">Sort: SNR</string>
+    <string name="decode_sort_cd_distance">Sort: distance, farthest first</string>
     <string name="decode_filter_all">All</string>
     <string name="decode_filter_cq_calls">CQ Calls</string>
     <string name="decode_filter_cq_pota">CQ POTA</string>
     <string name="decode_filter_new_dxcc">New DXCC</string>
+    <string name="decode_filter_new_zone">New Zone</string>
+    <string name="decode_filter_new_grid">New Grid</string>
     <string name="decode_filter_needed">Needed</string>
     <string name="decode_filter_for_me">For Me</string>
     <string name="decode_empty_cq_title">No CQ calls</string>
@@ -180,6 +185,10 @@
     <string name="decode_empty_pota_body">No park activations decoded on this band yet — open POTA → Hunt for the spot list.</string>
     <string name="decode_empty_dxcc_title">No new DXCC</string>
     <string name="decode_empty_dxcc_body">No unworked DXCC entities have been decoded yet.</string>
+    <string name="decode_empty_zone_title">No new zones</string>
+    <string name="decode_empty_zone_body">No stations calling from an unworked CQ zone have been decoded yet.</string>
+    <string name="decode_empty_grid_title">No new grids</string>
+    <string name="decode_empty_grid_body">No stations calling from an unworked grid square have been decoded yet.</string>
     <string name="decode_empty_needed_title">Nothing needed</string>
     <string name="decode_empty_needed_body">No stations needing confirmation found.</string>
     <string name="decode_empty_forme_title">No calls for you</string>
@@ -210,6 +219,13 @@
     <string name="qso_live_step_fallback">message</string>
     <string name="qso_tx_now">TX NOW</string>
     <string name="qso_tx_next">TX NEXT</string>
+    <string name="qso_worked_before_title">Worked before</string>
+    <plurals name="qso_worked_before_count">
+        <item quantity="one">%1$d QSO</item>
+        <item quantity="other">%1$d QSOs</item>
+    </plurals>
+    <string name="qso_worked_before_last">last %1$s</string>
+    <string name="qso_worked_before_bands">Bands: %1$s</string>
     <string name="qso_last_heard">Last heard</string>
     <string name="qso_last_heard_unknown">--</string>
     <string name="qso_last_heard_just_now">just now</string>
@@ -237,10 +253,15 @@
     <string name="log_award_dxcc_challenge">DXCC Challenge</string>
     <string name="log_award_was_states">Worked All States</string>
     <string name="log_award_states_needed">STATES NEEDED</string>
+    <string name="log_section_best_dx">Best DX</string>
     <string name="log_section_grid_coverage">Grid Coverage</string>
     <string name="log_section_signal_trend">Signal Trend</string>
     <string name="log_no_qsos_yet">No QSOs yet</string>
     <string name="log_no_qsos_recorded_yet">No QSOs recorded yet</string>
+    <string name="log_search_hint">Search callsign, grid, band…</string>
+    <string name="log_search_clear">Clear search</string>
+    <string name="log_search_no_results_title">No matching QSOs</string>
+    <string name="log_search_no_results_body">Nothing in your log matches “%1$s”</string>
     <string name="log_state_usa">%1$s, USA</string>
     <string name="log_cd_qso_actions">QSO actions</string>
     <string name="log_action_edit">Edit</string>
@@ -359,6 +380,8 @@
     <string name="map_mode_standard">STD</string>
     <string name="map_mode_azimuthal">AZ</string>
     <string name="map_overlay_psk">PSK</string>
+    <string name="map_overlay_grayline">GRAY</string>
+    <string name="map_overlay_grayline_cd">Gray line (day/night terminator) overlay</string>
     <string name="map_filter">Filter</string>
     <string name="map_filter_title">PSK filters</string>
     <string name="map_filter_done">Done</string>
@@ -554,6 +577,8 @@
     <!-- ===== Settings: decode highlights ===== -->
     <string name="settings_highlight_new_dxcc">New DXCC</string>
     <string name="settings_highlight_new_dxcc_desc">Highlight stations from an unworked DXCC entity</string>
+    <string name="settings_highlight_new_zone">New Zone</string>
+    <string name="settings_highlight_new_zone_desc">Highlight not-yet-worked CQ zones (Worked All Zones)</string>
     <string name="settings_highlight_new_grid">New Grid</string>
     <string name="settings_highlight_new_grid_desc">Highlight not-yet-worked Maidenhead grids</string>
     <string name="settings_highlight_new_band">New Band</string>
@@ -614,6 +639,11 @@
     <string name="settings_alert_qso_complete_desc">Sound + vibrate + notify when a QSO is logged</string>
     <string name="alert_cq_reply_title">Calling you: %1$s</string>
     <string name="alert_qso_complete_title">QSO complete</string>
+    <string name="settings_alert_watchlist">Callsign watchlist</string>
+    <string name="settings_alert_watchlist_desc">Sound + vibrate + notify the moment a watched callsign or prefix is decoded, on any band</string>
+    <string name="settings_watch_dialog_title">Callsign watchlist</string>
+    <string name="settings_watch_dialog_desc">Comma-separated calls or prefixes (e.g. 3Y0, W1AW, TX7). An alert fires the instant a match is decoded — matched by prefix, so a DXpedition prefix catches every variant.</string>
+    <string name="alert_watch_title">Watchlist: %1$s</string>
     <string name="rx_service_channel_name">Background receiving</string>
     <string name="rx_service_channel_desc">Keeps FT8 decoding running while the app is in the background or the screen is off</string>
     <string name="rx_service_title">FT8AF is receiving</string>
@@ -645,6 +675,13 @@
     <string name="settings_tx_delay_desc">Delay before transmit to allow prior-cycle decode</string>
     <string name="settings_late_start_tolerance">Late-start Tolerance</string>
     <string name="settings_late_start_tolerance_desc">Extra leading audio (ms) a late manual TX may clip so it still goes out this cycle instead of waiting for the next slot</string>
+    <!-- Power / thermal controls. A long portable session heats the phone until it
+         browns out its own OTG accessory rail, taking the CAT link with it. -->
+    <string name="settings_section_power">POWER &amp; HEAT</string>
+    <string name="settings_keep_screen_on">Keep screen on</string>
+    <string name="settings_keep_screen_on_desc">Hold the display awake while the app is open. Turn off for long portable sessions — receive keeps running in the background and the phone runs much cooler</string>
+    <string name="settings_deep_decode">Deep decode</string>
+    <string name="settings_deep_decode_desc" formatted="false">Subtract-and-redecode pass that digs weak signals out from under strong ones. Uses up to 75% of every slot at full CPU — the biggest single heat source. Turn off to run cooler at the cost of some weak decodes</string>
     <string name="late_start_deferred">Too late this cycle (need %d ms clip) — waiting for next slot</string>
 
     <!-- ===== Settings: about ===== -->
@@ -713,6 +750,15 @@
     <string name="input_level_good">Good</string>
     <string name="input_level_too_high">High</string>
     <string name="input_level_clipping">Clip</string>
+
+    <!-- ===== Clock-sync (DT) indicator on the slot-timer bar ===== -->
+    <string name="clock_sync_label" translatable="false">DT</string>
+    <string name="clock_sync_good">in sync</string>
+    <string name="clock_sync_fair">check clock</string>
+    <string name="clock_sync_poor">clock off</string>
+    <string name="clock_sync_unknown">no decodes</string>
+    <!-- %1$s = signed offset e.g. "+0.1 s"; %2$s = status word e.g. "in sync" -->
+    <string name="clock_sync_cd">Clock sync: average decode offset %1$s, %2$s</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Language</string>

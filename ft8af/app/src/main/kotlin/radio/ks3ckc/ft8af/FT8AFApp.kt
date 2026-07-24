@@ -229,6 +229,10 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     val operatingMode by mainViewModel.mutableOperatingMode.observeAsState(GeneralVariables.operatingMode)
     val modeName = ModeProfile.fromId(operatingMode).displayName
 
+    // Mean decode DT (seconds) for the slot-timer bar's live clock-sync pill; null until
+    // the first decode cycle reports one, so the bar renders unchanged before then.
+    val avgDtSec by mainViewModel.mutableTimerOffset.observeAsState()
+
     // Observe SWR lockout state
     val swrLocked by mainViewModel.meterProtectionController.swrLockout.observeAsState(false)
     val lockoutSwrRatio by mainViewModel.meterProtectionController.lockoutSwrRatio.observeAsState("")
@@ -352,9 +356,12 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 qsoPanel(Modifier)
             }
 
-            // Slot timer bar — fills 0→100% across each slot (15s FT8 / 7.5s FT4)
+            // Slot timer bar — fills 0→100% across each slot (15s FT8 / 7.5s FT4).
+            // The mean decode DT rides on the bar as a live clock-sync pill so the
+            // operator can spot a drifting clock without opening Settings → Time Sync.
             SlotTimerBar(
                 slotMillis = ModeProfile.fromId(operatingMode).slotMillis.toLong(),
+                offsetSec = avgDtSec,
             )
 
             // TX status strip — always visible above tab bar

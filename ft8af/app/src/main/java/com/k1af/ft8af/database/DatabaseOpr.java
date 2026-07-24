@@ -576,6 +576,43 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         return out;
     }
 
+    /**
+     * Every prior logged QSO with {@code callsign}, oldest first, as lightweight
+     * {@link com.k1af.ft8af.log.PriorQso} rows (date/time/band/mode only). Powers
+     * the decode sheet's "Worked before" card. Returns an empty list when the
+     * station has never been worked, on a blank callsign, or on any read error.
+     *
+     * <p>The exact-match on {@code "call"} is served by the {@code QSLTable_call_IDX}
+     * index, so this stays cheap even on a large log. Decoded callsigns are already
+     * upper-cased (as are stored ones), so no case-folding is needed — folding here
+     * would only defeat the index.
+     */
+    public java.util.List<com.k1af.ft8af.log.PriorQso> getPriorQsos(String callsign) {
+        java.util.List<com.k1af.ft8af.log.PriorQso> out = new ArrayList<>();
+        if (db == null || callsign == null) {
+            return out;
+        }
+        String c = callsign.trim();
+        if (c.isEmpty()) {
+            return out;
+        }
+        try (Cursor cursor = db.rawQuery(
+                "SELECT qso_date, time_on, band, mode FROM QSLTable "
+                        + "WHERE \"call\" = ? ORDER BY qso_date, time_on",
+                new String[]{c})) {
+            while (cursor.moveToNext()) {
+                out.add(new com.k1af.ft8af.log.PriorQso(
+                        cursor.getString(0),
+                        cursor.getString(1),
+                        cursor.getString(2),
+                        cursor.getString(3)));
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "getPriorQsos failed: " + e.getClass().getSimpleName());
+        }
+        return out;
+    }
+
     /** Drop every cached signature mapping (e.g. on server/logbook switch). */
     public void clearLocationStationCache() {
         if (db == null) {
@@ -2370,7 +2407,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             } finally {
                 cursor.close();
             }
-            GeneralVariables.QSL_Callsign_list = callsigns;
+            // Publish as a CopyOnWriteArrayList so the wholesale swap is atomic for the
+            // decode/UI/web-logbook readers racing this background reload (see the field's note).
+            GeneralVariables.QSL_Callsign_list = new java.util.concurrent.CopyOnWriteArrayList<>(callsigns);
 
             querySQL = "select distinct [call] from QSLTable where band<>?" + modeFilter.sqlSuffix;
             cursor = db.rawQuery(querySQL, modeFilter.withArgs(meter));
@@ -2677,7 +2716,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     } catch (NumberFormatException e) {
                         ms = 0;
                     }
-                    ms = Math.max(-2000, Math.min(2000, ms));
+                    // Clamp with the SAME bounds the live settings UI uses when it
+                    // persists this value (±5 s). The reload clamp used to be ±2 s,
+                    // silently truncating any correction beyond ±2 s on every launch.
+                    ms = GeneralVariables.clampManualTimeCorrectionMs(ms);
                     GeneralVariables.manualTimeCorrectionMs = ms;
                     UtcTimer.delay = ms;
                 }
@@ -2886,6 +2928,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("blockedKeywords")) {//Blocklist: keyword substrings
                     GeneralVariables.addBlockedKeywords(result);
                 }
+                if (name.equalsIgnoreCase("watchCallsigns")) {//Watchlist: alert on these call(prefix)es
+                    GeneralVariables.addWatchCallsigns(result);
+                }
                 if (name.equalsIgnoreCase("filterShowOnlyCQ")) {//Decode filter: CQ only
                     GeneralVariables.filterShowOnlyCQ = result.equals("1");
                 }
@@ -2962,7 +3007,12 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.usbAudioOutputProductId = parseConfigInt(result, 0);
                 }
                 if (name.equalsIgnoreCase("deepMode")) {//Deep decode mode
-                    GeneralVariables.deepDecodeMode =result.equals("1");
+                    GeneralVariables.deepDecodeMode = "1".equals(result);
+                }
+                if (name.equalsIgnoreCase("keepScreenOn")) {//Hold the screen awake in foreground
+                    // "1".equals(result), not result.equals("1"): a null config value
+                    // (missing/blank column from an imported backup) must not NPE here.
+                    GeneralVariables.keepScreenOn = "1".equals(result);
                 }
                 if (name.equalsIgnoreCase("debugModeEnabled")) {//Hidden debug screen unlock
                     GeneralVariables.debugModeEnabled = result.equals("1");
@@ -3039,6 +3089,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("pskOverlayEnabled")) {
                     GeneralVariables.pskOverlayEnabled = result.equals("1");
                 }
+                if (name.equalsIgnoreCase("grayLineEnabled")) {
+                    GeneralVariables.grayLineEnabled = result.equals("1");
+                }
 
                 if (name.equalsIgnoreCase("swrSwitch")) {
                     GeneralVariables.swr_switch_on = result.equals("1");
@@ -3081,6 +3134,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
 
                 if (name.equalsIgnoreCase("highlightNewDxcc")) {
                     GeneralVariables.highlightNewDxcc = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("highlightNewZone")) {
+                    GeneralVariables.highlightNewZone = result.equals("1");
                 }
                 if (name.equalsIgnoreCase("highlightNewGrid")) {
                     GeneralVariables.highlightNewGrid = result.equals("1");

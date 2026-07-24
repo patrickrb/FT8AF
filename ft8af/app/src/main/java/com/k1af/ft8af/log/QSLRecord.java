@@ -155,7 +155,10 @@ public class QSLRecord {
             }
         }
         if (map.containsKey("MODE")) {//Mode
-            mode = map.get("MODE");
+            // FT4/FT2 are ADIF SUBMODEs of the generic MFSK MODE (see AdifFormat.mfskSubmode),
+            // so they arrive as MODE=MFSK + SUBMODE=FT4. Resolve that back to the specific
+            // mode; reading MODE alone would store "MFSK" and lose the FT4/FT2 distinction.
+            mode = AdifFormat.resolveImportMode(map.get("MODE"), map.get("SUBMODE"));
         } else {
             mode = "";
         }

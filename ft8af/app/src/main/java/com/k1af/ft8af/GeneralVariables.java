@@ -65,6 +65,16 @@ public class GeneralVariables {
     // time bound.
     public static boolean deepDecodeMode = true;//Whether deep decode mode is enabled
 
+    // Hold the screen awake while the app is in the foreground. On by default —
+    // that was the hard-coded behaviour before this became a setting — but a long
+    // portable session is the case where you want it off: an always-on panel at
+    // outdoor brightness is one of the two biggest heat sources on the phone, and
+    // a hot phone browns out its own OTG accessory rail (see the 2026-07-23 field
+    // log: 48.6C battery, twelve USB re-enumerations). RX keeps running with the
+    // screen off via RxForegroundService, so turning this off costs nothing but
+    // having to wake the phone to look at the waterfall.
+    public static boolean keepScreenOn = true;
+
     public static boolean audioOutput32Bit = true;//Audio output type: true=float, false=int16
     public static int audioSampleRate = 12000;//Transmit audio sample rate
 
@@ -210,6 +220,15 @@ public class GeneralVariables {
     private static final java.util.LinkedHashSet<String> blockedExactCallsigns = new java.util.LinkedHashSet<>();
     private static final java.util.LinkedHashSet<String> blockedKeywords = new java.util.LinkedHashSet<>();
 
+    // Callsign watchlist (Settings → Needed-DX Alerts → Watchlist). When non-empty,
+    // a decoded message from a matching station fires a high-priority alert (sound +
+    // vibrate + notification) via DxAlertNotifier — the "tell me the instant this
+    // station is on the air" hunt tool for a rare DXpedition, a needed prefix, or a
+    // friend. Entries match by callsign PREFIX (so "3Y0" catches 3Y0J and 3Y0J/MM,
+    // and a full call like "W1AW" also matches "W1AW/P"), mirroring the excluded-
+    // callsign prefix semantics. Unlike the needed-DX alerts it is not CQ-gated.
+    private static final java.util.LinkedHashSet<String> watchCallsigns = new java.util.LinkedHashSet<>();
+
     /**
      * Split a user-entered list on comma / space / pipe / Chinese comma and
      * collect the non-empty, upper-cased tokens into {@code target}.
@@ -285,6 +304,37 @@ public class GeneralVariables {
 
     public static synchronized String getBlockedKeywords() {
         return joinBlockTokens(blockedKeywords);
+    }
+
+    /** Replace the callsign watchlist from a user-entered comma/space/pipe list. */
+    public static synchronized void addWatchCallsigns(String callsigns) {
+        parseBlockTokens(callsigns, watchCallsigns);
+    }
+
+    /** The watchlist in canonical comma-separated form (for persistence + display). */
+    public static synchronized String getWatchCallsigns() {
+        return joinBlockTokens(watchCallsigns);
+    }
+
+    /** Whether the user has any watchlist entries (gates the watchlist alert). */
+    public static synchronized boolean hasWatchCallsigns() {
+        return !watchCallsigns.isEmpty();
+    }
+
+    /**
+     * Whether {@code callsign} matches the watchlist by PREFIX (case-insensitive):
+     * "3Y0" matches 3Y0J / 3Y0J/MM, "W1AW" matches W1AW / W1AW/P. Anchored at the
+     * start, so "W1AW" does not match "KW1AW". Empty list matches nothing.
+     */
+    public static synchronized boolean checkIsWatchedCallsign(String callsign) {
+        if (callsign == null || watchCallsigns.isEmpty()) return false;
+        String up = callsign.toUpperCase();
+        for (String prefix : watchCallsigns) {
+            if (up.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -441,6 +491,7 @@ public class GeneralVariables {
     public static String qrzXmlUsername = ""; //QRZ XML API username (for callsign lookups)
     public static String qrzXmlPassword = ""; //QRZ XML API password
     public static boolean pskOverlayEnabled = false; //PSK Reporter map overlay (issue #33)
+    public static boolean grayLineEnabled = true; //Day/night terminator (gray line) map overlay — on by default
     public static boolean synFrequency = false;//Same-frequency transmit
     // Hold TX freq: don't move the TX offset to a station you answer (WSJT-X
     // "Hold Tx Freq"). Enabled by default (issue #498) to keep the TX frequency
@@ -449,7 +500,7 @@ public class GeneralVariables {
     public static int transmitDelay = 500;//Transmit delay; also allows decoding time for the previous cycle
     public static int pttDelay = 100;//PTT response time; radios typically need some response time after PTT command, default 100ms
     public static int lateStartTolerance = 2000;//Max ms of leading audio a late manual TX may clip past the per-mode audio slack (ModeProfile.audioSlackMillis) and still go out this cycle. Effective start budget is slack+tolerance. 0-4000. See issue #467.
-    public static int manualTimeCorrectionMs = 0;//Manual clock correction (ms) applied to UtcTimer.delay; for field use without internet NTP. Range -2000..2000. See TimeSyncSettings.
+    public static int manualTimeCorrectionMs = 0;//Manual clock correction (ms) applied to UtcTimer.delay; for field use without internet NTP. Range [MANUAL_TIME_CORRECTION_MIN_MS, MANUAL_TIME_CORRECTION_MAX_MS]. See TimeSyncSettings.
     public static boolean earlyDecode = true;//Fast turnaround: decode a shorter RX window so CQ decodes appear ~1s before the cycle boundary, enabling a next-slot reply.
     public static int operatingMode = FT8Common.FT8_MODE;//Current operating mode (FT8Common.FT8_MODE / FT4_MODE); persisted as config "operatingMode".
     public static int iaruRegion = 2;//Operator's IARU region (1/2/3), used to gate Message-Creator QSY frequency options to legal band edges. Default 2 (the Americas). See com.k1af.ft8af.message.SpecialMessage.
@@ -509,7 +560,14 @@ public class GeneralVariables {
     //Posted each time a GPS fix disciplines the clock, so the Time Sync screen can recompose
     //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.
     public static MutableLiveData<Long> mutableGpsClockSync = new MutableLiveData<>();
-    public static ArrayList<String> QSL_Callsign_list = new ArrayList<>();//Successfully QSL'd callsigns
+    // Successfully QSL'd callsigns (current band). Rebuilt wholesale on the DB thread
+    // (DatabaseOpr.GetAllQSLCallsign), appended to on the TX thread (addQSLCallsign), and
+    // read concurrently from decode/UI threads and the NanoHTTPD web-logbook worker. It is
+    // therefore a CopyOnWriteArrayList behind a volatile reference: the volatile makes the
+    // wholesale ref-swap publish safely, and copy-on-write keeps every concurrent reader on a
+    // stable snapshot so an in-place add() can't tear an iteration. Always assign a
+    // CopyOnWriteArrayList in production; see LogHttpServer.successfulCallsignBlock.
+    public static volatile List<String> QSL_Callsign_list = new CopyOnWriteArrayList<>();
     public static ArrayList<String> QSL_Callsign_list_other_band = new ArrayList<>();//Successfully QSL'd callsigns on other bands
     public static HashSet<String> QSL_Callsign_list_today = new HashSet<>();//Callsigns worked today or yesterday (any band); a set for O(1) membership checks
     public static HashSet<String> QSL_Grid_list = new HashSet<>();//Distinct worked 4-char Maidenhead grids (any band)
@@ -518,6 +576,7 @@ public class GeneralVariables {
     // Decode-list highlight toggles (Settings → Decode Highlights). Gate the
     // status pill shown for each worked-before category in resolveQsoStatus().
     public static boolean highlightNewDxcc = true;//Highlight stations from an unworked DXCC entity
+    public static boolean highlightNewZone = true;//Highlight stations from an unworked CQ zone (Worked All Zones)
     public static boolean highlightNewGrid = false;//Off by default — most grids are "new", so it's noisy
     public static boolean highlightNewBand = true;//Highlight stations worked only on other bands
     public static boolean highlightWorked = true;//Master enable for worked-station handling (see workedStationMode)
@@ -632,7 +691,19 @@ public class GeneralVariables {
     }
 
 
-    public static final ArrayList<String> followCallsign = new ArrayList<>();//Followed callsigns
+    // The followed-callsigns list. Mutated concurrently with no external lock:
+    // the decode/DB threads add (MainViewModel.addFollowCallsign,
+    // getFollowCallsignsFromDataBase) and the UI thread clears it
+    // (ClearCacheDataDialog), while the web logbook renders it on a NanoHTTPD
+    // worker thread (LogHttpServer). A plain ArrayList corrupts its backing
+    // array / throws IndexOutOfBounds under that contention, so this is a
+    // CopyOnWriteArrayList: every add/clear is atomic. Readers must iterate the
+    // list itself (for-each snapshots the array) rather than size()+get(i),
+    // which can still race a concurrent clear.
+    // final: the thread-safety invariant depends on this always being the
+    // CopyOnWriteArrayList — never reassign it to a plain List. Mutate in place
+    // (add/clear) only.
+    public static final List<String> followCallsign = new CopyOnWriteArrayList<>();//Followed callsigns
 
     // The calling-UI "followed entries" list. Mutated concurrently from three
     // threads with no external lock: the decode thread (findIncludedCallsigns
@@ -708,6 +779,37 @@ public class GeneralVariables {
         int clamped = Math.max(MIN_SPECTRUM_WIDTH_HZ, Math.min(MAX_SPECTRUM_WIDTH_HZ, width));
         mutableSpectrumWidth.postValue(clamped);
         GeneralVariables.spectrumWidth = clamped;
+    }
+
+    /**
+     * Inclusive bounds (ms) for the manual clock correction ({@link #manualTimeCorrectionMs}
+     * / {@code UtcTimer.delay}). This is the single source of truth for the range:
+     * the live settings UI's {@code TIME_CORRECTION_MIN_MS}/{@code TIME_CORRECTION_MAX_MS}
+     * in {@code TimeCorrection.kt} now reference these constants, so the UI slider and
+     * the reload-time clamp ({@link #clampManualTimeCorrectionMs}) can't drift apart.
+     * The range is ±5 s (widened from ±2 s so an offline phone that has drifted several
+     * seconds — a field-reported Samsung A50 needed over 3 s — can be pulled back).
+     */
+    public static final int MANUAL_TIME_CORRECTION_MIN_MS = -5000;
+    public static final int MANUAL_TIME_CORRECTION_MAX_MS = 5000;
+
+    /**
+     * Clamp a manual clock correction to
+     * [{@link #MANUAL_TIME_CORRECTION_MIN_MS}, {@link #MANUAL_TIME_CORRECTION_MAX_MS}] ms.
+     *
+     * <p>The live settings UI already clamps to this range before persisting
+     * ({@code TimeSyncSettings.apply} → {@code clampCorrectionMs}), but config
+     * hydration on every launch ({@code DatabaseOpr}'s {@code timeCorrectionMs}
+     * branch) re-applies the persisted value to {@code UtcTimer.delay} and must
+     * clamp with the <em>same</em> bounds. The reload path used to clamp to ±2000
+     * while the UI allowed ±5000, so any correction beyond ±2 s was silently
+     * truncated back to 2 s at startup — leaving the operator's carefully-set
+     * offline clock offset wrong by up to 3 s and degrading decodes. Byte-identical
+     * for every in-range value.
+     */
+    public static int clampManualTimeCorrectionMs(int ms) {
+        return Math.max(MANUAL_TIME_CORRECTION_MIN_MS,
+                Math.min(MANUAL_TIME_CORRECTION_MAX_MS, ms));
     }
 
     public static int getFftWindowType() {

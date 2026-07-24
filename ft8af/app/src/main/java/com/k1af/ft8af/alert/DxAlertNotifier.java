@@ -30,7 +30,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * <ul>
  *   <li>{@code dx_alerts} — a station calling CQ that is a NEW (unworked) entity in a
  *       user-enabled category: a new DXCC ({@link GeneralVariables#alertNewDxcc}) or US
- *       state ({@link GeneralVariables#alertNewState}). Driven from
+ *       state ({@link GeneralVariables#alertNewState}); and any decode from a station on
+ *       the user's callsign watchlist ({@link GeneralVariables#checkIsWatchedCallsign},
+ *       not CQ-gated). Driven from
  *       {@code MainViewModel.GetQTHRunnable.run()} once the {@code from*} flags are set.</li>
  *   <li>{@code qso_alerts} — someone calling YOU
  *       ({@link GeneralVariables#alertOnCqReply}, also driven from {@code processDecodes})
@@ -65,7 +67,7 @@ public class DxAlertNotifier {
                 appContext.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
         createHighChannel(nm, CHANNEL_ID, "Needed-DX alerts",
-                "New DXCC / US state stations calling CQ");
+                "New DXCC / US state stations calling CQ, and watchlist callsigns");
         createHighChannel(nm, QSO_CHANNEL_ID, "QSO & CQ alerts",
                 "Someone calling you, and completed-QSO alerts");
     }
@@ -95,13 +97,26 @@ public class DxAlertNotifier {
     public void processDecodes(List<Ft8Message> messages) {
         if (appContext == null || messages == null) return;
         if (!GeneralVariables.alertNewDxcc && !GeneralVariables.alertNewState
-                && !GeneralVariables.alertOnCqReply) {
+                && !GeneralVariables.alertOnCqReply && !GeneralVariables.hasWatchCallsigns()) {
             return;
         }
 
         for (Ft8Message msg : messages) {
             if (msg == null) continue;
             if (GeneralVariables.checkIsBlockedMessage(msg)) continue;
+
+            // Watchlist: any decode from a station on the user's watchlist — a rare
+            // DXpedition, a needed prefix, a friend. NOT CQ-gated (checked before the
+            // CQ-only continue below) so an in-QSO watched station still alerts the
+            // instant it's on the air. Blocked messages already `continue`d above.
+            boolean watched = GeneralVariables.checkIsWatchedCallsign(msg.getCallsignFrom());
+            if (AlertDecisions.shouldAlertWatch(
+                    GeneralVariables.hasWatchCallsigns(), watched, false)) {
+                fire(AlertDecisions.watchDedupKey(msg.getCallsignFrom()),
+                        CHANNEL_ID,
+                        appContext.getString(R.string.alert_watch_title, msg.getCallsignFrom()),
+                        defaultBody(msg), msg.getCallsignFrom(), msg.band);
+            }
 
             // CQ reply: any decoded message addressed to my callsign. The batch is already
             // own-TX-echo filtered upstream, so a message to my call is another station
@@ -176,15 +191,16 @@ public class DxAlertNotifier {
      */
     private void fire(String dedupKey, String channelId, String title, String body,
                       String callsignExtra, long bandExtra) {
-        if (!alerted.add(dedupKey)) return;                         // already alerted this session
+        // Gate on notification permission BEFORE consuming the dedup key. If we burned the
+        // key here while notifications are denied, the per-session `alerted` set (never
+        // cleared) would suppress this station forever — even after the user later grants
+        // POST_NOTIFICATIONS. claimAlert() checks `canPost` first, then dedups.
+        boolean canPost = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                || ContextCompat.checkSelfPermission(appContext,
+                        Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+        if (!AlertDecisions.claimAlert(alerted, dedupKey, canPost)) return;
 
         GeneralVariables.fileLog("ALERT fire key=[" + dedupKey + "] " + title);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                && ContextCompat.checkSelfPermission(appContext,
-                        Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            return;                                                 // no permission → skip silently
-        }
 
         int id = dedupKey.hashCode();
 
@@ -213,7 +229,10 @@ public class DxAlertNotifier {
         try {
             NotificationManagerCompat.from(appContext).notify(id, builder.build());
         } catch (SecurityException ignored) {
-            // Permission revoked between the check and notify(); ignore.
+            // Permission revoked between the check and notify(): nothing was posted, so
+            // release the key to let a later decode of the same station retry rather than
+            // stay suppressed for the session.
+            alerted.remove(dedupKey);
         }
     }
 }

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -57,7 +58,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -80,6 +84,7 @@ import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.count.CountDbOpr
 import com.k1af.ft8af.log.QSLCallsignRecord
 import com.k1af.ft8af.log.ThirdPartyService
+import com.k1af.ft8af.maidenhead.MaidenheadGrid
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
@@ -651,6 +656,24 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
             )
         }
 
+        // Best DX highlight — the furthest station worked, great-circle from the
+        // operator's grid. Only shown once there's a measurable contact (operator
+        // grid configured and at least one logged grid that parses).
+        val myGrid = GeneralVariables.getMyMaidenheadGrid()
+        val bestDx = remember(records, myGrid) {
+            computeBestDx(records) { grid ->
+                if (myGrid.isNullOrEmpty()) {
+                    null
+                } else {
+                    MaidenheadGrid.getDist(myGrid, grid)
+                }
+            }
+        }
+        if (bestDx != null) {
+            SectionHeader(stringResource(R.string.log_section_best_dx))
+            BestDxCard(bestDx = bestDx, modifier = Modifier.fillMaxWidth())
+        }
+
         // Band donut chart
         if (stats.bandCounts.isNotEmpty()) {
             SectionHeader(stringResource(R.string.log_section_band_distribution))
@@ -741,6 +764,52 @@ private fun BigStatCard(
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 letterSpacing = 0.04.sp,
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Best DX card
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun BestDxCard(bestDx: BestDx, modifier: Modifier = Modifier) {
+    // MaidenheadGrid.formatDist already renders in the operator's preferred unit
+    // (mi/km) with its abbreviated label, so this stays unit-agnostic here.
+    val distanceText = MaidenheadGrid.formatDist(bestDx.distanceKm)
+    GlassCard(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = bestDx.callsign,
+                    color = Signal,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = GeistMonoFamily,
+                )
+                if (bestDx.grid.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = bestDx.grid,
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 0.04.sp,
+                    )
+                }
+            }
+            Text(
+                text = distanceText,
+                color = Accent,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GeistMonoFamily,
             )
         }
     }
@@ -1093,6 +1162,40 @@ private fun gridSquaresWorked(records: List<QSLCallsignRecord>): Int =
         if (!grid.isNullOrBlank() && grid.length >= 4) grid.substring(0, 4).uppercase() else null
     }.distinct().size
 
+// ---------------------------------------------------------------------------
+// Helper: furthest station worked ("Best DX")
+// ---------------------------------------------------------------------------
+
+/** The furthest logged station and its great-circle distance from the operator. */
+internal data class BestDx(val callsign: String, val grid: String, val distanceKm: Double)
+
+/**
+ * The furthest-worked station across [records], measured great-circle from the
+ * operator's grid. [distanceKm] maps a remote grid to its distance in km, or
+ * null when it can't be measured (unparseable grid, or the operator's own grid
+ * isn't configured). Records with a blank callsign/grid, an un-measurable grid,
+ * or a non-positive / NaN distance are skipped — the last mirrors
+ * MaidenheadGrid's 0-km result for two stations sharing a grid, which is a
+ * distance floor, never a "best DX". Returns null when nothing is measurable.
+ *
+ * The distance function is injected so this reducer stays a pure, JVM-only unit
+ * (the real card passes a MaidenheadGrid-backed lambda).
+ */
+internal fun computeBestDx(
+    records: List<QSLCallsignRecord>,
+    distanceKm: (String) -> Double?,
+): BestDx? =
+    records.asSequence()
+        .mapNotNull { record ->
+            val callsign = record.callsign?.trim().orEmpty()
+            val grid = record.grid?.trim().orEmpty()
+            if (callsign.isEmpty() || grid.isEmpty()) return@mapNotNull null
+            val dist = distanceKm(grid) ?: return@mapNotNull null
+            if (dist.isNaN() || dist <= 0.0) return@mapNotNull null
+            BestDx(callsign, grid, dist)
+        }
+        .maxByOrNull { it.distanceKm }
+
 // ===========================================================================
 // RECENT TAB
 // ===========================================================================
@@ -1112,6 +1215,35 @@ private fun gridSquaresWorked(records: List<QSLCallsignRecord>): Int =
 internal fun sortQsosByDateTimeDesc(
     records: List<QSLCallsignRecord>,
 ): List<QSLCallsignRecord> = records.sortedByDescending { qsoSortKey(it) }
+
+/**
+ * Filter the recent-QSO list by a free-text [query] typed into the logbook search
+ * box. A blank/whitespace query returns the list unchanged (no filtering).
+ *
+ * Otherwise the trimmed query is matched case-insensitively as a *substring*
+ * against the fields an operator actually searches a log by — callsign (the
+ * primary target), grid, band, DXCC entity, and the stored "where" location — so
+ * typing a partial call ("K1A"), a grid ("FN42"), a band ("40M"), or a country
+ * narrows the log to the matching contacts. Matching a substring (rather than a
+ * prefix) means "PA" finds both "PA3XYZ" and "W1PA". Extracted as a pure function
+ * so the search behavior is unit-tested without Compose.
+ */
+internal fun filterQsoRecords(
+    records: List<QSLCallsignRecord>,
+    query: String,
+): List<QSLCallsignRecord> {
+    val q = query.trim().uppercase()
+    if (q.isEmpty()) return records
+    return records.filter { record ->
+        sequenceOf(
+            record.callsign,
+            record.grid,
+            record.band,
+            record.dxccStr,
+            record.where,
+        ).any { it != null && it.uppercase().contains(q) }
+    }
+}
 
 internal fun qsoSortKey(record: QSLCallsignRecord): String {
     val date = (record.lastTime ?: "").padEnd(8, '0')
@@ -1163,28 +1295,126 @@ private fun RecentTab(
         return
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        items(
-            items = sortQsosByDateTimeDesc(records),
-            // Include id so an edit that changes other fields still maps to a stable key,
-            // and so two grouped rows with otherwise identical display fields don't collide.
-            key = { "${it.id}_${it.callsign}_${it.lastTime}_${it.band}" },
-        ) { record ->
-            QsoRow(
-                record = record,
-                onEdit = { onEdit(record) },
-                onDelete = { onDelete(record) },
-            )
-        }
+    // Free-text search over the log (callsign / grid / band / DXCC). Kept in a
+    // rememberSaveable so the query survives recomposition and rotation; it resets
+    // when the operator leaves the Logbook, which matches the expectation that
+    // search is a transient "find this contact" action, not a persisted filter.
+    var query by rememberSaveable { mutableStateOf("") }
+    val filtered = remember(records, query) { filterQsoRecords(records, query) }
 
-        // Bottom spacer for safe area
-        item { Spacer(modifier = Modifier.height(16.dp)) }
+    Column(modifier = Modifier.fillMaxSize()) {
+        LogSearchBar(
+            query = query,
+            onQueryChange = { query = it },
+            modifier = Modifier
+                .padding(horizontal = 18.dp)
+                .padding(bottom = 6.dp),
+        )
+
+        if (filtered.isEmpty()) {
+            // Records exist but none match — keep the search bar above so the
+            // operator can refine or clear the query.
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 32.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                EmptyStateWaves(size = 140.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.log_search_no_results_title),
+                    color = TextMuted,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.log_search_no_results_body, query.trim()),
+                    color = TextFaint,
+                    fontSize = 12.sp,
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(
+                    items = sortQsosByDateTimeDesc(filtered),
+                    // Include id so an edit that changes other fields still maps to a stable key,
+                    // and so two grouped rows with otherwise identical display fields don't collide.
+                    key = { "${it.id}_${it.callsign}_${it.lastTime}_${it.band}" },
+                ) { record ->
+                    QsoRow(
+                        record = record,
+                        onEdit = { onEdit(record) },
+                        onDelete = { onDelete(record) },
+                    )
+                }
+
+                // Bottom spacer for safe area
+                item { Spacer(modifier = Modifier.height(16.dp)) }
+            }
+        }
     }
+}
+
+/**
+ * Search field for the Logbook Recent tab. A thin Compose wrapper around an
+ * [OutlinedTextField]; all match logic lives in the pure [filterQsoRecords].
+ */
+@Composable
+private fun LogSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = modifier.fillMaxWidth(),
+        singleLine = true,
+        placeholder = {
+            Text(
+                text = stringResource(R.string.log_search_hint),
+                color = TextFaint,
+                fontSize = 13.sp,
+                fontFamily = GeistMonoFamily,
+            )
+        },
+        leadingIcon = {
+            radio.ks3ckc.ft8af.ui.components.FT8AFIcons.Search(color = TextMuted, size = 18.dp)
+        },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                val clearLabel = stringResource(R.string.log_search_clear)
+                IconButton(onClick = { onQueryChange("") }) {
+                    radio.ks3ckc.ft8af.ui.components.FT8AFIcons.Close(
+                        modifier = Modifier.semantics { contentDescription = clearLabel },
+                        color = TextMuted,
+                        size = 18.dp,
+                    )
+                }
+            }
+        },
+        textStyle = TextStyle(
+            color = TextPrimary,
+            fontSize = 14.sp,
+            fontFamily = GeistMonoFamily,
+        ),
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = TextPrimary,
+            unfocusedTextColor = TextPrimary,
+            cursorColor = Accent,
+            focusedBorderColor = Accent,
+            unfocusedBorderColor = Border,
+        ),
+    )
 }
 
 // ---------------------------------------------------------------------------

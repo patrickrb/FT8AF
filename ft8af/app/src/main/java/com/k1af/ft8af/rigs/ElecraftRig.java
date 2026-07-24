@@ -122,42 +122,49 @@ public class ElecraftRig extends BaseRig {
     public void onReceiveData(byte[] data) {
         String s = new String(data);
 
-        if (!s.contains(";")) {
-            buffer.append(s);
-            if (buffer.length() > 1000) clearBufferData();
-            // return;//data reception not yet complete.
-        } else {
-            if (s.indexOf(";") > 0) {//received end-of-data, and ';' is not the first character
-                buffer.append(s.substring(0, s.indexOf(";")));
-            }
+        // Drain every complete ';'-terminated command in this read. The transport
+        // delivers bytes in arbitrary chunks, so a single read routinely coalesces
+        // two back-to-back replies (e.g. successive SWR meter polls during TX, or a
+        // freq reply followed by a meter reply). The old parser handled only the
+        // first command and re-buffered the rest WITH its retained terminator, so
+        // the second reply was dropped (then wiped by the next poll's
+        // clearBufferData()) and the retained ';' poisoned the next parse (the
+        // stale ID was read as the command and the real command landed in the data
+        // field). Only the trailing, unterminated fragment is carried over.
+        CatLineSplitter.Result result = CatLineSplitter.split(buffer.toString(), s, ';');
+        clearBufferData();
+        buffer.append(result.remainder);
+        // A runaway unterminated buffer must not grow without bound.
+        if (buffer.length() > 1000) clearBufferData();
 
-            //begin parsing data
-            ElecraftCommand elecraftCommand = ElecraftCommand.getCommand(buffer.toString());
-            clearBufferData();//clear buffer
-            //put remaining data into buffer
-            buffer.append(s.substring(s.indexOf(";") + 1));
-
-            if (elecraftCommand == null) {
-                return;
-            }
-            if (elecraftCommand.getCommandID().equalsIgnoreCase("FA")
-                    || elecraftCommand.getCommandID().equalsIgnoreCase("FB")) {
-                long tempFreq = ElecraftCommand.getFrequency(elecraftCommand);
-                if (tempFreq != 0) {//if tempFreq==0, frequency is invalid
-                    setFreq(ElecraftCommand.getFrequency(elecraftCommand));
-                }
-            } else if (elecraftCommand.getCommandID().equalsIgnoreCase("SW")) {//METER
-                if (ElecraftCommand.isSWRMeter(elecraftCommand)) {
-                    swr = ElecraftCommand.getSWRMeter(elecraftCommand);
-                }
-
-                showAlert();
-                notifyMeterData(-1, Math.min(swr * 4, 255));
-            }
-
-
+        for (String command : result.frames) {
+            processCommand(command);
         }
+    }
 
+    /**
+     * Parse and act on one complete CAT command (terminator already stripped).
+     * Extracted so {@link #onReceiveData} stays a thin drain loop.
+     */
+    private void processCommand(String command) {
+        ElecraftCommand elecraftCommand = ElecraftCommand.getCommand(command);
+        if (elecraftCommand == null) {
+            return;
+        }
+        if (elecraftCommand.getCommandID().equalsIgnoreCase("FA")
+                || elecraftCommand.getCommandID().equalsIgnoreCase("FB")) {
+            long tempFreq = ElecraftCommand.getFrequency(elecraftCommand);
+            if (tempFreq != 0) {//if tempFreq==0, frequency is invalid
+                setFreq(tempFreq);
+            }
+        } else if (elecraftCommand.getCommandID().equalsIgnoreCase("SW")) {//METER
+            if (ElecraftCommand.isSWRMeter(elecraftCommand)) {
+                swr = ElecraftCommand.getSWRMeter(elecraftCommand);
+            }
+
+            showAlert();
+            notifyMeterData(-1, Math.min(swr * 4, 255));
+        }
     }
 
     @Override

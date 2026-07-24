@@ -315,6 +315,19 @@ public class CableSerialPort {
             e.printStackTrace();
             fileLog("serial.send ERROR: " + e.getMessage());
             return false;
+        } catch (RuntimeException e) {
+            // Backstop. A CAT write must never be fatal: sendData runs on the TX
+            // pool thread via the PTT path, so an uncaught RuntimeException takes
+            // the whole process down — and if it happens between TX1 and TX0 the
+            // rig is left keyed with nothing alive to unkey it (observed in the
+            // field: process died 3ms after TX1, transmitter keyed for 89s).
+            // The known case is an NPE from a yanked USB endpoint, now also
+            // guarded at source in CommonUsbSerialPort; this catch covers the
+            // rest of the driver stack, which is third-party and NPEs freely
+            // once the device disappears mid-transfer.
+            e.printStackTrace();
+            fileLog("serial.send ERROR (runtime, port died mid-write): " + e);
+            return false;
         }
         return true;
     }

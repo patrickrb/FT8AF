@@ -32,6 +32,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -125,6 +126,39 @@ public class LogHttpServer extends NanoHTTPD {
      */
     static int normalizePageSize(int pageSize) {
         return pageSize > 0 ? pageSize : 100;
+    }
+
+    /**
+     * Render the "successfully contacted callsigns" cell block for the debug page, ten
+     * callsigns per table row.
+     *
+     * <p>Extracted so the caller reads the shared
+     * {@link GeneralVariables#QSL_Callsign_list} exactly once — passing the reference in as
+     * {@code callsigns} — and iterates that single snapshot. The old inline loop re-read the
+     * static field on every {@code size()} and {@code get(i)}, so a background DB reload
+     * ({@link com.k1af.ft8af.database.DatabaseOpr.GetAllQSLCallsign}) that swaps the list
+     * wholesale between the two reads could hand {@code get(i)} an index past the end of a
+     * now-shorter list and throw {@link IndexOutOfBoundsException} mid-render (the page
+     * auto-refreshes every 5 s, so the window is hit often). With the list published as a
+     * CopyOnWriteArrayList a concurrent in-place add() can't tear this iteration either.
+     */
+    static String successfulCallsignBlock(List<String> callsigns) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<tr><td class=\"default\" >");
+        // for-each, not size()/get(i): this uses CopyOnWriteArrayList's snapshot
+        // iterator, so a concurrent clear()/remove() (or a different List impl
+        // passed in) can't reintroduce a size/get TOCTOU IndexOutOfBoundsException.
+        int i = 0;
+        for (String callsign : callsigns) {
+            sb.append(callsign);
+            sb.append(",&nbsp;");
+            if (((i + 1) % 10) == 0) {
+                sb.append("</td></tr><tr><td class=\"default\" >\n");
+            }
+            i++;
+        }
+        sb.append("</td></tr>\n");
+        return sb.toString();
     }
 
     /**
@@ -907,15 +941,7 @@ public class LogHttpServer extends NanoHTTPD {
                 , String.format(GeneralVariables.getStringFromResource(R.string.html_successful_callsign)
                         , GeneralVariables.getBandString())));
 
-        result.append("<tr><td class=\"default\" >");
-        for (int i = 0; i < GeneralVariables.QSL_Callsign_list.size(); i++) {
-            result.append(GeneralVariables.QSL_Callsign_list.get(i));
-            result.append(",&nbsp;");
-            if (((i + 1) % 10) == 0) {
-                result.append("</td></tr><tr><td class=\"default\" >\n");
-            }
-        }
-        result.append("</td></tr>\n");
+        result.append(successfulCallsignBlock(GeneralVariables.QSL_Callsign_list));
         HtmlContext.tableEnd(result).append("<br>\n");
 
         HtmlContext.tableBegin(result, false, 0, true).append("\n");
@@ -923,13 +949,7 @@ public class LogHttpServer extends NanoHTTPD {
                 , GeneralVariables.getStringFromResource(R.string.html_tracking_callsign)));
 
         result.append("<tr><td class=\"default\" >");
-        for (int i = 0; i < GeneralVariables.followCallsign.size(); i++) {
-            result.append(GeneralVariables.followCallsign.get(i));
-            result.append(",&nbsp;");
-            if (((i + 1) % 10) == 0) {
-                result.append("</td></tr><tr><td class=\"default\" >\n");
-            }
-        }
+        result.append(followCallsignBlock(GeneralVariables.followCallsign));
         result.append("</td></tr>\n");
         HtmlContext.tableEnd(result).append("\n");
 
@@ -942,6 +962,33 @@ public class LogHttpServer extends NanoHTTPD {
         result.append("</td></tr>\n");
         HtmlContext.tableEnd(result).append("\n");
 
+        return result.toString();
+    }
+
+    /**
+     * Render the followed-callsign block as comma-separated cells, ten per row.
+     *
+     * <p>This runs on a NanoHTTPD worker thread while the decode/DB threads add
+     * to and the UI thread clears {@link GeneralVariables#followCallsign}. It
+     * iterates the list with a for-each so a {@link java.util.concurrent.CopyOnWriteArrayList}
+     * hands back a stable array snapshot — never a {@code size()}/{@code get(i)}
+     * scan, which can race a concurrent clear into an
+     * {@link IndexOutOfBoundsException}.
+     *
+     * @param callsigns the followed callsigns (never mutated here)
+     * @return the inner HTML for the tracking-callsign table cell
+     */
+    static String followCallsignBlock(java.util.List<String> callsigns) {
+        StringBuilder result = new StringBuilder();
+        int index = 0;
+        for (String callsign : callsigns) {
+            result.append(callsign);
+            result.append(",&nbsp;");
+            if (((index + 1) % 10) == 0) {
+                result.append("</td></tr><tr><td class=\"default\" >\n");
+            }
+            index++;
+        }
         return result.toString();
     }
 
@@ -968,7 +1015,12 @@ public class LogHttpServer extends NanoHTTPD {
 
 
         int order = 0;
-        for (Map.Entry<Long, String> entry : Ft8Message.hashList.entrySet()) {
+        // Iterate a snapshot taken under hashList's monitor: this page is served
+        // on a NanoHTTPD worker thread and auto-refreshes every 5 s, while the
+        // decode/DB/TX threads add hashes throughout a cycle. Iterating the live
+        // map here raced those synchronized writers (ConcurrentModificationException,
+        // or a resize corrupting the shared hash table).
+        for (Map.Entry<Long, String> entry : Ft8Message.hashList.snapshotEntries()) {
             HtmlContext.tableRowBegin(result, false, (order / 3) % 2 != 0);
 
             HtmlContext.tableCell(result, entry.getValue());

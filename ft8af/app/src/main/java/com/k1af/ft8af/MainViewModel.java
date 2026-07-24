@@ -56,6 +56,7 @@ import com.k1af.ft8af.callsign.CallsignDatabase;
 import com.k1af.ft8af.callsign.CallsignInfo;
 import com.k1af.ft8af.callsign.OnAfterQueryCallsignLocation;
 import com.k1af.ft8af.bluetooth.ScoPolicy;
+import com.k1af.ft8af.connector.BaseRigConnector;
 import com.k1af.ft8af.connector.BluetoothRigConnector;
 import com.k1af.ft8af.connector.CableConnector;
 import com.k1af.ft8af.connector.CableSerialPort;
@@ -208,8 +209,6 @@ public class MainViewModel extends ViewModel {
 
     private final ExecutorService getQTHThreadPool = Executors.newCachedThreadPool();
     private final ExecutorService sendWaveDataThreadPool = Executors.newCachedThreadPool();
-    private final GetQTHRunnable getQTHRunnable = new GetQTHRunnable(this);
-    private final SendWaveDataRunnable sendWaveDataRunnable = new SendWaveDataRunnable();
 
 
     //variables for displaying shared log generation progress
@@ -237,6 +236,9 @@ public class MainViewModel extends ViewModel {
     public FT8TransmitSignal ft8TransmitSignal;//object for transmitting signals
     // Deep-pass decodes that arrived mid-TX, replayed to the sequencer after key-up
     private final PendingSequencerDecodes pendingSequencerDecodes = new PendingSequencerDecodes();
+    // "We keyed the rig and haven't confirmed it back off" — settled by
+    // retryPendingUnkey() on reconnect and at slot boundaries.
+    private final PttSafetyLatch pttSafetyLatch = new PttSafetyLatch();
     public MeterProtectionController meterProtectionController;//ALC auto-volume + SWR halt
     public SpectrumListener spectrumListener;//object for drawing the spectrum
     public boolean markMessage = true;//whether to mark messages toggle
@@ -578,12 +580,29 @@ public class MainViewModel extends ViewModel {
                     mutable_Decoded_Counter.postValue(0);
                     publishFt8MessageList();
                 }
+                // Backstop for the unkey latch. The reconnect path is the fast
+                // route (~2s), but it only fires when the USB attach broadcast
+                // arrives; this bounds a stuck key at one slot even if the link
+                // recovered without one.
+                if (!ft8TransmitSignal.isTransmitting()) {
+                    retryPendingUnkey();
+                }
                 mutableIsDecoding.postValue(true);
             }
 
             @Override
             public void afterDecode(long utc, float time_sec, int sequential
                     , ArrayList<Ft8Message> decoded, boolean isDeep) {
+                // Replay decodes stashed during the last transmission at the first
+                // delivery with TX idle. This must run before the early returns
+                // below: the delivery that follows key-up is our own TX slot, which
+                // is silent except for the loopback echo and so filters down to zero
+                // kept messages every single time. Draining below those returns meant
+                // the stash never emptied on our own slot at all — it survived into
+                // the next receive slot and landed on top of that slot's fresh, newer
+                // evidence, rewinding the QSO a step.
+                drainStashedSequencerDecodes();
+
                 if (decoded.size() == 0) {
                     // beforeListen set mutableIsDecoding=true at the start of this cycle;
                     // clear it here so a silent slot doesn't leave the spectrum-display
@@ -690,15 +709,12 @@ public class MainViewModel extends ViewModel {
                         ft8TransmitSignal.parseMessageToFunction(messages, true);
                     }
                 }
-                // First delivery with TX idle (typically the own-slot fast pass
-                // ~1s after key-up): replay anything stashed mid-TX.
-                if (!ft8TransmitSignal.isTransmitting() && !pendingSequencerDecodes.isEmpty()) {
-                    ArrayList<Ft8Message> stashed =
-                            pendingSequencerDecodes.drain(UtcTimer.getSystemTime());
-                    if (!stashed.isEmpty()) {
-                        ft8TransmitSignal.parseMessageToFunction(stashed, true);
-                    }
-                }
+                // Fast path for a delivery that began mid-TX and stashed above, but
+                // whose transmission finished before we got here: replay it now
+                // rather than waiting for the next delivery. drain() empties the
+                // stash, so this can never re-apply what the call at the top of
+                // afterDecode already handled.
+                drainStashedSequencerDecodes();
 
                 decodeCycleState.labelsAfterPass(messages, isDeep);
 
@@ -710,12 +726,19 @@ public class MainViewModel extends ViewModel {
                 mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), messages.size()));
 
 
-                getQTHRunnable.messages = messages;
+                // A fresh task per dispatch, bound to *this* pass's messages. slot N's
+                // late/deep pass and slot N+1's early pass enter afterDecode concurrently
+                // (#398, same reason ft8Messages/decodeCycleState are synchronized above):
+                // a single shared Runnable whose `messages` field is overwritten per call
+                // and re-submitted to the pool loses one pass's list — that pass's QTH
+                // lookup (country/grid flags) and Needed-DX alerts are silently dropped,
+                // and two pool workers race on the one non-volatile field.
                 // Guard against the ViewModel-teardown race: a late deep-decode
                 // pass can deliver here after onCleared() shut the pool down,
                 // and a raw execute() on a terminated pool throws
                 // RejectedExecutionException on this decode thread (crash).
-                SafeExecutor.tryExecute(getQTHThreadPool, getQTHRunnable);//query location via thread pool
+                SafeExecutor.tryExecute(getQTHThreadPool,
+                        new GetQTHRunnable(MainViewModel.this, messages));//query location via thread pool
 
                 //this variable also notifies message list changes
                 mutable_Decoded_Counter.postValue(
@@ -798,6 +821,10 @@ public class MainViewModel extends ViewModel {
                     if (baseRig != null) {
                         //if (GeneralVariables.connectMode != ConnectMode.NETWORK) stopSco();
                         if (needControlSco()) stopSco();
+                        // Arm before the write, not after: if setPTT throws or the
+                        // process dies mid-key, we still recorded that the rig may
+                        // be keyed and the next reconnect settles it.
+                        pttSafetyLatch.onKeyed();
                         baseRig.setPTT(true);
                     }
                 }
@@ -810,6 +837,11 @@ public class MainViewModel extends ViewModel {
                         || GeneralVariables.controlMode == ControlMode.DTR) {
                     if (baseRig != null) {
                         baseRig.setPTT(false);
+                        // Only a confirmed write clears the latch. A PTT-off issued
+                        // at a port that has already gone away leaves the rig keyed,
+                        // so keep the debt and let retryPendingUnkey() settle it when
+                        // the link is back.
+                        pttSafetyLatch.onUnkeyAttempted(lastPttWriteReachedRig());
                         //if (GeneralVariables.connectMode != ConnectMode.NETWORK) startSco();
                         if (needControlSco()) startSco();
                     }
@@ -846,10 +878,11 @@ public class MainViewModel extends ViewModel {
                 if (GeneralVariables.connectMode == ConnectMode.NETWORK) {
                     if (baseRig != null) {
                         if (baseRig.isConnected()) {
-                            sendWaveDataRunnable.baseRig = baseRig;
-                            sendWaveDataRunnable.message = msg;
-                            //send network data packets via thread pool
-                            SafeExecutor.tryExecute(sendWaveDataThreadPool, sendWaveDataRunnable);
+                            //send network data packets via thread pool. A fresh task per
+                            //dispatch (not a shared, per-call-mutated instance) so a re-entrant
+                            //transmit/tune can't race the baseRig/message fields on the pool.
+                            SafeExecutor.tryExecute(sendWaveDataThreadPool,
+                                    new SendWaveDataRunnable(baseRig, msg));
                         }
                     }
                 }
@@ -875,9 +908,8 @@ public class MainViewModel extends ViewModel {
                 if (!supportTransmitOverCAT()) {
                     return;
                 }
-                sendWaveDataRunnable.baseRig = baseRig;
-                sendWaveDataRunnable.message = msg;
-                SafeExecutor.tryExecute(sendWaveDataThreadPool, sendWaveDataRunnable);
+                SafeExecutor.tryExecute(sendWaveDataThreadPool,
+                        new SendWaveDataRunnable(baseRig, msg));
             }
 
         }, new OnTransmitSuccess() {//when QSO is successful
@@ -1251,6 +1283,30 @@ public class MainViewModel extends ViewModel {
                 15,                           // T/R period (s)
                 "Default",                    // config name
                 "");                          // tx message
+    }
+
+    /**
+     * Replay decodes stashed during a transmission into the QSO sequencer, if any
+     * are pending and TX is idle.
+     *
+     * <p>Called at the top of every decode delivery and again after the deep-pass
+     * handling. The first call is the one that matters: the delivery right after
+     * key-up is our own transmit slot, whose only decode is the loopback echo of
+     * our own signal, so it filters down to zero kept messages and returns early.
+     * Draining only after that return left the stash to be replayed a full cycle
+     * later, on top of newer evidence — rewinding the QSO
+     * (see {@link PendingSequencerDecodes}).
+     *
+     * <p>{@link PendingSequencerDecodes#drain} empties the stash and drops entries
+     * past its age cap, so repeat calls are cheap and cannot double-apply.
+     */
+    private void drainStashedSequencerDecodes() {
+        if (ft8TransmitSignal == null || ft8TransmitSignal.isTransmitting()) return;
+        if (pendingSequencerDecodes.isEmpty()) return;
+        ArrayList<Ft8Message> stashed = pendingSequencerDecodes.drain(UtcTimer.getSystemTime());
+        if (!stashed.isEmpty()) {
+            ft8TransmitSignal.parseMessageToFunction(stashed, true);
+        }
     }
 
     /** Broadcast a slot's decodes as WSJT-X Decode messages. */
@@ -1637,6 +1693,11 @@ public class MainViewModel extends ViewModel {
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
+                // Settle any unkey owed from before the link dropped BEFORE
+                // retuning. If a brown-out killed the port mid-transmission the
+                // rig is still keyed, and sending frequency/mode to a keyed rig
+                // is exactly what makes it click and mis-set.
+                retryPendingUnkey();
                 setOperationBand();//set carrier frequency
             }
         }, 1000);
@@ -1984,6 +2045,40 @@ public class MainViewModel extends ViewModel {
         }
     }
 
+    /** Whether the rig's connector believes the last PTT write was delivered. */
+    private boolean lastPttWriteReachedRig() {
+        if (baseRig == null) return false;
+        BaseRigConnector connector = baseRig.getConnector();
+        // No connector at all means nothing was written; treat as undelivered so
+        // the latch stays armed rather than silently forgiving a lost unkey.
+        return connector != null && connector.isLastPttWriteOk();
+    }
+
+    /**
+     * Send PTT-off if we still owe the rig one, and clear the debt when it lands.
+     *
+     * <p>Called wherever a CAT link may have just come back: after a cable
+     * reconnect, and at every slot boundary as a backstop. Safe to call at any
+     * time — it is a no-op unless an unkey is actually outstanding, and CAT
+     * PTT-off is idempotent on a rig that is already receiving.
+     *
+     * <p>This is the recovery for the field failure where a USB brown-out killed
+     * the port mid-transmission and the rig stayed keyed for 97 seconds while the
+     * port itself was back within two.
+     *
+     * @return true if an unkey was owed and has now been sent successfully
+     */
+    public boolean retryPendingUnkey() {
+        if (!pttSafetyLatch.needsUnkey()) return false;
+        if (baseRig == null || !baseRig.isConnected()) return false;
+        fileLog("PTT: unkey still owed after link loss — re-sending PTT-off");
+        baseRig.setPTT(false);
+        boolean ok = lastPttWriteReachedRig();
+        pttSafetyLatch.onUnkeyAttempted(ok);
+        fileLog("PTT: unkey retry " + (ok ? "delivered" : "FAILED, still owed"));
+        return ok;
+    }
+
     /**
      * Whether the connected rig has answered at least one CAT probe since the
      * current connection came up. Backs the USB Diagnostics "CAT Response" check:
@@ -2121,14 +2216,22 @@ public class MainViewModel extends ViewModel {
         }
     }
 
-    private static class GetQTHRunnable implements Runnable {
-        MainViewModel mainViewModel;
-        ArrayList<Ft8Message> messages;
+    // Per-dispatch, immutable payload. One instance per afterDecode() call — never shared
+    // and mutated between submissions — so overlapping decode passes (#398) each get their
+    // own message list processed instead of racing/clobbering a single shared field.
+    static final class GetQTHRunnable implements Runnable {
+        private final MainViewModel mainViewModel;
+        private final ArrayList<Ft8Message> messages;
 
-        public GetQTHRunnable(MainViewModel mainViewModel) {
+        GetQTHRunnable(MainViewModel mainViewModel, ArrayList<Ft8Message> messages) {
             this.mainViewModel = mainViewModel;
+            this.messages = messages;
         }
 
+        /** The decode pass this task resolves locations for (bound at construction). */
+        ArrayList<Ft8Message> messages() {
+            return messages;
+        }
 
         @Override
         public void run() {
@@ -2140,10 +2243,22 @@ public class MainViewModel extends ViewModel {
         }
     }
 
-    private static class SendWaveDataRunnable implements Runnable {
-        BaseRig baseRig;
-        //float[] data;
-        Ft8Message message;
+    // Per-dispatch, immutable payload (see GetQTHRunnable): a fresh instance per transmit so
+    // a re-entrant TX/tune can't clobber baseRig/message on a worker still playing the prior
+    // waveform (the same shared-Runnable hazard fixed in IcomAudioUdp).
+    static final class SendWaveDataRunnable implements Runnable {
+        private final BaseRig baseRig;
+        private final Ft8Message message;
+
+        SendWaveDataRunnable(BaseRig baseRig, Ft8Message message) {
+            this.baseRig = baseRig;
+            this.message = message;
+        }
+
+        /** The message whose waveform this task sends (bound at construction). */
+        Ft8Message message() {
+            return message;
+        }
 
         @Override
         public void run() {
