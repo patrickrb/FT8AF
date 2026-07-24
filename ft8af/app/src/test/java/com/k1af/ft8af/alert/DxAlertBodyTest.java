@@ -7,8 +7,9 @@ import com.k1af.ft8af.Ft8Message;
 import org.junit.Test;
 
 /**
- * Pure-JVM tests for {@link DxAlertNotifier#defaultBody}/{@link DxAlertNotifier#cqReplyBody}
- * notification-body formatting. The interesting case is an unknown SNR: a valid decode can
+ * Pure-JVM tests for the {@link DxAlertNotifier#defaultBody} and
+ * {@link DxAlertNotifier#cqReplyBody} notification-body formatting. The interesting
+ * case is an unknown SNR: a valid decode can
  * reach the alert path with {@code snr == Ft8Message.SNR_UNKNOWN} (the decoder does not always
  * set it — FT8SignalListener logs "SNR not set by decoder" and still lists the message), and the
  * DX/watchlist/New-DXCC/New-State body must not render the {@link Integer#MIN_VALUE} sentinel.
@@ -45,7 +46,7 @@ public class DxAlertBodyTest {
     }
 
     @Test
-    public void defaultBody_gridOnlyWhenSnrUnknownAndGridMissing() {
+    public void defaultBody_callsignOnlyWhenSnrUnknownAndGridMissing() {
         assertThat(DxAlertNotifier.defaultBody(msg("JA1ABC", null, Ft8Message.SNR_UNKNOWN)))
                 .isEqualTo("JA1ABC");
     }
