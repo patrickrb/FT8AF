@@ -202,6 +202,7 @@
     <string name="qso_stat_signal">Signal</string>
     <string name="qso_stat_distance">Distance</string>
     <string name="qso_stat_azimuth">Azimuth</string>
+    <string name="qso_stat_azimuth_long_path">LP %1$s</string>
     <string name="qso_stat_band">Band</string>
     <string name="qso_sequence_header">QSO SEQUENCE</string>
     <string name="qso_step_send_call">Send call</string>
@@ -596,6 +597,8 @@
     <string name="settings_worked_same_mode_desc">Only count QSOs made on the current mode</string>
     <string name="settings_distance_unit">Distance in Miles</string>
     <string name="settings_distance_unit_desc">Show distances in miles instead of kilometers</string>
+    <string name="settings_show_beam_heading">Show beam heading</string>
+    <string name="settings_show_beam_heading_desc">Add the great-circle bearing to each decode row, for pointing a directional antenna</string>
 
     <!-- ===== Settings: callsign blocklist ===== -->
     <string name="settings_exact_callsigns">Exact Callsigns</string>

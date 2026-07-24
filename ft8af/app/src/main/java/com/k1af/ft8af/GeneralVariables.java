@@ -58,6 +58,12 @@ public class GeneralVariables {
 
     public static boolean distanceInMiles = true;//Display distances in miles (true) or kilometers (false)
 
+    // Show the great-circle beam heading (bearing to the station) next to the
+    // distance on each decode row, for operators pointing a directional antenna.
+    // Off by default — only useful with a beam, and it adds a column most ops
+    // (verticals/wires) don't need.
+    public static boolean showBeamHeading = false;
+
     // Deep decode (subtract-and-redecode + extra LDPC iterations) is on by default so the app
     // pulls weak signals out from under strong ones the way WSJT-X does at its default depth.
     // A persisted "deepMode" config row still overrides this; only installs that never touched
