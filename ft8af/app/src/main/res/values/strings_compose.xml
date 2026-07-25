@@ -115,6 +115,33 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_cq_options">CQ message options (modifier, free text, Field Day)</string>
+    <string name="tx_hunt_options">Hunt options (priority, smart filters)</string>
+
+    <!-- ===== Hunt options sheet ===== -->
+    <string name="hunt_priority_title">HUNT PRIORITY</string>
+    <string name="hunt_priority_latest">Latest</string>
+    <string name="hunt_priority_strongest">Strongest</string>
+    <string name="hunt_priority_weakest">Weakest</string>
+    <string name="hunt_priority_farthest">Farthest</string>
+    <string name="hunt_priority_pota">POTA/SOTA</string>
+    <string name="hunt_priority_new_dxcc">New DXCC</string>
+    <string name="hunt_priority_new_grid">New grid</string>
+    <string name="hunt_priority_desc_latest">Answer the most recently decoded CQ (classic behavior)</string>
+    <string name="hunt_priority_desc_strongest">Answer the loudest CQ first — best odds of completing</string>
+    <string name="hunt_priority_desc_weakest">Answer the weakest CQ first — QRP and challenge hunting</string>
+    <string name="hunt_priority_desc_farthest">Answer the most distant CQ first — chase DX</string>
+    <string name="hunt_priority_desc_pota">Answer park/summit activators first — parks you haven\'t hunted rank highest</string>
+    <string name="hunt_priority_desc_new_dxcc">Answer CQs from DXCC entities you haven\'t worked first</string>
+    <string name="hunt_priority_desc_new_grid">Answer CQs from grid squares you haven\'t worked first</string>
+    <string name="hunt_filters_title">SMART FILTERS</string>
+    <string name="hunt_avoid_pileups">Avoid pileups</string>
+    <string name="hunt_avoid_pileups_desc">Prefer CQs no one else is answering this cycle</string>
+    <string name="hunt_min_snr">Minimum signal</string>
+    <string name="hunt_min_snr_desc">Skip CQs weaker than this — fewer QSOs that fizzle out</string>
+    <string name="hunt_min_snr_off">Off</string>
+    <string name="hunt_footer_note">Hunt always skips stations you\'ve already worked and your excluded prefixes.</string>
+    <string name="hunt_start">Start Hunt</string>
+    <string name="hunt_done">Done</string>
 
     <!-- ===== CQ options sheet (free text / saved custom CQ) ===== -->
     <string name="cq_directed_too_long">CQ + text + call doesn\'t fit in one FT8 message (max 13 chars, limited character set)</string>

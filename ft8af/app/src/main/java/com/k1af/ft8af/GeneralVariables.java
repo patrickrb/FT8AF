@@ -493,6 +493,12 @@ public class GeneralVariables {
     // volatile: written from the Compose UI thread (DecodeScreen) and read from the
     // transmit/decode processing thread (FT8TransmitSignal), like zoneMapReady above.
     public static volatile boolean huntPotaOnly = false;//Mirror of the "CQ POTA" decode filter: Hunt only calls POTA CQs (issue #333)
+    // Hunt options (sheet on the HUNT button). volatile: written from the Compose UI
+    // thread, read from the transmit/decode processing thread (like huntPotaOnly).
+    public static volatile String huntPriority = "LATEST";//HuntPriority enum name: which CQ Hunt answers first
+    public static volatile boolean huntAvoidPileups = false;//Hunt: prefer CQs no one else is answering
+    public static final int HUNT_MIN_SNR_OFF = -999;//sentinel: min-SNR floor disabled
+    public static volatile int huntMinSnr = HUNT_MIN_SNR_OFF;//Hunt: skip CQs below this SNR (dB)
     public static boolean autoCallFollow = true;//Auto-call followed callsigns
     public static boolean autoUpdateGridFromGPS = false;//Use device GPS to keep Maidenhead grid current
     public static boolean disciplineClockFromGPS = false;//Discipline the app clock (UtcTimer.delay) from GPS satellite time (issue #373). Off by default — consensual.

@@ -119,6 +119,7 @@ fun TxStrip(
     cqModifier: String = "",
     isFreeTextMode: Boolean = false,
     fieldDayEnabled: Boolean = false,
+    huntPriorityTag: String? = null,
     isTuning: Boolean = false,
     tuneRemainingSec: Int = 0,
     onToggleTune: () -> Unit = {},
@@ -127,6 +128,7 @@ fun TxStrip(
     onCallCQ: () -> Unit,
     onStop: () -> Unit,
     onLongPressCQ: () -> Unit = {},
+    onLongPressHunt: () -> Unit = {},
     onToggleSlot: () -> Unit,
     onToggleHunt: () -> Unit,
     onCycleMode: () -> Unit,
@@ -297,9 +299,13 @@ fun TxStrip(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // HUNT — stacked icon + label. Locked off during an active CQ/QSO.
+            // The notch (and a long-press) opens the Hunt options sheet; the
+            // subtitle tag mirrors the armed non-default priority (like the CQ
+            // button's FREE/FD subtitle).
             StackedActionButton(
                 modifier = Modifier.weight(1f),
                 label = stringResource(R.string.tx_hunt),
+                subtitle = huntPriorityTag,
                 background = when {
                     actions.huntDisabled -> BgSurface3.copy(alpha = 0.4f)
                     actions.huntActive -> Signal.copy(alpha = 0.18f)
@@ -313,6 +319,8 @@ fun TxStrip(
                 borderColor = if (actions.huntActive) Signal.copy(alpha = 0.5f) else Border,
                 enabled = !actions.huntDisabled,
                 onClick = onToggleHunt,
+                onLongClick = onLongPressHunt,
+                optionsContentDescription = stringResource(R.string.tx_hunt_options),
             ) { color -> FT8AFIcons.Target(size = 18.dp, color = color, strokeWidth = 1.8f) }
 
             // CQ / STOP — the primary action. Filled amber to call CQ, red to stop.
@@ -469,6 +477,7 @@ private fun TxChip(
 }
 
 /** A large secondary button with the icon stacked above the label (HUNT, TX slot). */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun StackedActionButton(
     label: String,
@@ -478,30 +487,75 @@ private fun StackedActionButton(
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    onLongClick: (() -> Unit)? = null,
+    optionsContentDescription: String = "",
     icon: @Composable (Color) -> Unit,
 ) {
-    Column(
+    Row(
         modifier = modifier
             .height(54.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(background)
             .border(1.dp, borderColor, RoundedCornerShape(12.dp))
-            .clickable(enabled = enabled) { onClick() }
-            .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
+            .combinedClickable(
+                enabled = enabled,
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
+            .padding(horizontal = 4.dp, vertical = if (subtitle != null) 4.dp else 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        icon(contentColor)
-        Text(
-            text = label,
-            color = contentColor,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = GeistMonoFamily,
-            letterSpacing = 0.02.sp,
-            maxLines = 1,
-            softWrap = false,
-        )
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(
+                if (subtitle != null) 1.dp else 3.dp, Alignment.CenterVertically,
+            ),
+        ) {
+            icon(contentColor)
+            Text(
+                text = label,
+                color = contentColor,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GeistMonoFamily,
+                letterSpacing = 0.02.sp,
+                maxLines = 1,
+                softWrap = false,
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    color = contentColor.copy(alpha = 0.6f),
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = GeistMonoFamily,
+                    letterSpacing = 0.02.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+        }
+        if (onLongClick != null) {
+            // Same visible "more options" affordance as the CQ button — a plain
+            // tap opens the options sheet (discoverable), long-press on the whole
+            // button is the shortcut.
+            Box(
+                modifier = Modifier
+                    .size(width = 22.dp, height = 38.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(contentColor.copy(alpha = 0.16f))
+                    .clickable(enabled = enabled, onClick = onLongClick)
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = optionsContentDescription
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                FT8AFIcons.ChevronDown(size = 14.dp, color = contentColor, strokeWidth = 2.2f)
+            }
+        }
     }
 }
 
