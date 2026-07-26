@@ -23,9 +23,11 @@ import org.robolectric.RobolectricTestRunner;
  * requires), not the UTF-16 {@link String#length()} char count. The two differ for any non-ASCII
  * content (an accented comment, an international POTA park name): declaring the shorter char count
  * makes a byte-correct consumer (LoTW/QRZ/Cloudlog) read fewer bytes than were written, truncating
- * the field and mis-aligning the record boundary. The canonical writer {@link
- * com.k1af.ft8af.log.AdifRecord} already uses {@code AdifFormat.utf8Length}; this covers the
- * un-migrated {@code downQSLTable} twin used by the built-in web logbook download.
+ * the field and mis-aligning the record boundary.
+ *
+ * <p>{@code downQSLTable} — the built-in web logbook's download — now builds its records through
+ * the canonical {@link com.k1af.ft8af.log.AdifRecord} rather than its own inline copy, so these
+ * cases are covered twice over. They stay here as the guard on the cursor-to-record mapping.
  */
 @RunWith(RobolectricTestRunner.class)
 public class DatabaseOprAdifLengthTest {
@@ -103,10 +105,39 @@ public class DatabaseOprAdifLengthTest {
     }
 
     @Test
-    public void nullComment_doesNotThrow_emitsEmptyField() {
+    public void nullComment_doesNotThrow_andIsOmittedEntirely() {
         // Previously comment.length() NPE'd on a NULL comment, aborting the whole download.
+        // It then emitted "<comment:0> " instead; a zero-length field is not portable, so an
+        // absent comment is now simply absent.
         String adif = export(null, null, null);
-        assertThat(adif).contains("<comment:0> <eor>");
+        assertThat(adif).doesNotContain("comment");
+        assertThat(adif).endsWith("<eor>\n");
+    }
+
+    @Test
+    public void emptyOptionalColumns_produceNoZeroLengthFields() {
+        // Regression: a QSO logged without a grid (the other station never sent one) used to
+        // export "<gridsquare:0> ", which strict ADIF importers reject.
+        MatrixCursor cursor = new MatrixCursor(COLUMNS);
+        cursor.addRow(new Object[]{
+                "W1AW", 0, 0, "", "FT8", "", "",
+                "20260101", "1200", "", "", "20m", "14074000",
+                "", "", "",
+                "", "", "", "", ""
+        });
+        String adif = opr.downQSLTable(cursor, false);
+
+        assertThat(adif).doesNotContain(":0>");
+        assertThat(adif).contains("<call:4>W1AW ");
+        assertThat(adif).endsWith("<eor>\n");
+    }
+
+    @Test
+    public void webLogbookExport_usesTheConformantManualQslFieldName() {
+        // The web logbook download and the file export must agree; both go through AdifRecord.
+        String adif = export("QSO by FT8AF", null, null);
+        assertThat(adif).contains("<APP_FT8AF_QSL_MANUAL:1>N ");
+        assertThat(adif).doesNotContain("<QSL_MANUAL:");
     }
 
     @Test

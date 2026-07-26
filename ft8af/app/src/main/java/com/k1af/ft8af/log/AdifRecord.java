@@ -22,16 +22,28 @@ import java.util.Locale;
  *       value, not UTF-16 chars, so non-ASCII content (comments, park names) stays aligned.</li>
  * </ul>
  *
- * <p>Fields left {@code null} are omitted entirely; a field set to {@code ""} is still
- * emitted (as a zero-length field) to match the historical export behaviour. The POTA
- * fields ({@code MY_SIG}, {@code MY_SIG_INFO}, {@code SIG}, {@code SIG_INFO}) are the
- * exception: they are emitted only when non-null <em>and</em> non-empty so ordinary
- * non-POTA contacts stay clean.
+ * <p>Fields that are {@code null} <em>or</em> empty are omitted entirely. Emitting a
+ * zero-length field ({@code <gridsquare:0> }) instead — as this class used to for empty
+ * strings — is not portable: several ADIF importers treat a length-0 field as malformed
+ * and reject the whole record rather than reading it as "absent". An absent optional
+ * field means the same thing to every parser, so that is what we write.
  */
 public final class AdifRecord {
 
     /** Header (with {@code <eoh>}) written once at the top of a fresh ADIF file. */
     public static final String HEADER = "FT8AF ADIF Export<eoh>\n";
+
+    /**
+     * Application-defined field carrying the "manually confirmed" flag. ADIF has no
+     * {@code QSL_MANUAL} field — that bare name (which FT8AF wrote until this change)
+     * is non-conformant. {@code APP_<PROGRAMID>_<FIELD>} is the spec's escape hatch for
+     * program-specific data. {@link QSLRecord} still reads the legacy bare name so ADIF
+     * files exported by older builds keep round-tripping.
+     */
+    public static final String APP_QSL_MANUAL = "APP_FT8AF_QSL_MANUAL";
+
+    /** Legacy, non-conformant name for {@link #APP_QSL_MANUAL}. Read-only: never emitted. */
+    public static final String LEGACY_QSL_MANUAL = "QSL_MANUAL";
 
     private String call;
     private boolean swl;
@@ -58,7 +70,7 @@ public final class AdifRecord {
 
     public AdifRecord call(String v) { this.call = v; return this; }
 
-    /** SWL record: emits {@code <swl:1>Y } instead of the QSL_RCVD/QSL_MANUAL pair. */
+    /** SWL record: emits {@code <swl:1>Y } instead of the QSL_RCVD/APP_FT8AF_QSL_MANUAL pair. */
     public AdifRecord swl(boolean v) { this.swl = v; return this; }
 
     public AdifRecord lotwQsl(boolean v) { this.lotwQsl = v; return this; }
@@ -112,10 +124,18 @@ public final class AdifRecord {
             sb.append("<swl:1>Y ");
         } else {
             sb.append(lotwQsl ? "<QSL_RCVD:1>Y " : "<QSL_RCVD:1>N ");
-            sb.append(manualQsl ? "<QSL_MANUAL:1>Y " : "<QSL_MANUAL:1>N ");
+            // QSL_MANUAL is not an ADIF field. The spec reserves the APP_<PROGRAMID>_
+            // prefix for application-defined fields, so a strict importer can skip ours
+            // instead of erroring on an unrecognised bare name. QSL_RCVD above *is*
+            // standard and keeps its name.
+            sb.append(manualQsl
+                    ? "<" + APP_QSL_MANUAL + ":1>Y "
+                    : "<" + APP_QSL_MANUAL + ":1>N ");
         }
-        appendIfNotNull(sb, "gridsquare", gridsquare);
-        if (mode != null) {
+        appendIfNotEmpty(sb, "gridsquare", gridsquare);
+        // Empty as well as null: mode has its own branch (for the MFSK submode split) and
+        // so bypasses appendIfNotEmpty, which is exactly how it kept emitting <mode:0>.
+        if (mode != null && !mode.isEmpty()) {
             // FT4/FT2 are ADIF submodes of MFSK, not standalone modes — a bare <mode>FT2 is
             // rejected as invalid by pota.app and other ADIF consumers.
             String submode = AdifFormat.mfskSubmode(mode);
@@ -126,24 +146,24 @@ public final class AdifRecord {
                 appendField(sb, "mode", mode);
             }
         }
-        appendIfNotNull(sb, "rst_sent", rstSent);
-        appendIfNotNull(sb, "rst_rcvd", rstRcvd);
-        appendIfNotNull(sb, "qso_date", qsoDate);
-        appendIfNotNull(sb, "time_on", timeOn);
-        appendIfNotNull(sb, "qso_date_off", qsoDateOff);
-        appendIfNotNull(sb, "time_off", timeOff);
-        appendIfNotNull(sb, "band", band);
-        appendIfNotNull(sb, "freq", freq);
-        appendIfNotNull(sb, "station_callsign", stationCallsign);
-        appendIfNotNull(sb, "my_gridsquare", myGridsquare);
-        appendIfNotNull(sb, "operator", operator);
+        appendIfNotEmpty(sb, "rst_sent", rstSent);
+        appendIfNotEmpty(sb, "rst_rcvd", rstRcvd);
+        appendIfNotEmpty(sb, "qso_date", qsoDate);
+        appendIfNotEmpty(sb, "time_on", timeOn);
+        appendIfNotEmpty(sb, "qso_date_off", qsoDateOff);
+        appendIfNotEmpty(sb, "time_off", timeOff);
+        appendIfNotEmpty(sb, "band", band);
+        appendIfNotEmpty(sb, "freq", freq);
+        appendIfNotEmpty(sb, "station_callsign", stationCallsign);
+        appendIfNotEmpty(sb, "my_gridsquare", myGridsquare);
+        appendIfNotEmpty(sb, "operator", operator);
         // POTA fields. Only emit when populated so non-POTA QSOs stay clean.
         appendIfNotEmpty(sb, "MY_SIG", mySig);
         appendIfNotEmpty(sb, "MY_SIG_INFO", mySigInfo);
         appendIfNotEmpty(sb, "SIG", sig);
         appendIfNotEmpty(sb, "SIG_INFO", sigInfo);
-        String c = comment == null ? "" : comment;
-        sb.append(String.format(Locale.US, "<comment:%d>%s <eor>\n", utf8Length(c), c));
+        appendIfNotEmpty(sb, "comment", comment);
+        sb.append("<eor>\n");
         return sb.toString();
     }
 
@@ -152,13 +172,11 @@ public final class AdifRecord {
         return build().getBytes(StandardCharsets.UTF_8);
     }
 
-    /** Emit a field when the value is non-null (an empty value still emits a zero-length field). */
-    private static void appendIfNotNull(StringBuilder sb, String name, String value) {
-        if (value == null) return;
-        appendField(sb, name, value);
-    }
-
-    /** Emit a field only when the value is non-null and non-empty (POTA fields). */
+    /**
+     * Emit a field only when the value is non-null and non-empty. Omitting an empty
+     * optional field is the portable way to say "no value"; a zero-length field is not
+     * (see the class javadoc).
+     */
     private static void appendIfNotEmpty(StringBuilder sb, String name, String value) {
         if (value == null || value.isEmpty()) return;
         appendField(sb, name, value);

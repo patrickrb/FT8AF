@@ -20,7 +20,7 @@ public class AdifRecordTest {
 
     /** Matches an ADIF field: name, declared length, then value up to the trailing space. */
     private static final Pattern FIELD =
-            Pattern.compile("<([A-Za-z_]+):(\\d+)>([^<]*?) (?=<|$)");
+            Pattern.compile("<([A-Za-z0-9_]+):(\\d+)>([^<]*?) (?=<|$)");
 
     @Test
     public void oneQso_producesExactlyOneEorRecord() {
@@ -45,8 +45,18 @@ public class AdifRecordTest {
     public void nonSwl_emitsQslRcvdAndManualPair() {
         String out = new AdifRecord().call("W1AW").lotwQsl(true).manualQsl(false).build();
         assertThat(out).contains("<QSL_RCVD:1>Y ");
-        assertThat(out).contains("<QSL_MANUAL:1>N ");
+        assertThat(out).contains("<APP_FT8AF_QSL_MANUAL:1>N ");
         assertThat(out).doesNotContain("<swl:");
+    }
+
+    @Test
+    public void manualQsl_usesAppPrefixNotTheBareNonStandardName() {
+        // ADIF has no QSL_MANUAL field. Emitting the bare name makes a strict importer
+        // reject or warn on every record; APP_<PROGRAMID>_<FIELD> is the spec's mechanism
+        // for program-specific data and is safely skippable by consumers that don't know it.
+        String out = new AdifRecord().call("W1AW").manualQsl(true).build();
+        assertThat(out).contains("<APP_FT8AF_QSL_MANUAL:1>Y ");
+        assertThat(out).doesNotContain("<QSL_MANUAL:");
     }
 
     @Test
@@ -54,7 +64,7 @@ public class AdifRecordTest {
         String out = new AdifRecord().call("W1AW").swl(true).lotwQsl(true).build();
         assertThat(out).contains("<swl:1>Y ");
         assertThat(out).doesNotContain("<QSL_RCVD:");
-        assertThat(out).doesNotContain("<QSL_MANUAL:");
+        assertThat(out).doesNotContain("QSL_MANUAL");
     }
 
     @Test
@@ -100,19 +110,44 @@ public class AdifRecordTest {
     }
 
     @Test
-    public void nullFieldsAreOmittedButEmptyStringsAreEmitted() {
-        // gridsquare == null -> omitted entirely.
+    public void nullAndEmptyFieldsAreBothOmitted() {
+        // Regression: an empty grid used to emit "<gridsquare:0> ". Several ADIF importers
+        // treat a length-0 field as malformed and reject the whole record, so an absent
+        // optional field is the only portable way to say "no value".
         assertThat(new AdifRecord().call("W1AW").gridsquare(null).build())
                 .doesNotContain("gridsquare");
-        // gridsquare == "" -> still emitted as a zero-length field (historical behaviour).
         assertThat(new AdifRecord().call("W1AW").gridsquare("").build())
-                .contains("<gridsquare:0> ");
+                .doesNotContain("gridsquare");
     }
 
     @Test
-    public void comment_isAlwaysEmittedEvenWhenNull() {
+    public void noFieldIsEverEmittedWithZeroLength() {
+        // A record where every optional field is empty must still be a valid record —
+        // just a sparse one — with no "<name:0>" anywhere in it.
+        String out = new AdifRecord()
+                .call("W1AW")
+                .gridsquare("").mode("").rstSent("").rstRcvd("")
+                .qsoDate("").timeOn("").qsoDateOff("").timeOff("")
+                .band("").freq("").stationCallsign("").myGridsquare("")
+                .operator("").mySig("").mySigInfo("").sig("").sigInfo("")
+                .comment("")
+                .build();
+
+        assertThat(out).doesNotContain(":0>");
+        assertThat(out).contains("<call:4>W1AW ");
+        assertThat(out).endsWith("<eor>\n");
+    }
+
+    @Test
+    public void comment_isOmittedWhenNullOrEmptyButRecordStillTerminates() {
+        // The <eor> used to be glued onto the comment field, so a commentless QSO got a
+        // zero-length comment purely to carry the terminator. They are separate now.
         assertThat(new AdifRecord().call("W1AW").comment(null).build())
-                .contains("<comment:0> <eor>\n");
+                .isEqualTo("<call:4>W1AW <QSL_RCVD:1>N <APP_FT8AF_QSL_MANUAL:1>N <eor>\n");
+        assertThat(new AdifRecord().call("W1AW").comment("").build())
+                .doesNotContain("comment");
+        assertThat(new AdifRecord().call("W1AW").comment("hi").build())
+                .contains("<comment:2>hi <eor>\n");
     }
 
     @Test
