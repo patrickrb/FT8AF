@@ -264,4 +264,19 @@ public class AdifFormatTest {
         assertThat(AdifFormat.parseLocation("garbage")).isNull();
         assertThat(AdifFormat.parseLocation("X040 51.500")).isNull();
     }
+
+    @Test
+    public void parseLocation_rejectsOutOfRangeDegreesAndMinutes() {
+        // Latitude degrees > 90, longitude degrees > 180, negative degrees, and minutes
+        // outside [0, 60) are all malformed per the ADIF Location type and must not
+        // silently produce a value.
+        assertThat(AdifFormat.parseLocation("N091 00.000")).isNull();
+        assertThat(AdifFormat.parseLocation("E181 00.000")).isNull();
+        assertThat(AdifFormat.parseLocation("N-05 00.000")).isNull();
+        assertThat(AdifFormat.parseLocation("N040 60.000")).isNull();
+        assertThat(AdifFormat.parseLocation("N040 -1.000")).isNull();
+        // In range: accepted.
+        assertThat(AdifFormat.parseLocation("N090 00.000")).isWithin(1e-9).of(90.0);
+        assertThat(AdifFormat.parseLocation("W180 00.000")).isWithin(1e-9).of(-180.0);
+    }
 }

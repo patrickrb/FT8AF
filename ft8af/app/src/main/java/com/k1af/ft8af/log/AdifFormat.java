@@ -159,14 +159,17 @@ public final class AdifFormat {
         }
         char dir = Character.toUpperCase(v.charAt(0));
         int sign;
+        int maxDegrees;
         switch (dir) {
             case 'N':
-            case 'E':
-                sign = 1;
-                break;
             case 'S':
+                sign = dir == 'N' ? 1 : -1;
+                maxDegrees = 90;
+                break;
+            case 'E':
             case 'W':
-                sign = -1;
+                sign = dir == 'E' ? 1 : -1;
+                maxDegrees = 180;
                 break;
             default:
                 return null;
@@ -179,6 +182,12 @@ public final class AdifFormat {
         try {
             int degrees = Integer.parseInt(rest.substring(0, space));
             double minutes = Double.parseDouble(rest.substring(space + 1).trim());
+            // Reject malformed ADIF Location values rather than silently importing them:
+            // negative/out-of-range degrees (>90 for lat, >180 for lon) or minutes outside
+            // [0, 60).
+            if (degrees < 0 || degrees > maxDegrees || minutes < 0 || minutes >= 60) {
+                return null;
+            }
             return sign * (degrees + minutes / 60.0);
         } catch (NumberFormatException e) {
             return null;
