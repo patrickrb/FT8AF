@@ -22,8 +22,10 @@ import java.util.concurrent.locks.ReentrantLock;
  * full-slot pass for DEPTH (high-DT recovery, and — with deep decode on — the
  * subtract-and-redecode loop, which runs here instead of on the truncated early buffer;
  * see {@link #deepLoopRunsOnEarlyBuffer}). The full-slot pass is bounded by
- * {@link #latePassDeadlineMillis} so it finishes before the next slot's early decode
- * starts rather than colliding with it.
+ * {@link #latePassDeadlineMillis} so it normally finishes before the next slot's early
+ * decode starts rather than colliding with it, with the {@link AnalysisGate} contention
+ * abort as the backstop when it can't (per-candidate overrun, or a mid-slot timer
+ * rebuild moving the next boundary).
  *
  * <p>This class holds the parts of that feature that are decisions/state rather than
  * native-decoder plumbing, so they stay unit-testable: the should-run predicate, the
@@ -57,7 +59,12 @@ public final class LateDecode {
     /**
      * Absolute wall-clock instant the late full-slot pass must finish by: when the NEXT
      * slot's early decode thread starts (next boundary + early window), minus
-     * {@link #LATE_PASS_SAFETY_MS}. Before this bound existed the late pass was only
+     * {@link #LATE_PASS_SAFETY_MS}. Computed from the slot's RECORD-TIME mode snapshot,
+     * so it assumes the next slot keeps the same cycle timing; if the operator switches
+     * modes mid-slot, {@code FT8SignalListener.rebuildTimer(...)} moves the actual next
+     * boundary and this bound no longer tracks it — in that (rare) case the
+     * {@link AnalysisGate} contention abort is the backstop, exactly as it is for a
+     * per-candidate overrun. Before this bound existed the late pass was only
      * budget-bounded; with deep decode on, the early buffer's subtraction loop pushed its
      * start right up against the next early decode, so its first gate contention aborted
      * the whole candidate scan almost every slot — the two decode passes fought instead
