@@ -1480,6 +1480,12 @@ public class FT8TransmitSignal {
         // just abandoned by pressing CQ), which made auto-answer "randomly" lock
         // onto an inactive station and call it forever. Live decodes only, matching
         // the "calling me" loops.
+        //
+        // All qualifying CQs are collected (most-recent-first) and the Hunt options
+        // (priority, pileup avoidance, min-SNR floor) decide which one to answer via
+        // HuntTargetSelector — LATEST with no filters reproduces the historical
+        // first-qualifying-match behavior.
+        ArrayList<Ft8Message> eligible = new ArrayList<>();
         for (int i = messages.size() - 1; i >= 0; i--) {
             Ft8Message msg = messages.get(i);
             if (isExcludeMessage(msg)) continue;// check if this is an excluded message
@@ -1500,9 +1506,17 @@ public class FT8TransmitSignal {
                     || GeneralVariables.directionalCQIsForMe(msg.callsignTo))
                     && !GeneralVariables.checkQSLCallsign(msg.getCallsignFrom())// not previously contacted successfully
                     && !GeneralVariables.checkIsMyCallsign(msg.callsignFrom)) {// not myself
+                eligible.add(msg);
+            }
+        }
 
+        if (!eligible.isEmpty()) {
+            Ft8Message msg = radio.ks3ckc.ft8af.hunt.HuntTargetSelector.pick(eligible, messages);
+            if (msg != null) {
                 GeneralVariables.fileLog("QSO: auto-follow CQ from " + msg.getCallsignFrom()
-                        + " (Hunt=" + GeneralVariables.autoFollowCQ + ")");
+                        + " (Hunt=" + GeneralVariables.autoFollowCQ
+                        + ", priority=" + GeneralVariables.huntPriority
+                        + ", candidates=" + eligible.size() + ")");
                 resetTargetReport();
                 setTransmit(new TransmitCallsign(msg.i3, msg.n3, msg.getCallsignFrom(), msg.freq_hz
                         , msg.getSequence(), msg.hasSnr() ? msg.snr : 0), 1, msg.extraInfo);

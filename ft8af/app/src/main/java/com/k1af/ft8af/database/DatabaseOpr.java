@@ -2716,6 +2716,16 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("autoFollowCQ")) {//Auto-follow CQ
                     GeneralVariables.autoFollowCQ = result.equals("1");
                 }
+                if (name.equalsIgnoreCase("huntPriority")) {//Hunt target priority (HuntPriority enum name)
+                    GeneralVariables.huntPriority = result;
+                }
+                if (name.equalsIgnoreCase("huntAvoidPileups")) {//Hunt: prefer CQs no one else is answering
+                    GeneralVariables.huntAvoidPileups = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("huntMinSnr")) {//Hunt: min-SNR floor (dB), HUNT_MIN_SNR_OFF = off
+                    GeneralVariables.huntMinSnr =
+                            parseConfigInt(result, GeneralVariables.HUNT_MIN_SNR_OFF);
+                }
                 if (name.equalsIgnoreCase("huntCallsCQ")) {//Hunt+CQ hybrid
                     GeneralVariables.huntCallsCQ = result.equals("1");
                 }
