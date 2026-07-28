@@ -145,6 +145,29 @@ class HuntTargetSelectorTest {
         assertThat(select(listOf(newer, older), HuntPriority.STRONGEST)).isEqualTo(newer)
     }
 
+    @Test
+    fun tieBreak_usesIndexNotListPosition() {
+        // The tie-break is the explicit index comparator, not sort stability: even if
+        // the pool arrives out of freshness order, the smaller index still wins.
+        val older = candidate(3, snr = -3)
+        val newer = candidate(1, snr = -3)
+        assertThat(select(listOf(older, newer), HuntPriority.STRONGEST)).isEqualTo(newer)
+    }
+
+    @Test
+    fun farthest_tieGoesToFreshestDecode() {
+        val newer = candidate(0, distanceKm = 5000.0)
+        val older = candidate(1, distanceKm = 5000.0)
+        assertThat(select(listOf(newer, older), HuntPriority.FARTHEST)).isEqualTo(newer)
+    }
+
+    @Test
+    fun potaFirst_fullTieGoesToFreshestDecode() {
+        val newer = candidate(0, snr = -8, isActivator = true)
+        val older = candidate(1, snr = -8, isActivator = true)
+        assertThat(select(listOf(newer, older), HuntPriority.POTA_FIRST)).isEqualTo(newer)
+    }
+
     // ---- FARTHEST ----
 
     @Test

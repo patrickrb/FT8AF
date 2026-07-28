@@ -76,8 +76,9 @@ internal fun activatorRank(c: HuntCandidate): Int = when {
  * The floor is a hard filter (a too-weak CQ is never answered — better to wait a
  * cycle than start a QSO that fizzles). Pileup avoidance is a soft preference:
  * candidates nobody else is answering win, but when every caller has a pileup we
- * still pick one rather than sit silent. Ties always go to the freshest decode
- * (the input is most-recent-first and the sort is stable).
+ * still pick one rather than sit silent. Ties always go to the freshest decode:
+ * the input is most-recent-first and every comparator ends with an explicit
+ * [HuntCandidate.index] tie-breaker, so the winner never depends on sort stability.
  */
 internal fun selectHuntCandidate(
     candidates: List<HuntCandidate>,
@@ -108,7 +109,10 @@ internal fun selectHuntCandidate(
             compareByDescending<HuntCandidate> { it.isNewGrid }
                 .thenByDescending { it.snr ?: Int.MIN_VALUE }
     }
-    return pool.sortedWith(comparator).first()
+    // index is unique, so the composed comparator is a total order: the freshest
+    // decode wins ties by contract, not by sort stability. minWithOrNull also skips
+    // sorting/allocating a ranked copy of the pool every decode cycle.
+    return pool.minWithOrNull(comparator.thenBy { it.index })
 }
 
 /**
