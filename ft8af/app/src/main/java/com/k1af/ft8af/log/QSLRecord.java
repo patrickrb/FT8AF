@@ -188,8 +188,17 @@ public class QSLRecord {
         if (map.containsKey("LOTW_QSL_RCVD")) {//QSO confirmation; present in Log32.
             isLotW_QSL = Objects.requireNonNull(map.get("LOTW_QSL_RCVD")).equalsIgnoreCase("Y");
         }
-        if (map.containsKey("QSL_MANUAL")) {//Manual QSO confirmation; present in LoTW.
-            isQSL = Objects.requireNonNull(map.get("QSL_MANUAL")).equalsIgnoreCase("Y");
+        // Manual QSO confirmation. We now export this as APP_FT8AF_QSL_MANUAL (ADIF has
+        // no QSL_MANUAL field), but files written by older FT8AF builds — and by other
+        // loggers that copied the bare name — must keep importing, so accept both. The
+        // conformant name wins when a file somehow carries both.
+        if (map.containsKey(AdifRecord.LEGACY_QSL_MANUAL)) {
+            isQSL = Objects.requireNonNull(
+                    map.get(AdifRecord.LEGACY_QSL_MANUAL)).equalsIgnoreCase("Y");
+        }
+        if (map.containsKey(AdifRecord.APP_QSL_MANUAL)) {
+            isQSL = Objects.requireNonNull(
+                    map.get(AdifRecord.APP_QSL_MANUAL)).equalsIgnoreCase("Y");
         }
 
         if (map.containsKey("MY_GRIDSQUARE")) {//My grid (present in LoTW/Log32, may be absent depending on LoTW settings); N1MM has no grid

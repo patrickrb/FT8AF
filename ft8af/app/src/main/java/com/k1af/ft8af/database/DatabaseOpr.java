@@ -30,6 +30,7 @@ import com.k1af.ft8af.callsign.CallsignInfo;
 import com.k1af.ft8af.connector.ConnectMode;
 import com.k1af.ft8af.ft8signal.FT8Package;
 import com.k1af.ft8af.log.AdifFormat;
+import com.k1af.ft8af.log.AdifRecord;
 import com.k1af.ft8af.log.OnQueryQSLCallsign;
 import com.k1af.ft8af.log.OnQueryQSLRecordCallsign;
 import com.k1af.ft8af.log.QSLCallsignRecord;
@@ -1240,144 +1241,63 @@ public class DatabaseOpr extends SQLiteOpenHelper {
     public String downQSLTable(Cursor cursor, boolean isSWL) {
         StringBuilder logStr = new StringBuilder();
 
-        logStr.append("FT8AF ADIF Export<eoh>\n");
+        logStr.append(AdifRecord.HEADER);
         cursor.moveToPosition(-1);
         while (cursor.moveToNext()) {
-            logStr.append(com.k1af.ft8af.log.AdifFormat.callField(
-                    cursor.getString(cursor.getColumnIndex("call"))));
-            if (!isSWL) {
-                if (cursor.getInt(cursor.getColumnIndex("isLotW_QSL")) == 1) {
-                    logStr.append("<QSL_RCVD:1>Y ");
-                } else {
-                    logStr.append("<QSL_RCVD:1>N ");
-                }
-                if (cursor.getInt(cursor.getColumnIndex("isQSL")) == 1) {
-                    logStr.append("<QSL_MANUAL:1>Y ");
-                } else {
-                    logStr.append("<QSL_MANUAL:1>N ");
-                }
-            } else {
-                logStr.append("<swl:1>Y ");
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("gridsquare")) != null) {
-                logStr.append(String.format(Locale.US, "<gridsquare:%d>%s "
-                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("gridsquare")))
-                        , cursor.getString(cursor.getColumnIndex("gridsquare"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("mode")) != null) {
-                // FT4/FT2 are ADIF submodes of MFSK, not standalone modes — a bare
-                // <mode>FT2 is rejected as invalid by pota.app and other ADIF consumers.
-                String mode = cursor.getString(cursor.getColumnIndex("mode"));
-                String submode = AdifFormat.mfskSubmode(mode);
-                if (submode != null) {
-                    logStr.append(String.format(Locale.US, "<mode:4>MFSK <submode:%d>%s "
-                            , AdifFormat.utf8Length(submode), submode));
-                } else {
-                    logStr.append(String.format(Locale.US, "<mode:%d>%s "
-                            , AdifFormat.utf8Length(mode), mode));
-                }
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("rst_sent")) != null) {
-                logStr.append(String.format(Locale.US, "<rst_sent:%d>%s "
-                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("rst_sent")))
-                        , cursor.getString(cursor.getColumnIndex("rst_sent"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("rst_rcvd")) != null) {
-                logStr.append(String.format(Locale.US, "<rst_rcvd:%d>%s "
-                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("rst_rcvd")))
-                        , cursor.getString(cursor.getColumnIndex("rst_rcvd"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("qso_date")) != null) {
-                logStr.append(String.format(Locale.US, "<qso_date:%d>%s "
-                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("qso_date")))
-                        , cursor.getString(cursor.getColumnIndex("qso_date"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("time_on")) != null) {
-                logStr.append(String.format(Locale.US, "<time_on:%d>%s "
-                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("time_on")))
-                        , cursor.getString(cursor.getColumnIndex("time_on"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("qso_date_off")) != null) {
-                logStr.append(String.format(Locale.US, "<qso_date_off:%d>%s "
-                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("qso_date_off")))
-                        , cursor.getString(cursor.getColumnIndex("qso_date_off"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("time_off")) != null) {
-                logStr.append(String.format(Locale.US, "<time_off:%d>%s "
-                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("time_off")))
-                        , cursor.getString(cursor.getColumnIndex("time_off"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("band")) != null) {
-                logStr.append(String.format(Locale.US, "<band:%d>%s "
-                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("band")))
-                        , cursor.getString(cursor.getColumnIndex("band"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("freq")) != null) {
-                logStr.append(String.format(Locale.US, "<freq:%d>%s "
-                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("freq")))
-                        , cursor.getString(cursor.getColumnIndex("freq"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("station_callsign")) != null) {
-                logStr.append(String.format(Locale.US, "<station_callsign:%d>%s "
-                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("station_callsign")))
-                        , cursor.getString(cursor.getColumnIndex("station_callsign"))));
-            }
-
-            if (cursor.getString(cursor.getColumnIndex("my_gridsquare")) != null) {
-                logStr.append(String.format(Locale.US, "<my_gridsquare:%d>%s "
-                        , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("my_gridsquare")))
-                        , cursor.getString(cursor.getColumnIndex("my_gridsquare"))));
-            }
-
-            if (cursor.getColumnIndex("operator") != -1) {
-                if (cursor.getString(cursor.getColumnIndex("operator")) != null) {
-                    logStr.append(String.format(Locale.US, "<operator:%d>%s "
-                            , AdifFormat.utf8Length(cursor.getString(cursor.getColumnIndex("operator")))
-                            , cursor.getString(cursor.getColumnIndex("operator"))));
-                }
-            }
-
-            // POTA ADIF fields — emitted only when populated so non-POTA rows
-            // remain byte-identical to the prior upload format.
-            appendPotaField(logStr, cursor, "my_sig", "MY_SIG");
-            appendPotaField(logStr, cursor, "my_sig_info", "MY_SIG_INFO");
-            appendPotaField(logStr, cursor, "sig", "SIG");
-            appendPotaField(logStr, cursor, "sig_info", "SIG_INFO");
-
-            String comment = cursor.getString(cursor.getColumnIndex("comment"));
-            if (comment == null) {
-                comment = "";
-            }
-
-            //<comment:15>Distance: 99 km <eor>
-            //When writing to db, must append " km"
-            logStr.append(String.format(Locale.US, "<comment:%d>%s <eor>\n"
-                    , AdifFormat.utf8Length(comment)
-                    , comment));
+            logStr.append(adifRecordFromCursor(cursor, isSWL).build());
         }
 
         cursor.close();
         return logStr.toString();
     }
 
-    /** Append a POTA ADIF field if the column exists and is non-empty. */
-    private static void appendPotaField(StringBuilder sb, Cursor cursor, String column, String adifName) {
+    /**
+     * Map one QSLTable cursor row onto the shared {@link AdifRecord} builder.
+     *
+     * <p>This used to hand-roll the whole record inline, duplicating
+     * {@link AdifRecord#build()} field for field — and the two copies drifted. Routing
+     * both through the one builder means a formatting fix lands in every export at once
+     * instead of only in whichever twin someone remembered to edit.
+     *
+     * <p>{@code operator} and the POTA columns are read defensively: this cursor arrives
+     * from several different queries and not all of them select those columns.
+     */
+    static AdifRecord adifRecordFromCursor(Cursor cursor, boolean isSWL) {
+        return new AdifRecord()
+                .call(colStr(cursor, "call"))
+                .swl(isSWL)
+                .lotwQsl(colInt(cursor, "isLotW_QSL") == 1)
+                .manualQsl(colInt(cursor, "isQSL") == 1)
+                .gridsquare(colStr(cursor, "gridsquare"))
+                .mode(colStr(cursor, "mode"))
+                .rstSent(colStr(cursor, "rst_sent"))
+                .rstRcvd(colStr(cursor, "rst_rcvd"))
+                .qsoDate(colStr(cursor, "qso_date"))
+                .timeOn(colStr(cursor, "time_on"))
+                .qsoDateOff(colStr(cursor, "qso_date_off"))
+                .timeOff(colStr(cursor, "time_off"))
+                .band(colStr(cursor, "band"))
+                .freq(colStr(cursor, "freq"))
+                .stationCallsign(colStr(cursor, "station_callsign"))
+                .myGridsquare(colStr(cursor, "my_gridsquare"))
+                .operator(colStr(cursor, "operator"))
+                .mySig(colStr(cursor, "my_sig"))
+                .mySigInfo(colStr(cursor, "my_sig_info"))
+                .sig(colStr(cursor, "sig"))
+                .sigInfo(colStr(cursor, "sig_info"))
+                .comment(colStr(cursor, "comment"));
+    }
+
+    /** Cursor string read that tolerates the column being absent from this query. */
+    private static String colStr(Cursor cursor, String column) {
         int idx = cursor.getColumnIndex(column);
-        if (idx < 0) return;
-        String value = cursor.getString(idx);
-        if (value == null || value.isEmpty()) return;
-        sb.append(String.format(Locale.US, "<%s:%d>%s ", adifName, AdifFormat.utf8Length(value), value));
+        return idx < 0 ? null : cursor.getString(idx);
+    }
+
+    /** Cursor int read that tolerates the column being absent from this query. */
+    private static int colInt(Cursor cursor, String column) {
+        int idx = cursor.getColumnIndex(column);
+        return idx < 0 ? 0 : cursor.getInt(idx);
     }
 
     /**

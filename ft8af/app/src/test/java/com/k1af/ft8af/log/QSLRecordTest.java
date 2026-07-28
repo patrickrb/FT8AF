@@ -112,6 +112,53 @@ public class QSLRecordTest {
     }
 
     @Test
+    public void mapConstructor_readsManualQslUnderTheAppPrefixedName() {
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put(AdifRecord.APP_QSL_MANUAL, "Y");
+
+        assertThat(new QSLRecord(map).isQSL).isTrue();
+    }
+
+    @Test
+    public void mapConstructor_stillReadsTheLegacyBareQslManualName() {
+        // ADIF files written by FT8AF before the APP_ prefix — and by other loggers that
+        // copied the bare name — must keep importing with their confirmation flag intact.
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put(AdifRecord.LEGACY_QSL_MANUAL, "Y");
+
+        assertThat(new QSLRecord(map).isQSL).isTrue();
+    }
+
+    @Test
+    public void mapConstructor_manualQslDefaultsToFalseAndHonoursN() {
+        HashMap<String, String> plain = new HashMap<>();
+        plain.put("CALL", "W1AW");
+        plain.put("COMMENT", "imported");
+        assertThat(new QSLRecord(plain).isQSL).isFalse();
+
+        HashMap<String, String> explicitN = new HashMap<>();
+        explicitN.put("CALL", "W1AW");
+        explicitN.put("COMMENT", "imported");
+        explicitN.put(AdifRecord.APP_QSL_MANUAL, "N");
+        assertThat(new QSLRecord(explicitN).isQSL).isFalse();
+    }
+
+    @Test
+    public void mapConstructor_conformantNameWinsWhenBothArePresent() {
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put(AdifRecord.LEGACY_QSL_MANUAL, "Y");
+        map.put(AdifRecord.APP_QSL_MANUAL, "N");
+
+        assertThat(new QSLRecord(map).isQSL).isFalse();
+    }
+
+    @Test
     public void mapConstructor_mfskSubmodeResolvesToFt2() {
         HashMap<String, String> map = new HashMap<>();
         map.put("CALL", "W1AW");
