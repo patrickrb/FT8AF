@@ -65,7 +65,7 @@ public class LateDecodeTest {
     private static LateDecode.Handoff handoffWithLiveDeadline() {
         // Registered "now": deadline is ~18s away, so an offered buffer is returned
         // immediately and no test ever actually waits that long.
-        return new LateDecode.Handoff(System.currentTimeMillis(), 15_000);
+        return new LateDecode.Handoff(System.currentTimeMillis(), ModeProfile.FT8);
     }
 
     private static LateDecode.Handoff handoffWithExpiredDeadline() {
@@ -73,7 +73,7 @@ public class LateDecodeTest {
         // awaitBuffer must return null without blocking.
         return new LateDecode.Handoff(
                 System.currentTimeMillis() - 15_000 - LateDecode.DELIVERY_GRACE_MS - 1_000,
-                15_000);
+                ModeProfile.FT8);
     }
 
     @Test
@@ -161,6 +161,73 @@ public class LateDecodeTest {
             assertThat(plan.recordMillis).isEqualTo(mode.earlyDecodeMillis);
             assertThat(plan.lateHandoff).isNull();
         }
+    }
+
+    // ---- late-pass scheduling: the full-slot pass must coexist with the NEXT slot's
+    // early decode instead of fighting it (the "decoders working against each other" bug:
+    // the early buffer's subtraction loop delayed the late pass until it collided with
+    // the next early decode and aborted its whole candidate scan).
+
+    @Test
+    public void latePassDeadline_endsBeforeNextSlotsEarlyDecodeStarts() {
+        // Next slot's early decode thread starts at boundary + slot + earlyWindow; the
+        // late pass must be done a safety margin before that.
+        long registeredAt = 1_000_000L;
+        long nextEarlyDecodeStart = registeredAt + ModeProfile.FT8.slotMillis
+                + ModeProfile.FT8.earlyDecodeMillis;
+        assertThat(LateDecode.latePassDeadlineMillis(registeredAt, ModeProfile.FT8))
+                .isEqualTo(nextEarlyDecodeStart - LateDecode.LATE_PASS_SAFETY_MS);
+    }
+
+    @Test
+    public void latePassDeadline_leavesUsefulDecodeWindow() {
+        // Sanity on the constants: the window between buffer arrival (boundary + slot)
+        // and the deadline must stay big enough for real deep work — if a future tuning
+        // of earlyDecodeMillis/safety collapses it, the late pass silently degenerates
+        // back into an abort-every-slot pass.
+        long registeredAt = 0L;
+        long bufferArrival = ModeProfile.FT8.slotMillis;
+        long window = LateDecode.latePassDeadlineMillis(registeredAt, ModeProfile.FT8)
+                - bufferArrival;
+        assertThat(window).isAtLeast(10_000L);
+    }
+
+    @Test
+    public void effectiveLatePassDeadline_isTheEarlierOfWindowAndBudget() {
+        assertThat(LateDecode.effectiveLatePassDeadline(1_000L, 2_000L)).isEqualTo(1_000L);
+        assertThat(LateDecode.effectiveLatePassDeadline(2_000L, 1_000L)).isEqualTo(1_000L);
+        assertThat(LateDecode.effectiveLatePassDeadline(1_500L, 1_500L)).isEqualTo(1_500L);
+    }
+
+    @Test
+    public void handoff_carriesLatePassDeadline() {
+        long registeredAt = 1_000_000L;
+        LateDecode.Handoff handoff = new LateDecode.Handoff(registeredAt, ModeProfile.FT8);
+        assertThat(handoff.latePassDeadlineEpochMs)
+                .isEqualTo(LateDecode.latePassDeadlineMillis(registeredAt, ModeProfile.FT8));
+    }
+
+    // ---- deep-loop placement: exactly one buffer per slot hosts the subtraction loop --
+
+    @Test
+    public void deepLoop_runsOnEarlyBuffer_whenNoLatePassScheduled() {
+        // Early decode off (or FT4/FT2): the early buffer is the only buffer.
+        assertThat(LateDecode.deepLoopRunsOnEarlyBuffer(null)).isTrue();
+    }
+
+    @Test
+    public void deepLoop_deferredToFullSlotPass_whenLatePassScheduled() {
+        // With a full-slot pass pending, deep work on the (strict-prefix) early buffer
+        // would be duplicated AND delay the late pass into the next slot's early decode.
+        LateDecode.SlotPlan plan = LateDecode.planSlot(true, ModeProfile.FT8, 1_000_000L);
+        assertThat(LateDecode.deepLoopRunsOnEarlyBuffer(plan.lateHandoff)).isFalse();
+    }
+
+    @Test
+    public void planSlot_handoffLatePassDeadline_anchoredAtPlanTime() {
+        LateDecode.SlotPlan plan = LateDecode.planSlot(true, ModeProfile.FT8, 1_000_000L);
+        assertThat(plan.lateHandoff.latePassDeadlineEpochMs)
+                .isEqualTo(LateDecode.latePassDeadlineMillis(1_000_000L, ModeProfile.FT8));
     }
 
     @Test
