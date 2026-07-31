@@ -20,7 +20,11 @@ package com.k1af.ft8af.ft8listener;
  *
  * <p>Stashing is never wrong here: replay runs through the evidence-only parse, which still
  * answers a station calling us but suppresses absence-of-evidence decisions (no-reply
- * counting, give-up). Those belong to the cycle that already made them.
+ * counting, give-up). Those belong to the cycle that already made them. The load-bearing
+ * detail is that {@code FT8TransmitSignal.parseMessageToFunctionInner} calls
+ * {@code checkCQMeOrFollowCQMessage} <em>above</em> its {@code evidenceOnly} guard — if that
+ * call ever moves below the guard, a replayed decode silently stops answering callers and
+ * this whole mechanism goes quiet again.
  */
 public final class FastPassDisposition {
 
