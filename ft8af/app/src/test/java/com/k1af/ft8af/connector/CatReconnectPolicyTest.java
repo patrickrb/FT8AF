@@ -53,7 +53,7 @@ public class CatReconnectPolicyTest {
     public void autoReconnect_transientWithinBudget_allowed() {
         assertThat(CatReconnectPolicy.shouldAutoReconnect(Kind.TRANSIENT, 0)).isTrue();
         assertThat(CatReconnectPolicy.shouldAutoReconnect(
-                Kind.TRANSIENT, CatReconnectPolicy.MAX_AUTO_RECONNECT_ATTEMPTS - 1)).isTrue();
+                Kind.TRANSIENT, CatReconnectPolicy.BACKOFF_ESCALATION_ATTEMPTS - 1)).isTrue();
     }
 
     @Test
@@ -62,7 +62,7 @@ public class CatReconnectPolicyTest {
         // until they notice the retry chip. Containment comes from the backoff escalating
         // to MAX_BACKOFF_MS and staying there, not from stopping.
         assertThat(CatReconnectPolicy.shouldAutoReconnect(
-                Kind.TRANSIENT, CatReconnectPolicy.MAX_AUTO_RECONNECT_ATTEMPTS)).isTrue();
+                Kind.TRANSIENT, CatReconnectPolicy.BACKOFF_ESCALATION_ATTEMPTS)).isTrue();
         assertThat(CatReconnectPolicy.shouldAutoReconnect(Kind.TRANSIENT, 1_000)).isTrue();
     }
 
@@ -153,7 +153,7 @@ public class CatReconnectPolicyTest {
     @Test
     public void decide_transientKeepsReconnectingPastTheOldBudget() {
         assertThat(CatReconnectPolicy.decide(
-                false, Kind.TRANSIENT, CatReconnectPolicy.MAX_AUTO_RECONNECT_ATTEMPTS))
+                false, Kind.TRANSIENT, CatReconnectPolicy.BACKOFF_ESCALATION_ATTEMPTS))
                 .isEqualTo(CatReconnectPolicy.Action.RECONNECT);
     }
 
@@ -192,6 +192,17 @@ public class CatReconnectPolicyTest {
         // System.currentTimeMillis() is not monotonic and this app disciplines its own
         // clock; a backwards correction must not make a 30 ms connection look stable.
         assertThat(CatReconnectPolicy.shouldResetBurst(T0 - 60_000, T0)).isFalse();
+    }
+
+    @Test
+    public void escalationConstantMatchesWhenTheCeilingIsReached() {
+        // BACKOFF_ESCALATION_ATTEMPTS is no longer a give-up budget, so it only earns its
+        // place by describing something real: the attempt at which backoff hits the
+        // ceiling. Pin that, or the name drifts from the behaviour again.
+        assertThat(CatReconnectPolicy.backoffMs(CatReconnectPolicy.BACKOFF_ESCALATION_ATTEMPTS))
+                .isEqualTo(CatReconnectPolicy.MAX_BACKOFF_MS);
+        assertThat(CatReconnectPolicy.backoffMs(CatReconnectPolicy.BACKOFF_ESCALATION_ATTEMPTS - 1))
+                .isLessThan(CatReconnectPolicy.MAX_BACKOFF_MS);
     }
 
     @Test

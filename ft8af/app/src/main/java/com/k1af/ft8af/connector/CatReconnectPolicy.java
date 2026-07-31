@@ -17,9 +17,11 @@ package com.k1af.ft8af.connector;
  *       {@link Exception}s are a brief I/O stall the device recovers from by
  *       re-enumerating with the same VID/PID. Only a message that names the
  *       device as genuinely gone or access-denied is fatal.</li>
- *   <li><b>Should we auto-reconnect, and after how long?</b> A bounded number of
- *       attempts with exponential backoff. If they are exhausted we surface the
- *       manual retry state; a single glitch is absorbed silently.</li>
+ *   <li><b>Should we auto-reconnect, and after how long?</b> A transient error
+ *       retries indefinitely with exponential backoff, escalating to
+ *       {@link #MAX_BACKOFF_MS} and staying there — containment comes from the
+ *       interval, not from giving up. A single glitch is absorbed silently. Only a
+ *       FATAL classification surfaces the manual retry state.</li>
  * </ol>
  */
 public final class CatReconnectPolicy {
@@ -38,9 +40,9 @@ public final class CatReconnectPolicy {
     public enum Action {
         /** A deliberate user disconnect caused it — expected, do nothing. */
         IGNORE,
-        /** Transient glitch with budget left — attempt a bounded auto-reconnect. */
+        /** Transient glitch — auto-reconnect with escalating backoff. */
         RECONNECT,
-        /** Fatal, or reconnect budget exhausted — surface the manual retry state. */
+        /** Fatal (device gone / access denied) — surface the manual retry state. */
         SURFACE
     }
 
@@ -50,12 +52,13 @@ public final class CatReconnectPolicy {
      * <p>A deliberate user disconnect closes the port to interrupt the blocking
      * read, which itself raises an {@code IOException} on the read loop. That
      * error is <em>expected</em> and must be ignored rather than surfaced as a
-     * "Lost connection" error state. Otherwise a transient error with reconnect
-     * budget left reconnects; a fatal error or an exhausted budget surfaces.
+     * "Lost connection" error state. Otherwise a transient error reconnects (always —
+     * see {@link #BACKOFF_ESCALATION_ATTEMPTS}); only a fatal error surfaces.
      *
      * @param userDisconnected whether the user asked to disconnect
      * @param kind             the classification of the error
-     * @param attemptsSoFar    auto-reconnects already tried this burst ({@code 0} first)
+     * @param attemptsSoFar    auto-reconnects already tried this burst ({@code 0} first);
+     *                         no longer gates the outcome, retained for callers that log it
      */
     public static Action decide(boolean userDisconnected, Kind kind, int attemptsSoFar) {
         if (userDisconnected) return Action.IGNORE;
@@ -111,7 +114,7 @@ public final class CatReconnectPolicy {
      * <p>A FATAL classification still surfaces immediately — a device that has left the bus
      * or refused permission will not come back by retrying.
      */
-    public static final int MAX_AUTO_RECONNECT_ATTEMPTS = 5;
+    public static final int BACKOFF_ESCALATION_ATTEMPTS = 5;
 
     /** First backoff step; also the debounce window that swallows a lone glitch. */
     public static final long BASE_BACKOFF_MS = 500;
@@ -146,7 +149,7 @@ public final class CatReconnectPolicy {
     /**
      * Whether an automatic reconnect should be attempted.
      *
-     * <p>Transient errors retry without limit — see {@link #MAX_AUTO_RECONNECT_ATTEMPTS}
+     * <p>Transient errors retry without limit — see {@link #BACKOFF_ESCALATION_ATTEMPTS}
      * for why the budget was dropped. {@code attemptsSoFar} no longer gates the decision;
      * it survives only so callers reading this alongside {@link #backoffMs} see the same
      * burst counter, and so the signature stays stable for existing callers.

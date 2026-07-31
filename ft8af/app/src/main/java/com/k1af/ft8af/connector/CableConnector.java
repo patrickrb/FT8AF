@@ -37,7 +37,14 @@ public class CableConnector extends BaseRigConnector {
     // CatReconnectPolicy.STABLE_CONNECTION_MS — a port that opens is not a link that works,
     // and treating an open as success is what pinned the backoff at its first step and
     // produced 13,190 port opens in 88 minutes.
-    private volatile int reconnectAttempt = 0;
+    //
+    // AtomicInteger, not a volatile int: the increment below runs on the
+    // CAT-Auto-Reconnect thread while handleSerialError() (serial IO thread) and
+    // connect() (UI thread) reset it. `++` on a volatile is a read-modify-write and is
+    // NOT atomic, so a lost update would hold the counter down — pinning the backoff near
+    // BASE_BACKOFF_MS and reviving the exact storm this guards against.
+    private final java.util.concurrent.atomic.AtomicInteger reconnectAttempt =
+            new java.util.concurrent.atomic.AtomicInteger();
     private volatile long portOpenedAtMs = 0L;
 
     public CableConnector(Context context, CableSerialPort.SerialPort serialPort, int baudRate
@@ -75,10 +82,16 @@ public class CableConnector extends BaseRigConnector {
         // Only a connection that actually HELD counts as a recovery. Without this the
         // burst restarted on every open and the backoff never escalated past its first
         // 500 ms step, which is the reconnect storm this guards against.
+        // Reset and snapshot as one logical step so the value handed to decide() is the
+        // one this call established, not whatever the reconnect thread has since reached.
+        int attemptsSoFar;
         if (CatReconnectPolicy.shouldResetBurst(System.currentTimeMillis(), portOpenedAtMs)) {
-            reconnectAttempt = 0;
+            reconnectAttempt.set(0);
+            attemptsSoFar = 0;
+        } else {
+            attemptsSoFar = reconnectAttempt.get();
         }
-        switch (CatReconnectPolicy.decide(userDisconnected, kind, reconnectAttempt)) {
+        switch (CatReconnectPolicy.decide(userDisconnected, kind, attemptsSoFar)) {
             case IGNORE:
                 // User asked to disconnect; closing the port interrupts the blocking
                 // read with an IOException we expect — don't surface "Lost connection".
@@ -112,7 +125,7 @@ public class CableConnector extends BaseRigConnector {
                 while (!userDisconnected) {
                     // The burst counter persists across opens, so a link that keeps
                     // dropping keeps escalating instead of resetting to the first step.
-                    int attempt = ++reconnectAttempt;
+                    int attempt = reconnectAttempt.incrementAndGet();
                     long backoff = CatReconnectPolicy.backoffMs(attempt);
                     Log.d(TAG, "CAT auto-reconnect attempt " + attempt
                             + " in " + backoff + "ms");
@@ -245,7 +258,7 @@ public class CableConnector extends BaseRigConnector {
         userDisconnected = false;
         // A user-initiated connect is a fresh start: clear any escalation left over from a
         // previous flapping session so the first glitch is again absorbed at 500 ms.
-        reconnectAttempt = 0;
+        reconnectAttempt.set(0);
         super.connect();
         getOnConnectorStateChanged().onConnecting();
         if (cableSerialPort.connect()) {
