@@ -367,6 +367,37 @@ public class FT8TransmitSignal {
     static final int RESTART_HEADROOM_MS = 250;
 
     /**
+     * Whether the playback path these modes select can actually be interrupted mid-buffer.
+     *
+     * <p>Only the sound-card paths can. {@code playViaUsbAudio} and {@code
+     * playViaAudioTrack} both poll the cancel flags {@link #requestTxRestart} sets and
+     * unwind within a chunk. The other two branches of {@code playFT8Signal} do not:
+     *
+     * <ul>
+     *   <li>NETWORK hands the message to the ICOM network transmit callback and then
+     *       spins {@code while (isTransmitting)} for up to 13.1 s;
+     *   <li>CAT audio (controlMode CAT on a rig whose connector reports
+     *       {@code supportTransmitOverCAT()}) does the same for up to 13.0 s.
+     * </ul>
+     *
+     * <p>Neither observes {@code txAudioCancelled}, and {@link #requestTxRestart}
+     * deliberately leaves {@code isTransmitting} set, so a swap requested on those paths
+     * would not interrupt anything — it would sit queued until the wait expired and then
+     * replay ~13 s into the slot, where the clip math strips almost the whole message.
+     * That is worse than not swapping at all, so refuse up front and let the sequencer
+     * pick the change up next cycle as it did before.
+     *
+     * @param connectMode    {@code GeneralVariables.connectMode} (see {@link ConnectMode})
+     * @param controlMode    {@code GeneralVariables.controlMode} (see {@link ControlMode})
+     * @param catAudioInUse  whether the connector actually transmits audio over CAT
+     */
+    static boolean playbackSupportsMidCycleRestart(int connectMode, int controlMode,
+                                                   boolean catAudioInUse) {
+        if (connectMode == ConnectMode.NETWORK) return false;
+        return !(controlMode == ControlMode.CAT && catAudioInUse);
+    }
+
+    /**
      * Whether an in-flight transmission should be aborted and restarted with a different
      * message (the late-decode TX race).
      *
@@ -389,6 +420,8 @@ public class FT8TransmitSignal {
      * <p>PTT is deliberately NOT dropped for the swap — see {@link #requestTxRestart}.
      *
      * @param transmitting      whether an over is currently on the air
+     * @param playbackRestartable whether this playback path can be interrupted at all —
+     *                          see {@link #playbackSupportsMidCycleRestart}
      * @param transmitFreeText  whether free text is armed — its content does not depend on
      *                          {@code functionOrder}, so a swap would replay the identical
      *                          message and put a discontinuity on the air for nothing
@@ -397,10 +430,12 @@ public class FT8TransmitSignal {
      * @param msInCycle         ms elapsed since the current slot boundary (&gt;= 0)
      * @param audioSlackMillis  {@link ModeProfile#audioSlackMillis} — free slack before clipping
      */
-    static boolean shouldRestartForNewOrder(boolean transmitting, boolean transmitFreeText,
+    static boolean shouldRestartForNewOrder(boolean transmitting, boolean playbackRestartable,
+                                            boolean transmitFreeText,
                                             int orderAtKeyUp, int orderNow, long msInCycle,
                                             int audioSlackMillis) {
         if (!transmitting) return false;
+        if (!playbackRestartable) return false;
         if (transmitFreeText) return false;
         // Nothing new to say: same over we already keyed up with. Also covers the
         // "no reply decoded" case, where the sequencer leaves functionOrder alone.
@@ -1254,7 +1289,13 @@ public class FT8TransmitSignal {
      * teardown and must not run mid-swap.
      */
     private void afterPlayAudio() {
-        if (txRestartPending) {
+        // The swap exit is conditional on STILL TRANSMITTING. A STOP or deactivation
+        // (setTransmitting(false) / setActivated(false)) can land between the swap being
+        // queued and the writers unwinding; taking the early exit then would skip
+        // onAfterTransmit and leave the rig KEYED, and would leave txRestartPending set
+        // for a replay the operator just cancelled. Falling through instead drops the
+        // swap and runs the real end-of-over teardown, which is what a stop means.
+        if (txRestartPending && isTransmitting) {
             if (audioTrack != null) {
                 audioTrack.release();
                 audioTrack = null;
@@ -1262,6 +1303,7 @@ public class FT8TransmitSignal {
             txAudioFocus.release();
             return;
         }
+        txRestartPending = false;
         if (onDoTransmitted != null) {
             onDoTransmitted.onAfterTransmit(getFunctionCommand(functionOrder), functionOrder);
         }
@@ -1802,8 +1844,11 @@ public class FT8TransmitSignal {
         if (!evidenceOnly) return;
         ModeProfile mode = GeneralVariables.currentMode();
         long msInCycle = UtcTimer.getSystemTime() % mode.slotMillis;
-        if (shouldRestartForNewOrder(isTransmitting, transmitFreeText, orderAtKeyUp,
-                functionOrder, msInCycle, mode.audioSlackMillis)) {
+        boolean playbackRestartable = playbackSupportsMidCycleRestart(
+                GeneralVariables.connectMode, GeneralVariables.controlMode,
+                onDoTransmitted != null && onDoTransmitted.supportTransmitOverCAT());
+        if (shouldRestartForNewOrder(isTransmitting, playbackRestartable, transmitFreeText,
+                orderAtKeyUp, functionOrder, msInCycle, mode.audioSlackMillis)) {
             GeneralVariables.fileLog("QSO: late decode advanced order " + orderAtKeyUp
                     + " -> " + functionOrder + " at " + msInCycle
                     + "ms into slot; restarting TX with the new message");
@@ -3194,7 +3239,9 @@ public class FT8TransmitSignal {
                 //transmitSignal.playFT8Signal(buffer);
                 transmitSignal.playFT8Signal(msg);
 
-                if (!transmitSignal.consumeTxRestart()) break;
+                // isTransmitting re-checked alongside the flag: a STOP racing the swap
+                // request could otherwise replay an over the operator just cancelled.
+                if (!transmitSignal.consumeTxRestart() || !transmitSignal.isTransmitting) break;
                 // Swap: pick up whatever the sequencer settled on and replay this over.
                 msg = transmitSignal.currentTransmitMessage();
                 transmitSignal.orderAtKeyUp = transmitSignal.functionOrder;

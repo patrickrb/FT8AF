@@ -2,6 +2,9 @@ package com.k1af.ft8af.ft8transmit;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.k1af.ft8af.connector.ConnectMode;
+import com.k1af.ft8af.database.ControlMode;
+
 import org.junit.Test;
 
 /**
@@ -37,19 +40,19 @@ public class LateDecodeTxRestartTest {
         // The logged 17:50 K5UUT case: keyed up at order 3 (R-10), the late pass
         // advanced to order 2 about half a second into the slot.
         assertThat(FT8TransmitSignal.shouldRestartForNewOrder(
-                true, false, 3, 2, 507, FT8_SLACK_MS)).isTrue();
+                true, true, false, 3, 2, 507, FT8_SLACK_MS)).isTrue();
     }
 
     @Test
     public void lateDecodeAtTheVeryStartOfTheSlot_restarts() {
         assertThat(FT8TransmitSignal.shouldRestartForNewOrder(
-                true, false, 3, 4, 0, FT8_SLACK_MS)).isTrue();
+                true, true, false, 3, 4, 0, FT8_SLACK_MS)).isTrue();
     }
 
     @Test
     public void lateDecodeWellInsideTheSlack_restarts() {
         assertThat(FT8TransmitSignal.shouldRestartForNewOrder(
-                true, false, 2, 3, 1500, FT8_SLACK_MS)).isTrue();
+                true, true, false, 2, 3, 1500, FT8_SLACK_MS)).isTrue();
     }
 
     // ---------------------------------------------------------------
@@ -60,14 +63,14 @@ public class LateDecodeTxRestartTest {
     public void restartExactlyAtTheHeadroomLimit_stillRestarts() {
         int lastSafe = FT8_SLACK_MS - FT8TransmitSignal.RESTART_HEADROOM_MS;
         assertThat(FT8TransmitSignal.shouldRestartForNewOrder(
-                true, false, 3, 4, lastSafe, FT8_SLACK_MS)).isTrue();
+                true, true, false, 3, 4, lastSafe, FT8_SLACK_MS)).isTrue();
     }
 
     @Test
     public void oneMsPastTheHeadroomLimit_doesNotRestart() {
         int firstUnsafe = FT8_SLACK_MS - FT8TransmitSignal.RESTART_HEADROOM_MS + 1;
         assertThat(FT8TransmitSignal.shouldRestartForNewOrder(
-                true, false, 3, 4, firstUnsafe, FT8_SLACK_MS)).isFalse();
+                true, true, false, 3, 4, firstUnsafe, FT8_SLACK_MS)).isFalse();
     }
 
     @Test
@@ -75,23 +78,23 @@ public class LateDecodeTxRestartTest {
         // 2300 ms is within the 2360 ms slack, but the swap itself would push the
         // replay past it — exactly the clipping this guard exists to prevent.
         assertThat(FT8TransmitSignal.shouldRestartForNewOrder(
-                true, false, 3, 4, 2300, FT8_SLACK_MS)).isFalse();
+                true, true, false, 3, 4, 2300, FT8_SLACK_MS)).isFalse();
     }
 
     @Test
     public void lateDecodeWellPastTheSlack_doesNotRestart() {
         // The 2.5-3.5 s arrivals: unsaveable, let the original over finish.
         assertThat(FT8TransmitSignal.shouldRestartForNewOrder(
-                true, false, 3, 4, 3000, FT8_SLACK_MS)).isFalse();
+                true, true, false, 3, 4, 3000, FT8_SLACK_MS)).isFalse();
     }
 
     @Test
     public void ft4UsesItsOwnSlack() {
         // FT4's slack is wider than FT8's, so a swap FT8 would refuse is fine here.
         assertThat(FT8TransmitSignal.shouldRestartForNewOrder(
-                true, false, 3, 4, 2200, FT4_SLACK_MS)).isTrue();
+                true, true, false, 3, 4, 2200, FT4_SLACK_MS)).isTrue();
         assertThat(FT8TransmitSignal.shouldRestartForNewOrder(
-                true, false, 3, 4, 2200, FT8_SLACK_MS)).isFalse();
+                true, true, false, 3, 4, 2200, FT8_SLACK_MS)).isFalse();
     }
 
     // ---------------------------------------------------------------
@@ -103,7 +106,7 @@ public class LateDecodeTxRestartTest {
         // The ordinary case: the late pass advanced the sequencer between overs.
         // Nothing is on the air, so the next key-up already sends the right message.
         assertThat(FT8TransmitSignal.shouldRestartForNewOrder(
-                false, false, 3, 4, 500, FT8_SLACK_MS)).isFalse();
+                false, true, false, 3, 4, 500, FT8_SLACK_MS)).isFalse();
     }
 
     @Test
@@ -112,7 +115,7 @@ public class LateDecodeTxRestartTest {
         // advance the QSO. Restarting here would swap the message for an identical
         // one and put a needless discontinuity on the air.
         assertThat(FT8TransmitSignal.shouldRestartForNewOrder(
-                true, false, 3, 3, 500, FT8_SLACK_MS)).isFalse();
+                true, true, false, 3, 3, 500, FT8_SLACK_MS)).isFalse();
     }
 
     @Test
@@ -120,7 +123,7 @@ public class LateDecodeTxRestartTest {
         // Before the first key-up of a run there is no baseline to compare against,
         // so a non-matching order is initialization, not a real change.
         assertThat(FT8TransmitSignal.shouldRestartForNewOrder(
-                true, false, -1, 6, 500, FT8_SLACK_MS)).isFalse();
+                true, true, false, -1, 6, 500, FT8_SLACK_MS)).isFalse();
     }
 
     @Test
@@ -128,7 +131,7 @@ public class LateDecodeTxRestartTest {
         // A clock correction landing mid-over can produce this; refuse rather than
         // reason about a slot position we don't trust.
         assertThat(FT8TransmitSignal.shouldRestartForNewOrder(
-                true, false, 3, 4, -50, FT8_SLACK_MS)).isFalse();
+                true, true, false, 3, 4, -50, FT8_SLACK_MS)).isFalse();
     }
 
     @Test
@@ -137,7 +140,50 @@ public class LateDecodeTxRestartTest {
         // identical message — a discontinuity on the air that buys nothing. Same
         // inputs as lateDecodeJustAfterKeyUp_restarts, which does swap.
         assertThat(FT8TransmitSignal.shouldRestartForNewOrder(
-                true, true, 3, 2, 507, FT8_SLACK_MS)).isFalse();
+                true, true, true, 3, 2, 507, FT8_SLACK_MS)).isFalse();
+    }
+
+    @Test
+    public void uninterruptiblePlaybackPath_doesNotRestart() {
+        // NETWORK and CAT-audio playback spin on isTransmitting for ~13 s and never
+        // observe the cancel flags, so a queued swap would not interrupt anything — it
+        // would fire ~13 s into the slot and the clip math would strip nearly the whole
+        // message. Same inputs as lateDecodeJustAfterKeyUp_restarts, which does swap.
+        assertThat(FT8TransmitSignal.shouldRestartForNewOrder(
+                true, false, false, 3, 2, 507, FT8_SLACK_MS)).isFalse();
+    }
+
+    // ---------------------------------------------------------------
+    // Which playback paths can be interrupted at all
+    // ---------------------------------------------------------------
+
+    @Test
+    public void soundCardPathsAreRestartable() {
+        // USB-direct and AudioTrack both poll the cancel flags and unwind within a chunk.
+        assertThat(FT8TransmitSignal.playbackSupportsMidCycleRestart(
+                ConnectMode.USB_CABLE, ControlMode.VOX, false)).isTrue();
+        assertThat(FT8TransmitSignal.playbackSupportsMidCycleRestart(
+                ConnectMode.BLUE_TOOTH, ControlMode.RTS, false)).isTrue();
+    }
+
+    @Test
+    public void networkPlaybackIsNotRestartable() {
+        assertThat(FT8TransmitSignal.playbackSupportsMidCycleRestart(
+                ConnectMode.NETWORK, ControlMode.VOX, false)).isFalse();
+        // ...regardless of control mode.
+        assertThat(FT8TransmitSignal.playbackSupportsMidCycleRestart(
+                ConnectMode.NETWORK, ControlMode.CAT, true)).isFalse();
+    }
+
+    @Test
+    public void catAudioIsNotRestartableButCatControlAloneIs() {
+        // The CAT branch is only taken when the connector actually transmits audio over
+        // CAT (truSDX-style). A CAT-*controlled* rig whose audio goes out the sound card
+        // still uses the interruptible path and must keep the swap.
+        assertThat(FT8TransmitSignal.playbackSupportsMidCycleRestart(
+                ConnectMode.USB_CABLE, ControlMode.CAT, true)).isFalse();
+        assertThat(FT8TransmitSignal.playbackSupportsMidCycleRestart(
+                ConnectMode.USB_CABLE, ControlMode.CAT, false)).isTrue();
     }
 
     @Test
