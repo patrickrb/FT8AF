@@ -72,6 +72,7 @@ import com.k1af.ft8af.database.RigNameList;
 import com.k1af.ft8af.database.WorkedModeFilter;
 import com.k1af.ft8af.flex.FlexRadio;
 import com.k1af.ft8af.flex.RadioTcpClient;
+import com.k1af.ft8af.ft8listener.FastPassDisposition;
 import com.k1af.ft8af.ft8listener.FT8SignalListener;
 import com.k1af.ft8af.ft8listener.OnFt8Listen;
 import com.k1af.ft8af.ft8transmit.FT8TransmitSignal;
@@ -695,12 +696,43 @@ public class MainViewModel extends ViewModel {
                 //check transmit procedure. Parse transmit procedure from message list
                 //if exceeded cycle by 2 seconds, should not parse
                 int autoReplyBudgetMs = Math.max(2000, GeneralVariables.lateStartTolerance);
-                if (!ft8TransmitSignal.isTransmitting()
-                        && !isDeep//deep passes go through the evidence-only path below
-                        && (ft8SignalListener.timeSec
-                        + GeneralVariables.pttDelay
-                        + GeneralVariables.transmitDelay <= autoReplyBudgetMs)) {//budget scales with late-start tolerance
-                    ft8TransmitSignal.parseMessageToFunction(messages);//parse messages and process
+                if (!isDeep) {//deep passes go through the evidence-only path below
+                    long replyCostMs = ft8SignalListener.timeSec
+                            + GeneralVariables.pttDelay
+                            + GeneralVariables.transmitDelay;
+                    FastPassDisposition.Action action = FastPassDisposition.decide(
+                            ft8TransmitSignal.isTransmitting(), replyCostMs, autoReplyBudgetMs);
+                    if (action == FastPassDisposition.Action.PARSE) {
+                        ft8TransmitSignal.parseMessageToFunction(messages);//parse messages and process
+                    } else if (ft8TransmitSignal.isTransmitting()) {
+                        // The fast pass landed AFTER key-up. It used to be dropped outright
+                        // here — the single biggest cause of "the app doesn't see replies to
+                        // my CQ". On the 2026-07-31 activation 34 of the 66 cycles where a
+                        // station called us (52%) were discarded this way: decoded fine,
+                        // replyToMe=true, never shown to the sequencer, so we kept calling CQ
+                        // at someone who was answering. The fast decode arrives ~13.5s +
+                        // decode time into the slot, so a ~2s decode puts it a few hundred ms
+                        // PAST the boundary and past key-up.
+                        //
+                        // Deep passes in exactly this situation were already stashed and
+                        // replayed; the fast pass — the one that matters most — had no such
+                        // path. It does now. Replay goes through the evidence-only parse,
+                        // which still answers a station calling us (see
+                        // FT8TransmitSignal.parseMessageToFunctionInner: the
+                        // checkCQMeOrFollowCQMessage call sits ABOVE the evidenceOnly guard);
+                        // only absence-of-evidence decisions are suppressed, which is right —
+                        // this cycle's no-reply call was already made.
+                        pendingSequencerDecodes.stash(messages, UtcTimer.getSystemTime());
+                        fileLog("QSO: fast decode landed after key-up — stashed "
+                                + messages.size() + " msg(s) for replay");
+                    } else {
+                        // Too slow to key up this cycle, but the evidence is still good for
+                        // the next one. Previously also dropped, and — like the branch above
+                        // — invisible in debug.log, which is why this went unnoticed.
+                        pendingSequencerDecodes.stash(messages, UtcTimer.getSystemTime());
+                        fileLog("QSO: fast decode over reply budget (" + replyCostMs
+                                + "ms > " + autoReplyBudgetMs + "ms) — stashed for replay");
+                    }
                 }
 
                 // Deep/subtraction/late passes routinely find replies the fast
