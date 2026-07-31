@@ -1551,6 +1551,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             // or missing SD can never break QSO logging (AdifLogFile.logQso itself never throws).
             if (appendToAdifFile) {
                 com.k1af.ft8af.log.AdifLogFile.logQso(context, record);
+                // RTOTA trip mode: queue the contact for the live road-trip feed. Gated on
+                // the same appendToAdifFile flag as the ADIF mirror, so a bulk log import
+                // can't inject a thousand historic QSOs into today's drive. No-op unless a
+                // trip is running; never throws (see RtotaTripManager.onQsoLogged).
+                radio.ks3ckc.ft8af.rtota.RtotaTripManager.onQsoLogged(record);
             }
             if (afterInsertQSLData!=null){
                 afterInsertQSLData.doAfterInsert(false,true);//New QSL

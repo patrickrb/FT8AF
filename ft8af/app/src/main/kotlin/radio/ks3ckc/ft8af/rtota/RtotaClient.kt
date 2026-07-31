@@ -1,0 +1,243 @@
+package radio.ks3ckc.ft8af.rtota
+
+import android.util.Log
+import com.k1af.ft8af.GeneralVariables
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.io.FileWriter
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import java.nio.charset.StandardCharsets
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/** Non-2xx from rtota.app, carrying the status so callers can tell retryable from fatal. */
+class RtotaHttpException(val httpCode: Int, val body: String) :
+    Exception("HTTP $httpCode${if (body.isNotBlank()) ": ${body.take(200)}" else ""}") {
+
+    /** The `error` field rtota.app puts in every failure body, when present. */
+    val serverMessage: String?
+        get() = try {
+            JSONObject(body).optString("error").takeIf { it.isNotEmpty() }
+        } catch (_: Exception) {
+            null
+        }
+}
+
+/**
+ * True when [error] is worth retrying rather than surfacing: any connectivity
+ * failure (the normal case on the road), a rate-limit, or a 5xx. A 4xx means the
+ * request itself is wrong — a bad API key, a trip that isn't ours — and retrying
+ * it just burns battery against the same rejection.
+ */
+fun isRetryableRtotaFailure(error: Throwable?): Boolean = when (error) {
+    is RtotaHttpException -> error.httpCode == 429 || error.httpCode >= 500
+    is IOException -> true
+    else -> false
+}
+
+/**
+ * Backoff before retry [attempt] (1-based): 30s, 60s, 2m, 4m, … capped at 15
+ * minutes. Long by HTTP standards on purpose — the failure this handles is
+ * usually "no cell coverage for the next 40 miles", and hammering the radio
+ * costs battery on a device that is often navigating at the same time. A
+ * regained network triggers an immediate flush anyway (see [RtotaTripManager]),
+ * so the backoff only governs the pessimistic case.
+ */
+fun rtotaBackoffMs(attempt: Int): Long {
+    val capped = attempt.coerceIn(1, 6)
+    return minOf(30_000L shl (capped - 1), 15 * 60_000L)
+}
+
+/**
+ * Talks to the RTOTA API (rtota.app, or a self-hosted origin — see
+ * [RtotaSettings.baseUrl]). Same house style as
+ * [radio.ks3ckc.ft8af.pota.PotaClient]: HttpURLConnection only, suspend
+ * functions on Dispatchers.IO, every call logged into debug.log.
+ *
+ * Endpoints used:
+ *   POST /api/operators            -> register a callsign, receive an API key
+ *   POST /api/trips                -> create a trip
+ *   POST /api/trips/:id/live       -> append points + QSOs (idempotent for QSOs)
+ *   POST /api/trips/:id/complete   -> finalize
+ *   POST /api/activations          -> announce a planned trip
+ */
+object RtotaClient {
+    private const val TAG = "RtotaClient"
+    private const val USER_AGENT = "ft8af-rtota/1.0"
+    private const val CONNECT_TIMEOUT_MS = 15_000
+    private const val READ_TIMEOUT_MS = 30_000
+
+    /**
+     * Register a new rover. The server refuses a callsign that already exists
+     * (409) rather than echoing its key, so a returning user pastes the key from
+     * their rtota.app dashboard instead.
+     */
+    suspend fun registerOperator(
+        baseUrl: String,
+        callsign: String,
+        name: String? = null,
+        homeGrid: String? = null,
+        email: String? = null,
+    ): Result<String> = withContext(Dispatchers.IO) {
+        val body = JSONObject().apply {
+            put("callsign", callsign.trim().uppercase(Locale.US))
+            name?.takeIf { it.isNotBlank() }?.let { put("name", it.trim()) }
+            homeGrid?.takeIf { it.isNotBlank() }?.let { put("homeGrid", it.trim()) }
+            email?.takeIf { it.isNotBlank() }?.let { put("email", it.trim()) }
+        }.toString()
+        request("POST", "$baseUrl/api/operators", null, body).mapCatching { resp ->
+            JSONObject(resp).optString("apiKey").takeIf { it.isNotEmpty() }
+                ?: throw IllegalStateException("Server returned no apiKey")
+        }
+    }
+
+    /** Create a trip. Privacy omitted => the operator's default applies. */
+    suspend fun createTrip(
+        baseUrl: String,
+        apiKey: String,
+        name: String,
+        startTimeMs: Long,
+        notes: String? = null,
+        privacy: String? = null,
+    ): Result<RtotaTripHandle> = withContext(Dispatchers.IO) {
+        val body = JSONObject().apply {
+            put("name", name.trim().take(200))
+            put("startTime", isoUtc(startTimeMs))
+            notes?.takeIf { it.isNotBlank() }?.let { put("notes", it.trim().take(2000)) }
+            privacy?.takeIf { it.isNotBlank() }?.let { put("privacy", it) }
+        }.toString()
+        request("POST", "$baseUrl/api/trips", apiKey, body).mapCatching { resp ->
+            val o = JSONObject(resp)
+            val id = o.optString("id").takeIf { it.isNotEmpty() }
+                ?: throw IllegalStateException("Server returned no trip id")
+            RtotaTripHandle(id, o.optString("shareToken").takeIf { it.isNotEmpty() })
+        }
+    }
+
+    /**
+     * Append a batch to a running trip. Safe to retry: QSOs dedupe server-side.
+     * Points do not, so callers must only drop a batch on a confirmed 2xx — a
+     * response lost after the server committed can duplicate breadcrumbs, which
+     * is the one failure mode worth accepting here (a doubled point draws the
+     * same route; a lost QSO does not).
+     */
+    suspend fun sendLive(
+        baseUrl: String,
+        apiKey: String,
+        tripId: String,
+        batch: RtotaBatch,
+    ): Result<RtotaLiveAck> = withContext(Dispatchers.IO) {
+        val body = buildLiveBody(batch.points, batch.qsos)
+        request("POST", "$baseUrl/api/trips/$tripId/live", apiKey, body).map { resp ->
+            parseLiveAck(resp) ?: RtotaLiveAck(batch.points.size, batch.qsos.size, 0)
+        }
+    }
+
+    suspend fun completeTrip(
+        baseUrl: String,
+        apiKey: String,
+        tripId: String,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        request("POST", "$baseUrl/api/trips/$tripId/complete", apiKey, "{}").map { }
+    }
+
+    /** Announce a planned activation so followers see it before departure. */
+    suspend fun createActivation(
+        baseUrl: String,
+        apiKey: String,
+        title: String,
+        startTimeMs: Long,
+        endTimeMs: Long? = null,
+        detail: String? = null,
+        bands: List<String> = emptyList(),
+        modes: List<String> = emptyList(),
+        privacy: String? = null,
+    ): Result<String> = withContext(Dispatchers.IO) {
+        val body = JSONObject().apply {
+            put("title", title.trim().take(200))
+            put("startTime", isoUtc(startTimeMs))
+            endTimeMs?.let { put("endTime", isoUtc(it)) }
+            detail?.takeIf { it.isNotBlank() }?.let { put("detail", it.trim().take(2000)) }
+            if (bands.isNotEmpty()) put("bands", JSONArray(bands.take(20)))
+            if (modes.isNotEmpty()) put("modes", JSONArray(modes.take(20)))
+            privacy?.takeIf { it.isNotBlank() }?.let { put("privacy", it) }
+        }.toString()
+        request("POST", "$baseUrl/api/activations", apiKey, body).mapCatching { resp ->
+            JSONObject(resp).optString("id").takeIf { it.isNotEmpty() }
+                ?: throw IllegalStateException("Server returned no activation id")
+        }
+    }
+
+    /**
+     * One request. Returns the body on 2xx, a [RtotaHttpException] otherwise, or
+     * the underlying [IOException] when the network never got there.
+     */
+    // Broad catch on purpose: every failure mode here — DNS, TLS, a proxy
+    // rewriting the response, a malformed override URL the user typed — must come
+    // back as a Result the flush loop can classify, never as a thrown exception
+    // that would take out the upload coroutine mid-trip.
+    @Suppress("TooGenericExceptionCaught")
+    private fun request(
+        method: String,
+        url: String,
+        apiKey: String?,
+        body: String?,
+    ): Result<String> {
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = method
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = READ_TIMEOUT_MS
+                setRequestProperty("User-Agent", USER_AGENT)
+                setRequestProperty("Accept", "application/json")
+                apiKey?.takeIf { it.isNotBlank() }?.let {
+                    setRequestProperty("Authorization", "Bearer $it")
+                }
+                if (body != null) {
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                }
+            }
+            body?.let { payload ->
+                conn.outputStream.use { it.write(payload.toByteArray(StandardCharsets.UTF_8)) }
+            }
+            val code = conn.responseCode
+            if (code !in 200..299) {
+                val err = conn.errorStream?.bufferedReader(StandardCharsets.UTF_8)
+                    ?.use { it.readText() }.orEmpty()
+                log("$method $url -> http $code ${err.take(160)}")
+                return Result.failure(RtotaHttpException(code, err))
+            }
+            val resp = conn.inputStream?.bufferedReader(StandardCharsets.UTF_8)
+                ?.use { it.readText() }.orEmpty()
+            log("$method $url -> $code (${resp.length}B)")
+            Result.success(resp)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log("$method $url failed: ${e.javaClass.simpleName}: ${e.message ?: "?"}")
+            Result.failure(e)
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
+    private fun log(msg: String) {
+        Log.d(TAG, msg)
+        try {
+            val ctx = GeneralVariables.getMainContext() ?: return
+            val dir = ctx.getExternalFilesDir(null) ?: return
+            val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
+            FileWriter(File(dir, "debug.log"), true).use { it.append("$ts Rtota: $msg\n") }
+        } catch (_: Exception) {
+        }
+    }
+}

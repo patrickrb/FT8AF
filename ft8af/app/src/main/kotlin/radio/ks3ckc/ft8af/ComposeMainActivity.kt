@@ -37,6 +37,7 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import radio.ks3ckc.ft8af.crash.CrashReporting
+import radio.ks3ckc.ft8af.rtota.RtotaTripManager
 import radio.ks3ckc.ft8af.sync.QsoAutoSync
 import radio.ks3ckc.ft8af.util.bluetoothAdapter
 import com.k1af.ft8af.service.RxForegroundService
@@ -193,6 +194,11 @@ class ComposeMainActivity : AppCompatActivity() {
             register()
             syncNow("app-start")
         }
+
+        // RTOTA trip mode: restore an in-flight road trip (one the phone was killed or
+        // rebooted in the middle of), resume GPS tracking, and push whatever queued up
+        // offline. No-op unless trip mode is enabled and a trip is actually running.
+        RtotaTripManager.init(applicationContext)
 
         // Set Compose UI — splash plays once per cold start, then crossfades into the app.
         setContent {
