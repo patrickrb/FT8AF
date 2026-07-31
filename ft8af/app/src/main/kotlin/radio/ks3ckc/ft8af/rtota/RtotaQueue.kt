@@ -28,7 +28,6 @@ data class RtotaBatch(val points: List<TripPoint>, val qsos: List<TripQso>) {
  * [file] may be null in tests that only exercise the in-memory behaviour.
  */
 class RtotaQueue(private val file: File?) {
-
     private val points = ArrayList<TripPoint>()
     private val qsos = ArrayList<TripQso>()
 
@@ -77,10 +76,11 @@ class RtotaQueue(private val file: File?) {
     fun peekBatch(
         maxPoints: Int = BATCH_POINTS,
         maxQsos: Int = BATCH_QSOS,
-    ): RtotaBatch = RtotaBatch(
-        points = points.take(maxPoints),
-        qsos = qsos.take(maxQsos),
-    )
+    ): RtotaBatch =
+        RtotaBatch(
+            points = points.take(maxPoints),
+            qsos = qsos.take(maxQsos),
+        )
 
     /**
      * Drop a batch the server accepted. Counts, not identities: the queue is
@@ -138,10 +138,11 @@ class RtotaQueue(private val file: File?) {
     private fun persist() {
         val f = file ?: return
         try {
-            val root = JSONObject().apply {
-                put("points", JSONArray().apply { points.forEach { put(it.toStoredJson()) } })
-                put("qsos", JSONArray().apply { qsos.forEach { put(it.toStoredJson()) } })
-            }
+            val root =
+                JSONObject().apply {
+                    put("points", JSONArray().apply { points.forEach { put(it.toStoredJson()) } })
+                    put("qsos", JSONArray().apply { qsos.forEach { put(it.toStoredJson()) } })
+                }
             // Write-then-rename: a kill mid-write leaves the previous good file in
             // place instead of a truncated one.
             val tmp = File(f.parentFile, f.name + ".tmp")

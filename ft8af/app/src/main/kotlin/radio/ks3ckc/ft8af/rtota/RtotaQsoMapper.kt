@@ -11,7 +11,6 @@ import com.k1af.ft8af.log.QSLRecord
  * [tripQsoFromRecord] is the thin adapter the QSO save path calls.
  */
 object RtotaQsoMapper {
-
     /**
      * @param roverLat/[roverLon] where the rover was — the last accepted GPS
      *        breadcrumb. Omitted when tracking hasn't produced a fix yet; the
@@ -41,9 +40,10 @@ object RtotaQsoMapper {
         // Prefer TIME_ON (start of the exchange) — it is what the server's dedupe
         // key rounds to the minute, so the live copy and the end-of-trip ADIF
         // copy of the same QSO must agree on it.
-        val ts = parseAdifUtc(qsoDate, timeOn)
-            ?: parseAdifUtc(qsoDateOff, timeOff)
-            ?: nowMs
+        val ts =
+            parseAdifUtc(qsoDate, timeOn)
+                ?: parseAdifUtc(qsoDateOff, timeOff)
+                ?: nowMs
         return TripQso(
             callsign = call,
             timestampMs = ts,
@@ -67,21 +67,22 @@ object RtotaQsoMapper {
         roverLon: Double?,
         state: String?,
         nowMs: Long = System.currentTimeMillis(),
-    ): TripQso? = buildTripQso(
-        toCallsign = record.getToCallsign(),
-        qsoDate = record.getQso_date(),
-        timeOn = record.getTime_on(),
-        qsoDateOff = record.getQso_date_off(),
-        timeOff = record.getTime_off(),
-        band = record.getBandLength(),
-        mode = record.getMode(),
-        toGrid = record.getToMaidenGrid(),
-        sendReport = record.getSendReport(),
-        receivedReport = record.getReceivedReport(),
-        bandFreqHz = record.getBandFreq(),
-        roverLat = roverLat,
-        roverLon = roverLon,
-        state = state,
-        nowMs = nowMs,
-    )
+    ): TripQso? =
+        buildTripQso(
+            toCallsign = record.getToCallsign(),
+            qsoDate = record.getQso_date(),
+            timeOn = record.getTime_on(),
+            qsoDateOff = record.getQso_date_off(),
+            timeOff = record.getTime_off(),
+            band = record.getBandLength(),
+            mode = record.getMode(),
+            toGrid = record.getToMaidenGrid(),
+            sendReport = record.getSendReport(),
+            receivedReport = record.getReceivedReport(),
+            bandFreqHz = record.getBandFreq(),
+            roverLat = roverLat,
+            roverLon = roverLon,
+            state = state,
+            nowMs = nowMs,
+        )
 }

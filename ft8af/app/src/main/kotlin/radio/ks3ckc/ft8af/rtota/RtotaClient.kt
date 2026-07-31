@@ -20,14 +20,14 @@ import java.util.Locale
 /** Non-2xx from rtota.app, carrying the status so callers can tell retryable from fatal. */
 class RtotaHttpException(val httpCode: Int, val body: String) :
     Exception("HTTP $httpCode${if (body.isNotBlank()) ": ${body.take(200)}" else ""}") {
-
     /** The `error` field rtota.app puts in every failure body, when present. */
     val serverMessage: String?
-        get() = try {
-            JSONObject(body).optString("error").takeIf { it.isNotEmpty() }
-        } catch (_: Exception) {
-            null
-        }
+        get() =
+            try {
+                JSONObject(body).optString("error").takeIf { it.isNotEmpty() }
+            } catch (_: Exception) {
+                null
+            }
 }
 
 /**
@@ -36,11 +36,12 @@ class RtotaHttpException(val httpCode: Int, val body: String) :
  * request itself is wrong — a bad API key, a trip that isn't ours — and retrying
  * it just burns battery against the same rejection.
  */
-fun isRetryableRtotaFailure(error: Throwable?): Boolean = when (error) {
-    is RtotaHttpException -> error.httpCode == 429 || error.httpCode >= 500
-    is IOException -> true
-    else -> false
-}
+fun isRetryableRtotaFailure(error: Throwable?): Boolean =
+    when (error) {
+        is RtotaHttpException -> error.httpCode == 429 || error.httpCode >= 500
+        is IOException -> true
+        else -> false
+    }
 
 /**
  * Backoff before retry [attempt] (1-based): 30s, 60s, 2m, 4m, … capped at 15
@@ -85,18 +86,20 @@ object RtotaClient {
         name: String? = null,
         homeGrid: String? = null,
         email: String? = null,
-    ): Result<String> = withContext(Dispatchers.IO) {
-        val body = JSONObject().apply {
-            put("callsign", callsign.trim().uppercase(Locale.US))
-            name?.takeIf { it.isNotBlank() }?.let { put("name", it.trim()) }
-            homeGrid?.takeIf { it.isNotBlank() }?.let { put("homeGrid", it.trim()) }
-            email?.takeIf { it.isNotBlank() }?.let { put("email", it.trim()) }
-        }.toString()
-        request("POST", "$baseUrl/api/operators", null, body).mapCatching { resp ->
-            JSONObject(resp).optString("apiKey").takeIf { it.isNotEmpty() }
-                ?: throw IllegalStateException("Server returned no apiKey")
+    ): Result<String> =
+        withContext(Dispatchers.IO) {
+            val body =
+                JSONObject().apply {
+                    put("callsign", callsign.trim().uppercase(Locale.US))
+                    name?.takeIf { it.isNotBlank() }?.let { put("name", it.trim()) }
+                    homeGrid?.takeIf { it.isNotBlank() }?.let { put("homeGrid", it.trim()) }
+                    email?.takeIf { it.isNotBlank() }?.let { put("email", it.trim()) }
+                }.toString()
+            request("POST", "$baseUrl/api/operators", null, body).mapCatching { resp ->
+                JSONObject(resp).optString("apiKey").takeIf { it.isNotEmpty() }
+                    ?: throw IllegalStateException("Server returned no apiKey")
+            }
         }
-    }
 
     /** Create a trip. Privacy omitted => the operator's default applies. */
     suspend fun createTrip(
@@ -106,20 +109,23 @@ object RtotaClient {
         startTimeMs: Long,
         notes: String? = null,
         privacy: String? = null,
-    ): Result<RtotaTripHandle> = withContext(Dispatchers.IO) {
-        val body = JSONObject().apply {
-            put("name", name.trim().take(200))
-            put("startTime", isoUtc(startTimeMs))
-            notes?.takeIf { it.isNotBlank() }?.let { put("notes", it.trim().take(2000)) }
-            privacy?.takeIf { it.isNotBlank() }?.let { put("privacy", it) }
-        }.toString()
-        request("POST", "$baseUrl/api/trips", apiKey, body).mapCatching { resp ->
-            val o = JSONObject(resp)
-            val id = o.optString("id").takeIf { it.isNotEmpty() }
-                ?: throw IllegalStateException("Server returned no trip id")
-            RtotaTripHandle(id, o.optString("shareToken").takeIf { it.isNotEmpty() })
+    ): Result<RtotaTripHandle> =
+        withContext(Dispatchers.IO) {
+            val body =
+                JSONObject().apply {
+                    put("name", name.trim().take(200))
+                    put("startTime", isoUtc(startTimeMs))
+                    notes?.takeIf { it.isNotBlank() }?.let { put("notes", it.trim().take(2000)) }
+                    privacy?.takeIf { it.isNotBlank() }?.let { put("privacy", it) }
+                }.toString()
+            request("POST", "$baseUrl/api/trips", apiKey, body).mapCatching { resp ->
+                val o = JSONObject(resp)
+                val id =
+                    o.optString("id").takeIf { it.isNotEmpty() }
+                        ?: throw IllegalStateException("Server returned no trip id")
+                RtotaTripHandle(id, o.optString("shareToken").takeIf { it.isNotEmpty() })
+            }
         }
-    }
 
     /**
      * Append a batch to a running trip. Safe to retry: QSOs dedupe server-side.
@@ -133,20 +139,22 @@ object RtotaClient {
         apiKey: String,
         tripId: String,
         batch: RtotaBatch,
-    ): Result<RtotaLiveAck> = withContext(Dispatchers.IO) {
-        val body = buildLiveBody(batch.points, batch.qsos)
-        request("POST", "$baseUrl/api/trips/$tripId/live", apiKey, body).map { resp ->
-            parseLiveAck(resp) ?: RtotaLiveAck(batch.points.size, batch.qsos.size, 0)
+    ): Result<RtotaLiveAck> =
+        withContext(Dispatchers.IO) {
+            val body = buildLiveBody(batch.points, batch.qsos)
+            request("POST", "$baseUrl/api/trips/$tripId/live", apiKey, body).map { resp ->
+                parseLiveAck(resp) ?: RtotaLiveAck(batch.points.size, batch.qsos.size, 0)
+            }
         }
-    }
 
     suspend fun completeTrip(
         baseUrl: String,
         apiKey: String,
         tripId: String,
-    ): Result<Unit> = withContext(Dispatchers.IO) {
-        request("POST", "$baseUrl/api/trips/$tripId/complete", apiKey, "{}").map { }
-    }
+    ): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            request("POST", "$baseUrl/api/trips/$tripId/complete", apiKey, "{}").map { }
+        }
 
     /** Announce a planned activation so followers see it before departure. */
     suspend fun createActivation(
@@ -159,30 +167,33 @@ object RtotaClient {
         bands: List<String> = emptyList(),
         modes: List<String> = emptyList(),
         privacy: String? = null,
-    ): Result<String> = withContext(Dispatchers.IO) {
-        val body = JSONObject().apply {
-            put("title", title.trim().take(200))
-            put("startTime", isoUtc(startTimeMs))
-            endTimeMs?.let { put("endTime", isoUtc(it)) }
-            detail?.takeIf { it.isNotBlank() }?.let { put("detail", it.trim().take(2000)) }
-            if (bands.isNotEmpty()) put("bands", JSONArray(bands.take(20)))
-            if (modes.isNotEmpty()) put("modes", JSONArray(modes.take(20)))
-            privacy?.takeIf { it.isNotBlank() }?.let { put("privacy", it) }
-        }.toString()
-        request("POST", "$baseUrl/api/activations", apiKey, body).mapCatching { resp ->
-            JSONObject(resp).optString("id").takeIf { it.isNotEmpty() }
-                ?: throw IllegalStateException("Server returned no activation id")
+    ): Result<String> =
+        withContext(Dispatchers.IO) {
+            val body =
+                JSONObject().apply {
+                    put("title", title.trim().take(200))
+                    put("startTime", isoUtc(startTimeMs))
+                    endTimeMs?.let { put("endTime", isoUtc(it)) }
+                    detail?.takeIf { it.isNotBlank() }?.let { put("detail", it.trim().take(2000)) }
+                    if (bands.isNotEmpty()) put("bands", JSONArray(bands.take(20)))
+                    if (modes.isNotEmpty()) put("modes", JSONArray(modes.take(20)))
+                    privacy?.takeIf { it.isNotBlank() }?.let { put("privacy", it) }
+                }.toString()
+            request("POST", "$baseUrl/api/activations", apiKey, body).mapCatching { resp ->
+                JSONObject(resp).optString("id").takeIf { it.isNotEmpty() }
+                    ?: throw IllegalStateException("Server returned no activation id")
+            }
         }
-    }
 
     /**
      * One request. Returns the body on 2xx, a [RtotaHttpException] otherwise, or
      * the underlying [IOException] when the network never got there.
+     *
+     * The catch is broad on purpose: every failure mode here — DNS, TLS, a proxy
+     * rewriting the response, a malformed override URL the user typed — must come
+     * back as a Result the flush loop can classify, never as a thrown exception
+     * that would take out the upload coroutine mid-trip.
      */
-    // Broad catch on purpose: every failure mode here — DNS, TLS, a proxy
-    // rewriting the response, a malformed override URL the user typed — must come
-    // back as a Result the flush loop can classify, never as a thrown exception
-    // that would take out the upload coroutine mid-trip.
     @Suppress("TooGenericExceptionCaught")
     private fun request(
         method: String,
@@ -192,32 +203,35 @@ object RtotaClient {
     ): Result<String> {
         var conn: HttpURLConnection? = null
         return try {
-            conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = method
-                connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Accept", "application/json")
-                apiKey?.takeIf { it.isNotBlank() }?.let {
-                    setRequestProperty("Authorization", "Bearer $it")
+            conn =
+                (URL(url).openConnection() as HttpURLConnection).apply {
+                    requestMethod = method
+                    connectTimeout = CONNECT_TIMEOUT_MS
+                    readTimeout = READ_TIMEOUT_MS
+                    setRequestProperty("User-Agent", USER_AGENT)
+                    setRequestProperty("Accept", "application/json")
+                    apiKey?.takeIf { it.isNotBlank() }?.let {
+                        setRequestProperty("Authorization", "Bearer $it")
+                    }
+                    if (body != null) {
+                        doOutput = true
+                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                    }
                 }
-                if (body != null) {
-                    doOutput = true
-                    setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                }
-            }
             body?.let { payload ->
                 conn.outputStream.use { it.write(payload.toByteArray(StandardCharsets.UTF_8)) }
             }
             val code = conn.responseCode
             if (code !in 200..299) {
-                val err = conn.errorStream?.bufferedReader(StandardCharsets.UTF_8)
-                    ?.use { it.readText() }.orEmpty()
+                val err =
+                    conn.errorStream?.bufferedReader(StandardCharsets.UTF_8)
+                        ?.use { it.readText() }.orEmpty()
                 log("$method $url -> http $code ${err.take(160)}")
                 return Result.failure(RtotaHttpException(code, err))
             }
-            val resp = conn.inputStream?.bufferedReader(StandardCharsets.UTF_8)
-                ?.use { it.readText() }.orEmpty()
+            val resp =
+                conn.inputStream?.bufferedReader(StandardCharsets.UTF_8)
+                    ?.use { it.readText() }.orEmpty()
             log("$method $url -> $code (${resp.length}B)")
             Result.success(resp)
         } catch (e: CancellationException) {

@@ -4,10 +4,10 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import radio.ks3ckc.ft8af.ui.rtota.describeProfile
 import radio.ks3ckc.ft8af.ui.rtota.maskKey
-import radio.ks3ckc.ft8af.ui.rtota.nextDistance
-import radio.ks3ckc.ft8af.ui.rtota.nextInterval
 import radio.ks3ckc.ft8af.ui.rtota.nextPrivacy
+import radio.ks3ckc.ft8af.ui.rtota.nextProfile
 
 /**
  * The decision logic pulled out of the Compose screen (tap-to-cycle rows, key
@@ -41,11 +41,23 @@ class RoadTripScreenLogicTest {
     }
 
     @Test
-    fun `cadence rows step up and wrap`() {
-        assertThat(nextInterval(30)).isEqualTo(60)
-        assertThat(nextInterval(300)).isEqualTo(10)
-        assertThat(nextDistance(120)).isEqualTo(250)
-        assertThat(nextDistance(1000)).isEqualTo(50)
+    fun `the profile row cycles through every profile and wraps`() {
+        val seen = mutableListOf<String>()
+        var p = SmartBeaconProfile.CAR
+        repeat(SmartBeaconProfile.ALL.size) {
+            p = nextProfile(p)
+            seen.add(p.key)
+        }
+        assertThat(seen).containsExactly("bicycle", "walking", "car").inOrder()
+    }
+
+    @Test
+    fun `the profile summary states the real numbers`() {
+        val text = describeProfile(SmartBeaconProfile.CAR)
+        assertThat(text).contains("30 s above 70 mph")
+        assertThat(text).contains("3 min")
+        assertThat(text).contains("15° + 255/mph")
+        assertThat(text).contains("parked")
     }
 
     @Test
@@ -61,6 +73,15 @@ class RoadTripScreenLogicTest {
     fun `notification stays quiet when everything is uploaded`() {
         val text = RtotaTripService.notificationText(RtotaTripState(miles = 12.0, sentQsos = 3))
         assertThat(text).isEqualTo("12.0 mi · 3 QSOs")
+    }
+
+    @Test
+    fun `notification says parked so a quiet trail does not read as broken`() {
+        val text =
+            RtotaTripService.notificationText(
+                RtotaTripState(miles = 88.0, sentQsos = 12, parked = true),
+            )
+        assertThat(text).isEqualTo("88.0 mi · 12 QSOs · parked")
     }
 
     @Test

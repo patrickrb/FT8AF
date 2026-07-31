@@ -22,7 +22,7 @@ import java.util.TimeZone
  * backlog. Nullable fields are simply omitted when unknown.
  */
 
-/** One GPS breadcrumb along the route. */
+// One GPS breadcrumb along the route.
 data class TripPoint(
     val timestampMs: Long,
     val latitude: Double,
@@ -92,7 +92,10 @@ fun isoUtc(epochMs: Long): String {
  * a malformed row must yield null (the caller then falls back to "now") rather
  * than silently land the QSO in year 202.
  */
-fun parseAdifUtc(date: String?, time: String?): Long? {
+fun parseAdifUtc(
+    date: String?,
+    time: String?,
+): Long? {
     val d = date?.trim().orEmpty()
     val t = time?.trim().orEmpty()
     if (d.length != 8 || t.length < 4) return null
@@ -114,8 +117,7 @@ fun parseAdifUtc(date: String?, time: String?): Long? {
  * from imported logs). Mirrors `AdifFormat.formatReport` for real values so a
  * live-sent report reads identically to the one in the end-of-trip ADIF.
  */
-fun formatReport(report: Int): String? =
-    if (report == -100 || report == -120) null else String.format(Locale.US, "%+03d", report)
+fun formatReport(report: Int): String? = if (report == -100 || report == -120) null else String.format(Locale.US, "%+03d", report)
 
 /**
  * Dial frequency in Hz → kHz, or null when outside the server's accepted range
@@ -132,45 +134,48 @@ fun frequencyKhzOrNull(freqHz: Long): Double? {
 // JSON encoding / decoding
 // ---------------------------------------------------------------------------
 
-private fun JSONObject.putIfNotNull(name: String, value: Any?) {
+private fun JSONObject.putIfNotNull(
+    name: String,
+    value: Any?,
+) {
     if (value != null) put(name, value)
 }
 
-private fun JSONObject.optStringOrNull(name: String): String? =
-    if (isNull(name)) null else optString(name).takeIf { it.isNotEmpty() }
+private fun JSONObject.optStringOrNull(name: String): String? = if (isNull(name)) null else optString(name).takeIf { it.isNotEmpty() }
 
-private fun JSONObject.optDoubleOrNull(name: String): Double? =
-    if (isNull(name)) null else optDouble(name).takeIf { !it.isNaN() }
+private fun JSONObject.optDoubleOrNull(name: String): Double? = if (isNull(name)) null else optDouble(name).takeIf { !it.isNaN() }
 
 /**
  * Encode a point. Out-of-range optional fields are dropped rather than clamped
  * where a wrong value would be a lie (a bogus heading), and clamped where the
  * value is merely imprecise (a hair over 360 from a wrapping compass).
  */
-fun TripPoint.toJson(): JSONObject = JSONObject().apply {
-    put("timestamp", isoUtc(timestampMs))
-    put("latitude", latitude)
-    put("longitude", longitude)
-    putIfNotNull("speedMph", speedMph?.takeIf { it.isFinite() && it >= 0.0 })
-    putIfNotNull("headingDeg", headingDeg?.takeIf { it.isFinite() }?.let { ((it % 360.0) + 360.0) % 360.0 })
-    putIfNotNull("accuracy", accuracyM?.takeIf { it.isFinite() && it >= 0.0 })
-    putIfNotNull("state", state?.takeIf { it.isNotBlank() }?.take(40))
-    putIfNotNull("highway", highway?.takeIf { it.isNotBlank() }?.take(40))
-}
+fun TripPoint.toJson(): JSONObject =
+    JSONObject().apply {
+        put("timestamp", isoUtc(timestampMs))
+        put("latitude", latitude)
+        put("longitude", longitude)
+        putIfNotNull("speedMph", speedMph?.takeIf { it.isFinite() && it >= 0.0 })
+        putIfNotNull("headingDeg", headingDeg?.takeIf { it.isFinite() }?.let { ((it % 360.0) + 360.0) % 360.0 })
+        putIfNotNull("accuracy", accuracyM?.takeIf { it.isFinite() && it >= 0.0 })
+        putIfNotNull("state", state?.takeIf { it.isNotBlank() }?.take(40))
+        putIfNotNull("highway", highway?.takeIf { it.isNotBlank() }?.take(40))
+    }
 
-fun TripQso.toJson(): JSONObject = JSONObject().apply {
-    put("callsign", callsign.trim().uppercase(Locale.US).take(20))
-    put("timestamp", isoUtc(timestampMs))
-    putIfNotNull("band", band?.takeIf { it.isNotBlank() }?.take(12))
-    putIfNotNull("mode", mode?.takeIf { it.isNotBlank() }?.take(20))
-    putIfNotNull("grid", grid?.takeIf { it.isNotBlank() }?.take(12))
-    putIfNotNull("sentReport", sentReport?.takeIf { it.isNotBlank() }?.take(12))
-    putIfNotNull("rcvdReport", rcvdReport?.takeIf { it.isNotBlank() }?.take(12))
-    putIfNotNull("roverLat", roverLat?.takeIf { it.isFinite() && it in -90.0..90.0 })
-    putIfNotNull("roverLon", roverLon?.takeIf { it.isFinite() && it in -180.0..180.0 })
-    putIfNotNull("state", state?.takeIf { it.isNotBlank() }?.take(40))
-    putIfNotNull("frequencyKhz", frequencyKhz?.takeIf { it.isFinite() && it in 100.0..10_000_000.0 })
-}
+fun TripQso.toJson(): JSONObject =
+    JSONObject().apply {
+        put("callsign", callsign.trim().uppercase(Locale.US).take(20))
+        put("timestamp", isoUtc(timestampMs))
+        putIfNotNull("band", band?.takeIf { it.isNotBlank() }?.take(12))
+        putIfNotNull("mode", mode?.takeIf { it.isNotBlank() }?.take(20))
+        putIfNotNull("grid", grid?.takeIf { it.isNotBlank() }?.take(12))
+        putIfNotNull("sentReport", sentReport?.takeIf { it.isNotBlank() }?.take(12))
+        putIfNotNull("rcvdReport", rcvdReport?.takeIf { it.isNotBlank() }?.take(12))
+        putIfNotNull("roverLat", roverLat?.takeIf { it.isFinite() && it in -90.0..90.0 })
+        putIfNotNull("roverLon", roverLon?.takeIf { it.isFinite() && it in -180.0..180.0 })
+        putIfNotNull("state", state?.takeIf { it.isNotBlank() }?.take(40))
+        putIfNotNull("frequencyKhz", frequencyKhz?.takeIf { it.isFinite() && it in 100.0..10_000_000.0 })
+    }
 
 /** Rebuild a point from the queue file. Returns null for an unparsable row. */
 fun tripPointFromJson(o: JSONObject): TripPoint? {
@@ -196,30 +201,32 @@ fun tripPointFromJson(o: JSONObject): TripPoint? {
  * millis and short keys so a long dead-zone backlog stays small on disk, and so
  * a future change to the wire format can't corrupt already-queued data.
  */
-fun TripPoint.toStoredJson(): JSONObject = JSONObject().apply {
-    put("t", timestampMs)
-    put("lat", latitude)
-    put("lon", longitude)
-    putIfNotNull("spd", speedMph)
-    putIfNotNull("hdg", headingDeg)
-    putIfNotNull("acc", accuracyM)
-    putIfNotNull("st", state)
-    putIfNotNull("hw", highway)
-}
+fun TripPoint.toStoredJson(): JSONObject =
+    JSONObject().apply {
+        put("t", timestampMs)
+        put("lat", latitude)
+        put("lon", longitude)
+        putIfNotNull("spd", speedMph)
+        putIfNotNull("hdg", headingDeg)
+        putIfNotNull("acc", accuracyM)
+        putIfNotNull("st", state)
+        putIfNotNull("hw", highway)
+    }
 
-fun TripQso.toStoredJson(): JSONObject = JSONObject().apply {
-    put("t", timestampMs)
-    put("call", callsign)
-    putIfNotNull("band", band)
-    putIfNotNull("mode", mode)
-    putIfNotNull("grid", grid)
-    putIfNotNull("rs", sentReport)
-    putIfNotNull("rr", rcvdReport)
-    putIfNotNull("lat", roverLat)
-    putIfNotNull("lon", roverLon)
-    putIfNotNull("st", state)
-    putIfNotNull("khz", frequencyKhz)
-}
+fun TripQso.toStoredJson(): JSONObject =
+    JSONObject().apply {
+        put("t", timestampMs)
+        put("call", callsign)
+        putIfNotNull("band", band)
+        putIfNotNull("mode", mode)
+        putIfNotNull("grid", grid)
+        putIfNotNull("rs", sentReport)
+        putIfNotNull("rr", rcvdReport)
+        putIfNotNull("lat", roverLat)
+        putIfNotNull("lon", roverLon)
+        putIfNotNull("st", state)
+        putIfNotNull("khz", frequencyKhz)
+    }
 
 fun tripQsoFromJson(o: JSONObject): TripQso? {
     val ts = o.optLong("t", 0L)
@@ -241,7 +248,10 @@ fun tripQsoFromJson(o: JSONObject): TripQso? {
 }
 
 /** The body of one `POST /api/trips/:id/live` call. */
-fun buildLiveBody(points: List<TripPoint>, qsos: List<TripQso>): String =
+fun buildLiveBody(
+    points: List<TripPoint>,
+    qsos: List<TripQso>,
+): String =
     JSONObject().apply {
         if (points.isNotEmpty()) {
             put("points", JSONArray().apply { points.forEach { put(it.toJson()) } })
@@ -261,8 +271,9 @@ fun parseLiveAck(body: String?): RtotaLiveAck? {
         RtotaLiveAck(
             pointsInserted = points?.optInt("inserted", 0) ?: 0,
             qsosInserted = qsos?.optInt("inserted", 0) ?: 0,
-            duplicates = (qsos?.optInt("duplicatesExisting", 0) ?: 0) +
-                (qsos?.optInt("duplicatesInBatch", 0) ?: 0),
+            duplicates =
+                (qsos?.optInt("duplicatesExisting", 0) ?: 0) +
+                    (qsos?.optInt("duplicatesInBatch", 0) ?: 0),
         )
     } catch (_: Exception) {
         null

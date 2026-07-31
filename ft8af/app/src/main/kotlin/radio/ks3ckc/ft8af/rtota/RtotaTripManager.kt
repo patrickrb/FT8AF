@@ -7,10 +7,10 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.util.Log
+import com.google.android.gms.maps.model.LatLng
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.log.QSLRecord
 import com.k1af.ft8af.maidenhead.MaidenheadGrid
-import com.google.android.gms.maps.model.LatLng
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -46,6 +46,10 @@ data class RtotaTripState(
     val lastFixMs: Long = 0L,
     val lastUploadMs: Long = 0L,
     val uploading: Boolean = false,
+    /** Which SmartBeaconing rule kept the most recent route point. */
+    val lastBeaconReason: BeaconReason? = null,
+    /** True while the sampler considers the rover stopped (no points are recorded). */
+    val parked: Boolean = false,
     /** Last upload failure, cleared by the next success. Shown verbatim in the UI. */
     val lastError: String? = null,
 )
@@ -69,7 +73,6 @@ data class RtotaTripState(
  * the QSO save path deep in DatabaseOpr — have no shared owner to hang it off.
  */
 object RtotaTripManager {
-
     private const val TAG = "RtotaTripManager"
     private const val QUEUE_FILE = "rtota_queue.json"
 
@@ -85,7 +88,16 @@ object RtotaTripManager {
     @Volatile
     private var queue: RtotaQueue? = null
 
-    private var sampler = TripPointSampler()
+    private var sampler = SmartBeaconSampler(SmartBeaconProfile.byKey(null))
+
+    /**
+     * The freshest fix seen, kept or not. QSOs are stamped from this rather than
+     * from the last *beacon*: on an interstate the last kept point can be half a
+     * minute and half a mile back, and a contact belongs where the rover actually
+     * was when it happened.
+     */
+    @Volatile
+    private var lastRawFix: TripPoint? = null
 
     /** Consecutive failed flushes — drives [rtotaBackoffMs]. */
     @Volatile
@@ -96,12 +108,13 @@ object RtotaTripManager {
 
     private var connectivityRegistered = false
 
-    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) {
-            // Coming out of a dead zone is the single best moment to flush.
-            requestFlush("network-available")
+    private val networkCallback =
+        object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                // Coming out of a dead zone is the single best moment to flush.
+                requestFlush("network-available")
+            }
         }
-    }
 
     /**
      * Bind to the application context and restore any interrupted trip. Safe to
@@ -124,17 +137,26 @@ object RtotaTripManager {
             publish()
             return
         }
-        _state.value = _state.value.copy(
-            active = true,
-            tripId = RtotaSettings.tripId,
-            tripName = RtotaSettings.tripName,
-            startedMs = RtotaSettings.tripStartedMs,
-            shareToken = RtotaSettings.tripShareToken,
-            pendingCreate = RtotaSettings.tripPendingCreate,
-        )
+        // A resumed trip starts the sampler fresh: the first fix after a restart
+        // becomes a FIRST beacon, which is right — the gap while the app was dead
+        // is real, and pretending to continue from a stale point would draw a
+        // straight line across wherever the phone actually went.
+        sampler = SmartBeaconSampler(SmartBeaconProfile.byKey(RtotaSettings.beaconProfile))
+        lastRawFix = null
+        _state.value =
+            _state.value.copy(
+                active = true,
+                tripId = RtotaSettings.tripId,
+                tripName = RtotaSettings.tripName,
+                startedMs = RtotaSettings.tripStartedMs,
+                shareToken = RtotaSettings.tripShareToken,
+                pendingCreate = RtotaSettings.tripPendingCreate,
+            )
         publish()
-        log("restored trip id=${RtotaSettings.tripId.ifEmpty { "(pending)" }} " +
-            "queued=${queue?.pointCount() ?: 0}pts/${queue?.qsoCount() ?: 0}qsos")
+        log(
+            "restored trip id=${RtotaSettings.tripId.ifEmpty { "(pending)" }} " +
+                "queued=${queue?.pointCount() ?: 0}pts/${queue?.qsoCount() ?: 0}qsos",
+        )
         startTracking()
         requestFlush("restore")
     }
@@ -148,7 +170,11 @@ object RtotaTripManager {
      * background and is retried until it lands, so the rover can pull out of a
      * driveway with no signal and still have a complete route.
      */
-    fun startTrip(name: String, privacy: String?, notes: String? = null) {
+    fun startTrip(
+        name: String,
+        privacy: String?,
+        notes: String? = null,
+    ) {
         if (RtotaSettings.hasActiveTrip) {
             log("startTrip ignored — a trip is already running")
             return
@@ -162,19 +188,16 @@ object RtotaTripManager {
         RtotaSettings.tripId = ""
         RtotaSettings.tripShareToken = ""
 
-        sampler = TripPointSampler(
-            SamplerConfig(
-                minIntervalMs = RtotaSettings.minIntervalSec * 1000L,
-                minDistanceM = RtotaSettings.minDistanceM.toDouble(),
-            ),
-        )
+        sampler = SmartBeaconSampler(SmartBeaconProfile.byKey(RtotaSettings.beaconProfile))
+        lastRawFix = null
         queue?.clear()
-        _state.value = RtotaTripState(
-            active = true,
-            tripName = RtotaSettings.tripName,
-            startedMs = startedMs,
-            pendingCreate = true,
-        )
+        _state.value =
+            RtotaTripState(
+                active = true,
+                tripName = RtotaSettings.tripName,
+                startedMs = startedMs,
+                pendingCreate = true,
+            )
         log("startTrip '${RtotaSettings.tripName}' privacy=${privacy ?: "(default)"}")
         startTracking()
         // The trip notes ride along with the deferred create.
@@ -192,8 +215,13 @@ object RtotaTripManager {
      */
     fun endTrip() {
         if (!RtotaSettings.hasActiveTrip) return
-        log("endTrip '${RtotaSettings.tripName}' queued=${queue?.pointCount() ?: 0}pts/" +
-            "${queue?.qsoCount() ?: 0}qsos")
+        // Pin the last known position before tracking stops, so the route ends
+        // where the trip ended rather than at the last beacon behind it.
+        lastRawFix?.let { fix -> sampler.anchorForQso(fix)?.let { recordPoint(it) } }
+        log(
+            "endTrip '${RtotaSettings.tripName}' queued=${queue?.pointCount() ?: 0}pts/" +
+                "${queue?.qsoCount() ?: 0}qsos",
+        )
         RtotaSettings.tripPendingComplete = true
         stopTracking()
         requestFlush("end-trip")
@@ -209,8 +237,20 @@ object RtotaTripManager {
         queue?.clear()
         RtotaSettings.clearTrip()
         sampler.reset()
+        lastRawFix = null
         _state.value = RtotaTripState()
         log("abandonTrip — local queue dropped")
+    }
+
+    /**
+     * Change the SmartBeaconing profile, including mid-trip — a rover who parks
+     * the truck and walks a summit shouldn't have to end the trip to get sensible
+     * sampling on foot. The route recorded so far is untouched.
+     */
+    fun setBeaconProfile(profile: SmartBeaconProfile) {
+        RtotaSettings.beaconProfile = profile.key
+        sampler.setProfile(profile)
+        log("beacon profile -> ${profile.key}")
     }
 
     private fun defaultTripName(startedMs: Long): String {
@@ -223,37 +263,66 @@ object RtotaTripManager {
     // Producers
     // -----------------------------------------------------------------------
 
-    /** A GPS fix from [RtotaLocationTracker]. Sampled down before it is queued. */
+    /**
+     * A GPS fix from [RtotaLocationTracker], arriving about once a second.
+     * [SmartBeaconSampler] decides which ones become route points; the rest still
+     * update [lastRawFix] so a QSO can be placed precisely.
+     */
     fun onLocationFix(location: Location) {
         if (!RtotaSettings.hasActiveTrip) return
-        val candidate = TripPoint(
-            timestampMs = if (location.time > 0) location.time else System.currentTimeMillis(),
-            latitude = location.latitude,
-            longitude = location.longitude,
-            // Android reports m/s; the API wants mph.
-            speedMph = if (location.hasSpeed()) location.speed * 2.2369363 else null,
-            headingDeg = if (location.hasBearing()) location.bearing.toDouble() else null,
-            accuracyM = if (location.hasAccuracy()) location.accuracy.toDouble() else null,
-            state = stateForLatLon(location.latitude, location.longitude),
-        )
-        val accepted = sampler.offer(candidate) ?: run {
-            // Still note the fix so the UI can show tracking is alive.
-            _state.value = _state.value.copy(lastFixMs = candidate.timestampMs)
-            return
-        }
-        queue?.addPoint(accepted)
-        _state.value = _state.value.copy(
-            lastFixMs = accepted.timestampMs,
-            miles = sampler.traveledMeters / 1609.344,
-        )
-        publish()
+        val candidate =
+            TripPoint(
+                timestampMs = if (location.time > 0) location.time else System.currentTimeMillis(),
+                latitude = location.latitude,
+                longitude = location.longitude,
+                // Android reports m/s; the API wants mph.
+                speedMph = if (location.hasSpeed()) location.speed * MPS_TO_MPH else null,
+                headingDeg = if (location.hasBearing()) location.bearing.toDouble() else null,
+                accuracyM = if (location.hasAccuracy()) location.accuracy.toDouble() else null,
+                state = stateForLatLon(location.latitude, location.longitude),
+            )
+        lastRawFix = candidate
+
+        val decision =
+            sampler.offer(candidate) ?: run {
+                // Not a beacon — but a long stretch of not-a-beacon is how the sampler
+                // learns the rover has parked, so let it see the fix either way.
+                sampler.noteStationary(candidate)
+                _state.value =
+                    _state.value.copy(
+                        lastFixMs = candidate.timestampMs,
+                        parked = sampler.isParked,
+                    )
+                return
+            }
+        recordPoint(decision)
         requestFlush("point")
+    }
+
+    /** Queue a kept breadcrumb and reflect it in the UI/notification. */
+    private fun recordPoint(decision: BeaconDecision) {
+        queue?.addPoint(decision.point)
+        _state.value =
+            _state.value.copy(
+                lastFixMs = decision.point.timestampMs,
+                miles = sampler.traveledMeters / METERS_PER_MILE,
+                lastBeaconReason = decision.reason,
+                parked = sampler.isParked,
+            )
+        publish()
     }
 
     /**
      * A QSO was just written to the log. Called from `DatabaseOpr.doInsertQSLData`
      * for on-air and manually-logged contacts (bulk ADIF imports are excluded by
      * the caller — a whole imported logbook is not part of today's drive).
+     *
+     * Two things happen, and the second is the reason the map looks right: the
+     * contact is stamped with the *current* position ([lastRawFix]), and that
+     * position is also forced into the route as a breadcrumb. Without the anchor,
+     * a QSO logged mid-interstate-leg would be plotted up to half a mile off the
+     * drawn line — the line only has vertices where SmartBeaconing put them.
+     * With it, every contact sits exactly on the route it was made from.
      *
      * Never throws: this runs inside the app's log-write path, where an exception
      * would cost the operator the QSO itself.
@@ -263,14 +332,17 @@ object RtotaTripManager {
     fun onQsoLogged(record: QSLRecord?) {
         try {
             if (record == null || !RtotaSettings.enabled || !RtotaSettings.hasActiveTrip) return
-            val here = sampler.lastAccepted
-            val qso = RtotaQsoMapper.tripQsoFromRecord(
-                record = record,
-                roverLat = here?.latitude,
-                roverLon = here?.longitude,
-                state = here?.state,
-            ) ?: return
+            val here = lastRawFix ?: sampler.lastAccepted
+            val qso =
+                RtotaQsoMapper.tripQsoFromRecord(
+                    record = record,
+                    roverLat = here?.latitude,
+                    roverLon = here?.longitude,
+                    state = here?.state,
+                ) ?: return
             queue?.addQso(qso)
+            // Pin the route to where the contact happened.
+            here?.let { fix -> sampler.anchorForQso(fix)?.let { recordPoint(it) } }
             publish()
             requestFlush("qso")
             log("queued QSO ${qso.callsign} ${qso.band ?: "?"} ${qso.mode ?: "?"}")
@@ -285,7 +357,10 @@ object RtotaTripManager {
      * near a border, so this is a label for "which states did this trip touch",
      * not a legal determination — good enough for the trip's states-visited roll-up.
      */
-    private fun stateForLatLon(lat: Double, lon: Double): String? {
+    private fun stateForLatLon(
+        lat: Double,
+        lon: Double,
+    ): String? {
         val ctx = appContext ?: return null
         return try {
             val grid = MaidenheadGrid.getGridSquare(LatLng(lat, lon))
@@ -321,25 +396,27 @@ object RtotaTripManager {
 
             // 1. The trip may not exist server-side yet (started out of coverage).
             if (RtotaSettings.tripPendingCreate) {
-                val created = RtotaClient.createTrip(
-                    baseUrl = baseUrl,
-                    apiKey = apiKey,
-                    name = RtotaSettings.tripName,
-                    startTimeMs = RtotaSettings.tripStartedMs,
-                    notes = pendingNotes,
-                    privacy = RtotaSettings.tripPrivacy.takeIf { it.isNotBlank() },
-                )
+                val created =
+                    RtotaClient.createTrip(
+                        baseUrl = baseUrl,
+                        apiKey = apiKey,
+                        name = RtotaSettings.tripName,
+                        startTimeMs = RtotaSettings.tripStartedMs,
+                        notes = pendingNotes,
+                        privacy = RtotaSettings.tripPrivacy.takeIf { it.isNotBlank() },
+                    )
                 created.fold(
                     onSuccess = { handle ->
                         RtotaSettings.tripId = handle.id
                         RtotaSettings.tripShareToken = handle.shareToken.orEmpty()
                         RtotaSettings.tripPendingCreate = false
                         pendingNotes = null
-                        _state.value = _state.value.copy(
-                            tripId = handle.id,
-                            shareToken = handle.shareToken.orEmpty(),
-                            pendingCreate = false,
-                        )
+                        _state.value =
+                            _state.value.copy(
+                                tripId = handle.id,
+                                shareToken = handle.shareToken.orEmpty(),
+                                pendingCreate = false,
+                            )
                         log("trip created id=${handle.id}")
                     },
                     onFailure = { e ->
@@ -364,12 +441,13 @@ object RtotaTripManager {
                     onSuccess = { ack ->
                         q.commit(batch)
                         failedAttempts = 0
-                        _state.value = _state.value.copy(
-                            sentPoints = _state.value.sentPoints + batch.points.size,
-                            sentQsos = _state.value.sentQsos + ack.qsosInserted,
-                            lastUploadMs = System.currentTimeMillis(),
-                            lastError = null,
-                        )
+                        _state.value =
+                            _state.value.copy(
+                                sentPoints = _state.value.sentPoints + batch.points.size,
+                                sentQsos = _state.value.sentQsos + ack.qsosInserted,
+                                lastUploadMs = System.currentTimeMillis(),
+                                lastError = null,
+                            )
                         publish()
                     },
                     onFailure = { e ->
@@ -386,6 +464,7 @@ object RtotaTripManager {
                         log("trip completed id=$tripId")
                         RtotaSettings.clearTrip()
                         sampler.reset()
+                        lastRawFix = null
                         _state.value = RtotaTripState()
                     },
                     onFailure = { e ->
@@ -407,12 +486,16 @@ object RtotaTripManager {
      * on someone else's trip) just surfaces in the UI: the queue keeps everything,
      * so fixing the key and flushing again loses nothing.
      */
-    private fun failed(error: Throwable, step: String) {
+    private fun failed(
+        error: Throwable,
+        step: String,
+    ) {
         val retryable = isRetryableRtotaFailure(error)
-        val message = when (error) {
-            is RtotaHttpException -> error.serverMessage ?: "HTTP ${error.httpCode}"
-            else -> error.message ?: error.javaClass.simpleName
-        }
+        val message =
+            when (error) {
+                is RtotaHttpException -> error.serverMessage ?: "HTTP ${error.httpCode}"
+                else -> error.message ?: error.javaClass.simpleName
+            }
         _state.value = _state.value.copy(uploading = false, lastError = message)
         publish()
         log("$step failed (${if (retryable) "retrying" else "fatal"}): $message")
@@ -426,10 +509,11 @@ object RtotaTripManager {
 
     private fun scheduleRetry(delayMs: Long) {
         retryJob?.cancel()
-        retryJob = scope.launch {
-            delay(delayMs)
-            flush("retry")
-        }
+        retryJob =
+            scope.launch {
+                delay(delayMs)
+                flush("retry")
+            }
     }
 
     // -----------------------------------------------------------------------
@@ -443,10 +527,11 @@ object RtotaTripManager {
         // VALIDATED, not merely INTERNET: an unvalidated network (captive portal,
         // still associating) would just burn a flush pass. Same reasoning as
         // QsoAutoSync.
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-            .build()
+        val request =
+            NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                .build()
         try {
             cm.registerNetworkCallback(request, networkCallback)
             connectivityRegistered = true
@@ -471,10 +556,11 @@ object RtotaTripManager {
     /** Refresh the queue-derived counters and push them to the notification. */
     private fun publish() {
         val q = queue
-        _state.value = _state.value.copy(
-            pendingPoints = q?.pointCount() ?: 0,
-            pendingQsos = q?.qsoCount() ?: 0,
-        )
+        _state.value =
+            _state.value.copy(
+                pendingPoints = q?.pointCount() ?: 0,
+                pendingQsos = q?.qsoCount() ?: 0,
+            )
         appContext?.let { RtotaTripService.updateNotification(it, _state.value) }
     }
 

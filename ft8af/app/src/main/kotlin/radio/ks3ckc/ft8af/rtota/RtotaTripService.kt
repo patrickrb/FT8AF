@@ -32,7 +32,6 @@ import java.util.Locale
  * is still waiting to upload, plus a one-tap End Trip.
  */
 class RtotaTripService : Service() {
-
     private var tracker: RtotaLocationTracker? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -46,7 +45,11 @@ class RtotaTripService : Service() {
     // (missing permission, background-start policy, an OEM limit) and none of them
     // is worth crashing a trip over.
     @Suppress("TooGenericExceptionCaught")
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int,
+    ): Int {
         if (intent?.action == ACTION_END_TRIP) {
             GeneralVariables.fileLog("RtotaTripService: End Trip tapped")
             RtotaTripManager.endTrip()
@@ -95,14 +98,15 @@ class RtotaTripService : Service() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
         if (nm.getNotificationChannel(CHANNEL_ID) != null) return
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            getString(R.string.rtota_service_channel_name),
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply {
-            description = getString(R.string.rtota_service_channel_desc)
-            setShowBadge(false)
-        }
+        val channel =
+            NotificationChannel(
+                CHANNEL_ID,
+                getString(R.string.rtota_service_channel_name),
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = getString(R.string.rtota_service_channel_desc)
+                setShowBadge(false)
+            }
         nm.createNotificationChannel(channel)
     }
 
@@ -135,11 +139,15 @@ class RtotaTripService : Service() {
         }
 
         /** Refresh the ongoing notification's counters. No-op when not running. */
-        fun updateNotification(context: Context, state: RtotaTripState) {
+        fun updateNotification(
+            context: Context,
+            state: RtotaTripState,
+        ) {
             if (!running) return
             try {
-                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-                    ?: return
+                val nm =
+                    context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                        ?: return
                 nm.notify(NOTIF_ID, buildNotification(context, state))
             } catch (_: Exception) {
             }
@@ -151,31 +159,40 @@ class RtotaTripService : Service() {
          * line stays quiet.
          */
         internal fun notificationText(state: RtotaTripState): String {
-            val parts = mutableListOf(
-                String.format(Locale.US, "%.1f mi", state.miles),
-                "${state.sentQsos + state.pendingQsos} QSOs",
-            )
+            val parts =
+                mutableListOf(
+                    String.format(Locale.US, "%.1f mi", state.miles),
+                    "${state.sentQsos + state.pendingQsos} QSOs",
+                )
             val waiting = state.pendingPoints + state.pendingQsos
             if (waiting > 0) parts.add("$waiting waiting")
+            // Parked is worth saying out loud: the trail deliberately goes quiet,
+            // and without this the notification looks like tracking has broken.
+            if (state.parked) parts.add("parked")
             if (state.pendingCreate) parts.add("offline start")
             state.lastError?.let { parts.add(it.take(40)) }
             return parts.joinToString(" · ")
         }
 
-        private fun buildNotification(context: Context, state: RtotaTripState): Notification {
+        private fun buildNotification(
+            context: Context,
+            state: RtotaTripState,
+        ): Notification {
             var piFlags = PendingIntent.FLAG_UPDATE_CURRENT
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 piFlags = piFlags or PendingIntent.FLAG_IMMUTABLE
             }
-            val openIntent = Intent(context, radio.ks3ckc.ft8af.ComposeMainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            val openIntent =
+                Intent(context, radio.ks3ckc.ft8af.ComposeMainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             val openPi = PendingIntent.getActivity(context, 0, openIntent, piFlags)
-            val endPi = PendingIntent.getService(
-                context,
-                2,
-                Intent(context, RtotaTripService::class.java).setAction(ACTION_END_TRIP),
-                piFlags,
-            )
+            val endPi =
+                PendingIntent.getService(
+                    context,
+                    2,
+                    Intent(context, RtotaTripService::class.java).setAction(ACTION_END_TRIP),
+                    piFlags,
+                )
             val title = state.tripName.ifBlank { context.getString(R.string.rtota_service_title) }
             return NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)

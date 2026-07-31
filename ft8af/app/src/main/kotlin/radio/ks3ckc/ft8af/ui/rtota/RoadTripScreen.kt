@@ -3,8 +3,8 @@ package radio.ks3ckc.ft8af.ui.rtota
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,12 +17,12 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,15 +33,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.R
 import kotlinx.coroutines.launch
+import radio.ks3ckc.ft8af.rtota.BeaconReason
 import radio.ks3ckc.ft8af.rtota.RtotaClient
 import radio.ks3ckc.ft8af.rtota.RtotaSettings
 import radio.ks3ckc.ft8af.rtota.RtotaTripManager
 import radio.ks3ckc.ft8af.rtota.RtotaTripState
+import radio.ks3ckc.ft8af.rtota.SmartBeaconProfile
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 import radio.ks3ckc.ft8af.ui.components.SettingsRow
@@ -72,8 +74,9 @@ fun RoadTripScreen(onBack: () -> Unit) {
     var apiKey by remember { mutableStateOf(RtotaSettings.apiKey) }
     var privacy by remember { mutableStateOf(RtotaSettings.defaultPrivacy) }
     var tripName by remember { mutableStateOf("") }
-    var minIntervalSec by remember { mutableStateOf(RtotaSettings.minIntervalSec) }
-    var minDistanceM by remember { mutableStateOf(RtotaSettings.minDistanceM) }
+    var profile by remember {
+        mutableStateOf(SmartBeaconProfile.byKey(RtotaSettings.beaconProfile))
+    }
 
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -87,10 +90,11 @@ fun RoadTripScreen(onBack: () -> Unit) {
     // Trip tracking needs location; ask here rather than at the moment the user
     // taps Start, so a denied prompt doesn't silently produce a trip with no route.
     fun ensureLocationPermission(): Boolean {
-        val granted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-        ) == PackageManager.PERMISSION_GRANTED
+        val granted =
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
         if (!granted) {
             (context as? Activity)?.let {
                 ActivityCompat.requestPermissions(
@@ -170,25 +174,26 @@ fun RoadTripScreen(onBack: () -> Unit) {
                 busy = true
                 scope.launch {
                     val start = System.currentTimeMillis() + hoursFromNow * 3_600_000L
-                    val result = RtotaClient.createActivation(
-                        baseUrl = RtotaSettings.baseUrl,
-                        apiKey = RtotaSettings.apiKey,
-                        title = title,
-                        startTimeMs = start,
-                        privacy = privacy.takeIf { it.isNotBlank() },
-                    )
+                    val result =
+                        RtotaClient.createActivation(
+                            baseUrl = RtotaSettings.baseUrl,
+                            apiKey = RtotaSettings.apiKey,
+                            title = title,
+                            startTimeMs = start,
+                            privacy = privacy.takeIf { it.isNotBlank() },
+                        )
                     busy = false
-                    message = result.fold(
-                        onSuccess = { context.getString(R.string.rtota_announced) },
-                        onFailure = { it.message ?: it.javaClass.simpleName },
-                    )
+                    message =
+                        result.fold(
+                            onSuccess = { context.getString(R.string.rtota_announced) },
+                            onFailure = { it.message ?: it.javaClass.simpleName },
+                        )
                 }
             },
         )
     }
 
     SettingsDetailScaffold(title = stringResource(R.string.rtota_title), onBack = onBack) {
-
         // =====================================================================
         // ACCOUNT
         // =====================================================================
@@ -207,8 +212,9 @@ fun RoadTripScreen(onBack: () -> Unit) {
                     )
                     SettingsRow(
                         label = stringResource(R.string.rtota_callsign),
-                        value = callsign.ifBlank { GeneralVariables.myCallsign.orEmpty() }
-                            .ifBlank { "--" },
+                        value =
+                            callsign.ifBlank { GeneralVariables.myCallsign.orEmpty() }
+                                .ifBlank { "--" },
                         showChevron = true,
                         onClick = { showCallsignDialog = true },
                     )
@@ -220,21 +226,23 @@ fun RoadTripScreen(onBack: () -> Unit) {
                     )
                     SettingsRow(
                         label = stringResource(R.string.rtota_api_key),
-                        value = if (apiKey.isBlank()) {
-                            stringResource(R.string.common_not_configured)
-                        } else {
-                            maskKey(apiKey)
-                        },
+                        value =
+                            if (apiKey.isBlank()) {
+                                stringResource(R.string.common_not_configured)
+                            } else {
+                                maskKey(apiKey)
+                            },
                         showChevron = true,
                         onClick = { showKeyDialog = true },
                     )
                     if (apiKey.isBlank()) {
                         SettingsRow(
-                            label = if (busy) {
-                                stringResource(R.string.rtota_registering)
-                            } else {
-                                stringResource(R.string.rtota_register)
-                            },
+                            label =
+                                if (busy) {
+                                    stringResource(R.string.rtota_registering)
+                                } else {
+                                    stringResource(R.string.rtota_register)
+                                },
                             description = stringResource(R.string.rtota_register_desc),
                             showChevron = true,
                             onClick = {
@@ -242,13 +250,15 @@ fun RoadTripScreen(onBack: () -> Unit) {
                                 busy = true
                                 message = null
                                 scope.launch {
-                                    val result = RtotaClient.registerOperator(
-                                        baseUrl = RtotaSettings.baseUrl,
-                                        callsign = callsign.ifBlank {
-                                            GeneralVariables.myCallsign.orEmpty()
-                                        },
-                                        homeGrid = GeneralVariables.getMyMaidenheadGrid(),
-                                    )
+                                    val result =
+                                        RtotaClient.registerOperator(
+                                            baseUrl = RtotaSettings.baseUrl,
+                                            callsign =
+                                                callsign.ifBlank {
+                                                    GeneralVariables.myCallsign.orEmpty()
+                                                },
+                                            homeGrid = GeneralVariables.getMyMaidenheadGrid(),
+                                        )
                                     busy = false
                                     result.fold(
                                         onSuccess = { key ->
@@ -290,9 +300,10 @@ fun RoadTripScreen(onBack: () -> Unit) {
                         )
                         SettingsRow(
                             label = stringResource(R.string.rtota_privacy),
-                            value = privacy.ifBlank {
-                                stringResource(R.string.rtota_privacy_default)
-                            },
+                            value =
+                                privacy.ifBlank {
+                                    stringResource(R.string.rtota_privacy_default)
+                                },
                             onClick = {
                                 // Cycle: account default -> public -> delayed ->
                                 // followers -> private -> back to default.
@@ -330,28 +341,26 @@ fun RoadTripScreen(onBack: () -> Unit) {
         }
 
         // =====================================================================
-        // TRACKING
+        // TRACKING (SmartBeaconing)
         // =====================================================================
         SettingsSection(title = stringResource(R.string.rtota_section_tracking)) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     SettingsRow(
-                        label = stringResource(R.string.rtota_min_interval),
-                        description = stringResource(R.string.rtota_min_interval_desc),
-                        value = stringResource(R.string.rtota_seconds, minIntervalSec),
+                        label = stringResource(R.string.rtota_beacon_profile),
+                        description = stringResource(R.string.rtota_beacon_profile_desc),
+                        value = stringResource(profileLabelRes(profile.key)),
                         onClick = {
-                            minIntervalSec = nextInterval(minIntervalSec)
-                            RtotaSettings.minIntervalSec = minIntervalSec
+                            profile = nextProfile(profile)
+                            RtotaSettings.beaconProfile = profile.key
+                            RtotaTripManager.setBeaconProfile(profile)
                         },
                     )
-                    SettingsRow(
-                        label = stringResource(R.string.rtota_min_distance),
-                        description = stringResource(R.string.rtota_min_distance_desc),
-                        value = stringResource(R.string.rtota_meters, minDistanceM),
-                        onClick = {
-                            minDistanceM = nextDistance(minDistanceM)
-                            RtotaSettings.minDistanceM = minDistanceM
-                        },
+                    Text(
+                        text = describeProfile(profile),
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
                     )
                 }
             }
@@ -415,6 +424,15 @@ private fun ActiveTripCard(
                 stringResource(R.string.rtota_stat_never)
             },
         )
+        // Why the last route point was kept — makes SmartBeaconing legible from
+        // the passenger seat ("corner" on a curve, "parked" at a fuel stop).
+        StatLine(
+            stringResource(R.string.rtota_stat_last_point),
+            when {
+                state.parked -> stringResource(R.string.rtota_beacon_parked)
+                else -> stringResource(beaconReasonLabelRes(state.lastBeaconReason))
+            },
+        )
         if (state.pendingCreate) {
             Text(
                 text = stringResource(R.string.rtota_pending_create),
@@ -441,7 +459,10 @@ private fun ActiveTripCard(
 }
 
 @Composable
-private fun StatLine(label: String, value: String) {
+private fun StatLine(
+    label: String,
+    value: String,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -480,11 +501,12 @@ private fun RtotaTextDialog(
     var input by remember { mutableStateOf(initial) }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(BgSurface2)
-                .padding(24.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(BgSurface2)
+                    .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(text = title, color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
@@ -522,11 +544,12 @@ private fun AnnounceActivationDialog(
     var hours by remember { mutableStateOf("24") }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(BgSurface2)
-                .padding(24.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(BgSurface2)
+                    .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
@@ -573,15 +596,16 @@ private fun AnnounceActivationDialog(
 }
 
 @Composable
-private fun rtotaFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = TextPrimary,
-    unfocusedTextColor = TextPrimary,
-    cursorColor = Accent,
-    focusedBorderColor = Accent,
-    unfocusedBorderColor = BorderStrong,
-    focusedLabelColor = Accent,
-    unfocusedLabelColor = TextMuted,
-)
+private fun rtotaFieldColors() =
+    OutlinedTextFieldDefaults.colors(
+        focusedTextColor = TextPrimary,
+        unfocusedTextColor = TextPrimary,
+        cursorColor = Accent,
+        focusedBorderColor = Accent,
+        unfocusedBorderColor = BorderStrong,
+        focusedLabelColor = Accent,
+        unfocusedLabelColor = TextMuted,
+    )
 
 // ---------------------------------------------------------------------------
 // Small pure helpers (unit-tested)
@@ -591,8 +615,7 @@ private fun rtotaFieldColors() = OutlinedTextFieldDefaults.colors(
  * Show enough of the key to recognise it without printing a working credential
  * on a screen that may be mirrored to a car display.
  */
-internal fun maskKey(key: String): String =
-    if (key.length <= 8) "••••" else key.take(6) + "…" + key.takeLast(4)
+internal fun maskKey(key: String): String = if (key.length <= 8) "••••" else key.take(6) + "…" + key.takeLast(4)
 
 /** Privacy cycle for the tap-to-change row; "" means "let the account decide". */
 internal fun nextPrivacy(current: String): String {
@@ -601,13 +624,47 @@ internal fun nextPrivacy(current: String): String {
     return order[(idx + 1) % order.size]
 }
 
-/** Sampling cadences offered by the tap-to-change rows. */
-internal fun nextInterval(current: Int): Int {
-    val steps = listOf(10, 15, 30, 60, 120, 300)
-    return steps.firstOrNull { it > current } ?: steps.first()
+/** Tap-to-cycle through the SmartBeaconing profiles. */
+internal fun nextProfile(current: SmartBeaconProfile): SmartBeaconProfile {
+    val all = SmartBeaconProfile.ALL
+    val idx = all.indexOfFirst { it.key == current.key }.takeIf { it >= 0 } ?: 0
+    return all[(idx + 1) % all.size]
 }
 
-internal fun nextDistance(current: Int): Int {
-    val steps = listOf(50, 120, 250, 500, 1000)
-    return steps.firstOrNull { it > current } ?: steps.first()
-}
+@StringRes
+internal fun beaconReasonLabelRes(reason: BeaconReason?): Int =
+    when (reason) {
+        BeaconReason.FIRST -> R.string.rtota_beacon_first
+        BeaconReason.RATE -> R.string.rtota_beacon_rate
+        BeaconReason.CORNER -> R.string.rtota_beacon_corner
+        BeaconReason.RESUME -> R.string.rtota_beacon_resume
+        BeaconReason.QSO -> R.string.rtota_beacon_qso
+        null -> R.string.rtota_beacon_waiting
+    }
+
+@StringRes
+internal fun profileLabelRes(key: String): Int =
+    when (key) {
+        SmartBeaconProfile.BICYCLE.key -> R.string.rtota_profile_bicycle
+        SmartBeaconProfile.WALKING.key -> R.string.rtota_profile_walking
+        else -> R.string.rtota_profile_car
+    }
+
+/**
+ * Plain-language summary of what the profile will actually do, so the numbers
+ * behind SmartBeaconing are visible without an options screen full of them.
+ */
+internal fun describeProfile(profile: SmartBeaconProfile): String =
+    buildString {
+        append("A point every ")
+        append(profile.fastRateSec)
+        append(" s above ")
+        append(profile.fastSpeedMph.toInt())
+        append(" mph, stretching to ")
+        append(profile.slowRateSec / 60)
+        append(" min when crawling; extra points through turns sharper than ")
+        append(profile.minTurnAngleDeg.toInt())
+        append("° + ")
+        append(profile.turnSlope.toInt())
+        append("/mph. Nothing at all while parked.")
+    }

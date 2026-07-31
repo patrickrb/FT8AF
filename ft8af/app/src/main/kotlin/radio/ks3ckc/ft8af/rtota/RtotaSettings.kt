@@ -21,15 +21,13 @@ import com.k1af.ft8af.GeneralVariables
  * to the same trip id, with its queued breadcrumbs intact.
  */
 object RtotaSettings {
-
     private const val PREFS = "rtota_prefs"
 
     private const val KEY_ENABLED = "enabled"
     private const val KEY_BASE_URL = "baseUrl"
     private const val KEY_API_KEY = "apiKey"
     private const val KEY_CALLSIGN = "callsign"
-    private const val KEY_MIN_INTERVAL_SEC = "minIntervalSec"
-    private const val KEY_MIN_DISTANCE_M = "minDistanceM"
+    private const val KEY_BEACON_PROFILE = "beaconProfile"
     private const val KEY_DEFAULT_PRIVACY = "defaultPrivacy"
     private const val KEY_TRIP_ID = "tripId"
     private const val KEY_TRIP_NAME = "tripName"
@@ -41,12 +39,6 @@ object RtotaSettings {
 
     /** rtota.app is the hosted service; overridable for self-hosting or a dev box. */
     const val DEFAULT_BASE_URL = "https://rtota.app"
-
-    /** Sampling floor: no more than one breadcrumb every N seconds. */
-    const val DEFAULT_MIN_INTERVAL_SEC = 30
-
-    /** …and only after the rover has actually moved this far. */
-    const val DEFAULT_MIN_DISTANCE_M = 120
 
     val PRIVACY_LEVELS = listOf("public", "delayed", "followers", "private")
 
@@ -60,24 +52,26 @@ object RtotaSettings {
         }
     }
 
-    private fun build(ctx: Context): SharedPreferences = try {
-        createEncrypted(ctx)
-    } catch (_: Exception) {
-        // A corrupted keyset (app restored onto a device with no matching key)
-        // makes create() throw forever. Drop the file and rebuild once — the
-        // user re-enters their API key, which beats a permanently broken screen.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            ctx.deleteSharedPreferences(PREFS)
-        } else {
-            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().commit()
+    private fun build(ctx: Context): SharedPreferences =
+        try {
+            createEncrypted(ctx)
+        } catch (_: Exception) {
+            // A corrupted keyset (app restored onto a device with no matching key)
+            // makes create() throw forever. Drop the file and rebuild once — the
+            // user re-enters their API key, which beats a permanently broken screen.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                ctx.deleteSharedPreferences(PREFS)
+            } else {
+                ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().commit()
+            }
+            createEncrypted(ctx)
         }
-        createEncrypted(ctx)
-    }
 
     private fun createEncrypted(ctx: Context): SharedPreferences {
-        val masterKey = MasterKey.Builder(ctx)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
+        val masterKey =
+            MasterKey.Builder(ctx)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
         return EncryptedSharedPreferences.create(
             ctx,
             PREFS,
@@ -93,13 +87,17 @@ object RtotaSettings {
      * own. Before the app finishes starting this returns null and reads fall back
      * to defaults — deliberately, so nothing here can crash a cold start.
      */
-    private fun prefsOrNull(): SharedPreferences? =
-        GeneralVariables.getMainContext()?.let { prefs(it) }
+    private fun prefsOrNull(): SharedPreferences? = GeneralVariables.getMainContext()?.let { prefs(it) }
 
-    private fun readString(key: String, fallback: String): String =
-        prefsOrNull()?.getString(key, fallback) ?: fallback
+    private fun readString(
+        key: String,
+        fallback: String,
+    ): String = prefsOrNull()?.getString(key, fallback) ?: fallback
 
-    private fun writeString(key: String, value: String?) {
+    private fun writeString(
+        key: String,
+        value: String?,
+    ) {
         prefsOrNull()?.edit()?.apply {
             if (value.isNullOrEmpty()) remove(key) else putString(key, value)
         }?.apply()
@@ -132,19 +130,13 @@ object RtotaSettings {
 
     // -- Tracking cadence ---------------------------------------------------
 
-    var minIntervalSec: Int
-        get() = prefsOrNull()?.getInt(KEY_MIN_INTERVAL_SEC, DEFAULT_MIN_INTERVAL_SEC)
-            ?: DEFAULT_MIN_INTERVAL_SEC
-        set(value) {
-            prefsOrNull()?.edit()?.putInt(KEY_MIN_INTERVAL_SEC, value.coerceIn(5, 600))?.apply()
-        }
-
-    var minDistanceM: Int
-        get() = prefsOrNull()?.getInt(KEY_MIN_DISTANCE_M, DEFAULT_MIN_DISTANCE_M)
-            ?: DEFAULT_MIN_DISTANCE_M
-        set(value) {
-            prefsOrNull()?.edit()?.putInt(KEY_MIN_DISTANCE_M, value.coerceIn(10, 5000))?.apply()
-        }
+    /**
+     * Which [SmartBeaconProfile] drives route sampling — "car", "bicycle" or
+     * "walking". Unknown/absent falls back to the car profile.
+     */
+    var beaconProfile: String
+        get() = readString(KEY_BEACON_PROFILE, SmartBeaconProfile.CAR.key)
+        set(value) = writeString(KEY_BEACON_PROFILE, value)
 
     /** Privacy preselected in the start-trip sheet; blank = let the server decide. */
     var defaultPrivacy: String
