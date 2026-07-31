@@ -289,6 +289,18 @@ public class MainViewModel extends ViewModel {
             //connected to rig
             setCatConnectionState(CatConnectionState.CONNECTED);
             ToastMessage.show(getStringFromResource(R.string.connected_rig));
+            // A new link is a new session for the retune rate limit, so the push below is
+            // treated as a first push and can never be throttled. Without this the
+            // reconnect case the comment below describes would silently regress: the
+            // requested dial still equals the last one we pushed and baseRig's cached
+            // freq still matches it, so a reconnect inside the reassert window would be
+            // suppressed and the rig would keep whatever it powered up on.
+            //
+            // Deliberately NOT reset from setOperationBand()'s not-connected branch: in
+            // the ~1 Hz loop this rate limit exists to contain, half the calls observe
+            // the rig disconnected, so resetting there would re-arm the loop every other
+            // iteration and defeat the fix entirely.
+            resetRetuneRateLimit();
             // Push the app's current band/frequency to the rig on every connect —
             // including an automatic reconnect, which previously left the rig on
             // whatever frequency it powered up on ("no frequency set after connecting").
@@ -1520,8 +1532,19 @@ public class MainViewModel extends ViewModel {
     // what is still unexplained about the caller.
     private long lastPushedBandFreq = RetunePolicy.NO_PUSH;
     private long lastBandPushAtMs = 0L;
-    private long lastRetuneSuppressionLogAtMs = 0L;
+    private long lastRetuneSuppressionLogAtMs = RetunePolicy.NEVER_LOGGED;
     private int suppressedRetunes = 0;
+
+    /**
+     * Forget what we last pushed, so the next {@code setOperationBand()} is treated as a
+     * first push and goes out unthrottled. Called on every successful connect.
+     */
+    private void resetRetuneRateLimit() {
+        lastPushedBandFreq = RetunePolicy.NO_PUSH;
+        lastBandPushAtMs = 0L;
+        lastRetuneSuppressionLogAtMs = RetunePolicy.NEVER_LOGGED;
+        suppressedRetunes = 0;
+    }
 
     /**
      * Set the operating carrier frequency. Only operates if the rig is connected.

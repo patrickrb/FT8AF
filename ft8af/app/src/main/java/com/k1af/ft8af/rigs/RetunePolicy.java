@@ -42,7 +42,26 @@ public final class RetunePolicy {
     /** {@link #shouldRetune} sentinel for "nothing pushed yet this session". */
     public static final long NO_PUSH = 0L;
 
+    /** {@link #shouldLogSuppression} sentinel for "no suppression logged yet". */
+    public static final long NEVER_LOGGED = Long.MIN_VALUE;
+
     private RetunePolicy() {}
+
+    /**
+     * Milliseconds from {@code thenMs} to {@code nowMs}, treating a clock that has moved
+     * BACKWARDS as "the interval has elapsed".
+     *
+     * <p>Both intervals here are measured with {@link System#currentTimeMillis()}, which is
+     * not monotonic — an OS time correction can move it backwards under us, and this app
+     * runs on devices whose clocks are actively disciplined. A raw subtraction would then
+     * go negative and wedge the caller: retunes suppressed, or the suppression log silenced,
+     * until wall time caught back up. Saturating at "elapsed" fails safe in both cases (one
+     * extra CAT write, one extra log line) instead of silently disabling them.
+     */
+    static long elapsedSince(long nowMs, long thenMs) {
+        long delta = nowMs - thenMs;
+        return delta < 0 ? Long.MAX_VALUE : delta;
+    }
 
     /**
      * Whether this retune request should actually reach the rig.
@@ -70,12 +89,20 @@ public final class RetunePolicy {
         // The rig disagrees with us (front-panel move, dropped command): correct it now.
         if (rigFreq != requestedFreq) return true;
         // Fully redundant. Re-assert only on the slow heartbeat.
-        return nowMs - lastPushAtMs >= REASSERT_INTERVAL_MS;
+        return elapsedSince(nowMs, lastPushAtMs) >= REASSERT_INTERVAL_MS;
     }
 
-    /** Whether enough time has passed to emit another suppression summary. */
+    /**
+     * Whether enough time has passed to emit another suppression summary.
+     *
+     * <p>{@link #NEVER_LOGGED} is handled explicitly rather than relying on a sentinel of 0
+     * being far enough below an epoch {@code nowMs} to clear the interval by arithmetic —
+     * that coupling would silently delay the first line if this were ever fed a monotonic
+     * clock.
+     */
     public static boolean shouldLogSuppression(long nowMs, long lastLogAtMs) {
-        return nowMs - lastLogAtMs >= SUPPRESSION_LOG_INTERVAL_MS;
+        if (lastLogAtMs == NEVER_LOGGED) return true;
+        return elapsedSince(nowMs, lastLogAtMs) >= SUPPRESSION_LOG_INTERVAL_MS;
     }
 
     /**

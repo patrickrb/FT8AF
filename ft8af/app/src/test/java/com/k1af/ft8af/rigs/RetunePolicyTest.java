@@ -47,6 +47,19 @@ public class RetunePolicyTest {
     }
 
     @Test
+    public void reconnectIsNotThrottled_whenStateIsResetOnConnect() {
+        // MainViewModel.onConnected() calls resetRetuneRateLimit(), which restores
+        // NO_PUSH. That is what keeps the connect-time retune working: without it, a
+        // reconnect inside the reassert window has the same dial as the last push AND a
+        // cached rig freq that matches, so it would be suppressed and the rig would keep
+        // whatever frequency it powered up on — the exact bug that retune was added for.
+        assertThat(RetunePolicy.shouldRetune(
+                FREQ, FREQ, FREQ, T0 + 1_000, T0)).isFalse();      // without the reset
+        assertThat(RetunePolicy.shouldRetune(
+                FREQ, FREQ, RetunePolicy.NO_PUSH, T0 + 1_000, T0)).isTrue();  // with it
+    }
+
+    @Test
     public void newDialWinsEvenWhenRigAlreadyReportsIt() {
         // The rig can report the new dial before we have pushed the mode for it.
         assertThat(RetunePolicy.shouldRetune(
@@ -110,8 +123,36 @@ public class RetunePolicyTest {
 
     @Test
     public void firstSuppressionLogsImmediately() {
-        // lastLogAt == 0 (never logged) must not wait out the interval.
-        assertThat(RetunePolicy.shouldLogSuppression(T0, 0L)).isTrue();
+        // NEVER_LOGGED is an explicit sentinel, not a 0 that happens to be far enough
+        // below an epoch timestamp to clear the interval by arithmetic.
+        assertThat(RetunePolicy.shouldLogSuppression(T0, RetunePolicy.NEVER_LOGGED)).isTrue();
+        // ...and it holds for a small (monotonic-style) clock too, which the old
+        // arithmetic-only form would have got wrong.
+        assertThat(RetunePolicy.shouldLogSuppression(5L, RetunePolicy.NEVER_LOGGED)).isTrue();
+    }
+
+    // ---------------------------------------------------------------
+    // Non-monotonic wall clock (System.currentTimeMillis can move backwards)
+    // ---------------------------------------------------------------
+
+    @Test
+    public void clockMovingBackwardsDoesNotWedgeTheReassertHeartbeat() {
+        // An OS time correction lands between the push and the next call. A raw
+        // subtraction would go negative and suppress every retune until wall time caught
+        // back up; failing safe means one extra CAT write instead.
+        assertThat(RetunePolicy.shouldRetune(FREQ, FREQ, FREQ, T0 - 60_000, T0)).isTrue();
+    }
+
+    @Test
+    public void clockMovingBackwardsDoesNotSilenceTheSuppressionLog() {
+        assertThat(RetunePolicy.shouldLogSuppression(T0 - 60_000, T0)).isTrue();
+    }
+
+    @Test
+    public void elapsedSinceSaturatesOnBackwardsTime() {
+        assertThat(RetunePolicy.elapsedSince(T0 + 500, T0)).isEqualTo(500L);
+        assertThat(RetunePolicy.elapsedSince(T0, T0)).isEqualTo(0L);
+        assertThat(RetunePolicy.elapsedSince(T0 - 1, T0)).isEqualTo(Long.MAX_VALUE);
     }
 
     // ---------------------------------------------------------------
