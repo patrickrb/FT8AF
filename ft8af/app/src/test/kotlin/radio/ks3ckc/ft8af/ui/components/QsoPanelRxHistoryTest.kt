@@ -114,6 +114,56 @@ class QsoPanelRxHistoryTest {
     // Identity contract the composable's write-skip depends on
     // ---------------------------------------------------------------
 
+    // ---------------------------------------------------------------
+    // Metadata on a known row can still improve
+    // ---------------------------------------------------------------
+
+    @Test
+    fun aBetterSnrForAKnownRowReplacesIt() {
+        // FT8SignalListener.checkMessageSame upgrades a stored message's SNR in place
+        // when a later pass decodes the same text better ("prefer known SNR over
+        // unknown; when both are known, keep the higher"), so the same key legitimately
+        // arrives again carrying a better report. Discarding it would pin the panel to
+        // the first — often unknown — value for the rest of the QSO.
+        val first = mergeRxLog(
+            emptyList(),
+            listOf(QsoLogEntry(QsoLogEntry.Direction.RX, 1_000, "K1AF RA3XYZ -12", null)),
+        )
+        val updated = mergeRxLog(
+            first,
+            listOf(QsoLogEntry(QsoLogEntry.Direction.RX, 1_000, "K1AF RA3XYZ -12", -9)),
+        )
+
+        assertThat(updated).hasSize(1)
+        assertThat(updated.single().snr).isEqualTo(-9)
+        assertThat(updated).isNotSameInstanceAs(first)
+    }
+
+    @Test
+    fun anUnchangedRepeatDoesNotCountAsAnUpdate() {
+        // The common case every cycle: identical row, including SNR. Must stay a no-op
+        // so it costs no recomposition.
+        val entry = QsoLogEntry(QsoLogEntry.Direction.RX, 1_000, "K1AF RA3XYZ -12", -9)
+        val first = mergeRxLog(emptyList(), listOf(entry))
+
+        assertThat(mergeRxLog(first, listOf(entry))).isSameInstanceAs(first)
+    }
+
+    @Test
+    fun updatingARowDoesNotDisturbOrderOrCount() {
+        var log = mergeRxLog(
+            emptyList(),
+            listOf(rx(1_000, "first"), rx(2_000, "second"), rx(3_000, "third")),
+        )
+        log = mergeRxLog(
+            log,
+            listOf(QsoLogEntry(QsoLogEntry.Direction.RX, 2_000, "second", -3)),
+        )
+
+        assertThat(log.map { it.messageText }).containsExactly("first", "second", "third").inOrder()
+        assertThat(log[1].snr).isEqualTo(-3)
+    }
+
     @Test
     fun mergeReturnsTheSameInstanceWhenNothingIsAdded() {
         // ActiveQsoPanel skips the snapshot write (and the recomposition it triggers)

@@ -158,6 +158,15 @@ internal fun qsoLogKey(entry: QsoLogEntry): String =
  * same message reappears in every later snapshot, and the late full-slot pass re-delivers
  * a slot's messages alongside newly recovered ones.
  *
+ * <p>A repeat of a known key REPLACES the stored row rather than being discarded, because
+ * a row's metadata is not fixed once seen. `FT8SignalListener.checkMessageSame` upgrades a
+ * stored message's SNR *in place* when a later pass decodes the same text better ("prefer
+ * known SNR over unknown; when both are known, keep the higher"), so the same key can
+ * legitimately arrive with a better SNR than the one first captured. Keeping the first
+ * would pin the panel to a stale — often unknown — report for the rest of the QSO.
+ * Latest-wins matches that upstream resolution, which only ever moves toward the better
+ * value.
+ *
  * @param existing rows already accumulated for the current target
  * @param incoming rows just derived from the live decode list
  * @return the union, ascending by time, trimmed to [MAX_RX_LOG_ENTRIES] newest
@@ -167,11 +176,20 @@ internal fun mergeRxLog(
     incoming: List<QsoLogEntry>,
 ): List<QsoLogEntry> {
     if (incoming.isEmpty()) return existing
-    val seen = existing.mapTo(HashSet()) { qsoLogKey(it) }
-    val merged = ArrayList(existing)
-    incoming.forEach { if (seen.add(qsoLogKey(it))) merged.add(it) }
-    if (merged.size == existing.size) return existing
-    merged.sortBy { it.utcTime }
+    val byKey = LinkedHashMap<String, QsoLogEntry>(existing.size + incoming.size)
+    existing.forEach { byKey[qsoLogKey(it)] = it }
+    var changed = false
+    incoming.forEach { entry ->
+        val key = qsoLogKey(entry)
+        // Structural inequality, so an unchanged repeat (the common case, every cycle)
+        // still costs nothing and preserves the caller's instance below.
+        if (byKey[key] != entry) {
+            byKey[key] = entry
+            changed = true
+        }
+    }
+    if (!changed) return existing
+    val merged = byKey.values.sortedBy { it.utcTime }
     if (merged.size <= MAX_RX_LOG_ENTRIES) return merged
     return merged.subList(merged.size - MAX_RX_LOG_ENTRIES, merged.size).toList()
 }
