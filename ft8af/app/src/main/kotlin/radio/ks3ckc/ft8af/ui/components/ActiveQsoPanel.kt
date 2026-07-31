@@ -125,6 +125,76 @@ internal fun buildQsoLog(
 }
 
 /**
+ * Upper bound on the accumulated RX log for a single target, so a QSO that never
+ * completes (a stuck target on a busy frequency) can't grow the list without limit.
+ * Far above any real exchange — a standard QSO is 4-6 rows, and a stubborn one with
+ * repeats is a couple of dozen.
+ */
+internal const val MAX_RX_LOG_ENTRIES = 100
+
+/**
+ * Stable identity for one conversation row, used to de-duplicate across snapshots.
+ *
+ * <p>Time is part of the key on purpose: a station that sends the same text in two
+ * different cycles produced two real transmissions and gets two rows, matching how TX
+ * rows are logged per transmission rather than per unique message.
+ */
+internal fun qsoLogKey(entry: QsoLogEntry): String =
+    "${entry.direction}|${entry.utcTime}|${entry.messageText}"
+
+/**
+ * Merge freshly-decoded rows into the rows this panel has already shown.
+ *
+ * <p>This is what makes the panel's RX history durable. The decode list it is derived
+ * from is shared, capped, and periodically emptied — `trimToMessageCount` drops from the
+ * front once it hits `MESSAGE_COUNT` (about an hour of busy-band operating), the
+ * clear-every-cycle setting wipes it at each slot boundary, a band change or the Clear
+ * button empties it outright. Re-deriving the conversation from it on every recomposition
+ * meant any of those retroactively erased messages the operator had already read, and the
+ * log box — which sizes to its content — visibly shrank. TX rows never had this problem
+ * because they live in the composable's own state; now RX rows don't either.
+ *
+ * <p>Duplicates are expected input, not an error: the decode list is cumulative, so the
+ * same message reappears in every later snapshot, and the late full-slot pass re-delivers
+ * a slot's messages alongside newly recovered ones.
+ *
+ * <p>A repeat of a known key REPLACES the stored row rather than being discarded, because
+ * a row's metadata is not fixed once seen. `FT8SignalListener.checkMessageSame` upgrades a
+ * stored message's SNR *in place* when a later pass decodes the same text better ("prefer
+ * known SNR over unknown; when both are known, keep the higher"), so the same key can
+ * legitimately arrive with a better SNR than the one first captured. Keeping the first
+ * would pin the panel to a stale — often unknown — report for the rest of the QSO.
+ * Latest-wins matches that upstream resolution, which only ever moves toward the better
+ * value.
+ *
+ * @param existing rows already accumulated for the current target
+ * @param incoming rows just derived from the live decode list
+ * @return the union, ascending by time, trimmed to [MAX_RX_LOG_ENTRIES] newest
+ */
+internal fun mergeRxLog(
+    existing: List<QsoLogEntry>,
+    incoming: List<QsoLogEntry>,
+): List<QsoLogEntry> {
+    if (incoming.isEmpty()) return existing
+    val byKey = LinkedHashMap<String, QsoLogEntry>(existing.size + incoming.size)
+    existing.forEach { byKey[qsoLogKey(it)] = it }
+    var changed = false
+    incoming.forEach { entry ->
+        val key = qsoLogKey(entry)
+        // Structural inequality, so an unchanged repeat (the common case, every cycle)
+        // still costs nothing and preserves the caller's instance below.
+        if (byKey[key] != entry) {
+            byKey[key] = entry
+            changed = true
+        }
+    }
+    if (!changed) return existing
+    val merged = byKey.values.sortedBy { it.utcTime }
+    if (merged.size <= MAX_RX_LOG_ENTRIES) return merged
+    return merged.subList(merged.size - MAX_RX_LOG_ENTRIES, merged.size).toList()
+}
+
+/**
  * Outcome of one evaluation of the synthesized-TX-log effect.
  *
  * @property shouldLog            append a TX row now (with the current transmit message)
@@ -224,6 +294,13 @@ fun ActiveQsoPanel(
     var pendingTxLog by remember { mutableStateOf(false) }
     var synthTxTarget by remember { mutableStateOf<String?>(null) }
 
+    // Accumulated RX/BUSY rows for the current target, held here for the same reason
+    // synthTxLog is: the panel must not lose conversation it has already shown. These
+    // used to be re-derived from the shared decode list on every recomposition, so a
+    // trim, a clear-every-cycle wipe, a band change, or the Clear button silently
+    // erased them mid-QSO and the log box shrank. See mergeRxLog.
+    val rxLog = remember { mutableStateListOf<QsoLogEntry>() }
+
     // Clear TX state when the target genuinely changes to a different station.
     // Also handles the same-callsign-new-QSO edge case: when a QSO ends
     // (displayCallsign → null for > 500ms) and the same station is worked
@@ -235,6 +312,7 @@ fun ActiveQsoPanel(
         if (displayCallsign != null) {
             if (displayCallsign != synthTxTarget) {
                 synthTxLog.clear()
+                rxLog.clear()
                 wasTransmitting = false
                 pendingTxLog = false
             }
@@ -271,16 +349,43 @@ fun ActiveQsoPanel(
         }
     }
 
-    // Build the conversation log to/from the target station. The classification
-    // and ordering live in buildQsoLog() so they can be unit tested.
-    val qsoMessages: List<QsoLogEntry> = remember(messageList, messageList?.size, displayCallsign, transmittingMessage, synthTxLog.size) {
-        buildQsoLog(
+    // The target the conversation log belongs to. Falls back to synthTxTarget — which
+    // LaunchedEffect(displayCallsign) only clears after a 500ms settle — so the same
+    // LiveData null-flicker on tab switches that #250 fixed for the TX rows can no
+    // longer blank the RX rows either. A genuine QSO end still clears both, one target
+    // change later, exactly as before.
+    val logTarget = displayCallsign ?: synthTxTarget
+
+    // Fold this snapshot's decodes for the target into the durable RX log. Only new
+    // rows survive the merge, so the cumulative decode list re-presenting the same
+    // messages every cycle is a no-op rather than a source of duplicates.
+    LaunchedEffect(messageList, messageList?.size, logTarget) {
+        val target = logTarget ?: return@LaunchedEffect
+        val incoming = buildQsoLog(
             messageList = messageList,
-            displayCallsign = displayCallsign ?: "",
+            displayCallsign = target,
             myCallsign = GeneralVariables.myCallsign ?: "",
-            synthTx = synthTxLog.toList(),
+            synthTx = emptyList(),
         )
+        val existing = rxLog.toList()
+        val merged = mergeRxLog(existing, incoming)
+        // mergeRxLog returns the caller's OWN instance when it added nothing, so this
+        // identity check keeps snapshot writes (and the recomposition each triggers) to
+        // real changes. Size alone would miss a merge that both added and trimmed at
+        // MAX_RX_LOG_ENTRIES.
+        if (merged !== existing) {
+            rxLog.clear()
+            rxLog.addAll(merged)
+        }
     }
+
+    // The conversation shown: durable RX/BUSY rows plus our own TX rows, in time order.
+    // Computed inline rather than remember()d — these are snapshot state lists, so
+    // reading them here registers the dependency and any change recomposes. A remember
+    // keyed on sizes would miss a merge that trims as it appends.
+    val qsoMessages: List<QsoLogEntry> =
+        if (logTarget == null) emptyList()
+        else (rxLog + synthTxLog).sortedBy { it.utcTime }
 
     AnimatedVisibility(
         visible = expanded && (hasTarget || isActivated),
