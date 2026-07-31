@@ -74,9 +74,6 @@ fun RoadTripScreen(onBack: () -> Unit) {
     var apiKey by remember { mutableStateOf(RtotaSettings.apiKey) }
     var privacy by remember { mutableStateOf(RtotaSettings.defaultPrivacy) }
     var tripName by remember { mutableStateOf("") }
-    var profile by remember {
-        mutableStateOf(SmartBeaconProfile.byKey(RtotaSettings.beaconProfile))
-    }
 
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -345,22 +342,21 @@ fun RoadTripScreen(onBack: () -> Unit) {
         // =====================================================================
         SettingsSection(title = stringResource(R.string.rtota_section_tracking)) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
-                Column {
-                    SettingsRow(
-                        label = stringResource(R.string.rtota_beacon_profile),
-                        description = stringResource(R.string.rtota_beacon_profile_desc),
-                        value = stringResource(profileLabelRes(profile.key)),
-                        onClick = {
-                            profile = nextProfile(profile)
-                            RtotaSettings.beaconProfile = profile.key
-                            RtotaTripManager.setBeaconProfile(profile)
-                        },
+                // Read-only: the sampling is tuned for a vehicle and there is
+                // nothing here worth a knob. Stating what it does still matters —
+                // a trail that goes quiet at a fuel stop looks broken otherwise.
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = stringResource(R.string.rtota_beacon_heading),
+                        color = TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = describeProfile(profile),
+                        text = describeProfile(SmartBeaconProfile.DEFAULT),
                         color = TextMuted,
                         fontSize = 12.sp,
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
+                        modifier = Modifier.padding(top = 6.dp),
                     )
                 }
             }
@@ -624,13 +620,6 @@ internal fun nextPrivacy(current: String): String {
     return order[(idx + 1) % order.size]
 }
 
-/** Tap-to-cycle through the SmartBeaconing profiles. */
-internal fun nextProfile(current: SmartBeaconProfile): SmartBeaconProfile {
-    val all = SmartBeaconProfile.ALL
-    val idx = all.indexOfFirst { it.key == current.key }.takeIf { it >= 0 } ?: 0
-    return all[(idx + 1) % all.size]
-}
-
 @StringRes
 internal fun beaconReasonLabelRes(reason: BeaconReason?): Int =
     when (reason) {
@@ -642,16 +631,8 @@ internal fun beaconReasonLabelRes(reason: BeaconReason?): Int =
         null -> R.string.rtota_beacon_waiting
     }
 
-@StringRes
-internal fun profileLabelRes(key: String): Int =
-    when (key) {
-        SmartBeaconProfile.BICYCLE.key -> R.string.rtota_profile_bicycle
-        SmartBeaconProfile.WALKING.key -> R.string.rtota_profile_walking
-        else -> R.string.rtota_profile_car
-    }
-
 /**
- * Plain-language summary of what the profile will actually do, so the numbers
+ * Plain-language summary of what the sampler will actually do, so the numbers
  * behind SmartBeaconing are visible without an options screen full of them.
  */
 internal fun describeProfile(profile: SmartBeaconProfile): String =

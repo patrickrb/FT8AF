@@ -67,7 +67,6 @@ internal const val METERS_PER_MILE = 1609.344
  *    in the trail, so silence while parked is the signal, not a failure.
  */
 data class SmartBeaconProfile(
-    val key: String,
     val fastSpeedMph: Double,
     val fastRateSec: Int,
     val slowSpeedMph: Double,
@@ -91,10 +90,15 @@ data class SmartBeaconProfile(
     val maxAccuracyM: Double,
 ) {
     companion object {
-        /** Highway roving — the default. ~0.6 mi between points at 70 mph. */
-        val CAR =
+        /**
+         * The tuning RTOTA ships. It is a road-trip service — the rover is in a
+         * vehicle — so there is one profile and no picker: numbers tuned for
+         * highway speeds, giving ~0.6 mi between points at 70 mph.
+         *
+         * Tests build variants with [copy] to isolate a single rule.
+         */
+        val DEFAULT =
             SmartBeaconProfile(
-                key = "car",
                 fastSpeedMph = 70.0,
                 fastRateSec = 30,
                 slowSpeedMph = 4.0,
@@ -106,42 +110,6 @@ data class SmartBeaconProfile(
                 stationaryRadiusM = 60.0,
                 maxAccuracyM = 100.0,
             )
-
-        /** Slower, twistier, and closer to the ground: tighter turn detection. */
-        val BICYCLE =
-            SmartBeaconProfile(
-                key = "bicycle",
-                fastSpeedMph = 18.0,
-                fastRateSec = 45,
-                slowSpeedMph = 2.0,
-                slowRateSec = 300,
-                minTurnTimeSec = 15,
-                minTurnAngleDeg = 20.0,
-                turnSlope = 120.0,
-                turnMinDistanceM = 20.0,
-                stationaryRadiusM = 40.0,
-                maxAccuracyM = 60.0,
-            )
-
-        /** Walking a summit or a park — slow rates, coarse turns. */
-        val WALKING =
-            SmartBeaconProfile(
-                key = "walking",
-                fastSpeedMph = 5.0,
-                fastRateSec = 90,
-                slowSpeedMph = 1.0,
-                slowRateSec = 600,
-                minTurnTimeSec = 30,
-                minTurnAngleDeg = 30.0,
-                turnSlope = 60.0,
-                turnMinDistanceM = 10.0,
-                stationaryRadiusM = 25.0,
-                maxAccuracyM = 50.0,
-            )
-
-        val ALL = listOf(CAR, BICYCLE, WALKING)
-
-        fun byKey(key: String?): SmartBeaconProfile = ALL.firstOrNull { it.key == key } ?: CAR
     }
 }
 
@@ -179,9 +147,10 @@ data class BeaconDecision(val point: TripPoint, val reason: BeaconReason)
  * Stateful only in the last kept point (plus a parked flag); every rule is pure
  * and unit-tested.
  */
-class SmartBeaconSampler(profile: SmartBeaconProfile = SmartBeaconProfile.CAR) {
-    var profile: SmartBeaconProfile = profile
-        private set
+class SmartBeaconSampler(
+    /** Injected only so tests can isolate a rule; the app always uses the default. */
+    private val profile: SmartBeaconProfile = SmartBeaconProfile.DEFAULT,
+) {
 
     private var last: TripPoint? = null
 
@@ -202,11 +171,6 @@ class SmartBeaconSampler(profile: SmartBeaconProfile = SmartBeaconProfile.CAR) {
         last = null
         parked = false
         traveledMeters = 0.0
-    }
-
-    /** Swap profiles mid-trip (the UI allows it); the route so far is kept. */
-    fun setProfile(newProfile: SmartBeaconProfile) {
-        profile = newProfile
     }
 
     /**

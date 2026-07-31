@@ -15,7 +15,7 @@ import org.junit.Test
  */
 class SmartBeaconSamplerTest {
     private val base = 1_700_000_000_000L
-    private val car = SmartBeaconProfile.CAR
+    private val car = SmartBeaconProfile.DEFAULT
 
     /**
      * A fix [tSec] into the trip, [metersNorth] up the road from the origin.
@@ -241,24 +241,6 @@ class SmartBeaconSamplerTest {
         sampler.offer(fix(0, speedMph = 70.0, heading = 90.0))
         sampler.anchorForQso(fix(20, metersNorth = 626.0, speedMph = 70.0, heading = 90.0))
         assertThat(sampler.traveledMeters).isWithin(5.0).of(626.0)
-    }
-
-    // -- profiles -----------------------------------------------------------
-
-    @Test
-    fun `profiles resolve by key and fall back to car`() {
-        assertThat(SmartBeaconProfile.byKey("bicycle")).isEqualTo(SmartBeaconProfile.BICYCLE)
-        assertThat(SmartBeaconProfile.byKey("walking")).isEqualTo(SmartBeaconProfile.WALKING)
-        assertThat(SmartBeaconProfile.byKey(null)).isEqualTo(SmartBeaconProfile.CAR)
-        assertThat(SmartBeaconProfile.byKey("hot air balloon")).isEqualTo(SmartBeaconProfile.CAR)
-    }
-
-    @Test
-    fun `walking pace keeps a usable trail where the car profile would go quiet`() {
-        val walk = SmartBeaconProfile.WALKING
-        // 3 mph is "crawling" for a car (slow rate) but cruising on foot.
-        assertThat(SmartBeaconSampler.beaconRateSec(3.0, car)).isEqualTo(car.slowRateSec)
-        assertThat(SmartBeaconSampler.beaconRateSec(3.0, walk)).isAtMost(walk.fastRateSec * 2)
     }
 
     @Test

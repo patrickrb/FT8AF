@@ -88,7 +88,7 @@ object RtotaTripManager {
     @Volatile
     private var queue: RtotaQueue? = null
 
-    private var sampler = SmartBeaconSampler(SmartBeaconProfile.byKey(null))
+    private var sampler = SmartBeaconSampler()
 
     /**
      * The freshest fix seen, kept or not. QSOs are stamped from this rather than
@@ -141,7 +141,7 @@ object RtotaTripManager {
         // becomes a FIRST beacon, which is right — the gap while the app was dead
         // is real, and pretending to continue from a stale point would draw a
         // straight line across wherever the phone actually went.
-        sampler = SmartBeaconSampler(SmartBeaconProfile.byKey(RtotaSettings.beaconProfile))
+        sampler = SmartBeaconSampler()
         lastRawFix = null
         _state.value =
             _state.value.copy(
@@ -188,7 +188,7 @@ object RtotaTripManager {
         RtotaSettings.tripId = ""
         RtotaSettings.tripShareToken = ""
 
-        sampler = SmartBeaconSampler(SmartBeaconProfile.byKey(RtotaSettings.beaconProfile))
+        sampler = SmartBeaconSampler()
         lastRawFix = null
         queue?.clear()
         _state.value =
@@ -240,17 +240,6 @@ object RtotaTripManager {
         lastRawFix = null
         _state.value = RtotaTripState()
         log("abandonTrip — local queue dropped")
-    }
-
-    /**
-     * Change the SmartBeaconing profile, including mid-trip — a rover who parks
-     * the truck and walks a summit shouldn't have to end the trip to get sensible
-     * sampling on foot. The route recorded so far is untouched.
-     */
-    fun setBeaconProfile(profile: SmartBeaconProfile) {
-        RtotaSettings.beaconProfile = profile.key
-        sampler.setProfile(profile)
-        log("beacon profile -> ${profile.key}")
     }
 
     private fun defaultTripName(startedMs: Long): String {

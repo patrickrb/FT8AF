@@ -912,11 +912,7 @@
     <string name="rtota_error">Last error: %1$s</string>
     <string name="rtota_share_link">Share link</string>
     <string name="rtota_section_tracking">TRACKING</string>
-    <string name="rtota_beacon_profile">Beacon profile</string>
-    <string name="rtota_beacon_profile_desc">SmartBeaconing — point spacing follows your speed, with extra points through turns</string>
-    <string name="rtota_profile_car">Car</string>
-    <string name="rtota_profile_bicycle">Bicycle</string>
-    <string name="rtota_profile_walking">Walking</string>
+    <string name="rtota_beacon_heading">SmartBeaconing</string>
     <string name="rtota_stat_last_point">Last point</string>
     <string name="rtota_beacon_first">trip start</string>
     <string name="rtota_beacon_rate">interval</string>

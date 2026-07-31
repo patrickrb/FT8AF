@@ -27,7 +27,6 @@ object RtotaSettings {
     private const val KEY_BASE_URL = "baseUrl"
     private const val KEY_API_KEY = "apiKey"
     private const val KEY_CALLSIGN = "callsign"
-    private const val KEY_BEACON_PROFILE = "beaconProfile"
     private const val KEY_DEFAULT_PRIVACY = "defaultPrivacy"
     private const val KEY_TRIP_ID = "tripId"
     private const val KEY_TRIP_NAME = "tripName"
@@ -127,16 +126,6 @@ object RtotaSettings {
         set(value) = writeString(KEY_CALLSIGN, value.trim().uppercase())
 
     val isConfigured: Boolean get() = apiKey.isNotBlank()
-
-    // -- Tracking cadence ---------------------------------------------------
-
-    /**
-     * Which [SmartBeaconProfile] drives route sampling — "car", "bicycle" or
-     * "walking". Unknown/absent falls back to the car profile.
-     */
-    var beaconProfile: String
-        get() = readString(KEY_BEACON_PROFILE, SmartBeaconProfile.CAR.key)
-        set(value) = writeString(KEY_BEACON_PROFILE, value)
 
     /** Privacy preselected in the start-trip sheet; blank = let the server decide. */
     var defaultPrivacy: String

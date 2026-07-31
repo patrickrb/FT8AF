@@ -7,7 +7,6 @@ import org.robolectric.RobolectricTestRunner
 import radio.ks3ckc.ft8af.ui.rtota.describeProfile
 import radio.ks3ckc.ft8af.ui.rtota.maskKey
 import radio.ks3ckc.ft8af.ui.rtota.nextPrivacy
-import radio.ks3ckc.ft8af.ui.rtota.nextProfile
 
 /**
  * The decision logic pulled out of the Compose screen (tap-to-cycle rows, key
@@ -41,19 +40,8 @@ class RoadTripScreenLogicTest {
     }
 
     @Test
-    fun `the profile row cycles through every profile and wraps`() {
-        val seen = mutableListOf<String>()
-        var p = SmartBeaconProfile.CAR
-        repeat(SmartBeaconProfile.ALL.size) {
-            p = nextProfile(p)
-            seen.add(p.key)
-        }
-        assertThat(seen).containsExactly("bicycle", "walking", "car").inOrder()
-    }
-
-    @Test
-    fun `the profile summary states the real numbers`() {
-        val text = describeProfile(SmartBeaconProfile.CAR)
+    fun `the tracking summary states the real numbers`() {
+        val text = describeProfile(SmartBeaconProfile.DEFAULT)
         assertThat(text).contains("30 s above 70 mph")
         assertThat(text).contains("3 min")
         assertThat(text).contains("15° + 255/mph")

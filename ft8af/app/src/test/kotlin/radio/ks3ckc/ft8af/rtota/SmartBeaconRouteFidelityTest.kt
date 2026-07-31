@@ -125,7 +125,7 @@ class SmartBeaconRouteFidelityTest {
 
     @Test
     fun `the drawn route follows the real road through a sweeping curve`() {
-        val kept = replay(SmartBeaconProfile.CAR)
+        val kept = replay(SmartBeaconProfile.DEFAULT)
         val worst = worstDeviationMeters(kept)
         // Roughly a highway's own width off the truth at the worst point of the
         // curve, across 8.5 miles of driving.
@@ -136,8 +136,8 @@ class SmartBeaconRouteFidelityTest {
     fun `corner pegging is what buys that accuracy`() {
         // Same drive, same rates, but a turn threshold nothing can reach: pure
         // interval sampling. The curve gets cut across.
-        val noCorners = SmartBeaconProfile.CAR.copy(minTurnAngleDeg = 180.0, turnSlope = 0.0)
-        val withCorners = worstDeviationMeters(replay(SmartBeaconProfile.CAR))
+        val noCorners = SmartBeaconProfile.DEFAULT.copy(minTurnAngleDeg = 180.0, turnSlope = 0.0)
+        val withCorners = worstDeviationMeters(replay(SmartBeaconProfile.DEFAULT))
         val without = worstDeviationMeters(replay(noCorners))
         // Printed because the whole point of the test is the measurement; the
         // numbers are what justify the profile's turn settings.
@@ -151,7 +151,7 @@ class SmartBeaconRouteFidelityTest {
 
     @Test
     fun `it spends few points doing it`() {
-        val kept = replay(SmartBeaconProfile.CAR)
+        val kept = replay(SmartBeaconProfile.DEFAULT)
         // 510 fixes in (8.5 min at 1 Hz) — a couple of dozen out, most of them
         // the 30 s interval on the straights plus a handful through the curve.
         assertThat(kept.size).isAtMost(30)
