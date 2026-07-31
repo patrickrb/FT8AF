@@ -244,14 +244,21 @@ public class GpsClockUpdater extends LocationSubscriber {
         // computeAppliedOffset also re-checks running, so a fix that was already queued on the
         // main looper when the user disabled discipline (stop() flipped running=false) is
         // dropped instead of re-writing the clock after we've handed it back.
-        int rawOffsetMs = gpsClockOffsetMs(fixUtcMs, location.getElapsedRealtimeNanos(),
-                SystemClock.elapsedRealtimeNanos(), System.currentTimeMillis());
+        // Sample both clocks EXACTLY once and feed the same readings to the evaluation and
+        // to the log. Reading them twice let the logged "REJECTED fix offset=" disagree
+        // with the number actually judged against the bounds — which would undermine the
+        // diagnostics this logging exists to provide, and is most likely to bite in the
+        // very situation being diagnosed (a clock being corrected underneath us).
+        final long fixElapsedNanos = location.getElapsedRealtimeNanos();
+        final long nowElapsedNanos = SystemClock.elapsedRealtimeNanos();
+        final long nowSystemMs = System.currentTimeMillis();
+        int rawOffsetMs = gpsClockOffsetMs(fixUtcMs, fixElapsedNanos, nowElapsedNanos, nowSystemMs);
         Integer offsetMs = computeAppliedOffset(
                 isRunning(),
                 fixUtcMs,
-                location.getElapsedRealtimeNanos(),
-                SystemClock.elapsedRealtimeNanos(),
-                System.currentTimeMillis(),
+                fixElapsedNanos,
+                nowElapsedNanos,
+                nowSystemMs,
                 hasAppliedOffset,
                 lastAppliedOffsetMs);
 
@@ -279,8 +286,9 @@ public class GpsClockUpdater extends LocationSubscriber {
         GeneralVariables.gpsClockOffsetMs = offsetMs;
         // The UI renders this as "... UTC", so post the disciplined time, not the raw
         // (possibly-wrong) system clock we just computed a correction for.
-        GeneralVariables.mutableGpsClockSync.postValue(
-                disciplinedUtcMs(System.currentTimeMillis(), offsetMs));
+        // Same single sampling as the evaluation above, so the displayed last-sync instant
+        // is the one this offset was actually computed against.
+        GeneralVariables.mutableGpsClockSync.postValue(disciplinedUtcMs(nowSystemMs, offsetMs));
         Log.d(TAG, "GPS clock discipline applied offset " + offsetMs + "ms");
     }
 
