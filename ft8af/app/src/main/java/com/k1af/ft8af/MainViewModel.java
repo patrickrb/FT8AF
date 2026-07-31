@@ -90,6 +90,7 @@ import com.k1af.ft8af.log.ThirdPartyService;
 import com.k1af.ft8af.rigs.BaseRig;
 import com.k1af.ft8af.rigs.BaseRigOperation;
 import com.k1af.ft8af.rigs.CatConnectionState;
+import com.k1af.ft8af.rigs.RetunePolicy;
 import com.k1af.ft8af.rigs.CatLiveness;
 import com.k1af.ft8af.rigs.DiscoveryTX500Rig;
 import com.k1af.ft8af.rigs.ElecraftRig;
@@ -288,6 +289,18 @@ public class MainViewModel extends ViewModel {
             //connected to rig
             setCatConnectionState(CatConnectionState.CONNECTED);
             ToastMessage.show(getStringFromResource(R.string.connected_rig));
+            // A new link is a new session for the retune rate limit, so the push below is
+            // treated as a first push and can never be throttled. Without this the
+            // reconnect case the comment below describes would silently regress: the
+            // requested dial still equals the last one we pushed and baseRig's cached
+            // freq still matches it, so a reconnect inside the reassert window would be
+            // suppressed and the rig would keep whatever it powered up on.
+            //
+            // Deliberately NOT reset from setOperationBand()'s not-connected branch: in
+            // the ~1 Hz loop this rate limit exists to contain, half the calls observe
+            // the rig disconnected, so resetting there would re-arm the loop every other
+            // iteration and defeat the fix entirely.
+            resetRetuneRateLimit();
             // Push the app's current band/frequency to the rig on every connect —
             // including an automatic reconnect, which previously left the rig on
             // whatever frequency it powered up on ("no frequency set after connecting").
@@ -1515,14 +1528,58 @@ public class MainViewModel extends ViewModel {
         return false;
     }
 
+    // Rate-limit state for setOperationBand(). See RetunePolicy for why this exists and
+    // what is still unexplained about the caller.
+    private long lastPushedBandFreq = RetunePolicy.NO_PUSH;
+    private long lastBandPushAtMs = 0L;
+    private long lastRetuneSuppressionLogAtMs = RetunePolicy.NEVER_LOGGED;
+    private int suppressedRetunes = 0;
+
+    /**
+     * Forget what we last pushed, so the next {@code setOperationBand()} is treated as a
+     * first push and goes out unthrottled. Called on every successful connect.
+     */
+    private void resetRetuneRateLimit() {
+        lastPushedBandFreq = RetunePolicy.NO_PUSH;
+        lastBandPushAtMs = 0L;
+        lastRetuneSuppressionLogAtMs = RetunePolicy.NEVER_LOGGED;
+        suppressedRetunes = 0;
+    }
+
     /**
      * Set the operating carrier frequency. Only operates if the rig is connected.
+     *
+     * <p>Redundant requests — same dial as the last push, rig already reporting it — are
+     * suppressed down to a slow reassert heartbeat by {@link RetunePolicy}. A genuine
+     * retune (new dial, or a rig that has moved) is never delayed. This is containment for
+     * a ~1 Hz caller that has not been identified; the suppression log below names it.
      */
     public void setOperationBand() {
         if (!isRigConnected()) {
             fileLog("setOperationBand: rig not connected, skipping");
             return;
         }
+
+        long nowMs = System.currentTimeMillis();
+        if (!RetunePolicy.shouldRetune(GeneralVariables.band, baseRig.getFreq(),
+                lastPushedBandFreq, nowMs, lastBandPushAtMs)) {
+            suppressedRetunes++;
+            if (RetunePolicy.shouldLogSuppression(nowMs, lastRetuneSuppressionLogAtMs)) {
+                // Name the caller: the ~1 Hz driver of this loop is not identifiable from
+                // the source, so record who is actually asking. Only on the rate-limited
+                // path — building a stack trace per suppressed call would be its own leak.
+                fileLog("setOperationBand: suppressed " + suppressedRetunes
+                        + " redundant retunes (freq=" + GeneralVariables.band
+                        + " already set) caller=" + RetunePolicy.callerOf(
+                                Thread.currentThread().getStackTrace(),
+                                MainViewModel.class.getName()));
+                lastRetuneSuppressionLogAtMs = nowMs;
+                suppressedRetunes = 0;
+            }
+            return;
+        }
+        lastPushedBandFreq = GeneralVariables.band;
+        lastBandPushAtMs = nowMs;
 
         fileLog("setOperationBand: sending USB mode, then freq=" + GeneralVariables.band
                 + " in 800ms (controlMode=" + GeneralVariables.controlMode + ")");
