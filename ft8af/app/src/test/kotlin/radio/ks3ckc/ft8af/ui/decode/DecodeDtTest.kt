@@ -1,6 +1,7 @@
 package radio.ks3ckc.ft8af.ui.decode
 
 import com.google.common.truth.Truth.assertThat
+import radio.ks3ckc.ft8af.ui.components.CLOCK_SYNC_FAIR_SEC
 import org.junit.Test
 
 /**
@@ -43,12 +44,14 @@ class DecodeDtTest {
     }
 
     @Test
-    fun `notable threshold matches the slot bar's fair boundary`() {
-        // A row must not shout while the averaged pill upstream still says "fair".
-        assertThat(isDecodeDtNotable(0.3f)).isFalse()
-        assertThat(isDecodeDtNotable(1.0f)).isFalse()
-        assertThat(isDecodeDtNotable(1.1f)).isTrue()
-        assertThat(isDecodeDtNotable(-1.1f)).isTrue()
+    fun `notable threshold is the slot bar's fair boundary, not a copy of it`() {
+        // A row must not shout while the averaged pill upstream still says "fair",
+        // so the boundary is asserted against the shared constant rather than a
+        // repeated literal — a literal here would pass even after the two drifted.
+        assertThat(isDecodeDtNotable(CLOCK_SYNC_FAIR_SEC)).isFalse()
+        assertThat(isDecodeDtNotable(CLOCK_SYNC_FAIR_SEC + 0.1f)).isTrue()
+        assertThat(isDecodeDtNotable(-(CLOCK_SYNC_FAIR_SEC + 0.1f))).isTrue()
+        assertThat(isDecodeDtNotable(CLOCK_SYNC_FAIR_SEC - 0.7f)).isFalse()
     }
 
     @Test
