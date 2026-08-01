@@ -579,6 +579,24 @@ public class GeneralVariables {
     //to UtcTimer.delay. The last-sync *timestamp* is the retained value of mutableGpsClockSync
     //below, so there's no separate field for it.
     public static volatile int gpsClockOffsetMs = 0;
+
+    /**
+     * The dial the app is entitled to COMMAND, as opposed to {@link #band}, which is
+     * whatever the rig was last observed reporting. They used to be one field, so a bad
+     * reading became a command and fought the operator's band selection — see
+     * {@link com.k1af.ft8af.rigs.RigDialTarget}. Set by explicit selections (band picker,
+     * mode retune, connect-time push) and by a trusted rig report; 0 means "not yet
+     * established", which falls back to {@link #band}.
+     */
+    public static volatile long commandedBandHz = 0;
+
+    /**
+     * True when the rig has answered our last command with an error or an unparseable
+     * frame ("?;"), meaning the CAT stream is desynchronised and a frequency it reports
+     * right now is not trustworthy enough to command back at it. Cleared when we send the
+     * next command. See {@link com.k1af.ft8af.rigs.RigDialTarget#shouldAdoptAsTarget}.
+     */
+    public static volatile boolean rigRejectedSinceCommand = false;
     //Posted each time a GPS fix disciplines the clock, so the Time Sync screen can recompose
     //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.
     public static MutableLiveData<Long> mutableGpsClockSync = new MutableLiveData<>();

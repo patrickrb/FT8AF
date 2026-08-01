@@ -307,6 +307,9 @@ public class CableSerialPort {
                 for (byte b : src) hex.append(String.format("%02X ", b));
                 fileLog("serial.send[" + src.length + "]: " + preview + " | hex: " + hex.toString().trim());
             }
+            // A fresh command re-synchronises the stream: any earlier rejection no longer
+            // taints what the rig reports next. See RigDialTarget.
+            GeneralVariables.rigRejectedSinceCommand = false;
             writeIfOpen(port::write, src, SEND_TIMEOUT);
             if (!preview.equals("FA;") && !preview.startsWith("RM")) {
                 fileLog("serial.send: write completed OK");
