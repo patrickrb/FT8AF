@@ -103,6 +103,27 @@ class RtotaActivationTest {
     }
 
     @Test
+    fun `the slack boundary itself is inclusive, to the millisecond`() {
+        // The server's check is `t >= windowStart && t <= windowEnd`, so exactly
+        // twelve hours out still matches. Asserting only an hour inside the edge
+        // (as the test above does) would pass just as happily against an eleven-
+        // or thirteen-hour rule — the boundary is the only place the constant is
+        // actually pinned.
+        val windowStart = start - ACTIVATION_MATCH_SLACK_MS
+        val windowEnd = start + 8 * hour + ACTIVATION_MATCH_SLACK_MS
+
+        assertThat(activationMatchesNow(plan(), windowStart)).isTrue()
+        assertThat(activationMatchesNow(plan(), windowStart - 1)).isFalse()
+        assertThat(activationMatchesNow(plan(), windowEnd)).isTrue()
+        assertThat(activationMatchesNow(plan(), windowEnd + 1)).isFalse()
+    }
+
+    @Test
+    fun `the slack is twelve hours, not some other span`() {
+        assertThat(ACTIVATION_MATCH_SLACK_MS).isEqualTo(12 * 60 * 60 * 1000L)
+    }
+
+    @Test
     fun `outside the slack does not match`() {
         assertThat(activationMatchesNow(plan(), start - 13 * hour)).isFalse()
         assertThat(activationMatchesNow(plan(), start + 8 * hour + 13 * hour)).isFalse()
@@ -112,7 +133,10 @@ class RtotaActivationTest {
     fun `an open-ended plan is assumed to span a day, as on the server`() {
         val open = plan(endMs = null)
         assertThat(activationMatchesNow(open, start + 20 * hour)).isTrue()
-        // 24 h span + 12 h slack = 36 h; past that it is over.
-        assertThat(activationMatchesNow(open, start + 37 * hour)).isFalse()
+        // 24 h assumed span + 12 h slack = 36 h, and the edge is inclusive. Pinned at
+        // the boundary rather than an hour past it, so this can't keep passing if the
+        // assumed span drifts.
+        assertThat(activationMatchesNow(open, start + 36 * hour)).isTrue()
+        assertThat(activationMatchesNow(open, start + 36 * hour + 1)).isFalse()
     }
 }

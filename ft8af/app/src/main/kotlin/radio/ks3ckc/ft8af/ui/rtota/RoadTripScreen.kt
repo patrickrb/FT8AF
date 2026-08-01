@@ -5,10 +5,13 @@ import android.app.Activity
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -590,8 +593,11 @@ private fun TripPlanPickerDialog(
                         fontSize = 13.sp,
                     )
                 error != null ->
+                    // Not rtota_error ("Last error: …") — that phrasing belongs to the
+                    // trip's own upload failures, and reusing it here would report a
+                    // failed plan fetch as though the running trip were in trouble.
                     Text(
-                        text = stringResource(R.string.rtota_error, error),
+                        text = stringResource(R.string.rtota_pick_plan_error, error),
                         color = StatusBad,
                         fontSize = 13.sp,
                     )
@@ -602,30 +608,44 @@ private fun TripPlanPickerDialog(
                         fontSize = 13.sp,
                     )
                 else ->
-                    plans.forEach { plan ->
-                        val matches = activationMatchesNow(plan, nowMs)
-                        Column(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable { onPick(plan.title) }
-                                    .padding(vertical = 10.dp, horizontal = 12.dp),
-                        ) {
-                            Text(text = plan.title, color = TextPrimary, fontSize = 15.sp)
-                            Text(
-                                text =
-                                    if (matches) {
-                                        stringResource(R.string.rtota_plan_matches_now)
-                                    } else {
-                                        stringResource(
-                                            R.string.rtota_plan_starts,
-                                            formatPlanStart(plan.startTimeMs),
-                                        )
-                                    },
-                                color = if (matches) Accent else TextFaint,
-                                fontSize = 12.sp,
-                            )
+                    // Bounded and scrollable: a rover who plans a season of trips can
+                    // have a long list, and an unconstrained Column inside a Dialog
+                    // simply runs off the bottom of a small screen — the rows below the
+                    // fold become unreachable, which on a *picker* means unselectable.
+                    // Height-capped rather than a LazyColumn so the dialog still hugs a
+                    // short list instead of always claiming the cap.
+                    Column(
+                        modifier =
+                            Modifier
+                                .heightIn(max = 320.dp)
+                                .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        plans.forEach { plan ->
+                            val matches = activationMatchesNow(plan, nowMs)
+                            Column(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable { onPick(plan.title) }
+                                        .padding(vertical = 10.dp, horizontal = 12.dp),
+                            ) {
+                                Text(text = plan.title, color = TextPrimary, fontSize = 15.sp)
+                                Text(
+                                    text =
+                                        if (matches) {
+                                            stringResource(R.string.rtota_plan_matches_now)
+                                        } else {
+                                            stringResource(
+                                                R.string.rtota_plan_starts,
+                                                formatPlanStart(plan.startTimeMs),
+                                            )
+                                        },
+                                    color = if (matches) Accent else TextFaint,
+                                    fontSize = 12.sp,
+                                )
+                            }
                         }
                     }
             }
