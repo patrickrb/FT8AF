@@ -990,6 +990,11 @@ public class MainViewModel extends ViewModel {
         });
 
 
+        // Let the transmitter hold key-up while this slot's fast decode is still running,
+        // so a busy band answers callers in the right cycle instead of one late.
+        // See FastDecodeGate.
+        ft8TransmitSignal.setFastDecodeGate(ft8SignalListener.getFastDecodeGate());
+
         //create meter protection controller (ALC auto-volume + SWR halt)
         meterProtectionController = new MeterProtectionController();
         meterProtectionController.setTransmitSignal(ft8TransmitSignal);

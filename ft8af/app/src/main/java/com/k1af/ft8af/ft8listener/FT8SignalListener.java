@@ -52,6 +52,17 @@ public class FT8SignalListener {
     // work never slows the next slot's early decode. See LateDecode.AnalysisGate.
     private static final LateDecode.AnalysisGate ANALYSIS_GATE = new LateDecode.AnalysisGate();
 
+    /**
+     * Lets the transmitter hold key-up while this slot's fast pass is still running, so a
+     * busy band answers callers in the right cycle instead of one late. See
+     * {@link FastDecodeGate}.
+     */
+    private final FastDecodeGate fastDecodeGate = new FastDecodeGate();
+
+    public FastDecodeGate getFastDecodeGate() {
+        return fastDecodeGate;
+    }
+
 
     static {
         try {
@@ -199,6 +210,10 @@ public class FT8SignalListener {
 //        int data[][] = reader.getData();
         //----------------------------------------------------------
 
+        // Marked in flight BEFORE the thread starts, not inside it: the transmitter can
+        // reach its key-up check before this thread is scheduled, and would then see an
+        // idle gate and key up against a decode that was about to run.
+        fastDecodeGate.begin();
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -235,8 +250,16 @@ public class FT8SignalListener {
                 addMsgToList(allMsg, msgs);
                 timeSec = System.currentTimeMillis() - time;
                 decodeTimeSec.postValue(timeSec);// decode elapsed time
-                if (onFt8Listen != null) {
-                    onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, false);
+                try {
+                    if (onFt8Listen != null) {
+                        onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, false);
+                    }
+                } finally {
+                    // Released only after DELIVERY, not merely after decoding: the
+                    // sequencer acts inside afterDecode, so a transmitter waiting on this
+                    // would otherwise still race it. finally, so a throw in a listener
+                    // cannot strand TX waiting out the full hold. See FastDecodeGate.
+                    fastDecodeGate.end();
                 }
 
 
