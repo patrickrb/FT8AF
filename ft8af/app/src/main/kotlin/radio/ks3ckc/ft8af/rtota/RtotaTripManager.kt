@@ -88,6 +88,10 @@ object RtotaTripManager {
     @Volatile
     private var queue: RtotaQueue? = null
 
+    /** Names the road for each breadcrumb; null until [init] has a context. */
+    @Volatile
+    private var highwayResolver: HighwayResolver? = null
+
     private var sampler = SmartBeaconSampler()
 
     /**
@@ -99,9 +103,27 @@ object RtotaTripManager {
     @Volatile
     private var lastRawFix: TripPoint? = null
 
+    /**
+     * The freshest GPS fix this trip has seen, or null when no trip is running.
+     *
+     * Exposed for [radio.ks3ckc.ft8af.location.RoverPosition], which stamps every
+     * logged QSO with a position whether or not a trip is running — while a trip *is*
+     * running, this is by far the best source available, since it is a live fix the
+     * app is already paying for.
+     */
+    fun latestFix(): TripPoint? = if (RtotaSettings.hasActiveTrip) lastRawFix else null
+
     /** Consecutive failed flushes — drives [rtotaBackoffMs]. */
     @Volatile
     private var failedAttempts = 0
+
+    /**
+     * Set when a trip is resumed from disk, cleared once the server has told us
+     * what it already holds. Only a *resumed* trip needs asking: a trip this
+     * process started knows exactly what it has sent.
+     */
+    @Volatile
+    private var resumeHandshakePending = false
 
     @Volatile
     private var retryJob: Job? = null
@@ -125,9 +147,24 @@ object RtotaTripManager {
         if (appContext == null) {
             appContext = ctx
             queue = RtotaQueue(File(ctx.filesDir, QUEUE_FILE)).also { it.load() }
+            highwayResolver = HighwayResolver(ctx)
         }
         registerConnectivity(ctx)
         restore()
+    }
+
+    /**
+     * Re-impose the trip's CQ modifier once the persisted config has loaded.
+     *
+     * Separate from [init] on purpose. `init` runs early in activity startup,
+     * while `DatabaseOpr` assigns `GeneralVariables.toModifier` from the stored
+     * config row later — so applying at init time would both bank the wrong
+     * "operator's preference" and then be overwritten by the config load anyway.
+     * The caller invokes this from the config-loaded callback instead.
+     */
+    fun onConfigLoaded() {
+        if (!RtotaSettings.enabled || !RtotaSettings.hasActiveTrip) return
+        RtotaCqSession.apply()
     }
 
     /** Re-derive UI state from what was persisted, and resume delivery. */
@@ -142,7 +179,10 @@ object RtotaTripManager {
         // is real, and pretending to continue from a stale point would draw a
         // straight line across wherever the phone actually went.
         sampler = SmartBeaconSampler()
+        highwayResolver?.reset()
         lastRawFix = null
+        // Ask the server what it has before re-sending a queue we can't account for.
+        resumeHandshakePending = RtotaSettings.tripId.isNotEmpty()
         _state.value =
             _state.value.copy(
                 active = true,
@@ -189,7 +229,10 @@ object RtotaTripManager {
         RtotaSettings.tripShareToken = ""
 
         sampler = SmartBeaconSampler()
+        highwayResolver?.reset()
         lastRawFix = null
+        // A trip this process started has nothing to reconcile — it knows what it sent.
+        resumeHandshakePending = false
         queue?.clear()
         _state.value =
             RtotaTripState(
@@ -199,6 +242,8 @@ object RtotaTripManager {
                 pendingCreate = true,
             )
         log("startTrip '${RtotaSettings.tripName}' privacy=${privacy ?: "(default)"}")
+        // From here every generated CQ goes out as "CQ RTOA <call> <grid>".
+        RtotaCqSession.apply()
         startTracking()
         // The trip notes ride along with the deferred create.
         pendingNotes = notes
@@ -223,6 +268,10 @@ object RtotaTripManager {
                 "${queue?.qsoCount() ?: 0}qsos",
         )
         RtotaSettings.tripPendingComplete = true
+        // Released now, not when the server finally acks the completion: out of
+        // coverage that ack can be hours away, and the operator is off the road
+        // and off the trip the moment they say so.
+        RtotaCqSession.release()
         stopTracking()
         requestFlush("end-trip")
     }
@@ -233,11 +282,13 @@ object RtotaTripManager {
      * logbook remains the way to publish it.
      */
     fun abandonTrip() {
+        RtotaCqSession.release()
         stopTracking()
         queue?.clear()
         RtotaSettings.clearTrip()
         sampler.reset()
         lastRawFix = null
+        resumeHandshakePending = false
         _state.value = RtotaTripState()
         log("abandonTrip — local queue dropped")
     }
@@ -259,6 +310,7 @@ object RtotaTripManager {
      */
     fun onLocationFix(location: Location) {
         if (!RtotaSettings.hasActiveTrip) return
+        val state = stateForLatLon(location.latitude, location.longitude)
         val candidate =
             TripPoint(
                 timestampMs = if (location.time > 0) location.time else System.currentTimeMillis(),
@@ -268,7 +320,10 @@ object RtotaTripManager {
                 speedMph = if (location.hasSpeed()) location.speed * MPS_TO_MPH else null,
                 headingDeg = if (location.hasBearing()) location.bearing.toDouble() else null,
                 accuracyM = if (location.hasAccuracy()) location.accuracy.toDouble() else null,
-                state = stateForLatLon(location.latitude, location.longitude),
+                state = state,
+                // Answers from cache and refreshes in the background — never blocks
+                // this callback, and yields null rather than a guess when offline.
+                highway = highwayResolver?.labelFor(location.latitude, location.longitude, state),
             )
         lastRawFix = candidate
 
@@ -322,11 +377,16 @@ object RtotaTripManager {
         try {
             if (record == null || !RtotaSettings.enabled || !RtotaSettings.hasActiveTrip) return
             val here = lastRawFix ?: sampler.lastAccepted
+            // The record was stamped with a position moments ago by the QSO save path
+            // (RoverPosition), which runs whether or not a trip is active. Preferring it
+            // guarantees the live copy of this contact and the one in the end-of-trip
+            // ADIF report the identical coordinate — they dedupe into one row server-side,
+            // and two spellings of "where it happened" would be settled by arrival order.
             val qso =
                 RtotaQsoMapper.tripQsoFromRecord(
                     record = record,
-                    roverLat = here?.latitude,
-                    roverLon = here?.longitude,
+                    roverLat = record.myLat ?: here?.latitude,
+                    roverLon = record.myLon ?: here?.longitude,
                     state = here?.state,
                 ) ?: return
             queue?.addQso(qso)
@@ -421,7 +481,33 @@ object RtotaTripManager {
                 return@withLock
             }
 
-            // 2. Ship the backlog, oldest first, one batch per request.
+            // 2. Resume handshake, once per app start on an already-created trip.
+            //    A process killed 300 miles in comes back holding a queue it can't
+            //    tell apart from what already landed; one cheap GET turns "re-send
+            //    the whole day" into "send the last few minutes". Best-effort by
+            //    design: a failure here is not a delivery failure, so it must not
+            //    trip the backoff — the plain re-send below still works, the server
+            //    dedupes, and the only cost is bytes.
+            if (resumeHandshakePending) {
+                RtotaClient.fetchSyncState(baseUrl, apiKey, tripId).fold(
+                    onSuccess = { sync ->
+                        resumeHandshakePending = false
+                        val pruned = q.pruneAcknowledgedQsos(sync.qsoDedupeKeys)
+                        log(
+                            "sync-state: server has ${sync.pointCount}pts/${sync.qsoCount}qsos " +
+                                "status=${sync.status}${if (sync.truncated) " (keys truncated)" else ""}; " +
+                                "pruned $pruned queued QSO(s)",
+                        )
+                        publish()
+                    },
+                    onFailure = { e ->
+                        // Leave the flag set so the next pass tries again.
+                        log("sync-state unavailable (continuing): ${e.message ?: e.javaClass.simpleName}")
+                    },
+                )
+            }
+
+            // 3. Ship the backlog, oldest first, one batch per request.
             while (!q.isEmpty()) {
                 val batch = q.peekBatch()
                 if (batch.isEmpty) break
@@ -446,7 +532,7 @@ object RtotaTripManager {
                 )
             }
 
-            // 3. Finalize once nothing is left to send.
+            // 4. Finalize once nothing is left to send.
             if (RtotaSettings.tripPendingComplete && q.isEmpty()) {
                 RtotaClient.completeTrip(baseUrl, apiKey, tripId).fold(
                     onSuccess = {

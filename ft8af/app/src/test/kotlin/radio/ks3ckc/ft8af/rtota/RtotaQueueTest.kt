@@ -27,6 +27,43 @@ class RtotaQueueTest {
     private fun queueFile(): File = File(temp.newFolder(), "rtota_queue.json")
 
     @Test
+    fun `pruning drops only the contacts the server reported holding`() {
+        val q = RtotaQueue(queueFile())
+        repeat(3) { q.addQso(qso(it)) }
+        repeat(2) { q.addPoint(point(it)) }
+
+        val removed = q.pruneAcknowledgedQsos(setOf(qso(0).dedupeKey(), qso(2).dedupeKey()))
+
+        assertThat(removed).isEqualTo(2)
+        assertThat(q.qsoCount()).isEqualTo(1)
+        assertThat(q.peekBatch().qsos.single()).isEqualTo(qso(1))
+        // Breadcrumbs carry no key and re-send idempotently — pruning must not
+        // touch them.
+        assertThat(q.pointCount()).isEqualTo(2)
+    }
+
+    @Test
+    fun `pruning survives a restart, so a resumed trip does not re-send what it dropped`() {
+        val file = queueFile()
+        RtotaQueue(file).apply {
+            repeat(3) { addQso(qso(it)) }
+            pruneAcknowledgedQsos(setOf(qso(0).dedupeKey()))
+        }
+        val reloaded = RtotaQueue(file).also { it.load() }
+        assertThat(reloaded.qsoCount()).isEqualTo(2)
+    }
+
+    @Test
+    fun `an unknown or empty key set removes nothing`() {
+        // A failed handshake must never be read as "the server has everything".
+        val q = RtotaQueue(queueFile())
+        repeat(2) { q.addQso(qso(it)) }
+        assertThat(q.pruneAcknowledgedQsos(emptySet())).isEqualTo(0)
+        assertThat(q.pruneAcknowledgedQsos(setOf("W9XYZ|20M|FT8|2023-11-14T22:13"))).isEqualTo(0)
+        assertThat(q.qsoCount()).isEqualTo(2)
+    }
+
+    @Test
     fun `counts track what was added`() {
         val q = RtotaQueue(queueFile())
         q.addPoint(point(1))

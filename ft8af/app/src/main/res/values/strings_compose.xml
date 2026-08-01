@@ -914,6 +914,7 @@
     <string name="rtota_section_tracking">TRACKING</string>
     <string name="rtota_beacon_heading">SmartBeaconing</string>
     <string name="rtota_stat_last_point">Last point</string>
+    <string name="rtota_stat_cq">Calling</string>
     <string name="rtota_beacon_first">trip start</string>
     <string name="rtota_beacon_rate">interval</string>
     <string name="rtota_beacon_corner">corner</string>

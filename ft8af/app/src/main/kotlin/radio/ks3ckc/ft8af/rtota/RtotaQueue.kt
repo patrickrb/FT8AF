@@ -95,6 +95,27 @@ class RtotaQueue(private val file: File?) {
         persist()
     }
 
+    /**
+     * Drop queued contacts the server has already stored, identified by the
+     * dedupe keys a sync-state handshake returned. Returns how many were removed.
+     *
+     * Only ever called with keys the server itself reported, and matched on the
+     * exact format it stores (see [dedupeKey]) — a near-miss re-sends a contact
+     * that then dedupes server-side, which costs a few bytes, while a false match
+     * would silently discard a QSO that never arrived. Points are left alone:
+     * they carry no key, and re-sending them is already idempotent on
+     * (trip, timestamp).
+     */
+    @Synchronized
+    fun pruneAcknowledgedQsos(serverKeys: Set<String>): Int {
+        if (serverKeys.isEmpty() || qsos.isEmpty()) return 0
+        val before = qsos.size
+        qsos.retainAll { it.dedupeKey() !in serverKeys }
+        val removed = before - qsos.size
+        if (removed > 0) persist()
+        return removed
+    }
+
     @Synchronized
     fun clear() {
         points.clear()

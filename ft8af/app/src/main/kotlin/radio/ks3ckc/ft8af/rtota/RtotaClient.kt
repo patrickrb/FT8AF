@@ -128,11 +128,11 @@ object RtotaClient {
         }
 
     /**
-     * Append a batch to a running trip. Safe to retry: QSOs dedupe server-side.
-     * Points do not, so callers must only drop a batch on a confirmed 2xx — a
-     * response lost after the server committed can duplicate breadcrumbs, which
-     * is the one failure mode worth accepting here (a doubled point draws the
-     * same route; a lost QSO does not).
+     * Append a batch to a running trip. Safe to retry: QSOs dedupe on
+     * `callsign + band + mode + UTC minute`, and breadcrumbs are idempotent on
+     * (trip, timestamp) — so a response lost after the server committed costs a
+     * repeated request, not a duplicated route. Callers still only drop a batch on
+     * a confirmed 2xx: the queue is the sole copy until the server says otherwise.
      */
     suspend fun sendLive(
         baseUrl: String,
@@ -144,6 +144,26 @@ object RtotaClient {
             val body = buildLiveBody(batch.points, batch.qsos)
             request("POST", "$baseUrl/api/trips/$tripId/live", apiKey, body).map { resp ->
                 parseLiveAck(resp) ?: RtotaLiveAck(batch.points.size, batch.qsos.size, 0)
+            }
+        }
+
+    /**
+     * Ask what the server already holds for a trip — the resume handshake.
+     *
+     * Worth one request after a long silence (a dead zone measured in hours, a
+     * process the OS killed, a phone swap): ingestion is idempotent, so the app
+     * *could* always just re-send its whole backlog, but it has no way to know it
+     * is only missing the last ten minutes. Asking first turns a multi-megabyte
+     * re-send over a single bar of signal into a short one.
+     */
+    suspend fun fetchSyncState(
+        baseUrl: String,
+        apiKey: String,
+        tripId: String,
+    ): Result<RtotaSyncState> =
+        withContext(Dispatchers.IO) {
+            request("GET", "$baseUrl/api/trips/$tripId/sync-state", apiKey, null).mapCatching { resp ->
+                parseSyncState(resp) ?: throw IllegalStateException("Unparsable sync-state body")
             }
         }
 

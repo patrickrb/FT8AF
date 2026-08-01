@@ -36,8 +36,19 @@ object RtotaSettings {
     private const val KEY_TRIP_PENDING_CREATE = "tripPendingCreate"
     private const val KEY_TRIP_PENDING_COMPLETE = "tripPendingComplete"
 
-    /** rtota.app is the hosted service; overridable for self-hosting or a dev box. */
-    const val DEFAULT_BASE_URL = "https://rtota.app"
+    /**
+     * The hosted service; overridable for self-hosting or a dev box.
+     *
+     * The `www.` host is deliberate and load-bearing. The apex `rtota.app` answers
+     * every request with a 308 to `www.`, and a 308 is precisely the redirect no
+     * HTTP client may follow for a POST without being told to (RFC 9110: the
+     * method and body must be preserved, so clients decline rather than guess).
+     * Every write this app makes is a POST, so pointing at the apex turns trip
+     * creation into a permanent, non-retryable failure. See [normalizeRtotaBaseUrl],
+     * which repairs an apex URL typed into the server-override field for the same
+     * reason.
+     */
+    const val DEFAULT_BASE_URL = "https://www.rtota.app"
 
     val PRIVACY_LEVELS = listOf("public", "delayed", "followers", "private")
 
@@ -111,10 +122,17 @@ object RtotaSettings {
             prefsOrNull()?.edit()?.putBoolean(KEY_ENABLED, value)?.apply()
         }
 
-    /** Service origin with any trailing slash removed, so callers can append paths. */
+    /**
+     * Service origin, normalized so callers can append paths. Normalizing on
+     * *read* rather than only on write is what rescues the value an earlier build
+     * already persisted — an install that stored the apex `https://rtota.app`
+     * keeps working after an update instead of 308-ing forever.
+     */
     var baseUrl: String
-        get() = readString(KEY_BASE_URL, DEFAULT_BASE_URL).trimEnd('/').ifEmpty { DEFAULT_BASE_URL }
-        set(value) = writeString(KEY_BASE_URL, value.trim().trimEnd('/'))
+        get() =
+            normalizeRtotaBaseUrl(readString(KEY_BASE_URL, DEFAULT_BASE_URL))
+                .ifEmpty { DEFAULT_BASE_URL }
+        set(value) = writeString(KEY_BASE_URL, normalizeRtotaBaseUrl(value))
 
     var apiKey: String
         get() = readString(KEY_API_KEY, "")

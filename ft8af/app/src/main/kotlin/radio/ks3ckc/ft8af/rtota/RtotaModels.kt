@@ -58,6 +58,23 @@ data class TripQso(
 /** Trip identifiers handed back by `POST /api/trips`. */
 data class RtotaTripHandle(val id: String, val shareToken: String?)
 
+/**
+ * What `GET /api/trips/:id/sync-state` says the server already holds — the
+ * resume handshake for a client that has been out of touch long enough not to
+ * know what it still owes.
+ */
+data class RtotaSyncState(
+    val tripId: String,
+    /** "active" or "completed" — a completed trip must not be fed any more. */
+    val status: String,
+    val pointCount: Int,
+    val qsoCount: Int,
+    /** Dedupe keys of the most recent contacts, newest first. */
+    val qsoDedupeKeys: Set<String>,
+    /** True when the trip holds more keys than the server returned. */
+    val truncated: Boolean,
+)
+
 /** What the server reports it did with a live batch. */
 data class RtotaLiveAck(
     val pointsInserted: Int,
@@ -128,6 +145,39 @@ fun frequencyKhzOrNull(freqHz: Long): Double? {
     if (freqHz <= 0L) return null
     val khz = freqHz / 1000.0
     return if (khz in 100.0..10_000_000.0) khz else null
+}
+
+/**
+ * Clean up a base URL before it is used, repairing the two mistakes that cost a
+ * whole trip rather than one request.
+ *
+ * 1. **A bare host.** "rtota.app" typed into the server field has no scheme, so
+ *    `URL()` throws and every upload fails with a MalformedURLException the
+ *    operator can do nothing with. Assume https.
+ * 2. **The apex host.** `rtota.app` 308-redirects to `www.rtota.app`, and a 308
+ *    must not be auto-followed for a POST (RFC 9110 §15.4.9 — the method and
+ *    body have to survive, so a client that can't guarantee that declines).
+ *    Every write here is a POST, so the apex yields a 308 that
+ *    [isRetryableRtotaFailure] correctly classifies as fatal, stranding the trip
+ *    on the phone. Rewriting the host is the difference between a working test
+ *    run and a silent one.
+ *
+ * Only the known rtota.app host is rewritten: a self-hosted origin or a dev box
+ * is left exactly as typed, since nothing here knows how *it* is fronted.
+ */
+fun normalizeRtotaBaseUrl(raw: String): String {
+    val trimmed = raw.trim().trimEnd('/')
+    if (trimmed.isEmpty()) return trimmed
+    val withScheme =
+        when {
+            trimmed.startsWith("http://", ignoreCase = true) -> trimmed
+            trimmed.startsWith("https://", ignoreCase = true) -> trimmed
+            else -> "https://$trimmed"
+        }
+    // Match the apex host only — not "myrtota.app", and not a path that happens
+    // to contain the name.
+    return Regex("^(https?://)rtota\\.app(?=$|[/?#])", RegexOption.IGNORE_CASE)
+        .replace(withScheme) { "${it.groupValues[1]}www.rtota.app" }
 }
 
 // ---------------------------------------------------------------------------
@@ -260,6 +310,56 @@ fun buildLiveBody(
             put("qsos", JSONArray().apply { qsos.forEach { put(it.toJson()) } })
         }
     }.toString()
+
+/**
+ * The server's dedupe key for this contact: `CALLSIGN|BAND|MODE|UTC-minute`,
+ * with an empty field where the value is unknown.
+ *
+ * A deliberate mirror of `dedupeKey()` in the service's lib/qso.ts, computed
+ * from exactly what [toJson] puts on the wire (same trimming, same uppercasing,
+ * same truncation) so the two never disagree. The asymmetry is the safety net: a
+ * key the client fails to match merely re-sends a contact the server dedupes
+ * anyway, whereas a key that matches something it shouldn't would drop a QSO
+ * that was never delivered. That is why this mirrors the format exactly rather
+ * than approximating it, and why [RtotaSyncState] is only ever used to *skip*
+ * sends on an exact hit.
+ */
+fun TripQso.dedupeKey(): String {
+    val call = callsign.trim().uppercase(Locale.US).take(20)
+    val b = band?.takeIf { it.isNotBlank() }?.take(12)?.trim()?.uppercase(Locale.US).orEmpty()
+    val m = mode?.takeIf { it.isNotBlank() }?.take(20)?.trim()?.uppercase(Locale.US).orEmpty()
+    // "YYYY-MM-DDTHH:MM" — the ISO instant truncated to the minute, matching the
+    // server's `toISOString().slice(0, 16)`.
+    val minute = isoUtc(timestampMs).take(16)
+    return listOf(call, b, m, minute).joinToString("|")
+}
+
+/** Parse a `GET /api/trips/:id/sync-state` body, or null when it is unusable. */
+fun parseSyncState(body: String?): RtotaSyncState? {
+    if (body.isNullOrBlank()) return null
+    return try {
+        val root = JSONObject(body)
+        val tripId = root.optString("tripId").takeIf { it.isNotEmpty() } ?: return null
+        val qsos = root.optJSONObject("qsos")
+        val keysArray = qsos?.optJSONArray("dedupeKeys")
+        val keys = mutableSetOf<String>()
+        if (keysArray != null) {
+            for (i in 0 until keysArray.length()) {
+                keysArray.optString(i).takeIf { it.isNotEmpty() }?.let { keys.add(it) }
+            }
+        }
+        RtotaSyncState(
+            tripId = tripId,
+            status = root.optString("status"),
+            pointCount = root.optJSONObject("points")?.optInt("count", 0) ?: 0,
+            qsoCount = qsos?.optInt("count", 0) ?: 0,
+            qsoDedupeKeys = keys,
+            truncated = qsos?.optBoolean("truncated", false) ?: false,
+        )
+    } catch (_: Exception) {
+        null
+    }
+}
 
 /** Parse the live endpoint's response into counts for the UI. */
 fun parseLiveAck(body: String?): RtotaLiveAck? {

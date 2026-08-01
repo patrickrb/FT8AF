@@ -427,6 +427,13 @@ class ComposeMainActivity : AppCompatActivity() {
                 // persisted operating mode is known, rebuild them for it and sync the UI.
                 mainViewModel.applyLoadedOperatingMode()
 
+                // Re-impose "CQ RTOA" if a road trip was running when the app closed.
+                // Must come after the config load above (which assigns toModifier from
+                // the stored row) and before the POTA resume below: a park activation
+                // started mid-trip outranks the trip, and resuming in this order lets
+                // POTA save RTOA as its own predecessor and hand it back when it ends.
+                RtotaTripManager.onConfigLoaded()
+
                 // Resume any POTA activation that was interrupted by app close
                 PotaSessionManager.resume()
 

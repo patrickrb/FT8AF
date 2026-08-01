@@ -39,6 +39,7 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.R
 import kotlinx.coroutines.launch
 import radio.ks3ckc.ft8af.rtota.BeaconReason
+import radio.ks3ckc.ft8af.rtota.RTOTA_CQ_MODIFIER
 import radio.ks3ckc.ft8af.rtota.RtotaClient
 import radio.ks3ckc.ft8af.rtota.RtotaSettings
 import radio.ks3ckc.ft8af.rtota.RtotaTripManager
@@ -428,6 +429,12 @@ private fun ActiveTripCard(
                 state.parked -> stringResource(R.string.rtota_beacon_parked)
                 else -> stringResource(beaconReasonLabelRes(state.lastBeaconReason))
             },
+        )
+        // Spelled out because it is not the spelling anyone expects: an FT8 CQ
+        // modifier is at most four letters, so the trip calls RTOA, not RTOTA.
+        StatLine(
+            stringResource(R.string.rtota_stat_cq),
+            "CQ $RTOTA_CQ_MODIFIER",
         )
         if (state.pendingCreate) {
             Text(
