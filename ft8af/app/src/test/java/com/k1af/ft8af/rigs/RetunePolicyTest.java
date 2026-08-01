@@ -46,6 +46,44 @@ public class RetunePolicyTest {
                 FREQ, OTHER_FREQ, FREQ, T0 + 10, T0)).isTrue();
     }
 
+    // ---------------------------------------------------------------
+    // Connect-reset debounce (onConnected IS the ~1 Hz retune driver)
+    // ---------------------------------------------------------------
+
+    @Test
+    public void firstConnectResets() {
+        assertThat(RetunePolicy.shouldResetOnConnect(T0, RetunePolicy.NO_CONNECT)).isTrue();
+    }
+
+    @Test
+    public void aFlappingPortDoesNotReArmTheRateLimit() {
+        // The measured failure: CableSerialPort fires onConnected() on every successful
+        // port open() and the port was re-opening about once a second, so an
+        // unconditional reset re-armed the limiter on every iteration of the loop it
+        // exists to contain — retunes rose to 73/min from the 57/min measured before the
+        // rate limit existed.
+        assertThat(RetunePolicy.shouldResetOnConnect(T0 + 1_000, T0)).isFalse();
+        assertThat(RetunePolicy.shouldResetOnConnect(T0 + 5_000, T0)).isFalse();
+    }
+
+    @Test
+    public void aReconnectAfterARealOutageResets() {
+        assertThat(RetunePolicy.shouldResetOnConnect(
+                T0 + RetunePolicy.CONNECT_RESET_DEBOUNCE_MS, T0)).isTrue();
+    }
+
+    @Test
+    public void connectDebounceToleratesBackwardsTime() {
+        assertThat(RetunePolicy.shouldResetOnConnect(T0 - 60_000, T0)).isTrue();
+    }
+
+    @Test
+    public void connectDebounceOutlastsTheObservedFlapRate() {
+        // Must be far above the ~1 s flap; the reassert heartbeat and the rig-freq check
+        // cover a genuine reconnect that lands inside the window.
+        assertThat(RetunePolicy.CONNECT_RESET_DEBOUNCE_MS).isAtLeast(10_000L);
+    }
+
     @Test
     public void reconnectIsNotThrottled_whenStateIsResetOnConnect() {
         // MainViewModel.onConnected() calls resetRetuneRateLimit(), which restores

@@ -106,74 +106,31 @@ public class GpsClockUpdaterTest {
         assertThat(GpsClockUpdater.MAX_SANE_OFFSET_MS).isAtLeast(30_000L);
     }
 
-    // ---- isOffsetStepSane (the bound that catches a plausible-looking bad fix) ----
+    // ---- regression: a consistent correction must never be refused ----
 
     @Test
-    public void step_firstFixIsUnconstrained() {
-        // No baseline yet, and this is the fix that legitimately corrects accumulated
-        // drift — it must be allowed to move the clock by a lot.
-        assertThat(GpsClockUpdater.isOffsetStepSane(false, 0, 45_000)).isTrue();
-        assertThat(GpsClockUpdater.isOffsetStepSane(false, 0, -45_000)).isTrue();
-    }
-
-    @Test
-    public void step_rejectsTheMultiSecondJumpThatWentOnAir() {
-        // The 2026-07-30 activation: the grid slid 5.06 s and 7.63 s, and every over in
-        // those stretches keyed up past the audio slack with its leading Costas array
-        // clipped. Both are within the absolute bound, so only the step check stops them.
-        assertThat(GpsClockUpdater.isOffsetStepSane(true, 0, 5_060)).isFalse();
-        assertThat(GpsClockUpdater.isOffsetStepSane(true, 0, 7_630)).isFalse();
-        // ...and each is still "sane" by the absolute bound alone, which is the point.
-        assertThat(GpsClockUpdater.isOffsetSane(1_700_000_000_000L, 5_060)).isTrue();
-    }
-
-    @Test
-    public void step_acceptsOrdinaryDriftBetweenFixes() {
-        // A device clock drifts milliseconds between fixes minutes apart.
-        assertThat(GpsClockUpdater.isOffsetStepSane(true, 120, 145)).isTrue();
-        assertThat(GpsClockUpdater.isOffsetStepSane(true, -80, -60)).isTrue();
-    }
-
-    @Test
-    public void step_boundaryIsInclusive() {
-        int prior = 100;
-        int atBound = prior + (int) GpsClockUpdater.MAX_OFFSET_STEP_MS;
-        assertThat(GpsClockUpdater.isOffsetStepSane(true, prior, atBound)).isTrue();
-        assertThat(GpsClockUpdater.isOffsetStepSane(true, prior, atBound + 1)).isFalse();
-    }
-
-    @Test
-    public void step_measuredAgainstPriorNotZero() {
-        // A large but STABLE offset must keep being accepted: once the first fix has
-        // corrected a badly-unsynced clock, later fixes near that value are correct and
-        // must not be rejected for being far from zero.
-        assertThat(GpsClockUpdater.isOffsetStepSane(true, 40_000, 40_050)).isTrue();
-    }
-
-    @Test
-    public void step_rejectsJumpBackToZeroFromLargeOffset() {
-        // The mirror image: having disciplined to +40 s, a fix implying ~0 is a bad fix,
-        // not the clock spontaneously fixing itself.
-        assertThat(GpsClockUpdater.isOffsetStepSane(true, 40_000, 0)).isFalse();
-    }
-
-    // ---- computeAppliedOffset with the step bound wired in ----
-
-    @Test
-    public void appliedOffset_nullWhenStepTooLarge() {
-        // Running, absolute-sane, but a 3 s jump from the applied offset: dropped.
+    public void aMultiSecondCorrectionIsApplied_notRefusedForBeingFarFromThePrevious() {
+        // The 2026-07-31 activation, reproduced: a cold fix 2.6s after startup applied
+        // -1331ms, then eleven fixes over the following hour all implied about -2200ms
+        // and were each refused by a 500ms step bound for being ~870ms away from it. The
+        // clock stayed ~870ms wrong all session — decodes 5.9/cycle against 8.7 right
+        // after GPS finally got through, and 14 of 110 overs keying up 5s+ into the slot.
+        //
+        // A stale offset puts the FT8 grid off the air just as surely as a bad fix does,
+        // and unlike a bad fix it never self-corrects. Within the absolute bound, apply.
         Integer r = GpsClockUpdater.computeAppliedOffset(
-                true, 11_000L, 5000L * MS, 5000L * MS, 8_000L, true, 0);
-        assertThat(r).isNull();
+                true, 10_000L - 2_200L, 5000L * MS, 5000L * MS, 10_000L);
+        assertThat(r).isEqualTo(-2_200);
     }
 
     @Test
-    public void appliedOffset_allowsSmallStepFromPrior() {
-        // Same fix geometry as appliedOffset_returnsOffsetWhenRunningAndSane (+2000),
-        // with a prior offset close enough that the step passes.
-        Integer r = GpsClockUpdater.computeAppliedOffset(
-                true, 10_000L, 5000L * MS, 5000L * MS, 8_000L, true, 1_800);
-        assertThat(r).isEqualTo(2_000);
+    public void repeatedAgreeingFixesAllApply() {
+        // Whatever the previously applied offset was, each of a consistent run is applied.
+        for (int impliedOffset : new int[] {-2_112, -2_159, -2_143, -2_156, -2_213}) {
+            Integer r = GpsClockUpdater.computeAppliedOffset(
+                    true, 10_000L + impliedOffset, 5000L * MS, 5000L * MS, 10_000L);
+            assertThat(r).isEqualTo(impliedOffset);
+        }
     }
 
     // ---- clampIntervalMinutes ----
@@ -236,21 +193,21 @@ public class GpsClockUpdaterTest {
     @Test
     public void appliedOffset_nullWhenNotRunning() {
         // A fix that raced past a disable (running flipped false) must not touch the clock.
-        Integer r = GpsClockUpdater.computeAppliedOffset(false, 10_000L, 5000L * MS, 5000L * MS, 8_000L, false, 0);
+        Integer r = GpsClockUpdater.computeAppliedOffset(false, 10_000L, 5000L * MS, 5000L * MS, 8_000L);
         assertThat(r).isNull();
     }
 
     @Test
     public void appliedOffset_nullWhenInsane() {
         // fixUtc==0 (no time in the fix) is rejected even while running.
-        Integer r = GpsClockUpdater.computeAppliedOffset(true, 0L, 5000L * MS, 5000L * MS, 8_000L, false, 0);
+        Integer r = GpsClockUpdater.computeAppliedOffset(true, 0L, 5000L * MS, 5000L * MS, 8_000L);
         assertThat(r).isNull();
     }
 
     @Test
     public void appliedOffset_returnsOffsetWhenRunningAndSane() {
         // GPS UTC now = 10_000 (fresh fix), device reads 8_000 => +2_000.
-        Integer r = GpsClockUpdater.computeAppliedOffset(true, 10_000L, 5000L * MS, 5000L * MS, 8_000L, false, 0);
+        Integer r = GpsClockUpdater.computeAppliedOffset(true, 10_000L, 5000L * MS, 5000L * MS, 8_000L);
         assertThat(r).isEqualTo(2_000);
     }
 

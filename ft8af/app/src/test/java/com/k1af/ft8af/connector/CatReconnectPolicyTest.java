@@ -15,6 +15,9 @@ import java.io.IOException;
  */
 public class CatReconnectPolicyTest {
 
+    /** Fixed epoch-like instant for the burst-timing cases. */
+    private static final long T0 = 1_700_000_000_000L;
+
     // ---- classify -----------------------------------------------------------
 
     @Test
@@ -50,13 +53,17 @@ public class CatReconnectPolicyTest {
     public void autoReconnect_transientWithinBudget_allowed() {
         assertThat(CatReconnectPolicy.shouldAutoReconnect(Kind.TRANSIENT, 0)).isTrue();
         assertThat(CatReconnectPolicy.shouldAutoReconnect(
-                Kind.TRANSIENT, CatReconnectPolicy.MAX_AUTO_RECONNECT_ATTEMPTS - 1)).isTrue();
+                Kind.TRANSIENT, CatReconnectPolicy.BACKOFF_ESCALATION_ATTEMPTS - 1)).isTrue();
     }
 
     @Test
-    public void autoReconnect_budgetExhausted_denied() {
+    public void autoReconnect_transientRetriesWithoutLimit() {
+        // The budget was dropped deliberately: giving up strands the operator with no CAT
+        // until they notice the retry chip. Containment comes from the backoff escalating
+        // to MAX_BACKOFF_MS and staying there, not from stopping.
         assertThat(CatReconnectPolicy.shouldAutoReconnect(
-                Kind.TRANSIENT, CatReconnectPolicy.MAX_AUTO_RECONNECT_ATTEMPTS)).isFalse();
+                Kind.TRANSIENT, CatReconnectPolicy.BACKOFF_ESCALATION_ATTEMPTS)).isTrue();
+        assertThat(CatReconnectPolicy.shouldAutoReconnect(Kind.TRANSIENT, 1_000)).isTrue();
     }
 
     @Test
@@ -144,9 +151,66 @@ public class CatReconnectPolicyTest {
     }
 
     @Test
-    public void decide_transientBudgetExhausted_surfaces() {
+    public void decide_transientKeepsReconnectingPastTheOldBudget() {
         assertThat(CatReconnectPolicy.decide(
-                false, Kind.TRANSIENT, CatReconnectPolicy.MAX_AUTO_RECONNECT_ATTEMPTS))
-                .isEqualTo(CatReconnectPolicy.Action.SURFACE);
+                false, Kind.TRANSIENT, CatReconnectPolicy.BACKOFF_ESCALATION_ATTEMPTS))
+                .isEqualTo(CatReconnectPolicy.Action.RECONNECT);
+    }
+
+    // ---- shouldResetBurst: the reconnect-storm fix -------------------------
+
+    @Test
+    public void burst_neverConnected_resets() {
+        assertThat(CatReconnectPolicy.shouldResetBurst(T0, 0L)).isTrue();
+    }
+
+    @Test
+    public void burst_portThatDiesImmediatelyDoesNotReset() {
+        // THE bug. CableConnector treated connect() returning true as success and reset
+        // the escalation there, so a port that opened and immediately errored restarted
+        // the burst at attempt 1 every time — backoff pinned at BASE_BACKOFF_MS (500 ms).
+        // Measured result: 13,190 port opens in 88 minutes, inter-arrival 0.51-0.53 s,
+        // and the give-up path never reached once.
+        assertThat(CatReconnectPolicy.shouldResetBurst(T0 + 30, T0)).isFalse();
+        assertThat(CatReconnectPolicy.shouldResetBurst(T0 + 530, T0)).isFalse();
+    }
+
+    @Test
+    public void burst_connectionThatHeldResets() {
+        assertThat(CatReconnectPolicy.shouldResetBurst(
+                T0 + CatReconnectPolicy.STABLE_CONNECTION_MS, T0)).isTrue();
+    }
+
+    @Test
+    public void burst_justUnderStableDoesNotReset() {
+        assertThat(CatReconnectPolicy.shouldResetBurst(
+                T0 + CatReconnectPolicy.STABLE_CONNECTION_MS - 1, T0)).isFalse();
+    }
+
+    @Test
+    public void burst_backwardsClockDoesNotFakeStability() {
+        // System.currentTimeMillis() is not monotonic and this app disciplines its own
+        // clock; a backwards correction must not make a 30 ms connection look stable.
+        assertThat(CatReconnectPolicy.shouldResetBurst(T0 - 60_000, T0)).isFalse();
+    }
+
+    @Test
+    public void escalationConstantMatchesWhenTheCeilingIsReached() {
+        // BACKOFF_ESCALATION_ATTEMPTS is no longer a give-up budget, so it only earns its
+        // place by describing something real: the attempt at which backoff hits the
+        // ceiling. Pin that, or the name drifts from the behaviour again.
+        assertThat(CatReconnectPolicy.backoffMs(CatReconnectPolicy.BACKOFF_ESCALATION_ATTEMPTS))
+                .isEqualTo(CatReconnectPolicy.MAX_BACKOFF_MS);
+        assertThat(CatReconnectPolicy.backoffMs(CatReconnectPolicy.BACKOFF_ESCALATION_ATTEMPTS - 1))
+                .isLessThan(CatReconnectPolicy.MAX_BACKOFF_MS);
+    }
+
+    @Test
+    public void burst_escalationReachesTheCeilingQuickly() {
+        // With the counter persisting, a flapping link walks up to the ceiling in a
+        // handful of attempts instead of sitting at the first step forever.
+        assertThat(CatReconnectPolicy.backoffMs(1)).isEqualTo(CatReconnectPolicy.BASE_BACKOFF_MS);
+        assertThat(CatReconnectPolicy.backoffMs(5)).isEqualTo(CatReconnectPolicy.MAX_BACKOFF_MS);
+        assertThat(CatReconnectPolicy.backoffMs(50)).isEqualTo(CatReconnectPolicy.MAX_BACKOFF_MS);
     }
 }

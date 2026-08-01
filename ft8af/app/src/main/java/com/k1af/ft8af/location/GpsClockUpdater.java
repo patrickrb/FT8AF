@@ -59,24 +59,28 @@ public class GpsClockUpdater extends LocationSubscriber {
      */
     static final long MAX_SANE_OFFSET_MS = 60L * 1000L;
 
-    /**
-     * Largest jump allowed between consecutive GPS-applied offsets within one session.
-     *
-     * <p>The absolute bound above cannot catch the failure that actually bites: a single
-     * bad fix whose implied correction is small enough to look plausible but large enough
-     * to slide the FT8 grid off the air. On the 2026-07-30 activation the app spent two
-     * stretches transmitting 5.06 s and 7.63 s off grid — every over in them keyed up
-     * past the 2.36 s audio slack, so {@code lateStartSkipMs} clipped the leading Costas
-     * sync array out of 13.5% of that session's transmissions: loud on the air, invisible
-     * to receivers.
-     *
-     * <p>Physics makes this cheap to detect. GPS time does not jump, and a device clock
-     * drifts on the order of milliseconds between fixes minutes apart. A multi-second
-     * STEP is therefore bad data by definition, whatever its absolute value. Only the
-     * first fix of a session gets to move the clock freely (there is no baseline to
-     * compare against, and that fix is the one legitimately correcting real drift).
-     */
-    static final long MAX_OFFSET_STEP_MS = 500L;
+    // A step bound (reject a fix that moves the applied offset by more than 500 ms) was
+    // added here and REMOVED again after one activation, because it was actively harmful.
+    //
+    // The reasoning behind it — GPS time does not jump, so a multi-second step is bad
+    // data — is sound in isolation and wrong as a rule, because it has no way to
+    // distinguish "this fix is bad" from "the baseline is bad". Pairing it with an
+    // unconstrained first fix made the first fix of a run permanent: on the 2026-07-31
+    // activation a cold fix 2.6 s after startup applied -1331 ms, and the next ELEVEN
+    // fixes — spread over an hour and all agreeing on about -2200 ms — were each refused
+    // for being ~870 ms away from it. The clock stayed wrong for the whole session:
+    // decodes fell to 5.9/cycle against 8.7 immediately after GPS finally got through,
+    // and transmit timing scattered (14 of 110 overs keyed up 5 s or more into the slot).
+    //
+    // One outlier is noise; eleven consecutive fixes agreeing with each other and
+    // disagreeing with the baseline are the truth, and the rule could never act on that.
+    // Rejecting a correction is not the safe default it looks like — a stale offset is
+    // just as capable of putting the grid off the air as a bad fix is, and unlike a bad
+    // fix it never self-corrects.
+    //
+    // If step-limiting is revisited, it must be able to re-baseline: e.g. accept a run of
+    // consecutive fixes that agree with each other and disagree with the applied offset.
+    // Don't reintroduce a bare step check.
 
     /** Configurable update-interval bounds (minutes), per issue #373. */
     static final int MIN_INTERVAL_MINUTES = 1;
@@ -258,9 +262,7 @@ public class GpsClockUpdater extends LocationSubscriber {
                 fixUtcMs,
                 fixElapsedNanos,
                 nowElapsedNanos,
-                nowSystemMs,
-                hasAppliedOffset,
-                lastAppliedOffsetMs);
+                nowSystemMs);
 
         if (offsetMs == null) {
             Log.d(TAG, "Ignoring GPS fix (not running or implausible): fixUtc=" + fixUtcMs);
@@ -271,7 +273,7 @@ public class GpsClockUpdater extends LocationSubscriber {
             if (isRunning()) {
                 GeneralVariables.fileLog("GpsClock: REJECTED fix offset=" + rawOffsetMs
                         + "ms (prior=" + (hasAppliedOffset ? lastAppliedOffsetMs + "ms" : "none")
-                        + ", absMax=" + MAX_SANE_OFFSET_MS + "ms, maxStep=" + MAX_OFFSET_STEP_MS
+                        + ", absMax=" + MAX_SANE_OFFSET_MS
                         + "ms) — clock left at " + UtcTimer.delay + "ms");
             }
             return;
@@ -330,22 +332,6 @@ public class GpsClockUpdater extends LocationSubscriber {
         return Math.abs((long) offsetMs) <= MAX_SANE_OFFSET_MS;
     }
 
-    /**
-     * Whether {@code offsetMs} is a believable successor to the offset already applied
-     * this session. See {@link #MAX_OFFSET_STEP_MS} for why a step bound catches what the
-     * absolute bound cannot.
-     *
-     * @param hasPriorOffset whether GPS has already disciplined the clock this session;
-     *                       false for the first fix, which is unconstrained by this check
-     * @param priorOffsetMs  the offset currently applied (meaningless when no prior)
-     * @param offsetMs       the offset this fix implies
-     */
-    static boolean isOffsetStepSane(boolean hasPriorOffset, int priorOffsetMs, int offsetMs) {
-        if (!hasPriorOffset) return true;
-        long step = Math.abs((long) offsetMs - (long) priorOffsetMs);
-        return step <= MAX_OFFSET_STEP_MS;
-    }
-
     /** Coerce a configured update interval into the allowed range (minutes). */
     public static int clampIntervalMinutes(int minutes) {
         if (minutes < MIN_INTERVAL_MINUTES) return MIN_INTERVAL_MINUTES;
@@ -392,12 +378,10 @@ public class GpsClockUpdater extends LocationSubscriber {
      * without a {@link LocationManager}.
      */
     static Integer computeAppliedOffset(boolean running, long fixUtcMs, long fixElapsedRealtimeNanos,
-                                        long nowElapsedRealtimeNanos, long nowSystemMs,
-                                        boolean hasPriorOffset, int priorOffsetMs) {
+                                        long nowElapsedRealtimeNanos, long nowSystemMs) {
         if (!running) return null;
         int offsetMs = gpsClockOffsetMs(fixUtcMs, fixElapsedRealtimeNanos, nowElapsedRealtimeNanos, nowSystemMs);
         if (!isOffsetSane(fixUtcMs, offsetMs)) return null;
-        if (!isOffsetStepSane(hasPriorOffset, priorOffsetMs, offsetMs)) return null;
         return offsetMs;
     }
 }

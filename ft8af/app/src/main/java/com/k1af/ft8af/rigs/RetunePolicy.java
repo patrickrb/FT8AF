@@ -39,6 +39,30 @@ public final class RetunePolicy {
     /** Minimum gap between "suppressed N retunes" log lines, so the fix can't itself spam. */
     public static final long SUPPRESSION_LOG_INTERVAL_MS = 10_000L;
 
+    /**
+     * How far apart two {@code onConnected()} callbacks must be to count as two separate
+     * connections for the purpose of re-arming the rate limit.
+     *
+     * <p>Resetting on every {@code onConnected()} looked right — a new link genuinely is a
+     * new session — but the 2026-07-31 activation showed that callback IS the runaway. The
+     * suppression log named it directly:
+     * {@code caller=com.k1af.ft8af.MainViewModel$1$$ExternalSyntheticLambda0.run:0}, i.e.
+     * the {@code MainViewModel.this::setOperationBand} posted from {@code onConnected()}.
+     * {@code CableSerialPort} fires that callback on every successful port {@code open()},
+     * and the port was re-opening about once a second, so the reset re-armed the limiter on
+     * every iteration of the loop it exists to contain — retunes went UP, to 73/min from
+     * the 57/min measured before the rate limit existed.
+     *
+     * <p>Debouncing distinguishes the two cases without needing to know why the port
+     * churns: a burst of connects seconds apart is one flapping link and must not re-arm
+     * anything, while a reconnect after a real outage is minutes later and should. The
+     * underlying re-open storm is a separate bug still to be fixed.
+     */
+    public static final long CONNECT_RESET_DEBOUNCE_MS = 30_000L;
+
+    /** {@link #shouldResetOnConnect} sentinel for "no connect seen yet this run". */
+    public static final long NO_CONNECT = Long.MIN_VALUE;
+
     /** {@link #shouldRetune} sentinel for "nothing pushed yet this session". */
     public static final long NO_PUSH = 0L;
 
@@ -90,6 +114,19 @@ public final class RetunePolicy {
         if (rigFreq != requestedFreq) return true;
         // Fully redundant. Re-assert only on the slow heartbeat.
         return elapsedSince(nowMs, lastPushAtMs) >= REASSERT_INTERVAL_MS;
+    }
+
+    /**
+     * Whether this {@code onConnected()} represents a genuinely new connection, and so
+     * should re-arm the retune rate limit. See {@link #CONNECT_RESET_DEBOUNCE_MS}.
+     *
+     * @param nowMs           current wall clock
+     * @param lastConnectAtMs when the previous connect callback arrived, or
+     *                        {@link #NO_CONNECT} if this is the first
+     */
+    public static boolean shouldResetOnConnect(long nowMs, long lastConnectAtMs) {
+        if (lastConnectAtMs == NO_CONNECT) return true;
+        return elapsedSince(nowMs, lastConnectAtMs) >= CONNECT_RESET_DEBOUNCE_MS;
     }
 
     /**
