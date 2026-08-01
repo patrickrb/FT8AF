@@ -24,6 +24,7 @@ import androidx.lifecycle.MutableLiveData;
 
 import com.k1af.ft8af.FT8Common;
 import com.k1af.ft8af.ModeProfile;
+import com.k1af.ft8af.ft8listener.FastDecodeGate;
 import com.k1af.ft8af.Ft8Message;
 import com.k1af.ft8af.ft8signal.FT8Package;
 import com.k1af.ft8af.GeneralVariables;
@@ -281,6 +282,13 @@ public class FT8TransmitSignal {
                         ToastMessage.show(GeneralVariables.getStringFromResource(R.string.callsign_error));
                         return;
                     }
+                    // Wait for this slot's fast decode if it is still running. Costs
+                    // nothing when it has already finished (the quiet-band case, which is
+                    // most cycles); on a busy band it spends part of the otherwise-idle
+                    // audio slack so the sequencer keys up with the reply it is about to
+                    // learn about, rather than answering that caller a cycle late. Bounded
+                    // so a held start still clips no leading audio. See FastDecodeGate.
+                    holdForFastDecode(utc);
                     doTransmit();// transmit action follows precise timing; delay is the audio signal delay
                 }
             }
@@ -365,6 +373,86 @@ public class FT8TransmitSignal {
      * exact defect this feature exists to avoid.
      */
     static final int RESTART_HEADROOM_MS = 250;
+
+    /**
+     * Work that still has to happen after key-up is released and before audio starts:
+     * the PTT round trip, waveform generation, and opening the output path. Reserved out
+     * of the audio slack so a hold can never eat the margin that keeps the leading Costas
+     * sync array intact — the one failure this codebase must never reintroduce.
+     *
+     * <p>{@code pttDelay} is subtracted separately because it is user-configurable; this
+     * covers the rest.
+     */
+    static final int KEYUP_HOLD_RESERVE_MS = 500;
+
+    /**
+     * Latest point in the slot, in ms from the boundary, that key-up may be held to while
+     * waiting for the fast decode of the slot that just ended.
+     *
+     * <p>The waveform occupies {@code slotMillis - audioSlackMillis}, so any start within
+     * the slack fits with zero clipping. This spends part of that otherwise-idle headroom —
+     * but only the part left after reserving what key-up itself costs, so a held
+     * transmission still starts within the slack and clips nothing.
+     *
+     * <p>Returns 0 (no hold at all) if the reserves already consume the slack, which keeps
+     * a mode with little or no slack, or an extreme {@code pttDelay}, strictly at today's
+     * behaviour rather than borrowing margin it does not have.
+     *
+     * @param audioSlackMillis {@link ModeProfile#audioSlackMillis} — free slack before clipping
+     * @param pttDelayMs       {@code GeneralVariables.pttDelay}, the configured PTT settle time
+     */
+    static long keyUpHoldLimitMs(int audioSlackMillis, int pttDelayMs) {
+        long limit = (long) audioSlackMillis - Math.max(0, pttDelayMs) - KEYUP_HOLD_RESERVE_MS;
+        return Math.max(0, limit);
+    }
+
+    /**
+     * Absolute instant to stop waiting for the fast decode, or {@code boundaryMs} (i.e. no
+     * wait) when there is no headroom to spend.
+     *
+     * @param boundaryMs       wall-clock instant of the slot boundary this TX belongs to
+     * @param audioSlackMillis see {@link #keyUpHoldLimitMs}
+     * @param pttDelayMs       see {@link #keyUpHoldLimitMs}
+     */
+    static long keyUpHoldDeadline(long boundaryMs, int audioSlackMillis, int pttDelayMs) {
+        return boundaryMs + keyUpHoldLimitMs(audioSlackMillis, pttDelayMs);
+    }
+
+    /** Set by MainViewModel once the listener exists; null until then (and in tests). */
+    private volatile FastDecodeGate fastDecodeGate;
+
+    public void setFastDecodeGate(FastDecodeGate gate) {
+        this.fastDecodeGate = gate;
+    }
+
+    /**
+     * Block briefly, if needed, so this transmission carries the result of the fast decode
+     * of the slot that just ended. No-op when nothing is decoding.
+     *
+     * <p>Runs on the cycle-timer's pooled callback thread. Blocking there is safe — the
+     * pool creates threads on demand and this timer fires once per slot — and the wait is
+     * hard-bounded by {@link #keyUpHoldDeadline}, so a decode that never finishes delays
+     * key-up by at most the spare slack rather than stalling the cycle.
+     */
+    private void holdForFastDecode(long utc) {
+        FastDecodeGate gate = fastDecodeGate;
+        if (gate == null || !gate.inFlight()) return;
+        ModeProfile mode = GeneralVariables.currentMode();
+        long nowMs = System.currentTimeMillis();
+        // Anchor the deadline to THIS slot's boundary, derived from the same corrected
+        // clock the cycle timer fires on, so a clock correction cannot make the hold
+        // measure from the wrong place.
+        long boundaryMs = nowMs - (UtcTimer.getSystemTime() % mode.slotMillis);
+        long deadline = keyUpHoldDeadline(boundaryMs, mode.audioSlackMillis,
+                GeneralVariables.pttDelay);
+        if (deadline <= nowMs) return;
+        boolean landed = gate.awaitIdle(deadline, nowMs);
+        long heldMs = System.currentTimeMillis() - nowMs;
+        if (heldMs > 0) {
+            GeneralVariables.fileLog("QSO: held key-up " + heldMs + "ms for fast decode ("
+                    + (landed ? "landed" : "timed out") + ")");
+        }
+    }
 
     /**
      * Whether the playback path these modes select can actually be interrupted mid-buffer.
