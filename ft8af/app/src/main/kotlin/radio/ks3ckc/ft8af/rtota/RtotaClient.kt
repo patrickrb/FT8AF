@@ -167,6 +167,22 @@ object RtotaClient {
             }
         }
 
+    /**
+     * The operator's own planned trips, soonest first.
+     *
+     * Read from `/api/me` rather than `/api/activations`: the public listing only
+     * carries what a stranger may see, and a plan the operator marked `private`
+     * or `followers` — the ones most likely to be a real upcoming trip — would be
+     * missing from exactly the list they are trying to pick from.
+     */
+    suspend fun fetchMyActivations(
+        baseUrl: String,
+        apiKey: String,
+    ): Result<List<RtotaActivation>> =
+        withContext(Dispatchers.IO) {
+            request("GET", "$baseUrl/api/me", apiKey, null).map { parseMyActivations(it) }
+        }
+
     suspend fun completeTrip(
         baseUrl: String,
         apiKey: String,

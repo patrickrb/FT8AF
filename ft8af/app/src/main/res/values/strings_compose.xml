@@ -914,6 +914,12 @@
     <string name="rtota_section_tracking">TRACKING</string>
     <string name="rtota_beacon_heading">SmartBeaconing</string>
     <string name="rtota_stat_last_point">Last point</string>
+    <string name="rtota_pick_plan">Use a saved plan</string>
+    <string name="rtota_pick_plan_loading">Loading your plans…</string>
+    <string name="rtota_pick_plan_empty">No plans saved on rtota.app yet. Plan one on the site, or type a name.</string>
+    <string name="rtota_pick_plan_custom">Type a name</string>
+    <string name="rtota_plan_matches_now">Starting now uses this plan\'s privacy settings</string>
+    <string name="rtota_plan_starts">Starts %1$s — outside the window, so its privacy won\'t apply</string>
     <string name="rtota_stat_cq">Calling</string>
     <string name="rtota_beacon_first">trip start</string>
     <string name="rtota_beacon_rate">interval</string>

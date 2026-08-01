@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,6 +39,9 @@ import com.k1af.ft8af.R
 import kotlinx.coroutines.launch
 import radio.ks3ckc.ft8af.location.hasLocationPermission
 import radio.ks3ckc.ft8af.rtota.BeaconReason
+import radio.ks3ckc.ft8af.rtota.RtotaActivation
+import radio.ks3ckc.ft8af.rtota.RtotaHttpException
+import radio.ks3ckc.ft8af.rtota.activationMatchesNow
 import radio.ks3ckc.ft8af.rtota.RTOTA_CQ_MODIFIER
 import radio.ks3ckc.ft8af.rtota.RtotaClient
 import radio.ks3ckc.ft8af.rtota.RtotaSettings
@@ -82,6 +86,10 @@ fun RoadTripScreen(onBack: () -> Unit) {
     var showServerDialog by remember { mutableStateOf(false) }
     var showKeyDialog by remember { mutableStateOf(false) }
     var showTripNameDialog by remember { mutableStateOf(false) }
+    var showPlanPicker by remember { mutableStateOf(false) }
+    var plans by remember { mutableStateOf<List<RtotaActivation>>(emptyList()) }
+    var plansLoading by remember { mutableStateOf(false) }
+    var plansError by remember { mutableStateOf<String?>(null) }
     var showAnnounceDialog by remember { mutableStateOf(false) }
 
     // Trip tracking needs location; ask here rather than at the moment the user
@@ -146,6 +154,24 @@ fun RoadTripScreen(onBack: () -> Unit) {
                 // A key that arrives after a trip started offline unblocks the
                 // whole backlog.
                 RtotaTripManager.requestFlush("api-key-set")
+            },
+        )
+    }
+
+    if (showPlanPicker) {
+        TripPlanPickerDialog(
+            plans = plans,
+            loading = plansLoading,
+            error = plansError,
+            nowMs = System.currentTimeMillis(),
+            onDismiss = { showPlanPicker = false },
+            onPick = { picked ->
+                tripName = picked
+                showPlanPicker = false
+            },
+            onTypeName = {
+                showPlanPicker = false
+                showTripNameDialog = true
             },
         )
     }
@@ -293,7 +319,33 @@ fun RoadTripScreen(onBack: () -> Unit) {
                             label = stringResource(R.string.rtota_trip_name),
                             value = tripName.ifBlank { "--" },
                             showChevron = true,
-                            onClick = { showTripNameDialog = true },
+                            onClick = {
+                                // Straight to the free-text box when there is no key —
+                                // the plans live behind it, and an empty picker with an
+                                // auth error in it explains nothing.
+                                if (RtotaSettings.apiKey.isBlank()) {
+                                    showTripNameDialog = true
+                                    return@SettingsRow
+                                }
+                                showPlanPicker = true
+                                plansLoading = true
+                                plansError = null
+                                scope.launch {
+                                    RtotaClient.fetchMyActivations(
+                                        RtotaSettings.baseUrl,
+                                        RtotaSettings.apiKey,
+                                    ).fold(
+                                        onSuccess = { plans = it },
+                                        onFailure = { e ->
+                                            plansError =
+                                                (e as? RtotaHttpException)?.serverMessage
+                                                    ?: e.message
+                                                    ?: e.javaClass.simpleName
+                                        },
+                                    )
+                                    plansLoading = false
+                                }
+                            },
                         )
                         SettingsRow(
                             label = stringResource(R.string.rtota_privacy),
@@ -490,6 +542,112 @@ private fun NoticeText(text: String) {
         modifier = Modifier.padding(start = 4.dp, top = 4.dp),
     )
 }
+
+/**
+ * Pick the trip's name from the plans already saved on rtota.app, or type one.
+ *
+ * The plans are *scheduled activations* — what the site's plan wizard writes —
+ * because a trip only exists once someone drives it. Choosing one here does not
+ * bind anything: the server decides which plan a trip fulfils by comparing start
+ * times (±12 h), so the value of picking is that the name matches the plan and
+ * the operator can see, before setting off, whether starting now will inherit
+ * the privacy they chose in the wizard. A plan outside that window is still
+ * listed — driving early is normal — just marked so the inheritance isn't a
+ * surprise.
+ */
+@Composable
+private fun TripPlanPickerDialog(
+    plans: List<RtotaActivation>,
+    loading: Boolean,
+    error: String?,
+    nowMs: Long,
+    onDismiss: () -> Unit,
+    onPick: (String) -> Unit,
+    onTypeName: () -> Unit,
+) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(BgSurface2)
+                    .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.rtota_pick_plan),
+                color = TextPrimary,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+
+            when {
+                loading ->
+                    Text(
+                        text = stringResource(R.string.rtota_pick_plan_loading),
+                        color = TextMuted,
+                        fontSize = 13.sp,
+                    )
+                error != null ->
+                    Text(
+                        text = stringResource(R.string.rtota_error, error),
+                        color = StatusBad,
+                        fontSize = 13.sp,
+                    )
+                plans.isEmpty() ->
+                    Text(
+                        text = stringResource(R.string.rtota_pick_plan_empty),
+                        color = TextMuted,
+                        fontSize = 13.sp,
+                    )
+                else ->
+                    plans.forEach { plan ->
+                        val matches = activationMatchesNow(plan, nowMs)
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { onPick(plan.title) }
+                                    .padding(vertical = 10.dp, horizontal = 12.dp),
+                        ) {
+                            Text(text = plan.title, color = TextPrimary, fontSize = 15.sp)
+                            Text(
+                                text =
+                                    if (matches) {
+                                        stringResource(R.string.rtota_plan_matches_now)
+                                    } else {
+                                        stringResource(
+                                            R.string.rtota_plan_starts,
+                                            formatPlanStart(plan.startTimeMs),
+                                        )
+                                    },
+                                color = if (matches) Accent else TextFaint,
+                                fontSize = 12.sp,
+                            )
+                        }
+                    }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.action_cancel), color = TextMuted)
+                }
+                TextButton(onClick = onTypeName) {
+                    Text(stringResource(R.string.rtota_pick_plan_custom), color = Accent)
+                }
+            }
+        }
+    }
+}
+
+/** Local-time "Aug 4, 11:00" for a plan's departure, so it reads as the operator's clock. */
+internal fun formatPlanStart(startMs: Long): String =
+    SimpleDateFormat("MMM d, HH:mm", Locale.US).format(Date(startMs))
 
 /** Single-field dialog shared by the callsign / server / key / trip-name rows. */
 @Composable

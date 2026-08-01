@@ -59,6 +59,23 @@ data class TripQso(
 data class RtotaTripHandle(val id: String, val shareToken: String?)
 
 /**
+ * A trip the operator planned on rtota.app — what the site's plan wizard saves.
+ *
+ * The wizard writes a *scheduled activation*, not a trip: a trip only exists
+ * once someone actually drives it. So this is the thing to pick a trip's name
+ * from, and the plan's privacy choices ride along server-side when the trip
+ * turns out to fulfil it (see [activationMatchesNow]).
+ */
+data class RtotaActivation(
+    val id: String,
+    val title: String,
+    val startTimeMs: Long,
+    /** Planned finish, or null when the plan is open-ended. */
+    val endTimeMs: Long?,
+    val detail: String?,
+)
+
+/**
  * What `GET /api/trips/:id/sync-state` says the server already holds — the
  * resume handshake for a client that has been out of touch long enough not to
  * know what it still owes.
@@ -371,6 +388,91 @@ fun parseSyncState(body: String?): RtotaSyncState? {
         )
     } catch (_: Exception) {
         null
+    }
+}
+
+/**
+ * Parse an ISO-8601 instant of the shape the API returns
+ * (`2026-08-04T11:00:00.000Z`), or null when it is missing or unusable.
+ *
+ * Deliberately narrow: the API always emits UTC with milliseconds, and a
+ * hand-rolled lenient parser would happily accept a local-time string and place
+ * a trip several hours from where it belongs.
+ */
+fun parseIsoUtc(value: String?): Long? {
+    val raw = value?.trim().orEmpty()
+    if (raw.isEmpty()) return null
+    return try {
+        val fmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+        fmt.timeZone = TimeZone.getTimeZone("UTC")
+        fmt.isLenient = false
+        fmt.parse(raw)?.time
+    } catch (_: Exception) {
+        null
+    }
+}
+
+/**
+ * How much slack the server allows either side of a planned window when
+ * deciding which activation a trip fulfils.
+ *
+ * Mirrors `MATCH_SLACK_HOURS` in the service's lib/activation-match.ts.
+ * Departures rarely run on time, and the app only uses this to *tell the
+ * operator* whether starting now will pick the plan up — the server remains the
+ * one that actually decides.
+ */
+const val ACTIVATION_MATCH_SLACK_MS = 12 * 60 * 60 * 1000L
+
+/** An activation with no end time is assumed to span this long, as on the server. */
+private const val ACTIVATION_DEFAULT_SPAN_MS = 24 * 60 * 60 * 1000L
+
+/**
+ * Whether a trip started at [nowMs] would fall inside [activation]'s matching
+ * window, and so inherit the privacy the plan wizard chose.
+ *
+ * Worth surfacing because the consequence is invisible otherwise: a trip started
+ * outside the window is created with the operator's *default* privacy, which for
+ * a plan marked `delayed` means publishing a live position that was meant to lag.
+ */
+fun activationMatchesNow(
+    activation: RtotaActivation,
+    nowMs: Long,
+): Boolean {
+    val windowStart = activation.startTimeMs - ACTIVATION_MATCH_SLACK_MS
+    val windowEnd =
+        (activation.endTimeMs ?: (activation.startTimeMs + ACTIVATION_DEFAULT_SPAN_MS)) +
+            ACTIVATION_MATCH_SLACK_MS
+    return nowMs in windowStart..windowEnd
+}
+
+/**
+ * Pull the operator's own planned trips out of a `GET /api/me` body, soonest
+ * departure first. Rows missing an id, title or start time are dropped rather
+ * than shown as blanks in the picker.
+ */
+fun parseMyActivations(body: String?): List<RtotaActivation> {
+    if (body.isNullOrBlank()) return emptyList()
+    return try {
+        val array = JSONObject(body).optJSONArray("activations") ?: return emptyList()
+        buildList {
+            for (i in 0 until array.length()) {
+                val o = array.optJSONObject(i) ?: continue
+                val id = o.optString("id").takeIf { it.isNotEmpty() } ?: continue
+                val title = o.optString("title").takeIf { it.isNotEmpty() } ?: continue
+                val start = parseIsoUtc(o.optString("startTime")) ?: continue
+                add(
+                    RtotaActivation(
+                        id = id,
+                        title = title,
+                        startTimeMs = start,
+                        endTimeMs = parseIsoUtc(o.optString("endTime")),
+                        detail = o.optString("detail").takeIf { it.isNotEmpty() },
+                    ),
+                )
+            }
+        }.sortedBy { it.startTimeMs }
+    } catch (_: Exception) {
+        emptyList()
     }
 }
 
