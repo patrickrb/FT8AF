@@ -221,6 +221,16 @@ fun DecodeRow(
                 MetaText(if (message.hasSnr()) "${message.snr} dB" else "-- dB")
                 MetaText("${message.getFreq_hz()} Hz")
 
+                // DT, as WSJT-X shows it: how far into our RX window this signal
+                // started. Per-decode rather than only the averaged pill on the slot
+                // bar, because the two answer different questions — every station
+                // sitting at the same offset is our clock, one station out on its own
+                // is that station's.
+                MetaText(
+                    text = "DT ${formatDecodeDt(message.time_sec)}",
+                    color = if (isDecodeDtNotable(message.time_sec)) StatusWarn else TextFaint,
+                )
+
                 // Distance (computed from grid)
                 val distanceText = computeDistanceText(message)
                 if (distanceText.isNotEmpty()) {
@@ -338,10 +348,13 @@ private fun MessageLabel(
  * Small metadata text used in the bottom info row.
  */
 @Composable
-private fun MetaText(text: String) {
+private fun MetaText(
+    text: String,
+    color: androidx.compose.ui.graphics.Color = TextFaint,
+) {
     Text(
         text = text,
-        color = TextFaint,
+        color = color,
         fontFamily = GeistMonoFamily,
         fontSize = 10.5.sp,
         letterSpacing = 0.02.sp,
