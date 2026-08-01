@@ -350,7 +350,8 @@ public class MainViewModel extends ViewModel {
             // and fights the operator's band selection (measured: a 30m tap took ~59s and
             // four attempts because the app kept re-commanding a 14239985 it never chose).
             // See RigDialTarget.
-            if (RigDialTarget.shouldAdoptAsTarget(GeneralVariables.rigRejectedSinceCommand, freq)) {
+            if (RigDialTarget.shouldAdoptAsTarget(System.currentTimeMillis(),
+                    GeneralVariables.rigRejectedAtMs, freq)) {
                 GeneralVariables.commandedBandHz = freq;
             } else {
                 fileLog("rig echo ignored as command target: reported " + freq
@@ -1629,9 +1630,14 @@ public class MainViewModel extends ViewModel {
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
-                fileLog("setOperationBand: setting freq=" + dialHz
+                // Re-read the commanded dial HERE rather than using the value captured
+                // 800ms ago: the operator can change band inside that window, and a
+                // stale capture would briefly retune the rig back to the old one.
+                long sendHz = RigDialTarget.dialToCommand(
+                        GeneralVariables.commandedBandHz, GeneralVariables.band);
+                fileLog("setOperationBand: setting freq=" + sendHz
                         + " (rig.getFreq=" + baseRig.getFreq() + ")");
-                baseRig.setFreq(dialHz);//set frequency
+                baseRig.setFreq(sendHz);//set frequency
                 baseRig.setFreqToRig();
             }
         }, 800);

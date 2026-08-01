@@ -208,7 +208,7 @@ public class Yaesu39Rig extends BaseRig {
                 // The CAT stream is desynchronised (a "?;" rejection, or a frame we could
                 // not parse). Frequencies reported while this holds are not trustworthy
                 // enough to adopt as the dial we command back — see RigDialTarget.
-                GeneralVariables.rigRejectedSinceCommand = true;
+                GeneralVariables.rigRejectedAtMs = System.currentTimeMillis();
             }
             return;
         }

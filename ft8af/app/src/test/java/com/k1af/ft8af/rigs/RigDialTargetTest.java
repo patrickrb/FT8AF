@@ -19,6 +19,7 @@ public class RigDialTargetTest {
     private static final long M20 = 14_074_000L;
     /** The value the rig reported that nobody selected, from the 19:54 trace. */
     private static final long BOGUS = 14_239_985L;
+    private static final long T0 = 1_700_000_000_000L;
 
     // ---- shouldAdoptAsTarget ------------------------------------------------
 
@@ -26,29 +27,57 @@ public class RigDialTargetTest {
     public void healthyStream_adoptsTheReportedDial() {
         // The normal case, and the reason this isn't simply "never trust the rig": this is
         // how the app follows the operator turning the VFO by hand.
-        assertThat(RigDialTarget.shouldAdoptAsTarget(false, M20)).isTrue();
+        assertThat(RigDialTarget.shouldAdoptAsTarget(T0, 0L, M20)).isTrue();
     }
 
     @Test
     public void desyncedStream_refusesTheReportedDial() {
         // The measured failure: a reading taken while the rig is rejecting our commands
         // must not become something we command back at it.
-        assertThat(RigDialTarget.shouldAdoptAsTarget(true, BOGUS)).isFalse();
+        assertThat(RigDialTarget.shouldAdoptAsTarget(T0, T0, BOGUS)).isFalse();
     }
 
     @Test
     public void desyncRefusesEvenAPlausibleLookingDial() {
         // The bogus value was in the same band as the real one, so plausibility is no
         // defence — only the stream state distinguishes them.
-        assertThat(RigDialTarget.shouldAdoptAsTarget(true, M20)).isFalse();
+        assertThat(RigDialTarget.shouldAdoptAsTarget(T0, T0, M20)).isFalse();
     }
 
     @Test
     public void zeroOrNegativeIsNeverAdopted() {
         // rig.getFreq=0 shows up in the logs on a fresh connect, before any real read.
-        assertThat(RigDialTarget.shouldAdoptAsTarget(false, 0)).isFalse();
-        assertThat(RigDialTarget.shouldAdoptAsTarget(false, -1)).isFalse();
-        assertThat(RigDialTarget.shouldAdoptAsTarget(true, 0)).isFalse();
+        assertThat(RigDialTarget.shouldAdoptAsTarget(T0, 0L, 0)).isFalse();
+        assertThat(RigDialTarget.shouldAdoptAsTarget(T0, 0L, -1)).isFalse();
+        assertThat(RigDialTarget.shouldAdoptAsTarget(T0, T0, 0)).isFalse();
+    }
+
+    @Test
+    public void trustReturnsAfterTheDistrustWindow() {
+        // A window, not a "rejected since last command" flag: the CAT liveness watchdog
+        // polls the rig every 3 s, and that unrelated send would have cleared a flag
+        // between the rejection and the bad report — defeating the guard entirely.
+        long after = T0 + RigDialTarget.DESYNC_DISTRUST_MS;
+        assertThat(RigDialTarget.shouldAdoptAsTarget(after, T0, M20)).isTrue();
+        assertThat(RigDialTarget.shouldAdoptAsTarget(after - 1, T0, M20)).isFalse();
+    }
+
+    @Test
+    public void windowOutlastsTheGapBetweenCommandAndRejection() {
+        // The rejection arrived ~800 ms after the command batch, and the bogus report
+        // followed it. Too short a window would re-trust before the bad report lands.
+        assertThat(RigDialTarget.DESYNC_DISTRUST_MS).isAtLeast(1_500L);
+    }
+
+    @Test
+    public void backwardsClockDoesNotSilentlyReTrust() {
+        // System.currentTimeMillis() is not monotonic and this app disciplines its clock.
+        assertThat(RigDialTarget.shouldAdoptAsTarget(T0 - 60_000, T0, M20)).isFalse();
+    }
+
+    @Test
+    public void neverRejectedMeansAlwaysTrusted() {
+        assertThat(RigDialTarget.shouldAdoptAsTarget(T0, 0L, M20)).isTrue();
     }
 
     // ---- dialToCommand ------------------------------------------------------
@@ -79,16 +108,15 @@ public class RigDialTargetTest {
         // Operator taps 30m.
         long chosen = M30;
         // Rig rejects the set-frequency and reports something nobody asked for.
-        boolean desynced = true;
         long observed = BOGUS;
-        if (RigDialTarget.shouldAdoptAsTarget(desynced, observed)) {
+        if (RigDialTarget.shouldAdoptAsTarget(T0, T0, observed)) {
             chosen = observed;// old behaviour: the bad reading became the target
         }
         // The reassert heartbeat fires.
         assertThat(RigDialTarget.dialToCommand(chosen, observed)).isEqualTo(M30);
 
         // Once the stream re-synchronises and the rig confirms 30m, nothing changes.
-        if (RigDialTarget.shouldAdoptAsTarget(false, M30)) {
+        if (RigDialTarget.shouldAdoptAsTarget(T0, 0L, M30)) {
             chosen = M30;
         }
         assertThat(RigDialTarget.dialToCommand(chosen, M30)).isEqualTo(M30);

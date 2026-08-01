@@ -591,12 +591,12 @@ public class GeneralVariables {
     public static volatile long commandedBandHz = 0;
 
     /**
-     * True when the rig has answered our last command with an error or an unparseable
-     * frame ("?;"), meaning the CAT stream is desynchronised and a frequency it reports
-     * right now is not trustworthy enough to command back at it. Cleared when we send the
-     * next command. See {@link com.k1af.ft8af.rigs.RigDialTarget#shouldAdoptAsTarget}.
+     * When the rig last answered with an error or unparseable frame ("?;"), meaning the CAT
+     * stream was desynchronised and frequencies it reports around then are not trustworthy
+     * enough to command back at it. A timestamp, not a flag: see
+     * {@link com.k1af.ft8af.rigs.RigDialTarget#DESYNC_DISTRUST_MS}.
      */
-    public static volatile boolean rigRejectedSinceCommand = false;
+    public static volatile long rigRejectedAtMs = 0L;
     //Posted each time a GPS fix disciplines the clock, so the Time Sync screen can recompose
     //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.
     public static MutableLiveData<Long> mutableGpsClockSync = new MutableLiveData<>();

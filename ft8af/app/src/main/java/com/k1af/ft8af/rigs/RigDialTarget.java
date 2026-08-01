@@ -41,13 +41,33 @@ public final class RigDialTarget {
      * VFO. It is refused only while the rig is rejecting our commands, where the reading
      * may be a mis-parse or a stale frame rather than the operator's intent.
      *
-     * @param rigRejectedSinceCommand whether the rig has answered our last command with an
-     *                                error / unparseable frame
-     * @param reportedHz              the frequency just reported
+     * @param nowMs           current wall clock
+     * @param rigRejectedAtMs when the rig last answered with an error / unparseable frame,
+     *                        or 0 if never
+     * @param reportedHz      the frequency just reported
      */
-    public static boolean shouldAdoptAsTarget(boolean rigRejectedSinceCommand, long reportedHz) {
+    /**
+     * How long after a rejection the rig's frequency reports stay untrusted.
+     *
+     * <p>A timestamp rather than a "rejected since last command" flag, deliberately. The
+     * flag had to be cleared by the next outgoing command — but the CAT liveness watchdog
+     * polls the rig every {@code CAT_LIVENESS_TICK_MS} (3 s) with a frequency read, and
+     * that unrelated poll would clear the flag between the rejection and the bad report,
+     * defeating the guard entirely. A window depends on nothing but the clock.
+     *
+     * <p>Sized to the poll interval: long enough to cover the ~800 ms between the command
+     * batch and the rejection plus the report that follows it, short enough that a healthy
+     * stream is trusted again almost immediately.
+     */
+    public static final long DESYNC_DISTRUST_MS = 3_000;
+
+    public static boolean shouldAdoptAsTarget(long nowMs, long rigRejectedAtMs, long reportedHz) {
         if (reportedHz <= 0) return false;
-        return !rigRejectedSinceCommand;
+        if (rigRejectedAtMs <= 0) return true;
+        long since = nowMs - rigRejectedAtMs;
+        // A backwards clock correction must not silently re-trust the stream.
+        if (since < 0) return false;
+        return since >= DESYNC_DISTRUST_MS;
     }
 
     /**
