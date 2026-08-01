@@ -217,6 +217,18 @@ public class FT8SignalListener {
         new Thread(new Runnable() {
             @Override
             public void run() {
+                try {
+                runDecodeThread();
+                } finally {
+                    // Backstop. The timely release happens right after delivery below, but
+                    // anything throwing before it — JNI init, a decode failure, OOM —
+                    // would otherwise strand the gate in flight FOREVER, making every
+                    // later key-up wait out the full hold. end() is idempotent.
+                    fastDecodeGate.end();
+                }
+            }
+
+            private void runDecodeThread() {
                 long time = System.currentTimeMillis();
                 if (onFt8Listen != null) {
                     onFt8Listen.beforeListen(utc);
