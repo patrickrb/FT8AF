@@ -332,11 +332,19 @@ object RtotaTripManager {
                 // Not a beacon — but a long stretch of not-a-beacon is how the sampler
                 // learns the rover has parked, so let it see the fix either way.
                 sampler.noteStationary(candidate)
+                val wasParked = _state.value.parked
                 _state.value =
                     _state.value.copy(
                         lastFixMs = candidate.timestampMs,
                         parked = sampler.isParked,
                     )
+                // The notification says "parked", and this is the only path that can
+                // ever set it: once parked, no fix is kept, so recordPoint's publish()
+                // never runs and the notification would claim the rover is still
+                // rolling for as long as it sits there. Republish on the transition
+                // only — every fix would rebuild the notification once a second for
+                // the whole trip, since updateNotification does no throttling of its own.
+                if (sampler.isParked != wasParked) publish()
                 return
             }
         recordPoint(decision)

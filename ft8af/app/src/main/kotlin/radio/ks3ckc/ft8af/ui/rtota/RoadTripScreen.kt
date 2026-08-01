@@ -2,7 +2,6 @@ package radio.ks3ckc.ft8af.ui.rtota
 
 import android.Manifest
 import android.app.Activity
-import android.content.pm.PackageManager
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -34,10 +33,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.R
 import kotlinx.coroutines.launch
+import radio.ks3ckc.ft8af.location.hasLocationPermission
 import radio.ks3ckc.ft8af.rtota.BeaconReason
 import radio.ks3ckc.ft8af.rtota.RTOTA_CQ_MODIFIER
 import radio.ks3ckc.ft8af.rtota.RtotaClient
@@ -88,11 +87,11 @@ fun RoadTripScreen(onBack: () -> Unit) {
     // Trip tracking needs location; ask here rather than at the moment the user
     // taps Start, so a denied prompt doesn't silently produce a trip with no route.
     fun ensureLocationPermission(): Boolean {
-        val granted =
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_FINE_LOCATION,
-            ) == PackageManager.PERMISSION_GRANTED
+        // Fine *or* coarse, matching what RtotaLocationTracker actually needs.
+        // Gating on fine alone rejected an approximate-only grant — an ordinary
+        // choice in the Android 12+ permission dialog — and re-prompted for a
+        // permission the user had already given.
+        val granted = hasLocationPermission(context)
         if (!granted) {
             (context as? Activity)?.let {
                 ActivityCompat.requestPermissions(

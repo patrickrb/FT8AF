@@ -141,7 +141,7 @@ object RtotaSettings {
     /** The registered rover callsign; defaults to the operator's own callsign. */
     var callsign: String
         get() = readString(KEY_CALLSIGN, "").ifEmpty { GeneralVariables.myCallsign.orEmpty() }
-        set(value) = writeString(KEY_CALLSIGN, value.trim().uppercase())
+        set(value) = writeString(KEY_CALLSIGN, normalizeCallsign(value))
 
     val isConfigured: Boolean get() = apiKey.isNotBlank()
 

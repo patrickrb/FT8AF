@@ -10,7 +10,7 @@ import android.location.LocationManager
 import android.os.Bundle
 import android.os.Looper
 import android.util.Log
-import androidx.core.content.ContextCompat
+import radio.ks3ckc.ft8af.location.hasLocationPermission
 
 /**
  * Subscribes to GPS while a trip is running and hands every fix to
@@ -57,11 +57,7 @@ class RtotaLocationTracker(context: Context) {
             override fun onProviderDisabled(provider: String) {}
         }
 
-    fun hasPermission(): Boolean =
-        ContextCompat.checkSelfPermission(appContext, Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(appContext, Manifest.permission.ACCESS_COARSE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED
+    fun hasPermission(): Boolean = hasLocationPermission(appContext)
 
     /** Returns true when at least one provider is feeding us fixes. */
     @SuppressLint("MissingPermission")

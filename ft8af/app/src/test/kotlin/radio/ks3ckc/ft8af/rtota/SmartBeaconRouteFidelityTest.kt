@@ -30,8 +30,11 @@ class SmartBeaconRouteFidelityTest {
     private data class Fix(val lat: Double, val lon: Double, val headingDeg: Double, val speedMph: Double)
 
     /**
-     * Dead-reckon a 1 Hz track: cruise, then a sweeping 90° right-hand curve,
+     * Dead-reckon a 1 Hz track: cruise, then a sweeping 90° left-hand curve,
      * then cruise again. Flat-earth metres→degrees is plenty over these few km.
+     *
+     * Left-hand because the turn rate is negative and the heading runs 90°
+     * (due east) down to 0° (due north) — counterclockwise.
      */
     private fun syntheticDrive(): List<Fix> {
         val out = ArrayList<Fix>()

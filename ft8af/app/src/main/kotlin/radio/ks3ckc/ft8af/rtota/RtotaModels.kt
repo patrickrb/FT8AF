@@ -148,6 +148,19 @@ fun frequencyKhzOrNull(freqHz: Long): Double? {
 }
 
 /**
+ * Trim and upper-case a callsign for storage and for the wire.
+ *
+ * `Locale.US` is not decoration. The default-locale `uppercase()` is
+ * locale-sensitive for ASCII: under a Turkish or Azeri locale, "i" upper-cases
+ * to "İ" (U+0130), so an operator whose phone is set to Turkish would register
+ * as KİABC, store KİABC, and never match the KIABC the server knows — while
+ * [RtotaClient.registerOperator] normalizes with `Locale.US` and disagrees with
+ * the very setting that produced it. Callsigns are ASCII by definition, so the
+ * locale must be fixed rather than ambient.
+ */
+fun normalizeCallsign(raw: String): String = raw.trim().uppercase(Locale.US)
+
+/**
  * Clean up a base URL before it is used, repairing the two mistakes that cost a
  * whole trip rather than one request.
  *

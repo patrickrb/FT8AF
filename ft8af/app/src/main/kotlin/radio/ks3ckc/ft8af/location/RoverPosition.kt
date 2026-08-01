@@ -1,11 +1,8 @@
 package radio.ks3ckc.ft8af.location
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.util.Log
-import androidx.core.content.ContextCompat
 import radio.ks3ckc.ft8af.rtota.RtotaTripManager
 
 /**
@@ -125,9 +122,4 @@ object RoverPosition {
         }
     }
 
-    private fun hasLocationPermission(ctx: Context): Boolean =
-        ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED
 }
