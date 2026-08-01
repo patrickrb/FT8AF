@@ -93,6 +93,8 @@ public final class AdifLogFile {
                 .mySigInfo(record.getMySigInfo())
                 .sig(record.getSig())
                 .sigInfo(record.getSigInfo())
+                .myLat(record.getMyLat())
+                .myLon(record.getMyLon())
                 .comment(record.getComment());
     }
 

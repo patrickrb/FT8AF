@@ -29,6 +29,9 @@
          (Android 14 mutes background mic without a microphone-typed foreground service). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- RTOTA trip mode: a location-typed foreground service is the only way to keep
+         GPS breadcrumbs coming while the phone sits in a cradle with the screen off. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
     <application
         android:name="radio.ks3ckc.ft8af.FT8AFApplication"
@@ -101,6 +104,12 @@
             android:name="com.k1af.ft8af.service.RxForegroundService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <!-- RTOTA trip mode: owns the GPS subscription for the length of a road trip. -->
+        <service
+            android:name="radio.ks3ckc.ft8af.rtota.RtotaTripService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
         <!-- Persists the user's per-app language choice (AppCompatDelegate
              .setApplicationLocales) on Android 12 and below. On Android 13+

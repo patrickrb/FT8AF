@@ -42,6 +42,19 @@ public final class AdifRecord {
      */
     public static final String APP_QSL_MANUAL = "APP_FT8AF_QSL_MANUAL";
 
+    /**
+     * Application-defined fields carrying the operator's position as a plain decimal
+     * degree, alongside the standard {@code MY_LAT}/{@code MY_LON}.
+     *
+     * <p>Both are written because they serve different readers. ADIF's own location
+     * datatype is {@code XDDD MM.MMM} — degrees and decimal minutes — which every
+     * conventional logbook understands but which rounds to about 1.8 m and has to be
+     * re-parsed. rtota.app prefers these decimal twins, so a route replay gets back
+     * exactly the coordinate the phone recorded rather than a rounded reconstruction.
+     */
+    public static final String APP_RTOTA_LAT = "APP_RTOTA_LAT";
+    public static final String APP_RTOTA_LON = "APP_RTOTA_LON";
+
     /** Legacy, non-conformant name for {@link #APP_QSL_MANUAL}. Read-only: never emitted. */
     public static final String LEGACY_QSL_MANUAL = "QSL_MANUAL";
 
@@ -67,6 +80,9 @@ public final class AdifRecord {
     private String sig;
     private String sigInfo;
     private String comment;
+    /** Operator's position at QSO time; null when the app had no fix to record. */
+    private Double myLat;
+    private Double myLon;
 
     public AdifRecord call(String v) { this.call = v; return this; }
 
@@ -106,6 +122,8 @@ public final class AdifRecord {
     public AdifRecord mySig(String v) { this.mySig = v; return this; }
 
     public AdifRecord mySigInfo(String v) { this.mySigInfo = v; return this; }
+    public AdifRecord myLat(Double v) { this.myLat = v; return this; }
+    public AdifRecord myLon(Double v) { this.myLon = v; return this; }
 
     public AdifRecord sig(String v) { this.sig = v; return this; }
 
@@ -162,6 +180,14 @@ public final class AdifRecord {
         appendIfNotEmpty(sb, "MY_SIG_INFO", mySigInfo);
         appendIfNotEmpty(sb, "SIG", sig);
         appendIfNotEmpty(sb, "SIG_INFO", sigInfo);
+        // Operator position, standard field first then the exact decimal twin. Both
+        // are emitted or neither: a lone longitude is worse than no position at all.
+        if (myLat != null && myLon != null) {
+            appendIfNotEmpty(sb, "MY_LAT", AdifFormat.location(myLat, true));
+            appendIfNotEmpty(sb, "MY_LON", AdifFormat.location(myLon, false));
+            appendIfNotEmpty(sb, APP_RTOTA_LAT, AdifFormat.decimalDegrees(myLat));
+            appendIfNotEmpty(sb, APP_RTOTA_LON, AdifFormat.decimalDegrees(myLon));
+        }
         appendIfNotEmpty(sb, "comment", comment);
         sb.append("<eor>\n");
         return sb.toString();

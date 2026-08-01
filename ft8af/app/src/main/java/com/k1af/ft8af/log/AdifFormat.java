@@ -160,4 +160,92 @@ public final class AdifFormat {
         }
         return raw.substring(0, i);
     }
+
+    /**
+     * Format a coordinate in ADIF's Location datatype: {@code XDDD MM.MMM}, i.e. a
+     * hemisphere letter, three zero-padded degrees, a space, then decimal minutes —
+     * {@code N039 44.352}, {@code W104 59.418}.
+     *
+     * <p>Degrees are always three digits even for a latitude that can never exceed 90,
+     * because the spec fixes the width and importers parse by position. The awkward
+     * carry case is real and handled below: 59.9996 minutes rounds to 60.000, which is
+     * not a valid minute value, so the degree is incremented and the minutes wrap to
+     * zero rather than emitting {@code N039 60.000}.
+     *
+     * @param value    degrees, positive north/east
+     * @param latitude true for a latitude (N/S), false for a longitude (E/W)
+     * @return the formatted value, or null when {@code value} is absent or not finite
+     */
+    public static String location(Double value, boolean latitude) {
+        if (value == null || Double.isNaN(value) || Double.isInfinite(value)) {
+            return null;
+        }
+        double limit = latitude ? 90.0 : 180.0;
+        if (Math.abs(value) > limit) {
+            return null;
+        }
+        char hemisphere = value < 0 ? (latitude ? 'S' : 'W') : (latitude ? 'N' : 'E');
+        double magnitude = Math.abs(value);
+        int degrees = (int) magnitude;
+        double minutes = (magnitude - degrees) * 60.0;
+        // Round to the emitted precision *before* formatting so the carry is visible.
+        double rounded = Math.round(minutes * 1000.0) / 1000.0;
+        if (rounded >= 60.0) {
+            rounded -= 60.0;
+            degrees += 1;
+        }
+        return String.format(Locale.US, "%c%03d %06.3f", hemisphere, degrees, rounded);
+    }
+
+    /**
+     * Parse ADIF's Location datatype ({@code N039 44.352}) back to decimal degrees.
+     *
+     * <p>Lenient about the separator and about a missing leading zero, because exporters
+     * vary; strict about the hemisphere letter, which is the only thing carrying the
+     * sign. Returns null rather than guessing when the shape doesn't match — a
+     * mis-parsed coordinate puts a QSO in the wrong hemisphere, which is worse than
+     * having none.
+     */
+    public static Double parseLocation(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String s = raw.trim().toUpperCase(Locale.US);
+        if (s.length() < 2) {
+            return null;
+        }
+        char hemisphere = s.charAt(0);
+        if (hemisphere != 'N' && hemisphere != 'S' && hemisphere != 'E' && hemisphere != 'W') {
+            return null;
+        }
+        String[] parts = s.substring(1).trim().split("\\s+");
+        if (parts.length != 2) {
+            return null;
+        }
+        try {
+            int degrees = Integer.parseInt(parts[0]);
+            double minutes = Double.parseDouble(parts[1]);
+            if (degrees < 0 || minutes < 0 || minutes >= 60.0) {
+                return null;
+            }
+            double value = degrees + minutes / 60.0;
+            return (hemisphere == 'S' || hemisphere == 'W') ? -value : value;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Format a coordinate as plain decimal degrees for an {@code APP_}-prefixed field.
+     *
+     * <p>Six decimal places is about 11 cm — far beyond any consumer GPS, and enough
+     * that the value round-trips without the loss the degrees-and-minutes form imposes.
+     * Trailing zeros are kept so the field width is stable across records.
+     */
+    public static String decimalDegrees(Double value) {
+        if (value == null || Double.isNaN(value) || Double.isInfinite(value)) {
+            return null;
+        }
+        return String.format(Locale.US, "%.6f", value);
+    }
 }
