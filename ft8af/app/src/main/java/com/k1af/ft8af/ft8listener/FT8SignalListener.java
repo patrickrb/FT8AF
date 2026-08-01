@@ -218,7 +218,7 @@ public class FT8SignalListener {
             @Override
             public void run() {
                 try {
-                runDecodeThread();
+                    runDecodeThread();
                 } finally {
                     // Backstop. The timely release happens right after delivery below, but
                     // anything throwing before it — JNI init, a decode failure, OOM —

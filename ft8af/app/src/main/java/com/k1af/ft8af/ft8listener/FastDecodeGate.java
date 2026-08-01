@@ -34,7 +34,13 @@ public final class FastDecodeGate {
     private final Object lock = new Object();
     private boolean inFlight;
 
-    /** Called by the decode thread when a fast (non-deep) pass starts. */
+    /**
+     * Marks a fast (non-deep) pass as pending. Called by whichever thread is about to
+     * SPAWN the decode thread — deliberately not by the decode thread itself, which may
+     * not be scheduled before the transmitter reaches its key-up check and would leave it
+     * looking at an idle gate. See the comment at the {@code begin()} call site in
+     * {@code FT8SignalListener.decodeFt8}.
+     */
     public void begin() {
         synchronized (lock) {
             inFlight = true;
@@ -45,6 +51,9 @@ public final class FastDecodeGate {
      * Called by the decode thread once the fast pass has been DELIVERED — not merely
      * decoded. Waiting only until decode finished would still race the sequencer, which
      * acts inside the delivery callback.
+     *
+     * <p>Also called from a finally around the whole decode thread body, so a throw before
+     * delivery cannot strand the gate in flight. Idempotent, so the two paths can both fire.
      */
     public void end() {
         synchronized (lock) {
