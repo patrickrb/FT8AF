@@ -72,6 +72,7 @@ import com.k1af.ft8af.database.RigNameList;
 import com.k1af.ft8af.database.WorkedModeFilter;
 import com.k1af.ft8af.flex.FlexRadio;
 import com.k1af.ft8af.flex.RadioTcpClient;
+import com.k1af.ft8af.ft8listener.FastPassDisposition;
 import com.k1af.ft8af.ft8listener.FT8SignalListener;
 import com.k1af.ft8af.ft8listener.OnFt8Listen;
 import com.k1af.ft8af.ft8transmit.FT8TransmitSignal;
@@ -700,12 +701,26 @@ public class MainViewModel extends ViewModel {
                 //check transmit procedure. Parse transmit procedure from message list
                 //if exceeded cycle by 2 seconds, should not parse
                 int autoReplyBudgetMs = Math.max(2000, GeneralVariables.lateStartTolerance);
-                if (!ft8TransmitSignal.isTransmitting()
-                        && !isDeep//deep passes go through the evidence-only path below
-                        && (ft8SignalListener.timeSec
-                        + GeneralVariables.pttDelay
-                        + GeneralVariables.transmitDelay <= autoReplyBudgetMs)) {//budget scales with late-start tolerance
-                    ft8TransmitSignal.parseMessageToFunction(messages);//parse messages and process
+                if (!isDeep) {//deep passes go through the evidence-only path below
+                    long replyCostMs = ft8SignalListener.timeSec
+                            + GeneralVariables.pttDelay
+                            + GeneralVariables.transmitDelay;
+                    // Sample TX state ONCE: it is read by the decision and again by the
+                    // branch that words the log line, and it can flip between the two.
+                    final boolean transmitting = ft8TransmitSignal.isTransmitting();
+                    // Never dropped — a decode too late to act on this cycle is still
+                    // evidence for the next one. See FastPassDisposition.
+                    if (FastPassDisposition.decide(transmitting, replyCostMs, autoReplyBudgetMs)
+                            == FastPassDisposition.Action.PARSE) {
+                        ft8TransmitSignal.parseMessageToFunction(messages);//parse messages and process
+                    } else {
+                        pendingSequencerDecodes.stash(messages, UtcTimer.getSystemTime());
+                        fileLog(transmitting
+                                ? "QSO: fast decode landed after key-up — stashed "
+                                        + messages.size() + " msg(s) for replay"
+                                : "QSO: fast decode over reply budget (" + replyCostMs
+                                        + "ms > " + autoReplyBudgetMs + "ms) — stashed for replay");
+                    }
                 }
 
                 // Deep/subtraction/late passes routinely find replies the fast
