@@ -92,6 +92,7 @@ import com.k1af.ft8af.rigs.BaseRig;
 import com.k1af.ft8af.rigs.BaseRigOperation;
 import com.k1af.ft8af.rigs.CatConnectionState;
 import com.k1af.ft8af.rigs.RetunePolicy;
+import com.k1af.ft8af.rigs.RigDialTarget;
 import com.k1af.ft8af.rigs.CatLiveness;
 import com.k1af.ft8af.rigs.DiscoveryTX500Rig;
 import com.k1af.ft8af.rigs.ElecraftRig;
@@ -343,6 +344,20 @@ public class MainViewModel extends ViewModel {
             // though the band is the same. Wavelength only changes on a real band hop.
             String oldWaveLength = BaseRigOperation.getMeterFromFreq(GeneralVariables.band);
             GeneralVariables.band = freq;
+            // Observing a frequency is not the same as choosing one. Adopt it as the dial
+            // we COMMAND only while the CAT stream is healthy — otherwise a reading taken
+            // during a "?;" desync gets pushed back at the rig by the reassert heartbeat
+            // and fights the operator's band selection (measured: a 30m tap took ~59s and
+            // four attempts because the app kept re-commanding a 14239985 it never chose).
+            // See RigDialTarget.
+            if (RigDialTarget.shouldAdoptAsTarget(System.currentTimeMillis(),
+                    GeneralVariables.rigRejectedAtMs, freq)) {
+                GeneralVariables.commandedBandHz = freq;
+            } else {
+                fileLog("rig echo ignored as command target: reported " + freq
+                        + " while CAT desynced; still asserting "
+                        + GeneralVariables.commandedBandHz);
+            }
             GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(freq);
             GeneralVariables.mutableBandChange.postValue(GeneralVariables.bandListIndex);
             String newWaveLength = BaseRigOperation.getMeterFromFreq(freq);
@@ -1583,7 +1598,10 @@ public class MainViewModel extends ViewModel {
         }
 
         long nowMs = System.currentTimeMillis();
-        if (!RetunePolicy.shouldRetune(GeneralVariables.band, baseRig.getFreq(),
+        // Assert the dial we CHOSE, never one echoed back by the rig. See RigDialTarget.
+        final long dialHz = RigDialTarget.dialToCommand(
+                GeneralVariables.commandedBandHz, GeneralVariables.band);
+        if (!RetunePolicy.shouldRetune(dialHz, baseRig.getFreq(),
                 lastPushedBandFreq, nowMs, lastBandPushAtMs)) {
             suppressedRetunes++;
             if (RetunePolicy.shouldLogSuppression(nowMs, lastRetuneSuppressionLogAtMs)) {
@@ -1591,7 +1609,7 @@ public class MainViewModel extends ViewModel {
                 // the source, so record who is actually asking. Only on the rate-limited
                 // path — building a stack trace per suppressed call would be its own leak.
                 fileLog("setOperationBand: suppressed " + suppressedRetunes
-                        + " redundant retunes (freq=" + GeneralVariables.band
+                        + " redundant retunes (freq=" + dialHz
                         + " already set) caller=" + RetunePolicy.callerOf(
                                 Thread.currentThread().getStackTrace(),
                                 MainViewModel.class.getName()));
@@ -1600,10 +1618,10 @@ public class MainViewModel extends ViewModel {
             }
             return;
         }
-        lastPushedBandFreq = GeneralVariables.band;
+        lastPushedBandFreq = dialHz;
         lastBandPushAtMs = nowMs;
 
-        fileLog("setOperationBand: sending USB mode, then freq=" + GeneralVariables.band
+        fileLog("setOperationBand: sending USB mode, then freq=" + dialHz
                 + " in 800ms (controlMode=" + GeneralVariables.controlMode + ")");
         //set USB mode first, then set frequency
         baseRig.setUsbModeToRig();//set USB mode
@@ -1612,9 +1630,14 @@ public class MainViewModel extends ViewModel {
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
-                fileLog("setOperationBand: setting freq=" + GeneralVariables.band
+                // Re-read the commanded dial HERE rather than using the value captured
+                // 800ms ago: the operator can change band inside that window, and a
+                // stale capture would briefly retune the rig back to the old one.
+                long sendHz = RigDialTarget.dialToCommand(
+                        GeneralVariables.commandedBandHz, GeneralVariables.band);
+                fileLog("setOperationBand: setting freq=" + sendHz
                         + " (rig.getFreq=" + baseRig.getFreq() + ")");
-                baseRig.setFreq(GeneralVariables.band);//set frequency
+                baseRig.setFreq(sendHz);//set frequency
                 baseRig.setFreqToRig();
             }
         }, 800);
@@ -1672,6 +1695,8 @@ public class MainViewModel extends ViewModel {
         boolean retuned = false;
         if (newFreq > 0 && newFreq != GeneralVariables.band) {
             GeneralVariables.band = newFreq;
+            // Mode retune within the same band is an explicit choice too. See RigDialTarget.
+            GeneralVariables.commandedBandHz = newFreq;
             GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(newFreq);
             databaseOpr.writeConfig("bandFreq", String.valueOf(newFreq), null);
             retuned = true;

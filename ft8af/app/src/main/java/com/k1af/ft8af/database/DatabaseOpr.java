@@ -2652,6 +2652,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("bandFreq")) {
                     GeneralVariables.band = parseConfigLong(result, 14074000L);
+                    // Restored operator selection from config; seeds the commanded dial.
+                    GeneralVariables.commandedBandHz = GeneralVariables.band;
                     GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(GeneralVariables.band);
                 }
 
