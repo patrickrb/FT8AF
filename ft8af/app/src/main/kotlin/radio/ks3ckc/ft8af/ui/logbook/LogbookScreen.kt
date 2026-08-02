@@ -730,7 +730,7 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
         )
         AwardProgressBar(
             label = stringResource(R.string.log_award_vucc_grid_squares),
-            current = gridSquaresWorked(records.map { it.grid }),
+            current = stats.gridSquares,
             total = 100,
             gradientColors = listOf(StatusNew, Band12m),
             progress = chartProgress,

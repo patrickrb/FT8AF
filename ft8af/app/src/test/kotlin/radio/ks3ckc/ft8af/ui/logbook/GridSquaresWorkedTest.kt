@@ -11,8 +11,9 @@ import java.util.Locale
  * VUCC counts *unique* squares worked, so the helper de-dupes and ignores
  * partial/blank grids. All plain-JVM (the helper takes Strings).
  *
- * The regression these guard: the Awards-tab VUCC card used to be hardcoded to
- * 0, so grid chasers saw "0 / 100" no matter how many squares they had worked.
+ * The regression these tests guard against: the Awards-tab VUCC card used to be
+ * hardcoded to 0, so grid chasers saw "0 / 100" no matter how many squares they
+ * had worked.
  */
 class GridSquaresWorkedTest {
 
