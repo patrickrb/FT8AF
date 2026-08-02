@@ -40,6 +40,7 @@ object RotaSettings {
     private const val KEY_TRIP_STARTED_MS = "tripStartedMs"
     private const val KEY_TRIP_SHARE_TOKEN = "tripShareToken"
     private const val KEY_TRIP_PRIVACY = "tripPrivacy"
+    private const val KEY_TRIP_PLAN_ID = "tripPlanId"
     private const val KEY_TRIP_PENDING_CREATE = "tripPendingCreate"
     private const val KEY_TRIP_PENDING_COMPLETE = "tripPendingComplete"
 
@@ -178,6 +179,19 @@ object RotaSettings {
         get() = readString(KEY_TRIP_PRIVACY, "")
         set(value) = writeString(KEY_TRIP_PRIVACY, value)
 
+    /**
+     * The announced trip this drive is fulfilling, when the operator picked one
+     * — empty for a trip that was never announced.
+     *
+     * Held rather than just its name because the id is what promotes the plan:
+     * the flush loop starts *that* row instead of creating a new trip, which is
+     * what keeps the privacy the plan wizard chose and stops an announcement
+     * lingering at `planned` with a duplicate beside it.
+     */
+    var tripPlanId: String
+        get() = readString(KEY_TRIP_PLAN_ID, "")
+        set(value) = writeString(KEY_TRIP_PLAN_ID, value)
+
     var tripStartedMs: Long
         get() = prefsOrNull()?.getLong(KEY_TRIP_STARTED_MS, 0L) ?: 0L
         set(value) {
@@ -186,8 +200,8 @@ object RotaSettings {
 
     /**
      * True when the user started a trip out of coverage: tracking runs and the
-     * queue fills locally, and the flush loop keeps retrying `POST /api/trips`
-     * until it lands. Without this, starting a trip in a dead zone (which is
+     * queue fills locally, and the flush loop keeps retrying the create (or the
+     * start, for a picked plan) until it lands. Without this, starting a trip in a dead zone (which is
      * where roving starts more often than not) would simply fail.
      */
     var tripPendingCreate: Boolean
@@ -212,6 +226,7 @@ object RotaSettings {
             ?.remove(KEY_TRIP_NAME)
             ?.remove(KEY_TRIP_SHARE_TOKEN)
             ?.remove(KEY_TRIP_PRIVACY)
+            ?.remove(KEY_TRIP_PLAN_ID)
             ?.remove(KEY_TRIP_STARTED_MS)
             ?.remove(KEY_TRIP_PENDING_CREATE)
             ?.remove(KEY_TRIP_PENDING_COMPLETE)

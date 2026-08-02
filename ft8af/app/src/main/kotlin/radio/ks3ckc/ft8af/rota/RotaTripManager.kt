@@ -118,9 +118,10 @@ object RotaTripManager {
     private var failedAttempts = 0
 
     /**
-     * Set when a trip is resumed from disk, cleared once the server has told us
-     * what it already holds. Only a *resumed* trip needs asking: a trip this
-     * process started knows exactly what it has sent.
+     * Set when the trip in hand is one this process did not start — resumed from
+     * disk, or adopted after a 409 — and cleared once the server has told us what
+     * it already holds. A trip this process started knows exactly what it has
+     * sent and skips the request. See [needsResumeHandshake].
      */
     @Volatile
     private var resumeHandshakePending = false
@@ -214,6 +215,7 @@ object RotaTripManager {
         name: String,
         privacy: String?,
         notes: String? = null,
+        planId: String? = null,
     ) {
         if (RotaSettings.hasActiveTrip) {
             log("startTrip ignored — a trip is already running")
@@ -223,6 +225,7 @@ object RotaTripManager {
         RotaSettings.tripName = name.trim().ifEmpty { defaultTripName(startedMs) }
         RotaSettings.tripStartedMs = startedMs
         RotaSettings.tripPrivacy = privacy.orEmpty()
+        RotaSettings.tripPlanId = planId.orEmpty()
         RotaSettings.tripPendingCreate = true
         RotaSettings.tripPendingComplete = false
         RotaSettings.tripId = ""
@@ -452,17 +455,32 @@ object RotaTripManager {
             _state.value = _state.value.copy(uploading = true)
 
             // 1. The trip may not exist server-side yet (started out of coverage).
+            //
+            //    An announced trip already exists — it is sitting at `planned` —
+            //    so it is *started*, not created. Creating would leave the
+            //    announcement stranded with a duplicate beside it and lose the
+            //    privacy the plan wizard chose.
             if (RotaSettings.tripPendingCreate) {
-                val created =
-                    RotaClient.createTrip(
-                        baseUrl = baseUrl,
-                        apiKey = apiKey,
-                        name = RotaSettings.tripName,
-                        startTimeMs = RotaSettings.tripStartedMs,
-                        notes = pendingNotes,
-                        privacy = RotaSettings.tripPrivacy.takeIf { it.isNotBlank() },
-                    )
-                created.fold(
+                val planId = RotaSettings.tripPlanId
+                val landed =
+                    if (planId.isNotEmpty()) {
+                        RotaClient.startPlannedTrip(
+                            baseUrl = baseUrl,
+                            apiKey = apiKey,
+                            tripId = planId,
+                            startTimeMs = RotaSettings.tripStartedMs,
+                        )
+                    } else {
+                        RotaClient.createTrip(
+                            baseUrl = baseUrl,
+                            apiKey = apiKey,
+                            name = RotaSettings.tripName,
+                            startTimeMs = RotaSettings.tripStartedMs,
+                            notes = pendingNotes,
+                            privacy = RotaSettings.tripPrivacy.takeIf { it.isNotBlank() },
+                        )
+                    }
+                landed.fold(
                     onSuccess = { handle ->
                         RotaSettings.tripId = handle.id
                         RotaSettings.tripShareToken = handle.shareToken.orEmpty()
@@ -474,11 +492,38 @@ object RotaTripManager {
                                 shareToken = handle.shareToken.orEmpty(),
                                 pendingCreate = false,
                             )
-                        log("trip created id=${handle.id}")
+                        log(if (planId.isNotEmpty()) "plan started id=${handle.id}" else "trip created id=${handle.id}")
                     },
                     onFailure = { e ->
-                        failed(e, "create")
-                        return@withLock
+                        when (classifyPlanStartFailure(e, planId)) {
+                            // 409: the plan is no longer `planned`, so a previous
+                            // attempt landed (or another device started it). The
+                            // row is the trip; adopt it, and arm the resume
+                            // handshake below — an adopted row is one this
+                            // process did not start, so what it already holds is
+                            // exactly as unknown as a trip resumed from disk.
+                            PlanStartOutcome.ALREADY_STARTED -> {
+                                RotaSettings.tripId = planId
+                                RotaSettings.tripPendingCreate = false
+                                pendingNotes = null
+                                resumeHandshakePending = needsResumeHandshake(PlanStartOutcome.ALREADY_STARTED)
+                                _state.value = _state.value.copy(tripId = planId, pendingCreate = false)
+                                log("plan already started id=$planId — adopting it")
+                            }
+                            // 404: the plan was cancelled on the site while the
+                            // phone was out of coverage. Fall back to an ordinary
+                            // trip rather than stranding a drive that happened.
+                            PlanStartOutcome.PLAN_GONE -> {
+                                RotaSettings.tripPlanId = ""
+                                log("plan $planId is gone — creating a plain trip on the next flush")
+                                requestFlush("plan-gone")
+                                return@withLock
+                            }
+                            PlanStartOutcome.RETRY -> {
+                                failed(e, if (planId.isNotEmpty()) "start" else "create")
+                                return@withLock
+                            }
+                        }
                     },
                 )
             }

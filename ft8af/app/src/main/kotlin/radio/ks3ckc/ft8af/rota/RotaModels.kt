@@ -59,16 +59,16 @@ data class TripQso(
 data class RotaTripHandle(val id: String, val shareToken: String?)
 
 /**
- * A trip the operator planned on roadsontheair.com — what the site's plan wizard saves.
+ * A trip the operator announced on roadsontheair.com — what the site's plan
+ * wizard saves, held server-side as a trip with `status: "planned"`.
  *
- * The wizard writes a *scheduled activation*, not a trip: a trip only exists
- * once someone actually drives it. So this is the thing to pick a trip's name
- * from, and the plan's privacy choices ride along server-side when the trip
- * turns out to fulfil it (see [activationMatchesNow]).
+ * It is the same row the trip will be driven as, not a separate record a trip
+ * gets matched to: picking one here and starting it by id is what makes the
+ * wizard's privacy choices apply to the drive.
  */
-data class RotaActivation(
+data class RotaPlannedTrip(
     val id: String,
-    val title: String,
+    val name: String,
     val startTimeMs: Long,
     /** Planned finish, or null when the plan is open-ended. */
     val endTimeMs: Long?,
@@ -418,57 +418,30 @@ fun parseIsoUtc(value: String?): Long? {
 }
 
 /**
- * How much slack the server allows either side of a planned window when
- * deciding which activation a trip fulfils.
- *
- * Mirrors `MATCH_SLACK_HOURS` in the service's lib/activation-match.ts.
- * Departures rarely run on time, and the app only uses this to *tell the
- * operator* whether starting now will pick the plan up — the server remains the
- * one that actually decides.
- */
-const val ACTIVATION_MATCH_SLACK_MS = 12 * 60 * 60 * 1000L
-
-/** An activation with no end time is assumed to span this long, as on the server. */
-private const val ACTIVATION_DEFAULT_SPAN_MS = 24 * 60 * 60 * 1000L
-
-/**
- * Whether a trip started at [nowMs] would fall inside [activation]'s matching
- * window, and so inherit the privacy the plan wizard chose.
- *
- * Worth surfacing because the consequence is invisible otherwise: a trip started
- * outside the window is created with the operator's *default* privacy, which for
- * a plan marked `delayed` means publishing a live position that was meant to lag.
- */
-fun activationMatchesNow(
-    activation: RotaActivation,
-    nowMs: Long,
-): Boolean {
-    val windowStart = activation.startTimeMs - ACTIVATION_MATCH_SLACK_MS
-    val windowEnd =
-        (activation.endTimeMs ?: (activation.startTimeMs + ACTIVATION_DEFAULT_SPAN_MS)) +
-            ACTIVATION_MATCH_SLACK_MS
-    return nowMs in windowStart..windowEnd
-}
-
-/**
- * Pull the operator's own planned trips out of a `GET /api/me` body, soonest
- * departure first. Rows missing an id, title or start time are dropped rather
+ * Pull the operator's own announced trips out of a `GET /api/me` body, soonest
+ * departure first. Rows missing an id, name or start time are dropped rather
  * than shown as blanks in the picker.
+ *
+ * The key is `plannedTrips` and the label is `name`. Both were `activations`
+ * and `title` before announcements became a trip status, and the rename is the
+ * kind that fails quietly here — the catch below turns a shape mismatch into an
+ * empty list, which the picker renders as "no upcoming trips" rather than an
+ * error. Worth pinning in a test for exactly that reason.
  */
-fun parseMyActivations(body: String?): List<RotaActivation> {
+fun parseMyPlannedTrips(body: String?): List<RotaPlannedTrip> {
     if (body.isNullOrBlank()) return emptyList()
     return try {
-        val array = JSONObject(body).optJSONArray("activations") ?: return emptyList()
+        val array = JSONObject(body).optJSONArray("plannedTrips") ?: return emptyList()
         buildList {
             for (i in 0 until array.length()) {
                 val o = array.optJSONObject(i) ?: continue
                 val id = o.optString("id").takeIf { it.isNotEmpty() } ?: continue
-                val title = o.optString("title").takeIf { it.isNotEmpty() } ?: continue
+                val name = o.optString("name").takeIf { it.isNotEmpty() } ?: continue
                 val start = parseIsoUtc(o.optString("startTime")) ?: continue
                 add(
-                    RotaActivation(
+                    RotaPlannedTrip(
                         id = id,
-                        title = title,
+                        name = name,
                         startTimeMs = start,
                         endTimeMs = parseIsoUtc(o.optString("endTime")),
                         detail = o.optString("detail").takeIf { it.isNotEmpty() },
