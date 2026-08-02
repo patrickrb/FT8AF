@@ -256,6 +256,40 @@ public class ClockSelfSyncTest {
     }
 
     @Test
+    public void beginSlot_rejectsOlderSlotArrivingLate() {
+        // Adjacent-slot decode threads run concurrently: a slow slot's delivery
+        // can land AFTER its successor's. Monotonic dedup must reject it.
+        ClockSelfSync sync = new ClockSelfSync();
+        assertThat(sync.beginSlot(30_000L)).isTrue();
+        assertThat(sync.beginSlot(15_000L)).isFalse(); // straggler from the past
+        assertThat(sync.beginSlot(45_000L)).isTrue();
+    }
+
+    // ------------------------------------------------------------------
+    // onSlot — the atomic production entry (dedup + decision in one lock)
+    // ------------------------------------------------------------------
+
+    @Test
+    public void onSlot_redeliveredSlot_isIgnoredEvenWithQualifyingSamples() {
+        ClockSelfSync sync = new ClockSelfSync();
+        assertThat(sync.onSlot(15_000L, slot(1.0f, 4), 0)).isNull(); // streak = 1
+        // Redelivery of the same slot must not advance the streak to a step.
+        assertThat(sync.onSlot(15_000L, slot(1.0f, 4), 0)).isNull();
+        // The genuine second slot confirms and steps: -median*1000*GAIN.
+        assertThat(sync.onSlot(30_000L, slot(1.0f, 4), 0)).isEqualTo(-500);
+    }
+
+    @Test
+    public void onSlot_lateOlderSlot_cannotAffectStreak() {
+        ClockSelfSync sync = new ClockSelfSync();
+        assertThat(sync.onSlot(30_000L, slot(1.0f, 4), 0)).isNull(); // streak = 1
+        // A stale slot from the past, even with opposite-sign evidence that
+        // would reset the streak, is rejected by the monotonic dedup.
+        assertThat(sync.onSlot(15_000L, slot(-1.0f, 4), 0)).isNull();
+        assertThat(sync.onSlot(45_000L, slot(1.0f, 4), 0)).isEqualTo(-500);
+    }
+
+    @Test
     public void reset_clearsStreakAndSlotTracking() {
         ClockSelfSync sync = new ClockSelfSync();
         assertThat(sync.beginSlot(15_000L)).isTrue();

@@ -684,25 +684,26 @@ public class MainViewModel extends ViewModel {
                     // stands down (and clears its state) rather than fight it.
                     if (GeneralVariables.autoSyncClockFromDecodes
                             && !GeneralVariables.disciplineClockFromGPS) {
-                        if (clockSelfSync.beginSlot(utc)) {
-                            float[] dtSamples = new float[messages.size()];
-                            for (int i = 0; i < messages.size(); i++) {
-                                dtSamples[i] = messages.get(i).time_sec;
-                            }
-                            Integer newDelay =
-                                    clockSelfSync.onSlotDecodes(dtSamples, UtcTimer.delay);
-                            if (newDelay != null) {
-                                int oldDelay = UtcTimer.delay;
-                                // Same three-way fan-out as TimeSyncSettings.apply():
-                                // live timer, in-memory config mirror, and DB.
-                                UtcTimer.delay = newDelay;
-                                GeneralVariables.manualTimeCorrectionMs = newDelay;
-                                databaseOpr.writeConfig("timeCorrectionMs",
-                                        String.valueOf(newDelay), null);
-                                fileLog("selfSync: applied clock correction "
-                                        + oldDelay + " -> " + newDelay + " ms ("
-                                        + dtSamples.length + " decodes, slot utc=" + utc + ")");
-                            }
+                        float[] dtSamples = new float[messages.size()];
+                        for (int i = 0; i < messages.size(); i++) {
+                            dtSamples[i] = messages.get(i).time_sec;
+                        }
+                        // onSlot is atomic: slot dedup/ordering + streak update under
+                        // one lock, so concurrent adjacent-slot deliveries can't
+                        // interleave (out-of-order slots are rejected inside).
+                        Integer newDelay =
+                                clockSelfSync.onSlot(utc, dtSamples, UtcTimer.delay);
+                        if (newDelay != null) {
+                            int oldDelay = UtcTimer.delay;
+                            // Same three-way fan-out as TimeSyncSettings.apply():
+                            // live timer, in-memory config mirror, and DB.
+                            UtcTimer.delay = newDelay;
+                            GeneralVariables.manualTimeCorrectionMs = newDelay;
+                            databaseOpr.writeConfig("timeCorrectionMs",
+                                    String.valueOf(newDelay), null);
+                            fileLog("selfSync: applied clock correction "
+                                    + oldDelay + " -> " + newDelay + " ms ("
+                                    + dtSamples.length + " decodes, slot utc=" + utc + ")");
                         }
                     } else {
                         // Feature off or GPS disciplining: drop any half-built

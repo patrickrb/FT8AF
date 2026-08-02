@@ -118,16 +118,32 @@ public class ClockSelfSync {
 
     /**
      * Mark the slot identified by {@code utc} as processed. Returns true exactly
-     * once per slot — callers must only sample DTs (and call
-     * {@link #onSlotDecodes}) when this returns true, so the multiple decode
-     * passes of one slot cannot be double-counted.
+     * once per slot, and only for slots NEWER than the last processed one —
+     * decode threads for adjacent slots run concurrently, so a slow slot's
+     * delivery can arrive after its successor's; accepting it then would feed
+     * stale evidence into the confirmation streak. Monotonic rejection makes
+     * late stragglers a no-op.
      */
     public synchronized boolean beginSlot(long utc) {
-        if (utc == lastProcessedUtc) {
+        if (utc <= lastProcessedUtc) {
             return false;
         }
         lastProcessedUtc = utc;
         return true;
+    }
+
+    /**
+     * Atomic per-slot entry point: slot dedup/ordering ({@link #beginSlot}) and
+     * the correction decision ({@link #onSlotDecodes}) under one lock, so two
+     * decode threads delivering different slots cannot interleave between the
+     * dedup check and the streak update. Production code must use this; the
+     * two-step methods stay public for targeted unit tests.
+     */
+    public synchronized Integer onSlot(long utc, float[] dtSec, int currentDelayMs) {
+        if (!beginSlot(utc)) {
+            return null;
+        }
+        return onSlotDecodes(dtSec, currentDelayMs);
     }
 
     /**
