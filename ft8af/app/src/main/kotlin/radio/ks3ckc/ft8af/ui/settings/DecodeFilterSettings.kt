@@ -30,6 +30,7 @@ fun DecodeFilterSettings(
     var highlightNewZone by remember { mutableStateOf(GeneralVariables.highlightNewZone) }
     var highlightNewState by remember { mutableStateOf(GeneralVariables.highlightNewState) }
     var highlightNewGrid by remember { mutableStateOf(GeneralVariables.highlightNewGrid) }
+    var highlightNewPrefix by remember { mutableStateOf(GeneralVariables.highlightNewPrefix) }
     var highlightNewBand by remember { mutableStateOf(GeneralVariables.highlightNewBand) }
     var highlightWorked by remember { mutableStateOf(GeneralVariables.highlightWorked) }
     var workedStationMode by remember { mutableStateOf(GeneralVariables.workedStationMode) }
@@ -282,6 +283,19 @@ fun DecodeFilterSettings(
                             GeneralVariables.highlightNewGrid = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "highlightNewGrid", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_highlight_new_prefix),
+                        description = stringResource(R.string.settings_highlight_new_prefix_desc),
+                        toggle = highlightNewPrefix,
+                        onToggleChange = { checked ->
+                            highlightNewPrefix = checked
+                            GeneralVariables.highlightNewPrefix = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "highlightNewPrefix", if (checked) "1" else "0", null,
                             )
                         },
                     )

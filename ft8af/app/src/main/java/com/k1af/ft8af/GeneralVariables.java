@@ -612,6 +612,7 @@ public class GeneralVariables {
     public static HashSet<String> QSL_Callsign_list_today = new HashSet<>();//Callsigns worked today or yesterday (any band); a set for O(1) membership checks
     public static HashSet<String> QSL_Grid_list = new HashSet<>();//Distinct worked 4-char Maidenhead grids (any band)
     public static HashSet<String> QSL_Pota_list = new HashSet<>();//Distinct hunted POTA park refs (UPPER), any band
+    public static HashSet<String> QSL_Prefix_list = new HashSet<>();//Distinct worked CQ WPX prefixes (any band), see WpxPrefix
 
     // Decode-list highlight toggles (Settings → Decode Highlights). Gate the
     // status pill shown for each worked-before category in resolveQsoStatus().
@@ -619,6 +620,7 @@ public class GeneralVariables {
     public static boolean highlightNewZone = true;//Highlight stations from an unworked CQ zone (Worked All Zones)
     public static boolean highlightNewState = false;//Off by default — US-only (Worked All States); noise for non-US ops
     public static boolean highlightNewGrid = false;//Off by default — most grids are "new", so it's noisy
+    public static boolean highlightNewPrefix = false;//Off by default — many prefixes are "new" early on (Worked All Prefixes / WPX)
     public static boolean highlightNewBand = true;//Highlight stations worked only on other bands
     public static boolean highlightWorked = true;//Master enable for worked-station handling (see workedStationMode)
     public static boolean highlightPota = true;//Highlight spotted POTA activators (new parks stand out)
@@ -980,6 +982,16 @@ public class GeneralVariables {
     public static boolean checkQSLGrid(String grid) {
         if (grid == null || grid.length() < 4) return false;
         return QSL_Grid_list.contains(grid.substring(0, 4).toUpperCase());
+    }
+
+    /**
+     * Check whether a CQ WPX prefix (e.g. "W1", "DL0") has already been worked on
+     * any band. Caller should pass a prefix already normalized by
+     * {@link com.k1af.ft8af.callsign.WpxPrefix#of(String)} (upper case).
+     */
+    public static boolean checkQSLPrefix(String prefix) {
+        if (prefix == null || prefix.isEmpty()) return false;
+        return QSL_Prefix_list.contains(prefix);
     }
 
     /**

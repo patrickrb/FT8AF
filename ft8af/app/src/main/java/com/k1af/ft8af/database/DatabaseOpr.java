@@ -2454,6 +2454,27 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             }
             GeneralVariables.QSL_Grid_list = grids;
 
+            // Load distinct worked CQ WPX prefixes (any band) into an in-memory
+            // set backing the decode list's "New Prefix" highlight/filter. Derive
+            // each prefix from the logged callsign via the shared WpxPrefix helper
+            // so the "worked" set and the live decode predicate agree exactly.
+            querySQL = "select distinct [call] from QSLTable where [call] is not null and [call]<>''";
+            cursor = db.rawQuery(querySQL, null);
+            java.util.HashSet<String> prefixes = new java.util.HashSet<>();
+            try {
+                while (cursor.moveToNext()) {
+                    @SuppressLint("Range")
+                    String c = cursor.getString(cursor.getColumnIndex("call"));
+                    String pfx = com.k1af.ft8af.callsign.WpxPrefix.of(c);
+                    if (pfx != null) {
+                        prefixes.add(pfx);
+                    }
+                }
+            } finally {
+                cursor.close();
+            }
+            GeneralVariables.QSL_Prefix_list = prefixes;
+
             // Load distinct hunted POTA park refs (any band) into in-memory set.
             // sig/sig_info may be absent on some upgraded installs (see note in
             // onUpgrade), so guard the query defensively.
@@ -3149,6 +3170,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("highlightNewGrid")) {
                     GeneralVariables.highlightNewGrid = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("highlightNewPrefix")) {
+                    GeneralVariables.highlightNewPrefix = result.equals("1");
                 }
                 if (name.equalsIgnoreCase("highlightNewBand")) {
                     GeneralVariables.highlightNewBand = result.equals("1");

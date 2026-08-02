@@ -67,7 +67,7 @@ fun DecodeScreen(
     // Filter state. Backed by the ViewModel so the chosen filter survives
     // navigation away from Decode and back (the screen is recreated by the
     // tab switch, which would otherwise reset a local rememberSaveable).
-    val filterOptions = listOf("All", "CQ Calls", "CQ POTA", "New DXCC", "New Zone", "New State", "New Grid", "Needed", "For Me")
+    val filterOptions = listOf("All", "CQ Calls", "CQ POTA", "New DXCC", "New Zone", "New State", "New Grid", "New Prefix", "Needed", "For Me")
     val selectedFilter by mainViewModel.decodeFilter.observeAsState("All")
 
     // Couple the "CQ POTA" display filter to Hunt: while it's selected, the auto-call
@@ -525,6 +525,7 @@ private fun filterLabel(key: String): String = when (key) {
     "New Zone" -> stringResource(R.string.decode_filter_new_zone)
     "New State" -> stringResource(R.string.decode_filter_new_state)
     "New Grid" -> stringResource(R.string.decode_filter_new_grid)
+    "New Prefix" -> stringResource(R.string.decode_filter_new_prefix)
     "Needed" -> stringResource(R.string.decode_filter_needed)
     "For Me" -> stringResource(R.string.decode_filter_for_me)
     else -> stringResource(R.string.decode_filter_all)
@@ -604,6 +605,10 @@ internal fun filterMessages(
         // stations whose grid field the operator hasn't logged yet, so the list
         // becomes a one-tap "who's calling from a grid I still need" view.
         "New Grid" -> base.filter { it.checkIsCQ() && isNewGridStation(it) }
+        // Mirror of "New DXCC" for prefix chasers (Worked All Prefixes / WPX):
+        // only CQ stations whose callsign prefix the operator hasn't logged yet,
+        // so the list becomes a one-tap "who's a new prefix" view.
+        "New Prefix" -> base.filter { it.checkIsCQ() && isNewPrefixStation(it) }
         "Needed" -> base.filter {
             !it.isQSL_Callsign &&
                 !GeneralVariables.checkQSLCallsign(it.callsignFrom ?: "")
@@ -631,6 +636,7 @@ internal fun EmptyState(
         "New Zone" -> stringResource(R.string.decode_empty_zone_title) to stringResource(R.string.decode_empty_zone_body)
         "New State" -> stringResource(R.string.decode_empty_state_title) to stringResource(R.string.decode_empty_state_body)
         "New Grid" -> stringResource(R.string.decode_empty_grid_title) to stringResource(R.string.decode_empty_grid_body)
+        "New Prefix" -> stringResource(R.string.decode_empty_prefix_title) to stringResource(R.string.decode_empty_prefix_body)
         "Needed" -> stringResource(R.string.decode_empty_needed_title) to stringResource(R.string.decode_empty_needed_body)
         "For Me" -> stringResource(R.string.decode_empty_forme_title) to stringResource(R.string.decode_empty_forme_body)
         else -> stringResource(R.string.decode_empty_default_title) to stringResource(R.string.decode_empty_default_body, GeneralVariables.currentMode().displayName)

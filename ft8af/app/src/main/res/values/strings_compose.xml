@@ -49,6 +49,7 @@
     <string name="status_new_zone">NEW ZONE</string>
     <string name="status_new_state">NEW STATE</string>
     <string name="status_new_grid">NEW GRID</string>
+    <string name="status_new_prefix">NEW PFX</string>
     <string name="status_new_band">NEW BAND</string>
     <string name="status_pota">POTA</string>
     <string name="status_new_pota">NEW POTA</string>
@@ -206,6 +207,7 @@
     <string name="decode_filter_new_zone">New Zone</string>
     <string name="decode_filter_new_state">New State</string>
     <string name="decode_filter_new_grid">New Grid</string>
+    <string name="decode_filter_new_prefix">New Prefix</string>
     <string name="decode_filter_needed">Needed</string>
     <string name="decode_filter_for_me">For Me</string>
     <string name="decode_empty_cq_title">No CQ calls</string>
@@ -220,6 +222,8 @@
     <string name="decode_empty_state_body">No stations calling from an unworked US state have been decoded yet.</string>
     <string name="decode_empty_grid_title">No new grids</string>
     <string name="decode_empty_grid_body">No stations calling from an unworked grid square have been decoded yet.</string>
+    <string name="decode_empty_prefix_title">No new prefixes</string>
+    <string name="decode_empty_prefix_body">No stations calling from an unworked callsign prefix (WPX) have been decoded yet.</string>
     <string name="decode_empty_needed_title">Nothing needed</string>
     <string name="decode_empty_needed_body">No stations needing confirmation found.</string>
     <string name="decode_empty_forme_title">No calls for you</string>
@@ -645,6 +649,8 @@
     <string name="settings_highlight_new_state_desc">Highlight not-yet-worked US states (Worked All States)</string>
     <string name="settings_highlight_new_grid">New Grid</string>
     <string name="settings_highlight_new_grid_desc">Highlight not-yet-worked Maidenhead grids</string>
+    <string name="settings_highlight_new_prefix">New Prefix</string>
+    <string name="settings_highlight_new_prefix_desc">Highlight not-yet-worked callsign prefixes (Worked All Prefixes / WPX)</string>
     <string name="settings_highlight_new_band">New Band</string>
     <string name="settings_highlight_new_band_desc">Highlight stations worked only on other bands</string>
     <string name="settings_highlight_pota">POTA Activators</string>

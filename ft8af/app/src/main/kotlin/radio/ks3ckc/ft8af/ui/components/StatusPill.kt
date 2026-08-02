@@ -54,6 +54,12 @@ enum class QsoStatus(
         Color(0x1FFACC15),  // rgba(250,204,21,0.12)
         Color(0x47FACC15),  // rgba(250,204,21,0.28)
     ),
+    NEW_PREFIX(
+        R.string.status_new_prefix,
+        StatusPrefix,
+        Color(0x1FF472B6),  // rgba(244,114,182,0.12)
+        Color(0x47F472B6),  // rgba(244,114,182,0.28)
+    ),
     NEW_BAND(
         R.string.status_new_band,
         Signal,
