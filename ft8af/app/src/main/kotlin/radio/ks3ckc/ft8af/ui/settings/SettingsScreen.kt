@@ -55,7 +55,7 @@ import com.k1af.ft8af.R
 import com.k1af.ft8af.ft8signal.FT8Package
 import com.k1af.ft8af.location.GridLocationUpdater
 import radio.ks3ckc.ft8af.theme.*
-import radio.ks3ckc.ft8af.ui.rtota.RoadTripScreen
+import radio.ks3ckc.ft8af.ui.rota.RoadTripScreen
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 import radio.ks3ckc.ft8af.ui.components.SettingsRow
 import radio.ks3ckc.ft8af.ui.components.TopBar
@@ -328,8 +328,8 @@ private fun SettingsLanding(
                     )
                     SectionDivider()
                     SettingsRow(
-                        label = stringResource(R.string.rtota_title),
-                        description = stringResource(R.string.rtota_settings_desc),
+                        label = stringResource(R.string.rota_title),
+                        description = stringResource(R.string.rota_settings_desc),
                         showChevron = true,
                         onClick = { onOpenCategory(SettingsCategory.ROAD_TRIP) },
                     )

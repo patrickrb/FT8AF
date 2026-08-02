@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
@@ -18,7 +18,7 @@ import org.robolectric.RobolectricTestRunner
  * Robolectric because org.json is an Android stub on the plain JVM classpath.
  */
 @RunWith(RobolectricTestRunner::class)
-class RtotaSyncStateTest {
+class RotaSyncStateTest {
     private val ts = 1_753_970_709_000L // 2025-07-31T14:05:09Z
 
     @Test

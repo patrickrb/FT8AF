@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import kotlin.math.asin
 import kotlin.math.cos
@@ -63,7 +63,7 @@ internal const val METERS_PER_MILE = 1609.344
  *  - Rates are far tighter than APRS defaults (which exist to protect a shared
  *    2 m channel). We are drawing a map line, so the trail can be dense.
  *  - A true standstill emits *nothing* — see [stationaryRadiusM]. APRS keeps
- *    beaconing so you stay visible; RTOTA derives overnight stops from ≥4 h gaps
+ *    beaconing so you stay visible; ROTA derives overnight stops from ≥4 h gaps
  *    in the trail, so silence while parked is the signal, not a failure.
  */
 data class SmartBeaconProfile(
@@ -91,7 +91,7 @@ data class SmartBeaconProfile(
 ) {
     companion object {
         /**
-         * The tuning RTOTA ships. It is a road-trip service — the rover is in a
+         * The tuning ROTA ships. It is a road-trip service — the rover is in a
          * vehicle — so there is one profile and no picker: numbers tuned for
          * highway speeds, giving ~0.6 mi between points at 70 mph.
          *
@@ -327,7 +327,7 @@ class SmartBeaconSampler(
 
     /**
      * Fold the "did we just become parked" bookkeeping into the offer path.
-     * Called by [RtotaTripManager] on every fix, including the dropped ones, so
+     * Called by [RotaTripManager] on every fix, including the dropped ones, so
      * the parked flag reflects the *raw* stream rather than only kept points.
      */
     fun noteStationary(point: TripPoint) {

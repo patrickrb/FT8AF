@@ -10,7 +10,7 @@ import org.junit.Test
  * beats freshness, because a live trip fix is a better account of the drive than
  * a last-known location of unknown provenance even when it is older. And when
  * every candidate is stale the answer is *nothing* — an unlocated QSO is honest,
- * and rtota.app places it from the breadcrumb trail on upload.
+ * and roadsontheair.com places it from the breadcrumb trail on upload.
  */
 class RoverPositionTest {
     private fun fix(source: RoverPositionSource, ageMs: Long) =
@@ -57,7 +57,7 @@ class RoverPositionTest {
     fun `every stale candidate means no position at all, never an approximation`() {
         // No grid-centre tier exists on purpose: a 4-character grid is ~55 km across,
         // and its centre written into MY_LAT/MY_LON would read as a measurement.
-        // rtota.app infers a position from the breadcrumb trail instead.
+        // roadsontheair.com infers a position from the breadcrumb trail instead.
         val chosen =
             chooseRoverFix(
                 listOf(

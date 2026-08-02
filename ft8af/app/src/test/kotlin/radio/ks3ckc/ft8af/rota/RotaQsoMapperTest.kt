@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
@@ -7,13 +7,13 @@ import org.junit.Test
  * QSLRecord → live QSO mapping. Exercised through the pure entry point so no
  * QSLRecord (and therefore no GeneralVariables / rig layer) is needed.
  */
-class RtotaQsoMapperTest {
+class RotaQsoMapperTest {
     private val now = 1_753_970_709_000L
 
     @Test
     fun `a normal contact maps every field`() {
         val qso =
-            RtotaQsoMapper.buildTripQso(
+            RotaQsoMapper.buildTripQso(
                 toCallsign = "k1af",
                 qsoDate = "20250731",
                 timeOn = "140509",
@@ -44,7 +44,7 @@ class RtotaQsoMapperTest {
     @Test
     fun `TIME_ON wins over TIME_OFF so live and ADIF copies dedupe against each other`() {
         val qso =
-            RtotaQsoMapper.buildTripQso(
+            RotaQsoMapper.buildTripQso(
                 toCallsign = "K1AF",
                 qsoDate = "20250731",
                 timeOn = "140509",
@@ -67,7 +67,7 @@ class RtotaQsoMapperTest {
     @Test
     fun `an unusable TIME_ON falls back to the off time`() {
         val qso =
-            RtotaQsoMapper.buildTripQso(
+            RotaQsoMapper.buildTripQso(
                 toCallsign = "K1AF",
                 qsoDate = "",
                 timeOn = "",
@@ -90,7 +90,7 @@ class RtotaQsoMapperTest {
     @Test
     fun `a record with no usable timestamps falls back to now`() {
         val qso =
-            RtotaQsoMapper.buildTripQso(
+            RotaQsoMapper.buildTripQso(
                 toCallsign = "K1AF",
                 qsoDate = null,
                 timeOn = null,
@@ -113,7 +113,7 @@ class RtotaQsoMapperTest {
     @Test
     fun `an SWL record with no reports omits them instead of sending the sentinel`() {
         val qso =
-            RtotaQsoMapper.buildTripQso(
+            RotaQsoMapper.buildTripQso(
                 toCallsign = "K1AF",
                 qsoDate = "20250731",
                 timeOn = "140509",
@@ -140,7 +140,7 @@ class RtotaQsoMapperTest {
     @Test
     fun `a record with no callsign is not queued at all`() {
         val qso =
-            RtotaQsoMapper.buildTripQso(
+            RotaQsoMapper.buildTripQso(
                 toCallsign = "  ",
                 qsoDate = "20250731",
                 timeOn = "140509",

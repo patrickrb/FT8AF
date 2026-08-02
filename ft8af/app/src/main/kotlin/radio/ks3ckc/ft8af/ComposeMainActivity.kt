@@ -37,7 +37,7 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import radio.ks3ckc.ft8af.crash.CrashReporting
-import radio.ks3ckc.ft8af.rtota.RtotaTripManager
+import radio.ks3ckc.ft8af.rota.RotaTripManager
 import radio.ks3ckc.ft8af.sync.QsoAutoSync
 import radio.ks3ckc.ft8af.util.bluetoothAdapter
 import com.k1af.ft8af.service.RxForegroundService
@@ -195,10 +195,10 @@ class ComposeMainActivity : AppCompatActivity() {
             syncNow("app-start")
         }
 
-        // RTOTA trip mode: restore an in-flight road trip (one the phone was killed or
+        // ROTA trip mode: restore an in-flight road trip (one the phone was killed or
         // rebooted in the middle of), resume GPS tracking, and push whatever queued up
         // offline. No-op unless trip mode is enabled and a trip is actually running.
-        RtotaTripManager.init(applicationContext)
+        RotaTripManager.init(applicationContext)
 
         // Set Compose UI — splash plays once per cold start, then crossfades into the app.
         setContent {
@@ -427,12 +427,12 @@ class ComposeMainActivity : AppCompatActivity() {
                 // persisted operating mode is known, rebuild them for it and sync the UI.
                 mainViewModel.applyLoadedOperatingMode()
 
-                // Re-impose "CQ RTOA" if a road trip was running when the app closed.
+                // Re-impose "CQ ROTA" if a road trip was running when the app closed.
                 // Must come after the config load above (which assigns toModifier from
                 // the stored row) and before the POTA resume below: a park activation
                 // started mid-trip outranks the trip, and resuming in this order lets
-                // POTA save RTOA as its own predecessor and hand it back when it ends.
-                RtotaTripManager.onConfigLoaded()
+                // POTA save ROTA as its own predecessor and hand it back when it ends.
+                RotaTripManager.onConfigLoaded()
 
                 // Resume any POTA activation that was interrupted by app close
                 PotaSessionManager.resume()

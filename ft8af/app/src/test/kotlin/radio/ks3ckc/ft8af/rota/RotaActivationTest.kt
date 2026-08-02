@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
@@ -18,7 +18,7 @@ import org.robolectric.RobolectricTestRunner
  * Robolectric because org.json is an Android stub on the plain JVM classpath.
  */
 @RunWith(RobolectricTestRunner::class)
-class RtotaActivationTest {
+class RotaActivationTest {
     // 2026-08-01T22:00:00Z
     private val start = 1_785_621_600_000L
     private val hour = 3_600_000L
@@ -26,7 +26,7 @@ class RtotaActivationTest {
     private fun plan(
         startMs: Long = start,
         endMs: Long? = start + 8 * hour,
-    ) = RtotaActivation("id", "Shakedown", startMs, endMs, null)
+    ) = RotaActivation("id", "Shakedown", startMs, endMs, null)
 
     @Test
     fun `parses the plans an api-me body carries, soonest first`() {

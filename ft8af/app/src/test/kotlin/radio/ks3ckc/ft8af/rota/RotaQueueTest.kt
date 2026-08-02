@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Rule
@@ -14,7 +14,7 @@ import java.io.File
  * must drop exactly what the server took and not a row more.
  */
 @RunWith(RobolectricTestRunner::class)
-class RtotaQueueTest {
+class RotaQueueTest {
     @get:Rule
     val temp = TemporaryFolder()
 
@@ -24,11 +24,11 @@ class RtotaQueueTest {
 
     private fun qso(i: Int) = TripQso("K1AF$i", base + i * 1000L, band = "20m", mode = "FT8")
 
-    private fun queueFile(): File = File(temp.newFolder(), "rtota_queue.json")
+    private fun queueFile(): File = File(temp.newFolder(), "rota_queue.json")
 
     @Test
     fun `pruning drops only the contacts the server reported holding`() {
-        val q = RtotaQueue(queueFile())
+        val q = RotaQueue(queueFile())
         repeat(3) { q.addQso(qso(it)) }
         repeat(2) { q.addPoint(point(it)) }
 
@@ -45,18 +45,18 @@ class RtotaQueueTest {
     @Test
     fun `pruning survives a restart, so a resumed trip does not re-send what it dropped`() {
         val file = queueFile()
-        RtotaQueue(file).apply {
+        RotaQueue(file).apply {
             repeat(3) { addQso(qso(it)) }
             pruneAcknowledgedQsos(setOf(qso(0).dedupeKey()))
         }
-        val reloaded = RtotaQueue(file).also { it.load() }
+        val reloaded = RotaQueue(file).also { it.load() }
         assertThat(reloaded.qsoCount()).isEqualTo(2)
     }
 
     @Test
     fun `an unknown or empty key set removes nothing`() {
         // A failed handshake must never be read as "the server has everything".
-        val q = RtotaQueue(queueFile())
+        val q = RotaQueue(queueFile())
         repeat(2) { q.addQso(qso(it)) }
         assertThat(q.pruneAcknowledgedQsos(emptySet())).isEqualTo(0)
         assertThat(q.pruneAcknowledgedQsos(setOf("W9XYZ|20M|FT8|2023-11-14T22:13"))).isEqualTo(0)
@@ -65,7 +65,7 @@ class RtotaQueueTest {
 
     @Test
     fun `counts track what was added`() {
-        val q = RtotaQueue(queueFile())
+        val q = RotaQueue(queueFile())
         q.addPoint(point(1))
         q.addPoint(point(2))
         q.addQso(qso(1))
@@ -76,7 +76,7 @@ class RtotaQueueTest {
 
     @Test
     fun `batch takes the oldest first and leaves the queue intact`() {
-        val q = RtotaQueue(queueFile())
+        val q = RotaQueue(queueFile())
         repeat(5) { q.addPoint(point(it)) }
         val batch = q.peekBatch(maxPoints = 3, maxQsos = 3)
         assertThat(batch.points).hasSize(3)
@@ -86,7 +86,7 @@ class RtotaQueueTest {
 
     @Test
     fun `commit removes exactly the batch and keeps what arrived during the upload`() {
-        val q = RtotaQueue(queueFile())
+        val q = RotaQueue(queueFile())
         repeat(3) { q.addPoint(point(it)) }
         val batch = q.peekBatch()
         // A fix that lands while the POST is in flight must survive the commit.
@@ -99,11 +99,11 @@ class RtotaQueueTest {
     @Test
     fun `a queue survives a process restart`() {
         val file = queueFile()
-        val first = RtotaQueue(file)
+        val first = RotaQueue(file)
         repeat(4) { first.addPoint(point(it)) }
         first.addQso(qso(1))
 
-        val second = RtotaQueue(file).apply { load() }
+        val second = RotaQueue(file).apply { load() }
         assertThat(second.pointCount()).isEqualTo(4)
         assertThat(second.qsoCount()).isEqualTo(1)
         assertThat(second.peekBatch().qsos.single().callsign).isEqualTo("K1AF1")
@@ -113,22 +113,22 @@ class RtotaQueueTest {
     fun `a truncated queue file starts empty rather than throwing`() {
         val file = queueFile()
         file.writeText("""{"points":[{"t":1,""")
-        val q = RtotaQueue(file).apply { load() }
+        val q = RotaQueue(file).apply { load() }
         assertThat(q.isEmpty()).isTrue()
     }
 
     @Test
     fun `points are capped, dropping the oldest`() {
-        val q = RtotaQueue(null)
-        repeat(RtotaQueue.MAX_POINTS + 10) { q.addPoint(point(it)) }
-        assertThat(q.pointCount()).isEqualTo(RtotaQueue.MAX_POINTS)
+        val q = RotaQueue(null)
+        repeat(RotaQueue.MAX_POINTS + 10) { q.addPoint(point(it)) }
+        assertThat(q.pointCount()).isEqualTo(RotaQueue.MAX_POINTS)
         // The head is now the 11th point ever added.
         assertThat(q.peekBatch(maxPoints = 1).points.single()).isEqualTo(point(10))
     }
 
     @Test
     fun `clear empties both halves`() {
-        val q = RtotaQueue(queueFile())
+        val q = RotaQueue(queueFile())
         q.addPoint(point(1))
         q.addQso(qso(1))
         q.clear()
@@ -137,9 +137,9 @@ class RtotaQueueTest {
 
     @Test
     fun `committing more than the queue holds does not underflow`() {
-        val q = RtotaQueue(null)
+        val q = RotaQueue(null)
         q.addPoint(point(1))
-        val oversized = RtotaBatch(listOf(point(1), point(2), point(3)), emptyList())
+        val oversized = RotaBatch(listOf(point(1), point(2), point(3)), emptyList())
         q.commit(oversized)
         assertThat(q.isEmpty()).isTrue()
     }

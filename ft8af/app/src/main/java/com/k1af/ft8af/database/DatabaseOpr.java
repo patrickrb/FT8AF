@@ -1509,7 +1509,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 radio.ks3ckc.ft8af.pota.PotaSpotsRepository.parkRefFor(record.getToCallsign()));
 
         // Stamp where the operator was, for every real-time contact — not just during an
-        // RTOTA trip. The ADIF this ends up in is the copy that reaches rtota.app, QRZ,
+        // ROTA trip. The ADIF this ends up in is the copy that reaches roadsontheair.com, QRZ,
         // Cloudlog and LoTW, and a QSO without a position can only ever be placed at the
         // grid's centre by whoever reads it.
         //
@@ -1613,11 +1613,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             // or missing SD can never break QSO logging (AdifLogFile.logQso itself never throws).
             if (appendToAdifFile) {
                 com.k1af.ft8af.log.AdifLogFile.logQso(context, record);
-                // RTOTA trip mode: queue the contact for the live road-trip feed. Gated on
+                // ROTA trip mode: queue the contact for the live road-trip feed. Gated on
                 // the same appendToAdifFile flag as the ADIF mirror, so a bulk log import
                 // can't inject a thousand historic QSOs into today's drive. No-op unless a
-                // trip is running; never throws (see RtotaTripManager.onQsoLogged).
-                radio.ks3ckc.ft8af.rtota.RtotaTripManager.onQsoLogged(record);
+                // trip is running; never throws (see RotaTripManager.onQsoLogged).
+                radio.ks3ckc.ft8af.rota.RotaTripManager.onQsoLogged(record);
             }
             if (afterInsertQSLData!=null){
                 afterInsertQSLData.doAfterInsert(false,true);//New QSL

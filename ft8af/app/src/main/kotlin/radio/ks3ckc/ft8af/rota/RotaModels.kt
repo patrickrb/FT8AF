@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import org.json.JSONArray
 import org.json.JSONObject
@@ -8,12 +8,12 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Wire model for RTOTA (Road Trips On The Air) trip mode — the road-going
- * companion service at rtota.app.
+ * Wire model for ROTA (Roads On The Air) trip mode — the road-going
+ * companion service at roadsontheair.com.
  *
  * Everything here is deliberately free of Android types so the payload shapes
  * can be unit-tested without a device: the manager collects [TripPoint] /
- * [TripQso] values, [RtotaQueue] persists them, and [buildLiveBody] renders the
+ * [TripQso] values, [RotaQueue] persists them, and [buildLiveBody] renders the
  * exact JSON `POST /api/trips/:id/live` expects.
  *
  * The server validates every field (zod schemas in lib/api/schemas.ts), so the
@@ -56,17 +56,17 @@ data class TripQso(
 )
 
 /** Trip identifiers handed back by `POST /api/trips`. */
-data class RtotaTripHandle(val id: String, val shareToken: String?)
+data class RotaTripHandle(val id: String, val shareToken: String?)
 
 /**
- * A trip the operator planned on rtota.app — what the site's plan wizard saves.
+ * A trip the operator planned on roadsontheair.com — what the site's plan wizard saves.
  *
  * The wizard writes a *scheduled activation*, not a trip: a trip only exists
  * once someone actually drives it. So this is the thing to pick a trip's name
  * from, and the plan's privacy choices ride along server-side when the trip
  * turns out to fulfil it (see [activationMatchesNow]).
  */
-data class RtotaActivation(
+data class RotaActivation(
     val id: String,
     val title: String,
     val startTimeMs: Long,
@@ -80,7 +80,7 @@ data class RtotaActivation(
  * resume handshake for a client that has been out of touch long enough not to
  * know what it still owes.
  */
-data class RtotaSyncState(
+data class RotaSyncState(
     val tripId: String,
     /** "active" or "completed" — a completed trip must not be fed any more. */
     val status: String,
@@ -93,7 +93,7 @@ data class RtotaSyncState(
 )
 
 /** What the server reports it did with a live batch. */
-data class RtotaLiveAck(
+data class RotaLiveAck(
     val pointsInserted: Int,
     val qsosInserted: Int,
     val duplicates: Int,
@@ -171,7 +171,7 @@ fun frequencyKhzOrNull(freqHz: Long): Double? {
  * locale-sensitive for ASCII: under a Turkish or Azeri locale, "i" upper-cases
  * to "İ" (U+0130), so an operator whose phone is set to Turkish would register
  * as KİABC, store KİABC, and never match the KIABC the server knows — while
- * [RtotaClient.registerOperator] normalizes with `Locale.US` and disagrees with
+ * [RotaClient.registerOperator] normalizes with `Locale.US` and disagrees with
  * the very setting that produced it. Callsigns are ASCII by definition, so the
  * locale must be fixed rather than ambient.
  */
@@ -181,21 +181,21 @@ fun normalizeCallsign(raw: String): String = raw.trim().uppercase(Locale.US)
  * Clean up a base URL before it is used, repairing the two mistakes that cost a
  * whole trip rather than one request.
  *
- * 1. **A bare host.** "rtota.app" typed into the server field has no scheme, so
+ * 1. **A bare host.** "roadsontheair.com" typed into the server field has no scheme, so
  *    `URL()` throws and every upload fails with a MalformedURLException the
  *    operator can do nothing with. Assume https.
- * 2. **The apex host.** `rtota.app` 308-redirects to `www.rtota.app`, and a 308
+ * 2. **The apex host.** `roadsontheair.com` 308-redirects to `www.roadsontheair.com`, and a 308
  *    must not be auto-followed for a POST (RFC 9110 §15.4.9 — the method and
  *    body have to survive, so a client that can't guarantee that declines).
  *    Every write here is a POST, so the apex yields a 308 that
- *    [isRetryableRtotaFailure] correctly classifies as fatal, stranding the trip
+ *    [isRetryableRotaFailure] correctly classifies as fatal, stranding the trip
  *    on the phone. Rewriting the host is the difference between a working test
  *    run and a silent one.
  *
- * Only the known rtota.app host is rewritten: a self-hosted origin or a dev box
- * is left exactly as typed, since nothing here knows how *it* is fronted.
+ * Only the hosted service's own domains are rewritten: a self-hosted origin or a
+ * dev box is left exactly as typed, since nothing here knows how *it* is fronted.
  */
-fun normalizeRtotaBaseUrl(raw: String): String {
+fun normalizeRotaBaseUrl(raw: String): String {
     val trimmed = raw.trim().trimEnd('/')
     if (trimmed.isEmpty()) return trimmed
     val withScheme =
@@ -204,10 +204,15 @@ fun normalizeRtotaBaseUrl(raw: String): String {
             trimmed.startsWith("https://", ignoreCase = true) -> trimmed
             else -> "https://$trimmed"
         }
-    // Match the apex host only — not "myrtota.app", and not a path that happens
-    // to contain the name.
-    return Regex("^(https?://)rtota\\.app(?=$|[/?#])", RegexOption.IGNORE_CASE)
-        .replace(withScheme) { "${it.groupValues[1]}www.rtota.app" }
+    // Match the known hosts only — not "myroadsontheair.com", and not a path that
+    // happens to contain the name. The legacy rtota.app pair (the program's name
+    // before it became Roads On The Air) is folded in here too: an install that
+    // persisted the old origin before the rename would otherwise keep POSTing at
+    // a domain we no longer run, so rewriting on *read* silently repoints it.
+    return Regex(
+        "^(https?://)(?:www\\.)?(?:roadsontheair\\.com|rtota\\.app)(?=$|[/?#])",
+        RegexOption.IGNORE_CASE,
+    ).replace(withScheme) { "${it.groupValues[1]}www.roadsontheair.com" }
 }
 
 // ---------------------------------------------------------------------------
@@ -351,7 +356,7 @@ fun buildLiveBody(
  * key the client fails to match merely re-sends a contact the server dedupes
  * anyway, whereas a key that matches something it shouldn't would drop a QSO
  * that was never delivered. That is why this mirrors the format exactly rather
- * than approximating it, and why [RtotaSyncState] is only ever used to *skip*
+ * than approximating it, and why [RotaSyncState] is only ever used to *skip*
  * sends on an exact hit.
  */
 fun TripQso.dedupeKey(): String {
@@ -365,7 +370,7 @@ fun TripQso.dedupeKey(): String {
 }
 
 /** Parse a `GET /api/trips/:id/sync-state` body, or null when it is unusable. */
-fun parseSyncState(body: String?): RtotaSyncState? {
+fun parseSyncState(body: String?): RotaSyncState? {
     if (body.isNullOrBlank()) return null
     return try {
         val root = JSONObject(body)
@@ -378,7 +383,7 @@ fun parseSyncState(body: String?): RtotaSyncState? {
                 keysArray.optString(i).takeIf { it.isNotEmpty() }?.let { keys.add(it) }
             }
         }
-        RtotaSyncState(
+        RotaSyncState(
             tripId = tripId,
             status = root.optString("status"),
             pointCount = root.optJSONObject("points")?.optInt("count", 0) ?: 0,
@@ -435,7 +440,7 @@ private const val ACTIVATION_DEFAULT_SPAN_MS = 24 * 60 * 60 * 1000L
  * a plan marked `delayed` means publishing a live position that was meant to lag.
  */
 fun activationMatchesNow(
-    activation: RtotaActivation,
+    activation: RotaActivation,
     nowMs: Long,
 ): Boolean {
     val windowStart = activation.startTimeMs - ACTIVATION_MATCH_SLACK_MS
@@ -450,7 +455,7 @@ fun activationMatchesNow(
  * departure first. Rows missing an id, title or start time are dropped rather
  * than shown as blanks in the picker.
  */
-fun parseMyActivations(body: String?): List<RtotaActivation> {
+fun parseMyActivations(body: String?): List<RotaActivation> {
     if (body.isNullOrBlank()) return emptyList()
     return try {
         val array = JSONObject(body).optJSONArray("activations") ?: return emptyList()
@@ -461,7 +466,7 @@ fun parseMyActivations(body: String?): List<RtotaActivation> {
                 val title = o.optString("title").takeIf { it.isNotEmpty() } ?: continue
                 val start = parseIsoUtc(o.optString("startTime")) ?: continue
                 add(
-                    RtotaActivation(
+                    RotaActivation(
                         id = id,
                         title = title,
                         startTimeMs = start,
@@ -477,13 +482,13 @@ fun parseMyActivations(body: String?): List<RtotaActivation> {
 }
 
 /** Parse the live endpoint's response into counts for the UI. */
-fun parseLiveAck(body: String?): RtotaLiveAck? {
+fun parseLiveAck(body: String?): RotaLiveAck? {
     if (body.isNullOrBlank()) return null
     return try {
         val root = JSONObject(body)
         val points = root.optJSONObject("points")
         val qsos = root.optJSONObject("qsos")
-        RtotaLiveAck(
+        RotaLiveAck(
             pointsInserted = points?.optInt("inserted", 0) ?: 0,
             qsosInserted = qsos?.optInt("inserted", 0) ?: 0,
             duplicates =

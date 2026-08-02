@@ -197,6 +197,71 @@ public class QSLRecordTest {
     }
 
     @Test
+    public void mapConstructor_readsRoverPositionFromTheCurrentAppFields() {
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("APP_ROTA_LAT", "39.739200");
+        map.put("APP_ROTA_LON", "-104.990300");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.getMyLat()).isWithin(1e-9).of(39.7392);
+        assertThat(r.getMyLon()).isWithin(1e-9).of(-104.9903);
+    }
+
+    @Test
+    public void mapConstructor_stillReadsThePreRenameAppFields() {
+        // ADIF exported before the Roads On The Air rename — and every install
+        // still running an older build — spells these APP_RTOTA_. Dropping them
+        // would silently downgrade an archived log to the rounded MY_LAT/MY_LON
+        // pair, losing about 1.8 m on every rover fix.
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("APP_RTOTA_LAT", "39.739200");
+        map.put("APP_RTOTA_LON", "-104.990300");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.getMyLat()).isWithin(1e-9).of(39.7392);
+        assertThat(r.getMyLon()).isWithin(1e-9).of(-104.9903);
+    }
+
+    @Test
+    public void mapConstructor_currentAppFieldsWinOverTheLegacyPair() {
+        // A record carrying both (an old export re-exported by a new build)
+        // must not resolve to the stale copy.
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("APP_ROTA_LAT", "39.739200");
+        map.put("APP_ROTA_LON", "-104.990300");
+        map.put("APP_RTOTA_LAT", "1.000000");
+        map.put("APP_RTOTA_LON", "2.000000");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.getMyLat()).isWithin(1e-9).of(39.7392);
+        assertThat(r.getMyLon()).isWithin(1e-9).of(-104.9903);
+    }
+
+    @Test
+    public void mapConstructor_fallsBackToStandardFieldsWhenNoAppPairIsPresent() {
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("MY_LAT", "N039 44.352");
+        map.put("MY_LON", "W104 59.418");
+
+        QSLRecord r = new QSLRecord(map);
+
+        // The Location datatype quantizes to a thousandth of a minute.
+        assertThat(r.getMyLat()).isWithin(1e-4).of(39.7392);
+        assertThat(r.getMyLon()).isWithin(1e-4).of(-104.9903);
+    }
+
+    @Test
     public void mapConstructor_qslAndPotaFields() {
         HashMap<String, String> map = new HashMap<>();
         map.put("CALL", "W1AW");

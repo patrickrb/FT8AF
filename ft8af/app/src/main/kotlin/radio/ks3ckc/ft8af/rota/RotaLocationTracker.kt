@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -14,7 +14,7 @@ import radio.ks3ckc.ft8af.location.hasLocationPermission
 
 /**
  * Subscribes to GPS while a trip is running and hands every fix to
- * [RtotaTripManager], which samples them down into route breadcrumbs.
+ * [RotaTripManager], which samples them down into route breadcrumbs.
  *
  * Deliberately *not* built on [com.k1af.ft8af.location.LocationSubscriber]: that
  * base class exists for the two toggle-driven, low-cadence consumers (grid
@@ -30,7 +30,7 @@ import radio.ks3ckc.ft8af.location.hasLocationPermission
  * peg a corner it saw happen, and it can only place a QSO where the rover was if
  * a recent fix exists.
  */
-class RtotaLocationTracker(context: Context) {
+class RotaLocationTracker(context: Context) {
     private val appContext = context.applicationContext
 
     private var locationManager: LocationManager? = null
@@ -41,7 +41,7 @@ class RtotaLocationTracker(context: Context) {
     private val listener =
         object : LocationListener {
             override fun onLocationChanged(location: Location) {
-                RtotaTripManager.onLocationFix(location)
+                RotaTripManager.onLocationFix(location)
             }
 
             // The three no-op overrides below are abstract on API < 30, so they must
@@ -111,7 +111,7 @@ class RtotaLocationTracker(context: Context) {
     }
 
     companion object {
-        private const val TAG = "RtotaLocationTracker"
+        private const val TAG = "RotaLocationTracker"
 
         /** Ask for a fix this often; [SmartBeaconSampler] decides what to keep. */
         private const val REQUEST_INTERVAL_MS = 1_000L

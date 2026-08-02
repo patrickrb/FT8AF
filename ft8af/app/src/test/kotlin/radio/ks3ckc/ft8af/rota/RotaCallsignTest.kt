@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
@@ -14,7 +14,7 @@ import java.util.Locale
  * a callsign the server can never match, while the rest of the feature
  * normalizes with `Locale.US` and disagrees with the setting that produced it.
  */
-class RtotaCallsignTest {
+class RotaCallsignTest {
     private val original: Locale = Locale.getDefault()
 
     @After

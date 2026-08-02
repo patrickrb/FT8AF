@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -24,15 +24,15 @@ import java.util.Locale
  * foreground service that declares the `location` type, so trip tracking cannot
  * live in the activity: the phone is usually in a cradle with the screen off (or
  * showing a map app) while the rover drives. The service exists purely to hold
- * that permission window open, own the [RtotaLocationTracker] subscription, and
+ * that permission window open, own the [RotaLocationTracker] subscription, and
  * show the ongoing notification the OS requires — the queueing and uploading all
- * stay in [RtotaTripManager], which outlives it.
+ * stay in [RotaTripManager], which outlives it.
  *
  * The notification doubles as the trip's dashboard: miles, contacts, and how much
  * is still waiting to upload, plus a one-tap End Trip.
  */
-class RtotaTripService : Service() {
-    private var tracker: RtotaLocationTracker? = null
+class RotaTripService : Service() {
+    private var tracker: RotaLocationTracker? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -51,12 +51,12 @@ class RtotaTripService : Service() {
         startId: Int,
     ): Int {
         if (intent?.action == ACTION_END_TRIP) {
-            GeneralVariables.fileLog("RtotaTripService: End Trip tapped")
-            RtotaTripManager.endTrip()
+            GeneralVariables.fileLog("RotaTripService: End Trip tapped")
+            RotaTripManager.endTrip()
             return START_NOT_STICKY
         }
 
-        val notification = buildNotification(this, RtotaTripManager.state.value)
+        val notification = buildNotification(this, RotaTripManager.state.value)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
@@ -66,18 +66,18 @@ class RtotaTripService : Service() {
         } catch (e: Exception) {
             // Location permission missing, or a background-start restriction on
             // Android 12+. Trip mode degrades to "QSOs only" rather than crashing.
-            GeneralVariables.fileLog("RtotaTripService start failed: $e")
+            GeneralVariables.fileLog("RotaTripService start failed: $e")
             stopSelf()
             return START_NOT_STICKY
         }
 
-        val t = tracker ?: RtotaLocationTracker(this).also { tracker = it }
+        val t = tracker ?: RotaLocationTracker(this).also { tracker = it }
         if (!t.start()) {
             Log.d(TAG, "tracker did not start (no permission / no provider)")
         }
         running = true
         // STICKY: if the OS reclaims the process mid-trip, restart tracking as
-        // soon as memory allows — the trip itself is restored from RtotaSettings.
+        // soon as memory allows — the trip itself is restored from RotaSettings.
         return START_STICKY
     }
 
@@ -101,20 +101,20 @@ class RtotaTripService : Service() {
         val channel =
             NotificationChannel(
                 CHANNEL_ID,
-                getString(R.string.rtota_service_channel_name),
+                getString(R.string.rota_service_channel_name),
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = getString(R.string.rtota_service_channel_desc)
+                description = getString(R.string.rota_service_channel_desc)
                 setShowBadge(false)
             }
         nm.createNotificationChannel(channel)
     }
 
     companion object {
-        private const val TAG = "RtotaTripService"
-        private const val CHANNEL_ID = "rtota_trip"
+        private const val TAG = "RotaTripService"
+        private const val CHANNEL_ID = "rota_trip"
         private const val NOTIF_ID = 0x52544F54 // "RTOT"
-        const val ACTION_END_TRIP = "radio.ks3ckc.ft8af.rtota.END_TRIP"
+        const val ACTION_END_TRIP = "radio.ks3ckc.ft8af.rota.END_TRIP"
 
         @Volatile
         private var running = false
@@ -124,16 +124,16 @@ class RtotaTripService : Service() {
             try {
                 ContextCompat.startForegroundService(
                     context,
-                    Intent(context, RtotaTripService::class.java),
+                    Intent(context, RotaTripService::class.java),
                 )
             } catch (e: Exception) {
-                GeneralVariables.fileLog("RtotaTripService.start failed: $e")
+                GeneralVariables.fileLog("RotaTripService.start failed: $e")
             }
         }
 
         fun stop(context: Context) {
             try {
-                context.stopService(Intent(context, RtotaTripService::class.java))
+                context.stopService(Intent(context, RotaTripService::class.java))
             } catch (_: Exception) {
             }
         }
@@ -141,7 +141,7 @@ class RtotaTripService : Service() {
         /** Refresh the ongoing notification's counters. No-op when not running. */
         fun updateNotification(
             context: Context,
-            state: RtotaTripState,
+            state: RotaTripState,
         ) {
             if (!running) return
             try {
@@ -158,7 +158,7 @@ class RtotaTripService : Service() {
          * clause only appears when there is a backlog, so on a good connection the
          * line stays quiet.
          */
-        internal fun notificationText(state: RtotaTripState): String {
+        internal fun notificationText(state: RotaTripState): String {
             val parts =
                 mutableListOf(
                     String.format(Locale.US, "%.1f mi", state.miles),
@@ -176,7 +176,7 @@ class RtotaTripService : Service() {
 
         private fun buildNotification(
             context: Context,
-            state: RtotaTripState,
+            state: RotaTripState,
         ): Notification {
             var piFlags = PendingIntent.FLAG_UPDATE_CURRENT
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -190,10 +190,10 @@ class RtotaTripService : Service() {
                 PendingIntent.getService(
                     context,
                     2,
-                    Intent(context, RtotaTripService::class.java).setAction(ACTION_END_TRIP),
+                    Intent(context, RotaTripService::class.java).setAction(ACTION_END_TRIP),
                     piFlags,
                 )
-            val title = state.tripName.ifBlank { context.getString(R.string.rtota_service_title) }
+            val title = state.tripName.ifBlank { context.getString(R.string.rota_service_title) }
             return NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(title)
@@ -204,7 +204,7 @@ class RtotaTripService : Service() {
                 .setContentIntent(openPi)
                 .addAction(
                     R.drawable.ic_baseline_close_32,
-                    context.getString(R.string.rtota_action_end_trip),
+                    context.getString(R.string.rota_action_end_trip),
                     endPi,
                 )
                 .build()

@@ -49,11 +49,21 @@ public final class AdifRecord {
      * <p>Both are written because they serve different readers. ADIF's own location
      * datatype is {@code XDDD MM.MMM} — degrees and decimal minutes — which every
      * conventional logbook understands but which rounds to about 1.8 m and has to be
-     * re-parsed. rtota.app prefers these decimal twins, so a route replay gets back
+     * re-parsed. roadsontheair.com prefers these decimal twins, so a route replay gets back
      * exactly the coordinate the phone recorded rather than a rounded reconstruction.
      */
-    public static final String APP_RTOTA_LAT = "APP_RTOTA_LAT";
-    public static final String APP_RTOTA_LON = "APP_RTOTA_LON";
+    public static final String APP_ROTA_LAT = "APP_ROTA_LAT";
+    public static final String APP_ROTA_LON = "APP_ROTA_LON";
+
+    /**
+     * The names these fields carried before the program was renamed from Road Trips
+     * On The Air to Roads On The Air. Read-only: never emitted, but still parsed on
+     * import so ADIF exported by an older build — or sitting in someone's archive —
+     * keeps its exact rover coordinates instead of silently falling back to the
+     * rounded {@code MY_LAT}/{@code MY_LON} pair.
+     */
+    public static final String LEGACY_APP_ROTA_LAT = "APP_RTOTA_LAT";
+    public static final String LEGACY_APP_ROTA_LON = "APP_RTOTA_LON";
 
     /** Legacy, non-conformant name for {@link #APP_QSL_MANUAL}. Read-only: never emitted. */
     public static final String LEGACY_QSL_MANUAL = "QSL_MANUAL";
@@ -185,8 +195,8 @@ public final class AdifRecord {
         if (myLat != null && myLon != null) {
             appendIfNotEmpty(sb, "MY_LAT", AdifFormat.location(myLat, true));
             appendIfNotEmpty(sb, "MY_LON", AdifFormat.location(myLon, false));
-            appendIfNotEmpty(sb, APP_RTOTA_LAT, AdifFormat.decimalDegrees(myLat));
-            appendIfNotEmpty(sb, APP_RTOTA_LON, AdifFormat.decimalDegrees(myLon));
+            appendIfNotEmpty(sb, APP_ROTA_LAT, AdifFormat.decimalDegrees(myLat));
+            appendIfNotEmpty(sb, APP_ROTA_LON, AdifFormat.decimalDegrees(myLon));
         }
         appendIfNotEmpty(sb, "comment", comment);
         sb.append("<eor>\n");

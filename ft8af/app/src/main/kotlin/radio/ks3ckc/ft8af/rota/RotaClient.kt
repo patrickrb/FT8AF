@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import android.util.Log
 import com.k1af.ft8af.GeneralVariables
@@ -17,10 +17,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Non-2xx from rtota.app, carrying the status so callers can tell retryable from fatal. */
-class RtotaHttpException(val httpCode: Int, val body: String) :
+/** Non-2xx from roadsontheair.com, carrying the status so callers can tell retryable from fatal. */
+class RotaHttpException(val httpCode: Int, val body: String) :
     Exception("HTTP $httpCode${if (body.isNotBlank()) ": ${body.take(200)}" else ""}") {
-    /** The `error` field rtota.app puts in every failure body, when present. */
+    /** The `error` field roadsontheair.com puts in every failure body, when present. */
     val serverMessage: String?
         get() =
             try {
@@ -36,9 +36,9 @@ class RtotaHttpException(val httpCode: Int, val body: String) :
  * request itself is wrong — a bad API key, a trip that isn't ours — and retrying
  * it just burns battery against the same rejection.
  */
-fun isRetryableRtotaFailure(error: Throwable?): Boolean =
+fun isRetryableRotaFailure(error: Throwable?): Boolean =
     when (error) {
-        is RtotaHttpException -> error.httpCode == 429 || error.httpCode >= 500
+        is RotaHttpException -> error.httpCode == 429 || error.httpCode >= 500
         is IOException -> true
         else -> false
     }
@@ -48,17 +48,17 @@ fun isRetryableRtotaFailure(error: Throwable?): Boolean =
  * minutes. Long by HTTP standards on purpose — the failure this handles is
  * usually "no cell coverage for the next 40 miles", and hammering the radio
  * costs battery on a device that is often navigating at the same time. A
- * regained network triggers an immediate flush anyway (see [RtotaTripManager]),
+ * regained network triggers an immediate flush anyway (see [RotaTripManager]),
  * so the backoff only governs the pessimistic case.
  */
-fun rtotaBackoffMs(attempt: Int): Long {
+fun rotaBackoffMs(attempt: Int): Long {
     val capped = attempt.coerceIn(1, 6)
     return minOf(30_000L shl (capped - 1), 15 * 60_000L)
 }
 
 /**
- * Talks to the RTOTA API (rtota.app, or a self-hosted origin — see
- * [RtotaSettings.baseUrl]). Same house style as
+ * Talks to the ROTA API (roadsontheair.com, or a self-hosted origin — see
+ * [RotaSettings.baseUrl]). Same house style as
  * [radio.ks3ckc.ft8af.pota.PotaClient]: HttpURLConnection only, suspend
  * functions on Dispatchers.IO, every call logged into debug.log.
  *
@@ -69,16 +69,16 @@ fun rtotaBackoffMs(attempt: Int): Long {
  *   POST /api/trips/:id/complete   -> finalize
  *   POST /api/activations          -> announce a planned trip
  */
-object RtotaClient {
-    private const val TAG = "RtotaClient"
-    private const val USER_AGENT = "ft8af-rtota/1.0"
+object RotaClient {
+    private const val TAG = "RotaClient"
+    private const val USER_AGENT = "ft8af-rota/1.0"
     private const val CONNECT_TIMEOUT_MS = 15_000
     private const val READ_TIMEOUT_MS = 30_000
 
     /**
      * Register a new rover. The server refuses a callsign that already exists
      * (409) rather than echoing its key, so a returning user pastes the key from
-     * their rtota.app dashboard instead.
+     * their roadsontheair.com dashboard instead.
      */
     suspend fun registerOperator(
         baseUrl: String,
@@ -109,7 +109,7 @@ object RtotaClient {
         startTimeMs: Long,
         notes: String? = null,
         privacy: String? = null,
-    ): Result<RtotaTripHandle> =
+    ): Result<RotaTripHandle> =
         withContext(Dispatchers.IO) {
             val body =
                 JSONObject().apply {
@@ -123,7 +123,7 @@ object RtotaClient {
                 val id =
                     o.optString("id").takeIf { it.isNotEmpty() }
                         ?: throw IllegalStateException("Server returned no trip id")
-                RtotaTripHandle(id, o.optString("shareToken").takeIf { it.isNotEmpty() })
+                RotaTripHandle(id, o.optString("shareToken").takeIf { it.isNotEmpty() })
             }
         }
 
@@ -138,12 +138,12 @@ object RtotaClient {
         baseUrl: String,
         apiKey: String,
         tripId: String,
-        batch: RtotaBatch,
-    ): Result<RtotaLiveAck> =
+        batch: RotaBatch,
+    ): Result<RotaLiveAck> =
         withContext(Dispatchers.IO) {
             val body = buildLiveBody(batch.points, batch.qsos)
             request("POST", "$baseUrl/api/trips/$tripId/live", apiKey, body).map { resp ->
-                parseLiveAck(resp) ?: RtotaLiveAck(batch.points.size, batch.qsos.size, 0)
+                parseLiveAck(resp) ?: RotaLiveAck(batch.points.size, batch.qsos.size, 0)
             }
         }
 
@@ -160,7 +160,7 @@ object RtotaClient {
         baseUrl: String,
         apiKey: String,
         tripId: String,
-    ): Result<RtotaSyncState> =
+    ): Result<RotaSyncState> =
         withContext(Dispatchers.IO) {
             request("GET", "$baseUrl/api/trips/$tripId/sync-state", apiKey, null).mapCatching { resp ->
                 parseSyncState(resp) ?: throw IllegalStateException("Unparsable sync-state body")
@@ -178,7 +178,7 @@ object RtotaClient {
     suspend fun fetchMyActivations(
         baseUrl: String,
         apiKey: String,
-    ): Result<List<RtotaActivation>> =
+    ): Result<List<RotaActivation>> =
         withContext(Dispatchers.IO) {
             request("GET", "$baseUrl/api/me", apiKey, null).map { parseMyActivations(it) }
         }
@@ -222,7 +222,7 @@ object RtotaClient {
         }
 
     /**
-     * One request. Returns the body on 2xx, a [RtotaHttpException] otherwise, or
+     * One request. Returns the body on 2xx, a [RotaHttpException] otherwise, or
      * the underlying [IOException] when the network never got there.
      *
      * The catch is broad on purpose: every failure mode here — DNS, TLS, a proxy
@@ -263,7 +263,7 @@ object RtotaClient {
                     conn.errorStream?.bufferedReader(StandardCharsets.UTF_8)
                         ?.use { it.readText() }.orEmpty()
                 log("$method $url -> http $code ${err.take(160)}")
-                return Result.failure(RtotaHttpException(code, err))
+                return Result.failure(RotaHttpException(code, err))
             }
             val resp =
                 conn.inputStream?.bufferedReader(StandardCharsets.UTF_8)
@@ -286,7 +286,7 @@ object RtotaClient {
             val ctx = GeneralVariables.getMainContext() ?: return
             val dir = ctx.getExternalFilesDir(null) ?: return
             val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
-            FileWriter(File(dir, "debug.log"), true).use { it.append("$ts Rtota: $msg\n") }
+            FileWriter(File(dir, "debug.log"), true).use { it.append("$ts Rota: $msg\n") }
         } catch (_: Exception) {
         }
     }
