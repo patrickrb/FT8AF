@@ -576,6 +576,11 @@
     <string name="settings_time_suggest_apply">Apply suggested correction</string>
     <string name="settings_time_correction_gps_locked">GPS clock discipline is controlling the clock — turn it off below to adjust manually.</string>
 
+    <!-- ===== Settings: Time Sync (self-syncing clock from decodes) ===== -->
+    <string name="settings_selfsync_section">Self-Syncing Clock</string>
+    <string name="settings_selfsync_toggle">Auto-sync clock from decodes</string>
+    <string name="settings_selfsync_toggle_desc">Continuously trim the clock using the median DT of received stations — the band itself becomes the time source. No internet or GPS needed. Unavailable while GPS clock discipline is on.</string>
+
     <!-- ===== Settings: Time Sync (GPS clock discipline, issue #373) ===== -->
     <string name="settings_gps_clock_section">GPS Clock Discipline</string>
     <string name="settings_gps_clock_toggle">Discipline clock from GPS</string>

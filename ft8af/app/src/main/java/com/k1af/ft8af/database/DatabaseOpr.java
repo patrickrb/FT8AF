@@ -2828,6 +2828,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("disciplineClockFromGPS")) {//Discipline clock from GPS (issue #373)
                     GeneralVariables.disciplineClockFromGPS = result.equals("1");
                 }
+                if (name.equalsIgnoreCase("autoSyncClockFromDecodes")) {//Self-syncing clock from decode DT medians (ClockSelfSync)
+                    GeneralVariables.autoSyncClockFromDecodes = result.equals("1");
+                }
                 if (name.equalsIgnoreCase("gpsClockIntervalMin")) {//GPS discipline update interval (minutes)
                     GeneralVariables.gpsClockIntervalMinutes =
                             com.k1af.ft8af.location.GpsClockUpdater.parseIntervalMinutes(result);
