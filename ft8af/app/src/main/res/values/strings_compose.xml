@@ -919,8 +919,7 @@
     <string name="rota_pick_plan_empty">No plans saved on roadsontheair.com yet. Plan one on the site, or type a name.</string>
     <string name="rota_pick_plan_custom">Type a name</string>
     <string name="rota_pick_plan_error">Couldn\'t load your plans: %1$s</string>
-    <string name="rota_plan_matches_now">Starting now uses this plan\'s privacy settings</string>
-    <string name="rota_plan_starts">Starts %1$s — outside the window, so its privacy won\'t apply</string>
+    <string name="rota_plan_starts">Starts %1$s</string>
     <string name="rota_stat_cq">Calling</string>
     <string name="rota_beacon_first">trip start</string>
     <string name="rota_beacon_rate">interval</string>

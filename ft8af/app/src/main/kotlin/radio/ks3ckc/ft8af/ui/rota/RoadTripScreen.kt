@@ -42,9 +42,8 @@ import com.k1af.ft8af.R
 import kotlinx.coroutines.launch
 import radio.ks3ckc.ft8af.location.hasLocationPermission
 import radio.ks3ckc.ft8af.rota.BeaconReason
-import radio.ks3ckc.ft8af.rota.RotaActivation
+import radio.ks3ckc.ft8af.rota.RotaPlannedTrip
 import radio.ks3ckc.ft8af.rota.RotaHttpException
-import radio.ks3ckc.ft8af.rota.activationMatchesNow
 import radio.ks3ckc.ft8af.rota.ROTA_CQ_MODIFIER
 import radio.ks3ckc.ft8af.rota.RotaClient
 import radio.ks3ckc.ft8af.rota.RotaSettings
@@ -81,6 +80,9 @@ fun RoadTripScreen(onBack: () -> Unit) {
     var apiKey by remember { mutableStateOf(RotaSettings.apiKey) }
     var privacy by remember { mutableStateOf(RotaSettings.defaultPrivacy) }
     var tripName by remember { mutableStateOf("") }
+    // The announced trip this drive fulfils, when one was picked. Held so Start
+    // promotes that row rather than creating a second trip beside it.
+    var tripPlanId by remember { mutableStateOf("") }
 
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -90,7 +92,7 @@ fun RoadTripScreen(onBack: () -> Unit) {
     var showKeyDialog by remember { mutableStateOf(false) }
     var showTripNameDialog by remember { mutableStateOf(false) }
     var showPlanPicker by remember { mutableStateOf(false) }
-    var plans by remember { mutableStateOf<List<RotaActivation>>(emptyList()) }
+    var plans by remember { mutableStateOf<List<RotaPlannedTrip>>(emptyList()) }
     var plansLoading by remember { mutableStateOf(false) }
     var plansError by remember { mutableStateOf<String?>(null) }
     var showAnnounceDialog by remember { mutableStateOf(false) }
@@ -166,10 +168,10 @@ fun RoadTripScreen(onBack: () -> Unit) {
             plans = plans,
             loading = plansLoading,
             error = plansError,
-            nowMs = System.currentTimeMillis(),
             onDismiss = { showPlanPicker = false },
             onPick = { picked ->
-                tripName = picked
+                tripName = picked.name
+                tripPlanId = picked.id
                 showPlanPicker = false
             },
             onTypeName = {
@@ -187,6 +189,10 @@ fun RoadTripScreen(onBack: () -> Unit) {
             onDismiss = { showTripNameDialog = false },
             onSave = {
                 tripName = it.trim()
+                // A hand-typed name is a different trip from the plan that was
+                // picked; keeping the id would start that announcement under a
+                // name its followers never saw.
+                tripPlanId = ""
                 showTripNameDialog = false
             },
         )
@@ -201,10 +207,10 @@ fun RoadTripScreen(onBack: () -> Unit) {
                 scope.launch {
                     val start = System.currentTimeMillis() + hoursFromNow * 3_600_000L
                     val result =
-                        RotaClient.createActivation(
+                        RotaClient.announceTrip(
                             baseUrl = RotaSettings.baseUrl,
                             apiKey = RotaSettings.apiKey,
-                            title = title,
+                            name = title,
                             startTimeMs = start,
                             privacy = privacy.takeIf { it.isNotBlank() },
                         )
@@ -334,7 +340,7 @@ fun RoadTripScreen(onBack: () -> Unit) {
                                 plansLoading = true
                                 plansError = null
                                 scope.launch {
-                                    RotaClient.fetchMyActivations(
+                                    RotaClient.fetchMyPlannedTrips(
                                         RotaSettings.baseUrl,
                                         RotaSettings.apiKey,
                                     ).fold(
@@ -381,6 +387,7 @@ fun RoadTripScreen(onBack: () -> Unit) {
                                         RotaTripManager.startTrip(
                                             name = tripName,
                                             privacy = privacy.takeIf { it.isNotBlank() },
+                                            planId = tripPlanId.takeIf { it.isNotEmpty() },
                                         )
                                         message = null
                                     }
@@ -546,25 +553,24 @@ private fun NoticeText(text: String) {
 }
 
 /**
- * Pick the trip's name from the plans already saved on roadsontheair.com, or type one.
+ * Pick the trip to drive from the ones already announced on roadsontheair.com,
+ * or type a name for an unannounced one.
  *
- * The plans are *scheduled activations* — what the site's plan wizard writes —
- * because a trip only exists once someone drives it. Choosing one here does not
- * bind anything: the server decides which plan a trip fulfils by comparing start
- * times (±12 h), so the value of picking is that the name matches the plan and
- * the operator can see, before setting off, whether starting now will inherit
- * the privacy they chose in the wizard. A plan outside that window is still
- * listed — driving early is normal — just marked so the inheritance isn't a
- * surprise.
+ * Picking binds: the announced trip *is* the trip, held server-side at
+ * `planned`, and Start promotes that row. So its privacy — the delay, the route
+ * trim, the replay lock chosen in the wizard — applies to this drive by
+ * construction. It used to be a name-only convenience, with the server guessing
+ * which plan a new trip fulfilled by comparing departure times within ±12 h;
+ * driving outside that window silently fell back to the account default. There
+ * is nothing left to warn about, so the rows just show when each one departs.
  */
 @Composable
 private fun TripPlanPickerDialog(
-    plans: List<RotaActivation>,
+    plans: List<RotaPlannedTrip>,
     loading: Boolean,
     error: String?,
-    nowMs: Long,
     onDismiss: () -> Unit,
-    onPick: (String) -> Unit,
+    onPick: (RotaPlannedTrip) -> Unit,
     onTypeName: () -> Unit,
 ) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
@@ -621,27 +627,22 @@ private fun TripPlanPickerDialog(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         plans.forEach { plan ->
-                            val matches = activationMatchesNow(plan, nowMs)
                             Column(
                                 modifier =
                                     Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(10.dp))
-                                        .clickable { onPick(plan.title) }
+                                        .clickable { onPick(plan) }
                                         .padding(vertical = 10.dp, horizontal = 12.dp),
                             ) {
-                                Text(text = plan.title, color = TextPrimary, fontSize = 15.sp)
+                                Text(text = plan.name, color = TextPrimary, fontSize = 15.sp)
                                 Text(
                                     text =
-                                        if (matches) {
-                                            stringResource(R.string.rota_plan_matches_now)
-                                        } else {
-                                            stringResource(
-                                                R.string.rota_plan_starts,
-                                                formatPlanStart(plan.startTimeMs),
-                                            )
-                                        },
-                                    color = if (matches) Accent else TextFaint,
+                                        stringResource(
+                                            R.string.rota_plan_starts,
+                                            formatPlanStart(plan.startTimeMs),
+                                        ),
+                                    color = TextFaint,
                                     fontSize = 12.sp,
                                 )
                             }

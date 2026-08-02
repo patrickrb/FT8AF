@@ -134,24 +134,114 @@ class RotaClientTest {
         }
 
     @Test
-    fun `createActivation posts the announcement`() =
+    fun `announceTrip posts a planned trip to the trips endpoint`() =
         runBlocking {
-            server.enqueue(MockResponse().setResponseCode(201).setBody("""{"id":"act-1"}"""))
+            server.enqueue(MockResponse().setResponseCode(201).setBody("""{"id":"plan-1"}"""))
             val id =
-                RotaClient.createActivation(
+                RotaClient.announceTrip(
                     baseUrl = baseUrl,
                     apiKey = "k",
-                    title = "I-70 westbound",
+                    name = "I-70 westbound",
                     startTimeMs = 1_753_970_709_000L,
                     bands = listOf("20m", "40m"),
                     modes = listOf("FT8"),
                 ).getOrNull()
 
-            assertThat(id).isEqualTo("act-1")
-            val body = JSONObject(server.takeRequest().body.readUtf8())
-            assertThat(body.getString("title")).isEqualTo("I-70 westbound")
+            assertThat(id).isEqualTo("plan-1")
+            val request = server.takeRequest()
+            // /api/activations is gone; an announcement is a trip with a status.
+            assertThat(request.path).isEqualTo("/api/trips")
+            val body = JSONObject(request.body.readUtf8())
+            assertThat(body.getString("status")).isEqualTo("planned")
+            assertThat(body.getString("name")).isEqualTo("I-70 westbound")
             assertThat(body.getJSONArray("bands").length()).isEqualTo(2)
         }
+
+    @Test
+    fun `startPlannedTrip promotes the plan by id and keeps its share token`() =
+        runBlocking {
+            server.enqueue(
+                MockResponse().setResponseCode(200).setBody(
+                    """{"id":"plan-1","status":"active","startTime":"2026-08-02T14:00:00.000Z","shareToken":"tok-9"}""",
+                ),
+            )
+            val handle =
+                RotaClient.startPlannedTrip(
+                    baseUrl = baseUrl,
+                    apiKey = "k",
+                    tripId = "plan-1",
+                    startTimeMs = 1_753_970_709_000L,
+                ).getOrNull()
+
+            assertThat(handle?.id).isEqualTo("plan-1")
+            assertThat(handle?.shareToken).isEqualTo("tok-9")
+            val request = server.takeRequest()
+            assertThat(request.path).isEqualTo("/api/trips/plan-1/start")
+            assertThat(JSONObject(request.body.readUtf8()).getString("startTime"))
+                .isEqualTo("2025-07-31T14:05:09.000Z")
+        }
+
+    @Test
+    fun `startPlannedTrip survives a server that sends no share token`() =
+        runBlocking {
+            // The field was added after the endpoint shipped; a missing one must
+            // leave the share link empty rather than fail the start and strand
+            // the trip in "pending create" forever.
+            server.enqueue(MockResponse().setResponseCode(200).setBody("""{"id":"plan-1","status":"active"}"""))
+            val handle =
+                RotaClient.startPlannedTrip(baseUrl, "k", "plan-1", 1_753_970_709_000L).getOrNull()
+
+            assertThat(handle?.id).isEqualTo("plan-1")
+            assertThat(handle?.shareToken).isNull()
+        }
+
+    @Test
+    fun `a 409 from start comes back as an http failure the caller can classify`() =
+        runBlocking {
+            // The manager turns this into "already started, adopt the row" rather
+            // than an error — but only if the code survives as RotaHttpException.
+            server.enqueue(MockResponse().setResponseCode(409).setBody("""{"error":"Trip is already active"}"""))
+            val error =
+                RotaClient.startPlannedTrip(baseUrl, "k", "plan-1", 1_753_970_709_000L).exceptionOrNull()
+
+            assertThat(error).isInstanceOf(RotaHttpException::class.java)
+            assertThat((error as RotaHttpException).httpCode).isEqualTo(409)
+            assertThat(error.serverMessage).isEqualTo("Trip is already active")
+        }
+
+    @Test
+    fun `a 409 start means the plan is already the running trip, not a failure`() {
+        // The rover retried over a flaky link and the first attempt actually
+        // landed. Surfacing this as an error would leave a trip stuck "pending
+        // create" with a queue that never drains, so the manager adopts the row.
+        val outcome = classifyPlanStartFailure(RotaHttpException(409, ""), "plan-1")
+        assertThat(outcome).isEqualTo(PlanStartOutcome.ALREADY_STARTED)
+    }
+
+    @Test
+    fun `a 404 start means the plan was cancelled, so fall back to a plain trip`() {
+        // Cancelled on the site while the phone had no signal. The drive still
+        // happened; creating an ordinary trip is what keeps its route.
+        val outcome = classifyPlanStartFailure(RotaHttpException(404, ""), "plan-1")
+        assertThat(outcome).isEqualTo(PlanStartOutcome.PLAN_GONE)
+    }
+
+    @Test
+    fun `other start failures retry, and a plain create never falls back`() {
+        assertThat(classifyPlanStartFailure(RotaHttpException(503, ""), "plan-1"))
+            .isEqualTo(PlanStartOutcome.RETRY)
+        assertThat(classifyPlanStartFailure(IOException("no route to host"), "plan-1"))
+            .isEqualTo(PlanStartOutcome.RETRY)
+        // A 401 is fatal, but that is `failed()`'s call via isRetryableRotaFailure —
+        // what matters here is that it is not mistaken for an adopt-or-recreate.
+        assertThat(classifyPlanStartFailure(RotaHttpException(401, ""), "plan-1"))
+            .isEqualTo(PlanStartOutcome.RETRY)
+        // No plan id: there was no promotion to fall back from.
+        assertThat(classifyPlanStartFailure(RotaHttpException(409, ""), ""))
+            .isEqualTo(PlanStartOutcome.RETRY)
+        assertThat(classifyPlanStartFailure(RotaHttpException(404, ""), ""))
+            .isEqualTo(PlanStartOutcome.RETRY)
+    }
 
     @Test
     fun `a server error is retryable, a rejected request is not`() {

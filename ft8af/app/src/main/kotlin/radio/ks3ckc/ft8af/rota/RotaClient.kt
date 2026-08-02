@@ -43,6 +43,42 @@ fun isRetryableRotaFailure(error: Throwable?): Boolean =
         else -> false
     }
 
+/** What a failed `POST /api/trips/:id/start` means for the trip in hand. */
+enum class PlanStartOutcome {
+    /** 409 — the row is no longer `planned`, so it already *is* the running trip. */
+    ALREADY_STARTED,
+
+    /** 404 — the announcement was cancelled on the site; create a plain trip instead. */
+    PLAN_GONE,
+
+    /** Anything else, including every ordinary network failure. */
+    RETRY,
+}
+
+/**
+ * Classify a failure from starting an announced trip.
+ *
+ * Both special cases are states a *rover* reaches normally rather than errors: a
+ * retry landing twice over a flaky link, and a plan cancelled on the site while
+ * the phone had no signal. Treating either as a hard failure would strand a
+ * drive that really happened behind a queue that never drains — so neither goes
+ * through [isRetryableRotaFailure], which correctly calls a 4xx fatal.
+ *
+ * [planId] empty means there was no plan to fall back from (a plain create), so
+ * the answer is always [PlanStartOutcome.RETRY] and the usual handling applies.
+ */
+fun classifyPlanStartFailure(
+    error: Throwable?,
+    planId: String,
+): PlanStartOutcome {
+    if (planId.isEmpty() || error !is RotaHttpException) return PlanStartOutcome.RETRY
+    return when (error.httpCode) {
+        409 -> PlanStartOutcome.ALREADY_STARTED
+        404 -> PlanStartOutcome.PLAN_GONE
+        else -> PlanStartOutcome.RETRY
+    }
+}
+
 /**
  * Backoff before retry [attempt] (1-based): 30s, 60s, 2m, 4m, … capped at 15
  * minutes. Long by HTTP standards on purpose — the failure this handles is
@@ -64,10 +100,16 @@ fun rotaBackoffMs(attempt: Int): Long {
  *
  * Endpoints used:
  *   POST /api/operators            -> register a callsign, receive an API key
- *   POST /api/trips                -> create a trip
+ *   POST /api/trips                -> create a trip; `status: "planned"` announces
+ *                                     one ahead of time instead of starting it
+ *   POST /api/trips/:id/start      -> an announced trip departing (planned -> active)
  *   POST /api/trips/:id/live       -> append points + QSOs (idempotent for QSOs)
  *   POST /api/trips/:id/complete   -> finalize
- *   POST /api/activations          -> announce a planned trip
+ *
+ * A trip is one row on the server across its whole life. Announcements used to
+ * be a separate resource (`/api/activations`) that a trip was matched to by
+ * comparing departure times; that guess is gone, and an announced trip is
+ * started by id.
  */
 object RotaClient {
     private const val TAG = "RotaClient"
@@ -168,19 +210,20 @@ object RotaClient {
         }
 
     /**
-     * The operator's own planned trips, soonest first.
+     * The operator's own announced trips, soonest first.
      *
-     * Read from `/api/me` rather than `/api/activations`: the public listing only
-     * carries what a stranger may see, and a plan the operator marked `private`
-     * or `followers` — the ones most likely to be a real upcoming trip — would be
-     * missing from exactly the list they are trying to pick from.
+     * Read from `/api/me` rather than the public `GET /api/trips?status=planned`:
+     * the public listing only carries what a stranger may see, and a plan the
+     * operator marked `private` or `followers` — the ones most likely to be a
+     * real upcoming trip — would be missing from exactly the list they are
+     * trying to pick from.
      */
-    suspend fun fetchMyActivations(
+    suspend fun fetchMyPlannedTrips(
         baseUrl: String,
         apiKey: String,
-    ): Result<List<RotaActivation>> =
+    ): Result<List<RotaPlannedTrip>> =
         withContext(Dispatchers.IO) {
-            request("GET", "$baseUrl/api/me", apiKey, null).map { parseMyActivations(it) }
+            request("GET", "$baseUrl/api/me", apiKey, null).map { parseMyPlannedTrips(it) }
         }
 
     suspend fun completeTrip(
@@ -192,11 +235,14 @@ object RotaClient {
             request("POST", "$baseUrl/api/trips/$tripId/complete", apiKey, "{}").map { }
         }
 
-    /** Announce a planned activation so followers see it before departure. */
-    suspend fun createActivation(
+    /**
+     * Announce a trip so followers see it before departure — a `planned` trip,
+     * carrying the privacy choices it will keep when it is started.
+     */
+    suspend fun announceTrip(
         baseUrl: String,
         apiKey: String,
-        title: String,
+        name: String,
         startTimeMs: Long,
         endTimeMs: Long? = null,
         detail: String? = null,
@@ -207,7 +253,8 @@ object RotaClient {
         withContext(Dispatchers.IO) {
             val body =
                 JSONObject().apply {
-                    put("title", title.trim().take(200))
+                    put("status", "planned")
+                    put("name", name.trim().take(200))
                     put("startTime", isoUtc(startTimeMs))
                     endTimeMs?.let { put("endTime", isoUtc(it)) }
                     detail?.takeIf { it.isNotBlank() }?.let { put("detail", it.trim().take(2000)) }
@@ -215,9 +262,37 @@ object RotaClient {
                     if (modes.isNotEmpty()) put("modes", JSONArray(modes.take(20)))
                     privacy?.takeIf { it.isNotBlank() }?.let { put("privacy", it) }
                 }.toString()
-            request("POST", "$baseUrl/api/activations", apiKey, body).mapCatching { resp ->
+            request("POST", "$baseUrl/api/trips", apiKey, body).mapCatching { resp ->
                 JSONObject(resp).optString("id").takeIf { it.isNotEmpty() }
-                    ?: throw IllegalStateException("Server returned no activation id")
+                    ?: throw IllegalStateException("Server returned no trip id")
+            }
+        }
+
+    /**
+     * Start an announced trip: `planned` -> `active`, stamping the real departure.
+     *
+     * This is how a picked plan becomes the trip being driven. Creating a trip
+     * instead would leave the announcement sitting at `planned` forever with a
+     * duplicate beside it, and would drop the privacy the wizard chose — the
+     * plan's settings are already on the row this promotes.
+     *
+     * The server answers 409 when the trip is no longer `planned`, which for a
+     * retry that actually landed is success in disguise; [RotaHttpException.code]
+     * lets the caller tell that apart from a real failure.
+     */
+    suspend fun startPlannedTrip(
+        baseUrl: String,
+        apiKey: String,
+        tripId: String,
+        startTimeMs: Long,
+    ): Result<RotaTripHandle> =
+        withContext(Dispatchers.IO) {
+            val body = JSONObject().apply { put("startTime", isoUtc(startTimeMs)) }.toString()
+            request("POST", "$baseUrl/api/trips/$tripId/start", apiKey, body).map { resp ->
+                // The id is already known — it is the plan's. Only the share token
+                // is news, and an older server that doesn't send one just leaves
+                // the share link empty rather than failing the start.
+                RotaTripHandle(tripId, JSONObject(resp).optString("shareToken").takeIf { it.isNotEmpty() })
             }
         }
 
