@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import android.content.Context
 import android.location.Address
@@ -176,7 +176,7 @@ class HighwayResolver(
                             null
                         }
                     onResult(name)
-                }, "rtota-geocode").start()
+                }, "rota-geocode").start()
             }
         } catch (e: Exception) {
             Log.d(TAG, "geocode threw: ${e.javaClass.simpleName}")

@@ -3,7 +3,7 @@ package radio.ks3ckc.ft8af.location
 import android.content.Context
 import android.location.LocationManager
 import android.util.Log
-import radio.ks3ckc.ft8af.rtota.RtotaTripManager
+import radio.ks3ckc.ft8af.rota.RotaTripManager
 
 /**
  * Where a position came from, in descending order of trustworthiness.
@@ -14,7 +14,7 @@ import radio.ks3ckc.ft8af.rtota.RtotaTripManager
  * MY_LAT/MY_LON would dress that up as a measurement. The ADIF already carries
  * MY_GRIDSQUARE, so anyone reading the log can make that approximation
  * themselves, knowing exactly what it is. When there is no fix, the QSO is
- * logged without coordinates and rtota.app infers a position from the breadcrumb
+ * logged without coordinates and roadsontheair.com infers a position from the breadcrumb
  * trail instead.
  */
 enum class RoverPositionSource {
@@ -62,7 +62,7 @@ fun chooseRoverFix(candidates: List<RoverFix?>): RoverFix? =
 /**
  * The operator's position right now, for stamping onto a logged QSO.
  *
- * Deliberately independent of RTOTA trip mode: a contact made at home, at a park,
+ * Deliberately independent of ROTA trip mode: a contact made at home, at a park,
  * or parked at a scenic overlook is worth locating too, and the ADIF that carries
  * it is the copy that reaches every other logbook. Trip mode is simply the best
  * *source* when it happens to be running.
@@ -80,7 +80,7 @@ object RoverPosition {
 
     /** The freshest fix the running trip has seen, if a trip is running at all. */
     private fun liveTripFix(): RoverFix? {
-        val point = RtotaTripManager.latestFix() ?: return null
+        val point = RotaTripManager.latestFix() ?: return null
         return RoverFix(
             latitude = point.latitude,
             longitude = point.longitude,

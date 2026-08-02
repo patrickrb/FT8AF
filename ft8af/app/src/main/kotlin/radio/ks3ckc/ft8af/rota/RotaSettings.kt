@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -8,7 +8,7 @@ import androidx.security.crypto.MasterKey
 import com.k1af.ft8af.GeneralVariables
 
 /**
- * Persistent configuration for RTOTA trip mode.
+ * Persistent configuration for ROTA trip mode.
  *
  * Kept in its own Keystore-backed [EncryptedSharedPreferences] file rather than
  * the app's `config` table because the API key is a standing upload credential
@@ -20,7 +20,14 @@ import com.k1af.ft8af.GeneralVariables
  * gets its process killed 300 miles into a trip must come back up still attached
  * to the same trip id, with its queued breadcrumbs intact.
  */
-object RtotaSettings {
+object RotaSettings {
+    /**
+     * Deliberately still the pre-rename name. This is the on-disk
+     * EncryptedSharedPreferences filename, so renaming it alongside the
+     * Roads-On-The-Air rebrand would orphan every existing install's API key and
+     * — worse — its in-flight trip id and queued breadcrumbs. A cosmetic rename
+     * is not worth stranding someone 300 miles into a trip.
+     */
     private const val PREFS = "rtota_prefs"
 
     private const val KEY_ENABLED = "enabled"
@@ -39,16 +46,16 @@ object RtotaSettings {
     /**
      * The hosted service; overridable for self-hosting or a dev box.
      *
-     * The `www.` host is deliberate and load-bearing. The apex `rtota.app` answers
+     * The `www.` host is deliberate and load-bearing. The apex `roadsontheair.com` answers
      * every request with a 308 to `www.`, and a 308 is precisely the redirect no
      * HTTP client may follow for a POST without being told to (RFC 9110: the
      * method and body must be preserved, so clients decline rather than guess).
      * Every write this app makes is a POST, so pointing at the apex turns trip
-     * creation into a permanent, non-retryable failure. See [normalizeRtotaBaseUrl],
+     * creation into a permanent, non-retryable failure. See [normalizeRotaBaseUrl],
      * which repairs an apex URL typed into the server-override field for the same
      * reason.
      */
-    const val DEFAULT_BASE_URL = "https://www.rtota.app"
+    const val DEFAULT_BASE_URL = "https://www.roadsontheair.com"
 
     val PRIVACY_LEVELS = listOf("public", "delayed", "followers", "private")
 
@@ -125,14 +132,16 @@ object RtotaSettings {
     /**
      * Service origin, normalized so callers can append paths. Normalizing on
      * *read* rather than only on write is what rescues the value an earlier build
-     * already persisted — an install that stored the apex `https://rtota.app`
-     * keeps working after an update instead of 308-ing forever.
+     * already persisted — an install that stored the apex `https://roadsontheair.com`
+     * keeps working after an update instead of 308-ing forever, and one that
+     * stored the pre-rename `rtota.app` origin gets repointed at the current
+     * domain rather than failing against a host we no longer serve.
      */
     var baseUrl: String
         get() =
-            normalizeRtotaBaseUrl(readString(KEY_BASE_URL, DEFAULT_BASE_URL))
+            normalizeRotaBaseUrl(readString(KEY_BASE_URL, DEFAULT_BASE_URL))
                 .ifEmpty { DEFAULT_BASE_URL }
-        set(value) = writeString(KEY_BASE_URL, normalizeRtotaBaseUrl(value))
+        set(value) = writeString(KEY_BASE_URL, normalizeRotaBaseUrl(value))
 
     var apiKey: String
         get() = readString(KEY_API_KEY, "")

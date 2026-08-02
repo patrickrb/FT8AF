@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import android.content.Context
 import android.location.Location
@@ -30,7 +30,7 @@ import java.util.Date
 import java.util.Locale
 
 /** Everything the trip UI (and the service notification) renders. */
-data class RtotaTripState(
+data class RotaTripState(
     val active: Boolean = false,
     val tripId: String = "",
     val tripName: String = "",
@@ -55,15 +55,15 @@ data class RtotaTripState(
 )
 
 /**
- * Trip mode: streams the rover's route and contacts to rtota.app while driving.
+ * Trip mode: streams the rover's route and contacts to roadsontheair.com while driving.
  *
  * Responsibilities, in the order they matter on the road:
  *  1. Record. Every accepted GPS breadcrumb and every logged QSO lands in
- *     [RtotaQueue] (on disk) before anything is attempted over the network.
+ *     [RotaQueue] (on disk) before anything is attempted over the network.
  *  2. Deliver. A single-flight flush drains the queue in batches whenever there
  *     is something to send, backing off on failure and flushing immediately when
  *     connectivity returns.
- *  3. Survive. Trip identity lives in [RtotaSettings], so a reboot or a killed
+ *  3. Survive. Trip identity lives in [RotaSettings], so a reboot or a killed
  *     process resumes the same trip rather than orphaning it.
  *
  * A trip can be started *and* ended with no coverage at all: creation and
@@ -72,21 +72,21 @@ data class RtotaTripState(
  * The object is a singleton because its two producers — the location tracker and
  * the QSO save path deep in DatabaseOpr — have no shared owner to hang it off.
  */
-object RtotaTripManager {
-    private const val TAG = "RtotaTripManager"
-    private const val QUEUE_FILE = "rtota_queue.json"
+object RotaTripManager {
+    private const val TAG = "RotaTripManager"
+    private const val QUEUE_FILE = "rota_queue.json"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val flushLock = Mutex()
 
-    private val _state = MutableStateFlow(RtotaTripState())
-    val state: StateFlow<RtotaTripState> = _state.asStateFlow()
+    private val _state = MutableStateFlow(RotaTripState())
+    val state: StateFlow<RotaTripState> = _state.asStateFlow()
 
     @Volatile
     private var appContext: Context? = null
 
     @Volatile
-    private var queue: RtotaQueue? = null
+    private var queue: RotaQueue? = null
 
     /** Names the road for each breadcrumb; null until [init] has a context. */
     @Volatile
@@ -111,9 +111,9 @@ object RtotaTripManager {
      * running, this is by far the best source available, since it is a live fix the
      * app is already paying for.
      */
-    fun latestFix(): TripPoint? = if (RtotaSettings.hasActiveTrip) lastRawFix else null
+    fun latestFix(): TripPoint? = if (RotaSettings.hasActiveTrip) lastRawFix else null
 
-    /** Consecutive failed flushes — drives [rtotaBackoffMs]. */
+    /** Consecutive failed flushes — drives [rotaBackoffMs]. */
     @Volatile
     private var failedAttempts = 0
 
@@ -146,7 +146,7 @@ object RtotaTripManager {
         val ctx = context.applicationContext
         if (appContext == null) {
             appContext = ctx
-            queue = RtotaQueue(File(ctx.filesDir, QUEUE_FILE)).also { it.load() }
+            queue = RotaQueue(File(ctx.filesDir, QUEUE_FILE)).also { it.load() }
             highwayResolver = HighwayResolver(ctx)
         }
         registerConnectivity(ctx)
@@ -163,14 +163,14 @@ object RtotaTripManager {
      * The caller invokes this from the config-loaded callback instead.
      */
     fun onConfigLoaded() {
-        if (!RtotaSettings.enabled || !RtotaSettings.hasActiveTrip) return
-        RtotaCqSession.apply()
+        if (!RotaSettings.enabled || !RotaSettings.hasActiveTrip) return
+        RotaCqSession.apply()
     }
 
     /** Re-derive UI state from what was persisted, and resume delivery. */
     private fun restore() {
-        if (!RtotaSettings.enabled) return
-        if (!RtotaSettings.hasActiveTrip) {
+        if (!RotaSettings.enabled) return
+        if (!RotaSettings.hasActiveTrip) {
             publish()
             return
         }
@@ -182,19 +182,19 @@ object RtotaTripManager {
         highwayResolver?.reset()
         lastRawFix = null
         // Ask the server what it has before re-sending a queue we can't account for.
-        resumeHandshakePending = RtotaSettings.tripId.isNotEmpty()
+        resumeHandshakePending = RotaSettings.tripId.isNotEmpty()
         _state.value =
             _state.value.copy(
                 active = true,
-                tripId = RtotaSettings.tripId,
-                tripName = RtotaSettings.tripName,
-                startedMs = RtotaSettings.tripStartedMs,
-                shareToken = RtotaSettings.tripShareToken,
-                pendingCreate = RtotaSettings.tripPendingCreate,
+                tripId = RotaSettings.tripId,
+                tripName = RotaSettings.tripName,
+                startedMs = RotaSettings.tripStartedMs,
+                shareToken = RotaSettings.tripShareToken,
+                pendingCreate = RotaSettings.tripPendingCreate,
             )
         publish()
         log(
-            "restored trip id=${RtotaSettings.tripId.ifEmpty { "(pending)" }} " +
+            "restored trip id=${RotaSettings.tripId.ifEmpty { "(pending)" }} " +
                 "queued=${queue?.pointCount() ?: 0}pts/${queue?.qsoCount() ?: 0}qsos",
         )
         startTracking()
@@ -215,18 +215,18 @@ object RtotaTripManager {
         privacy: String?,
         notes: String? = null,
     ) {
-        if (RtotaSettings.hasActiveTrip) {
+        if (RotaSettings.hasActiveTrip) {
             log("startTrip ignored — a trip is already running")
             return
         }
         val startedMs = System.currentTimeMillis()
-        RtotaSettings.tripName = name.trim().ifEmpty { defaultTripName(startedMs) }
-        RtotaSettings.tripStartedMs = startedMs
-        RtotaSettings.tripPrivacy = privacy.orEmpty()
-        RtotaSettings.tripPendingCreate = true
-        RtotaSettings.tripPendingComplete = false
-        RtotaSettings.tripId = ""
-        RtotaSettings.tripShareToken = ""
+        RotaSettings.tripName = name.trim().ifEmpty { defaultTripName(startedMs) }
+        RotaSettings.tripStartedMs = startedMs
+        RotaSettings.tripPrivacy = privacy.orEmpty()
+        RotaSettings.tripPendingCreate = true
+        RotaSettings.tripPendingComplete = false
+        RotaSettings.tripId = ""
+        RotaSettings.tripShareToken = ""
 
         sampler = SmartBeaconSampler()
         highwayResolver?.reset()
@@ -235,15 +235,15 @@ object RtotaTripManager {
         resumeHandshakePending = false
         queue?.clear()
         _state.value =
-            RtotaTripState(
+            RotaTripState(
                 active = true,
-                tripName = RtotaSettings.tripName,
+                tripName = RotaSettings.tripName,
                 startedMs = startedMs,
                 pendingCreate = true,
             )
-        log("startTrip '${RtotaSettings.tripName}' privacy=${privacy ?: "(default)"}")
-        // From here every generated CQ goes out as "CQ RTOA <call> <grid>".
-        RtotaCqSession.apply()
+        log("startTrip '${RotaSettings.tripName}' privacy=${privacy ?: "(default)"}")
+        // From here every generated CQ goes out as "CQ ROTA <call> <grid>".
+        RotaCqSession.apply()
         startTracking()
         // The trip notes ride along with the deferred create.
         pendingNotes = notes
@@ -259,19 +259,19 @@ object RtotaTripManager {
      * the flush loop finishes the job once the phone is back online.
      */
     fun endTrip() {
-        if (!RtotaSettings.hasActiveTrip) return
+        if (!RotaSettings.hasActiveTrip) return
         // Pin the last known position before tracking stops, so the route ends
         // where the trip ended rather than at the last beacon behind it.
         lastRawFix?.let { fix -> sampler.anchorForQso(fix)?.let { recordPoint(it) } }
         log(
-            "endTrip '${RtotaSettings.tripName}' queued=${queue?.pointCount() ?: 0}pts/" +
+            "endTrip '${RotaSettings.tripName}' queued=${queue?.pointCount() ?: 0}pts/" +
                 "${queue?.qsoCount() ?: 0}qsos",
         )
-        RtotaSettings.tripPendingComplete = true
+        RotaSettings.tripPendingComplete = true
         // Released now, not when the server finally acks the completion: out of
         // coverage that ack can be hours away, and the operator is off the road
         // and off the trip the moment they say so.
-        RtotaCqSession.release()
+        RotaCqSession.release()
         stopTracking()
         requestFlush("end-trip")
     }
@@ -282,19 +282,19 @@ object RtotaTripManager {
      * logbook remains the way to publish it.
      */
     fun abandonTrip() {
-        RtotaCqSession.release()
+        RotaCqSession.release()
         stopTracking()
         queue?.clear()
-        RtotaSettings.clearTrip()
+        RotaSettings.clearTrip()
         sampler.reset()
         lastRawFix = null
         resumeHandshakePending = false
-        _state.value = RtotaTripState()
+        _state.value = RotaTripState()
         log("abandonTrip — local queue dropped")
     }
 
     private fun defaultTripName(startedMs: Long): String {
-        val call = RtotaSettings.callsign.ifBlank { GeneralVariables.myCallsign.orEmpty() }
+        val call = RotaSettings.callsign.ifBlank { GeneralVariables.myCallsign.orEmpty() }
         val day = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(startedMs))
         return listOf(call, day).filter { it.isNotBlank() }.joinToString(" ")
     }
@@ -304,12 +304,12 @@ object RtotaTripManager {
     // -----------------------------------------------------------------------
 
     /**
-     * A GPS fix from [RtotaLocationTracker], arriving about once a second.
+     * A GPS fix from [RotaLocationTracker], arriving about once a second.
      * [SmartBeaconSampler] decides which ones become route points; the rest still
      * update [lastRawFix] so a QSO can be placed precisely.
      */
     fun onLocationFix(location: Location) {
-        if (!RtotaSettings.hasActiveTrip) return
+        if (!RotaSettings.hasActiveTrip) return
         val state = stateForLatLon(location.latitude, location.longitude)
         val candidate =
             TripPoint(
@@ -383,7 +383,7 @@ object RtotaTripManager {
     @Suppress("TooGenericExceptionCaught") // see the "never throws" note above
     fun onQsoLogged(record: QSLRecord?) {
         try {
-            if (record == null || !RtotaSettings.enabled || !RtotaSettings.hasActiveTrip) return
+            if (record == null || !RotaSettings.enabled || !RotaSettings.hasActiveTrip) return
             val here = lastRawFix ?: sampler.lastAccepted
             // The record was stamped with a position moments ago by the QSO save path
             // (RoverPosition), which runs whether or not a trip is active. Preferring it
@@ -391,7 +391,7 @@ object RtotaTripManager {
             // ADIF report the identical coordinate — they dedupe into one row server-side,
             // and two spellings of "where it happened" would be settled by arrival order.
             val qso =
-                RtotaQsoMapper.tripQsoFromRecord(
+                RotaQsoMapper.tripQsoFromRecord(
                     record = record,
                     roverLat = record.myLat ?: here?.latitude,
                     roverLon = record.myLon ?: here?.longitude,
@@ -433,7 +433,7 @@ object RtotaTripManager {
 
     /** Ask for a flush. Cheap and safe to call from any thread, as often as you like. */
     fun requestFlush(reason: String) {
-        if (!RtotaSettings.enabled || !RtotaSettings.isConfigured) return
+        if (!RotaSettings.enabled || !RotaSettings.isConfigured) return
         scope.launch { flush(reason) }
     }
 
@@ -443,30 +443,30 @@ object RtotaTripManager {
      */
     private suspend fun flush(reason: String) {
         val q = queue ?: return
-        if (!RtotaSettings.hasActiveTrip) return
-        val apiKey = RtotaSettings.apiKey
+        if (!RotaSettings.hasActiveTrip) return
+        val apiKey = RotaSettings.apiKey
         if (apiKey.isBlank()) return
 
         flushLock.withLock {
-            val baseUrl = RtotaSettings.baseUrl
+            val baseUrl = RotaSettings.baseUrl
             _state.value = _state.value.copy(uploading = true)
 
             // 1. The trip may not exist server-side yet (started out of coverage).
-            if (RtotaSettings.tripPendingCreate) {
+            if (RotaSettings.tripPendingCreate) {
                 val created =
-                    RtotaClient.createTrip(
+                    RotaClient.createTrip(
                         baseUrl = baseUrl,
                         apiKey = apiKey,
-                        name = RtotaSettings.tripName,
-                        startTimeMs = RtotaSettings.tripStartedMs,
+                        name = RotaSettings.tripName,
+                        startTimeMs = RotaSettings.tripStartedMs,
                         notes = pendingNotes,
-                        privacy = RtotaSettings.tripPrivacy.takeIf { it.isNotBlank() },
+                        privacy = RotaSettings.tripPrivacy.takeIf { it.isNotBlank() },
                     )
                 created.fold(
                     onSuccess = { handle ->
-                        RtotaSettings.tripId = handle.id
-                        RtotaSettings.tripShareToken = handle.shareToken.orEmpty()
-                        RtotaSettings.tripPendingCreate = false
+                        RotaSettings.tripId = handle.id
+                        RotaSettings.tripShareToken = handle.shareToken.orEmpty()
+                        RotaSettings.tripPendingCreate = false
                         pendingNotes = null
                         _state.value =
                             _state.value.copy(
@@ -483,7 +483,7 @@ object RtotaTripManager {
                 )
             }
 
-            val tripId = RtotaSettings.tripId
+            val tripId = RotaSettings.tripId
             if (tripId.isEmpty()) {
                 _state.value = _state.value.copy(uploading = false)
                 return@withLock
@@ -497,7 +497,7 @@ object RtotaTripManager {
             //    trip the backoff — the plain re-send below still works, the server
             //    dedupes, and the only cost is bytes.
             if (resumeHandshakePending) {
-                RtotaClient.fetchSyncState(baseUrl, apiKey, tripId).fold(
+                RotaClient.fetchSyncState(baseUrl, apiKey, tripId).fold(
                     onSuccess = { sync ->
                         resumeHandshakePending = false
                         val pruned = q.pruneAcknowledgedQsos(sync.qsoDedupeKeys)
@@ -519,7 +519,7 @@ object RtotaTripManager {
             while (!q.isEmpty()) {
                 val batch = q.peekBatch()
                 if (batch.isEmpty) break
-                val result = RtotaClient.sendLive(baseUrl, apiKey, tripId, batch)
+                val result = RotaClient.sendLive(baseUrl, apiKey, tripId, batch)
                 result.fold(
                     onSuccess = { ack ->
                         q.commit(batch)
@@ -541,14 +541,14 @@ object RtotaTripManager {
             }
 
             // 4. Finalize once nothing is left to send.
-            if (RtotaSettings.tripPendingComplete && q.isEmpty()) {
-                RtotaClient.completeTrip(baseUrl, apiKey, tripId).fold(
+            if (RotaSettings.tripPendingComplete && q.isEmpty()) {
+                RotaClient.completeTrip(baseUrl, apiKey, tripId).fold(
                     onSuccess = {
                         log("trip completed id=$tripId")
-                        RtotaSettings.clearTrip()
+                        RotaSettings.clearTrip()
                         sampler.reset()
                         lastRawFix = null
-                        _state.value = RtotaTripState()
+                        _state.value = RotaTripState()
                     },
                     onFailure = { e ->
                         failed(e, "complete")
@@ -573,10 +573,10 @@ object RtotaTripManager {
         error: Throwable,
         step: String,
     ) {
-        val retryable = isRetryableRtotaFailure(error)
+        val retryable = isRetryableRotaFailure(error)
         val message =
             when (error) {
-                is RtotaHttpException -> error.serverMessage ?: "HTTP ${error.httpCode}"
+                is RotaHttpException -> error.serverMessage ?: "HTTP ${error.httpCode}"
                 else -> error.message ?: error.javaClass.simpleName
             }
         _state.value = _state.value.copy(uploading = false, lastError = message)
@@ -587,7 +587,7 @@ object RtotaTripManager {
             return
         }
         failedAttempts++
-        scheduleRetry(rtotaBackoffMs(failedAttempts))
+        scheduleRetry(rotaBackoffMs(failedAttempts))
     }
 
     private fun scheduleRetry(delayMs: Long) {
@@ -628,12 +628,12 @@ object RtotaTripManager {
 
     private fun startTracking() {
         val ctx = appContext ?: return
-        RtotaTripService.start(ctx)
+        RotaTripService.start(ctx)
     }
 
     private fun stopTracking() {
         val ctx = appContext ?: return
-        RtotaTripService.stop(ctx)
+        RotaTripService.stop(ctx)
     }
 
     /** Refresh the queue-derived counters and push them to the notification. */
@@ -644,7 +644,7 @@ object RtotaTripManager {
                 pendingPoints = q?.pointCount() ?: 0,
                 pendingQsos = q?.qsoCount() ?: 0,
             )
-        appContext?.let { RtotaTripService.updateNotification(it, _state.value) }
+        appContext?.let { RotaTripService.updateNotification(it, _state.value) }
     }
 
     private fun log(msg: String) {
@@ -653,7 +653,7 @@ object RtotaTripManager {
             val ctx = appContext ?: GeneralVariables.getMainContext() ?: return
             val dir = ctx.getExternalFilesDir(null) ?: return
             val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
-            FileWriter(File(dir, "debug.log"), true).use { it.append("$ts Rtota: $msg\n") }
+            FileWriter(File(dir, "debug.log"), true).use { it.append("$ts Rota: $msg\n") }
         } catch (_: Exception) {
         }
     }

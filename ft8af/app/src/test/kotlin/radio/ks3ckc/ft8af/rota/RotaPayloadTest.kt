@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import com.google.common.truth.Truth.assertThat
 import org.json.JSONObject
@@ -16,7 +16,7 @@ import org.robolectric.RobolectricTestRunner
  * ones — a wrapping heading, a rig reporting 0 Hz, a missing report.
  */
 @RunWith(RobolectricTestRunner::class)
-class RtotaPayloadTest {
+class RotaPayloadTest {
     private val ts = 1_753_970_709_000L // 2025-07-31T14:05:09Z
 
     @Test

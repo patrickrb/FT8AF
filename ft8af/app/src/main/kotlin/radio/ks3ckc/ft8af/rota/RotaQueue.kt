@@ -1,18 +1,18 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
 /** One batch handed to the uploader, plus how much of the queue it covers. */
-data class RtotaBatch(val points: List<TripPoint>, val qsos: List<TripQso>) {
+data class RotaBatch(val points: List<TripPoint>, val qsos: List<TripQso>) {
     val isEmpty: Boolean get() = points.isEmpty() && qsos.isEmpty()
     val size: Int get() = points.size + qsos.size
 }
 
 /**
  * The outbox for trip mode: breadcrumbs and contacts wait here until they reach
- * rtota.app, and survive a process death while they wait.
+ * roadsontheair.com, and survive a process death while they wait.
  *
  * Roving means hours out of coverage. Everything the app records goes into this
  * queue first and is only dropped once the server has acknowledged it, so a
@@ -27,7 +27,7 @@ data class RtotaBatch(val points: List<TripPoint>, val qsos: List<TripQso>) {
  *
  * [file] may be null in tests that only exercise the in-memory behaviour.
  */
-class RtotaQueue(private val file: File?) {
+class RotaQueue(private val file: File?) {
     private val points = ArrayList<TripPoint>()
     private val qsos = ArrayList<TripQso>()
 
@@ -76,8 +76,8 @@ class RtotaQueue(private val file: File?) {
     fun peekBatch(
         maxPoints: Int = BATCH_POINTS,
         maxQsos: Int = BATCH_QSOS,
-    ): RtotaBatch =
-        RtotaBatch(
+    ): RotaBatch =
+        RotaBatch(
             points = points.take(maxPoints),
             qsos = qsos.take(maxQsos),
         )
@@ -89,7 +89,7 @@ class RtotaQueue(private val file: File?) {
      * the upload sits safely behind it.
      */
     @Synchronized
-    fun commit(batch: RtotaBatch) {
+    fun commit(batch: RotaBatch) {
         repeat(minOf(batch.points.size, points.size)) { points.removeAt(0) }
         repeat(minOf(batch.qsos.size, qsos.size)) { qsos.removeAt(0) }
         persist()

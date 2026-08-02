@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.ui.rtota
+package radio.ks3ckc.ft8af.ui.rota
 
 import android.Manifest
 import android.app.Activity
@@ -41,16 +41,16 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.R
 import kotlinx.coroutines.launch
 import radio.ks3ckc.ft8af.location.hasLocationPermission
-import radio.ks3ckc.ft8af.rtota.BeaconReason
-import radio.ks3ckc.ft8af.rtota.RtotaActivation
-import radio.ks3ckc.ft8af.rtota.RtotaHttpException
-import radio.ks3ckc.ft8af.rtota.activationMatchesNow
-import radio.ks3ckc.ft8af.rtota.RTOTA_CQ_MODIFIER
-import radio.ks3ckc.ft8af.rtota.RtotaClient
-import radio.ks3ckc.ft8af.rtota.RtotaSettings
-import radio.ks3ckc.ft8af.rtota.RtotaTripManager
-import radio.ks3ckc.ft8af.rtota.RtotaTripState
-import radio.ks3ckc.ft8af.rtota.SmartBeaconProfile
+import radio.ks3ckc.ft8af.rota.BeaconReason
+import radio.ks3ckc.ft8af.rota.RotaActivation
+import radio.ks3ckc.ft8af.rota.RotaHttpException
+import radio.ks3ckc.ft8af.rota.activationMatchesNow
+import radio.ks3ckc.ft8af.rota.ROTA_CQ_MODIFIER
+import radio.ks3ckc.ft8af.rota.RotaClient
+import radio.ks3ckc.ft8af.rota.RotaSettings
+import radio.ks3ckc.ft8af.rota.RotaTripManager
+import radio.ks3ckc.ft8af.rota.RotaTripState
+import radio.ks3ckc.ft8af.rota.SmartBeaconProfile
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 import radio.ks3ckc.ft8af.ui.components.SettingsRow
@@ -61,25 +61,25 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * RTOTA trip mode screen: register with rtota.app, start and end a road trip,
+ * ROTA trip mode screen: register with roadsontheair.com, start and end a road trip,
  * watch what has reached the server, and announce a trip before it starts.
  *
- * The screen is a thin view over [RtotaTripManager] — it never touches GPS or
+ * The screen is a thin view over [RotaTripManager] — it never touches GPS or
  * the queue itself, so closing it (or the whole app) has no effect on a trip in
  * progress. Everything long-running is reported through
- * [RtotaTripManager.state] rather than owned here.
+ * [RotaTripManager.state] rather than owned here.
  */
 @Composable
 fun RoadTripScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val state by RtotaTripManager.state.collectAsState()
+    val state by RotaTripManager.state.collectAsState()
 
-    var enabled by remember { mutableStateOf(RtotaSettings.enabled) }
-    var callsign by remember { mutableStateOf(RtotaSettings.callsign) }
-    var baseUrl by remember { mutableStateOf(RtotaSettings.baseUrl) }
-    var apiKey by remember { mutableStateOf(RtotaSettings.apiKey) }
-    var privacy by remember { mutableStateOf(RtotaSettings.defaultPrivacy) }
+    var enabled by remember { mutableStateOf(RotaSettings.enabled) }
+    var callsign by remember { mutableStateOf(RotaSettings.callsign) }
+    var baseUrl by remember { mutableStateOf(RotaSettings.baseUrl) }
+    var apiKey by remember { mutableStateOf(RotaSettings.apiKey) }
+    var privacy by remember { mutableStateOf(RotaSettings.defaultPrivacy) }
     var tripName by remember { mutableStateOf("") }
 
     var busy by remember { mutableStateOf(false) }
@@ -90,7 +90,7 @@ fun RoadTripScreen(onBack: () -> Unit) {
     var showKeyDialog by remember { mutableStateOf(false) }
     var showTripNameDialog by remember { mutableStateOf(false) }
     var showPlanPicker by remember { mutableStateOf(false) }
-    var plans by remember { mutableStateOf<List<RtotaActivation>>(emptyList()) }
+    var plans by remember { mutableStateOf<List<RotaActivation>>(emptyList()) }
     var plansLoading by remember { mutableStateOf(false) }
     var plansError by remember { mutableStateOf<String?>(null) }
     var showAnnounceDialog by remember { mutableStateOf(false) }
@@ -98,7 +98,7 @@ fun RoadTripScreen(onBack: () -> Unit) {
     // Trip tracking needs location; ask here rather than at the moment the user
     // taps Start, so a denied prompt doesn't silently produce a trip with no route.
     fun ensureLocationPermission(): Boolean {
-        // Fine *or* coarse, matching what RtotaLocationTracker actually needs.
+        // Fine *or* coarse, matching what RotaLocationTracker actually needs.
         // Gating on fine alone rejected an approximate-only grant — an ordinary
         // choice in the Android 12+ permission dialog — and re-prompted for a
         // permission the user had already given.
@@ -119,44 +119,44 @@ fun RoadTripScreen(onBack: () -> Unit) {
     }
 
     if (showCallsignDialog) {
-        RtotaTextDialog(
-            title = stringResource(R.string.rtota_callsign),
+        RotaTextDialog(
+            title = stringResource(R.string.rota_callsign),
             initial = callsign,
             onDismiss = { showCallsignDialog = false },
             onSave = {
                 callsign = it.trim().uppercase(Locale.US)
-                RtotaSettings.callsign = callsign
+                RotaSettings.callsign = callsign
                 showCallsignDialog = false
             },
         )
     }
 
     if (showServerDialog) {
-        RtotaTextDialog(
-            title = stringResource(R.string.rtota_server),
+        RotaTextDialog(
+            title = stringResource(R.string.rota_server),
             initial = baseUrl,
             onDismiss = { showServerDialog = false },
             onSave = {
-                RtotaSettings.baseUrl = it
-                baseUrl = RtotaSettings.baseUrl
+                RotaSettings.baseUrl = it
+                baseUrl = RotaSettings.baseUrl
                 showServerDialog = false
             },
         )
     }
 
     if (showKeyDialog) {
-        RtotaTextDialog(
-            title = stringResource(R.string.rtota_api_key),
+        RotaTextDialog(
+            title = stringResource(R.string.rota_api_key),
             initial = apiKey,
-            hint = stringResource(R.string.rtota_api_key_hint),
+            hint = stringResource(R.string.rota_api_key_hint),
             onDismiss = { showKeyDialog = false },
             onSave = {
                 apiKey = it.trim()
-                RtotaSettings.apiKey = apiKey
+                RotaSettings.apiKey = apiKey
                 showKeyDialog = false
                 // A key that arrives after a trip started offline unblocks the
                 // whole backlog.
-                RtotaTripManager.requestFlush("api-key-set")
+                RotaTripManager.requestFlush("api-key-set")
             },
         )
     }
@@ -180,10 +180,10 @@ fun RoadTripScreen(onBack: () -> Unit) {
     }
 
     if (showTripNameDialog) {
-        RtotaTextDialog(
-            title = stringResource(R.string.rtota_trip_name),
+        RotaTextDialog(
+            title = stringResource(R.string.rota_trip_name),
             initial = tripName,
-            hint = stringResource(R.string.rtota_trip_name_hint),
+            hint = stringResource(R.string.rota_trip_name_hint),
             onDismiss = { showTripNameDialog = false },
             onSave = {
                 tripName = it.trim()
@@ -201,9 +201,9 @@ fun RoadTripScreen(onBack: () -> Unit) {
                 scope.launch {
                     val start = System.currentTimeMillis() + hoursFromNow * 3_600_000L
                     val result =
-                        RtotaClient.createActivation(
-                            baseUrl = RtotaSettings.baseUrl,
-                            apiKey = RtotaSettings.apiKey,
+                        RotaClient.createActivation(
+                            baseUrl = RotaSettings.baseUrl,
+                            apiKey = RotaSettings.apiKey,
                             title = title,
                             startTimeMs = start,
                             privacy = privacy.takeIf { it.isNotBlank() },
@@ -211,7 +211,7 @@ fun RoadTripScreen(onBack: () -> Unit) {
                     busy = false
                     message =
                         result.fold(
-                            onSuccess = { context.getString(R.string.rtota_announced) },
+                            onSuccess = { context.getString(R.string.rota_announced) },
                             onFailure = { it.message ?: it.javaClass.simpleName },
                         )
                 }
@@ -219,25 +219,25 @@ fun RoadTripScreen(onBack: () -> Unit) {
         )
     }
 
-    SettingsDetailScaffold(title = stringResource(R.string.rtota_title), onBack = onBack) {
+    SettingsDetailScaffold(title = stringResource(R.string.rota_title), onBack = onBack) {
         // =====================================================================
         // ACCOUNT
         // =====================================================================
-        SettingsSection(title = stringResource(R.string.rtota_section_account)) {
+        SettingsSection(title = stringResource(R.string.rota_section_account)) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     SettingsRow(
-                        label = stringResource(R.string.rtota_enable),
-                        description = stringResource(R.string.rtota_enable_desc),
+                        label = stringResource(R.string.rota_enable),
+                        description = stringResource(R.string.rota_enable_desc),
                         toggle = enabled,
                         onToggleChange = { checked ->
                             enabled = checked
-                            RtotaSettings.enabled = checked
-                            if (checked) RtotaTripManager.init(context)
+                            RotaSettings.enabled = checked
+                            if (checked) RotaTripManager.init(context)
                         },
                     )
                     SettingsRow(
-                        label = stringResource(R.string.rtota_callsign),
+                        label = stringResource(R.string.rota_callsign),
                         value =
                             callsign.ifBlank { GeneralVariables.myCallsign.orEmpty() }
                                 .ifBlank { "--" },
@@ -245,13 +245,13 @@ fun RoadTripScreen(onBack: () -> Unit) {
                         onClick = { showCallsignDialog = true },
                     )
                     SettingsRow(
-                        label = stringResource(R.string.rtota_server),
+                        label = stringResource(R.string.rota_server),
                         value = baseUrl.removePrefix("https://"),
                         showChevron = true,
                         onClick = { showServerDialog = true },
                     )
                     SettingsRow(
-                        label = stringResource(R.string.rtota_api_key),
+                        label = stringResource(R.string.rota_api_key),
                         value =
                             if (apiKey.isBlank()) {
                                 stringResource(R.string.common_not_configured)
@@ -265,11 +265,11 @@ fun RoadTripScreen(onBack: () -> Unit) {
                         SettingsRow(
                             label =
                                 if (busy) {
-                                    stringResource(R.string.rtota_registering)
+                                    stringResource(R.string.rota_registering)
                                 } else {
-                                    stringResource(R.string.rtota_register)
+                                    stringResource(R.string.rota_register)
                                 },
-                            description = stringResource(R.string.rtota_register_desc),
+                            description = stringResource(R.string.rota_register_desc),
                             showChevron = true,
                             onClick = {
                                 if (busy) return@SettingsRow
@@ -277,8 +277,8 @@ fun RoadTripScreen(onBack: () -> Unit) {
                                 message = null
                                 scope.launch {
                                     val result =
-                                        RtotaClient.registerOperator(
-                                            baseUrl = RtotaSettings.baseUrl,
+                                        RotaClient.registerOperator(
+                                            baseUrl = RotaSettings.baseUrl,
                                             callsign =
                                                 callsign.ifBlank {
                                                     GeneralVariables.myCallsign.orEmpty()
@@ -289,8 +289,8 @@ fun RoadTripScreen(onBack: () -> Unit) {
                                     result.fold(
                                         onSuccess = { key ->
                                             apiKey = key
-                                            RtotaSettings.apiKey = key
-                                            message = context.getString(R.string.rtota_registered)
+                                            RotaSettings.apiKey = key
+                                            message = context.getString(R.string.rota_registered)
                                         },
                                         onFailure = {
                                             message = it.message ?: it.javaClass.simpleName
@@ -308,25 +308,25 @@ fun RoadTripScreen(onBack: () -> Unit) {
         // =====================================================================
         // TRIP
         // =====================================================================
-        SettingsSection(title = stringResource(R.string.rtota_section_trip)) {
+        SettingsSection(title = stringResource(R.string.rota_section_trip)) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 if (state.active) {
                     ActiveTripCard(
                         state = state,
-                        onEnd = { RtotaTripManager.endTrip() },
-                        onAbandon = { RtotaTripManager.abandonTrip() },
+                        onEnd = { RotaTripManager.endTrip() },
+                        onAbandon = { RotaTripManager.abandonTrip() },
                     )
                 } else {
                     Column {
                         SettingsRow(
-                            label = stringResource(R.string.rtota_trip_name),
+                            label = stringResource(R.string.rota_trip_name),
                             value = tripName.ifBlank { "--" },
                             showChevron = true,
                             onClick = {
                                 // Straight to the free-text box when there is no key —
                                 // the plans live behind it, and an empty picker with an
                                 // auth error in it explains nothing.
-                                if (RtotaSettings.apiKey.isBlank()) {
+                                if (RotaSettings.apiKey.isBlank()) {
                                     showTripNameDialog = true
                                     return@SettingsRow
                                 }
@@ -334,14 +334,14 @@ fun RoadTripScreen(onBack: () -> Unit) {
                                 plansLoading = true
                                 plansError = null
                                 scope.launch {
-                                    RtotaClient.fetchMyActivations(
-                                        RtotaSettings.baseUrl,
-                                        RtotaSettings.apiKey,
+                                    RotaClient.fetchMyActivations(
+                                        RotaSettings.baseUrl,
+                                        RotaSettings.apiKey,
                                     ).fold(
                                         onSuccess = { plans = it },
                                         onFailure = { e ->
                                             plansError =
-                                                (e as? RtotaHttpException)?.serverMessage
+                                                (e as? RotaHttpException)?.serverMessage
                                                     ?: e.message
                                                     ?: e.javaClass.simpleName
                                         },
@@ -351,34 +351,34 @@ fun RoadTripScreen(onBack: () -> Unit) {
                             },
                         )
                         SettingsRow(
-                            label = stringResource(R.string.rtota_privacy),
+                            label = stringResource(R.string.rota_privacy),
                             value =
                                 privacy.ifBlank {
-                                    stringResource(R.string.rtota_privacy_default)
+                                    stringResource(R.string.rota_privacy_default)
                                 },
                             onClick = {
                                 // Cycle: account default -> public -> delayed ->
                                 // followers -> private -> back to default.
                                 privacy = nextPrivacy(privacy)
-                                RtotaSettings.defaultPrivacy = privacy
+                                RotaSettings.defaultPrivacy = privacy
                             },
                         )
                         SettingsRow(
-                            label = stringResource(R.string.rtota_start_trip),
+                            label = stringResource(R.string.rota_start_trip),
                             showChevron = true,
                             onClick = {
                                 when {
-                                    RtotaSettings.apiKey.isBlank() ->
-                                        message = context.getString(R.string.rtota_need_key)
+                                    RotaSettings.apiKey.isBlank() ->
+                                        message = context.getString(R.string.rota_need_key)
                                     !ensureLocationPermission() ->
-                                        message = context.getString(R.string.rtota_need_location)
+                                        message = context.getString(R.string.rota_need_location)
                                     else -> {
-                                        if (!RtotaSettings.enabled) {
-                                            RtotaSettings.enabled = true
+                                        if (!RotaSettings.enabled) {
+                                            RotaSettings.enabled = true
                                             enabled = true
                                         }
-                                        RtotaTripManager.init(context)
-                                        RtotaTripManager.startTrip(
+                                        RotaTripManager.init(context)
+                                        RotaTripManager.startTrip(
                                             name = tripName,
                                             privacy = privacy.takeIf { it.isNotBlank() },
                                         )
@@ -395,14 +395,14 @@ fun RoadTripScreen(onBack: () -> Unit) {
         // =====================================================================
         // TRACKING (SmartBeaconing)
         // =====================================================================
-        SettingsSection(title = stringResource(R.string.rtota_section_tracking)) {
+        SettingsSection(title = stringResource(R.string.rota_section_tracking)) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 // Read-only: the sampling is tuned for a vehicle and there is
                 // nothing here worth a knob. Stating what it does still matters —
                 // a trail that goes quiet at a fuel stop looks broken otherwise.
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = stringResource(R.string.rtota_beacon_heading),
+                        text = stringResource(R.string.rota_beacon_heading),
                         color = TextPrimary,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -420,15 +420,15 @@ fun RoadTripScreen(onBack: () -> Unit) {
         // =====================================================================
         // ANNOUNCE
         // =====================================================================
-        SettingsSection(title = stringResource(R.string.rtota_section_activation)) {
+        SettingsSection(title = stringResource(R.string.rota_section_activation)) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 SettingsRow(
-                    label = stringResource(R.string.rtota_announce),
-                    description = stringResource(R.string.rtota_announce_desc),
+                    label = stringResource(R.string.rota_announce),
+                    description = stringResource(R.string.rota_announce_desc),
                     showChevron = true,
                     onClick = {
-                        if (RtotaSettings.apiKey.isBlank()) {
-                            message = context.getString(R.string.rtota_need_key)
+                        if (RotaSettings.apiKey.isBlank()) {
+                            message = context.getString(R.string.rota_need_key)
                         } else {
                             showAnnounceDialog = true
                         }
@@ -444,72 +444,71 @@ private const val REQUEST_LOCATION = 4201
 /** Live trip readout: what has been recorded, what is still waiting. */
 @Composable
 private fun ActiveTripCard(
-    state: RtotaTripState,
+    state: RotaTripState,
     onEnd: () -> Unit,
     onAbandon: () -> Unit,
 ) {
     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            text = state.tripName.ifBlank { stringResource(R.string.rtota_service_title) },
+            text = state.tripName.ifBlank { stringResource(R.string.rota_service_title) },
             color = TextPrimary,
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
         )
         StatLine(
-            stringResource(R.string.rtota_stat_miles),
+            stringResource(R.string.rota_stat_miles),
             String.format(Locale.US, "%.1f", state.miles),
         )
         StatLine(
-            stringResource(R.string.rtota_stat_qsos),
+            stringResource(R.string.rota_stat_qsos),
             "${state.sentQsos}",
         )
         StatLine(
-            stringResource(R.string.rtota_stat_pending),
+            stringResource(R.string.rota_stat_pending),
             "${state.pendingPoints + state.pendingQsos}",
         )
         StatLine(
-            stringResource(R.string.rtota_stat_last_upload),
+            stringResource(R.string.rota_stat_last_upload),
             if (state.lastUploadMs > 0) {
                 SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(state.lastUploadMs))
             } else {
-                stringResource(R.string.rtota_stat_never)
+                stringResource(R.string.rota_stat_never)
             },
         )
         // Why the last route point was kept — makes SmartBeaconing legible from
         // the passenger seat ("corner" on a curve, "parked" at a fuel stop).
         StatLine(
-            stringResource(R.string.rtota_stat_last_point),
+            stringResource(R.string.rota_stat_last_point),
             when {
-                state.parked -> stringResource(R.string.rtota_beacon_parked)
+                state.parked -> stringResource(R.string.rota_beacon_parked)
                 else -> stringResource(beaconReasonLabelRes(state.lastBeaconReason))
             },
         )
-        // Spelled out because it is not the spelling anyone expects: an FT8 CQ
-        // modifier is at most four letters, so the trip calls RTOA, not RTOTA.
+        // Shown verbatim so the operator can see exactly what is going out.
         StatLine(
-            stringResource(R.string.rtota_stat_cq),
-            "CQ $RTOTA_CQ_MODIFIER",
+            stringResource(R.string.rota_stat_cq),
+            "CQ $ROTA_CQ_MODIFIER",
         )
         if (state.pendingCreate) {
             Text(
-                text = stringResource(R.string.rtota_pending_create),
+                text = stringResource(R.string.rota_pending_create),
                 color = TextMuted,
                 fontSize = 12.sp,
             )
         }
         state.lastError?.let {
             Text(
-                text = stringResource(R.string.rtota_error, it),
+                text = stringResource(R.string.rota_error, it),
                 color = StatusBad,
                 fontSize = 12.sp,
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             TextButton(onClick = onEnd) {
-                Text(stringResource(R.string.rtota_end_trip), color = Accent)
+                Text(stringResource(R.string.rota_end_trip), color = Accent)
             }
             TextButton(onClick = onAbandon) {
-                Text(stringResource(R.string.rtota_abandon), color = TextMuted)
+                Text(stringResource(R.string.rota_abandon), color = TextMuted)
             }
         }
     }
@@ -547,7 +546,7 @@ private fun NoticeText(text: String) {
 }
 
 /**
- * Pick the trip's name from the plans already saved on rtota.app, or type one.
+ * Pick the trip's name from the plans already saved on roadsontheair.com, or type one.
  *
  * The plans are *scheduled activations* — what the site's plan wizard writes —
  * because a trip only exists once someone drives it. Choosing one here does not
@@ -560,7 +559,7 @@ private fun NoticeText(text: String) {
  */
 @Composable
 private fun TripPlanPickerDialog(
-    plans: List<RtotaActivation>,
+    plans: List<RotaActivation>,
     loading: Boolean,
     error: String?,
     nowMs: Long,
@@ -579,7 +578,7 @@ private fun TripPlanPickerDialog(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = stringResource(R.string.rtota_pick_plan),
+                text = stringResource(R.string.rota_pick_plan),
                 color = TextPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -588,22 +587,22 @@ private fun TripPlanPickerDialog(
             when {
                 loading ->
                     Text(
-                        text = stringResource(R.string.rtota_pick_plan_loading),
+                        text = stringResource(R.string.rota_pick_plan_loading),
                         color = TextMuted,
                         fontSize = 13.sp,
                     )
                 error != null ->
-                    // Not rtota_error ("Last error: …") — that phrasing belongs to the
+                    // Not rota_error ("Last error: …") — that phrasing belongs to the
                     // trip's own upload failures, and reusing it here would report a
                     // failed plan fetch as though the running trip were in trouble.
                     Text(
-                        text = stringResource(R.string.rtota_pick_plan_error, error),
+                        text = stringResource(R.string.rota_pick_plan_error, error),
                         color = StatusBad,
                         fontSize = 13.sp,
                     )
                 plans.isEmpty() ->
                     Text(
-                        text = stringResource(R.string.rtota_pick_plan_empty),
+                        text = stringResource(R.string.rota_pick_plan_empty),
                         color = TextMuted,
                         fontSize = 13.sp,
                     )
@@ -635,10 +634,10 @@ private fun TripPlanPickerDialog(
                                 Text(
                                     text =
                                         if (matches) {
-                                            stringResource(R.string.rtota_plan_matches_now)
+                                            stringResource(R.string.rota_plan_matches_now)
                                         } else {
                                             stringResource(
-                                                R.string.rtota_plan_starts,
+                                                R.string.rota_plan_starts,
                                                 formatPlanStart(plan.startTimeMs),
                                             )
                                         },
@@ -658,7 +657,7 @@ private fun TripPlanPickerDialog(
                     Text(stringResource(R.string.action_cancel), color = TextMuted)
                 }
                 TextButton(onClick = onTypeName) {
-                    Text(stringResource(R.string.rtota_pick_plan_custom), color = Accent)
+                    Text(stringResource(R.string.rota_pick_plan_custom), color = Accent)
                 }
             }
         }
@@ -671,7 +670,7 @@ internal fun formatPlanStart(startMs: Long): String =
 
 /** Single-field dialog shared by the callsign / server / key / trip-name rows. */
 @Composable
-private fun RtotaTextDialog(
+private fun RotaTextDialog(
     title: String,
     initial: String,
     hint: String? = null,
@@ -695,7 +694,7 @@ private fun RtotaTextDialog(
                 onValueChange = { input = it },
                 placeholder = hint?.let { { Text(it, color = TextFaint) } },
                 singleLine = true,
-                colors = rtotaFieldColors(),
+                colors = rotaFieldColors(),
                 textStyle = TextStyle(fontSize = 14.sp),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -733,7 +732,7 @@ private fun AnnounceActivationDialog(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = stringResource(R.string.rtota_announce),
+                text = stringResource(R.string.rota_announce),
                 color = TextPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -741,19 +740,19 @@ private fun AnnounceActivationDialog(
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
-                label = { Text(stringResource(R.string.rtota_announce_title_field)) },
+                label = { Text(stringResource(R.string.rota_announce_title_field)) },
                 singleLine = true,
-                colors = rtotaFieldColors(),
+                colors = rotaFieldColors(),
                 textStyle = TextStyle(fontSize = 14.sp),
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
                 value = hours,
                 onValueChange = { hours = it.filter { c -> c.isDigit() }.take(4) },
-                label = { Text(stringResource(R.string.rtota_announce_hours)) },
+                label = { Text(stringResource(R.string.rota_announce_hours)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                colors = rtotaFieldColors(),
+                colors = rotaFieldColors(),
                 textStyle = TextStyle(fontSize = 14.sp),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -768,7 +767,7 @@ private fun AnnounceActivationDialog(
                         }
                     },
                 ) {
-                    Text(stringResource(R.string.rtota_announce_send), color = Accent)
+                    Text(stringResource(R.string.rota_announce_send), color = Accent)
                 }
             }
         }
@@ -776,7 +775,7 @@ private fun AnnounceActivationDialog(
 }
 
 @Composable
-private fun rtotaFieldColors() =
+private fun rotaFieldColors() =
     OutlinedTextFieldDefaults.colors(
         focusedTextColor = TextPrimary,
         unfocusedTextColor = TextPrimary,
@@ -794,12 +793,22 @@ private fun rtotaFieldColors() =
 /**
  * Show enough of the key to recognise it without printing a working credential
  * on a screen that may be mirrored to a car display.
+ *
+ * The head is cut at the prefix separator rather than a fixed width, because the
+ * server mints `rota_…` now and `rtota_…` before the rename — the two differ by a
+ * character, and a hardcoded width would expose a character of the secret itself
+ * on whichever one it was not sized for.
  */
-internal fun maskKey(key: String): String = if (key.length <= 8) "••••" else key.take(6) + "…" + key.takeLast(4)
+internal fun maskKey(key: String): String {
+    if (key.length <= 8) return "••••"
+    val afterPrefix = key.indexOf('_') + 1
+    val head = if (afterPrefix in 1..8) key.take(afterPrefix) else key.take(6)
+    return head + "…" + key.takeLast(4)
+}
 
 /** Privacy cycle for the tap-to-change row; "" means "let the account decide". */
 internal fun nextPrivacy(current: String): String {
-    val order = listOf("") + RtotaSettings.PRIVACY_LEVELS
+    val order = listOf("") + RotaSettings.PRIVACY_LEVELS
     val idx = order.indexOf(current).takeIf { it >= 0 } ?: 0
     return order[(idx + 1) % order.size]
 }
@@ -807,12 +816,12 @@ internal fun nextPrivacy(current: String): String {
 @StringRes
 internal fun beaconReasonLabelRes(reason: BeaconReason?): Int =
     when (reason) {
-        BeaconReason.FIRST -> R.string.rtota_beacon_first
-        BeaconReason.RATE -> R.string.rtota_beacon_rate
-        BeaconReason.CORNER -> R.string.rtota_beacon_corner
-        BeaconReason.RESUME -> R.string.rtota_beacon_resume
-        BeaconReason.QSO -> R.string.rtota_beacon_qso
-        null -> R.string.rtota_beacon_waiting
+        BeaconReason.FIRST -> R.string.rota_beacon_first
+        BeaconReason.RATE -> R.string.rota_beacon_rate
+        BeaconReason.CORNER -> R.string.rota_beacon_corner
+        BeaconReason.RESUME -> R.string.rota_beacon_resume
+        BeaconReason.QSO -> R.string.rota_beacon_qso
+        null -> R.string.rota_beacon_waiting
     }
 
 /**

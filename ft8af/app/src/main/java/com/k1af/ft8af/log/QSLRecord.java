@@ -257,11 +257,17 @@ public class QSLRecord {
         if (map.containsKey("SIG")) sig = map.get("SIG");
         if (map.containsKey("SIG_INFO")) sigInfo = map.get("SIG_INFO");
 
-        // Operator position on import. The APP_RTOTA_ decimal pair is preferred over the
+        // Operator position on import. The APP_ROTA_ decimal pair is preferred over the
         // standard MY_LAT/MY_LON because it is what this app wrote and round-trips
         // exactly; the standard fields are the fallback for logs from anywhere else.
-        Double lat = parseAdifDecimal(map.get("APP_RTOTA_LAT"));
-        Double lon = parseAdifDecimal(map.get("APP_RTOTA_LON"));
+        // APP_RTOTA_ is the pre-rename spelling — still read so archived exports and
+        // logs from older builds keep their exact coordinates.
+        Double lat = parseAdifDecimal(map.get(AdifRecord.APP_ROTA_LAT));
+        Double lon = parseAdifDecimal(map.get(AdifRecord.APP_ROTA_LON));
+        if (lat == null || lon == null) {
+            lat = parseAdifDecimal(map.get(AdifRecord.LEGACY_APP_ROTA_LAT));
+            lon = parseAdifDecimal(map.get(AdifRecord.LEGACY_APP_ROTA_LON));
+        }
         if (lat == null || lon == null) {
             lat = AdifFormat.parseLocation(map.get("MY_LAT"));
             lon = AdifFormat.parseLocation(map.get("MY_LON"));
@@ -273,7 +279,7 @@ public class QSLRecord {
         }
     }
 
-    /** Plain decimal-degree parse for the APP_RTOTA_ fields; null when unusable. */
+    /** Plain decimal-degree parse for the APP_ROTA_ fields; null when unusable. */
     private static Double parseAdifDecimal(String raw) {
         if (raw == null || raw.trim().isEmpty()) return null;
         try {

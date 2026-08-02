@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import com.k1af.ft8af.log.QSLRecord
 
@@ -10,7 +10,7 @@ import com.k1af.ft8af.log.QSLRecord
  * [buildTripQso] is pure and takes the fields as plain values, and
  * [tripQsoFromRecord] is the thin adapter the QSO save path calls.
  */
-object RtotaQsoMapper {
+object RotaQsoMapper {
     /**
      * @param roverLat/[roverLon] where the rover was — the last accepted GPS
      *        breadcrumb. Omitted when tracking hasn't produced a fix yet; the

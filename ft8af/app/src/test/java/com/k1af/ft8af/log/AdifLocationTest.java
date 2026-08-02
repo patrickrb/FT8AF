@@ -113,15 +113,15 @@ public class AdifLocationTest {
                 .build();
         assertThat(adif).contains("<MY_LAT:11>N039 44.352");
         assertThat(adif).contains("<MY_LON:11>W104 59.418");
-        assertThat(adif).contains("<APP_RTOTA_LAT:9>39.739200");
-        assertThat(adif).contains("<APP_RTOTA_LON:11>-104.990300");
+        assertThat(adif).contains("<APP_ROTA_LAT:9>39.739200");
+        assertThat(adif).contains("<APP_ROTA_LON:11>-104.990300");
     }
 
     @Test
     public void record_emitsNoPositionFieldsWhenUnknown() {
         String adif = new AdifRecord().call("K1ABC").build();
         assertThat(adif).doesNotContain("MY_LAT");
-        assertThat(adif).doesNotContain("APP_RTOTA_LAT");
+        assertThat(adif).doesNotContain("APP_ROTA_LAT");
     }
 
     @Test

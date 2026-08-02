@@ -1,4 +1,4 @@
-package radio.ks3ckc.ft8af.rtota
+package radio.ks3ckc.ft8af.rota
 
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.runBlocking
@@ -14,12 +14,12 @@ import java.io.IOException
 
 /**
  * Request shape and failure classification against a stub server. What is being
- * pinned here is the contract with rtota.app: the paths, the Bearer header, and
+ * pinned here is the contract with roadsontheair.com: the paths, the Bearer header, and
  * — most importantly — which failures are worth retrying from a moving vehicle
  * and which are the operator's problem to fix.
  */
 @RunWith(RobolectricTestRunner::class)
-class RtotaClientTest {
+class RotaClientTest {
     private lateinit var server: MockWebServer
     private lateinit var baseUrl: String
 
@@ -39,11 +39,11 @@ class RtotaClientTest {
     fun `registerOperator posts the callsign and returns the key`() =
         runBlocking {
             server.enqueue(
-                MockResponse().setBody("""{"id":"op1","callsign":"K1AF","apiKey":"rtota_abc123"}"""),
+                MockResponse().setBody("""{"id":"op1","callsign":"K1AF","apiKey":"rota_abc123"}"""),
             )
-            val result = RtotaClient.registerOperator(baseUrl, "k1af", homeGrid = "DM79")
+            val result = RotaClient.registerOperator(baseUrl, "k1af", homeGrid = "DM79")
 
-            assertThat(result.getOrNull()).isEqualTo("rtota_abc123")
+            assertThat(result.getOrNull()).isEqualTo("rota_abc123")
             val request = server.takeRequest()
             assertThat(request.path).isEqualTo("/api/operators")
             assertThat(request.method).isEqualTo("POST")
@@ -59,13 +59,13 @@ class RtotaClientTest {
                 MockResponse().setResponseCode(409)
                     .setBody("""{"error":"That callsign is already registered."}"""),
             )
-            val error = RtotaClient.registerOperator(baseUrl, "K1AF").exceptionOrNull()
+            val error = RotaClient.registerOperator(baseUrl, "K1AF").exceptionOrNull()
 
-            assertThat(error).isInstanceOf(RtotaHttpException::class.java)
-            assertThat((error as RtotaHttpException).serverMessage)
+            assertThat(error).isInstanceOf(RotaHttpException::class.java)
+            assertThat((error as RotaHttpException).serverMessage)
                 .isEqualTo("That callsign is already registered.")
             // A 409 is the user's to resolve — retrying would fail identically forever.
-            assertThat(isRetryableRtotaFailure(error)).isFalse()
+            assertThat(isRetryableRotaFailure(error)).isFalse()
         }
 
     @Test
@@ -76,17 +76,17 @@ class RtotaClientTest {
                     .setBody("""{"id":"trip-1","shareToken":"tok","status":"active"}"""),
             )
             val handle =
-                RtotaClient.createTrip(
+                RotaClient.createTrip(
                     baseUrl = baseUrl,
-                    apiKey = "rtota_key",
+                    apiKey = "rota_key",
                     name = "Route 66",
                     startTimeMs = 1_753_970_709_000L,
                     privacy = "delayed",
                 ).getOrNull()
 
-            assertThat(handle).isEqualTo(RtotaTripHandle("trip-1", "tok"))
+            assertThat(handle).isEqualTo(RotaTripHandle("trip-1", "tok"))
             val request = server.takeRequest()
-            assertThat(request.getHeader("Authorization")).isEqualTo("Bearer rtota_key")
+            assertThat(request.getHeader("Authorization")).isEqualTo("Bearer rota_key")
             val body = JSONObject(request.body.readUtf8())
             assertThat(body.getString("name")).isEqualTo("Route 66")
             assertThat(body.getString("startTime")).isEqualTo("2025-07-31T14:05:09.000Z")
@@ -102,11 +102,11 @@ class RtotaClientTest {
                 ),
             )
             val batch =
-                RtotaBatch(
+                RotaBatch(
                     points = listOf(TripPoint(1_753_970_709_000L, 39.0, -105.0)),
                     qsos = listOf(TripQso("K1AF", 1_753_970_709_000L, band = "20m", mode = "FT8")),
                 )
-            val ack = RtotaClient.sendLive(baseUrl, "k", "trip-1", batch).getOrNull()
+            val ack = RotaClient.sendLive(baseUrl, "k", "trip-1", batch).getOrNull()
 
             assertThat(ack?.qsosInserted).isEqualTo(1)
             val request = server.takeRequest()
@@ -121,15 +121,15 @@ class RtotaClientTest {
     fun `a live batch the server accepts with no body still reports success`() =
         runBlocking {
             server.enqueue(MockResponse().setBody(""))
-            val batch = RtotaBatch(listOf(TripPoint(1L, 39.0, -105.0)), emptyList())
-            assertThat(RtotaClient.sendLive(baseUrl, "k", "t", batch).isSuccess).isTrue()
+            val batch = RotaBatch(listOf(TripPoint(1L, 39.0, -105.0)), emptyList())
+            assertThat(RotaClient.sendLive(baseUrl, "k", "t", batch).isSuccess).isTrue()
         }
 
     @Test
     fun `completeTrip hits the complete endpoint`() =
         runBlocking {
             server.enqueue(MockResponse().setBody("""{"status":"completed"}"""))
-            assertThat(RtotaClient.completeTrip(baseUrl, "k", "trip-1").isSuccess).isTrue()
+            assertThat(RotaClient.completeTrip(baseUrl, "k", "trip-1").isSuccess).isTrue()
             assertThat(server.takeRequest().path).isEqualTo("/api/trips/trip-1/complete")
         }
 
@@ -138,7 +138,7 @@ class RtotaClientTest {
         runBlocking {
             server.enqueue(MockResponse().setResponseCode(201).setBody("""{"id":"act-1"}"""))
             val id =
-                RtotaClient.createActivation(
+                RotaClient.createActivation(
                     baseUrl = baseUrl,
                     apiKey = "k",
                     title = "I-70 westbound",
@@ -155,21 +155,21 @@ class RtotaClientTest {
 
     @Test
     fun `a server error is retryable, a rejected request is not`() {
-        assertThat(isRetryableRtotaFailure(RtotaHttpException(503, ""))).isTrue()
-        assertThat(isRetryableRtotaFailure(RtotaHttpException(429, ""))).isTrue()
-        assertThat(isRetryableRtotaFailure(IOException("no route to host"))).isTrue()
-        assertThat(isRetryableRtotaFailure(RtotaHttpException(401, ""))).isFalse()
-        assertThat(isRetryableRtotaFailure(RtotaHttpException(403, ""))).isFalse()
-        assertThat(isRetryableRtotaFailure(IllegalStateException("bad parse"))).isFalse()
+        assertThat(isRetryableRotaFailure(RotaHttpException(503, ""))).isTrue()
+        assertThat(isRetryableRotaFailure(RotaHttpException(429, ""))).isTrue()
+        assertThat(isRetryableRotaFailure(IOException("no route to host"))).isTrue()
+        assertThat(isRetryableRotaFailure(RotaHttpException(401, ""))).isFalse()
+        assertThat(isRetryableRotaFailure(RotaHttpException(403, ""))).isFalse()
+        assertThat(isRetryableRotaFailure(IllegalStateException("bad parse"))).isFalse()
     }
 
     @Test
     fun `backoff grows and then holds at fifteen minutes`() {
-        assertThat(rtotaBackoffMs(1)).isEqualTo(30_000L)
-        assertThat(rtotaBackoffMs(2)).isEqualTo(60_000L)
-        assertThat(rtotaBackoffMs(3)).isEqualTo(120_000L)
-        assertThat(rtotaBackoffMs(6)).isEqualTo(15 * 60_000L)
+        assertThat(rotaBackoffMs(1)).isEqualTo(30_000L)
+        assertThat(rotaBackoffMs(2)).isEqualTo(60_000L)
+        assertThat(rotaBackoffMs(3)).isEqualTo(120_000L)
+        assertThat(rotaBackoffMs(6)).isEqualTo(15 * 60_000L)
         // Past the cap the wait must not keep doubling toward hours.
-        assertThat(rtotaBackoffMs(50)).isEqualTo(15 * 60_000L)
+        assertThat(rotaBackoffMs(50)).isEqualTo(15 * 60_000L)
     }
 }
