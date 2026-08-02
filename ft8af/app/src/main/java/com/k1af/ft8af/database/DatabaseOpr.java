@@ -62,9 +62,24 @@ public class DatabaseOpr extends SQLiteOpenHelper {
     private SQLiteDatabase db;
 
 
+    /**
+     * Schema version. <b>Bump this whenever a column is added</b> — the {@code alterTable}
+     * calls in {@code createQSLTable} and friends only ever execute from {@link #onCreate}
+     * and {@link #onUpgrade}, and {@code onUpgrade} fires only when this number increases.
+     *
+     * <p>Adding a column without bumping it produces a bug that is invisible in
+     * development and fatal in the field: a fresh install gets the column from
+     * {@code CREATE TABLE} and works perfectly, while every existing install keeps the old
+     * table and crashes the moment something writes the new column. That is exactly what
+     * v20 fixes — {@code my_lat}/{@code my_lon} shipped without a bump, so
+     * {@code doInsertQSLData} threw "table QSLTable has no column named my_lat" on every
+     * logged QSO for anyone upgrading rather than installing clean.
+     */
+    static final int SCHEMA_VERSION = 20;
+
     public static synchronized DatabaseOpr getInstance(@Nullable Context context, @Nullable String databaseName) {
         if (instance == null) {
-            instance = new DatabaseOpr(context, databaseName, null, 19);
+            instance = new DatabaseOpr(context, databaseName, null, SCHEMA_VERSION);
         }
         return instance;
     }
