@@ -191,6 +191,17 @@ public class MicRecorder {
     }
 
     /**
+     * True when capture runs over the direct-libusb USB path — no AudioRecord
+     * exists, so Android's audio capture stack (and the phone mic) is free for
+     * other clients (e.g. the voice-command SpeechRecognizer). False whenever
+     * an AudioRecord is in play, including the "preferred device" USB-UAC
+     * route (that still holds an Android capture session).
+     */
+    public boolean isUsingUsbDirect() {
+        return useUsbAudio;
+    }
+
+    /**
      * Open and configure a USB audio device for input.
      */
     private UsbAudioDevice openUsbAudioInput() {

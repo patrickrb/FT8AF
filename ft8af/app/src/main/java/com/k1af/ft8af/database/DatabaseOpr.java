@@ -2996,6 +2996,25 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("alertOnQsoComplete")) {//Alert when a QSO completes
                     GeneralVariables.alertOnQsoComplete = result.equals("1");
                 }
+                if (name.equalsIgnoreCase("voiceAnnounceCalling")) {//Voice: announce station calling me
+                    GeneralVariables.voiceAnnounceCalling = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("voiceAnnounceQsoComplete")) {//Voice: announce QSO logged
+                    GeneralVariables.voiceAnnounceQsoComplete = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("voiceAnnounceNewDxcc")) {//Voice: announce new-DXCC CQ
+                    GeneralVariables.voiceAnnounceNewDxcc = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("voiceAnnounceNewPrefix")) {//Voice: announce new-prefix CQ
+                    GeneralVariables.voiceAnnounceNewPrefix = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("voiceCommandsEnabled")) {//Voice: push-to-talk command button
+                    GeneralVariables.voiceCommandsEnabled = result.equals("1");
+                    // Hydration runs on a worker thread; postValue keeps the
+                    // observable mirror (main-screen mic button) in sync.
+                    GeneralVariables.mutableVoiceCommandsEnabled
+                            .postValue(GeneralVariables.voiceCommandsEnabled);
+                }
                 if (name.equalsIgnoreCase("flexMaxRfPower")) {//Flex max RF power
                     GeneralVariables.flexMaxRfPower = parseConfigInt(result, 10);
                 }

@@ -59,6 +59,7 @@ import radio.ks3ckc.ft8af.ui.components.SlotTimerBar
 import radio.ks3ckc.ft8af.ui.components.TabBar
 import radio.ks3ckc.ft8af.ui.components.TransmitGlow
 import radio.ks3ckc.ft8af.ui.components.TxStrip
+import radio.ks3ckc.ft8af.ui.components.VoiceCommandButton
 import radio.ks3ckc.ft8af.ui.components.selectBandIndex
 import radio.ks3ckc.ft8af.ui.decode.DecodeScreen
 import radio.ks3ckc.ft8af.ui.logbook.LogbookScreen
@@ -400,6 +401,18 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                             .padding(bottom = WaterfallBottomStripHeight),
                     )
                 }
+
+                // Voice-command push-to-talk mic (v1). Floats over the content
+                // just above the TX strip so it never resizes the waterfall's
+                // AndroidView or shifts list layouts. Renders nothing unless
+                // the voice-commands setting is on; tap is refused (with the
+                // reason) while FT8 RX is capturing through the phone mic.
+                VoiceCommandButton(
+                    mainViewModel = mainViewModel,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 12.dp, bottom = 12.dp),
+                )
             }
 
             // Active QSO panel (docked) — slides up above TxStrip when a QSO is

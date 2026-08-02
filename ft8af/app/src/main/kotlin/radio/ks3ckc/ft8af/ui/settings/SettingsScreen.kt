@@ -69,6 +69,7 @@ private enum class SettingsCategory {
     TRANSMISSION,
     TIME_SYNC,
     DECODE_FILTERS,
+    VOICE,
     LOGGING,
     ROAD_TRIP,
     ADVANCED,
@@ -142,6 +143,8 @@ fun SettingsScreen(
                 TimeSyncSettings(mainViewModel, onBack = { currentCategory = null })
             SettingsCategory.DECODE_FILTERS ->
                 DecodeFilterSettings(mainViewModel, onBack = { currentCategory = null })
+            SettingsCategory.VOICE ->
+                VoiceSettings(mainViewModel, onBack = { currentCategory = null })
             SettingsCategory.LOGGING ->
                 LoggingSettings(mainViewModel, onBack = { currentCategory = null })
             SettingsCategory.ROAD_TRIP ->
@@ -319,6 +322,13 @@ private fun SettingsLanding(
                         label = stringResource(R.string.settings_cat_decode_filters),
                         showChevron = true,
                         onClick = { onOpenCategory(SettingsCategory.DECODE_FILTERS) },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_cat_voice),
+                        description = stringResource(R.string.settings_cat_voice_desc),
+                        showChevron = true,
+                        onClick = { onOpenCategory(SettingsCategory.VOICE) },
                     )
                     SectionDivider()
                     SettingsRow(

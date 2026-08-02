@@ -17,7 +17,11 @@ import androidx.core.content.ContextCompat;
 import com.k1af.ft8af.Ft8Message;
 import com.k1af.ft8af.GeneralVariables;
 import com.k1af.ft8af.R;
+import com.k1af.ft8af.callsign.WpxPrefix;
 import com.k1af.ft8af.log.QSLRecord;
+import com.k1af.ft8af.voice.VoiceAnnouncementDecisions;
+import com.k1af.ft8af.voice.VoiceAnnouncer;
+import com.k1af.ft8af.voice.VoicePhrases;
 
 import java.util.Collections;
 import java.util.List;
@@ -54,10 +58,20 @@ public class DxAlertNotifier {
     private final Context appContext;
     // Already-alerted keys this session (namespaced: "DXCC:"/"STATE:"/"CQREPLY:"/"QSO:").
     private final Set<String> alerted = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    // Voice assistant: spoken announcements ride the same decode/QSO hooks as the
+    // notification alerts, so the announcer is co-located here. TTS init is lazy
+    // inside the announcer — nothing spins up unless a voice toggle is enabled.
+    private final VoiceAnnouncer voiceAnnouncer;
 
     public DxAlertNotifier(Context context) {
         this.appContext = context != null ? context.getApplicationContext() : null;
+        this.voiceAnnouncer = new VoiceAnnouncer(this.appContext);
         createChannels();
+    }
+
+    /** The announcer, for TX-mute wiring (MainViewModel) and command echo (UI). */
+    public VoiceAnnouncer getVoiceAnnouncer() {
+        return voiceAnnouncer;
     }
 
     private void createChannels() {
@@ -96,8 +110,13 @@ public class DxAlertNotifier {
      */
     public void processDecodes(List<Ft8Message> messages) {
         if (appContext == null || messages == null) return;
+        boolean anyVoice = VoiceAnnouncementDecisions.anyDecodeAnnounceEnabled(
+                GeneralVariables.voiceAnnounceCalling,
+                GeneralVariables.voiceAnnounceNewDxcc,
+                GeneralVariables.voiceAnnounceNewPrefix);
         if (!GeneralVariables.alertNewDxcc && !GeneralVariables.alertNewState
-                && !GeneralVariables.alertOnCqReply && !GeneralVariables.hasWatchCallsigns()) {
+                && !GeneralVariables.alertOnCqReply && !GeneralVariables.hasWatchCallsigns()
+                && !anyVoice) {
             return;
         }
 
@@ -130,6 +149,11 @@ public class DxAlertNotifier {
                         cqReplyBody(msg), msg.getCallsignFrom(), msg.band);
             }
 
+            // Voice assistant: spoken announcement, independent toggles from the
+            // notification alerts. Runs before the CQ-only gate because the
+            // calling-me announcement (like the CQ-reply alert) isn't a CQ.
+            maybeAnnounceVoice(msg, addressedToMe);
+
             // Needed-DX alerts apply to CQ broadcasts only.
             if (!msg.checkIsCQ()) continue;
 
@@ -146,9 +170,70 @@ public class DxAlertNotifier {
         }
     }
 
+    /**
+     * Voice-assistant arm of {@link #processDecodes}: decide + dedup + speak.
+     * Blocked messages never reach here (the caller {@code continue}s on them),
+     * and the dedup claim is gated on canSpeakNow() so a station first decoded
+     * during a transmission isn't silenced for the whole session.
+     */
+    private void maybeAnnounceVoice(Ft8Message msg, boolean addressedToMe) {
+        boolean isCq = msg.checkIsCQ();
+
+        // New-prefix predicate, only computed when it could matter (mirrors the
+        // Kotlin isNewPrefixStation logic: WpxPrefix + checkQSLPrefix).
+        String prefix = null;
+        boolean fromNewPrefix = false;
+        if (GeneralVariables.voiceAnnounceNewPrefix && isCq) {
+            prefix = WpxPrefix.of(msg.getCallsignFrom());
+            fromNewPrefix = prefix != null && !GeneralVariables.checkQSLPrefix(prefix);
+        }
+
+        VoiceAnnouncementDecisions.Kind kind = VoiceAnnouncementDecisions.decide(
+                GeneralVariables.voiceAnnounceCalling,
+                GeneralVariables.voiceAnnounceNewDxcc,
+                GeneralVariables.voiceAnnounceNewPrefix,
+                addressedToMe, isCq, msg.fromDxcc, fromNewPrefix,
+                false /* blocked messages already filtered by the caller */);
+        if (kind == null) return;
+
+        String key;
+        String phrase;
+        switch (kind) {
+            case CALLING_ME:
+                key = VoiceAnnouncementDecisions.callingMeKey(msg.getCallsignFrom());
+                phrase = VoicePhrases.callingYou(msg.getCallsignFrom(), msg.snr);
+                break;
+            case NEW_DXCC:
+                // Same fallback as the notification arm: country name when
+                // resolved, else the (spelled) callsign.
+                boolean noCountry = msg.fromWhere == null || msg.fromWhere.isEmpty();
+                String country = noCountry ? msg.getCallsignFrom() : msg.fromWhere;
+                key = VoiceAnnouncementDecisions.newDxccKey(country);
+                phrase = VoicePhrases.newCountry(
+                        noCountry ? VoicePhrases.spellCallsign(country) : country);
+                break;
+            default: // NEW_PREFIX
+                key = VoiceAnnouncementDecisions.newPrefixKey(prefix);
+                phrase = VoicePhrases.newPrefix(prefix);
+                break;
+        }
+
+        if (!VoiceAnnouncementDecisions.claim(
+                voiceAnnouncer.spokenKeys(), key, voiceAnnouncer.canSpeakNow())) {
+            return;
+        }
+        GeneralVariables.fileLog("VOICE announce key=[" + key + "] " + phrase);
+        voiceAnnouncer.speak(phrase, key);
+    }
+
     /** Fire a notification when a QSO has just been logged, if the user enabled it. */
     public void notifyQsoComplete(QSLRecord qslRecord) {
         if (appContext == null || qslRecord == null) return;
+
+        // Voice announcement first — its toggle is independent of the
+        // notification toggle below.
+        announceQsoCompleteVoice(qslRecord);
+
         if (!GeneralVariables.alertOnQsoComplete) return;
 
         String call = qslRecord.getToCallsign();
@@ -166,6 +251,19 @@ public class DxAlertNotifier {
                 QSO_CHANNEL_ID,
                 appContext.getString(R.string.alert_qso_complete_title),
                 body.toString(), call, qslRecord.getBandFreq());
+    }
+
+    /** "QSO with K 1 A B C logged" — once per logged contact, opt-in. */
+    private void announceQsoCompleteVoice(QSLRecord qslRecord) {
+        if (!GeneralVariables.voiceAnnounceQsoComplete) return;
+        String call = qslRecord.getToCallsign();
+        String key = VoiceAnnouncementDecisions.qsoCompleteKey(call, qslRecord.getEndTime());
+        if (!VoiceAnnouncementDecisions.claim(
+                voiceAnnouncer.spokenKeys(), key, voiceAnnouncer.canSpeakNow())) {
+            return;
+        }
+        GeneralVariables.fileLog("VOICE announce key=[" + key + "]");
+        voiceAnnouncer.speak(VoicePhrases.qsoLogged(call), key);
     }
 
     static String defaultBody(Ft8Message msg) {
