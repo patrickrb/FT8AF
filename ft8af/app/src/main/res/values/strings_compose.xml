@@ -716,6 +716,31 @@
     <string name="settings_watch_dialog_title">Callsign watchlist</string>
     <string name="settings_watch_dialog_desc">Comma-separated calls or prefixes (e.g. 3Y0, W1AW, TX7). An alert fires the instant a match is decoded — matched by prefix, so a DXpedition prefix catches every variant.</string>
     <string name="alert_watch_title">Watchlist: %1$s</string>
+
+    <!-- ===== Settings: voice assistant ===== -->
+    <string name="settings_cat_voice">Voice Assistant</string>
+    <string name="settings_cat_voice_desc">Spoken announcements and hands-free voice commands</string>
+    <string name="settings_section_voice_announce">Spoken announcements</string>
+    <string name="settings_section_voice_commands">Voice commands</string>
+    <string name="settings_voice_announce_calling">Station calling me</string>
+    <string name="settings_voice_announce_calling_desc">Speak the callsign and signal report when a station calls you</string>
+    <string name="settings_voice_announce_qso">QSO completed</string>
+    <string name="settings_voice_announce_qso_desc">Speak a confirmation when a QSO is logged</string>
+    <string name="settings_voice_announce_new_dxcc">New DXCC CQ</string>
+    <string name="settings_voice_announce_new_dxcc_desc">Speak when an unworked DXCC entity calls CQ</string>
+    <string name="settings_voice_announce_new_prefix">New prefix CQ</string>
+    <string name="settings_voice_announce_new_prefix_desc">Speak when an unworked WPX prefix calls CQ</string>
+    <string name="settings_voice_commands">Voice command button</string>
+    <string name="settings_voice_commands_desc">Show a push-to-talk mic button on the main screen. Say \"answer\", \"call CQ\", \"stop\", \"skip\", or \"log it\". Unavailable while FT8 receive uses the phone mic.</string>
+    <string name="settings_voice_tx_note">Announcements never play while transmitting, so they can\'t leak into the rig audio.</string>
+    <string name="voice_button_desc">Voice command</string>
+    <string name="voice_button_mic_busy_desc">Voice command unavailable: phone mic in use</string>
+    <string name="voice_mic_busy">Voice commands unavailable: the phone mic is capturing FT8 receive audio. Use USB or network rig audio to free it.</string>
+    <string name="voice_listening">Listening…</string>
+    <string name="voice_not_understood">Didn\'t catch a command. Try \"answer\", \"call CQ\", \"stop\", \"skip\", or \"log it\".</string>
+    <string name="voice_no_caller">No station to answer</string>
+    <string name="voice_recognizer_unavailable">Speech recognition is not available on this device</string>
+    <string name="voice_recognizer_error">Speech recognition error</string>
     <string name="rx_service_channel_name">Background receiving</string>
     <string name="rx_service_channel_desc">Keeps FT8 decoding running while the app is in the background or the screen is off</string>
     <string name="rx_service_title">FT8AF is receiving</string>

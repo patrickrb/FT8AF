@@ -33,6 +33,18 @@
          GPS breadcrumbs coming while the phone sits in a cradle with the screen off. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
+    <!-- Voice assistant: package-visibility (API 30+) for the on-device speech
+         recognizer and the system TTS engine. Without these, SpeechRecognizer
+         .isRecognitionAvailable() and TextToSpeech init can fail on Android 11+. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <application
         android:name="radio.ks3ckc.ft8af.FT8AFApplication"
         android:allowBackup="false"

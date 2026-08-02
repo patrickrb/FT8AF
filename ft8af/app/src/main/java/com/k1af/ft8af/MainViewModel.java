@@ -1015,6 +1015,25 @@ public class MainViewModel extends ViewModel {
         meterProtectionController.setTransmitSignal(ft8TransmitSignal);
         ft8TransmitSignal.setMeterProtectionController(meterProtectionController);
 
+        // Voice assistant: TTS must never leak into a transmission (it would be
+        // mixed into the rig audio and go out over the air — see the TX audio
+        // hazards in CLAUDE.md). Two layers: the announcer refuses to start an
+        // utterance while isTransmitting(), and this observer hard-stops any
+        // in-flight speech the instant TX begins. observeForever is safe here:
+        // the ViewModel constructor runs on the main thread (setValue above),
+        // and both objects live for the whole process.
+        {
+            final com.k1af.ft8af.voice.VoiceAnnouncer announcer =
+                    dxAlertNotifier.getVoiceAnnouncer();
+            announcer.setTransmitGate(
+                    () -> ft8TransmitSignal != null && ft8TransmitSignal.isTransmitting());
+            ft8TransmitSignal.mutableIsTransmitting.observeForever(transmitting -> {
+                if (Boolean.TRUE.equals(transmitting)) {
+                    announcer.stopNow();
+                }
+            });
+        }
+
         //bring up the WSJT-X UDP interface (status provider + inbound request handlers)
         setupWsjtxUdp();
 
@@ -1280,6 +1299,53 @@ public class MainViewModel extends ViewModel {
                 order,
                 message.extraInfo);
         ft8TransmitSignal.transmitNow();
+    }
+
+    // --- Voice assistant --------------------------------------------------------
+
+    /**
+     * Whether FT8 RX currently holds an Android audio-capture session (system
+     * mic or Android-routed USB input). The voice-command push-to-talk button
+     * is disabled while true: a SpeechRecognizer would fight our capture under
+     * Android's concurrent-capture rules. False for direct-libusb USB audio
+     * and LAN audio sources, where the capture stack is free.
+     */
+    public boolean isPhoneMicInUse() {
+        return hamRecorder != null && hamRecorder.isPhoneMicInUse();
+    }
+
+    /** The voice announcer (TTS), for the command button's spoken echo. */
+    public com.k1af.ft8af.voice.VoiceAnnouncer getVoiceAnnouncer() {
+        return dxAlertNotifier.getVoiceAnnouncer();
+    }
+
+    /**
+     * "Answer" voice command: call the best current candidate — the newest
+     * decode addressed to me, else the caller-queue head's newest decode
+     * (selection logic in {@link com.k1af.ft8af.voice.VoiceAnswerSelector}).
+     *
+     * @return the callsign being answered, or null when there was no candidate
+     *         (the spoken/toast feedback branches on this)
+     */
+    public String voiceAnswerBestCaller() {
+        if (ft8TransmitSignal == null) return null;
+        ArrayList<Ft8Message> snapshot;
+        synchronized (ft8Messages) {
+            snapshot = new ArrayList<>(ft8Messages);
+        }
+        ArrayList<com.k1af.ft8af.ft8transmit.QueuedCaller> queue =
+                ft8TransmitSignal.mutableCallerQueue.getValue();
+        String queueHead = (queue != null && !queue.isEmpty()) ? queue.get(0).callsign : null;
+
+        Ft8Message target = com.k1af.ft8af.voice.VoiceAnswerSelector.pick(
+                snapshot,
+                m -> GeneralVariables.checkIsMyCallsign(m.getCallsignTo()),
+                Ft8Message::getCallsignFrom,
+                queueHead);
+        if (target == null) return null;
+        // callStation guards against TX-in-progress, empty sender, and own call.
+        callStation(target);
+        return target.getCallsignFrom();
     }
 
     // --- WSJT-X UDP interface -------------------------------------------------

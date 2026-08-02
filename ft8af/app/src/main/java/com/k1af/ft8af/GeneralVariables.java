@@ -688,6 +688,17 @@ public class GeneralVariables {
     public static boolean alertOnCqReply = false;
     public static boolean alertOnQsoComplete = false;
 
+    // Voice assistant (Settings → Voice Assistant). All opt-in, default off.
+    //   - voiceAnnounce*: spoken TTS announcements (station calling me, QSO logged,
+    //     new-DXCC CQ, new-prefix CQ) — see voice/VoiceAnnouncer + DxAlertNotifier.
+    //   - voiceCommandsEnabled: shows the push-to-talk mic button on the main screen
+    //     for one-shot voice commands (answer / call CQ / stop / skip / log it).
+    public static boolean voiceAnnounceCalling = false;
+    public static boolean voiceAnnounceQsoComplete = false;
+    public static boolean voiceAnnounceNewDxcc = false;
+    public static boolean voiceAnnounceNewPrefix = false;
+    public static boolean voiceCommandsEnabled = false;
+
     // Geographic continent-directed CQ tokens — matched against myContinent.
     private static final java.util.Set<String> CONTINENT_CODES =
             new java.util.HashSet<>(java.util.Arrays.asList("NA", "SA", "EU", "AF", "AS", "OC", "AN"));
