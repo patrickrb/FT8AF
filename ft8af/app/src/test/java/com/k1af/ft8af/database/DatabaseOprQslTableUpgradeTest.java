@@ -54,8 +54,13 @@ public class DatabaseOprQslTableUpgradeTest {
 
     private static Set<String> columnsOf(SQLiteDatabase db, String table) {
         Set<String> names = new HashSet<>();
-        try (Cursor c = db.rawQuery("PRAGMA table_info(" + table + ")", null)) {
-            int nameIdx = c.getColumnIndex("name");
+        // PRAGMA takes no bind parameters, so the identifier has to be inlined; quote it
+        // rather than concatenating it bare. getColumnIndexOrThrow because the silent
+        // alternative is getString(-1), which fails as an opaque index error several
+        // frames from the actual cause.
+        String pragma = "PRAGMA table_info(\"" + table.replace("\"", "\"\"") + "\")";
+        try (Cursor c = db.rawQuery(pragma, null)) {
+            int nameIdx = c.getColumnIndexOrThrow("name");
             while (c.moveToNext()) {
                 names.add(c.getString(nameIdx));
             }
@@ -63,22 +68,36 @@ public class DatabaseOprQslTableUpgradeTest {
         return names;
     }
 
-    @Test
-    public void openingAnOlderDatabase_addsThePositionColumns() {
-        Context context = ApplicationProvider.getApplicationContext();
-        File dbFile = context.getDatabasePath("upgrade_probe.db");
+    /**
+     * Lay down a database exactly as the previous release left it: the old table, stamped
+     * with the old schema version so the helper sees an upgrade rather than a create.
+     *
+     * <p>Closed in a finally so a failure while building it cannot leak the handle — an
+     * open handle keeps the file locked on Windows, which would then defeat the
+     * {@code delete()} each test does on the way out and leave the next test to open a
+     * database it believes it created fresh.
+     */
+    private static void writeLegacyDatabase(File dbFile) {
         //noinspection ResultOfMethodCallIgnored
         dbFile.getParentFile().mkdirs();
         //noinspection ResultOfMethodCallIgnored
         dbFile.delete();
 
-        // Stand up a database as the previous release left it: the old table, stamped
-        // with the old schema version so the helper sees an upgrade rather than a create.
         SQLiteDatabase legacy = SQLiteDatabase.openOrCreateDatabase(dbFile, null);
-        legacy.execSQL(LEGACY_QSL_TABLE);
-        legacy.setVersion(19);
-        assertThat(columnsOf(legacy, "QSLTable")).doesNotContain("my_lat");
-        legacy.close();
+        try {
+            legacy.execSQL(LEGACY_QSL_TABLE);
+            legacy.setVersion(19);
+            assertThat(columnsOf(legacy, "QSLTable")).doesNotContain("my_lat");
+        } finally {
+            legacy.close();
+        }
+    }
+
+    @Test
+    public void openingAnOlderDatabase_addsThePositionColumns() {
+        Context context = ApplicationProvider.getApplicationContext();
+        File dbFile = context.getDatabasePath("upgrade_probe.db");
+        writeLegacyDatabase(dbFile);
 
         DatabaseOpr opr = new DatabaseOpr(context, dbFile.getName(), null, DatabaseOpr.SCHEMA_VERSION);
         try {
@@ -109,15 +128,7 @@ public class DatabaseOprQslTableUpgradeTest {
         // INSERT without a migration should fail here, not in a car.
         Context context = ApplicationProvider.getApplicationContext();
         File dbFile = context.getDatabasePath("upgrade_columns_probe.db");
-        //noinspection ResultOfMethodCallIgnored
-        dbFile.getParentFile().mkdirs();
-        //noinspection ResultOfMethodCallIgnored
-        dbFile.delete();
-
-        SQLiteDatabase legacy = SQLiteDatabase.openOrCreateDatabase(dbFile, null);
-        legacy.execSQL(LEGACY_QSL_TABLE);
-        legacy.setVersion(19);
-        legacy.close();
+        writeLegacyDatabase(dbFile);
 
         DatabaseOpr opr = new DatabaseOpr(context, dbFile.getName(), null, DatabaseOpr.SCHEMA_VERSION);
         try {
