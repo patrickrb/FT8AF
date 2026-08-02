@@ -48,6 +48,31 @@ public class WpxPrefixTest {
     }
 
     @Test
+    public void portableNumber_digitLeadingPrefix() {
+        // The prefix starts with a numeral, so the call has no leading letters to
+        // lift — the base prefix has to come from the simple-call rule first.
+        assertThat(WpxPrefix.of("9A1AA/7")).isEqualTo("9A7");
+        assertThat(WpxPrefix.of("4X4AAA/1")).isEqualTo("4X1");
+        // Only the prefix's own numeral is replaced, not the leading digit.
+        assertThat(WpxPrefix.of("3DA0RS/7")).isEqualTo("3DA7");
+    }
+
+    @Test
+    public void portableNumber_noNumeralCall() {
+        // RAEM has no digit at all: it resolves to RA0 on its own, so a portable
+        // number swaps that 0 rather than being appended to the whole call.
+        assertThat(WpxPrefix.of("RAEM/4")).isEqualTo("RA4");
+    }
+
+    @Test
+    public void portableNumber_onNonCallsignToken_staysNull() {
+        // A bare prefix or a grid isn't a whole callsign, so adding a portable
+        // number must not conjure one up.
+        assertThat(WpxPrefix.of("W1/7")).isNull();
+        assertThat(WpxPrefix.of("FN42/7")).isNull();
+    }
+
+    @Test
     public void portablePrefix_designatorWins() {
         assertThat(WpxPrefix.of("DL/W1AW")).isEqualTo("DL0");
         assertThat(WpxPrefix.of("PJ4/K1ABC")).isEqualTo("PJ4");

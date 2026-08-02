@@ -20,8 +20,14 @@ import java.util.Locale;
  *       {@code 9A1AA}&rarr;{@code 9A1}, {@code 3DA0RS}&rarr;{@code 3DA0}.</li>
  *   <li>Call with no numeral (rare/historic, e.g. {@code RAEM}) — first two
  *       letters plus {@code 0} &rarr; {@code RA0}.</li>
- *   <li>Portable number {@code CALL/n} — the base call's leading letters plus
- *       the new number. {@code W1AW/4}&rarr;{@code W4}, {@code VE3ABC/7}&rarr;{@code VE7}.</li>
+ *   <li>Portable number {@code CALL/n} — the base call's own prefix with its
+ *       numeral swapped for the new one. {@code W1AW/4}&rarr;{@code W4},
+ *       {@code VE3ABC/7}&rarr;{@code VE7}, {@code 9A1AA/7}&rarr;{@code 9A7},
+ *       {@code RAEM/4}&rarr;{@code RA4}. Deriving the base with the same
+ *       simple-call rule (rather than lifting leading letters off the raw token)
+ *       is what makes digit-leading and no-numeral calls behave; it also means a
+ *       token that isn't a whole callsign — {@code W1/7}, {@code FN42/7} — stays
+ *       {@code null} instead of inventing a prefix.</li>
  *   <li>Portable prefix {@code pfx/CALL} — the designator prefix, adding a
  *       {@code 0} when it carries no numeral. {@code DL/W1AW}&rarr;{@code DL0},
  *       {@code PJ4/K1ABC}&rarr;{@code PJ4}, {@code W1AW/KH6}&rarr;{@code KH6}.</li>
@@ -107,7 +113,8 @@ public final class WpxPrefix {
             return simple(parts.get(0));
         }
 
-        // Portable number: CALL/n → base's leading letters + the new number.
+        // Portable number: CALL/n → the base call's own prefix with its numeral
+        // swapped for the new one.
         String numeric = null;
         for (String p : parts) {
             if (isAllDigits(p) && p.length() <= 2) {
@@ -117,8 +124,8 @@ public final class WpxPrefix {
         if (numeric != null) {
             for (String p : parts) {
                 if (!isAllDigits(p)) {
-                    String letters = leadingLetters(p);
-                    return letters.isEmpty() ? null : letters + numeric;
+                    String base = simple(p);
+                    return base == null ? null : withPortableNumber(base, numeric);
                 }
             }
             return null;
@@ -195,11 +202,27 @@ public final class WpxPrefix {
         return false;
     }
 
-    private static String leadingLetters(String s) {
-        int i = 0;
-        while (i < s.length() && s.charAt(i) >= 'A' && s.charAt(i) <= 'Z') {
-            i++;
+    /**
+     * Swap the trailing numerals of an already-derived prefix for the portable
+     * number, e.g. {@code ("9A1","7")}&rarr;{@code 9A7}, {@code ("RA0","4")}&rarr;
+     * {@code RA4}, {@code ("W1","4")}&rarr;{@code W4}.
+     *
+     * <p>Working from {@link #simple(String)}'s output rather than the raw token's
+     * leading letters is what makes the digit-leading and no-numeral cases come
+     * out right: {@code 9A1AA} has no leading letters at all, and {@code RAEM}
+     * is all letters, so lifting letters off the raw call yielded nothing or the
+     * whole token. {@code simple} has already resolved both to a real prefix
+     * ({@code 9A1}, {@code RA0}), and every prefix it returns ends in a numeral,
+     * so replacing that numeral is well defined.
+     *
+     * @return the adjusted prefix, or {@code null} if nothing but digits remains
+     */
+    private static String withPortableNumber(String base, String number) {
+        int end = base.length();
+        while (end > 0 && base.charAt(end - 1) >= '0' && base.charAt(end - 1) <= '9') {
+            end--;
         }
-        return s.substring(0, i);
+        String letters = base.substring(0, end);
+        return letters.isEmpty() ? null : letters + number;
     }
 }
