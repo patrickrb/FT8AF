@@ -1,7 +1,7 @@
 import Foundation
 
 /// ADIF import/export for the QSO log. `export` is a byte-for-byte port of desktop
-/// db.rs `export_adif` (same header, field set, order, and the fixed QSL flags),
+/// db.rs `export_adif` (same header, field set, order, and the fixed QSL flag),
 /// so logs round-trip identically across the iOS app, the desktop port, and
 /// ShareLogs. `parse` is the inverse (new on iOS — users import existing logs),
 /// a lenient length-prefixed `<field:len>value` tokenizer.
@@ -11,12 +11,13 @@ public enum Adif {
 
     /// Render `records` as an ADIF string in the given order. Matches desktop
     /// db.rs export_adif exactly: a fixed header, then per record the CALL field,
-    /// the fixed QSL flags, every non-empty optional field, and comment + <eor>.
+    /// `QSL_RCVD` (iOS has no confirmation state yet, so always `N`), every
+    /// non-empty optional field, and comment + <eor>.
     public static func export(_ records: [QsoRecord]) -> String {
         var out = "FT8AF ADIF Export<eoh>\n"
         for r in records {
             out += field("call", r.call)
-            out += "<QSL_RCVD:1>N <QSL_MANUAL:1>N "
+            out += "<QSL_RCVD:1>N "
             opt(&out, "gridsquare", r.gridsquare)
             opt(&out, "mode", r.mode)
             opt(&out, "rst_sent", r.rstSent)
