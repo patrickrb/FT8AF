@@ -1,0 +1,29 @@
+{
+  "beta": [
+    {
+      "name": "0.149-dev.666",
+      "status": "completed",
+      "versionCodes": [
+        1666
+      ]
+    }
+  ],
+  "internal": [
+    {
+      "name": "android-dev.677",
+      "status": "completed",
+      "versionCodes": [
+        1677
+      ]
+    }
+  ],
+  "production": [
+    {
+      "name": "2.0",
+      "status": "completed",
+      "versionCodes": [
+        1327
+      ]
+    }
+  ]
+}
