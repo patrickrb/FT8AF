@@ -235,7 +235,7 @@ public class AdifFormatTest {
     }
 
     @Test
-    public void stripHeader_headlessFile_returnsWholeContent() {
+    public void stripHeader_headerlessFile_returnsWholeContent() {
         // Regression: the file begins with '<' so per the ADI spec it has NO header and is
         // entirely records. The old importers split on <eoh>, found none, and returned "" \u2014
         // dropping every QSO. The whole content must survive.
@@ -244,7 +244,7 @@ public class AdifFormatTest {
     }
 
     @Test
-    public void stripHeader_headlessFile_skipsLeadingWhitespaceAndBom() {
+    public void stripHeader_headerlessFile_skipsLeadingWhitespaceAndBom() {
         // A leading BOM or newline before the first field must not be mistaken for a header.
         String content = "<call:5>K1ABC<eor>";
         assertThat(AdifFormat.stripHeader("\n  " + content)).isEqualTo("\n  " + content);
@@ -268,7 +268,7 @@ public class AdifFormatTest {
     }
 
     @Test
-    public void stripHeader_headPresentButNoEoh_returnsEmpty() {
+    public void stripHeader_headerPresentButNoEoh_returnsEmpty() {
         // Header present (does not begin with '<') but unterminated: no parseable body.
         assertThat(AdifFormat.stripHeader("header only, no eoh marker")).isEmpty();
     }
