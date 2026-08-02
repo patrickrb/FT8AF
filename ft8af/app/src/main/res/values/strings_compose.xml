@@ -731,11 +731,11 @@
     <string name="settings_voice_announce_new_prefix">New prefix CQ</string>
     <string name="settings_voice_announce_new_prefix_desc">Speak when an unworked WPX prefix calls CQ</string>
     <string name="settings_voice_commands">Voice command button</string>
-    <string name="settings_voice_commands_desc">Show a push-to-talk mic button on the main screen. Say \"answer\", \"call CQ\", \"stop\", \"skip\", or \"log it\". Unavailable while FT8 receive uses the phone mic.</string>
+    <string name="settings_voice_commands_desc">Show a push-to-talk mic button on the main screen. Say \"answer\", \"call CQ\", \"stop\", \"skip\", or \"log it\". Unavailable while FT8 receive is capturing through Android audio (phone mic or Android-routed USB).</string>
     <string name="settings_voice_tx_note">Announcements never play while transmitting, so they can\'t leak into the rig audio.</string>
     <string name="voice_button_desc">Voice command</string>
-    <string name="voice_button_mic_busy_desc">Voice command unavailable: phone mic in use</string>
-    <string name="voice_mic_busy">Voice commands unavailable: the phone mic is capturing FT8 receive audio. Use USB or network rig audio to free it.</string>
+    <string name="voice_button_mic_busy_desc">Voice command unavailable: audio input in use by FT8 receive</string>
+    <string name="voice_mic_busy">Voice commands unavailable: FT8 receive is capturing through Android audio (phone mic or Android-routed USB). Direct-USB or network rig audio frees it.</string>
     <string name="voice_listening">Listening…</string>
     <string name="voice_not_understood">Didn\'t catch a command. Try \"answer\", \"call CQ\", \"stop\", \"skip\", or \"log it\".</string>
     <string name="voice_no_caller">No station to answer</string>

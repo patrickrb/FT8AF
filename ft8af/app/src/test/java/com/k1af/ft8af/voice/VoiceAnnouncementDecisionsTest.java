@@ -152,4 +152,21 @@ public class VoiceAnnouncementDecisionsTest {
         assertThat(VoiceAnnouncementDecisions.callingMeKey(null)).isEqualTo("VCALL:");
         assertThat(VoiceAnnouncementDecisions.qsoCompleteKey(null, null)).isEqualTo("VQSO:|");
     }
+
+    @Test
+    public void keys_localeStableUnderTurkishDefaultLocale() {
+        // Default-locale toUpperCase() in tr-TR maps 'i' -> dotted 'İ', so the
+        // same station would produce different dedup keys on a Turkish device.
+        // norm() must use Locale.ROOT.
+        java.util.Locale original = java.util.Locale.getDefault();
+        try {
+            java.util.Locale.setDefault(new java.util.Locale("tr", "TR"));
+            assertThat(VoiceAnnouncementDecisions.callingMeKey("ti5abc"))
+                    .isEqualTo("VCALL:TI5ABC");
+            assertThat(VoiceAnnouncementDecisions.newDxccKey("Liberia"))
+                    .isEqualTo("VDXCC:LIBERIA");
+        } finally {
+            java.util.Locale.setDefault(original);
+        }
+    }
 }

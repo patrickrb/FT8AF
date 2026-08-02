@@ -62,6 +62,21 @@ internal fun voiceButtonState(
     }
 
 /**
+ * Toast string resource for a recognizer error code, or null for codes that
+ * must stay silent: ERROR_CLIENT is what the recognizer emits after a
+ * user-initiated cancel() (second tap), and toasting it would make a
+ * deliberate cancel look like a failure. Pure so the mapping is testable.
+ */
+internal fun voiceErrorToastRes(errorCode: Int): Int? =
+    when (errorCode) {
+        SpeechRecognizer.ERROR_CLIENT -> null
+        SpeechRecognizer.ERROR_NO_MATCH,
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
+        -> R.string.voice_not_understood
+        else -> R.string.voice_recognizer_error
+    }
+
+/**
  * The spoken confirmation for an executed voice command, or null when there
  * is nothing to echo (UNKNOWN, or ANSWER with no candidate — those get toasts
  * instead). Pure; the phrases themselves live in [VoicePhrases].
@@ -155,15 +170,12 @@ fun VoiceCommandButton(
                     },
                     onError = { errorCode ->
                         listening = false
-                        val msgRes = when (errorCode) {
-                            SpeechRecognizer.ERROR_NO_MATCH,
-                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
-                            -> R.string.voice_not_understood
-                            else -> R.string.voice_recognizer_error
+                        val msgRes = voiceErrorToastRes(errorCode)
+                        if (msgRes != null) {
+                            Toast
+                                .makeText(context, context.getString(msgRes), Toast.LENGTH_SHORT)
+                                .show()
                         }
-                        Toast
-                            .makeText(context, context.getString(msgRes), Toast.LENGTH_SHORT)
-                            .show()
                     },
                 )
             }

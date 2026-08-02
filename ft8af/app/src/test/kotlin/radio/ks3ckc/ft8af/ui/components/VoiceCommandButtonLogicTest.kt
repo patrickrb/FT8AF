@@ -1,6 +1,8 @@
 package radio.ks3ckc.ft8af.ui.components
 
+import android.speech.SpeechRecognizer
 import com.google.common.truth.Truth.assertThat
+import com.k1af.ft8af.R
 import com.k1af.ft8af.voice.VoiceCommandParser
 import org.junit.Test
 
@@ -61,5 +63,30 @@ class VoiceCommandButtonLogicTest {
     @Test
     fun unknownHasNoEcho() {
         assertThat(echoPhraseFor(VoiceCommandParser.Command.UNKNOWN, null)).isNull()
+    }
+
+    // ---- recognizer error -> toast mapping ---------------------------------
+
+    @Test
+    fun errorClientIsSilent() {
+        // ERROR_CLIENT is what cancel() (second tap) produces — a deliberate
+        // user action must not be toasted as a failure.
+        assertThat(voiceErrorToastRes(SpeechRecognizer.ERROR_CLIENT)).isNull()
+    }
+
+    @Test
+    fun noMatchAndTimeoutToastNotUnderstood() {
+        assertThat(voiceErrorToastRes(SpeechRecognizer.ERROR_NO_MATCH))
+            .isEqualTo(R.string.voice_not_understood)
+        assertThat(voiceErrorToastRes(SpeechRecognizer.ERROR_SPEECH_TIMEOUT))
+            .isEqualTo(R.string.voice_not_understood)
+    }
+
+    @Test
+    fun otherErrorsToastGenericMessage() {
+        assertThat(voiceErrorToastRes(SpeechRecognizer.ERROR_NETWORK))
+            .isEqualTo(R.string.voice_recognizer_error)
+        assertThat(voiceErrorToastRes(SpeechRecognizer.ERROR_AUDIO))
+            .isEqualTo(R.string.voice_recognizer_error)
     }
 }

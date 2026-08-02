@@ -1,5 +1,6 @@
 package com.k1af.ft8af.voice;
 
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -86,6 +87,8 @@ public final class VoiceAnnouncementDecisions {
     }
 
     private static String norm(String s) {
-        return s == null ? "" : s.trim().toUpperCase();
+        // Locale.ROOT: default-locale casing (e.g. Turkish dotted/dotless I)
+        // would make dedup keys differ between devices for the same station.
+        return s == null ? "" : s.trim().toUpperCase(Locale.ROOT);
     }
 }
