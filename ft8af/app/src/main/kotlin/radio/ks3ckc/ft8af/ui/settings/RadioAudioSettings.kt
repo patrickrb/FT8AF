@@ -1,6 +1,7 @@
 package radio.ks3ckc.ft8af.ui.settings
 
 import android.media.AudioManager
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -644,6 +645,60 @@ fun RadioAudioSettings(
                         },
                     )
                     SectionDivider()
+                    run {
+                        // "Direct USB TX" is a second view of the audio-output
+                        // selection above: on == route TX straight to the USB
+                        // radio (bypasses Android's mixer, so notification/app
+                        // sounds can't leak on air); off == normal AudioTrack
+                        // sink. Both write the same GeneralVariables + config
+                        // keys, so this toggle and the picker stay in step.
+                        var directUsb by remember {
+                            mutableStateOf(
+                                isDirectUsbTxEnabled(
+                                    GeneralVariables.audioOutputDeviceId,
+                                    GeneralVariables.usbAudioOutputVendorId,
+                                ),
+                            )
+                        }
+                        SettingsRow(
+                            label = stringResource(R.string.settings_direct_usb_tx),
+                            description = stringResource(R.string.settings_direct_usb_tx_desc),
+                            toggle = directUsb,
+                            onToggleChange = { enabled ->
+                                if (enabled) {
+                                    audioOutputAdapter.refreshDevices()
+                                    val usbInfo = firstUsbOutputDevice(audioOutputAdapter)
+                                    if (usbInfo == null) {
+                                        // Can't enable with no USB sound card present;
+                                        // leave the toggle off and say why.
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.settings_direct_usb_tx_none),
+                                            Toast.LENGTH_LONG,
+                                        ).show()
+                                    } else {
+                                        applyAudioOutputSelection(
+                                            mainViewModel,
+                                            directUsbTxSelection(
+                                                usbInfo.device.vendorId,
+                                                usbInfo.device.productId,
+                                            ),
+                                        )
+                                        mainViewModel.requestUsbPermissionIfNeeded(usbInfo.device)
+                                        audioOutputName = audioOutputAdapter.getDeviceDisplayName(
+                                            audioOutputAdapter.getPositionByDeviceId(-1),
+                                        )
+                                        directUsb = true
+                                    }
+                                } else {
+                                    applyAudioOutputSelection(mainViewModel, systemDefaultTxSelection())
+                                    audioOutputName = audioOutputAdapter.getDeviceDisplayName(0)
+                                    directUsb = false
+                                }
+                            },
+                        )
+                    }
+                    SectionDivider()
                     SettingsRow(
                         label = stringResource(R.string.settings_input_volume),
                         description = stringResource(R.string.settings_input_volume_desc),
@@ -1003,3 +1058,41 @@ internal const val INPUT_VOLUME_MAX = 200
  * re-persisted unchanged on dismiss.
  */
 internal fun clampVolumePercent(value: Int, maxValue: Int): Int = value.coerceIn(0, maxValue)
+
+/**
+ * First USB-audio output device the adapter knows about, or null if none is
+ * connected. The output adapter's USB list is already filtered to
+ * output-capable devices, so the first non-null entry is a valid TX sink.
+ */
+private fun firstUsbOutputDevice(
+    adapter: AudioDeviceSpinnerAdapter,
+): com.k1af.ft8af.wave.UsbAudioDevice.UsbAudioDeviceInfo? {
+    for (pos in 0 until adapter.count) {
+        val info = adapter.getUsbAudioDeviceInfo(pos)
+        if (info != null) return info
+    }
+    return null
+}
+
+/**
+ * Apply an [AudioOutputSelection] to the live fields and persist it, using the
+ * same three config keys the "Audio Output" device picker writes so the two
+ * controls round-trip identically across restarts.
+ */
+private fun applyAudioOutputSelection(
+    mainViewModel: MainViewModel,
+    selection: AudioOutputSelection,
+) {
+    GeneralVariables.audioOutputDeviceId = selection.audioOutputDeviceId
+    GeneralVariables.usbAudioOutputVendorId = selection.usbVendorId
+    GeneralVariables.usbAudioOutputProductId = selection.usbProductId
+    mainViewModel.databaseOpr.writeConfig(
+        "audioOutputDevice", selection.audioOutputDeviceId.toString(), null,
+    )
+    mainViewModel.databaseOpr.writeConfig(
+        "usbAudioOutputVid", selection.usbVendorId.toString(), null,
+    )
+    mainViewModel.databaseOpr.writeConfig(
+        "usbAudioOutputPid", selection.usbProductId.toString(), null,
+    )
+}

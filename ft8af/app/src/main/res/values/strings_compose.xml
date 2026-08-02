@@ -615,6 +615,9 @@
     <string name="settings_per_band_volume">Save Output Level per Band</string>
     <string name="settings_per_band_volume_desc">Remember the TX volume separately for each band and restore it on band change</string>
     <string name="per_band_volume_restored">TX volume %1$d%% restored for %2$s</string>
+    <string name="settings_direct_usb_tx">Direct USB TX</string>
+    <string name="settings_direct_usb_tx_desc">Send transmit audio straight to the USB radio, bypassing Android\'s mixer. Keeps notification and other app sounds off the air. Turn off to transmit through the normal audio output.</string>
+    <string name="settings_direct_usb_tx_none">No USB audio device found. Connect the radio\'s sound card and try again.</string>
 
     <!-- ===== Settings: transmission ===== -->
     <string name="settings_tx_rx_split">TX/RX Split</string>
