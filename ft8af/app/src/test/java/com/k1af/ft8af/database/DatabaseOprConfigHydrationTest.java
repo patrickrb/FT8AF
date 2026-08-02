@@ -54,6 +54,7 @@ public class DatabaseOprConfigHydrationTest {
     private int origAlcTargetLow;
     private boolean origDeepDecodeMode;
     private boolean origKeepScreenOn;
+    private boolean origAutoSyncClockFromDecodes;
 
     @Before
     public void setUp() {
@@ -71,6 +72,7 @@ public class DatabaseOprConfigHydrationTest {
         origAlcTargetLow = GeneralVariables.alcTargetLow;
         origDeepDecodeMode = GeneralVariables.deepDecodeMode;
         origKeepScreenOn = GeneralVariables.keepScreenOn;
+        origAutoSyncClockFromDecodes = GeneralVariables.autoSyncClockFromDecodes;
 
         opr = new DatabaseOpr(ApplicationProvider.getApplicationContext(), null, null, 18);
     }
@@ -94,6 +96,7 @@ public class DatabaseOprConfigHydrationTest {
             GeneralVariables.alcTargetLow = origAlcTargetLow;
             GeneralVariables.deepDecodeMode = origDeepDecodeMode;
             GeneralVariables.keepScreenOn = origKeepScreenOn;
+            GeneralVariables.autoSyncClockFromDecodes = origAutoSyncClockFromDecodes;
         }
     }
 
@@ -282,6 +285,35 @@ public class DatabaseOprConfigHydrationTest {
         hydrate();
 
         assertThat(GeneralVariables.keepScreenOn).isTrue();
+    }
+
+    // ---- self-syncing clock (ClockSelfSync) -----------------------------------
+    // New "autoSyncClockFromDecodes" key: the classic bug this guards against is
+    // adding the field + writeConfig on toggle but forgetting the hydration arm,
+    // which silently reverts the setting to off on every relaunch.
+
+    @Test
+    public void autoSyncClockFromDecodes_hydratesOnAndOff() {
+        GeneralVariables.autoSyncClockFromDecodes = false;
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("autoSyncClockFromDecodes", "1");
+        opr.writeConfigSync(config);
+        hydrate();
+        assertThat(GeneralVariables.autoSyncClockFromDecodes).isTrue();
+
+        GeneralVariables.autoSyncClockFromDecodes = true;
+        config.put("autoSyncClockFromDecodes", "0");
+        opr.writeConfigSync(config);
+        hydrate();
+        assertThat(GeneralVariables.autoSyncClockFromDecodes).isFalse();
+    }
+
+    @Test
+    public void autoSyncClockFromDecodes_absentRowLeavesDefaultOff() {
+        GeneralVariables.autoSyncClockFromDecodes = false;
+        // No row written for the key at all (fresh install / pre-feature backup).
+        hydrate();
+        assertThat(GeneralVariables.autoSyncClockFromDecodes).isFalse();
     }
 
     @Test

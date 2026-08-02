@@ -120,6 +120,7 @@ import com.k1af.ft8af.rigs.Yaesu38_450Rig;
 import com.k1af.ft8af.rigs.Yaesu39Rig;
 import com.k1af.ft8af.rigs.YaesuDX10Rig;
 import com.k1af.ft8af.spectrum.SpectrumListener;
+import com.k1af.ft8af.timer.ClockSelfSync;
 import com.k1af.ft8af.timer.OnUtcTimer;
 import com.k1af.ft8af.timer.UtcTimer;
 import com.k1af.ft8af.ui.ToastMessage;
@@ -169,6 +170,12 @@ public class MainViewModel extends ViewModel {
     //public int decoded_counter = 0;//total decoded count
     public final ArrayList<Ft8Message> ft8Messages = new ArrayList<>();//message list
     public UtcTimer utcTimer;//timer for sync-triggered actions.
+
+    // Self-syncing clock (opt-in): per-slot median-DT estimator that trims
+    // UtcTimer.delay from the band itself. Fed from afterDecode's fast pass;
+    // reset by the settings toggle / GPS discipline takeover. Public so
+    // TimeSyncSettings can reset it when the operator flips the toggles.
+    public final ClockSelfSync clockSelfSync = new ClockSelfSync();
 
 
     //public CallsignDatabase callsignDatabase = null;//callsign information database
@@ -667,6 +674,41 @@ public class MainViewModel extends ViewModel {
                 // passes to avoid log spam (they re-report the same cycle).
                 if (!isDeep) {
                     fileLog(filtered.decodeLogLine(sequential));
+
+                    // Self-syncing clock (opt-in): sample this slot's per-decode DTs
+                    // from the fast pass only — it fires exactly once per slot with
+                    // that pass's own (deduped, echo-filtered) messages. Deep/late
+                    // passes re-deliver the same slot and are skipped by the isDeep
+                    // gate; beginSlot() dedupes by slot utc as a second line of
+                    // defense. GPS discipline owns the clock when enabled, so this
+                    // stands down (and clears its state) rather than fight it.
+                    if (GeneralVariables.autoSyncClockFromDecodes
+                            && !GeneralVariables.disciplineClockFromGPS) {
+                        if (clockSelfSync.beginSlot(utc)) {
+                            float[] dtSamples = new float[messages.size()];
+                            for (int i = 0; i < messages.size(); i++) {
+                                dtSamples[i] = messages.get(i).time_sec;
+                            }
+                            Integer newDelay =
+                                    clockSelfSync.onSlotDecodes(dtSamples, UtcTimer.delay);
+                            if (newDelay != null) {
+                                int oldDelay = UtcTimer.delay;
+                                // Same three-way fan-out as TimeSyncSettings.apply():
+                                // live timer, in-memory config mirror, and DB.
+                                UtcTimer.delay = newDelay;
+                                GeneralVariables.manualTimeCorrectionMs = newDelay;
+                                databaseOpr.writeConfig("timeCorrectionMs",
+                                        String.valueOf(newDelay), null);
+                                fileLog("selfSync: applied clock correction "
+                                        + oldDelay + " -> " + newDelay + " ms ("
+                                        + dtSamples.length + " decodes, slot utc=" + utc + ")");
+                            }
+                        }
+                    } else {
+                        // Feature off or GPS disciplining: drop any half-built
+                        // confirmation streak so stale state can't act later.
+                        clockSelfSync.reset();
+                    }
                 }
                 if (messages.size() == 0) {
                     //nothing left after filtering own echoes
