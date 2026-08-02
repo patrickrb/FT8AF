@@ -121,6 +121,10 @@ fun VoiceSettings(
                     onToggleChange = { checked ->
                         commandsEnabled = checked
                         GeneralVariables.voiceCommandsEnabled = checked
+                        // The mic button on the (already-composed) main screen
+                        // observes this mirror; without it the change only shows
+                        // after an app restart.
+                        GeneralVariables.mutableVoiceCommandsEnabled.value = checked
                         mainViewModel.databaseOpr.writeConfig(
                             "voiceCommandsEnabled", if (checked) "1" else "0", null,
                         )

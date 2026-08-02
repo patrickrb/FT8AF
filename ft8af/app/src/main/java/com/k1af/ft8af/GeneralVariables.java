@@ -698,6 +698,12 @@ public class GeneralVariables {
     public static boolean voiceAnnounceNewDxcc = false;
     public static boolean voiceAnnounceNewPrefix = false;
     public static boolean voiceCommandsEnabled = false;
+    // Observable mirror of voiceCommandsEnabled: the mic button lives on the main
+    // screen, which is already composed when the settings toggle flips — a plain
+    // static read there never recomposes, so the button only appeared after an
+    // app restart. Settings writes and config hydration must update both.
+    public static final MutableLiveData<Boolean> mutableVoiceCommandsEnabled =
+            new MutableLiveData<>(false);
 
     // Geographic continent-directed CQ tokens — matched against myContinent.
     private static final java.util.Set<String> CONTINENT_CODES =

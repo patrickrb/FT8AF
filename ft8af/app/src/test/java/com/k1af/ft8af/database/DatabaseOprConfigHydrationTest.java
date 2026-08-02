@@ -284,6 +284,59 @@ public class DatabaseOprConfigHydrationTest {
         assertThat(GeneralVariables.keepScreenOn).isTrue();
     }
 
+    // ---- voice-command toggle + its observable mirror -------------------------
+    // The main-screen mic button observes mutableVoiceCommandsEnabled (a plain
+    // static read there is never recomposed), so hydration must update BOTH the
+    // static and the LiveData mirror or a persisted "on" renders no button until
+    // the setting is touched.
+
+    @Test
+    public void voiceCommandsEnabled_hydrationUpdatesStaticAndLiveDataMirror() {
+        boolean origEnabled = GeneralVariables.voiceCommandsEnabled;
+        Boolean origMirror = GeneralVariables.mutableVoiceCommandsEnabled.getValue();
+        try {
+            GeneralVariables.voiceCommandsEnabled = false;
+            GeneralVariables.mutableVoiceCommandsEnabled.setValue(false);
+
+            Map<String, String> config = new LinkedHashMap<>();
+            config.put("voiceCommandsEnabled", "1");
+            opr.writeConfigSync(config);
+
+            hydrate();
+            // postValue lands via the main looper; run it so getValue() sees it.
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+
+            assertThat(GeneralVariables.voiceCommandsEnabled).isTrue();
+            assertThat(GeneralVariables.mutableVoiceCommandsEnabled.getValue()).isTrue();
+        } finally {
+            GeneralVariables.voiceCommandsEnabled = origEnabled;
+            GeneralVariables.mutableVoiceCommandsEnabled.setValue(origMirror);
+        }
+    }
+
+    @Test
+    public void voiceCommandsEnabled_hydrationTurnsMirrorBackOff() {
+        boolean origEnabled = GeneralVariables.voiceCommandsEnabled;
+        Boolean origMirror = GeneralVariables.mutableVoiceCommandsEnabled.getValue();
+        try {
+            GeneralVariables.voiceCommandsEnabled = true;
+            GeneralVariables.mutableVoiceCommandsEnabled.setValue(true);
+
+            Map<String, String> config = new LinkedHashMap<>();
+            config.put("voiceCommandsEnabled", "0");
+            opr.writeConfigSync(config);
+
+            hydrate();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+
+            assertThat(GeneralVariables.voiceCommandsEnabled).isFalse();
+            assertThat(GeneralVariables.mutableVoiceCommandsEnabled.getValue()).isFalse();
+        } finally {
+            GeneralVariables.voiceCommandsEnabled = origEnabled;
+            GeneralVariables.mutableVoiceCommandsEnabled.setValue(origMirror);
+        }
+    }
+
     @Test
     public void powerToggles_nonBooleanValueReadsAsOff() {
         // Hydration compares against "1", so anything else is off rather than a

@@ -100,8 +100,14 @@ fun VoiceCommandButton(
     // ambient recomposition (slot timer / TX state churn in FT8AFApp).
     val recorderRunning by mainViewModel.mutableHamRecordIsRunning.observeAsState(false)
 
+    // Observable mirror of the setting — a plain static read here would only be
+    // re-evaluated on unrelated recompositions, so the button wouldn't appear or
+    // disappear until app restart when the toggle flips.
+    val commandsEnabled by GeneralVariables.mutableVoiceCommandsEnabled
+        .observeAsState(GeneralVariables.voiceCommandsEnabled)
+
     val state = voiceButtonState(
-        commandsEnabled = GeneralVariables.voiceCommandsEnabled,
+        commandsEnabled = commandsEnabled == true,
         // isPhoneMicInUse() already includes the running check; the LiveData
         // read is ANDed in to make this a tracked snapshot dependency.
         phoneMicInUse = recorderRunning == true && mainViewModel.isPhoneMicInUse(),

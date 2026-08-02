@@ -3007,6 +3007,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("voiceCommandsEnabled")) {//Voice: push-to-talk command button
                     GeneralVariables.voiceCommandsEnabled = result.equals("1");
+                    // Hydration runs on a worker thread; postValue keeps the
+                    // observable mirror (main-screen mic button) in sync.
+                    GeneralVariables.mutableVoiceCommandsEnabled
+                            .postValue(GeneralVariables.voiceCommandsEnabled);
                 }
                 if (name.equalsIgnoreCase("flexMaxRfPower")) {//Flex max RF power
                     GeneralVariables.flexMaxRfPower = parseConfigInt(result, 10);
