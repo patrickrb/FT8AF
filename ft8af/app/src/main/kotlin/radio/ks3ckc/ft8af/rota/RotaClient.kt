@@ -80,6 +80,19 @@ fun classifyPlanStartFailure(
 }
 
 /**
+ * Whether the trip left behind by [outcome] has to be asked what it already holds.
+ *
+ * One question decides it: did *this* process put the row into `active`? A trip
+ * we started ourselves knows exactly what it has sent, so the handshake would be
+ * a wasted request. An *adopted* row — [PlanStartOutcome.ALREADY_STARTED], where
+ * another device started the plan or a start we never saw the answer to landed —
+ * could hold anything, and that is the same not-knowing a trip resumed from disk
+ * has. [PlanStartOutcome.PLAN_GONE] creates a fresh trip and
+ * [PlanStartOutcome.RETRY] never got one, so neither has a server to ask.
+ */
+fun needsResumeHandshake(outcome: PlanStartOutcome): Boolean = outcome == PlanStartOutcome.ALREADY_STARTED
+
+/**
  * Backoff before retry [attempt] (1-based): 30s, 60s, 2m, 4m, … capped at 15
  * minutes. Long by HTTP standards on purpose — the failure this handles is
  * usually "no cell coverage for the next 40 miles", and hammering the radio
@@ -277,7 +290,7 @@ object RotaClient {
      * plan's settings are already on the row this promotes.
      *
      * The server answers 409 when the trip is no longer `planned`, which for a
-     * retry that actually landed is success in disguise; [RotaHttpException.code]
+     * retry that actually landed is success in disguise; [RotaHttpException.httpCode]
      * lets the caller tell that apart from a real failure.
      */
     suspend fun startPlannedTrip(

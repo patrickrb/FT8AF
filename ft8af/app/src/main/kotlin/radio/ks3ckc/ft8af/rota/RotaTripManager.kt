@@ -118,9 +118,10 @@ object RotaTripManager {
     private var failedAttempts = 0
 
     /**
-     * Set when a trip is resumed from disk, cleared once the server has told us
-     * what it already holds. Only a *resumed* trip needs asking: a trip this
-     * process started knows exactly what it has sent.
+     * Set when the trip in hand is one this process did not start — resumed from
+     * disk, or adopted after a 409 — and cleared once the server has told us what
+     * it already holds. A trip this process started knows exactly what it has
+     * sent and skips the request. See [needsResumeHandshake].
      */
     @Volatile
     private var resumeHandshakePending = false
@@ -497,12 +498,15 @@ object RotaTripManager {
                         when (classifyPlanStartFailure(e, planId)) {
                             // 409: the plan is no longer `planned`, so a previous
                             // attempt landed (or another device started it). The
-                            // row is the trip; adopt it and let the resume
-                            // handshake below establish what the server holds.
+                            // row is the trip; adopt it, and arm the resume
+                            // handshake below — an adopted row is one this
+                            // process did not start, so what it already holds is
+                            // exactly as unknown as a trip resumed from disk.
                             PlanStartOutcome.ALREADY_STARTED -> {
                                 RotaSettings.tripId = planId
                                 RotaSettings.tripPendingCreate = false
                                 pendingNotes = null
+                                resumeHandshakePending = needsResumeHandshake(PlanStartOutcome.ALREADY_STARTED)
                                 _state.value = _state.value.copy(tripId = planId, pendingCreate = false)
                                 log("plan already started id=$planId — adopting it")
                             }

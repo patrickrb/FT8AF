@@ -244,6 +244,22 @@ class RotaClientTest {
     }
 
     @Test
+    fun `an adopted trip is asked what it holds, a trip we started is not`() {
+        // The 409 branch adopts a row this process did not start — another
+        // device's, or a start whose answer we never saw — so its contents are
+        // as unknown as a trip resumed from disk, and the queue must not be
+        // re-sent blind. The other outcomes have no server row to ask about:
+        // PLAN_GONE creates a fresh trip, RETRY never got one.
+        assertThat(needsResumeHandshake(PlanStartOutcome.ALREADY_STARTED)).isTrue()
+        assertThat(needsResumeHandshake(PlanStartOutcome.PLAN_GONE)).isFalse()
+        assertThat(needsResumeHandshake(PlanStartOutcome.RETRY)).isFalse()
+        // Pin the set: a new outcome must decide this deliberately rather than
+        // inherit "no handshake" by being added to the enum.
+        assertThat(PlanStartOutcome.entries.filter { needsResumeHandshake(it) })
+            .containsExactly(PlanStartOutcome.ALREADY_STARTED)
+    }
+
+    @Test
     fun `a server error is retryable, a rejected request is not`() {
         assertThat(isRetryableRotaFailure(RotaHttpException(503, ""))).isTrue()
         assertThat(isRetryableRotaFailure(RotaHttpException(429, ""))).isTrue()
