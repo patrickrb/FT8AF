@@ -52,8 +52,8 @@ object RotaQsoMapper {
             grid = toGrid?.trim()?.takeIf { it.isNotEmpty() },
             // QSLRecord's sendReport is the report *we sent* the other station,
             // receivedReport the one they sent us — matching the API's naming.
-            sentReport = formatReport(sendReport),
-            rcvdReport = formatReport(receivedReport),
+            sentReport = formatReport(mode, sendReport),
+            rcvdReport = formatReport(mode, receivedReport),
             roverLat = roverLat,
             roverLon = roverLon,
             state = state?.trim()?.takeIf { it.isNotEmpty() },

@@ -154,6 +154,22 @@ fun parseAdifUtc(
 fun formatReport(report: Int): String? = if (report == -100 || report == -120) null else String.format(Locale.US, "%+03d", report)
 
 /**
+ * Mode-aware variant: signed SNR only for the digital modes that report SNR,
+ * plain RS(T) digits for voice/CW — a 59 sent on SSB must go up as "59", not
+ * "+59". Delegates to [com.k1af.ft8af.log.AdifFormat.formatReport] so the
+ * live-sent report and the one in the end-of-trip ADIF stay byte-identical.
+ */
+fun formatReport(
+    mode: String?,
+    report: Int,
+): String? =
+    if (report == -100 || report == -120) {
+        null
+    } else {
+        com.k1af.ft8af.log.AdifFormat.formatReport(mode, report)
+    }
+
+/**
  * Dial frequency in Hz → kHz, or null when outside the server's accepted range
  * (100 kHz – 10 GHz). A rig that reports 0 while disconnected would otherwise
  * fail schema validation for the entire batch.

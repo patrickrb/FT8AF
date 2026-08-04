@@ -132,6 +132,19 @@ class RotaPayloadTest {
     }
 
     @Test
+    fun `mode-aware reports go up plain for voice and signed for digital`() {
+        // A 59 sent on SSB must reach the server as "59" — the signed "+59"
+        // would disagree with the end-of-trip ADIF and land the QSO twice.
+        assertThat(formatReport("SSB", 59)).isEqualTo("59")
+        assertThat(formatReport("CW", 599)).isEqualTo("599")
+        assertThat(formatReport("FT8", 3)).isEqualTo("+03")
+        assertThat(formatReport("FT4", -12)).isEqualTo("-12")
+        assertThat(formatReport(null, 59)).isEqualTo("59")
+        assertThat(formatReport("SSB", -100)).isNull()
+        assertThat(formatReport("FT8", -120)).isNull()
+    }
+
+    @Test
     fun `adif date-time parses as UTC and rejects junk`() {
         assertThat(parseAdifUtc("20250731", "140509")).isEqualTo(ts)
         // ADIF allows HH:mm with no seconds.
