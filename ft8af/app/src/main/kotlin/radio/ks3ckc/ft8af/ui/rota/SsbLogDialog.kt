@@ -65,6 +65,7 @@ internal fun LogSsbQsoDialog(
 
     val freqHz = parseSsbFrequencyMhzToHz(freqMhz)
     val bandLabel = freqHz?.let { BaseRigOperation.getMeterFromFreq(it) }.orEmpty()
+    val entryValid = ssbEntryValid(callsign, freqMhz, rstSent, rstRcvd, grid)
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -158,6 +159,10 @@ internal fun LogSsbQsoDialog(
                     Text(stringResource(R.string.action_cancel), color = TextMuted)
                 }
                 TextButton(
+                    // Disabled until the entry validates so the button reads as
+                    // inert instead of broken; the onClick guard stays as a
+                    // belt-and-braces check against a stale recomposition.
+                    enabled = entryValid,
                     onClick = {
                         if (!ssbEntryValid(callsign, freqMhz, rstSent, rstRcvd, grid)) {
                             return@TextButton
@@ -179,7 +184,11 @@ internal fun LogSsbQsoDialog(
                         onLogged(record.toCallsign)
                     },
                 ) {
-                    Text(stringResource(R.string.rota_ssb_log_action), color = Accent)
+                    // Explicit color would defeat the disabled state's dimming.
+                    Text(
+                        stringResource(R.string.rota_ssb_log_action),
+                        color = if (entryValid) Accent else TextFaint,
+                    )
                 }
             }
         }
