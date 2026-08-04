@@ -1504,8 +1504,8 @@ public class MainViewModel extends ViewModel {
                 nz(r.getToMaidenGrid()),
                 txFreq,
                 r.getMode() == null ? "FT8" : r.getMode(),
-                AdifFormat.formatReport(r.getSendReport()),
-                AdifFormat.formatReport(r.getReceivedReport()),
+                AdifFormat.formatReport(r.getMode(), r.getSendReport()),
+                AdifFormat.formatReport(r.getMode(), r.getReceivedReport()),
                 "",                            // tx power
                 nz(r.getComment()),
                 "",                            // name

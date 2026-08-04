@@ -1,7 +1,10 @@
 package com.k1af.ft8af.log;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * Small helpers for writing ADIF fields safely.
@@ -104,6 +107,29 @@ public final class AdifFormat {
             return String.valueOf(report);
         }
         return String.format(Locale.US, "%+03d", report);
+    }
+
+    /**
+     * Modes whose reports are SNR in dB and carry the WSJT-X sign convention. Everything
+     * else — SSB, CW, AM, FM, and anything imported that we don't recognise — uses a plain
+     * RS(T) number: a 59 sent on SSB must read {@code "59"}, not {@code "+59"}.
+     */
+    private static final Set<String> SNR_REPORT_MODES = new HashSet<>(Arrays.asList(
+            "FT8", "FT4", "FT2", "MFSK", "JT4", "JT9", "JT65", "JS8", "FST4", "MSK144", "Q65"));
+
+    /**
+     * Format a signal report the way {@code mode} reports it: signed SNR for the digital
+     * modes in {@link #SNR_REPORT_MODES}, plain RS(T) digits for everything else. The
+     * "no report" sentinels pass through unchanged, as in {@link #formatReport(int)}.
+     */
+    public static String formatReport(String mode, int report) {
+        if (report == NO_REPORT || report == NO_REPORT_ALT) {
+            return String.valueOf(report);
+        }
+        if (mode != null && SNR_REPORT_MODES.contains(mode.trim().toUpperCase(Locale.US))) {
+            return String.format(Locale.US, "%+03d", report);
+        }
+        return String.valueOf(report);
     }
 
     /**

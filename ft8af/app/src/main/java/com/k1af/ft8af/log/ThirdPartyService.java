@@ -247,10 +247,10 @@ public class ThirdPartyService {
             }
         }
 
-        String rstSent = AdifFormat.formatReport(qslRecord.getSendReport());
+        String rstSent = AdifFormat.formatReport(qslRecord.getMode(), qslRecord.getSendReport());
         logStr.append(String.format("<rst_sent:%d>%s ", AdifFormat.utf8Length(rstSent), rstSent));
 
-        String rstRcvd = AdifFormat.formatReport(qslRecord.getReceivedReport());
+        String rstRcvd = AdifFormat.formatReport(qslRecord.getMode(), qslRecord.getReceivedReport());
         logStr.append(String.format("<rst_rcvd:%d>%s ", AdifFormat.utf8Length(rstRcvd), rstRcvd));
 
         if (qslRecord.getQso_date() != null) {

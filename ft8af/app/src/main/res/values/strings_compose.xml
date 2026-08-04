@@ -977,4 +977,12 @@
     <string name="rota_service_channel_desc">Records your route while a trip is running</string>
     <string name="rota_service_title">ROTA trip in progress</string>
     <string name="rota_action_end_trip">End trip</string>
+    <string name="rota_log_ssb">Log SSB contact</string>
+    <string name="rota_ssb_callsign">Their callsign</string>
+    <string name="rota_ssb_freq">Frequency (MHz)</string>
+    <string name="rota_ssb_rst_sent">RST sent</string>
+    <string name="rota_ssb_rst_rcvd">RST rcvd</string>
+    <string name="rota_ssb_grid">Their grid (optional)</string>
+    <string name="rota_ssb_log_action">Log contact</string>
+    <string name="rota_ssb_logged">Logged %1$s — uploading to the trip map</string>
 </resources>

@@ -1583,8 +1583,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     , String.valueOf(record.isLotW_QSL ? 1 : 0)
                     , record.getToMaidenGrid()
                     , record.getMode()
-                    , AdifFormat.formatReport(record.getSendReport())
-                    , AdifFormat.formatReport(record.getReceivedReport())
+                    , AdifFormat.formatReport(record.getMode(), record.getSendReport())
+                    , AdifFormat.formatReport(record.getMode(), record.getReceivedReport())
                     , record.getQso_date()
                     , record.getTime_on()
 
@@ -1667,7 +1667,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             if (record.getSendReport() > -100) {
                 db.execSQL("UPDATE  QSLTable  SET rst_sent=? " +
                                 " WHERE (call=?) and (qso_date=?) and(time_on=?) and(mode=?)"
-                        , new Object[]{AdifFormat.formatReport(record.getSendReport()), record.getToCallsign()
+                        , new Object[]{AdifFormat.formatReport(record.getMode(), record.getSendReport()), record.getToCallsign()
                                 , record.getQso_date()
                                 , record.getTime_on()
                                 , record.getMode()});
@@ -1675,7 +1675,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             if (record.getReceivedReport() > -100) {
                 db.execSQL("UPDATE  QSLTable  SET rst_rcvd=? " +
                                 " WHERE (call=?) and (qso_date=?) and(time_on=?) and(mode=?)"
-                        , new Object[]{AdifFormat.formatReport(record.getReceivedReport()), record.getToCallsign()
+                        , new Object[]{AdifFormat.formatReport(record.getMode(), record.getReceivedReport()), record.getToCallsign()
                                 , record.getQso_date()
                                 , record.getTime_on()
                                 , record.getMode()});
@@ -1903,8 +1903,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             databaseOpr.db.execSQL(querySQL, new String[]{qslRecord.getToCallsign()
                     , qslRecord.getToMaidenGrid()
                     , qslRecord.getMode()
-                    , AdifFormat.formatReport(qslRecord.getSendReport())
-                    , AdifFormat.formatReport(qslRecord.getReceivedReport())
+                    , AdifFormat.formatReport(qslRecord.getMode(), qslRecord.getSendReport())
+                    , AdifFormat.formatReport(qslRecord.getMode(), qslRecord.getReceivedReport())
                     , qslRecord.getQso_date()
                     , qslRecord.getTime_on()
 

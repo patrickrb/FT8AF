@@ -96,6 +96,7 @@ fun RoadTripScreen(onBack: () -> Unit) {
     var plansLoading by remember { mutableStateOf(false) }
     var plansError by remember { mutableStateOf<String?>(null) }
     var showAnnounceDialog by remember { mutableStateOf(false) }
+    var showSsbLogDialog by remember { mutableStateOf(false) }
 
     // Trip tracking needs location; ask here rather than at the moment the user
     // taps Start, so a denied prompt doesn't silently produce a trip with no route.
@@ -194,6 +195,16 @@ fun RoadTripScreen(onBack: () -> Unit) {
                 // name its followers never saw.
                 tripPlanId = ""
                 showTripNameDialog = false
+            },
+        )
+    }
+
+    if (showSsbLogDialog) {
+        LogSsbQsoDialog(
+            onDismiss = { showSsbLogDialog = false },
+            onLogged = { loggedCall ->
+                showSsbLogDialog = false
+                message = context.getString(R.string.rota_ssb_logged, loggedCall)
             },
         )
     }
@@ -319,6 +330,7 @@ fun RoadTripScreen(onBack: () -> Unit) {
                 if (state.active) {
                     ActiveTripCard(
                         state = state,
+                        onLogSsb = { showSsbLogDialog = true },
                         onEnd = { RotaTripManager.endTrip() },
                         onAbandon = { RotaTripManager.abandonTrip() },
                     )
@@ -452,6 +464,7 @@ private const val REQUEST_LOCATION = 4201
 @Composable
 private fun ActiveTripCard(
     state: RotaTripState,
+    onLogSsb: () -> Unit,
     onEnd: () -> Unit,
     onAbandon: () -> Unit,
 ) {
@@ -509,6 +522,12 @@ private fun ActiveTripCard(
                 color = StatusBad,
                 fontSize = 12.sp,
             )
+        }
+        // Its own row, above End/Discard: this is the button a driver reaches
+        // for mid-trip, and sitting beside "End trip" invites a fat-finger that
+        // closes the whole trip instead of logging a contact.
+        TextButton(onClick = onLogSsb) {
+            Text(stringResource(R.string.rota_log_ssb), color = Accent)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             TextButton(onClick = onEnd) {
@@ -776,7 +795,7 @@ private fun AnnounceActivationDialog(
 }
 
 @Composable
-private fun rotaFieldColors() =
+internal fun rotaFieldColors() =
     OutlinedTextFieldDefaults.colors(
         focusedTextColor = TextPrimary,
         unfocusedTextColor = TextPrimary,

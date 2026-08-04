@@ -43,6 +43,7 @@ object RotaSettings {
     private const val KEY_TRIP_PLAN_ID = "tripPlanId"
     private const val KEY_TRIP_PENDING_CREATE = "tripPendingCreate"
     private const val KEY_TRIP_PENDING_COMPLETE = "tripPendingComplete"
+    private const val KEY_LAST_SSB_FREQ_HZ = "lastSsbFreqHz"
 
     /**
      * The hosted service; overridable for self-hosting or a dev box.
@@ -219,6 +220,18 @@ object RotaSettings {
 
     /** True while a trip is running — created on the server or still pending. */
     val hasActiveTrip: Boolean get() = tripId.isNotEmpty() || tripPendingCreate
+
+    /**
+     * The dial frequency (Hz) of the last manually logged SSB contact, prefilled
+     * into the quick-log dialog. A rover typically camps on one frequency for a
+     * whole run of contacts, so remembering it turns each entry after the first
+     * into callsign-and-tap. 0 = never logged one.
+     */
+    var lastSsbFreqHz: Long
+        get() = prefsOrNull()?.getLong(KEY_LAST_SSB_FREQ_HZ, 0L) ?: 0L
+        set(value) {
+            prefsOrNull()?.edit()?.putLong(KEY_LAST_SSB_FREQ_HZ, value)?.apply()
+        }
 
     fun clearTrip() {
         prefsOrNull()?.edit()

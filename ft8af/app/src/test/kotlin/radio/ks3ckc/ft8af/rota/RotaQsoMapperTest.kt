@@ -42,6 +42,35 @@ class RotaQsoMapperTest {
     }
 
     @Test
+    fun `an SSB contact keeps plain RST reports on the wire`() {
+        val qso =
+            RotaQsoMapper.buildTripQso(
+                toCallsign = "K1AF",
+                qsoDate = "20250731",
+                timeOn = "140509",
+                qsoDateOff = "20250731",
+                timeOff = "140609",
+                band = "20m",
+                mode = "SSB",
+                toGrid = "FN42",
+                sendReport = 59,
+                receivedReport = 57,
+                bandFreqHz = 14_250_000L,
+                roverLat = 39.7,
+                roverLon = -104.9,
+                state = "Colorado",
+                nowMs = now,
+            )
+
+        assertThat(qso!!.mode).isEqualTo("SSB")
+        // "59", never the FT8-style "+59" — the signed form would disagree with
+        // the ADIF copy and defeat the server's dedupe.
+        assertThat(qso.sentReport).isEqualTo("59")
+        assertThat(qso.rcvdReport).isEqualTo("57")
+        assertThat(qso.frequencyKhz).isWithin(1e-9).of(14250.0)
+    }
+
+    @Test
     fun `TIME_ON wins over TIME_OFF so live and ADIF copies dedupe against each other`() {
         val qso =
             RotaQsoMapper.buildTripQso(

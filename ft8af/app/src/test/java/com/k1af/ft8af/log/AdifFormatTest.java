@@ -156,6 +156,27 @@ public class AdifFormatTest {
     }
 
     @Test
+    public void formatReport_modeAware_plainRstForVoiceSignedSnrForDigital() {
+        // The bug: a 59 sent on SSB was stored and exported as "+59".
+        assertThat(AdifFormat.formatReport("SSB", 59)).isEqualTo("59");
+        assertThat(AdifFormat.formatReport("ssb", 59)).isEqualTo("59");
+        assertThat(AdifFormat.formatReport("CW", 599)).isEqualTo("599");
+        assertThat(AdifFormat.formatReport("FM", 59)).isEqualTo("59");
+        // Unknown or missing modes read as non-SNR: plain digits.
+        assertThat(AdifFormat.formatReport(null, 59)).isEqualTo("59");
+        // The digital modes keep the WSJT-X sign convention exactly as before.
+        assertThat(AdifFormat.formatReport("FT8", 5)).isEqualTo("+05");
+        assertThat(AdifFormat.formatReport("FT4", -3)).isEqualTo("-03");
+        assertThat(AdifFormat.formatReport("MFSK", 0)).isEqualTo("+00");
+    }
+
+    @Test
+    public void formatReport_modeAware_leavesNoReportSentinelsUnchanged() {
+        assertThat(AdifFormat.formatReport("SSB", -100)).isEqualTo("-100");
+        assertThat(AdifFormat.formatReport("FT8", -120)).isEqualTo("-120");
+    }
+
+    @Test
     public void utf8Length_asciiEqualsCharCount() {
         // Pure ASCII: byte length == char length, so existing records are byte-identical.
         assertThat(AdifFormat.utf8Length("")).isEqualTo(0);
