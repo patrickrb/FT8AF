@@ -25,6 +25,8 @@ class RotaAbandonTest {
     @Test
     fun `no id or no key means no doomed network attempt`() {
         assertThat(shouldCompleteAbandonedTrip("", false, "rota_key")).isFalse()
+        // Blank, not merely empty: an id of stray whitespace is still "no id".
+        assertThat(shouldCompleteAbandonedTrip("   ", false, "rota_key")).isFalse()
         assertThat(shouldCompleteAbandonedTrip("trip-123", false, "")).isFalse()
         assertThat(shouldCompleteAbandonedTrip("trip-123", false, "   ")).isFalse()
     }

@@ -732,4 +732,4 @@ internal fun shouldCompleteAbandonedTrip(
     tripId: String,
     pendingCreate: Boolean,
     apiKey: String,
-): Boolean = tripId.isNotEmpty() && !pendingCreate && apiKey.isNotBlank()
+): Boolean = tripId.isNotBlank() && !pendingCreate && apiKey.isNotBlank()
