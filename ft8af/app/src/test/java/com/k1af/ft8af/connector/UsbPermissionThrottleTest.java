@@ -87,6 +87,19 @@ public class UsbPermissionThrottleTest {
     }
 
     @Test
+    public void registry_outOfOrderMarksCannotShortenTheCooldown() {
+        // Two threads racing markRequested (a bounce re-enumerates both serial
+        // ports near-simultaneously) can land out of order. The earlier stamp must
+        // not overwrite the later one — that would end the cooldown early and let
+        // an extra dialog through.
+        UsbPermissionThrottle.markRequested(VENDOR_SERIAL, T0);
+        UsbPermissionThrottle.markRequested(VENDOR_SERIAL, T0 - 25_000);
+        assertThat(UsbPermissionThrottle.shouldRequestNow(VENDOR_SERIAL, T0 + 10_000)).isFalse();
+        assertThat(UsbPermissionThrottle.shouldRequestNow(VENDOR_SERIAL,
+                T0 + UsbPermissionThrottle.REQUEST_COOLDOWN_MS)).isTrue();
+    }
+
+    @Test
     public void registry_outlivesAPortInstance() {
         // The whole point: the state is static, so a "new CableSerialPort" (modelled
         // here by nothing at all — there is no per-instance state to reset) still sees

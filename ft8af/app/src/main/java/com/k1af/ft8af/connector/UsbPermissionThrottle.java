@@ -58,9 +58,15 @@ public final class UsbPermissionThrottle {
         return shouldRequest(last == null ? 0L : last, nowMs);
     }
 
-    /** Record that a permission dialog has just been raised for the given vendor. */
+    /**
+     * Record that a permission dialog has just been raised for the given vendor.
+     *
+     * <p>Monotonic: two threads racing here (a bounce re-enumerates both serial ports
+     * near-simultaneously) must not let the later stamp be overwritten by the earlier
+     * one, which would shorten the cooldown and let an extra dialog through.
+     */
     public static void markRequested(int vendorId, long nowMs) {
-        lastRequestAtByVendor.put(vendorId, nowMs);
+        lastRequestAtByVendor.merge(vendorId, nowMs, Math::max);
     }
 
     /** Test isolation only: forget every recorded request. */

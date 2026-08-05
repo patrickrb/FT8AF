@@ -136,8 +136,10 @@ public class CableSerialPort {
      * match {@link #prepare()} uses to find the device). The auto-reconnect loop consults
      * this to stop retrying a device that has been unplugged — see
      * {@link CatReconnectPolicy#shouldKeepRetrying(boolean, boolean)}.
+     * Package-private on purpose: an internal reconnect helper, not part of the
+     * port's supported surface.
      */
-    public boolean isDevicePresent() {
+    boolean isDevicePresent() {
         UsbManager manager = (UsbManager) context.getSystemService(Context.USB_SERVICE);
         if (manager == null) return false;
         for (UsbDevice v : manager.getDeviceList().values()) {

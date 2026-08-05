@@ -166,11 +166,15 @@ public class CableConnector extends BaseRigConnector {
                 }
                 // The while-condition ended the loop: the device left the bus before the
                 // first attempt (a deliberate user disconnect returns above instead).
-                // Surface it so the UI leaves the "connecting" state set at burst start.
+                // Tear the port down rather than just notifying: each connect() attempt
+                // re-registers the permission-grant receiver via prepare(), so exiting
+                // without disconnect() would leak it (and any half-open port state).
+                // disconnect() fires onDisconnected itself, which also moves the UI
+                // out of the "connecting" state set at burst start.
                 if (!userDisconnected) {
                     Log.d(TAG, "CAT auto-reconnect: device left the bus, stopping"
                             + " (attach broadcast will restart)");
-                    getOnConnectorStateChanged().onDisconnected();
+                    cableSerialPort.disconnect();
                 }
             } finally {
                 reconnecting = false;
