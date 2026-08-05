@@ -694,7 +694,7 @@ private fun TripPlanPickerDialog(
                                                 R.string.rota_active_trip_summary,
                                                 formatPlanStart(trip.startTimeMs),
                                                 trip.qsoCount,
-                                                trip.totalDistanceMiles.toInt(),
+                                                wholeMiles(trip.totalDistanceMiles),
                                             ),
                                         color = TextFaint,
                                         fontSize = 12.sp,
@@ -744,6 +744,13 @@ private fun TripPlanPickerDialog(
 /** Local-time "Aug 4, 11:00" for a plan's departure, so it reads as the operator's clock. */
 internal fun formatPlanStart(startMs: Long): String =
     SimpleDateFormat("MMM d, HH:mm", Locale.US).format(Date(startMs))
+
+/**
+ * Miles for the picker row, rounded to the nearest whole mile. Rounded rather than
+ * truncated — 716.55 reads as 717, not 716; a rover mid-drive notices their odometer
+ * going backwards.
+ */
+internal fun wholeMiles(miles: Double): Int = Math.round(miles).toInt()
 
 /** Single-field dialog shared by the callsign / server / key / trip-name rows. */
 @Composable

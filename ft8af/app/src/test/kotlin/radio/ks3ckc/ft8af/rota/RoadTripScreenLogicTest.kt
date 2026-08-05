@@ -7,6 +7,7 @@ import org.robolectric.RobolectricTestRunner
 import radio.ks3ckc.ft8af.ui.rota.describeProfile
 import radio.ks3ckc.ft8af.ui.rota.maskKey
 import radio.ks3ckc.ft8af.ui.rota.nextPrivacy
+import radio.ks3ckc.ft8af.ui.rota.wholeMiles
 
 /**
  * The decision logic pulled out of the Compose screen (tap-to-cycle rows, key
@@ -15,6 +16,15 @@ import radio.ks3ckc.ft8af.ui.rota.nextPrivacy
  */
 @RunWith(RobolectricTestRunner::class)
 class RoadTripScreenLogicTest {
+    @Test
+    fun `picker miles are rounded, not truncated`() {
+        // 716.55 must read as 717 — truncation shows a rover's odometer going
+        // backwards relative to what the site reports.
+        assertThat(wholeMiles(716.55)).isEqualTo(717)
+        assertThat(wholeMiles(716.45)).isEqualTo(716)
+        assertThat(wholeMiles(0.0)).isEqualTo(0)
+    }
+
     @Test
     fun `key masking never shows a usable credential`() {
         assertThat(maskKey("rota_1234567890abcdef")).isEqualTo("rota_…cdef")
