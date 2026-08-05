@@ -76,6 +76,25 @@ data class RotaPlannedTrip(
 )
 
 /**
+ * A trip of the operator's that is `active` on the server right now — one this
+ * install can re-attach to and continue.
+ *
+ * Exists for the reinstall recovery (2026-08-04): the in-flight trip id lives in
+ * Keystore-encrypted prefs, which no backup can carry across an uninstall, so a
+ * reinstalled app came up with the trip still running server-side (716 mi /
+ * 138 QSOs that day) and no way to rejoin it — the picker only listed `planned`
+ * trips. The progress numbers ride along so the picker row reads as "this is the
+ * drive you're on", not just a name.
+ */
+data class RotaActiveTrip(
+    val id: String,
+    val name: String,
+    val startTimeMs: Long,
+    val qsoCount: Int,
+    val totalDistanceMiles: Double,
+)
+
+/**
  * What `GET /api/trips/:id/sync-state` says the server already holds — the
  * resume handshake for a client that has been out of touch long enough not to
  * know what it still owes.
@@ -465,6 +484,43 @@ fun parseMyPlannedTrips(body: String?): List<RotaPlannedTrip> {
                 )
             }
         }.sortedBy { it.startTimeMs }
+    } catch (_: Exception) {
+        emptyList()
+    }
+}
+
+/**
+ * Pull the operator's own trips that are `active` right now out of the same
+ * `GET /api/me` body, most recently started first.
+ *
+ * They live under `recentTrips` (which mixes `active` and `completed` rows,
+ * each carrying a `status`), not `plannedTrips` — verified against the live
+ * server 2026-08-04. Same defensive posture as [parseMyPlannedTrips]: rows
+ * missing an id, name or start time are dropped, and a shape mismatch parses
+ * as "nothing to continue" rather than an error.
+ */
+fun parseMyActiveTrips(body: String?): List<RotaActiveTrip> {
+    if (body.isNullOrBlank()) return emptyList()
+    return try {
+        val array = JSONObject(body).optJSONArray("recentTrips") ?: return emptyList()
+        buildList {
+            for (i in 0 until array.length()) {
+                val o = array.optJSONObject(i) ?: continue
+                if (o.optString("status") != "active") continue
+                val id = o.optString("id").takeIf { it.isNotEmpty() } ?: continue
+                val name = o.optString("name").takeIf { it.isNotEmpty() } ?: continue
+                val start = parseIsoUtc(o.optString("startTime")) ?: continue
+                add(
+                    RotaActiveTrip(
+                        id = id,
+                        name = name,
+                        startTimeMs = start,
+                        qsoCount = o.optInt("qsoCount", 0),
+                        totalDistanceMiles = o.optDouble("totalDistanceMiles", 0.0),
+                    ),
+                )
+            }
+        }.sortedByDescending { it.startTimeMs }
     } catch (_: Exception) {
         emptyList()
     }

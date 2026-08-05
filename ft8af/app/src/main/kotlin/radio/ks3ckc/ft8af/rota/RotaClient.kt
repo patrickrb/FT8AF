@@ -222,21 +222,35 @@ object RotaClient {
             }
         }
 
+    /** Both halves of the trip picker, from one `GET /api/me`. */
+    data class MyTrips(
+        val planned: List<RotaPlannedTrip>,
+        val active: List<RotaActiveTrip>,
+    )
+
     /**
-     * The operator's own announced trips, soonest first.
+     * The operator's own announced trips (soonest first) and any trip of theirs
+     * still `active` on the server (most recently started first).
      *
-     * Read from `/api/me` rather than the public `GET /api/trips?status=planned`:
-     * the public listing only carries what a stranger may see, and a plan the
+     * Read from `/api/me` rather than the public `GET /api/trips?...` listings:
+     * the public listing only carries what a stranger may see, and a trip the
      * operator marked `private` or `followers` — the ones most likely to be a
-     * real upcoming trip — would be missing from exactly the list they are
+     * real trip of theirs — would be missing from exactly the list they are
      * trying to pick from.
+     *
+     * Active trips ride along so the picker can offer "continue" after a
+     * reinstall wiped the Keystore-encrypted local trip state (2026-08-04) or
+     * when a second device joins a drive; both parse from the same body, so one
+     * round-trip serves the whole picker.
      */
-    suspend fun fetchMyPlannedTrips(
+    suspend fun fetchMyTrips(
         baseUrl: String,
         apiKey: String,
-    ): Result<List<RotaPlannedTrip>> =
+    ): Result<MyTrips> =
         withContext(Dispatchers.IO) {
-            request("GET", "$baseUrl/api/me", apiKey, null).map { parseMyPlannedTrips(it) }
+            request("GET", "$baseUrl/api/me", apiKey, null).map {
+                MyTrips(planned = parseMyPlannedTrips(it), active = parseMyActiveTrips(it))
+            }
         }
 
     suspend fun completeTrip(

@@ -257,6 +257,56 @@ object RotaTripManager {
     private var pendingNotes: String? = null
 
     /**
+     * Re-attach to a trip that is already `active` on the server and keep driving
+     * it — the recovery for a reinstall (the in-flight trip id lives in
+     * Keystore-encrypted prefs, which no backup can carry across an uninstall) or
+     * for a second device joining a drive.
+     *
+     * Mirrors [restore], not [startTrip]: the trip exists server-side, so there is
+     * nothing to create ([RotaSettings.tripPendingCreate] stays false), and what
+     * the server already holds is unknown to this process — the resume handshake
+     * reconciles via sync-state before anything is re-sent. The share token is not
+     * carried by `/api/me`'s trip rows, so the share link stays unavailable for a
+     * continued trip; every upload and completion path works without it.
+     */
+    fun continueTrip(trip: RotaActiveTrip) {
+        if (RotaSettings.hasActiveTrip) {
+            log("continueTrip ignored — a trip is already running")
+            return
+        }
+        RotaSettings.tripName = trip.name
+        RotaSettings.tripStartedMs = trip.startTimeMs
+        RotaSettings.tripPrivacy = ""
+        RotaSettings.tripPlanId = ""
+        RotaSettings.tripPendingCreate = false
+        RotaSettings.tripPendingComplete = false
+        RotaSettings.tripId = trip.id
+        RotaSettings.tripShareToken = ""
+
+        // Same reasoning as restore(): the gap while this install wasn't tracking
+        // is real, so the first fix becomes a FIRST beacon rather than a straight
+        // line drawn from wherever the old install last reported.
+        sampler = SmartBeaconSampler()
+        highwayResolver?.reset()
+        lastRawFix = null
+        // An adopted trip is one this process did not start; what the server
+        // already holds is exactly as unknown as a trip resumed from disk.
+        resumeHandshakePending = true
+        queue?.clear()
+        _state.value =
+            RotaTripState(
+                active = true,
+                tripId = trip.id,
+                tripName = trip.name,
+                startedMs = trip.startTimeMs,
+            )
+        log("continueTrip '${trip.name}' id=${trip.id} (server has ${trip.qsoCount} QSOs)")
+        RotaCqSession.apply()
+        startTracking()
+        requestFlush("continue-trip")
+    }
+
+    /**
      * End the trip: stop tracking, flush what's left, then finalize on the
      * server. Out of coverage this leaves a "complete when possible" flag, and
      * the flush loop finishes the job once the phone is back online.
