@@ -131,6 +131,23 @@ public class CableSerialPort {
         return portNum >= 0 && portNum < portCount;
     }
 
+    /**
+     * Whether a USB device with this port's vendor id is currently on the bus (the same
+     * match {@link #prepare()} uses to find the device). The auto-reconnect loop consults
+     * this to stop retrying a device that has been unplugged — see
+     * {@link CatReconnectPolicy#shouldKeepRetrying(boolean, boolean)}.
+     */
+    public boolean isDevicePresent() {
+        UsbManager manager = (UsbManager) context.getSystemService(Context.USB_SERVICE);
+        if (manager == null) return false;
+        for (UsbDevice v : manager.getDeviceList().values()) {
+            if (v.getVendorId() == vendorId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean prepare() {
         registerRigSerialPort(context);
         UsbDevice device = null;
@@ -184,14 +201,24 @@ public class CableSerialPort {
         }
         if (usbConnection == null && usbPermission == UsbPermission.Unknown
                 && !usbManager.hasPermission(driver.getDevice())) {
-            usbPermission = UsbPermission.Requested;
+            // The Unknown guard above is per-instance and every auto-connect builds a
+            // fresh instance, so on a flapping link it alone raised a system dialog per
+            // bounce. The process-wide throttle is what actually spaces the dialogs out.
+            if (UsbPermissionThrottle.shouldRequestNow(vendorId, System.currentTimeMillis())) {
+                usbPermission = UsbPermission.Requested;
+                UsbPermissionThrottle.markRequested(vendorId, System.currentTimeMillis());
 
-            PendingIntent usbPermissionIntent =
-                    UsbPermissionIntentsKt.createUsbPermissionIntent(context, INTENT_ACTION_GRANT_USB);
+                PendingIntent usbPermissionIntent =
+                        UsbPermissionIntentsKt.createUsbPermissionIntent(context, INTENT_ACTION_GRANT_USB);
 
 
-            usbManager.requestPermission(driver.getDevice(), usbPermissionIntent);
-            prepare();
+                usbManager.requestPermission(driver.getDevice(), usbPermissionIntent);
+                prepare();
+            } else {
+                fileLog(String.format("usbPermission: request for vendor 0x%04x throttled"
+                        + " (asked <%ds ago)", vendorId,
+                        UsbPermissionThrottle.REQUEST_COOLDOWN_MS / 1000));
+            }
         }
         if (usbConnection == null) {
             if (onStateChanged!=null){

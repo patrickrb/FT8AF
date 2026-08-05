@@ -63,6 +63,7 @@ import com.k1af.ft8af.connector.CableSerialPort;
 import com.k1af.ft8af.connector.ConnectMode;
 import com.k1af.ft8af.connector.FlexConnector;
 import com.k1af.ft8af.connector.IComWifiConnector;
+import com.k1af.ft8af.connector.UsbPermissionThrottle;
 import com.k1af.ft8af.connector.X6100Connector;
 import com.k1af.ft8af.database.ControlMode;
 import com.k1af.ft8af.database.DatabaseOpr;
@@ -1884,6 +1885,16 @@ public class MainViewModel extends ViewModel {
             databaseOpr.writeConfig("ctrMode", String.valueOf(ControlMode.CAT), null);
             GeneralVariables.mutableControlMode.postValue(GeneralVariables.controlMode);
         }
+        // Tear down any previous connector FIRST. It owns an open port and an
+        // auto-reconnect loop; just overwriting the reference leaked both, so every
+        // re-enumeration of a flapping link stacked another live connector — measured
+        // 2026-08-04 as an orphaned port's poll timers spamming "port not open!"
+        // interleaved with the live port's sends, and concurrent reconnect loops each
+        // hammering port opens. disconnect() sets that connector's userDisconnected,
+        // which is what actually ends its loop.
+        if (baseRig != null && baseRig.getConnector() != null) {
+            baseRig.getConnector().disconnect();
+        }
         connectRig();
 
         if (baseRig == null) {
@@ -2517,6 +2528,18 @@ public class MainViewModel extends ViewModel {
             Log.d(TAG, "USB audio device already has permission");
             return;
         }
+
+        // Same nag-storm containment as the serial path (CableSerialPort.connect):
+        // a flapping link re-fires the ATTACH handler per bounce, and each call here
+        // raised a fresh system dialog for the audio device.
+        if (!UsbPermissionThrottle.shouldRequestNow(
+                device.getVendorId(), System.currentTimeMillis())) {
+            fileLog(String.format("usbPermission: audio request for vendor 0x%04x throttled"
+                    + " (asked <%ds ago)", device.getVendorId(),
+                    UsbPermissionThrottle.REQUEST_COOLDOWN_MS / 1000));
+            return;
+        }
+        UsbPermissionThrottle.markRequested(device.getVendorId(), System.currentTimeMillis());
 
         Log.d(TAG, "Requesting USB permission for audio device: " + device.getProductName());
         PendingIntent permissionIntent = UsbPermissionIntentsKt.createUsbPermissionIntent(
