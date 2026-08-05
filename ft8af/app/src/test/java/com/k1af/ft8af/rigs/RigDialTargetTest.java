@@ -190,6 +190,32 @@ public class RigDialTargetTest {
         assertThat(RigDialTarget.dialToCommand(commanded, M30)).isEqualTo(M30);
     }
 
+    // ---- deliveredStamp -----------------------------------------------------
+
+    @Test
+    public void successfulWriteAdvancesTheDeliveryStamp() {
+        assertThat(RigDialTarget.deliveredStamp(true, T0, 0L)).isEqualTo(T0);
+    }
+
+    @Test
+    public void failedWriteLeavesTheStampAlone() {
+        // sendData returns false (port died between the connected-gate and the
+        // write) without throwing; stamping that as delivered would start the
+        // confirm grace on a command the rig never saw.
+        assertThat(RigDialTarget.deliveredStamp(false, T0, 0L)).isEqualTo(0L);
+        long previous = T0 - 60_000;
+        assertThat(RigDialTarget.deliveredStamp(false, T0, previous)).isEqualTo(previous);
+    }
+
+    @Test
+    public void failedWriteKeepsTheSelectionProtected() {
+        // End-to-end: tap at T0, dispatch fails, stamp stays 0 -> the poll echo of
+        // the old band is still refused, exactly as if never dispatched.
+        long stamp = RigDialTarget.deliveredStamp(false, T0 + 1_000, 0L);
+        assertThat(RigDialTarget.shouldAdoptAsTarget(T0 + 2_000, 0L, M20, M30, T0, stamp))
+                .isFalse();
+    }
+
     // ---- dialToCommand ------------------------------------------------------
 
     @Test

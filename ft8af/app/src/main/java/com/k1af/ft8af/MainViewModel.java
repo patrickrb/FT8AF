@@ -1765,8 +1765,15 @@ public class MainViewModel extends ViewModel {
                 baseRig.setFreqToRig();
                 // A pending operator selection has now actually been dispatched (the
                 // connected-gate above passed): start the confirm grace, after which a
-                // still-differing rig report is trusted again. See RigDialTarget.
-                GeneralVariables.operatorDialDeliveredAtMs = System.currentTimeMillis();
+                // still-differing rig report is trusted again. Only if the write really
+                // reached the rig, though — a port that died between the gate and the
+                // send returns false from sendData without throwing, and stamping that
+                // as delivered would re-open the overwrite. See RigDialTarget.
+                boolean catOk = baseRig.getConnector() != null
+                        && baseRig.getConnector().isLastCatWriteOk();
+                GeneralVariables.operatorDialDeliveredAtMs = RigDialTarget.deliveredStamp(
+                        catOk, System.currentTimeMillis(),
+                        GeneralVariables.operatorDialDeliveredAtMs);
             }
         }, 800);
     }

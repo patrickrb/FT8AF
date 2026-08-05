@@ -164,7 +164,15 @@ public class CableConnector extends BaseRigConnector {
 
     @Override
     public synchronized void sendData(byte[] data) {
-        cableSerialPort.sendData(data);
+        lastCatWriteOk = cableSerialPort.sendData(data);
+    }
+
+    /** See {@link BaseRigConnector#isLastCatWriteOk()}. Optimistic until a write fails. */
+    private volatile boolean lastCatWriteOk = true;
+
+    @Override
+    public boolean isLastCatWriteOk() {
+        return lastCatWriteOk;
     }
 
 

@@ -628,6 +628,11 @@ public class GeneralVariables {
     public static void operatorChoseDial(long hz) {
         commandedBandHz = hz;
         operatorDialAssertedAtMs = System.currentTimeMillis();
+        // A stale stamp from an OLDER selection must not make this one look
+        // delivered: normally deliveredAt < assertedAt covers that, but this
+        // app's clock is GPS-disciplined and can step backwards, which could
+        // leave an old deliveredAt >= the new assertedAt. Zero is unambiguous.
+        operatorDialDeliveredAtMs = 0L;
     }
     //Posted each time a GPS fix disciplines the clock, so the Time Sync screen can recompose
     //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.

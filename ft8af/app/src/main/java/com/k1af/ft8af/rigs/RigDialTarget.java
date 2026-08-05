@@ -137,6 +137,23 @@ public final class RigDialTarget {
     }
 
     /**
+     * The delivery stamp to record after a set-frequency dispatch.
+     *
+     * <p>The CAT write can fail without throwing — {@code CableSerialPort.sendData}
+     * returns {@code false} on a port that has already gone away — and stamping such an
+     * attempt as "delivered" would start the {@link #CONFIRM_GRACE_MS} countdown on a
+     * command the rig never saw, re-opening the overwrite this class exists to prevent.
+     * Only a write the connector believes reached the rig advances the stamp.
+     *
+     * @param writeOk         whether the connector reports the write as delivered
+     * @param nowMs           current wall clock
+     * @param previousStampMs the stamp as it stood before this dispatch
+     */
+    public static long deliveredStamp(boolean writeOk, long nowMs, long previousStampMs) {
+        return writeOk ? nowMs : previousStampMs;
+    }
+
+    /**
      * The dial {@code setOperationBand()} should actually send.
      *
      * <p>Falls back to the observed band when no commanded dial has been established yet
