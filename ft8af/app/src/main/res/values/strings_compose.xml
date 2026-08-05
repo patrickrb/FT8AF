@@ -956,6 +956,8 @@
     <string name="rota_pick_plan_custom">Type a name</string>
     <string name="rota_pick_plan_error">Couldn\'t load your plans: %1$s</string>
     <string name="rota_plan_starts">Starts %1$s</string>
+    <string name="rota_pick_continue_header">On the road now</string>
+    <string name="rota_active_trip_summary">Started %1$s · %2$d QSOs · %3$d mi</string>
     <string name="rota_stat_cq">Calling</string>
     <string name="rota_beacon_first">trip start</string>
     <string name="rota_beacon_rate">interval</string>

@@ -42,6 +42,7 @@ import com.k1af.ft8af.R
 import kotlinx.coroutines.launch
 import radio.ks3ckc.ft8af.location.hasLocationPermission
 import radio.ks3ckc.ft8af.rota.BeaconReason
+import radio.ks3ckc.ft8af.rota.RotaActiveTrip
 import radio.ks3ckc.ft8af.rota.RotaPlannedTrip
 import radio.ks3ckc.ft8af.rota.RotaHttpException
 import radio.ks3ckc.ft8af.rota.ROTA_CQ_MODIFIER
@@ -93,6 +94,7 @@ fun RoadTripScreen(onBack: () -> Unit) {
     var showTripNameDialog by remember { mutableStateOf(false) }
     var showPlanPicker by remember { mutableStateOf(false) }
     var plans by remember { mutableStateOf<List<RotaPlannedTrip>>(emptyList()) }
+    var activeTrips by remember { mutableStateOf<List<RotaActiveTrip>>(emptyList()) }
     var plansLoading by remember { mutableStateOf(false) }
     var plansError by remember { mutableStateOf<String?>(null) }
     var showAnnounceDialog by remember { mutableStateOf(false) }
@@ -167,9 +169,24 @@ fun RoadTripScreen(onBack: () -> Unit) {
     if (showPlanPicker) {
         TripPlanPickerDialog(
             plans = plans,
+            activeTrips = activeTrips,
             loading = plansLoading,
             error = plansError,
             onDismiss = { showPlanPicker = false },
+            onContinue = { trip ->
+                showPlanPicker = false
+                // Same gate as the Start row: a continued trip tracks location too.
+                if (!ensureLocationPermission()) {
+                    message = context.getString(R.string.rota_need_location)
+                } else {
+                    if (!RotaSettings.enabled) {
+                        RotaSettings.enabled = true
+                        enabled = true
+                    }
+                    RotaTripManager.init(context)
+                    RotaTripManager.continueTrip(trip)
+                }
+            },
             onPick = { picked ->
                 tripName = picked.name
                 tripPlanId = picked.id
@@ -352,11 +369,14 @@ fun RoadTripScreen(onBack: () -> Unit) {
                                 plansLoading = true
                                 plansError = null
                                 scope.launch {
-                                    RotaClient.fetchMyPlannedTrips(
+                                    RotaClient.fetchMyTrips(
                                         RotaSettings.baseUrl,
                                         RotaSettings.apiKey,
                                     ).fold(
-                                        onSuccess = { plans = it },
+                                        onSuccess = {
+                                            plans = it.planned
+                                            activeTrips = it.active
+                                        },
                                         onFailure = { e ->
                                             plansError =
                                                 (e as? RotaHttpException)?.serverMessage
@@ -586,9 +606,11 @@ private fun NoticeText(text: String) {
 @Composable
 private fun TripPlanPickerDialog(
     plans: List<RotaPlannedTrip>,
+    activeTrips: List<RotaActiveTrip>,
     loading: Boolean,
     error: String?,
     onDismiss: () -> Unit,
+    onContinue: (RotaActiveTrip) -> Unit,
     onPick: (RotaPlannedTrip) -> Unit,
     onTypeName: () -> Unit,
 ) {
@@ -625,7 +647,7 @@ private fun TripPlanPickerDialog(
                         color = StatusBad,
                         fontSize = 13.sp,
                     )
-                plans.isEmpty() ->
+                plans.isEmpty() && activeTrips.isEmpty() ->
                     Text(
                         text = stringResource(R.string.rota_pick_plan_empty),
                         color = TextMuted,
@@ -645,6 +667,41 @@ private fun TripPlanPickerDialog(
                                 .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
+                        // Trips already active on the server (a reinstall lost the local
+                        // attachment, or another device started it) come first: someone
+                        // mid-drive opening this picker almost certainly wants to rejoin,
+                        // not start a duplicate.
+                        if (activeTrips.isNotEmpty()) {
+                            Text(
+                                text = stringResource(R.string.rota_pick_continue_header),
+                                color = TextMuted,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            activeTrips.forEach { trip ->
+                                Column(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable { onContinue(trip) }
+                                            .padding(vertical = 10.dp, horizontal = 12.dp),
+                                ) {
+                                    Text(text = trip.name, color = Accent, fontSize = 15.sp)
+                                    Text(
+                                        text =
+                                            stringResource(
+                                                R.string.rota_active_trip_summary,
+                                                formatPlanStart(trip.startTimeMs),
+                                                trip.qsoCount,
+                                                trip.totalDistanceMiles.toInt(),
+                                            ),
+                                        color = TextFaint,
+                                        fontSize = 12.sp,
+                                    )
+                                }
+                            }
+                        }
                         plans.forEach { plan ->
                             Column(
                                 modifier =
