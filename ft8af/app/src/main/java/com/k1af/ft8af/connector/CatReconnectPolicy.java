@@ -163,6 +163,24 @@ public final class CatReconnectPolicy {
     }
 
     /**
+     * Whether the auto-reconnect loop should run another attempt.
+     *
+     * <p>Retrying is pointless once the USB device has left the bus: the port cannot
+     * open without it, and retrying anyway is what turned a cable unplug into a storm
+     * (the plug bounce re-enumerates the devices several times on the way out, each
+     * bounce spawning a fresh connect attempt and its system USB-permission dialog,
+     * 2026-08-04). A device that comes back re-enters through the USB ATTACH
+     * broadcast, which restarts auto-connect from scratch — so stopping here loses
+     * nothing.
+     *
+     * @param userDisconnected whether the user asked to disconnect
+     * @param devicePresent    whether a matching USB device is currently on the bus
+     */
+    public static boolean shouldKeepRetrying(boolean userDisconnected, boolean devicePresent) {
+        return !userDisconnected && devicePresent;
+    }
+
+    /**
      * Delay before the given auto-reconnect attempt. Exponential
      * ({@code 500&nbsp;ms, 1&nbsp;s, 2&nbsp;s, 4&nbsp;s, 8&nbsp;s}) capped at
      * {@link #MAX_BACKOFF_MS}. The first attempt ({@code attempt == 1}) also acts

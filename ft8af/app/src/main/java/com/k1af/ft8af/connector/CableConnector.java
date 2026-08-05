@@ -118,11 +118,16 @@ public class CableConnector extends BaseRigConnector {
         getOnConnectorStateChanged().onConnecting();
         new Thread(() -> {
             try {
-                // Unbounded by design: giving up would strand the operator with no CAT
-                // until they noticed the retry chip. The backoff escalates to
-                // MAX_BACKOFF_MS and stays there, so a persistently flaky link costs one
-                // attempt every 8 s instead of two per second.
-                while (!userDisconnected) {
+                // Unbounded in TIME by design: giving up on a still-present device would
+                // strand the operator with no CAT until they noticed the retry chip. The
+                // backoff escalates to MAX_BACKOFF_MS and stays there, so a persistently
+                // flaky link costs one attempt every 8 s instead of two per second. But a
+                // device that has LEFT the bus ends the loop: retrying can't bring it
+                // back, and each fresh attempt was raising the system USB-permission
+                // dialog — the "asks for permission when I unplug the cable" storm. The
+                // USB ATTACH broadcast restarts auto-connect when it returns.
+                while (CatReconnectPolicy.shouldKeepRetrying(
+                        userDisconnected, cableSerialPort.isDevicePresent())) {
                     // The burst counter persists across opens, so a link that keeps
                     // dropping keeps escalating instead of resetting to the first step.
                     int attempt = reconnectAttempt.incrementAndGet();
@@ -137,6 +142,9 @@ public class CableConnector extends BaseRigConnector {
                     }
                     if (userDisconnected) {
                         return;
+                    }
+                    if (!cableSerialPort.isDevicePresent()) {
+                        break; // gone mid-backoff — surfaced after the loop
                     }
                     // The port already tore itself down (SerialInputOutputManager
                     // calls disconnect() after onRunError); re-open it fresh.
@@ -155,6 +163,18 @@ public class CableConnector extends BaseRigConnector {
                         Log.d(TAG, "CAT port re-opened on attempt " + attempt);
                         return; // connect() already fired onConnected()
                     }
+                }
+                // The while-condition ended the loop: the device left the bus before the
+                // first attempt (a deliberate user disconnect returns above instead).
+                // Tear the port down rather than just notifying: each connect() attempt
+                // re-registers the permission-grant receiver via prepare(), so exiting
+                // without disconnect() would leak it (and any half-open port state).
+                // disconnect() fires onDisconnected itself, which also moves the UI
+                // out of the "connecting" state set at burst start.
+                if (!userDisconnected) {
+                    Log.d(TAG, "CAT auto-reconnect: device left the bus, stopping"
+                            + " (attach broadcast will restart)");
+                    cableSerialPort.disconnect();
                 }
             } finally {
                 reconnecting = false;

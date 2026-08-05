@@ -213,4 +213,32 @@ public class CatReconnectPolicyTest {
         assertThat(CatReconnectPolicy.backoffMs(5)).isEqualTo(CatReconnectPolicy.MAX_BACKOFF_MS);
         assertThat(CatReconnectPolicy.backoffMs(50)).isEqualTo(CatReconnectPolicy.MAX_BACKOFF_MS);
     }
+
+    // ---- shouldKeepRetrying -------------------------------------------------
+    //
+    // The 2026-08-04 storm: unplugging the cable re-enumerates the devices several
+    // times on the way out, and the loop retried each bounce — every fresh attempt
+    // raising the system USB-permission dialog ("asks for permission when I
+    // DISCONNECT the cable").
+
+    @Test
+    public void retry_keepsGoingWhileDevicePresent() {
+        // The unbounded-in-time behaviour is unchanged for a device that is still
+        // on the bus: a flaky-but-present link keeps recovering unattended.
+        assertThat(CatReconnectPolicy.shouldKeepRetrying(false, true)).isTrue();
+    }
+
+    @Test
+    public void retry_stopsWhenDeviceLeavesTheBus() {
+        // Retrying can't bring an unplugged device back; the ATTACH broadcast
+        // restarts auto-connect when it returns, so stopping loses nothing.
+        assertThat(CatReconnectPolicy.shouldKeepRetrying(false, false)).isFalse();
+    }
+
+    @Test
+    public void retry_userDisconnectAlwaysStops() {
+        // A deliberate disconnect wins regardless of what the bus says.
+        assertThat(CatReconnectPolicy.shouldKeepRetrying(true, true)).isFalse();
+        assertThat(CatReconnectPolicy.shouldKeepRetrying(true, false)).isFalse();
+    }
 }
