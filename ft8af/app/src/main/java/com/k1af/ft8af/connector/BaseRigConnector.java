@@ -84,6 +84,20 @@ public class BaseRigConnector {
      */
     public boolean isLastPttWriteOk(){ return true; }
 
+    /**
+     * Whether the most recent {@link #sendData} write actually reached the rig.
+     *
+     * <p>Same posture as {@link #isLastPttWriteOk()}: lets the band-change path tell
+     * "frequency command sent" from "command attempted at a port that had already gone
+     * away" — the difference between an operator selection that has been DELIVERED
+     * (and may be superseded by what the rig reports back) and one that is still
+     * pending. Connectors that cannot fail silently keep the optimistic default; the
+     * USB cable path overrides it.
+     *
+     * @return true if the last CAT data write is believed delivered
+     */
+    public boolean isLastCatWriteOk(){ return true; }
+
     public void setControlMode(int mode){
         controlMode=mode;
     }

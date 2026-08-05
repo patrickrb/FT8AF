@@ -352,18 +352,28 @@ public class MainViewModel extends ViewModel {
             String oldWaveLength = BaseRigOperation.getMeterFromFreq(GeneralVariables.band);
             GeneralVariables.band = freq;
             // Observing a frequency is not the same as choosing one. Adopt it as the dial
-            // we COMMAND only while the CAT stream is healthy — otherwise a reading taken
-            // during a "?;" desync gets pushed back at the rig by the reassert heartbeat
-            // and fights the operator's band selection (measured: a 30m tap took ~59s and
-            // four attempts because the app kept re-commanding a 14239985 it never chose).
+            // we COMMAND only while the CAT stream is healthy AND no explicit operator
+            // selection is pending — otherwise a reading gets pushed back at the rig by
+            // the reassert heartbeat and fights the operator's band selection. Two
+            // measured failures: a "?;"-desync reading of 14239985 (took a 30m tap ~59s
+            // and four attempts), and a healthy echo of the OLD band overwriting a tap
+            // the connected-gate had dropped before it reached the wire (2026-08-04, the
+            // heartbeat then re-asserted 20m against 30m taps all evening).
             // See RigDialTarget.
+            if (freq == GeneralVariables.commandedBandHz) {
+                // The rig confirmed the operator's selection — back to follow mode.
+                GeneralVariables.operatorDialAssertedAtMs = 0L;
+            }
             if (RigDialTarget.shouldAdoptAsTarget(System.currentTimeMillis(),
-                    GeneralVariables.rigRejectedAtMs, freq)) {
+                    GeneralVariables.rigRejectedAtMs, freq,
+                    GeneralVariables.commandedBandHz,
+                    GeneralVariables.operatorDialAssertedAtMs,
+                    GeneralVariables.operatorDialDeliveredAtMs)) {
                 GeneralVariables.commandedBandHz = freq;
             } else {
                 fileLog("rig echo ignored as command target: reported " + freq
-                        + " while CAT desynced; still asserting "
-                        + GeneralVariables.commandedBandHz);
+                        + " while CAT desynced or operator selection pending;"
+                        + " still asserting " + GeneralVariables.commandedBandHz);
             }
             GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(freq);
             GeneralVariables.mutableBandChange.postValue(GeneralVariables.bandListIndex);
@@ -1753,6 +1763,17 @@ public class MainViewModel extends ViewModel {
                         + " (rig.getFreq=" + baseRig.getFreq() + ")");
                 baseRig.setFreq(sendHz);//set frequency
                 baseRig.setFreqToRig();
+                // A pending operator selection has now actually been dispatched (the
+                // connected-gate above passed): start the confirm grace, after which a
+                // still-differing rig report is trusted again. Only if the write really
+                // reached the rig, though — a port that died between the gate and the
+                // send returns false from sendData without throwing, and stamping that
+                // as delivered would re-open the overwrite. See RigDialTarget.
+                boolean catOk = baseRig.getConnector() != null
+                        && baseRig.getConnector().isLastCatWriteOk();
+                GeneralVariables.operatorDialDeliveredAtMs = RigDialTarget.deliveredStamp(
+                        catOk, System.currentTimeMillis(),
+                        GeneralVariables.operatorDialDeliveredAtMs);
             }
         }, 800);
     }
@@ -1810,7 +1831,7 @@ public class MainViewModel extends ViewModel {
         if (newFreq > 0 && newFreq != GeneralVariables.band) {
             GeneralVariables.band = newFreq;
             // Mode retune within the same band is an explicit choice too. See RigDialTarget.
-            GeneralVariables.commandedBandHz = newFreq;
+            GeneralVariables.operatorChoseDial(newFreq);
             GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(newFreq);
             databaseOpr.writeConfig("bandFreq", String.valueOf(newFreq), null);
             retuned = true;

@@ -598,6 +598,42 @@ public class GeneralVariables {
      * {@link com.k1af.ft8af.rigs.RigDialTarget#DESYNC_DISTRUST_MS}.
      */
     public static volatile long rigRejectedAtMs = 0L;
+
+    /**
+     * When the operator last explicitly selected a dial in the app (band picker, mode
+     * retune), or 0 when there is no unconfirmed selection. While set, a rig report that
+     * differs from {@link #commandedBandHz} is an echo of the past — the selection may not
+     * even have reached the wire yet — and must not be adopted as the commanded dial.
+     * Cleared when the rig confirms the selection. See
+     * {@link com.k1af.ft8af.rigs.RigDialTarget}. Set via {@link #operatorChoseDial(long)}.
+     */
+    public static volatile long operatorDialAssertedAtMs = 0L;
+
+    /**
+     * When {@link #commandedBandHz} was last actually dispatched to the rig (the FA write
+     * in {@code setOperationBand}'s delayed runnable), or 0 if not yet. Distinguishes a
+     * selection the rig has had a chance to act on from one dropped by the
+     * connected-gate — the 2026-08-04 failure where a 30m tap was silently skipped and a
+     * healthy poll of the still-on-20m rig overwrote the choice within 2 s. See
+     * {@link com.k1af.ft8af.rigs.RigDialTarget#CONFIRM_GRACE_MS}.
+     */
+    public static volatile long operatorDialDeliveredAtMs = 0L;
+
+    /**
+     * Record an explicit operator dial selection: the dial the app asserts from now on,
+     * protected from being overwritten by rig reports until the rig confirms it. One
+     * helper so every band-selection entry point (Compose picker, legacy spinner/dialog,
+     * mode retune) keeps the two fields in step.
+     */
+    public static void operatorChoseDial(long hz) {
+        commandedBandHz = hz;
+        operatorDialAssertedAtMs = System.currentTimeMillis();
+        // A stale stamp from an OLDER selection must not make this one look
+        // delivered: normally deliveredAt < assertedAt covers that, but this
+        // app's clock is GPS-disciplined and can step backwards, which could
+        // leave an old deliveredAt >= the new assertedAt. Zero is unambiguous.
+        operatorDialDeliveredAtMs = 0L;
+    }
     //Posted each time a GPS fix disciplines the clock, so the Time Sync screen can recompose
     //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.
     public static MutableLiveData<Long> mutableGpsClockSync = new MutableLiveData<>();

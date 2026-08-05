@@ -184,6 +184,9 @@ public class FreqDialog extends Dialog {
                public void onClick(View view) {
                    GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(holder.band);
                    GeneralVariables.band = holder.band;
+                   // An explicit operator choice — this path used to leave commandedBandHz
+                   // stale, so setOperationBand re-commanded the OLD dial. See RigDialTarget.
+                   GeneralVariables.operatorChoseDial(holder.band);
 
                    mainViewModel.databaseOpr.getAllQSLCallsigns();// Load successfully contacted callsigns
                    mainViewModel.databaseOpr.writeConfig("bandFreq"

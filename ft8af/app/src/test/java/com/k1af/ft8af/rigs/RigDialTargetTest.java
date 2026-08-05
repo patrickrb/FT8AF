@@ -80,6 +80,142 @@ public class RigDialTargetTest {
         assertThat(RigDialTarget.shouldAdoptAsTarget(T0, 0L, M20)).isTrue();
     }
 
+    // ---- shouldAdoptAsTarget: pending operator selection ---------------------
+    //
+    // The 2026-08-04 failure: a 30m tap while the flapping USB link was down was
+    // dropped by the connected-gate, a healthy poll then echoed the still-on-20m rig,
+    // the echo was adopted as the commanded dial, and the reassert heartbeat pushed 20m
+    // back at the rig every ~2 minutes all evening — against repeated 30m taps.
+
+    @Test
+    public void undeliveredSelection_pollEchoOfOldBandIsNotAdopted() {
+        // Tap 30m at T0, never dispatched (delivered=0). The rig truthfully reports the
+        // OLD band — that report must not overwrite the operator's choice.
+        assertThat(RigDialTarget.shouldAdoptAsTarget(T0 + 2_000, 0L, M20, M30, T0, 0L))
+                .isFalse();
+    }
+
+    @Test
+    public void undeliveredSelection_protectedWithoutTimeLimit() {
+        // The link can stay down for minutes; while it is, no dispatch can happen, and
+        // the choice must survive until the reconnect push delivers it.
+        assertThat(RigDialTarget.shouldAdoptAsTarget(T0 + 600_000, 0L, M20, M30, T0, 0L))
+                .isFalse();
+    }
+
+    @Test
+    public void deliveryFromAnEarlierSelectionDoesNotCount() {
+        // delivered stamp predates this selection: it belongs to the previous choice.
+        assertThat(RigDialTarget.shouldAdoptAsTarget(
+                T0 + 60_000, 0L, M20, M30, T0, T0 - 10_000)).isFalse();
+    }
+
+    @Test
+    public void justDelivered_differingReportStillRefusedDuringGrace() {
+        // The FA went out; the rig needs a moment to QSY and the next poll may still
+        // carry the old dial. Inside the grace, keep asserting the choice.
+        long delivered = T0 + 1_000;
+        long stillInGrace = delivered + RigDialTarget.CONFIRM_GRACE_MS - 1;
+        assertThat(RigDialTarget.shouldAdoptAsTarget(
+                stillInGrace, 0L, M20, M30, T0, delivered)).isFalse();
+    }
+
+    @Test
+    public void afterGrace_differingReportIsFollowedAgain() {
+        // Delivered, grace expired, rig still reports something else: either the rig
+        // refused the command or the operator turned the VFO by hand. Follow the rig —
+        // fighting a manual tune would be its own bug.
+        long delivered = T0 + 1_000;
+        long afterGrace = delivered + RigDialTarget.CONFIRM_GRACE_MS;
+        assertThat(RigDialTarget.shouldAdoptAsTarget(
+                afterGrace, 0L, M20, M30, T0, delivered)).isTrue();
+    }
+
+    @Test
+    public void matchingReportIsAlwaysAdoptable() {
+        // The rig confirming the commanded dial is a no-op write, never refused by the
+        // pending guard (the caller also uses this equality to clear the pending state).
+        assertThat(RigDialTarget.shouldAdoptAsTarget(T0 + 1, 0L, M30, M30, T0, 0L))
+                .isTrue();
+    }
+
+    @Test
+    public void noPendingSelection_behavesExactlyAsBefore() {
+        // operatorAssertedAtMs == 0 (config load, first run, or already confirmed):
+        // the guard is inert and only the desync window applies.
+        assertThat(RigDialTarget.shouldAdoptAsTarget(T0, 0L, M20, M30, 0L, 0L)).isTrue();
+        assertThat(RigDialTarget.shouldAdoptAsTarget(T0, T0, M20, M30, 0L, 0L)).isFalse();
+    }
+
+    @Test
+    public void desyncStillRefusesEvenAfterGrace() {
+        // The two guards compose: surviving the pending guard does not bypass the
+        // desync window.
+        long delivered = T0 + 1_000;
+        long afterGrace = delivered + RigDialTarget.CONFIRM_GRACE_MS;
+        assertThat(RigDialTarget.shouldAdoptAsTarget(
+                afterGrace, afterGrace, M20, M30, T0, delivered)).isFalse();
+    }
+
+    @Test
+    public void backwardsClockDuringGraceDoesNotReTrust() {
+        // The clock is disciplined by GPS/decode sync and can step backwards; a
+        // now < deliveredAt must read as still-in-grace, not as grace-expired.
+        long delivered = T0 + 1_000;
+        assertThat(RigDialTarget.shouldAdoptAsTarget(
+                delivered - 60_000, 0L, M20, M30, T0, delivered)).isFalse();
+    }
+
+    @Test
+    public void theMeasuredDroppedTapNowHolds() {
+        // 20:19:40 — operator taps 30m; the connected-gate drops the send.
+        long commanded = M30;
+        long assertedAt = T0;
+        long deliveredAt = 0L;
+        // 20:19:4x — healthy poll echoes the still-on-20m rig. Old behaviour adopted it.
+        if (RigDialTarget.shouldAdoptAsTarget(T0 + 2_000, 0L, M20,
+                commanded, assertedAt, deliveredAt)) {
+            commanded = M20;
+        }
+        // The heartbeat fires: it must still push the operator's 30m, not 20m.
+        assertThat(RigDialTarget.dialToCommand(commanded, M20)).isEqualTo(M30);
+
+        // Link recovers; the reassert dispatches the FA for 30m.
+        deliveredAt = T0 + 30_000;
+        // The rig QSYs and confirms; the caller clears the pending state on equality.
+        if (RigDialTarget.shouldAdoptAsTarget(deliveredAt + 2_000, 0L, M30,
+                commanded, assertedAt, deliveredAt)) {
+            commanded = M30;
+        }
+        assertThat(RigDialTarget.dialToCommand(commanded, M30)).isEqualTo(M30);
+    }
+
+    // ---- deliveredStamp -----------------------------------------------------
+
+    @Test
+    public void successfulWriteAdvancesTheDeliveryStamp() {
+        assertThat(RigDialTarget.deliveredStamp(true, T0, 0L)).isEqualTo(T0);
+    }
+
+    @Test
+    public void failedWriteLeavesTheStampAlone() {
+        // sendData returns false (port died between the connected-gate and the
+        // write) without throwing; stamping that as delivered would start the
+        // confirm grace on a command the rig never saw.
+        assertThat(RigDialTarget.deliveredStamp(false, T0, 0L)).isEqualTo(0L);
+        long previous = T0 - 60_000;
+        assertThat(RigDialTarget.deliveredStamp(false, T0, previous)).isEqualTo(previous);
+    }
+
+    @Test
+    public void failedWriteKeepsTheSelectionProtected() {
+        // End-to-end: tap at T0, dispatch fails, stamp stays 0 -> the poll echo of
+        // the old band is still refused, exactly as if never dispatched.
+        long stamp = RigDialTarget.deliveredStamp(false, T0 + 1_000, 0L);
+        assertThat(RigDialTarget.shouldAdoptAsTarget(T0 + 2_000, 0L, M20, M30, T0, stamp))
+                .isFalse();
+    }
+
     // ---- dialToCommand ------------------------------------------------------
 
     @Test
