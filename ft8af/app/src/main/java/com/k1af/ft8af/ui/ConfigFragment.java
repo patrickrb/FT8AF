@@ -750,6 +750,10 @@ public class ConfigFragment extends Fragment {
                     public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
                         GeneralVariables.bandListIndex = i;
                         GeneralVariables.band = OperationBand.getBandFreq(i);// Save the current band frequency
+                        // An explicit operator choice — this path used to leave
+                        // commandedBandHz stale, so setOperationBand re-commanded the OLD
+                        // dial. See RigDialTarget.
+                        GeneralVariables.operatorChoseDial(GeneralVariables.band);
 
                         mainViewModel.databaseOpr.getAllQSLCallsigns();// Load successfully contacted callsigns
                         writeConfig("bandFreq", String.valueOf(GeneralVariables.band));

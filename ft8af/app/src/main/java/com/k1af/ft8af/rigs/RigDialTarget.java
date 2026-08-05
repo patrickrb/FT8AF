@@ -29,23 +29,32 @@ package com.k1af.ft8af.rigs;
  * 29 rejections followed an {@code FA} set-frequency, and the bogus reading appeared inside
  * that window. A reading taken while the command stream is known to be desynchronised is
  * not trustworthy enough to command back.
+ *
+ * <p>A second measured way an observation steals the target, from the 2026-08-04 session,
+ * on a USB link that was flapping (write errors + auto-reconnect every few seconds):
+ *
+ * <pre>
+ * 20:19:40  bandSelect: band=10136000, rigConnected=false   &lt;- operator taps 30m
+ * 20:19:41  setOperationBand: rig not connected, skipping   &lt;- FA never dispatched
+ * 20:19:4x  poll reads the rig, still on 14074000           &lt;- healthy stream, no "?;"
+ *           -&gt; adopted as commandedBandHz                   &lt;- the tap is ERASED
+ * 20:23:35  serial.send: FA014074000;                       &lt;- heartbeat re-asserts 20m,
+ *                                                              every ~2 min, all evening
+ * </pre>
+ *
+ * <p>The desync window can't catch this: the stream is healthy, the reading is truthful —
+ * the rig really is still on 20m, precisely because the operator's command was dropped by
+ * the connected-gate before ever reaching the wire. So an explicit operator selection is
+ * additionally tracked as PENDING until the app has actually dispatched it
+ * ({@code operatorDialAssertedAtMs} / {@code operatorDialDeliveredAtMs} in
+ * {@code GeneralVariables}); while pending, a differing report is an echo of the past, not
+ * the operator's intent, and must not be adopted. Delivery plus a short settle grace ends
+ * the protection, so a hand-turned VFO is followed again within seconds.
  */
 public final class RigDialTarget {
 
     private RigDialTarget() {}
 
-    /**
-     * Whether a frequency the rig has just reported should become the dial the app asserts.
-     *
-     * <p>Adopting is the normal case: it is how the app follows the operator turning the
-     * VFO. It is refused only while the rig is rejecting our commands, where the reading
-     * may be a mis-parse or a stale frame rather than the operator's intent.
-     *
-     * @param nowMs           current wall clock
-     * @param rigRejectedAtMs when the rig last answered with an error / unparseable frame,
-     *                        or 0 if never
-     * @param reportedHz      the frequency just reported
-     */
     /**
      * How long after a rejection the rig's frequency reports stay untrusted.
      *
@@ -61,8 +70,65 @@ public final class RigDialTarget {
      */
     public static final long DESYNC_DISTRUST_MS = 3_000;
 
+    /**
+     * How long after an operator selection is actually dispatched to the rig its reports
+     * stay untrusted, so the rig has time to QSY and the next poll reflects it.
+     *
+     * <p>Sized to cover the 2 s freq-poll interval plus rig settle time: a differing
+     * report landing later than this after the last dispatch means the rig refused the
+     * command or the operator turned the VFO by hand — either way, follow the rig.
+     */
+    public static final long CONFIRM_GRACE_MS = 5_000;
+
+    /**
+     * Legacy form: no operator selection is pending. Kept because "no pending state"
+     * is a meaningful default (config load, first run), not just a test convenience.
+     */
     public static boolean shouldAdoptAsTarget(long nowMs, long rigRejectedAtMs, long reportedHz) {
+        return shouldAdoptAsTarget(nowMs, rigRejectedAtMs, reportedHz, 0L, 0L, 0L);
+    }
+
+    /**
+     * Whether a frequency the rig has just reported should become the dial the app asserts,
+     * given the state of the operator's most recent explicit selection.
+     *
+     * <p>Refusal cases, each from a measured field failure (class javadoc):
+     * <ul>
+     *   <li>the stream is desynchronised ({@code DESYNC_DISTRUST_MS} after a "?;"), or</li>
+     *   <li>an operator selection is pending and has not yet been dispatched to the rig
+     *       (the 20:19:40 dropped-tap trace), or</li>
+     *   <li>it was dispatched less than {@link #CONFIRM_GRACE_MS} ago, so a differing
+     *       report may predate the rig's QSY.</li>
+     * </ul>
+     *
+     * <p>A report that matches the commanded dial is always adopted (a no-op write) — the
+     * caller uses that same equality to clear the pending state.
+     *
+     * @param nowMs                    current wall clock
+     * @param rigRejectedAtMs          when the rig last answered with an error /
+     *                                 unparseable frame, or 0 if never
+     * @param reportedHz               the frequency just reported
+     * @param commandedHz              the dial the app currently asserts
+     *                                 ({@code GeneralVariables.commandedBandHz})
+     * @param operatorAssertedAtMs     when the operator last explicitly selected a dial in
+     *                                 the app, or 0 if never / already confirmed
+     * @param operatorDeliveredAtMs    when that selection was last actually dispatched to
+     *                                 the rig, or 0 if not yet
+     */
+    public static boolean shouldAdoptAsTarget(long nowMs, long rigRejectedAtMs, long reportedHz,
+                                              long commandedHz, long operatorAssertedAtMs,
+                                              long operatorDeliveredAtMs) {
         if (reportedHz <= 0) return false;
+        if (reportedHz != commandedHz && operatorAssertedAtMs > 0) {
+            // An explicit selection the rig has not confirmed yet. Undelivered, it is
+            // protected unconditionally: the report is an echo of the dial the operator
+            // just left, not a choice. (No time limit — while the link is down no reports
+            // arrive anyway, and the moment it is back the ~1 Hz reassert delivers.)
+            if (operatorDeliveredAtMs < operatorAssertedAtMs) return false;
+            long sinceDelivery = nowMs - operatorDeliveredAtMs;
+            // Backwards clock (< 0) is treated as still-in-grace, same posture as below.
+            if (sinceDelivery < CONFIRM_GRACE_MS) return false;
+        }
         if (rigRejectedAtMs <= 0) return true;
         long since = nowMs - rigRejectedAtMs;
         // A backwards clock correction must not silently re-trust the stream.
