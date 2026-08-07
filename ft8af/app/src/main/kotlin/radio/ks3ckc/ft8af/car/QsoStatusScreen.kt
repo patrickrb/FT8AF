@@ -24,6 +24,8 @@ import com.k1af.ft8af.R
 import com.k1af.ft8af.database.OperationBand
 import com.k1af.ft8af.rigs.BaseRigOperation
 import com.k1af.ft8af.timer.UtcTimer
+import radio.ks3ckc.ft8af.pota.PotaSessionManager
+import radio.ks3ckc.ft8af.rota.RotaTripManager
 import radio.ks3ckc.ft8af.ui.components.slotTimerState
 
 /**
@@ -128,8 +130,22 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
                 .build(),
             Row.Builder().setTitle(status.bandLine).build(),
         )
+        val priorities = mutableListOf(CAR_ROW_HEADLINE, CAR_ROW_SEQ_SLOT, CAR_ROW_BAND)
+        // POTA / ROTA rows only exist while an activation or trip is running.
+        // StateFlow reads (not observers) are enough for freshness: the 1 Hz tick
+        // re-renders the pane every second anyway.
+        val activation = PotaSessionManager.currentActivation.value
+        buildCarPotaLine(activation?.parkRefsDisplay, activation?.qsoCount)?.let {
+            rows.add(Row.Builder().setTitle(resolve(it)).build())
+            priorities.add(CAR_ROW_ACTIVATION)
+        }
+        val trip = RotaTripManager.state.value
+        buildCarRotaLine(trip.active, trip.tripName, trip.sentQsos, trip.pendingQsos, trip.miles)?.let {
+            rows.add(Row.Builder().setTitle(resolve(it)).build())
+            priorities.add(CAR_ROW_ACTIVATION)
+        }
         val pane = Pane.Builder().apply {
-            rows.take(paneRowLimit(carContext)).forEach { addRow(it) }
+            selectCarPaneRows(priorities, paneRowLimit(carContext)).forEach { addRow(rows[it]) }
         }.build()
         return PaneTemplate.Builder(pane)
             .setTitle(carContext.getString(R.string.car_screen_title))

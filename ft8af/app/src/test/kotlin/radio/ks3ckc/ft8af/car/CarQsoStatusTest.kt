@@ -215,4 +215,74 @@ class CarQsoStatusTest {
         assertThat(shouldInvalidateForTick(lastSecond = 7, newSecond = 6)).isTrue()
         assertThat(shouldInvalidateForTick(lastSecond = -1, newSecond = 15)).isTrue()
     }
+
+    // --- POTA / ROTA activation rows ---------------------------------------
+
+    @Test
+    fun buildCarPotaLine_nullOrBlankPark_hidesRow() {
+        assertThat(buildCarPotaLine(null, 3)).isNull()
+        assertThat(buildCarPotaLine("", 3)).isNull()
+        assertThat(buildCarPotaLine("  ", 3)).isNull()
+    }
+
+    @Test
+    fun buildCarPotaLine_formatsParkAndCount() {
+        val spec = buildCarPotaLine("K-1234 + K-5678", 7)!!
+        assertThat(spec.resId).isEqualTo(R.string.car_pota_line)
+        assertThat(spec.args).containsExactly("K-1234 + K-5678", 7).inOrder()
+    }
+
+    @Test
+    fun buildCarPotaLine_nullCount_showsZero() {
+        assertThat(buildCarPotaLine("K-1234", null)!!.args).containsExactly("K-1234", 0).inOrder()
+    }
+
+    @Test
+    fun buildCarRotaLine_inactiveTrip_hidesRow() {
+        assertThat(buildCarRotaLine(false, "Route 66", 5, 2, 12.0)).isNull()
+    }
+
+    @Test
+    fun buildCarRotaLine_sumsSentAndPendingQsos_andFormatsMiles() {
+        val spec = buildCarRotaLine(true, "Route 66", 10, 2, 45.34)!!
+        assertThat(spec.resId).isEqualTo(R.string.car_rota_line)
+        // 12 = 10 sent + 2 still queued offline; miles use the trip
+        // notification's one-decimal format.
+        assertThat(spec.args).containsExactly("Route 66", 12, "45.3").inOrder()
+    }
+
+    @Test
+    fun buildCarRotaLine_blankTripName_fallsBackToTrip() {
+        assertThat(buildCarRotaLine(true, "   ", 0, 0, 0.0)!!.args)
+            .containsExactly("trip", 0, "0.0").inOrder()
+    }
+
+    @Test
+    fun selectCarPaneRows_underLimit_keepsAllInOrder() {
+        val p = listOf(CAR_ROW_HEADLINE, CAR_ROW_SEQ_SLOT, CAR_ROW_BAND)
+        assertThat(selectCarPaneRows(p, 3)).containsExactly(0, 1, 2).inOrder()
+        assertThat(selectCarPaneRows(p, 10)).containsExactly(0, 1, 2).inOrder()
+    }
+
+    @Test
+    fun selectCarPaneRows_tightLimit_dropsBandBeforeActivationRows() {
+        // Build order: headline, seq/slot, band, POTA, ROTA.
+        val p = listOf(
+            CAR_ROW_HEADLINE, CAR_ROW_SEQ_SLOT, CAR_ROW_BAND,
+            CAR_ROW_ACTIVATION, CAR_ROW_ACTIVATION,
+        )
+        // 3-row host: band is sacrificed, POTA survives (earlier activation row
+        // wins the tie against ROTA).
+        assertThat(selectCarPaneRows(p, 3)).containsExactly(0, 1, 3).inOrder()
+        // 4-row host: both activation rows fit; band is still the one dropped.
+        assertThat(selectCarPaneRows(p, 4)).containsExactly(0, 1, 3, 4).inOrder()
+        // 5-row host: everything fits, build order preserved.
+        assertThat(selectCarPaneRows(p, 5)).containsExactly(0, 1, 2, 3, 4).inOrder()
+    }
+
+    @Test
+    fun selectCarPaneRows_zeroOrNegativeLimit_isEmpty() {
+        assertThat(selectCarPaneRows(listOf(0, 1), 0)).isEmpty()
+        assertThat(selectCarPaneRows(listOf(0, 1), -2)).isEmpty()
+    }
 }

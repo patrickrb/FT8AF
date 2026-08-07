@@ -1608,6 +1608,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 db.execSQL("UPDATE pota_activation SET qso_count = qso_count + 1 "
                         + "WHERE park_ref = ? AND ended_at IS NULL"
                         , new Object[]{record.getMySigInfo()});
+                // Keep the in-memory activation (phone + Android Auto UIs) in step
+                // with the row just bumped; refreshCounter() only runs while the
+                // phone's POTA screen is open, which it isn't while driving.
+                radio.ks3ckc.ft8af.pota.PotaSessionManager.onQsoLogged(record.getMySigInfo());
             }
             // Mirror this genuinely-new QSO to the running ADIF file. Wrapped so a full disk
             // or missing SD can never break QSO logging (AdifLogFile.logQso itself never throws).

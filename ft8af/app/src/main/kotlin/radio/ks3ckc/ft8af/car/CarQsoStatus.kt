@@ -113,6 +113,57 @@ internal fun carBandLine(freqHz: Long, bandName: String, modeName: String): Stri
 /** "+3 dB" / "-12 dB" (ASCII hyphen from Int.toString); null in (SNR unknown) gives null out. */
 internal fun formatSnrLabel(snr: Int?): String? = snr?.let { if (it > 0) "+$it dB" else "$it dB" }
 
+// --- Pane row priorities ---------------------------------------------------
+// Lower value = kept first when the host's pane row limit is tight. The
+// POTA/ROTA activation rows outrank the band row on purpose: on a 3-row host an
+// active activation replaces the band line rather than being silently dropped.
+internal const val CAR_ROW_HEADLINE = 0
+internal const val CAR_ROW_SEQ_SLOT = 1
+internal const val CAR_ROW_ACTIVATION = 2
+internal const val CAR_ROW_BAND = 3
+
+/**
+ * Picks which pane rows survive the host's row limit: keeps the [limit] rows
+ * with the lowest priority values (ties keep the earlier row) and returns their
+ * indices in build order.
+ */
+internal fun selectCarPaneRows(priorities: List<Int>, limit: Int): List<Int> {
+    if (limit <= 0) return emptyList()
+    if (priorities.size <= limit) return priorities.indices.toList()
+    return priorities.withIndex()
+        .sortedWith(compareBy({ it.value }, { it.index }))
+        .take(limit)
+        .map { it.index }
+        .sorted()
+}
+
+/**
+ * "POTA K-1234 · 3 QSOs" (multi-park refs arrive pre-joined as "K-1234 + K-5678").
+ * Null when no activation is running, which removes the row entirely.
+ */
+internal fun buildCarPotaLine(parkRefsDisplay: String?, qsoCount: Int?): CarStringSpec? {
+    if (parkRefsDisplay.isNullOrBlank()) return null
+    return CarStringSpec(R.string.car_pota_line, listOf(parkRefsDisplay, qsoCount ?: 0))
+}
+
+/**
+ * "ROTA Route 66 · 12 QSOs · 45.3 mi"; null when no trip is running. The QSO
+ * count is sent+pending so contacts logged out of coverage still show, and the
+ * miles match the trip notification's one-decimal format.
+ */
+internal fun buildCarRotaLine(
+    active: Boolean,
+    tripName: String,
+    sentQsos: Int,
+    pendingQsos: Int,
+    miles: Double,
+): CarStringSpec? {
+    if (!active) return null
+    val name = tripName.trim().ifEmpty { "trip" }
+    val milesLabel = String.format(java.util.Locale.US, "%.1f", miles)
+    return CarStringSpec(R.string.car_rota_line, listOf(name, sentQsos + pendingQsos, milesLabel))
+}
+
 /** One row of the car's recent-decodes list. */
 internal data class CarDecodeRow(val utcTimeMs: Long, val text: String, val snrLabel: String?)
 

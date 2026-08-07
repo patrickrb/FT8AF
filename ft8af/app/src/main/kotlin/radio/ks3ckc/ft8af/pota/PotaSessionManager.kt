@@ -94,6 +94,19 @@ object PotaSessionManager {
         _activationQsos.value = emptyList()
     }
 
+    /**
+     * Called from the QSO save path (DatabaseOpr) right after it bumps
+     * pota_activation.qso_count in SQLite, so the in-memory activation that the
+     * phone and Android Auto UIs observe stays in step with the DB without a
+     * blocking reload on the save path.
+     */
+    @JvmStatic
+    fun onQsoLogged(mySigInfo: String?) {
+        val active = _currentActivation.value ?: return
+        if (!qsoCountsForActivation(active.parkRef, mySigInfo)) return
+        _currentActivation.value = active.copy(qsoCount = active.qsoCount + 1)
+    }
+
     /** Pull the latest qso_count and contacts from the DB so the UI stays accurate. */
     fun refreshCounter() {
         val active = _currentActivation.value ?: return
@@ -125,6 +138,14 @@ object PotaSessionManager {
             record.sigInfo = it
         }
     }
+
+    /**
+     * Mirrors DatabaseOpr's bump predicate (`park_ref = ? AND ended_at IS NULL`
+     * bound to the record's MY_SIG_INFO): the in-memory counter must move
+     * exactly when the DB row moved, or the two drift apart.
+     */
+    internal fun qsoCountsForActivation(activeParkRef: String, mySigInfo: String?): Boolean =
+        !mySigInfo.isNullOrEmpty() && mySigInfo == activeParkRef
 
     private fun log(msg: String) {
         Log.d(TAG, msg)
