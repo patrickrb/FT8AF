@@ -143,30 +143,3 @@ internal fun carDecodeSecondary(utcTimeMs: Long, snrLabel: String?): String {
  * actually changed, so a jittery handler can't spam the host with no-op renders.
  */
 internal fun shouldInvalidateForTick(lastSecond: Int, newSecond: Int): Boolean = newSecond != lastSecond
-
-/**
- * Formats the POTA activation line for the car surface/pane:
- * "POTA K-1234 · 3 QSOs" (or "POTA K-1234 + K-5678 · 3 QSOs" for multi-park).
- * Returns a [CarStringSpec] the Screen resolves against [R.string.car_pota_line]
- * (so the line is localizable), or null when there is no active activation.
- */
-internal fun buildCarPotaLine(parkRefsDisplay: String?, qsoCount: Int?): CarStringSpec? {
-    if (parkRefsDisplay.isNullOrBlank()) return null
-    val count = qsoCount ?: 0
-    return CarStringSpec(R.string.car_pota_line, listOf(parkRefsDisplay, count))
-}
-
-/** ARGB colour for "who heard me" PSK markers \u2014 a distinct green from the decode dots. */
-internal const val PSK_MARKER_COLOR = 0xFF66BB6A.toInt()
-
-/**
- * Maps PSKReporter "who heard me" spots to car map markers (drawn as hollow rings
- * by [CarMapSurfaceRenderer]). Skips spots with no usable coordinates (0/0), which
- * PSKReporter occasionally returns for gridless reports.
- */
-internal fun pskSpotsToMarkers(
-    spots: List<radio.ks3ckc.ft8af.pskreporter.PskReporterSpot>,
-): List<CarStationMarker> =
-    spots
-        .filterNot { it.lat == 0.0 && it.lon == 0.0 }
-        .map { CarStationMarker(it.lat, it.lon, PSK_MARKER_COLOR) }
