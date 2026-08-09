@@ -324,7 +324,7 @@ internal class CarMapSurfaceRenderer {
         )
         val bottomLines = buildList {
             add(PanelLine(state.bandText, TEXT_MUTED, detailSize, bold = false))
-            state.potaText?.let { add(PanelLine(it, TEXT_ACCENT, detailSize, bold = false)) }
+            state.activationLines.forEach { add(PanelLine(it, TEXT_ACCENT, detailSize, bold = false)) }
         }
 
         // Anchor flush to the system bars when known (top banner just under the status

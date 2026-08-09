@@ -40,6 +40,7 @@ import kotlinx.coroutines.launch
 import radio.ks3ckc.ft8af.pota.PotaSessionManager
 import radio.ks3ckc.ft8af.pskreporter.PskReporterClient
 import radio.ks3ckc.ft8af.pskreporter.WhoHeardMeCache
+import radio.ks3ckc.ft8af.rota.RotaTripManager
 import radio.ks3ckc.ft8af.ui.components.slotTimerState
 import radio.ks3ckc.ft8af.ui.map.StateLabel
 import radio.ks3ckc.ft8af.ui.map.UsStateLabels
@@ -295,6 +296,10 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
 
         val headline = resolve(status.headline) +
             (status.snrLabel?.let { " · $it" } ?: "")
+        val bandRow = Row.Builder().setTitle(status.bandLine)
+        carDecodesSecondary(vm.mutableFt8MessageList.value?.size ?: 0)?.let {
+            bandRow.addText(resolve(it))
+        }
         val rows = mutableListOf(
             Row.Builder()
                 .setTitle(headline)
@@ -304,16 +309,52 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
                 .setTitle(status.seqLine?.let { resolve(it) } ?: resolve(status.slotLine))
                 .apply { if (status.seqLine != null) addText(resolve(status.slotLine)) }
                 .build(),
-            Row.Builder().setTitle(status.bandLine).build(),
+            bandRow.build(),
         )
-        // POTA activation line (only when running an activation)
-        val activation = PotaSessionManager.currentActivation.value
-        buildCarPotaLine(activation?.parkRefsDisplay, activation?.qsoCount)?.let {
-            rows.add(Row.Builder().setTitle(resolve(it)).build())
+        // Activation dashboard: POTA and/or ROTA rows while activating, otherwise a
+        // session-summary row (see buildCarActivationRows).
+        buildActivationPaneRows(vm).forEach { r ->
+            rows.add(
+                Row.Builder()
+                    .setTitle(resolve(r.title))
+                    .apply { r.secondary?.let { addText(resolve(it)) } }
+                    .build(),
+            )
         }
         return Pane.Builder().apply {
             rows.take(paneRowLimit(carContext)).forEach { addRow(it) }
         }.build()
+    }
+
+    /**
+     * Reads the current POTA/ROTA activation and session state and maps it to the
+     * pane's activation rows. The decision logic lives in the pure
+     * [buildCarActivationRows]; this just extracts the primitives from the app
+     * singletons. "Session QSOs" uses the today/yesterday worked-callsign set
+     * ([GeneralVariables.QSL_Callsign_list_today]) — the only cheap in-memory count —
+     * and "last logged" is best-effort: the just-completed QSO timestamp
+     * ([FT8TransmitSignal.mutableQsoCompletedAt], stamped with [UtcTimer]) with the
+     * current partner callsign and tuned band.
+     */
+    private fun buildActivationPaneRows(vm: MainViewModel): List<CarPaneRow> {
+        val pota = PotaSessionManager.currentActivation.value
+        val rota = RotaTripManager.state.value
+        return buildCarActivationRows(
+            potaActive = pota != null,
+            potaParkRefsDisplay = pota?.parkRefsDisplay,
+            potaQsoCount = pota?.qsoCount ?: 0,
+            rotaActive = rota.active,
+            rotaTripName = rota.tripName,
+            rotaQsoCount = rota.sentQsos + rota.pendingQsos,
+            rotaMiles = rota.miles,
+            sessionQsoCount = GeneralVariables.QSL_Callsign_list_today.size,
+            lastQsoCallsign = vm.ft8TransmitSignal.mutableToCallsign.value?.callsign,
+            lastQsoBandName = currentBandName(),
+            lastQsoMinutesAgo = minutesAgo(
+                UtcTimer.getSystemTime(),
+                vm.ft8TransmitSignal.mutableQsoCompletedAt.value,
+            ),
+        )
     }
 
     // -----------------------------------------------------------------------
@@ -420,7 +461,6 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
             partnerLatLng?.longitude ?: Double.NaN,
         )
 
-        val activation = PotaSessionManager.currentActivation.value
         return CarSurfaceState(
             opLat = opLatLng?.latitude ?: Double.NaN,
             opLon = opLatLng?.longitude ?: Double.NaN,
@@ -431,7 +471,10 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
             headlineText = resolve(status.headline) + (status.snrLabel?.let { " · $it" } ?: ""),
             slotText = resolve(status.slotLine) + (partnerLocation?.let { " · $it" } ?: ""),
             bandText = status.bandLine,
-            potaText = buildCarPotaLine(activation?.parkRefsDisplay, activation?.qsoCount)?.let { resolve(it) },
+            // Same activation/session rows as the pane, drawn as compact single lines
+            // (titles only — the "to validate" / mileage / last-logged detail stays on
+            // the pane so the surface overlay doesn't crowd the map).
+            activationLines = buildActivationPaneRows(vm).map { resolve(it.title) },
         )
     }
 

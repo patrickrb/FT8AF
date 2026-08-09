@@ -156,6 +156,124 @@ internal fun buildCarPotaLine(parkRefsDisplay: String?, qsoCount: Int?): CarStri
     return CarStringSpec(R.string.car_pota_line, listOf(parkRefsDisplay, count))
 }
 
+/** A two-line row of the Android Auto status pane: a title and an optional secondary line. */
+internal data class CarPaneRow(val title: CarStringSpec, val secondary: CarStringSpec? = null)
+
+/**
+ * QSOs a POTA activation needs before it counts under the POTA program rules.
+ * There is no constant for this in the POTA session code (the phone UI never
+ * shows a remaining-to-validate figure), so the well-known program rule lives
+ * here where the car dashboard uses it.
+ */
+internal const val POTA_ACTIVATION_TARGET = 10
+
+/**
+ * Secondary line for the POTA row: "N more to validate the activation" while the
+ * count is below [POTA_ACTIVATION_TARGET], then "Activation validated". Counts at
+ * or above the target (including hand-logged overshoot) clamp to validated.
+ */
+internal fun potaValidateSpec(qsoCount: Int): CarStringSpec {
+    val remaining = (POTA_ACTIVATION_TARGET - qsoCount).coerceAtLeast(0)
+    return if (remaining > 0) {
+        CarStringSpec(R.string.car_pota_to_validate, listOf(remaining))
+    } else {
+        CarStringSpec(R.string.car_pota_validated)
+    }
+}
+
+/** "0.0" / "12.3" — one decimal, locale-independent so tests are stable. */
+internal fun formatMiles(miles: Double): String =
+    String.format(java.util.Locale.US, "%.1f", miles)
+
+/**
+ * Whole minutes between [thenMs] and [nowMs] for the "last logged … N min" line.
+ * Returns null when there is no timestamp (0/null) or the clock is skewed so [thenMs]
+ * is in the future, so the session row degrades to "No QSOs logged yet" rather than
+ * showing a nonsense figure.
+ */
+internal fun minutesAgo(nowMs: Long, thenMs: Long?): Int? {
+    if (thenMs == null || thenMs <= 0L) return null
+    val delta = nowMs - thenMs
+    if (delta < 0L) return null
+    return (delta / 60_000L).toInt()
+}
+
+/**
+ * The session-summary row shown when no POTA/ROTA activation is running. The title
+ * is always the session QSO count; the secondary reports the most recent logged
+ * contact ("Last logged JA1XYZ · 20m · 41 min") when one is known, degrading to a
+ * band-less form, then to "No QSOs logged yet" when [lastQsoCallsign] or
+ * [lastQsoMinutesAgo] is missing.
+ */
+internal fun buildCarSessionRow(
+    sessionQsoCount: Int,
+    lastQsoCallsign: String?,
+    lastQsoBandName: String?,
+    lastQsoMinutesAgo: Int?,
+): CarPaneRow {
+    val title = CarStringSpec(R.string.car_session_line, listOf(sessionQsoCount))
+    val call = lastQsoCallsign?.takeIf { it.isNotBlank() }
+    val secondary = if (call != null && lastQsoMinutesAgo != null) {
+        val band = lastQsoBandName?.takeIf { it.isNotBlank() }
+        if (band != null) {
+            CarStringSpec(R.string.car_session_last, listOf(call, band, lastQsoMinutesAgo))
+        } else {
+            CarStringSpec(R.string.car_session_last_noband, listOf(call, lastQsoMinutesAgo))
+        }
+    } else {
+        CarStringSpec(R.string.car_session_none)
+    }
+    return CarPaneRow(title, secondary)
+}
+
+/**
+ * The activation block of the car status pane. Emits a POTA row and/or a ROTA row
+ * for whichever activations are running; when neither is active the block collapses
+ * to a single session-summary row (the design's "activation rows drop out, session
+ * stats take the slot"). POTA and ROTA are practically mutually exclusive — parked
+ * at a park vs. roving on roads — but both are emitted if both happen to be active,
+ * ordered POTA then ROTA.
+ */
+internal fun buildCarActivationRows(
+    potaActive: Boolean,
+    potaParkRefsDisplay: String?,
+    potaQsoCount: Int,
+    rotaActive: Boolean,
+    rotaTripName: String?,
+    rotaQsoCount: Int,
+    rotaMiles: Double,
+    sessionQsoCount: Int,
+    lastQsoCallsign: String?,
+    lastQsoBandName: String?,
+    lastQsoMinutesAgo: Int?,
+): List<CarPaneRow> {
+    val rows = mutableListOf<CarPaneRow>()
+    if (potaActive) {
+        buildCarPotaLine(potaParkRefsDisplay, potaQsoCount)?.let {
+            rows.add(CarPaneRow(title = it, secondary = potaValidateSpec(potaQsoCount)))
+        }
+    }
+    if (rotaActive && !rotaTripName.isNullOrBlank()) {
+        rows.add(
+            CarPaneRow(
+                title = CarStringSpec(R.string.car_rota_line, listOf(rotaTripName, rotaQsoCount)),
+                secondary = CarStringSpec(R.string.car_rota_miles, listOf(formatMiles(rotaMiles))),
+            ),
+        )
+    }
+    if (rows.isEmpty()) {
+        rows.add(buildCarSessionRow(sessionQsoCount, lastQsoCallsign, lastQsoBandName, lastQsoMinutesAgo))
+    }
+    return rows
+}
+
+/**
+ * Secondary line for the band row: "N decodes last cycle" (null when there were no
+ * decodes, so the row shows the frequency alone rather than "0 decodes").
+ */
+internal fun carDecodesSecondary(decodeCount: Int): CarStringSpec? =
+    if (decodeCount > 0) CarStringSpec(R.string.car_decodes_last_cycle, listOf(decodeCount)) else null
+
 /** ARGB colour for "who heard me" PSK markers \u2014 a distinct green from the decode dots. */
 internal const val PSK_MARKER_COLOR = 0xFF66BB6A.toInt()
 
