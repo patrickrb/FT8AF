@@ -101,6 +101,7 @@ object PotaSessionManager {
      * blocking reload on the save path.
      */
     @JvmStatic
+    @Synchronized
     fun onQsoLogged(mySigInfo: String?) {
         val active = _currentActivation.value ?: return
         if (!qsoCountsForActivation(active.parkRef, mySigInfo)) return

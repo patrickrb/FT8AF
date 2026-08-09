@@ -47,6 +47,7 @@ class CarAppManifestWiringTest {
             context.packageName,
             PackageManager.GET_META_DATA,
         )
+        assertThat(appInfo.metaData).isNotNull()
         assertThat(appInfo.metaData.getInt("com.google.android.gms.car.application"))
             .isEqualTo(R.xml.automotive_app_desc)
         assertThat(appInfo.metaData.getInt("androidx.car.app.minCarApiLevel")).isEqualTo(1)
