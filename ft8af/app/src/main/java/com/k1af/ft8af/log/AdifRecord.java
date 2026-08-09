@@ -22,16 +22,51 @@ import java.util.Locale;
  *       value, not UTF-16 chars, so non-ASCII content (comments, park names) stays aligned.</li>
  * </ul>
  *
- * <p>Fields left {@code null} are omitted entirely; a field set to {@code ""} is still
- * emitted (as a zero-length field) to match the historical export behaviour. The POTA
- * fields ({@code MY_SIG}, {@code MY_SIG_INFO}, {@code SIG}, {@code SIG_INFO}) are the
- * exception: they are emitted only when non-null <em>and</em> non-empty so ordinary
- * non-POTA contacts stay clean.
+ * <p>Fields that are {@code null} <em>or</em> empty are omitted entirely. Emitting a
+ * zero-length field ({@code <gridsquare:0> }) instead — as this class used to for empty
+ * strings — is not portable: several ADIF importers treat a length-0 field as malformed
+ * and reject the whole record rather than reading it as "absent". An absent optional
+ * field means the same thing to every parser, so that is what we write.
  */
 public final class AdifRecord {
 
     /** Header (with {@code <eoh>}) written once at the top of a fresh ADIF file. */
     public static final String HEADER = "FT8AF ADIF Export<eoh>\n";
+
+    /**
+     * Application-defined field carrying the "manually confirmed" flag. ADIF has no
+     * {@code QSL_MANUAL} field — that bare name (which FT8AF wrote until this change)
+     * is non-conformant. {@code APP_<PROGRAMID>_<FIELD>} is the spec's escape hatch for
+     * program-specific data. {@link QSLRecord} still reads the legacy bare name so ADIF
+     * files exported by older builds keep round-tripping.
+     */
+    public static final String APP_QSL_MANUAL = "APP_FT8AF_QSL_MANUAL";
+
+    /**
+     * Application-defined fields carrying the operator's position as a plain decimal
+     * degree, alongside the standard {@code MY_LAT}/{@code MY_LON}.
+     *
+     * <p>Both are written because they serve different readers. ADIF's own location
+     * datatype is {@code XDDD MM.MMM} — degrees and decimal minutes — which every
+     * conventional logbook understands but which rounds to about 1.8 m and has to be
+     * re-parsed. roadsontheair.com prefers these decimal twins, so a route replay gets back
+     * exactly the coordinate the phone recorded rather than a rounded reconstruction.
+     */
+    public static final String APP_ROTA_LAT = "APP_ROTA_LAT";
+    public static final String APP_ROTA_LON = "APP_ROTA_LON";
+
+    /**
+     * The names these fields carried before the program was renamed from Road Trips
+     * On The Air to Roads On The Air. Read-only: never emitted, but still parsed on
+     * import so ADIF exported by an older build — or sitting in someone's archive —
+     * keeps its exact rover coordinates instead of silently falling back to the
+     * rounded {@code MY_LAT}/{@code MY_LON} pair.
+     */
+    public static final String LEGACY_APP_ROTA_LAT = "APP_RTOTA_LAT";
+    public static final String LEGACY_APP_ROTA_LON = "APP_RTOTA_LON";
+
+    /** Legacy, non-conformant name for {@link #APP_QSL_MANUAL}. Read-only: never emitted. */
+    public static final String LEGACY_QSL_MANUAL = "QSL_MANUAL";
 
     private String call;
     private boolean swl;
@@ -55,10 +90,13 @@ public final class AdifRecord {
     private String sig;
     private String sigInfo;
     private String comment;
+    /** Operator's position at QSO time; null when the app had no fix to record. */
+    private Double myLat;
+    private Double myLon;
 
     public AdifRecord call(String v) { this.call = v; return this; }
 
-    /** SWL record: emits {@code <swl:1>Y } instead of the QSL_RCVD/QSL_MANUAL pair. */
+    /** SWL record: emits {@code <swl:1>Y } instead of the QSL_RCVD/APP_FT8AF_QSL_MANUAL pair. */
     public AdifRecord swl(boolean v) { this.swl = v; return this; }
 
     public AdifRecord lotwQsl(boolean v) { this.lotwQsl = v; return this; }
@@ -94,6 +132,8 @@ public final class AdifRecord {
     public AdifRecord mySig(String v) { this.mySig = v; return this; }
 
     public AdifRecord mySigInfo(String v) { this.mySigInfo = v; return this; }
+    public AdifRecord myLat(Double v) { this.myLat = v; return this; }
+    public AdifRecord myLon(Double v) { this.myLon = v; return this; }
 
     public AdifRecord sig(String v) { this.sig = v; return this; }
 
@@ -112,10 +152,18 @@ public final class AdifRecord {
             sb.append("<swl:1>Y ");
         } else {
             sb.append(lotwQsl ? "<QSL_RCVD:1>Y " : "<QSL_RCVD:1>N ");
-            sb.append(manualQsl ? "<QSL_MANUAL:1>Y " : "<QSL_MANUAL:1>N ");
+            // QSL_MANUAL is not an ADIF field. The spec reserves the APP_<PROGRAMID>_
+            // prefix for application-defined fields, so a strict importer can skip ours
+            // instead of erroring on an unrecognised bare name. QSL_RCVD above *is*
+            // standard and keeps its name.
+            sb.append(manualQsl
+                    ? "<" + APP_QSL_MANUAL + ":1>Y "
+                    : "<" + APP_QSL_MANUAL + ":1>N ");
         }
-        appendIfNotNull(sb, "gridsquare", gridsquare);
-        if (mode != null) {
+        appendIfNotEmpty(sb, "gridsquare", gridsquare);
+        // Empty as well as null: mode has its own branch (for the MFSK submode split) and
+        // so bypasses appendIfNotEmpty, which is exactly how it kept emitting <mode:0>.
+        if (mode != null && !mode.isEmpty()) {
             // FT4/FT2 are ADIF submodes of MFSK, not standalone modes — a bare <mode>FT2 is
             // rejected as invalid by pota.app and other ADIF consumers.
             String submode = AdifFormat.mfskSubmode(mode);
@@ -126,24 +174,32 @@ public final class AdifRecord {
                 appendField(sb, "mode", mode);
             }
         }
-        appendIfNotNull(sb, "rst_sent", rstSent);
-        appendIfNotNull(sb, "rst_rcvd", rstRcvd);
-        appendIfNotNull(sb, "qso_date", qsoDate);
-        appendIfNotNull(sb, "time_on", timeOn);
-        appendIfNotNull(sb, "qso_date_off", qsoDateOff);
-        appendIfNotNull(sb, "time_off", timeOff);
-        appendIfNotNull(sb, "band", band);
-        appendIfNotNull(sb, "freq", freq);
-        appendIfNotNull(sb, "station_callsign", stationCallsign);
-        appendIfNotNull(sb, "my_gridsquare", myGridsquare);
-        appendIfNotNull(sb, "operator", operator);
+        appendIfNotEmpty(sb, "rst_sent", rstSent);
+        appendIfNotEmpty(sb, "rst_rcvd", rstRcvd);
+        appendIfNotEmpty(sb, "qso_date", qsoDate);
+        appendIfNotEmpty(sb, "time_on", timeOn);
+        appendIfNotEmpty(sb, "qso_date_off", qsoDateOff);
+        appendIfNotEmpty(sb, "time_off", timeOff);
+        appendIfNotEmpty(sb, "band", band);
+        appendIfNotEmpty(sb, "freq", freq);
+        appendIfNotEmpty(sb, "station_callsign", stationCallsign);
+        appendIfNotEmpty(sb, "my_gridsquare", myGridsquare);
+        appendIfNotEmpty(sb, "operator", operator);
         // POTA fields. Only emit when populated so non-POTA QSOs stay clean.
         appendIfNotEmpty(sb, "MY_SIG", mySig);
         appendIfNotEmpty(sb, "MY_SIG_INFO", mySigInfo);
         appendIfNotEmpty(sb, "SIG", sig);
         appendIfNotEmpty(sb, "SIG_INFO", sigInfo);
-        String c = comment == null ? "" : comment;
-        sb.append(String.format(Locale.US, "<comment:%d>%s <eor>\n", utf8Length(c), c));
+        // Operator position, standard field first then the exact decimal twin. Both
+        // are emitted or neither: a lone longitude is worse than no position at all.
+        if (myLat != null && myLon != null) {
+            appendIfNotEmpty(sb, "MY_LAT", AdifFormat.location(myLat, true));
+            appendIfNotEmpty(sb, "MY_LON", AdifFormat.location(myLon, false));
+            appendIfNotEmpty(sb, APP_ROTA_LAT, AdifFormat.decimalDegrees(myLat));
+            appendIfNotEmpty(sb, APP_ROTA_LON, AdifFormat.decimalDegrees(myLon));
+        }
+        appendIfNotEmpty(sb, "comment", comment);
+        sb.append("<eor>\n");
         return sb.toString();
     }
 
@@ -152,13 +208,11 @@ public final class AdifRecord {
         return build().getBytes(StandardCharsets.UTF_8);
     }
 
-    /** Emit a field when the value is non-null (an empty value still emits a zero-length field). */
-    private static void appendIfNotNull(StringBuilder sb, String name, String value) {
-        if (value == null) return;
-        appendField(sb, name, value);
-    }
-
-    /** Emit a field only when the value is non-null and non-empty (POTA fields). */
+    /**
+     * Emit a field only when the value is non-null and non-empty. Omitting an empty
+     * optional field is the portable way to say "no value"; a zero-length field is not
+     * (see the class javadoc).
+     */
     private static void appendIfNotEmpty(StringBuilder sb, String name, String value) {
         if (value == null || value.isEmpty()) return;
         appendField(sb, name, value);

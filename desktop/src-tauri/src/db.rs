@@ -375,7 +375,7 @@ impl Db {
         {
             out.push_str(&adif_field("call", &r.call));
             let qsl = if r.confirmed { "Y" } else { "N" };
-            out.push_str(&format!("<QSL_RCVD:1>{qsl} <QSL_MANUAL:1>N "));
+            out.push_str(&format!("<QSL_RCVD:1>{qsl} "));
             adif_opt(&mut out, "gridsquare", &r.gridsquare);
             adif_opt(&mut out, "mode", &r.mode);
             adif_opt(&mut out, "rst_sent", &r.rst_sent);
@@ -422,7 +422,7 @@ pub fn adif_record(r: &QsoRecord) -> String {
     let mut out = String::new();
     out.push_str(&adif_field("call", &r.call));
     let qsl = if r.confirmed { "Y" } else { "N" };
-    out.push_str(&format!("<QSL_RCVD:1>{qsl} <QSL_MANUAL:1>N "));
+    out.push_str(&format!("<QSL_RCVD:1>{qsl} "));
     adif_opt(&mut out, "gridsquare", &r.gridsquare);
     adif_opt(&mut out, "mode", &r.mode);
     adif_opt(&mut out, "rst_sent", &r.rst_sent);
@@ -480,6 +480,29 @@ mod tests {
         assert!(adif.contains("<gridsquare:4>FN42 "));
         assert!(adif.contains("<band:3>20m "));
         assert!(adif.trim_end().ends_with("<eor>"));
+    }
+
+    #[test]
+    fn export_omits_the_non_adif_qsl_manual_tag() {
+        // QSL_MANUAL is not in the ADIF spec (issue #697), and strict importers
+        // reject or silently drop unknown tags. Both emitters are covered: the
+        // file export and adif_record(), which is what goes out over the WSJT-X
+        // "Logged ADIF" UDP message to JTAlert/N1MM.
+        let db = Db::open_in_memory().unwrap();
+        let confirmed = rec("K1ABC", "20260604", "120000", true);
+        let unconfirmed = rec("W1AW", "20260604", "130000", false);
+        db.insert_qso(&confirmed).unwrap();
+        db.insert_qso(&unconfirmed).unwrap();
+
+        let adif = db.export_adif();
+        assert!(!adif.contains("QSL_MANUAL"));
+        assert!(!adif_record(&confirmed).contains("QSL_MANUAL"));
+
+        // QSL_RCVD is a real ADIF field and still carries the confirmed flag,
+        // which is the only QSL information these records ever held.
+        assert!(adif.contains("<call:5>K1ABC <QSL_RCVD:1>Y "));
+        assert!(adif.contains("<call:4>W1AW <QSL_RCVD:1>N "));
+        assert!(adif_record(&confirmed).contains("<QSL_RCVD:1>Y "));
     }
 
     #[test]

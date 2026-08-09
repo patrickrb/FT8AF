@@ -329,6 +329,9 @@
     <string name="settings_tx_watchdog_desc">Arrêt automatique de l\'émission après expiration du délai</string>
     <string name="settings_stop_after">Arrêter après</string>
     <string name="settings_stop_after_desc">Arrêter d\'appeler après N tentatives sans réponse</string>
+    <string name="settings_max_73">Envois 73 max</string>
+    <string name="settings_max_73_desc">Nombre maximal de transmissions RR73/73 par contact avant de passer à la suite</string>
+    <string name="settings_max_73_auto">Auto</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Chasse (réponse auto au CQ)</string>

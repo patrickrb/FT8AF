@@ -406,6 +406,9 @@
     <string name="settings_tx_watchdog_desc">Uitzending automatisch stoppen na time-out</string>
     <string name="settings_stop_after">Stoppen na</string>
     <string name="settings_stop_after_desc">Stop met roepen na N onbeantwoorde pogingen</string>
+    <string name="settings_max_73">Max. 73-zendingen</string>
+    <string name="settings_max_73_desc">Maximaal aantal RR73/73-uitzendingen per verbinding voordat wordt doorgegaan</string>
+    <string name="settings_max_73_auto">Auto</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Hunt (CQ automatisch beantwoorden)</string>

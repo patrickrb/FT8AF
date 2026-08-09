@@ -406,6 +406,9 @@
     <string name="settings_tx_watchdog_desc">إيقاف الإرسال تلقائياً بعد المهلة</string>
     <string name="settings_stop_after">التوقف بعد</string>
     <string name="settings_stop_after_desc">التوقف عن النداء بعد N محاولات بلا رد</string>
+    <string name="settings_max_73">الحد الأقصى لإرسال 73</string>
+    <string name="settings_max_73_desc">أقصى عدد لإرسالات RR73/73 لكل اتصال قبل المتابعة</string>
+    <string name="settings_max_73_auto">تلقائي</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">الصيد (رد تلقائي على CQ)</string>

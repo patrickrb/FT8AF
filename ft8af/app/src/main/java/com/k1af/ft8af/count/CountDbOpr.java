@@ -53,6 +53,44 @@ public class CountDbOpr {
     }
 
     /**
+     * Count the continents worked, for the "Worked All Continents" (WAC) award.
+     * Fires the callback once with one {@link CountValue} per worked continent
+     * (its {@code name} is the continent code, e.g. "EU"); the presentation logic
+     * lives in the pure Kotlin {@code workedAllContinents} reducer.
+     */
+    public static void getContinentCount(SQLiteDatabase db,AfterCount afterCount){
+        new GetContinentCount(db,afterCount).execute();
+    }
+
+    /**
+     * The distinct continent codes worked, derived from each log gridsquare via
+     * the DXCC lookup tables ({@code dxcc_grid} grid -> DXCC entity, then
+     * {@code dxccList} DXCC -> continent) exactly like the DXCC / CQ-zone stats.
+     *
+     * <p>Extracted as a synchronous static method (separate from the AsyncTask)
+     * so the grid -> continent join is unit-testable against an in-memory
+     * database without touching the UI thread. Blank / null continents are
+     * filtered in SQL, so the returned list holds only usable codes (which may
+     * still include the non-WAC "AN"/"-" — the Kotlin reducer drops those).
+     *
+     * @return one continent code per group; empty when no logged grid resolves.
+     */
+    @SuppressLint("Range")
+    public static java.util.List<String> queryWorkedContinents(SQLiteDatabase db){
+        java.util.ArrayList<String> continents=new java.util.ArrayList<>();
+        String querySQL="SELECT DISTINCT dl.continent AS cont FROM dxcc_grid dg\n" +
+                "inner join QSLTable q on dg.grid = UPPER(SUBSTR(q.gridsquare,1,4))\n" +
+                "left join dxccList dl on dg.dxcc = dl.dxcc\n" +
+                "WHERE dl.continent IS NOT NULL AND TRIM(dl.continent) <> ''";
+        try (Cursor cursor=db.rawQuery(querySQL,null)){
+            while (cursor.moveToNext()){
+                continents.add(cursor.getString(cursor.getColumnIndex("cont")));
+            }
+        }
+        return continents;
+    }
+
+    /**
      * Accumulated maximum/minimum great-circle distance (in km) from the
      * operator's own grid to a set of log gridsquares. {@link #hasData()}
      * distinguishes "no valid contacts were found" from a genuine 0 km
@@ -564,6 +602,37 @@ public class CountDbOpr {
 
 
 
+
+    /**
+     * Gather the worked continents for the WAC award off the UI thread. The
+     * heavy lifting (the grid -> continent join) is in {@link #queryWorkedContinents}
+     * so this task is just the async wrapper + callback marshalling.
+     */
+    static class GetContinentCount extends AsyncTask<Void, Void, Void>{
+        private final SQLiteDatabase db;
+        private final AfterCount afterCount;
+
+        public GetContinentCount(SQLiteDatabase db, AfterCount afterCount) {
+            this.db = db;
+            this.afterCount = afterCount;
+        }
+
+        @Override
+        protected Void doInBackground(Void... voids) {
+            java.util.List<String> continents = queryWorkedContinents(db);
+            ArrayList<CountValue> values = new ArrayList<>();
+            for (String c : continents) {
+                values.add(new CountValue(1, c));
+            }
+            if (afterCount != null) {
+                afterCount.countInformation(new CountInfo(""
+                        , ChartType.Bar
+                        , GeneralVariables.getStringFromResource(R.string.continent_completion_statistics)
+                        , values));
+            }
+            return null;
+        }
+    }
 
     public interface  AfterCount{
         void countInformation(CountInfo countInfo);

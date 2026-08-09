@@ -33,6 +33,17 @@ public class Yaesu2RigConstantTest {
     }
 
     @Test
+    public void setOperationFreq_packsTensOfHzInLastNibble() {
+        // 14.074050 MHz: the 50 Hz component is the tens-of-Hz digit (5), which must
+        // land in the low nibble of the last byte -> 0x05, not the raw remainder 50
+        // (0x32). Packing 50 there used to desync the encoder from getFrequency, which
+        // weights that nibble x10 (would have read back 14_074_320, +270 Hz).
+        byte[] f = Yaesu2RigConstant.setOperationFreq(14_074_050L);
+        byte[] expected = {(byte) 0x01, (byte) 0x40, (byte) 0x74, (byte) 0x05, (byte) 0x01};
+        assertThat(f).isEqualTo(expected);
+    }
+
+    @Test
     public void setPTTState_toggleByteDiffers() {
         byte[] on = Yaesu2RigConstant.setPTTState(true);
         byte[] off = Yaesu2RigConstant.setPTTState(false);

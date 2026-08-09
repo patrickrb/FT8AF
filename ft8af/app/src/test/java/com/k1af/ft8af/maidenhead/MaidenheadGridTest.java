@@ -8,6 +8,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
+import java.util.Locale;
+
 /**
  * Exercise the Maidenhead grid math: grid->LatLng, LatLng->grid, distance,
  * and the format validator. Robolectric is required because the production
@@ -110,6 +112,30 @@ public class MaidenheadGridTest {
         assertThat(MaidenheadGrid.gridToLatLng("ABCDEFG")).isNull();
     }
 
+    @Test
+    public void gridToLatLng_rightLengthWrongAlphabet_returnsNull() {
+        // A token of a legal length (2/4/6) but that is not a Maidenhead locator
+        // must be rejected, not coerced into an arbitrary LatLng. Before this
+        // guard an ADIF GRIDSQUARE of "1234" (or any 4-char junk) decoded to a
+        // bogus point that was plotted on the map and fed into distance stats.
+        assertThat(MaidenheadGrid.gridToLatLng("1234")).isNull(); // digits in field slots
+        assertThat(MaidenheadGrid.gridToLatLng("FN4X")).isNull(); // letter in a digit slot
+        assertThat(MaidenheadGrid.gridToLatLng("ZZ99")).isNull(); // field letters past R
+        assertThat(MaidenheadGrid.gridToLatLng("AB1@")).isNull(); // symbol in a digit slot
+        assertThat(MaidenheadGrid.gridToLatLng("FN42zz")).isNull(); // subsquare past x
+        assertThat(MaidenheadGrid.gridToLatLng("1A")).isNull();   // 2-char field with a digit
+    }
+
+    @Test
+    public void gridToLatLng_validGridsStillDecode() {
+        // Regression guard: the alphabet check must be a no-op for real locators
+        // of every supported length and case.
+        assertThat(MaidenheadGrid.gridToLatLng("FN")).isNotNull();
+        assertThat(MaidenheadGrid.gridToLatLng("FN42")).isNotNull();
+        assertThat(MaidenheadGrid.gridToLatLng("IO91wm")).isNotNull();
+        assertThat(MaidenheadGrid.gridToLatLng("io91WM")).isNotNull(); // mixed case
+    }
+
     // ---------- getGridSquare ----------
 
     @Test
@@ -125,6 +151,22 @@ public class MaidenheadGridTest {
         // Boston-ish coordinates.
         String grid = MaidenheadGrid.getGridSquare(new LatLng(42.5, -71.0));
         assertThat(grid).isEqualTo("FN42");
+    }
+
+    @Test
+    public void getGridSquare_northPoleStaysWithinFieldRange() {
+        // A GPS fix at the North Pole (lat == 90) drove the latitude field index
+        // to 18 — one past the legal A-R range — emitting the letter 'S', i.e. an
+        // invalid locator that was then written to config as the operator's grid,
+        // transmitted in FT8 messages, and uploaded to PSKReporter. (Play-Services
+        // LatLng clamps latitude to [-90, 90] so 90 survives; it normalizes
+        // longitude 180 -> -180, so the antimeridian overflow is only reachable in
+        // the raw math — see MaidenheadGridSquareTest.) The field letters must stay
+        // in A-R.
+        String grid = MaidenheadGrid.getGridSquare(new LatLng(90.0, 0.0));
+        assertThat(MaidenheadGrid.checkMaidenhead(grid)).isTrue();
+        assertThat(grid.charAt(0)).isAtMost('R');
+        assertThat(grid.charAt(1)).isAtMost('R');
     }
 
     // ---------- getDist ----------
@@ -317,6 +359,23 @@ public class MaidenheadGridTest {
     }
 
     @Test
+    public void gridToPolygon_nullReturnsNullNotNPE() {
+        // Unlike its sibling gridToLatLng, gridToPolygon had no null guard and
+        // NPE'd on grid.length(). A null gridsquare reaching the GridPolygon
+        // overlay must yield null, not throw.
+        assertThat(MaidenheadGrid.gridToPolygon(null)).isNull();
+    }
+
+    @Test
+    public void gridToPolygon_rightLengthWrongAlphabet_returnsNull() {
+        // Same alphabet contract as gridToLatLng: a legal-length non-locator
+        // token must be rejected rather than drawn as a bogus cell outline.
+        assertThat(MaidenheadGrid.gridToPolygon("1234")).isNull();
+        assertThat(MaidenheadGrid.gridToPolygon("FN4X")).isNull();
+        assertThat(MaidenheadGrid.gridToPolygon("ZZ99")).isNull();
+    }
+
+    @Test
     public void gridToPolygon_cornersFormARectangle() {
         // latLngs[0]/[1] share lat1; [2]/[3] share lat2; [0]/[3] share lng1;
         // [1]/[2] share lng2 — i.e. an axis-aligned box.
@@ -401,5 +460,29 @@ public class MaidenheadGridTest {
     public void checkMaidenhead_rejectsTwoCharField() {
         // Unlike gridToLatLng, the validator does not accept 2-char fields.
         assertThat(MaidenheadGrid.checkMaidenhead("FN")).isFalse();
+    }
+
+    // ---------- locale safety ----------
+
+    @Test
+    public void gridToLatLng_lowerCase_turkishDefaultLocale_decodesCorrectly() {
+        // Default-locale toUpperCase() maps 'i' to dotted-capital 'İ' (U+0130) under
+        // Turkish locales — a multi-byte UTF-8 char that shifts every getBytes()
+        // index and breaks the byte arithmetic. The decoders must normalize with a
+        // fixed locale so "io91wm" decodes identically everywhere.
+        Locale saved = Locale.getDefault();
+        Locale.setDefault(new Locale("tr", "TR"));
+        try {
+            LatLng p = MaidenheadGrid.gridToLatLng("io91wm");
+            assertThat(p).isNotNull();
+            assertThat(p.latitude).isWithin(POS_TOL).of(51.521);
+            assertThat(p.longitude).isWithin(POS_TOL).of(-0.125);
+
+            LatLng[] poly = MaidenheadGrid.gridToPolygon("io91wm");
+            assertThat(poly).isNotNull();
+            assertThat(poly[0].latitude).isWithin(POS_TOL).of(51.5);
+        } finally {
+            Locale.setDefault(saved);
+        }
     }
 }

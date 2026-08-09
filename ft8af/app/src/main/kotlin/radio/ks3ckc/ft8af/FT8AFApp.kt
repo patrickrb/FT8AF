@@ -47,15 +47,19 @@ import radio.ks3ckc.ft8af.ui.components.CqOptionsSheet
 import radio.ks3ckc.ft8af.ui.components.canEnableFieldDay
 import radio.ks3ckc.ft8af.ui.components.shouldPersistFreeText
 import radio.ks3ckc.ft8af.ui.components.shouldPersistSection
+import radio.ks3ckc.ft8af.hunt.huntPriorityFromConfig
 import radio.ks3ckc.ft8af.ui.components.FT8AFTab
 import radio.ks3ckc.ft8af.ui.components.FrequencyPickerSheet
 import radio.ks3ckc.ft8af.ui.components.HoundSetupSheet
+import radio.ks3ckc.ft8af.ui.components.HuntOptionsSheet
+import radio.ks3ckc.ft8af.ui.components.huntStripSubtitle
 import radio.ks3ckc.ft8af.ui.components.formatMhz
 import radio.ks3ckc.ft8af.ui.components.QsoCelebration
 import radio.ks3ckc.ft8af.ui.components.SlotTimerBar
 import radio.ks3ckc.ft8af.ui.components.TabBar
 import radio.ks3ckc.ft8af.ui.components.TransmitGlow
 import radio.ks3ckc.ft8af.ui.components.TxStrip
+import radio.ks3ckc.ft8af.ui.components.VoiceCommandButton
 import radio.ks3ckc.ft8af.ui.components.selectBandIndex
 import radio.ks3ckc.ft8af.ui.decode.DecodeScreen
 import radio.ks3ckc.ft8af.ui.logbook.LogbookScreen
@@ -144,6 +148,52 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     // editable in Settings, which provides the persisted default at startup).
     var huntEnabled by remember { mutableStateOf(GeneralVariables.autoFollowCQ) }
 
+    // Hunt Options sheet state — the notch on (or a long-press of) the HUNT
+    // button opens it. Mirrors the GeneralVariables.hunt* statics the transmit
+    // engine's HuntTargetSelector reads each decode cycle.
+    var showHuntOptions by remember { mutableStateOf(false) }
+    var huntPriority by remember {
+        mutableStateOf(huntPriorityFromConfig(GeneralVariables.huntPriority))
+    }
+    var huntAvoidPileups by remember { mutableStateOf(GeneralVariables.huntAvoidPileups) }
+    var huntMinSnr by remember {
+        mutableStateOf(
+            GeneralVariables.huntMinSnr.takeIf { it != GeneralVariables.HUNT_MIN_SNR_OFF },
+        )
+    }
+
+    // Turn Hunt on/off — shared by the TX-strip HUNT toggle and the Hunt options
+    // sheet's Start button so both arm the sequencer identically.
+    val setHuntEnabled: (Boolean) -> Unit = setHunt@{ newVal ->
+        if (newVal && GeneralVariables.myCallsign.isNullOrEmpty()) {
+            // Hunt transmits replies, so it needs a callsign just like CQ does.
+            Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
+            return@setHunt
+        }
+        huntEnabled = newVal
+        GeneralVariables.autoFollowCQ = newVal
+        mainViewModel.databaseOpr.writeConfig(
+            "autoFollowCQ", if (newVal) "1" else "0", null,
+        )
+        if (newVal) {
+            // Arm the sequencer so Hunt actually answers CQs. It stays silent
+            // (transmit path suppresses calling CQ) until it hears a CQ to work.
+            // armForHunt (not userResetToCQ) so Hunt can answer on the very next
+            // cycle instead of skipping one via pendingUserCQ.
+            mainViewModel.ft8TransmitSignal.armForHunt()
+            mainViewModel.ft8TransmitSignal.setActivated(true)
+            GeneralVariables.resetLaunchSupervision()
+        } else {
+            mainViewModel.ft8TransmitSignal.setActivated(false)
+        }
+        Toast.makeText(
+            context,
+            if (newVal) context.getString(R.string.app_hunt_on)
+            else context.getString(R.string.app_hunt_off),
+            Toast.LENGTH_SHORT,
+        ).show()
+    }
+
     // DXpedition Hound mode. Mirrors GeneralVariables.houndMode; the setup sheet
     // collects the Fox call + call frequency before starting.
     var dxEnabled by remember { mutableStateOf(GeneralVariables.houndMode) }
@@ -184,6 +234,11 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             // chip reflects the correct state even when arming is skipped
             // (e.g. callsign not yet configured).
             huntEnabled = GeneralVariables.autoFollowCQ
+            // Hunt options load with the rest of the config, after first composition.
+            huntPriority = huntPriorityFromConfig(GeneralVariables.huntPriority)
+            huntAvoidPileups = GeneralVariables.huntAvoidPileups
+            huntMinSnr = GeneralVariables.huntMinSnr
+                .takeIf { it != GeneralVariables.HUNT_MIN_SNR_OFF }
             // Config (incl. the saved custom CQ) loads after first composition, so
             // pull it in once it's ready and seed the field if untouched.
             savedCqFreeText = GeneralVariables.cqFreeText ?: ""
@@ -228,6 +283,10 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     // recompose when the mode changes.
     val operatingMode by mainViewModel.mutableOperatingMode.observeAsState(GeneralVariables.operatingMode)
     val modeName = ModeProfile.fromId(operatingMode).displayName
+
+    // Mean decode DT (seconds) for the slot-timer bar's live clock-sync pill; null until
+    // the first decode cycle reports one, so the bar renders unchanged before then.
+    val avgDtSec by mainViewModel.mutableTimerOffset.observeAsState()
 
     // Observe SWR lockout state
     val swrLocked by mainViewModel.meterProtectionController.swrLockout.observeAsState(false)
@@ -342,6 +401,18 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                             .padding(bottom = WaterfallBottomStripHeight),
                     )
                 }
+
+                // Voice-command push-to-talk mic (v1). Floats over the content
+                // just above the TX strip so it never resizes the waterfall's
+                // AndroidView or shifts list layouts. Renders nothing unless
+                // the voice-commands setting is on; tap is refused (with the
+                // reason) while FT8 RX is capturing through the phone mic.
+                VoiceCommandButton(
+                    mainViewModel = mainViewModel,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 12.dp, bottom = 12.dp),
+                )
             }
 
             // Active QSO panel (docked) — slides up above TxStrip when a QSO is
@@ -352,9 +423,12 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 qsoPanel(Modifier)
             }
 
-            // Slot timer bar — fills 0→100% across each slot (15s FT8 / 7.5s FT4)
+            // Slot timer bar — fills 0→100% across each slot (15s FT8 / 7.5s FT4).
+            // The mean decode DT rides on the bar as a live clock-sync pill so the
+            // operator can spot a drifting clock without opening Settings → Time Sync.
             SlotTimerBar(
                 slotMillis = ModeProfile.fromId(operatingMode).slotMillis.toLong(),
+                offsetSec = avgDtSec,
             )
 
             // TX status strip — always visible above tab bar
@@ -375,6 +449,7 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 cqModifier = cqModifier,
                 isFreeTextMode = isFreeTextMode,
                 fieldDayEnabled = fieldDayEnabled,
+                huntPriorityTag = huntStripSubtitle(huntPriority),
                 isTuning = isTuning,
                 tuneRemainingSec = tuneRemainingSec,
                 onToggleTune = {
@@ -465,36 +540,8 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                         mainViewModel.ft8TransmitSignal.userResetToCQ()
                     }
                 },
-                onToggleHunt = {
-                    val newVal = !huntEnabled
-                    if (newVal && GeneralVariables.myCallsign.isNullOrEmpty()) {
-                        // Hunt transmits replies, so it needs a callsign just like CQ does.
-                        Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
-                    } else {
-                        huntEnabled = newVal
-                        GeneralVariables.autoFollowCQ = newVal
-                        mainViewModel.databaseOpr.writeConfig(
-                            "autoFollowCQ", if (newVal) "1" else "0", null,
-                        )
-                        if (newVal) {
-                            // Arm the sequencer so Hunt actually answers CQs. It stays silent
-                            // (transmit path suppresses calling CQ) until it hears a CQ to work.
-                            // armForHunt (not userResetToCQ) so Hunt can answer on the very next
-                            // cycle instead of skipping one via pendingUserCQ.
-                            mainViewModel.ft8TransmitSignal.armForHunt()
-                            mainViewModel.ft8TransmitSignal.setActivated(true)
-                            GeneralVariables.resetLaunchSupervision()
-                        } else {
-                            mainViewModel.ft8TransmitSignal.setActivated(false)
-                        }
-                        Toast.makeText(
-                            context,
-                            if (newVal) context.getString(R.string.app_hunt_on)
-                            else context.getString(R.string.app_hunt_off),
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                    }
-                },
+                onToggleHunt = { setHuntEnabled(!huntEnabled) },
+                onLongPressHunt = { showHuntOptions = true },
                 onCycleMode = {
                     // Cycle through the shipped ModeProfile entries in declaration order
                     // (FT8 -> FT4 -> FT2 -> ...), wrapping around. An unknown current mode
@@ -704,6 +751,37 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                     GeneralVariables.resetLaunchSupervision()
                 }
             },
+        )
+
+        // Hunt Options — target priority + smart filters. Selections apply
+        // immediately (the engine reads the GeneralVariables.hunt* mirrors every
+        // decode cycle), so mid-hunt changes take effect on the next cycle.
+        HuntOptionsSheet(
+            visible = showHuntOptions,
+            huntEnabled = huntEnabled,
+            priority = huntPriority,
+            avoidPileups = huntAvoidPileups,
+            minSnrDb = huntMinSnr,
+            onDismiss = { showHuntOptions = false },
+            onSelectPriority = { p ->
+                huntPriority = p
+                GeneralVariables.huntPriority = p.name
+                mainViewModel.databaseOpr.writeConfig("huntPriority", p.name, null)
+            },
+            onAvoidPileupsChange = { enabled ->
+                huntAvoidPileups = enabled
+                GeneralVariables.huntAvoidPileups = enabled
+                mainViewModel.databaseOpr.writeConfig(
+                    "huntAvoidPileups", if (enabled) "1" else "0", null,
+                )
+            },
+            onMinSnrChange = { floor ->
+                huntMinSnr = floor
+                val stored = floor ?: GeneralVariables.HUNT_MIN_SNR_OFF
+                GeneralVariables.huntMinSnr = stored
+                mainViewModel.databaseOpr.writeConfig("huntMinSnr", stored.toString(), null)
+            },
+            onStartHunt = { setHuntEnabled(true) },
         )
     }
 }

@@ -52,7 +52,10 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -95,13 +98,13 @@ private data class StationMarker(
 // PSK Reporter overlay (issue #33) — the other station in a reception report
 // (a receiver that heard us, or a sender we heard, per the direction filter).
 private data class PskSpotMarker(
-    val callsign: String,
+    override val callsign: String,
     val grid: String,
-    val lat: Double,
-    val lon: Double,
-    val snr: Int,
+    override val lat: Double,
+    override val lon: Double,
+    override val snr: Int,
     override val frequencyHz: Long,
-) : HasFrequencyHz
+) : HasFrequencyHz, ReachSpot
 
 private const val PSK_POLL_INTERVAL_MS = 5L * 60L * 1000L
 
@@ -116,6 +119,12 @@ internal enum class MapViewMode { STANDARD, AZIMUTHAL }
 private const val MAP_MIN_ZOOM = 1f
 private const val MAP_MAX_ZOOM = 8f
 private const val MAP_ZOOM_STEP = 2f
+
+// Gray-line overlay colors. The night side is a translucent navy wash so land
+// and markers stay legible beneath it; the terminator itself is a soft amber
+// stroke — the "gray line" HF operators chase for enhanced propagation.
+private val GrayLineNightFill = Color(0x4A0B1220)
+private val GrayLineTerminator = Color(0xB3F5B44A)
 
 // Persists the PSK filter across config changes / process death. band == "" means all.
 private val PskFilterSaver = listSaver<PskFilter, Any>(
@@ -183,6 +192,18 @@ internal fun azProject(opLat: Double, opLon: Double, lat: Double, lon: Double): 
     )
 }
 
+// Great-circle distance (km) to the map disc edge. The antipode sits at angular
+// distance PI, so it is PI * 6371 km away; [azProject] projects it to a normalized
+// radius of 1 (c / PI), i.e. exactly the disc radius `r`. Range rings must be scaled
+// against this same maximum so they line up with the station markers.
+internal val MAP_EDGE_KM = PI * 6371.0
+
+// Screen radius (px) for a range ring at great-circle distance [km], using the SAME
+// factor [azProject] applies to markers (normalized radius = distKm / MAP_EDGE_KM),
+// so rings align with the marks instead of ballooning past them.
+internal fun rangeRingRadiusPx(km: Double, r: Float, scale: Float): Float =
+    (km / MAP_EDGE_KM).toFloat() * r * scale
+
 // ---------------------------------------------------------------------------
 // Map Screen
 // ---------------------------------------------------------------------------
@@ -210,6 +231,24 @@ fun MapScreen(mainViewModel: MainViewModel) {
     // changes via PskFilterSaver. Changing it re-runs the fetch (force-once below).
     var pskFilter by rememberSaveable(stateSaver = PskFilterSaver) { mutableStateOf(PskFilter()) }
     var filterSheetOpen by rememberSaveable { mutableStateOf(false) }
+
+    // Gray-line (day/night terminator) overlay. On by default — it's a passive,
+    // translucent shade that HF operators use to spot enhanced-propagation paths.
+    // `nowMillis` ticks once a minute so the terminator creeps across the map in
+    // real time; the Sun moves ~0.25°/min, far slower than the tick.
+    var grayLineEnabled by rememberSaveable { mutableStateOf(GeneralVariables.grayLineEnabled) }
+    var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(grayLineEnabled) {
+        while (grayLineEnabled) {
+            nowMillis = System.currentTimeMillis()
+            delay(60_000L)
+        }
+    }
+    // The night region as a lat/lon ring, recomputed only when the minute ticks
+    // (not every animation frame). The canvas just projects + fills it.
+    val nightRing = remember(grayLineEnabled, nowMillis) {
+        if (grayLineEnabled) nightPolygonLatLon(subsolarPoint(nowMillis)) else null
+    }
 
     // Zoom + pan (issue #51). Scale is clamped to [1, MAX_ZOOM]; pan is clamped so the
     // scaled map can't be dragged entirely off-screen. Both reset whenever the projection
@@ -400,6 +439,7 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 stations = stations,
                 pskSpots = pskSpots,
                 connectionLines = connectionLines,
+                nightRing = nightRing,
                 selectedCallsign = selectedCallsign,
                 onStationSelected = { selectedCallsign = it },
                 scale = mapScale,
@@ -477,6 +517,22 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 FilterPill(active = filterSheetOpen, onClick = { filterSheetOpen = !filterSheetOpen })
                 Spacer(modifier = Modifier.width(6.dp))
             }
+            // Gray-line toggle — only the equirectangular map draws the terminator.
+            if (viewMode == MapViewMode.STANDARD) {
+                GrayLineToggle(
+                    enabled = grayLineEnabled,
+                    onToggle = { newVal ->
+                        grayLineEnabled = newVal
+                        GeneralVariables.grayLineEnabled = newVal
+                        mainViewModel.databaseOpr.writeConfig(
+                            "grayLineEnabled",
+                            if (newVal) "1" else "0",
+                            null,
+                        )
+                    },
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+            }
             PskOverlayToggle(
                 enabled = pskOverlayEnabled,
                 onToggle = { newVal ->
@@ -498,7 +554,15 @@ fun MapScreen(mainViewModel: MainViewModel) {
         }
 
         // Bottom: the PSK filter sheet takes the bottom slot when open; otherwise the
-        // selected-station card. (Mutually exclusive so they don't stack.)
+        // selected-station card, or — when the "Heard me" overlay is on and nothing is
+        // selected — the signal-reach summary. (Mutually exclusive so they don't stack.)
+        val reach = remember(pskSpots, opLatLng, pskFilter.direction) {
+            if (pskFilter.direction == PskDirection.WHO_HEARD_ME) {
+                summarizeSignalReach(pskSpots, opLatLng?.latitude, opLatLng?.longitude)
+            } else {
+                null
+            }
+        }
         if (pskOverlayEnabled && filterSheetOpen) {
             PskFilterSheet(
                 filter = pskFilter,
@@ -515,6 +579,14 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 opLat = opLat,
                 opLon = opLon,
                 onDismiss = { selectedCallsign = null },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(12.dp)
+                    .fillMaxWidth(),
+            )
+        } else if (pskOverlayEnabled && reach != null) {
+            SignalReachCard(
+                reach = reach,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(12.dp)
@@ -751,6 +823,28 @@ internal fun PskOverlayToggle(enabled: Boolean, onToggle: (Boolean) -> Unit) {
     ) {
         Text(
             text = stringResource(R.string.map_overlay_psk),
+            color = if (enabled) BgApp else TextMuted,
+            fontFamily = GeistMonoFamily,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+internal fun GrayLineToggle(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    val cd = stringResource(R.string.map_overlay_grayline_cd)
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (enabled) GrayLineTerminator else BgSurface3)
+            .clickable { onToggle(!enabled) }
+            .semantics { contentDescription = cd }
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = stringResource(R.string.map_overlay_grayline),
             color = if (enabled) BgApp else TextMuted,
             fontFamily = GeistMonoFamily,
             fontSize = 11.sp,
@@ -1047,6 +1141,7 @@ private fun StandardMapCanvas(
     stations: List<StationMarker>,
     pskSpots: List<PskSpotMarker>,
     connectionLines: List<ConnectionLine>,
+    nightRing: FloatArray?,
     selectedCallsign: String?,
     onStationSelected: (String?) -> Unit,
     scale: Float,
@@ -1081,6 +1176,10 @@ private fun StandardMapCanvas(
 
         // Lat/lon grid (over land so it stays visible across continents)
         drawEquirectGrid(vp)
+
+        // Gray-line (day/night terminator) — translucent night wash + amber
+        // terminator stroke, drawn over land/grid but under the markers.
+        nightRing?.let { ring -> drawGrayLine(ring, vp) }
 
         // Operator marker (at projected lat/lon, scaled + panned with map)
         val opPos = vp.projectLatLon(opLat, opLon)
@@ -1356,6 +1455,47 @@ private fun DrawScope.drawWorldLand(rings: List<FloatArray>, vp: EquirectViewpor
     drawPath(path, color = Color(0x9094A3B8), style = Stroke(width = 0.75f))   // outline
 }
 
+/**
+ * Draw the gray-line overlay on the equirectangular map: fill the night side
+ * with a translucent wash and stroke the terminator itself. [ring] is the flat
+ * `[lon, lat, …]` night polygon from [nightPolygonLatLon] — its last two
+ * vertices close the ring along the dark pole, so the terminator stroke uses
+ * everything but those two.
+ */
+private fun DrawScope.drawGrayLine(ring: FloatArray, vp: EquirectViewport) {
+    if (ring.size < 8) return
+    val cx = vp.canvasW / 2f
+    val cy = vp.canvasH / 2f
+    val sxUnit = vp.worldPxW / 2f
+    val syUnit = vp.worldPxH / 2f
+    fun px(lon: Float) = cx + (lon / 180f) * sxUnit + vp.panX
+    fun py(lat: Float) = cy + (-lat / 90f) * syUnit + vp.panY
+
+    // Filled night region (the whole closed ring).
+    val fill = Path()
+    var i = 0
+    while (i + 1 < ring.size) {
+        val x = px(ring[i])
+        val y = py(ring[i + 1])
+        if (i == 0) fill.moveTo(x, y) else fill.lineTo(x, y)
+        i += 2
+    }
+    fill.close()
+    drawPath(fill, color = GrayLineNightFill)
+
+    // Terminator stroke — the curve only, dropping the two pole-closing vertices.
+    val curveFloats = ring.size - 4
+    val stroke = Path()
+    var j = 0
+    while (j < curveFloats) {
+        val x = px(ring[j])
+        val y = py(ring[j + 1])
+        if (j == 0) stroke.moveTo(x, y) else stroke.lineTo(x, y)
+        j += 2
+    }
+    drawPath(stroke, color = GrayLineTerminator, style = Stroke(width = 1.5f))
+}
+
 // ---------------------------------------------------------------------------
 // Azimuthal land renderer + drawing helpers
 // ---------------------------------------------------------------------------
@@ -1395,13 +1535,12 @@ private fun DrawScope.drawAzimuthalLand(
 }
 
 private fun DrawScope.drawRangeRings(cx: Float, cy: Float, r: Float, scale: Float = 1f) {
-    val maxKm = 20015.0
     val rings = listOf(2500, 5000, 10000, 15000, 20000)
     val ringColor = Color(0x1894A3B8)
     val dashEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 6f))
 
     for (km in rings) {
-        val ringR = (km.toFloat() / maxKm.toFloat()) * r * (PI.toFloat() / 2f) * scale
+        val ringR = rangeRingRadiusPx(km.toDouble(), r, scale)
         drawCircle(
             color = ringColor,
             radius = ringR,
@@ -1514,6 +1653,59 @@ private fun SelectedStationCard(
                 InfoChip(MaidenheadGrid.formatDist(distKm), stringResource(R.string.map_info_distance))
                 InfoChip("${String.format("%.0f", bearing)}\u00B0", stringResource(R.string.map_info_bearing))
                 InfoChip("${station.snr} dB", stringResource(R.string.map_info_snr))
+            }
+        }
+    }
+}
+
+/**
+ * Bottom card summarising how far the operator's own signal is reaching, derived
+ * from PSK Reporter "heard me" spots by [summarizeSignalReach]. Shown when the
+ * overlay is on in the "Heard me" direction and no individual station is
+ * selected — the glanceable answer to "is my signal getting out, and how far?".
+ */
+@Composable
+private fun SignalReachCard(reach: SignalReach, modifier: Modifier = Modifier) {
+    GlassCard(modifier = modifier) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.map_reach_title),
+                    color = Signal,
+                    fontFamily = GeistMonoFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                )
+                Text(
+                    text = pluralStringResource(
+                        R.plurals.map_reach_receivers,
+                        reach.receivers,
+                        reach.receivers,
+                    ),
+                    color = TextMuted,
+                    fontSize = 11.sp,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                if (reach.furthestCall.isNotEmpty()) {
+                    InfoChip(
+                        MaidenheadGrid.formatDist(reach.furthestKm),
+                        stringResource(R.string.map_reach_furthest, reach.furthestCall),
+                    )
+                }
+                if (reach.strongestCall.isNotEmpty()) {
+                    InfoChip(
+                        "${reach.strongestSnr} dB",
+                        stringResource(R.string.map_reach_best, reach.strongestCall),
+                    )
+                }
             }
         }
     }

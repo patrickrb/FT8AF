@@ -36,7 +36,7 @@ final class AdifTests: XCTestCase {
         let expected =
             "FT8AF ADIF Export<eoh>\n"
             + "<call:5>K1ABC "
-            + "<QSL_RCVD:1>N <QSL_MANUAL:1>N "
+            + "<QSL_RCVD:1>N "
             + "<gridsquare:4>FN42 "
             + "<mode:3>FT8 "
             + "<rst_sent:3>-08 "
@@ -56,7 +56,7 @@ final class AdifTests: XCTestCase {
     func testExportOmitsEmptyOptionalsButKeepsCallFlagsAndComment() {
         let out = Adif.export([rec(call: "W1AW")]) // all optionals empty
         XCTAssertEqual(out,
-            "FT8AF ADIF Export<eoh>\n<call:4>W1AW <QSL_RCVD:1>N <QSL_MANUAL:1>N <comment:0> <eor>\n")
+            "FT8AF ADIF Export<eoh>\n<call:4>W1AW <QSL_RCVD:1>N <comment:0> <eor>\n")
     }
 
     func testExportUsesUtf8ByteLengthForComment() {

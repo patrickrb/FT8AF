@@ -502,6 +502,36 @@ class PskReporterSenderTest {
     }
 
     // ---------------------------------------------------------------
+    // Sender locator sanitation (reportableLocator)
+    // ---------------------------------------------------------------
+
+    @Test
+    fun `reportableLocator keeps a genuine 4-char grid`() {
+        assertThat(PskReporterSender.reportableLocator("FN31")).isEqualTo("FN31")
+    }
+
+    @Test
+    fun `reportableLocator keeps a 6-char grid`() {
+        assertThat(PskReporterSender.reportableLocator("IO91wm")).isEqualTo("IO91wm")
+    }
+
+    @Test
+    fun `reportableLocator drops the RR73 signoff token`() {
+        // "RR73" is a syntactic grid look-alike (R,R + 7,3) but is the roger-73
+        // sign-off, never a Maidenhead locator. It must not be uploaded to the
+        // global PSKReporter database. The old `length >= 4` check let it through.
+        assertThat(PskReporterSender.reportableLocator("RR73")).isNull()
+        assertThat(PskReporterSender.reportableLocator("rr73")).isNull()
+    }
+
+    @Test
+    fun `reportableLocator drops absent or too-short grids`() {
+        assertThat(PskReporterSender.reportableLocator(null)).isNull()
+        assertThat(PskReporterSender.reportableLocator("")).isNull()
+        assertThat(PskReporterSender.reportableLocator("FN")).isNull()
+    }
+
+    // ---------------------------------------------------------------
     // Dedup window bookkeeping (markIfFresh) + thread-safety
     // ---------------------------------------------------------------
 
@@ -596,6 +626,59 @@ class PskReporterSenderTest {
         assertThat(threads.none { it.isAlive }).isTrue()
         // Every distinct key is fresh exactly once — no lost or double inserts.
         assertThat(admitted.get()).isEqualTo(threadCount * perThread)
+    }
+
+    // ---------------------------------------------------------------
+    // Dedup map eviction (pruneDedup) — bounded-memory guarantee
+    // ---------------------------------------------------------------
+
+    @Test
+    fun `pruneDedup evicts entries aged past the window and keeps fresh ones`() {
+        // Two stations marked at t=1000; one refreshed just before pruning.
+        assertThat(PskReporterSender.markIfFresh("OLD|14", 1_000L)).isTrue()
+        assertThat(PskReporterSender.markIfFresh("NEW|14", 1_000L)).isTrue()
+        assertThat(PskReporterSender.dedupSize()).isEqualTo(2)
+
+        // Refresh NEW right at the prune instant so it is still inside the window.
+        val now = 1_000L + dedupWindowMs
+        assertThat(PskReporterSender.markIfFresh("NEW|14", now)).isTrue()
+
+        // OLD is exactly window-old (nowMs - lastSeen == window) → aged out; NEW stays.
+        PskReporterSender.pruneDedup(now)
+        assertThat(PskReporterSender.dedupSize()).isEqualTo(1)
+        // OLD is gone, so it reports fresh again; NEW is still deduped.
+        assertThat(PskReporterSender.markIfFresh("OLD|14", now)).isTrue()
+        assertThat(PskReporterSender.markIfFresh("NEW|14", now)).isFalse()
+    }
+
+    @Test
+    fun `pruneDedup keeps entries still inside the window`() {
+        assertThat(PskReporterSender.markIfFresh("W1AW|14", 1_000L)).isTrue()
+        // One millisecond short of the full window → not yet stale.
+        PskReporterSender.pruneDedup(1_000L + dedupWindowMs - 1)
+        assertThat(PskReporterSender.dedupSize()).isEqualTo(1)
+    }
+
+    @Test
+    fun `pruneDedup on an empty map is a no-op`() {
+        PskReporterSender.pruneDedup(10_000_000L)
+        assertThat(PskReporterSender.dedupSize()).isEqualTo(0)
+    }
+
+    @Test
+    fun `flush prunes stale dedup entries so the map stays bounded`() {
+        // Populate the dedup map with entries that are already stale relative to the
+        // real clock flush() uses, then flush an empty spot queue: without eviction
+        // the map would retain every historical entry forever (the leak).
+        assertThat(PskReporterSender.markIfFresh("STALE1|14", 1_000L)).isTrue()
+        assertThat(PskReporterSender.markIfFresh("STALE2|7", 2_000L)).isTrue()
+        assertThat(PskReporterSender.dedupSize()).isEqualTo(2)
+
+        kotlinx.coroutines.runBlocking { PskReporterSender.flush() }
+
+        // System.currentTimeMillis() is vastly larger than the fixture timestamps, so
+        // every entry has aged past the 5-minute window and flush() evicts them all.
+        assertThat(PskReporterSender.dedupSize()).isEqualTo(0)
     }
 
     /** Decode a hex string (all whitespace ignored) into bytes for golden-vector comparison. */

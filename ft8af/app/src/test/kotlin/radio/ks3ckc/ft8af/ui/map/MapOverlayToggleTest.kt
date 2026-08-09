@@ -44,6 +44,21 @@ class MapOverlayToggleTest {
     }
 
     @Test
+    fun grayLineToggle_clickEmitsToggledValue() {
+        val label = context.getString(R.string.map_overlay_grayline)
+        var toggledTo: Boolean? = null
+        composeRule.setContent {
+            GrayLineToggle(enabled = true, onToggle = { toggledTo = it })
+        }
+
+        composeRule.onNodeWithText(label).assertIsDisplayed()
+        composeRule.onNodeWithText(label).performClick()
+
+        // Starts enabled, so a tap turns it off.
+        assertThat(toggledTo).isFalse()
+    }
+
+    @Test
     fun mapViewToggle_selectingAzimuthalEmitsThatMode() {
         val azimuthalLabel = context.getString(R.string.map_mode_azimuthal)
         var selected: MapViewMode? = null

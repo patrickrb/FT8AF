@@ -17,9 +17,11 @@ package com.k1af.ft8af.connector;
  *       {@link Exception}s are a brief I/O stall the device recovers from by
  *       re-enumerating with the same VID/PID. Only a message that names the
  *       device as genuinely gone or access-denied is fatal.</li>
- *   <li><b>Should we auto-reconnect, and after how long?</b> A bounded number of
- *       attempts with exponential backoff. If they are exhausted we surface the
- *       manual retry state; a single glitch is absorbed silently.</li>
+ *   <li><b>Should we auto-reconnect, and after how long?</b> A transient error
+ *       retries indefinitely with exponential backoff, escalating to
+ *       {@link #MAX_BACKOFF_MS} and staying there — containment comes from the
+ *       interval, not from giving up. A single glitch is absorbed silently. Only a
+ *       FATAL classification surfaces the manual retry state.</li>
  * </ol>
  */
 public final class CatReconnectPolicy {
@@ -38,9 +40,9 @@ public final class CatReconnectPolicy {
     public enum Action {
         /** A deliberate user disconnect caused it — expected, do nothing. */
         IGNORE,
-        /** Transient glitch with budget left — attempt a bounded auto-reconnect. */
+        /** Transient glitch — auto-reconnect with escalating backoff. */
         RECONNECT,
-        /** Fatal, or reconnect budget exhausted — surface the manual retry state. */
+        /** Fatal (device gone / access denied) — surface the manual retry state. */
         SURFACE
     }
 
@@ -50,12 +52,13 @@ public final class CatReconnectPolicy {
      * <p>A deliberate user disconnect closes the port to interrupt the blocking
      * read, which itself raises an {@code IOException} on the read loop. That
      * error is <em>expected</em> and must be ignored rather than surfaced as a
-     * "Lost connection" error state. Otherwise a transient error with reconnect
-     * budget left reconnects; a fatal error or an exhausted budget surfaces.
+     * "Lost connection" error state. Otherwise a transient error reconnects (always —
+     * see {@link #BACKOFF_ESCALATION_ATTEMPTS}); only a fatal error surfaces.
      *
      * @param userDisconnected whether the user asked to disconnect
      * @param kind             the classification of the error
-     * @param attemptsSoFar    auto-reconnects already tried this burst ({@code 0} first)
+     * @param attemptsSoFar    auto-reconnects already tried this burst ({@code 0} first);
+     *                         no longer gates the outcome, retained for callers that log it
      */
     public static Action decide(boolean userDisconnected, Kind kind, int attemptsSoFar) {
         if (userDisconnected) return Action.IGNORE;
@@ -64,11 +67,54 @@ public final class CatReconnectPolicy {
     }
 
     /**
-     * Most bounded auto-reconnect attempts before falling back to the manual
-     * <em>tap to retry</em> chip. Chosen so a device that re-enumerates within a
-     * few seconds is picked back up, but a truly-gone cable stops churning.
+     * How long a freshly-opened port must survive before the link counts as recovered and
+     * the escalating backoff resets.
+     *
+     * <p>This is the fix for the reconnect storm measured on the 2026-07-31 activation:
+     * {@code CableConnector} treated {@code connect()} returning true — the port merely
+     * <em>opening</em> — as success, ended the burst there, and reset the escalation. With
+     * a link that opened and immediately errored again, every error therefore started a
+     * fresh burst at attempt 1, so the backoff never got past its first step. Result:
+     * <strong>13,190 port opens in 88 minutes</strong> (2.5/s), inter-arrival pinned at
+     * 0.51–0.53 s — exactly {@link #BASE_BACKOFF_MS} plus the open — and the
+     * budget-exhausted path never reached once.
+     *
+     * <p>A port that opens is not a link that works. Only elapsed time proves that, so the
+     * burst now persists across opens and resets only after the connection has genuinely
+     * held for this long.
      */
-    public static final int MAX_AUTO_RECONNECT_ATTEMPTS = 5;
+    public static final long STABLE_CONNECTION_MS = 10_000;
+
+    /**
+     * Whether a connection that has just failed had lasted long enough to count as a
+     * recovery, meaning the next failure starts a fresh escalation rather than continuing
+     * the previous burst.
+     *
+     * @param nowMs         when the failure arrived
+     * @param connectedAtMs when the port was last opened, or {@code 0} if never
+     */
+    public static boolean shouldResetBurst(long nowMs, long connectedAtMs) {
+        if (connectedAtMs <= 0) return true;
+        long held = nowMs - connectedAtMs;
+        // A backwards clock correction must not make a brief connection look stable.
+        if (held < 0) return false;
+        return held >= STABLE_CONNECTION_MS;
+    }
+
+    /**
+     * Attempts over which the backoff escalates before pinning at {@link #MAX_BACKOFF_MS}.
+     *
+     * <p>No longer a give-up budget. A transient error now retries indefinitely, because
+     * giving up strands the operator: the storm this policy failed to prevent was at least
+     * landing CAT commands intermittently, and surfacing the manual <em>tap to retry</em>
+     * chip mid-activation would have taken CAT away entirely until the user noticed and
+     * tapped. Escalating to one attempt per {@link #MAX_BACKOFF_MS} is a ~20x reduction in
+     * churn (2.5/s measured, down to 0.125/s) while the link still recovers unattended.
+     *
+     * <p>A FATAL classification still surfaces immediately — a device that has left the bus
+     * or refused permission will not come back by retrying.
+     */
+    public static final int BACKOFF_ESCALATION_ATTEMPTS = 5;
 
     /** First backoff step; also the debounce window that swallows a lone glitch. */
     public static final long BASE_BACKOFF_MS = 500;
@@ -103,13 +149,35 @@ public final class CatReconnectPolicy {
     /**
      * Whether an automatic reconnect should be attempted.
      *
+     * <p>Transient errors retry without limit — see {@link #BACKOFF_ESCALATION_ATTEMPTS}
+     * for why the budget was dropped. {@code attemptsSoFar} no longer gates the decision;
+     * it survives only so callers reading this alongside {@link #backoffMs} see the same
+     * burst counter, and so the signature stays stable for existing callers.
+     *
      * @param kind          the classification of the error
      * @param attemptsSoFar how many auto-reconnects have already been tried in
      *                      this burst ({@code 0} on the first error)
      */
     public static boolean shouldAutoReconnect(Kind kind, int attemptsSoFar) {
-        if (kind == Kind.FATAL) return false;
-        return attemptsSoFar < MAX_AUTO_RECONNECT_ATTEMPTS;
+        return kind != Kind.FATAL;
+    }
+
+    /**
+     * Whether the auto-reconnect loop should run another attempt.
+     *
+     * <p>Retrying is pointless once the USB device has left the bus: the port cannot
+     * open without it, and retrying anyway is what turned a cable unplug into a storm
+     * (the plug bounce re-enumerates the devices several times on the way out, each
+     * bounce spawning a fresh connect attempt and its system USB-permission dialog,
+     * 2026-08-04). A device that comes back re-enters through the USB ATTACH
+     * broadcast, which restarts auto-connect from scratch — so stopping here loses
+     * nothing.
+     *
+     * @param userDisconnected whether the user asked to disconnect
+     * @param devicePresent    whether a matching USB device is currently on the bus
+     */
+    public static boolean shouldKeepRetrying(boolean userDisconnected, boolean devicePresent) {
+        return !userDisconnected && devicePresent;
     }
 
     /**

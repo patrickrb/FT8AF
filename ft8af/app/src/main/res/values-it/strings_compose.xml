@@ -395,6 +395,9 @@
     <string name="settings_tx_watchdog_desc">Interrompe automaticamente la trasmissione dopo il timeout</string>
     <string name="settings_stop_after">Stop dopo</string>
     <string name="settings_stop_after_desc">Interrompi la chiamata dopo N tentativi senza risposta</string>
+    <string name="settings_max_73">Invii 73 max</string>
+    <string name="settings_max_73_desc">Numero massimo di trasmissioni RR73/73 per contatto prima di proseguire</string>
+    <string name="settings_max_73_auto">Auto</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Hunt (risposta automatica al CQ)</string>

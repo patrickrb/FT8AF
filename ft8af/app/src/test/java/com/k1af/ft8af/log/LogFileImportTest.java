@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Locale;
 
 /**
  * Drive {@link LogFileImport} against on-disk ADIF fixtures. The production
@@ -101,6 +102,22 @@ public class LogFileImportTest {
         assertThat(records.get(0).get("CALL")).isEqualTo("K1ABC");
         assertThat(records.get(1).get("CALL")).isEqualTo("W1AW");
         assertThat(imp.getErrorCount()).isEqualTo(1);
+    }
+
+    @Test
+    public void fieldValueContainingGreaterThan_isPreservedEndToEnd() throws IOException {
+        // A field value may legally contain '>' (ADIF slices by the declared byte
+        // length, not by the next '>'). The old parser truncated it at the first
+        // interior '>'. Drive the full constructor -> getLogRecords path.
+        File f = tmp.newFile("gt.adi");
+        try (FileOutputStream out = new FileOutputStream(f)) {
+            out.write("header<eoh><call:5>K1ABC<comment:11>hello>world<eor>"
+                    .getBytes(StandardCharsets.UTF_8));
+        }
+        LogFileImport imp = new LogFileImport(task, f.getAbsolutePath());
+        HashMap<String, String> first = imp.getLogRecords().get(0);
+        assertThat(first.get("CALL")).isEqualTo("K1ABC");
+        assertThat(first.get("COMMENT")).isEqualTo("hello>world");
     }
 
     @Test
@@ -266,6 +283,90 @@ public class LogFileImportTest {
         assertThat(imp.getLogRecords()).hasSize(count);
         // No NUL padding leaked in from a short read.
         assertThat(imp.getFileContext()).doesNotContain("\u0000");
+    }
+
+    // ---- parseRecord(String): pure per-record field parsing ----
+
+    @Test
+    public void parseRecord_extractsFieldsByDeclaredLength() {
+        HashMap<String, String> r = LogFileImport.parseRecord("<call:5>K1ABC<mode:3>FT8");
+        assertThat(r.get("CALL")).isEqualTo("K1ABC");
+        assertThat(r.get("MODE")).isEqualTo("FT8");
+    }
+
+    @Test
+    public void parseRecord_uppercasesKeys() {
+        HashMap<String, String> r = LogFileImport.parseRecord("<call:5>K1ABC");
+        assertThat(r).containsKey("CALL");
+        assertThat(r).doesNotContainKey("call");
+    }
+
+    @Test
+    public void parseRecord_valueContainingGreaterThan_isPreserved() {
+        // Regression: the old field.split(">") kept only the token before the
+        // second '>', truncating "hello>world" to "hello".
+        HashMap<String, String> r = LogFileImport.parseRecord("<comment:11>hello>world");
+        assertThat(r.get("COMMENT")).isEqualTo("hello>world");
+    }
+
+    @Test
+    public void parseRecord_greaterThanInEarlierValue_doesNotCorruptLaterFields() {
+        HashMap<String, String> r =
+                LogFileImport.parseRecord("<comment:5>a>b>c<call:5>K1ABC");
+        assertThat(r.get("COMMENT")).isEqualTo("a>b>c");
+        assertThat(r.get("CALL")).isEqualTo("K1ABC");
+    }
+
+    @Test
+    public void parseRecord_nonAsciiValue_slicedByUtf8Bytes_notChars() {
+        // LEN is a UTF-8 byte count (this app's own export writes
+        // "<comment:9>Caf\u00e9 QSO <eor>"): 9 bytes cover the 8-char "Caf\u00e9 QSO".
+        // Slicing 9 CHARS kept the field separator space as part of the value.
+        HashMap<String, String> r = LogFileImport.parseRecord("<comment:9>Caf\u00e9 QSO <call:5>K1ABC");
+        assertThat(r.get("COMMENT")).isEqualTo("Caf\u00e9 QSO");
+        assertThat(r.get("CALL")).isEqualTo("K1ABC");
+    }
+
+    @Test
+    public void parseRecord_nonAsciiValue_truncatedRecordKeepsWhatIsThere() {
+        // Declared byte length exceeds the bytes present (truncated record).
+        HashMap<String, String> r = LogFileImport.parseRecord("<comment:20>Caf\u00e9");
+        assertThat(r.get("COMMENT")).isEqualTo("Caf\u00e9");
+    }
+
+    @Test
+    public void parseRecord_turkishDefaultLocale_keysStillAsciiUppercase() {
+        // Default-locale toUpperCase maps 'i' -> '\u0130' under Turkish locales, turning
+        // the "gridsquare" key into "GR\u0130DSQUARE" and losing the field.
+        Locale saved = Locale.getDefault();
+        Locale.setDefault(new Locale("tr", "TR"));
+        try {
+            HashMap<String, String> r = LogFileImport.parseRecord("<gridsquare:4>FN42");
+            assertThat(r.get("GRIDSQUARE")).isEqualTo("FN42");
+        } finally {
+            Locale.setDefault(saved);
+        }
+    }
+
+    @Test
+    public void parseRecord_declaredLengthLongerThanValue_keepsWholeValue() {
+        // <station_callsign:5> declared for the 4-char value "W1AW".
+        HashMap<String, String> r = LogFileImport.parseRecord("<station_callsign:5>W1AW");
+        assertThat(r.get("STATION_CALLSIGN")).isEqualTo("W1AW");
+    }
+
+    @Test
+    public void parseRecord_typeQualifiedHeader_usesLengthNotType() {
+        // ADIF allows <NAME:LEN:TYPE>; the length is ttt[1], the type is ignored.
+        HashMap<String, String> r = LogFileImport.parseRecord("<freq:8:N>14.07415");
+        assertThat(r.get("FREQ")).isEqualTo("14.07415");
+    }
+
+    @Test(expected = NumberFormatException.class)
+    public void parseRecord_nonNumericLength_throwsForCallerToCount() {
+        // getLogRecords wraps this in a try/catch that records the bad line; the
+        // helper itself surfaces the parse failure rather than swallowing it.
+        LogFileImport.parseRecord("<call:notanumber>BADREC");
     }
 
     private static String repeat(String s, int times) {

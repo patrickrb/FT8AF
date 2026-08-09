@@ -63,6 +63,9 @@ fun TimeSyncSettings(
 
     // GPS clock discipline (issue #373).
     var disciplineFromGps by remember { mutableStateOf(GeneralVariables.disciplineClockFromGPS) }
+
+    // Self-syncing clock: auto-trim the correction from decode DT medians.
+    var autoSyncFromDecodes by remember { mutableStateOf(GeneralVariables.autoSyncClockFromDecodes) }
     var gpsIntervalMin by remember { mutableIntStateOf(GeneralVariables.gpsClockIntervalMinutes) }
     // Re-read the status readout whenever a GPS fix disciplines the clock. The LiveData
     // retains its last posted timestamp, so seeding from .value shows a prior sync when the
@@ -165,6 +168,36 @@ fun TimeSyncSettings(
         }
 
         // =====================================================================
+        // SELF-SYNCING CLOCK (auto-correct from decode DT medians)
+        // =====================================================================
+        SettingsSection(title = stringResource(R.string.settings_selfsync_section)) {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                SettingsRow(
+                    label = stringResource(R.string.settings_selfsync_toggle),
+                    description = stringResource(R.string.settings_selfsync_toggle_desc),
+                    toggle = autoSyncFromDecodes,
+                    // Same lock-out as the manual controls: while GPS discipline owns
+                    // the clock this estimator must not fight it, so the row is inert.
+                    enabled = !disciplineFromGps,
+                    onToggleChange = { checked ->
+                        autoSyncFromDecodes = checked
+                        GeneralVariables.autoSyncClockFromDecodes = checked
+                        mainViewModel.databaseOpr.writeConfig(
+                            "autoSyncClockFromDecodes",
+                            if (checked) "1" else "0",
+                            null,
+                        )
+                        if (!checked) {
+                            // Drop any half-built confirmation streak so re-enabling
+                            // later starts from a clean slate.
+                            mainViewModel.clockSelfSync.reset()
+                        }
+                    },
+                )
+            }
+        }
+
+        // =====================================================================
         // SUGGESTION (from decode DT)
         // =====================================================================
         SettingsSection(title = stringResource(R.string.settings_time_suggest_section)) {
@@ -237,6 +270,12 @@ fun TimeSyncSettings(
                         mainViewModel.databaseOpr.writeConfig(
                             "disciplineClockFromGPS", if (checked) "1" else "0", null,
                         )
+                        if (checked) {
+                            // GPS discipline takes over the clock; the self-sync
+                            // estimator stands down — clear its streak so stale
+                            // pre-GPS evidence can't act if GPS is later disabled.
+                            mainViewModel.clockSelfSync.reset()
+                        }
                         GpsClockUpdater.refresh(context)
                     },
                 )

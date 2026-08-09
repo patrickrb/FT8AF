@@ -111,7 +111,16 @@ fn awaiting_any_decode(pending_decodes: usize) -> bool {
 /// the run loop ticks fast, so the first eligible tick after the decodes settle is
 /// near the top of the slot — but a reply that becomes eligible a little later in
 /// the window is still keyed rather than dropped.
+///
+/// The trigger is part of the decode-driven RX/TX cycle, so it is dormant while the
+/// decoder is stopped (`decoding == false`) — matching the sibling per-tick actions
+/// (the decode trigger and the waterfall row, both already gated on `self.decoding`).
+/// Without this a QSO/CQ left `active` when the operator stops decoding would keep
+/// auto-keying the rig every eligible slot with the receiver off — the radio would
+/// transmit unattended, since `pending_decodes` drops to 0 on `StopDecode` so the
+/// awaiting gate no longer holds it back.
 fn boundary_tx_ready(
+    decoding: bool,
     active: bool,
     awaiting_decode: bool,
     tx_parity: Option<i64>,
@@ -119,7 +128,9 @@ fn boundary_tx_ready(
     txed_slot: i64,
     into_cycle_ms: i64,
 ) -> bool {
-    !awaiting_decode && tx_slot_eligible(active, tx_parity, slot_id, txed_slot, into_cycle_ms)
+    decoding
+        && !awaiting_decode
+        && tx_slot_eligible(active, tx_parity, slot_id, txed_slot, into_cycle_ms)
 }
 // Live-waterfall FFT parameters (window/size/averaging + display constants)
 // live in `crate::wf` and are runtime-configurable via SetWaterfallConfig.
@@ -632,6 +643,7 @@ impl Engine {
             // are in; `maybe_transmit` re-checks eligibility and is idempotent per
             // slot (the `txed_slot` guard).
             if boundary_tx_ready(
+                self.decoding,
                 self.qso.active,
                 awaiting_any_decode(self.pending_decodes),
                 self.tx_parity,
@@ -1368,17 +1380,34 @@ mod tests {
         // Fast decode: this slot's decodes are already processed (awaiting=false), so a
         // reply computed in the previous cycle keys at the top of its slot. This is the
         // case the decode-arrival trigger used to miss — it fires mid-slot, past the
-        // window, so the queued reply/CQ was silently dropped.
-        assert!(boundary_tx_ready(true, false, None, 4, -1, 0));
+        // window, so the queued reply/CQ was silently dropped. (First arg is `decoding`,
+        // true throughout here — the normal case.)
+        assert!(boundary_tx_ready(true, true, false, None, 4, -1, 0));
         // Slow decode still pending: must NOT key a (stale) message; handle_decoded
         // keys the fresh one when the decode lands.
-        assert!(!boundary_tx_ready(true, true, None, 4, -1, 0));
+        assert!(!boundary_tx_ready(true, true, true, None, 4, -1, 0));
         // Past the window, already transmitted this slot, wrong parity, or inactive all
         // block it too (it delegates to tx_slot_eligible).
-        assert!(!boundary_tx_ready(true, false, None, 4, -1, TX_LATEST_MS + 1));
-        assert!(!boundary_tx_ready(true, false, None, 4, 4, 0));
-        assert!(!boundary_tx_ready(true, false, Some(1), 4, -1, 0)); // wants odd, slot 4 even
-        assert!(!boundary_tx_ready(false, false, None, 4, -1, 0));
+        assert!(!boundary_tx_ready(true, true, false, None, 4, -1, TX_LATEST_MS + 1));
+        assert!(!boundary_tx_ready(true, true, false, None, 4, 4, 0));
+        assert!(!boundary_tx_ready(true, true, false, Some(1), 4, -1, 0)); // wants odd, slot 4 even
+        assert!(!boundary_tx_ready(true, false, false, None, 4, -1, 0));
+    }
+
+    #[test]
+    fn boundary_tx_is_dormant_while_decoding_is_stopped() {
+        use super::boundary_tx_ready;
+        // Regression for the StopDecode runaway-TX bug: after the operator stops
+        // decoding, `pending_decodes` is reset to 0 (so the awaiting gate opens) but a
+        // CQ/QSO left `active` keeps `qso.active` and `tx_parity` set. The per-tick
+        // boundary trigger must stay dormant with the decoder off — otherwise the rig
+        // keys every eligible slot with the receiver muted (transmitting unattended).
+        // Every other input here is exactly the "would key" case from the test above;
+        // only `decoding == false` must hold it back.
+        assert!(!boundary_tx_ready(false, true, false, None, 4, -1, 0));
+        assert!(!boundary_tx_ready(false, true, false, Some(0), 4, -1, 0));
+        // Turning decoding back on restores keying (the fix changes nothing else).
+        assert!(boundary_tx_ready(true, true, false, None, 4, -1, 0));
     }
 
     #[test]

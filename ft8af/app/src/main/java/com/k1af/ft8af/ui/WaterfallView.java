@@ -107,6 +107,19 @@ public class WaterfallView extends View {
                 , getResources().getDisplayMetrics());
     }
 
+    /**
+     * Height (px) of the existing waterfall region copied and scrolled down by one block on
+     * each new spectrum row. Clamped to be non-negative: when the view is only one block
+     * tall or shorter (e.g. measured at {@code h == 1}, where {@code blockHeight} clamps to
+     * 1 and equals {@code drawHeight}), there is nothing above the new row to scroll, so the
+     * caller must skip the {@code Bitmap.createBitmap} blit — that call throws
+     * {@code IllegalArgumentException} on a non-positive height. Extracted as a pure static
+     * helper so the geometry is unit-testable without a Canvas.
+     */
+    static int scrolledRegionHeight(int drawHeight, int blockHeight) {
+        return Math.max(0, drawHeight - blockHeight);
+    }
+
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         if (w <= 0 || h <= 0) return;
@@ -301,9 +314,18 @@ public class WaterfallView extends View {
         LinearGradient linearGradient = new LinearGradient(0, 0, drawWidth * gradientScale, 0, colors
                 , null, Shader.TileMode.CLAMP);
         linearPaint.setShader(linearGradient);
-        Bitmap bitmap = Bitmap.createBitmap(lastBitMap, 0, 0, drawWidth, drawHeight - blockHeight);
-        _canvas.drawBitmap(bitmap, 0, blockHeight, null);
-        bitmap.recycle();
+        // Scroll the previously-drawn waterfall down by one block, then paint the new
+        // spectrum row into the freed top strip. When the view is only a block tall (or
+        // shorter) there is nothing above the new row to scroll: scrolledRegionHeight() is
+        // 0 and we skip the blit — Bitmap.createBitmap rejects a non-positive height and
+        // would otherwise throw IllegalArgumentException (seen when the view is measured at
+        // h==1, where blockHeight clamps to 1 == drawHeight). The new-row paint still runs.
+        int scrolledHeight = scrolledRegionHeight(drawHeight, blockHeight);
+        if (scrolledHeight > 0) {
+            Bitmap bitmap = Bitmap.createBitmap(lastBitMap, 0, 0, drawWidth, scrolledHeight);
+            _canvas.drawBitmap(bitmap, 0, blockHeight, null);
+            bitmap.recycle();
+        }
         _canvas.drawRect(0, 0, drawWidth, blockHeight, linearPaint);
 
         // Draw the UTC timestamp line at each slot boundary of the CURRENT mode (15s FT8,

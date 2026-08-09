@@ -34,6 +34,9 @@ import radio.ks3ckc.ft8af.theme.TextMuted
 @Composable
 fun SlotTimerBar(
     slotMillis: Long = 15_000L,
+    // Mean decode DT (seconds) for the live clock-sync pill; null until the first decode
+    // cycle reports, in which case no pill is shown (the bar looks exactly as before).
+    offsetSec: Float? = null,
     modifier: Modifier = Modifier,
 ) {
     var nowMs by remember { mutableLongStateOf(UtcTimer.getSystemTime()) }
@@ -56,6 +59,9 @@ fun SlotTimerBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (offsetSec != null) {
+            ClockSyncIndicator(offsetSec = offsetSec)
+        }
         Box(
             modifier = Modifier
                 .weight(1f)

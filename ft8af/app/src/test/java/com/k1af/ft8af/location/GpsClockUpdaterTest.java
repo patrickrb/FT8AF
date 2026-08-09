@@ -84,7 +84,7 @@ public class GpsClockUpdaterTest {
 
     @Test
     public void sane_rejectsAbsurdOffset() {
-        // Beyond an hour: mock provider / timezone confusion / bogus fix.
+        // Beyond the absolute bound: mock provider / timezone confusion / bogus fix.
         int tooBig = (int) (GpsClockUpdater.MAX_SANE_OFFSET_MS + 1);
         assertThat(GpsClockUpdater.isOffsetSane(1_700_000_000_000L, tooBig)).isFalse();
         assertThat(GpsClockUpdater.isOffsetSane(1_700_000_000_000L, -tooBig)).isFalse();
@@ -94,6 +94,43 @@ public class GpsClockUpdaterTest {
     public void sane_acceptsExactlyAtBound() {
         int atBound = (int) GpsClockUpdater.MAX_SANE_OFFSET_MS;
         assertThat(GpsClockUpdater.isOffsetSane(1_700_000_000_000L, atBound)).isTrue();
+    }
+
+    @Test
+    public void sane_absoluteBoundIsTightEnoughForFt8() {
+        // Guards the tightening itself. The old ±1 h bound let an hour-scale "correction"
+        // be written straight into UtcTimer.delay, which moves every decode window and
+        // every transmit key-up. Anything near that is unusable for FT8 by definition.
+        assertThat(GpsClockUpdater.MAX_SANE_OFFSET_MS).isAtMost(60_000L);
+        // ...but still generous enough to fix a genuinely unsynced clock.
+        assertThat(GpsClockUpdater.MAX_SANE_OFFSET_MS).isAtLeast(30_000L);
+    }
+
+    // ---- regression: a consistent correction must never be refused ----
+
+    @Test
+    public void aMultiSecondCorrectionIsApplied_notRefusedForBeingFarFromThePrevious() {
+        // The 2026-07-31 activation, reproduced: a cold fix 2.6s after startup applied
+        // -1331ms, then eleven fixes over the following hour all implied about -2200ms
+        // and were each refused by a 500ms step bound for being ~870ms away from it. The
+        // clock stayed ~870ms wrong all session — decodes 5.9/cycle against 8.7 right
+        // after GPS finally got through, and 14 of 110 overs keying up 5s+ into the slot.
+        //
+        // A stale offset puts the FT8 grid off the air just as surely as a bad fix does,
+        // and unlike a bad fix it never self-corrects. Within the absolute bound, apply.
+        Integer r = GpsClockUpdater.computeAppliedOffset(
+                true, 10_000L - 2_200L, 5000L * MS, 5000L * MS, 10_000L);
+        assertThat(r).isEqualTo(-2_200);
+    }
+
+    @Test
+    public void repeatedAgreeingFixesAllApply() {
+        // Whatever the previously applied offset was, each of a consistent run is applied.
+        for (int impliedOffset : new int[] {-2_112, -2_159, -2_143, -2_156, -2_213}) {
+            Integer r = GpsClockUpdater.computeAppliedOffset(
+                    true, 10_000L + impliedOffset, 5000L * MS, 5000L * MS, 10_000L);
+            assertThat(r).isEqualTo(impliedOffset);
+        }
     }
 
     // ---- clampIntervalMinutes ----

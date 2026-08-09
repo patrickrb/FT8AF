@@ -52,6 +52,17 @@ public class FT8SignalListener {
     // work never slows the next slot's early decode. See LateDecode.AnalysisGate.
     private static final LateDecode.AnalysisGate ANALYSIS_GATE = new LateDecode.AnalysisGate();
 
+    /**
+     * Lets the transmitter hold key-up while this slot's fast pass is still running, so a
+     * busy band answers callers in the right cycle instead of one late. See
+     * {@link FastDecodeGate}.
+     */
+    private final FastDecodeGate fastDecodeGate = new FastDecodeGate();
+
+    public FastDecodeGate getFastDecodeGate() {
+        return fastDecodeGate;
+    }
+
 
     static {
         try {
@@ -199,9 +210,25 @@ public class FT8SignalListener {
 //        int data[][] = reader.getData();
         //----------------------------------------------------------
 
+        // Marked in flight BEFORE the thread starts, not inside it: the transmitter can
+        // reach its key-up check before this thread is scheduled, and would then see an
+        // idle gate and key up against a decode that was about to run.
+        fastDecodeGate.begin();
         new Thread(new Runnable() {
             @Override
             public void run() {
+                try {
+                    runDecodeThread();
+                } finally {
+                    // Backstop. The timely release happens right after delivery below, but
+                    // anything throwing before it — JNI init, a decode failure, OOM —
+                    // would otherwise strand the gate in flight FOREVER, making every
+                    // later key-up wait out the full hold. end() is idempotent.
+                    fastDecodeGate.end();
+                }
+            }
+
+            private void runDecodeThread() {
                 long time = System.currentTimeMillis();
                 if (onFt8Listen != null) {
                     onFt8Listen.beforeListen(utc);
@@ -235,8 +262,16 @@ public class FT8SignalListener {
                 addMsgToList(allMsg, msgs);
                 timeSec = System.currentTimeMillis() - time;
                 decodeTimeSec.postValue(timeSec);// decode elapsed time
-                if (onFt8Listen != null) {
-                    onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, false);
+                try {
+                    if (onFt8Listen != null) {
+                        onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, false);
+                    }
+                } finally {
+                    // Released only after DELIVERY, not merely after decoding: the
+                    // sequencer acts inside afterDecode, so a transmitter waiting on this
+                    // would otherwise still race it. finally, so a throw in a listener
+                    // cannot strand TX waiting out the full hold. See FastDecodeGate.
+                    fastDecodeGate.end();
                 }
 
 
@@ -251,29 +286,38 @@ public class FT8SignalListener {
                         onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, true);
                     }
 
-                    final long deepDecodeBudgetMs = mode.deepDecodeBudgetMillis();
-                    // Budget the subtract-and-redecode loop by ITS OWN elapsed time, not the total
-                    // decode time. On a slow device the initial fast + first deep pass can already
-                    // exceed the budget, which would abort subtraction before it ran even once.
-                    final long deepLoopStart = System.currentTimeMillis();
-                    // Passes inside the loop also stop their candidate scan at this instant,
-                    // so one pass over a huge candidate list can't blow through the budget.
-                    final long passDeadline = DeepDecodeBudget.passDeadline(deepLoopStart, deepDecodeBudgetMs);
-                    do {
-                        if (DeepDecodeBudget.loopExhausted(deepLoopStart, System.currentTimeMillis(), deepDecodeBudgetMs)) break;// stop once the subtraction loop has spent its budget
-                        // subtract decoded signals
-                        subtractDecode(ft8Decoder, a91List, fromSource);
+                    // The subtract-and-redecode loop runs on the early buffer ONLY when no
+                    // late full-slot pass is scheduled (early decode off, or FT4/FT2).
+                    // With a late pass pending, the loop is deferred to the full-slot
+                    // buffer (a strict superset of this one): running it here doubled the
+                    // deep work and pushed the late pass's start past the next slot's
+                    // early decode, whose first gate contention then aborted the late
+                    // candidate scan almost every cycle. See LateDecode.deepLoopRunsOnEarlyBuffer.
+                    if (LateDecode.deepLoopRunsOnEarlyBuffer(lateHandoff)) {
+                        final long deepDecodeBudgetMs = mode.deepDecodeBudgetMillis();
+                        // Budget the subtract-and-redecode loop by ITS OWN elapsed time, not the total
+                        // decode time. On a slow device the initial fast + first deep pass can already
+                        // exceed the budget, which would abort subtraction before it ran even once.
+                        final long deepLoopStart = System.currentTimeMillis();
+                        // Passes inside the loop also stop their candidate scan at this instant,
+                        // so one pass over a huge candidate list can't blow through the budget.
+                        final long passDeadline = DeepDecodeBudget.passDeadline(deepLoopStart, deepDecodeBudgetMs);
+                        do {
+                            if (DeepDecodeBudget.loopExhausted(deepLoopStart, System.currentTimeMillis(), deepDecodeBudgetMs)) break;// stop once the subtraction loop has spent its budget
+                            // subtract decoded signals
+                            subtractDecode(ft8Decoder, a91List, fromSource);
 
-                        // perform another decode pass
-                        msgs = runDecode(ft8Decoder, utc, true, mode, passDeadline, a91List, null);
-                        addMsgToList(allMsg, msgs);
-                        timeSec = System.currentTimeMillis() - time;
-                        decodeTimeSec.postValue(timeSec);// decode elapsed time
-                        if (onFt8Listen != null) {
-                            onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, true);
-                        }
+                            // perform another decode pass
+                            msgs = runDecode(ft8Decoder, utc, true, mode, passDeadline, a91List, null);
+                            addMsgToList(allMsg, msgs);
+                            timeSec = System.currentTimeMillis() - time;
+                            decodeTimeSec.postValue(timeSec);// decode elapsed time
+                            if (onFt8Listen != null) {
+                                onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, true);
+                            }
 
-                    } while (msgs.size() > 0 );
+                        } while (msgs.size() > 0 );
+                    }
 
                 }
                 // Moved to finalize() method
@@ -295,12 +339,20 @@ public class FT8SignalListener {
     }
 
     /**
-     * Decode the full-slot buffer captured alongside the early window, recovering signals
-     * whose DT pushed them past the early window's end. Deliveries reuse the slot's
-     * {@code allMsg} dedup scope, so everything the early passes already reported is
-     * filtered out and only genuinely new messages reach {@code afterDecode} — flagged
-     * isDeep=true so the auto-sequencer (which already acted on the early results) is not
-     * triggered a second time.
+     * Decode the full-slot buffer captured alongside the early window: the slot's DEPTH
+     * pass, complementing the early buffer's SPEED pass. It recovers signals whose DT
+     * pushed them past the early window's end, and — with deep decode on — hosts the
+     * slot's subtract-and-redecode loop (deferred here from the early buffer, which is a
+     * strict prefix of this one; see {@link LateDecode#deepLoopRunsOnEarlyBuffer}).
+     * Deliveries reuse the slot's {@code allMsg} dedup scope, so everything the early
+     * passes already reported is filtered out and only genuinely new messages reach
+     * {@code afterDecode} — flagged isDeep=true so the auto-sequencer treats them as
+     * evidence rather than re-triggering on them.
+     *
+     * <p>Every candidate loop in here is bounded by the ABSOLUTE window deadline (next
+     * slot boundary + early window − safety margin, capped by the mode's deep budget):
+     * the pass must finish before the next slot's early decode thread starts, so the
+     * analysis-gate abort is a backstop for overruns, not the routine exit path.
      *
      * <p>Deliberately does NOT touch {@link #timeSec}/{@link #decodeTimeSec}: by the time
      * this runs the next slot may already be decoding, and clobbering the shared elapsed
@@ -323,19 +375,36 @@ public class FT8SignalListener {
         long lateDecoder = initDecoder(utc, fullData.length, mode);
         try {
             pressFloatDecode(fullData, lateDecoder, fromSource);
-            // Bound the whole late pass (fast + deep candidate loops) by the mode's deep
-            // budget so a slow device can't chain late work across multiple later slots.
-            final long deadline = DeepDecodeBudget.passDeadline(time,
-                    mode.deepDecodeBudgetMillis());
+            final long deadline = LateDecode.effectiveLatePassDeadline(
+                    handoff.latePassDeadlineEpochMs,
+                    DeepDecodeBudget.passDeadline(time, mode.deepDecodeBudgetMillis()));
             // Best-effort priority: the first analysis-gate contention with the next
             // slot's early decode trips this and the late pass gives up the rest of its
-            // candidates (and the deep pass). See LateDecode.AnalysisGate.
+            // candidates (and the deep loop). See LateDecode.AnalysisGate.
             final LateDecode.LateAbort lateAbort = new LateDecode.LateAbort();
             deliverLateMessages(utc, allMsg,
                     runDecode(lateDecoder, utc, false, mode, deadline, a91List, lateAbort));
             if (GeneralVariables.deepDecodeMode && !lateAbort.tripped()) {
-                deliverLateMessages(utc, allMsg,
-                        runDecode(lateDecoder, utc, true, mode, deadline, a91List, lateAbort));
+                ArrayList<Ft8Message> msgs =
+                        runDecode(lateDecoder, utc, true, mode, deadline, a91List, lateAbort);
+                deliverLateMessages(utc, allMsg, msgs);
+                // Subtract-and-redecode on the full buffer. Same convergence rule as the
+                // early-buffer loop this replaces (do/while: at least one subtraction
+                // round even when the deep pass above surfaced nothing new — subtraction
+                // is what uncovers weak signals UNDER the already-decoded strong ones):
+                // keep going while a pass still yields NEW messages (deliverLateMessages
+                // strips already-delivered ones from msgs in place) and the deadline
+                // hasn't passed. a91List holds the previous pass's decodes — exactly
+                // what the next subtraction removes.
+                do {
+                    if (lateAbort.tripped()
+                            || DeepDecodeBudget.passExpired(deadline, System.currentTimeMillis())) {
+                        break;
+                    }
+                    subtractDecode(lateDecoder, a91List, fromSource);
+                    msgs = runDecode(lateDecoder, utc, true, mode, deadline, a91List, lateAbort);
+                    deliverLateMessages(utc, allMsg, msgs);
+                } while (!msgs.isEmpty());
             }
         } finally {
             deleteDecoder(lateDecoder, fromSource);

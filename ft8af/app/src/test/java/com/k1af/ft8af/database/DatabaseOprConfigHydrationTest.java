@@ -52,6 +52,9 @@ public class DatabaseOprConfigHydrationTest {
     private int origIcomUdpPort;
     private float origVolumePercent;
     private int origAlcTargetLow;
+    private boolean origDeepDecodeMode;
+    private boolean origKeepScreenOn;
+    private boolean origAutoSyncClockFromDecodes;
 
     @Before
     public void setUp() {
@@ -67,6 +70,9 @@ public class DatabaseOprConfigHydrationTest {
         origIcomUdpPort = GeneralVariables.icomUdpPort;
         origVolumePercent = GeneralVariables.volumePercent;
         origAlcTargetLow = GeneralVariables.alcTargetLow;
+        origDeepDecodeMode = GeneralVariables.deepDecodeMode;
+        origKeepScreenOn = GeneralVariables.keepScreenOn;
+        origAutoSyncClockFromDecodes = GeneralVariables.autoSyncClockFromDecodes;
 
         opr = new DatabaseOpr(ApplicationProvider.getApplicationContext(), null, null, 18);
     }
@@ -88,6 +94,9 @@ public class DatabaseOprConfigHydrationTest {
             GeneralVariables.icomUdpPort = origIcomUdpPort;
             GeneralVariables.volumePercent = origVolumePercent;
             GeneralVariables.alcTargetLow = origAlcTargetLow;
+            GeneralVariables.deepDecodeMode = origDeepDecodeMode;
+            GeneralVariables.keepScreenOn = origKeepScreenOn;
+            GeneralVariables.autoSyncClockFromDecodes = origAutoSyncClockFromDecodes;
         }
     }
 
@@ -223,5 +232,158 @@ public class DatabaseOprConfigHydrationTest {
         } finally {
             GeneralVariables.udpPort = orig;
         }
+    }
+
+    // ---- power & heat toggles ------------------------------------------------
+    // Both are surfaced in the Compose settings for the first time. deepMode
+    // reuses the key the retired legacy fragment wrote, so an existing preference
+    // must still hydrate; keepScreenOn is new and must default to the previous
+    // hard-coded behaviour (on) when absent.
+
+    @Test
+    public void powerToggles_hydrateFromStoredValues() {
+        GeneralVariables.deepDecodeMode = true;
+        GeneralVariables.keepScreenOn = true;
+
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("deepMode", "0");
+        config.put("keepScreenOn", "0");
+        opr.writeConfigSync(config);
+
+        hydrate();
+
+        assertThat(GeneralVariables.deepDecodeMode).isFalse();
+        assertThat(GeneralVariables.keepScreenOn).isFalse();
+    }
+
+    @Test
+    public void powerToggles_hydrateBackOn() {
+        GeneralVariables.deepDecodeMode = false;
+        GeneralVariables.keepScreenOn = false;
+
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("deepMode", "1");
+        config.put("keepScreenOn", "1");
+        opr.writeConfigSync(config);
+
+        hydrate();
+
+        assertThat(GeneralVariables.deepDecodeMode).isTrue();
+        assertThat(GeneralVariables.keepScreenOn).isTrue();
+    }
+
+    @Test
+    public void keepScreenOn_absentFromConfigKeepsThePreviousBehaviour() {
+        // An install that predates the setting has no row; the screen must keep
+        // behaving as it did when the flag was hard-coded on.
+        GeneralVariables.keepScreenOn = true;
+
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("deepMode", "1");
+        opr.writeConfigSync(config);
+
+        hydrate();
+
+        assertThat(GeneralVariables.keepScreenOn).isTrue();
+    }
+
+    // ---- voice-command toggle + its observable mirror -------------------------
+    // The main-screen mic button observes mutableVoiceCommandsEnabled (a plain
+    // static read there is never recomposed), so hydration must update BOTH the
+    // static and the LiveData mirror or a persisted "on" renders no button until
+    // the setting is touched.
+
+    @Test
+    public void voiceCommandsEnabled_hydrationUpdatesStaticAndLiveDataMirror() {
+        boolean origEnabled = GeneralVariables.voiceCommandsEnabled;
+        Boolean origMirror = GeneralVariables.mutableVoiceCommandsEnabled.getValue();
+        try {
+            GeneralVariables.voiceCommandsEnabled = false;
+            GeneralVariables.mutableVoiceCommandsEnabled.setValue(false);
+
+            Map<String, String> config = new LinkedHashMap<>();
+            config.put("voiceCommandsEnabled", "1");
+            opr.writeConfigSync(config);
+
+            hydrate();
+            // postValue lands via the main looper; run it so getValue() sees it.
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+
+            assertThat(GeneralVariables.voiceCommandsEnabled).isTrue();
+            assertThat(GeneralVariables.mutableVoiceCommandsEnabled.getValue()).isTrue();
+        } finally {
+            GeneralVariables.voiceCommandsEnabled = origEnabled;
+            GeneralVariables.mutableVoiceCommandsEnabled.setValue(origMirror);
+        }
+    }
+
+    @Test
+    public void voiceCommandsEnabled_hydrationTurnsMirrorBackOff() {
+        boolean origEnabled = GeneralVariables.voiceCommandsEnabled;
+        Boolean origMirror = GeneralVariables.mutableVoiceCommandsEnabled.getValue();
+        try {
+            GeneralVariables.voiceCommandsEnabled = true;
+            GeneralVariables.mutableVoiceCommandsEnabled.setValue(true);
+
+            Map<String, String> config = new LinkedHashMap<>();
+            config.put("voiceCommandsEnabled", "0");
+            opr.writeConfigSync(config);
+
+            hydrate();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+
+            assertThat(GeneralVariables.voiceCommandsEnabled).isFalse();
+            assertThat(GeneralVariables.mutableVoiceCommandsEnabled.getValue()).isFalse();
+        } finally {
+            GeneralVariables.voiceCommandsEnabled = origEnabled;
+            GeneralVariables.mutableVoiceCommandsEnabled.setValue(origMirror);
+        }
+    }
+
+    // ---- self-syncing clock (ClockSelfSync) -----------------------------------
+    // New "autoSyncClockFromDecodes" key: the classic bug this guards against is
+    // adding the field + writeConfig on toggle but forgetting the hydration arm,
+    // which silently reverts the setting to off on every relaunch.
+
+    @Test
+    public void autoSyncClockFromDecodes_hydratesOnAndOff() {
+        GeneralVariables.autoSyncClockFromDecodes = false;
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("autoSyncClockFromDecodes", "1");
+        opr.writeConfigSync(config);
+        hydrate();
+        assertThat(GeneralVariables.autoSyncClockFromDecodes).isTrue();
+
+        GeneralVariables.autoSyncClockFromDecodes = true;
+        config.put("autoSyncClockFromDecodes", "0");
+        opr.writeConfigSync(config);
+        hydrate();
+        assertThat(GeneralVariables.autoSyncClockFromDecodes).isFalse();
+    }
+
+    @Test
+    public void autoSyncClockFromDecodes_absentRowLeavesDefaultOff() {
+        GeneralVariables.autoSyncClockFromDecodes = false;
+        // No row written for the key at all (fresh install / pre-feature backup).
+        hydrate();
+        assertThat(GeneralVariables.autoSyncClockFromDecodes).isFalse();
+    }
+
+    @Test
+    public void powerToggles_nonBooleanValueReadsAsOff() {
+        // Hydration compares against "1", so anything else is off rather than a
+        // parse crash (the failure mode this test class exists for).
+        GeneralVariables.deepDecodeMode = true;
+        GeneralVariables.keepScreenOn = true;
+
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("deepMode", "");
+        config.put("keepScreenOn", "yes");
+        opr.writeConfigSync(config);
+
+        hydrate(); // must not throw
+
+        assertThat(GeneralVariables.deepDecodeMode).isFalse();
+        assertThat(GeneralVariables.keepScreenOn).isFalse();
     }
 }

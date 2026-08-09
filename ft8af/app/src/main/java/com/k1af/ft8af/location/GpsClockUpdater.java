@@ -48,11 +48,39 @@ public class GpsClockUpdater extends LocationSubscriber {
      * A fix implying a correction larger than this is treated as bad data and ignored
      * (see {@link #isOffsetSane}). Fix age is not checked separately: {@link #gpsUtcNow}
      * folds it into the implied offset, so a stale fix shows up here as a large offset.
-     * GPS UTC and the device clock are never legitimately an hour apart; a value that
-     * big means a mock provider, a bogus fix, or a timezone confusion, none of which
-     * should be allowed to yank the transmit timing.
+     *
+     * <p>This bound was ±1 hour, which is far looser than anything FT8 can survive: the
+     * offset it admits is written straight into {@link UtcTimer#delay}, which moves the
+     * WHOLE cycle grid — every decode window and every transmit key-up. A phone that is
+     * even a few seconds out cannot work FT8 at all, so an hour-scale "correction" can
+     * only ever be a mock provider, a bogus fix, or a timezone confusion. 60 s still
+     * covers a genuinely unsynced clock (no network for days) while refusing the
+     * nonsense; past it the operator has a clock problem to fix, not one to paper over.
      */
-    static final long MAX_SANE_OFFSET_MS = 60L * 60L * 1000L;
+    static final long MAX_SANE_OFFSET_MS = 60L * 1000L;
+
+    // A step bound (reject a fix that moves the applied offset by more than 500 ms) was
+    // added here and REMOVED again after one activation, because it was actively harmful.
+    //
+    // The reasoning behind it — GPS time does not jump, so a multi-second step is bad
+    // data — is sound in isolation and wrong as a rule, because it has no way to
+    // distinguish "this fix is bad" from "the baseline is bad". Pairing it with an
+    // unconstrained first fix made the first fix of a run permanent: on the 2026-07-31
+    // activation a cold fix 2.6 s after startup applied -1331 ms, and the next ELEVEN
+    // fixes — spread over an hour and all agreeing on about -2200 ms — were each refused
+    // for being ~870 ms away from it. The clock stayed wrong for the whole session:
+    // decodes fell to 5.9/cycle against 8.7 immediately after GPS finally got through,
+    // and transmit timing scattered (14 of 110 overs keyed up 5 s or more into the slot).
+    //
+    // One outlier is noise; eleven consecutive fixes agreeing with each other and
+    // disagreeing with the baseline are the truth, and the rule could never act on that.
+    // Rejecting a correction is not the safe default it looks like — a stale offset is
+    // just as capable of putting the grid off the air as a bad fix is, and unlike a bad
+    // fix it never self-corrects.
+    //
+    // If step-limiting is revisited, it must be able to re-baseline: e.g. accept a run of
+    // consecutive fixes that agree with each other and disagree with the applied offset.
+    // Don't reintroduce a bare step check.
 
     /** Configurable update-interval bounds (minutes), per issue #373. */
     static final int MIN_INTERVAL_MINUTES = 1;
@@ -74,6 +102,12 @@ public class GpsClockUpdater extends LocationSubscriber {
     // so disabling GPS returns the clock to its pre-GPS state instead of clobbering it with
     // manualTimeCorrectionMs, which NTP never writes. NO_SAVED_DELAY means "not disciplining".
     private int savedDelayBeforeGps = NO_SAVED_DELAY;
+
+    // Baseline for the step bound (see MAX_OFFSET_STEP_MS): the last offset GPS actually
+    // applied, and whether there has been one at all this discipline run. Reset by stop()
+    // so a fresh run's first fix is again free to correct real accumulated drift.
+    private volatile boolean hasAppliedOffset = false;
+    private volatile int lastAppliedOffsetMs = 0;
 
     private GpsClockUpdater(Context context) {
         super(context);
@@ -194,6 +228,11 @@ public class GpsClockUpdater extends LocationSubscriber {
         // Return UtcTimer.delay to whatever it was before GPS took over (an NTP sync, a manual
         // correction, or 0) rather than to manualTimeCorrectionMs — NTP writes delay but never
         // manualTimeCorrectionMs, so restoring the latter would silently discard the NTP sync.
+        // A new discipline run starts with no baseline, so its first fix may again correct
+        // whatever drift accumulated while GPS was off.
+        hasAppliedOffset = false;
+        lastAppliedOffsetMs = 0;
+
         if (savedDelayBeforeGps != NO_SAVED_DELAY) {
             UtcTimer.delay = savedDelayBeforeGps;
             Log.d(TAG, "Stopped GPS clock discipline; restored pre-GPS offset "
@@ -209,24 +248,49 @@ public class GpsClockUpdater extends LocationSubscriber {
         // computeAppliedOffset also re-checks running, so a fix that was already queued on the
         // main looper when the user disabled discipline (stop() flipped running=false) is
         // dropped instead of re-writing the clock after we've handed it back.
+        // Sample both clocks EXACTLY once and feed the same readings to the evaluation and
+        // to the log. Reading them twice let the logged "REJECTED fix offset=" disagree
+        // with the number actually judged against the bounds — which would undermine the
+        // diagnostics this logging exists to provide, and is most likely to bite in the
+        // very situation being diagnosed (a clock being corrected underneath us).
+        final long fixElapsedNanos = location.getElapsedRealtimeNanos();
+        final long nowElapsedNanos = SystemClock.elapsedRealtimeNanos();
+        final long nowSystemMs = System.currentTimeMillis();
+        int rawOffsetMs = gpsClockOffsetMs(fixUtcMs, fixElapsedNanos, nowElapsedNanos, nowSystemMs);
         Integer offsetMs = computeAppliedOffset(
                 isRunning(),
                 fixUtcMs,
-                location.getElapsedRealtimeNanos(),
-                SystemClock.elapsedRealtimeNanos(),
-                System.currentTimeMillis());
+                fixElapsedNanos,
+                nowElapsedNanos,
+                nowSystemMs);
 
         if (offsetMs == null) {
             Log.d(TAG, "Ignoring GPS fix (not running or implausible): fixUtc=" + fixUtcMs);
+            // debug.log, not just logcat: this path moves the whole FT8 cycle grid, so a
+            // rejected fix has to be visible in the same log the on-air symptoms are.
+            // (The old code logged only to logcat, which is why the 2026-07-30 activation
+            // could not be diagnosed from the pulled debug.log.)
+            if (isRunning()) {
+                GeneralVariables.fileLog("GpsClock: REJECTED fix offset=" + rawOffsetMs
+                        + "ms (prior=" + (hasAppliedOffset ? lastAppliedOffsetMs + "ms" : "none")
+                        + ", absMax=" + MAX_SANE_OFFSET_MS
+                        + "ms) — clock left at " + UtcTimer.delay + "ms");
+            }
             return;
         }
 
+        GeneralVariables.fileLog("GpsClock: applied offset " + offsetMs + "ms (was "
+                + UtcTimer.delay + "ms, prior GPS="
+                + (hasAppliedOffset ? lastAppliedOffsetMs + "ms" : "none") + ")");
+        lastAppliedOffsetMs = offsetMs;
+        hasAppliedOffset = true;
         UtcTimer.delay = offsetMs;
         GeneralVariables.gpsClockOffsetMs = offsetMs;
         // The UI renders this as "... UTC", so post the disciplined time, not the raw
         // (possibly-wrong) system clock we just computed a correction for.
-        GeneralVariables.mutableGpsClockSync.postValue(
-                disciplinedUtcMs(System.currentTimeMillis(), offsetMs));
+        // Same single sampling as the evaluation above, so the displayed last-sync instant
+        // is the one this offset was actually computed against.
+        GeneralVariables.mutableGpsClockSync.postValue(disciplinedUtcMs(nowSystemMs, offsetMs));
         Log.d(TAG, "GPS clock discipline applied offset " + offsetMs + "ms");
     }
 
