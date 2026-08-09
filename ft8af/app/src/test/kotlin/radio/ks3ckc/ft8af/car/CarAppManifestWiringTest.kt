@@ -3,24 +3,24 @@ package radio.ks3ckc.ft8af.car
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Bundle
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.k1af.ft8af.R
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Pins Android Auto as *unwired* in the manifest. The car-app screens
- * (FT8AFCarAppService/QsoStatusScreen) still exist in the tree, but the manifest
- * entries the Android Auto host discovers them through were removed: Play rejected
- * the app for not behaving as a NAVIGATION-category car app ("does not load map and
- * user location in Android Auto Environment"), and re-adding either entry would
- * re-flag the app as Android-Auto-enabled and re-trigger that review failure.
+ * Pins the Android Auto manifest wiring: the host discovers the app through the
+ * CarAppService intent filter plus the automotive_app_desc meta-data, and a
+ * silently dropped entry would only show up as "app missing from the car
+ * launcher" — a failure mode adb/unit tests can't otherwise see.
  *
- * This runs against the debug variant's merged manifest, which still overlays the
- * debug-only CarAppActivity used for on-emulator development — that entry is not a
- * release Android Auto descriptor and never ships, so it doesn't count here.
+ * It also pins the wiring to the exact shape Play approved in production
+ * (versionCode 1327 / 2.0): IOT category, no NAVIGATION/POI category, and no
+ * androidx.car.app template permissions. The NAVIGATION-category map variant
+ * was rejected by Play review ("does not load map and user location") and had
+ * to be pulled in PR #600 — these guards keep that shape from coming back.
  */
 @RunWith(RobolectricTestRunner::class)
 class CarAppManifestWiringTest {
@@ -28,28 +28,50 @@ class CarAppManifestWiringTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
     @Test
-    fun noCarAppService_isDeclared() {
+    fun carAppService_isDeclaredExported_withIotCategory() {
         val intent = Intent("androidx.car.app.CarAppService").setPackage(context.packageName)
         val services = context.packageManager.queryIntentServices(
             intent,
             PackageManager.GET_RESOLVED_FILTER,
         )
-        assertThat(services).isEmpty()
+        assertThat(services).hasSize(1)
+        val resolved = services[0]
+        assertThat(resolved.serviceInfo.name).isEqualTo("radio.ks3ckc.ft8af.car.FT8AFCarAppService")
+        assertThat(resolved.serviceInfo.exported).isTrue()
+        assertThat(resolved.filter.hasCategory("androidx.car.app.category.IOT")).isTrue()
     }
 
     @Test
-    fun androidAutoDescriptorMetaData_isAbsent() {
+    fun automotiveAppDescriptor_andMinCarApiLevel_areDeclared() {
         val appInfo = context.packageManager.getApplicationInfo(
             context.packageName,
             PackageManager.GET_META_DATA,
         )
-        // ApplicationInfo.metaData is null when the manifest carries no
-        // application-level meta-data at all; treat that as an empty Bundle so the
-        // test asserts on absence of the AA keys rather than NPE-ing. (Today
-        // io.sentry.auto-init keeps it non-null, but the guard must not depend on
-        // that unrelated entry surviving.)
-        val meta = appInfo.metaData ?: Bundle()
-        assertThat(meta.containsKey("com.google.android.gms.car.application")).isFalse()
-        assertThat(meta.containsKey("androidx.car.app.minCarApiLevel")).isFalse()
+        assertThat(appInfo.metaData).isNotNull()
+        assertThat(appInfo.metaData.getInt("com.google.android.gms.car.application"))
+            .isEqualTo(R.xml.automotive_app_desc)
+        assertThat(appInfo.metaData.getInt("androidx.car.app.minCarApiLevel")).isEqualTo(1)
+    }
+
+    @Test
+    fun rejectedNavigationCategory_isNotDeclared() {
+        val intent = Intent("androidx.car.app.CarAppService").setPackage(context.packageName)
+        val resolved = context.packageManager.queryIntentServices(
+            intent,
+            PackageManager.GET_RESOLVED_FILTER,
+        )[0]
+        assertThat(resolved.filter.hasCategory("androidx.car.app.category.NAVIGATION")).isFalse()
+        assertThat(resolved.filter.hasCategory("androidx.car.app.category.POI")).isFalse()
+    }
+
+    @Test
+    fun carTemplatePermissions_areNotRequested() {
+        val requested = context.packageManager.getPackageInfo(
+            context.packageName,
+            PackageManager.GET_PERMISSIONS,
+        ).requestedPermissions.orEmpty().toList()
+        assertThat(requested).doesNotContain("androidx.car.app.MAP_TEMPLATES")
+        assertThat(requested).doesNotContain("androidx.car.app.NAVIGATION_TEMPLATES")
+        assertThat(requested).doesNotContain("androidx.car.app.ACCESS_SURFACE")
     }
 }

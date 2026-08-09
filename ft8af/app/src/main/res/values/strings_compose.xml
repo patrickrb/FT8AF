@@ -914,6 +914,7 @@
     <string name="car_decodes_title">Recent decodes</string>
     <string name="car_no_decodes">No decodes yet</string>
     <string name="car_pota_line">POTA %1$s · %2$d QSOs</string>
+    <string name="car_rota_line">ROTA %1$s · %2$d QSOs · %3$s mi</string>
 
     <!-- ROTA (Roads On The Air) trip mode -->
     <string name="rota_title">Roads On The Air (ROTA)</string>

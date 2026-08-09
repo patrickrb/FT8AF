@@ -21,6 +21,7 @@ class DebugInjectTest {
                 partnerGrid = "FN42",
                 snr = -12,
                 parkRef = null,
+                rotaTrip = null,
                 decodes = 0,
                 psk = 0,
                 qsos = 0,
@@ -63,6 +64,15 @@ class DebugInjectTest {
         assertThat(spec.opGrid).isEqualTo("EM29")
         assertThat(spec.parkRef).isEqualTo("K-1234")
         assertThat(spec.snr).isEqualTo(5)
+    }
+
+    /** The rota extra keeps its case (trip names are free text) and trims. */
+    @Test
+    fun rotaTrip_parsesVerbatim_andBlankIsAbsent() {
+        assertThat(parseDebugInject { mapOf("rota" to " Route 66 ")[it] }.rotaTrip)
+            .isEqualTo("Route 66")
+        assertThat(parseDebugInject { mapOf("rota" to "   ")[it] }.rotaTrip).isNull()
+        assertThat(parseDebugInject { null }.rotaTrip).isNull()
     }
 
     /** Blank/whitespace extras are treated as absent (fall back to defaults). */
