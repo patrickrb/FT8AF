@@ -128,20 +128,27 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
                 .setTitle(status.seqLine?.let { resolve(it) } ?: resolve(status.slotLine))
                 .apply { if (status.seqLine != null) addText(resolve(status.slotLine)) }
                 .build(),
-            Row.Builder().setTitle(status.bandLine).build(),
+            Row.Builder().setTitle(status.bandLine)
+                .apply {
+                    // Per-cycle decode count: currentMessages is the label overlay,
+                    // refreshed each cycle and cleared on a silent slot, so it drops
+                    // to 0 correctly (mutableFt8MessageList accumulates across cycles
+                    // when clearDecodesEveryCycle is off, the default).
+                    carDecodesSecondary(vm.currentMessages?.size ?: 0)?.let { addText(resolve(it)) }
+                }
+                .build(),
         )
         val priorities = mutableListOf(CAR_ROW_HEADLINE, CAR_ROW_SEQ_SLOT, CAR_ROW_BAND)
-        // POTA / ROTA rows only exist while an activation or trip is running.
-        // StateFlow reads (not observers) are enough for freshness: the 1 Hz tick
-        // re-renders the pane every second anyway.
-        val activation = PotaSessionManager.currentActivation.value
-        buildCarPotaLine(activation?.parkRefsDisplay, activation?.qsoCount)?.let {
-            rows.add(Row.Builder().setTitle(resolve(it)).build())
-            priorities.add(CAR_ROW_ACTIVATION)
-        }
-        val trip = RotaTripManager.state.value
-        buildCarRotaLine(trip.active, trip.tripName, trip.sentQsos, trip.pendingQsos, trip.miles)?.let {
-            rows.add(Row.Builder().setTitle(resolve(it)).build())
+        // Activation dashboard: POTA and/or ROTA rows while activating, otherwise a
+        // single session-summary row (see buildCarActivationRows). Plain StateFlow
+        // reads are enough for freshness — the 1 Hz tick re-renders every second.
+        buildActivationPaneRows(vm).forEach { row ->
+            rows.add(
+                Row.Builder()
+                    .setTitle(resolve(row.title))
+                    .apply { row.secondary?.let { addText(resolve(it)) } }
+                    .build(),
+            )
             priorities.add(CAR_ROW_ACTIVATION)
         }
         val pane = Pane.Builder().apply {
@@ -163,6 +170,36 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
                     .build(),
             )
             .build()
+    }
+
+    /**
+     * Reads the current POTA/ROTA activation and session state and maps it to the
+     * pane's activation rows via the pure [buildCarActivationRows]. "Session QSOs"
+     * uses the today/yesterday worked-callsign set
+     * ([GeneralVariables.QSL_Callsign_list_today]) — the only cheap in-memory count —
+     * and "last logged" is best-effort: the just-completed QSO timestamp
+     * ([com.k1af.ft8af.ft8transmit.FT8TransmitSignal.mutableQsoCompletedAt], stamped
+     * with [UtcTimer]) with the current partner callsign and tuned band.
+     */
+    private fun buildActivationPaneRows(vm: MainViewModel): List<CarPaneRow> {
+        val pota = PotaSessionManager.currentActivation.value
+        val rota = RotaTripManager.state.value
+        return buildCarActivationRows(
+            potaActive = pota != null,
+            potaParkRefsDisplay = pota?.parkRefsDisplay,
+            potaQsoCount = pota?.qsoCount ?: 0,
+            rotaActive = rota.active,
+            rotaTripName = rota.tripName,
+            rotaQsoCount = rota.sentQsos + rota.pendingQsos,
+            rotaMiles = rota.miles,
+            sessionQsoCount = GeneralVariables.QSL_Callsign_list_today.size,
+            lastQsoCallsign = vm.ft8TransmitSignal.mutableToCallsign.value?.callsign,
+            lastQsoBandName = currentBandName(),
+            lastQsoMinutesAgo = minutesAgo(
+                UtcTimer.getSystemTime(),
+                vm.ft8TransmitSignal.mutableQsoCompletedAt.value,
+            ),
+        )
     }
 
     private fun resolve(spec: CarStringSpec): String =

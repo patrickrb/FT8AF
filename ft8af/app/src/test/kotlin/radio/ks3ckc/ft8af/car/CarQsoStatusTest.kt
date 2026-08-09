@@ -237,25 +237,9 @@ class CarQsoStatusTest {
         assertThat(buildCarPotaLine("K-1234", null)!!.args).containsExactly("K-1234", 0).inOrder()
     }
 
-    @Test
-    fun buildCarRotaLine_inactiveTrip_hidesRow() {
-        assertThat(buildCarRotaLine(false, "Route 66", 5, 2, 12.0)).isNull()
-    }
-
-    @Test
-    fun buildCarRotaLine_sumsSentAndPendingQsos_andFormatsMiles() {
-        val spec = buildCarRotaLine(true, "Route 66", 10, 2, 45.34)!!
-        assertThat(spec.resId).isEqualTo(R.string.car_rota_line)
-        // 12 = 10 sent + 2 still queued offline; miles use the trip
-        // notification's one-decimal format.
-        assertThat(spec.args).containsExactly("Route 66", 12, "45.3").inOrder()
-    }
-
-    @Test
-    fun buildCarRotaLine_blankTripName_fallsBackToTrip() {
-        assertThat(buildCarRotaLine(true, "   ", 0, 0, 0.0)!!.args)
-            .containsExactly("trip", 0, "0.0").inOrder()
-    }
+    // The ROTA row (title + miles secondary) and the session-fallback row are
+    // built inside buildCarActivationRows; their formatting is covered in
+    // CarDashboardTest.
 
     @Test
     fun selectCarPaneRows_underLimit_keepsAllInOrder() {
