@@ -297,7 +297,11 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
         val headline = resolve(status.headline) +
             (status.snrLabel?.let { " · $it" } ?: "")
         val bandRow = Row.Builder().setTitle(status.bandLine)
-        carDecodesSecondary(vm.mutableFt8MessageList.value?.size ?: 0)?.let {
+        // Per-cycle decode count: currentMessages (the label overlay) is refreshed
+        // every cycle and cleared on a silent slot, so this drops to 0 correctly.
+        // mutableFt8MessageList accumulates across cycles when clearDecodesEveryCycle
+        // is off (the default), which would keep a stale "N decodes last cycle".
+        carDecodesSecondary(vm.currentMessages?.size ?: 0)?.let {
             bandRow.addText(resolve(it))
         }
         val rows = mutableListOf(
