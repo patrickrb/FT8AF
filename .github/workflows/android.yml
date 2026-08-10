@@ -616,15 +616,15 @@ jobs:
           track: ${{ steps.tag.outputs.play_track }}
           status: completed
           releaseName: ${{ steps.tag.outputs.release_tag }}
-          # The app has pending Play Console changes that require review (e.g. the
-          # Android Auto removal / store-listing edits), so Google refuses to
-          # auto-send the edit for review from the API and the upload fails with
-          # "Changes cannot be sent for review automatically. Please set the query
-          # parameter changesNotSentForReview to true." Committing the edit WITHOUT
-          # auto-review lets the AAB land on the track; the release is then sent for
-          # review manually from the Play Console UI (Publishing overview -> Send
-          # for review). Harmless once no review-gated changes are pending.
-          changesNotSentForReview: true
+          # Let Google auto-send the release for review (the normal path). Do NOT
+          # set this true: that bypass is only accepted while the app has
+          # review-gated changes pending. Once it's a normal reviewed app, Google
+          # auto-sends changes for review and the edit-commit rejects the flag with
+          # "Changes are sent for review automatically. The query parameter
+          # changesNotSentForReview must not be set." — which failed the internal
+          # upload for the android-dev.1026 staging build. Flip back to true only if
+          # a future upload fails demanding it (a new review-gated change is pending).
+          changesNotSentForReview: false
 
       # Make a swallowed publish failure visible (annotation on the run) without
       # failing the job — the artifact + GitHub Release already succeeded.
