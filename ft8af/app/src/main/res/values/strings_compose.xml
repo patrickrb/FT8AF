@@ -906,14 +906,12 @@
     <string name="car_screen_title" translatable="false">FT8AF</string>
     <string name="car_open_phone">Open FT8AF on your phone to start the FT8 engine</string>
     <string name="car_monitoring">Monitoring — TX off</string>
-    <string name="car_no_tx">No transmission queued</string>
     <string name="car_seq_step">Step %1$s (%2$d/%3$d)</string>
     <string name="car_slot_tx">TX slot · %1$d s</string>
     <string name="car_slot_rx">RX slot · %1$d s</string>
     <string name="car_decodes_action">Decodes</string>
     <string name="car_decodes_title">Recent decodes</string>
     <string name="car_no_decodes">No decodes yet</string>
-    <string name="car_pota_line">POTA %1$s · %2$d QSOs</string>
 
     <!-- ROTA (Roads On The Air) trip mode -->
     <string name="rota_title">Roads On The Air (ROTA)</string>
@@ -938,7 +936,7 @@
     <string name="rota_end_trip">End trip</string>
     <string name="rota_ending">Finishing up — uploading the rest…</string>
     <string name="rota_abandon">Discard local trip</string>
-    <string name="rota_abandon_desc">Stops tracking and drops anything not yet uploaded</string>
+    <string name="rota_abandon_desc">Discard stops tracking, drops anything not yet uploaded, and still ends the trip on roadsontheair.com</string>
     <string name="rota_stat_miles">Miles</string>
     <string name="rota_stat_qsos">Contacts sent</string>
     <string name="rota_stat_pending">Waiting to upload</string>

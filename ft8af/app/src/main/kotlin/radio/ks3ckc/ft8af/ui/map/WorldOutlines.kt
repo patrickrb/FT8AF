@@ -54,10 +54,10 @@ private fun ringToFlat(ring: JSONArray): FloatArray {
  *
  * The vertex count is bounded to `ring.size / 2`, so a trailing unpaired
  * coordinate in a malformed odd-length ring is ignored rather than read out of
- * bounds. This centralizes the safe bound already used by [pointInRing] and
- * `CarMapSurfaceRenderer.buildPaths`, replacing the `while (i < ring.size)`
- * walks (which read `ring[i + 1]` one past the end of an odd-length ring) in
- * the equirectangular / azimuthal / POTA / QSO-path land renderers.
+ * bounds. This centralizes the safe bound already used by [pointInRing],
+ * replacing the `while (i < ring.size)` walks (which read `ring[i + 1]` one
+ * past the end of an odd-length ring) in the equirectangular / azimuthal /
+ * POTA / QSO-path land renderers.
  *
  * `inline` keeps the per-vertex [plot] call allocation-free on the draw hot
  * path (this runs for every land ring, every frame).
