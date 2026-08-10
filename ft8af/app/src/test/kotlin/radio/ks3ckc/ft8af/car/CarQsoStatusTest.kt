@@ -216,30 +216,9 @@ class CarQsoStatusTest {
         assertThat(shouldInvalidateForTick(lastSecond = -1, newSecond = 15)).isTrue()
     }
 
-    // --- POTA / ROTA activation rows ---------------------------------------
-
-    @Test
-    fun buildCarPotaLine_nullOrBlankPark_hidesRow() {
-        assertThat(buildCarPotaLine(null, 3)).isNull()
-        assertThat(buildCarPotaLine("", 3)).isNull()
-        assertThat(buildCarPotaLine("  ", 3)).isNull()
-    }
-
-    @Test
-    fun buildCarPotaLine_formatsParkAndCount() {
-        val spec = buildCarPotaLine("K-1234 + K-5678", 7)!!
-        assertThat(spec.resId).isEqualTo(R.string.car_pota_line)
-        assertThat(spec.args).containsExactly("K-1234 + K-5678", 7).inOrder()
-    }
-
-    @Test
-    fun buildCarPotaLine_nullCount_showsZero() {
-        assertThat(buildCarPotaLine("K-1234", null)!!.args).containsExactly("K-1234", 0).inOrder()
-    }
-
-    // The ROTA row (title + miles secondary) and the session-fallback row are
-    // built inside buildCarActivationRows; their formatting is covered in
-    // CarDashboardTest.
+    // --- Pane row selection ------------------------------------------------
+    // The status/band/POTA/ROTA/session row content, badges, and color spans are
+    // built by the design dashboard helpers, covered in CarDashboardTest.
 
     @Test
     fun selectCarPaneRows_underLimit_keepsAllInOrder() {

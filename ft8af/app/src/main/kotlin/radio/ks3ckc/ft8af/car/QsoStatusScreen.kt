@@ -1,18 +1,29 @@
 package radio.ks3ckc.ft8af.car
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
+import android.text.SpannableStringBuilder
+import android.text.Spanned
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
+import androidx.car.app.model.CarColor
+import androidx.car.app.model.CarIcon
+import androidx.car.app.model.CarText
+import androidx.car.app.model.ForegroundCarColorSpan
 import androidx.car.app.model.MessageTemplate
 import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.car.app.versioning.CarAppApiLevels
+import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.Observer
@@ -117,42 +128,43 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
             huntCallsCQ = GeneralVariables.huntCallsCQ,
         )
 
-        val headline = resolve(status.headline) +
-            (status.snrLabel?.let { " · $it" } ?: "")
-        val rows = mutableListOf(
-            Row.Builder()
-                .setTitle(headline)
-                .addText(status.messageLine ?: carContext.getString(R.string.car_no_tx))
-                .build(),
-            Row.Builder()
-                .setTitle(status.seqLine?.let { resolve(it) } ?: resolve(status.slotLine))
-                .apply { if (status.seqLine != null) addText(resolve(status.slotLine)) }
-                .build(),
-            Row.Builder().setTitle(status.bandLine)
-                .apply {
-                    // Per-cycle decode count: currentMessages is the label overlay,
-                    // refreshed each cycle and cleared on a silent slot, so it drops
-                    // to 0 correctly (mutableFt8MessageList accumulates across cycles
-                    // when clearDecodesEveryCycle is off, the default).
-                    carDecodesSecondary(vm.currentMessages?.size ?: 0)?.let { addText(resolve(it)) }
-                }
-                .build(),
+        val target = toCallsign?.callsign?.takeIf { it.isNotEmpty() && it != "CQ" }
+        // Status row (state + green countdown, target + yellow SNR + TX-queue state).
+        val statusRow = carStatusDashRow(
+            txState = status.txState,
+            secondsRemaining = slot.secondsRemaining,
+            target = target,
+            snrLabel = status.snrLabel,
+            txMessage = status.messageLine,
+            hunting = GeneralVariables.autoFollowCQ && !GeneralVariables.huntCallsCQ,
         )
-        val priorities = mutableListOf(CAR_ROW_HEADLINE, CAR_ROW_SEQ_SLOT, CAR_ROW_BAND)
-        // Activation dashboard: POTA and/or ROTA rows while activating, otherwise a
-        // single session-summary row (see buildCarActivationRows). Plain StateFlow
-        // reads are enough for freshness — the 1 Hz tick re-renders every second.
-        buildActivationPaneRows(vm).forEach { row ->
-            rows.add(
-                Row.Builder()
-                    .setTitle(resolve(row.title))
-                    .apply { row.secondary?.let { addText(resolve(it)) } }
-                    .build(),
-            )
-            priorities.add(CAR_ROW_ACTIVATION)
-        }
+        // Band row: "20m" badge + "14.074 MHz · FT8" + per-cycle decode count.
+        // currentMessages is the label overlay (refreshed each cycle, cleared on a
+        // silent slot, so it drops to 0), not the cross-cycle mutableFt8MessageList.
+        val bandRow = carBandDashRow(
+            freqHz = GeneralVariables.band,
+            bandName = currentBandName(),
+            modeName = mode.displayName,
+            decodeCount = vm.currentMessages?.size ?: 0,
+        )
+        // Activation rows while a POTA/ROTA is live, otherwise a session-summary row.
+        // Plain StateFlow reads are enough for freshness — the 1 Hz tick re-renders.
+        val pota = PotaSessionManager.currentActivation.value
+        val rota = RotaTripManager.state.value
+        val potaRow = carPotaDashRow(pota?.parkRefsDisplay, pota?.qsoCount ?: 0)
+        val rotaRow = carRotaDashRow(rota.active, rota.tripName, rota.sentQsos + rota.pendingQsos, rota.miles)
+        val sessionRow = carSessionDashRow(
+            sessionQsoCount = GeneralVariables.QSL_Callsign_list_today.size,
+            lastQsoCallsign = target,
+            lastQsoBandName = currentBandName(),
+            lastQsoMinutesAgo = minutesAgo(UtcTimer.getSystemTime(), ts.mutableQsoCompletedAt.value),
+        )
+
+        val dashRows = buildCarDashboardRows(statusRow, bandRow, potaRow, rotaRow, sessionRow)
+        val builtRows = dashRows.map { renderDashRow(it) }
         val pane = Pane.Builder().apply {
-            selectCarPaneRows(priorities, paneRowLimit(carContext)).forEach { addRow(rows[it]) }
+            selectCarPaneRows(dashRows.map { it.priority }, paneRowLimit(carContext))
+                .forEach { addRow(builtRows[it]) }
         }.build()
         return PaneTemplate.Builder(pane)
             .setTitle(carContext.getString(R.string.car_screen_title))
@@ -173,37 +185,68 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
     }
 
     /**
-     * Reads the current POTA/ROTA activation and session state and maps it to the
-     * pane's activation rows via the pure [buildCarActivationRows]. "Session QSOs"
-     * uses the today/yesterday worked-callsign set
-     * ([GeneralVariables.QSL_Callsign_list_today]) — the only cheap in-memory count —
-     * and "last logged" is best-effort: the just-completed QSO timestamp
-     * ([com.k1af.ft8af.ft8transmit.FT8TransmitSignal.mutableQsoCompletedAt], stamped
-     * with [UtcTimer]) with the current partner callsign and tuned band.
+     * A dashboard row → a Pane Row with its colored leading badge. The Car App
+     * Library only permits [ForegroundCarColorSpan] on a row's secondary text, not
+     * its title (Row.setTitle validates against a no-color constraint and throws),
+     * so the title is rendered as plain text and color emphasis lives on the
+     * secondary line.
      */
-    private fun buildActivationPaneRows(vm: MainViewModel): List<CarPaneRow> {
-        val pota = PotaSessionManager.currentActivation.value
-        val rota = RotaTripManager.state.value
-        return buildCarActivationRows(
-            potaActive = pota != null,
-            potaParkRefsDisplay = pota?.parkRefsDisplay,
-            potaQsoCount = pota?.qsoCount ?: 0,
-            rotaActive = rota.active,
-            rotaTripName = rota.tripName,
-            rotaQsoCount = rota.sentQsos + rota.pendingQsos,
-            rotaMiles = rota.miles,
-            sessionQsoCount = GeneralVariables.QSL_Callsign_list_today.size,
-            lastQsoCallsign = vm.ft8TransmitSignal.mutableToCallsign.value?.callsign,
-            lastQsoBandName = currentBandName(),
-            lastQsoMinutesAgo = minutesAgo(
-                UtcTimer.getSystemTime(),
-                vm.ft8TransmitSignal.mutableQsoCompletedAt.value,
-            ),
-        )
+    private fun renderDashRow(row: CarDashRow): Row =
+        Row.Builder()
+            .setImage(badgeIcon(row.badge))
+            .setTitle(row.title.joinToString("") { it.text })
+            .apply { row.secondary?.let { addText(carText(it)) } }
+            .build()
+
+    /** Concatenate [spans] into a CarText, applying a [ForegroundCarColorSpan] over each colored run. */
+    private fun carText(spans: List<CarSpan>): CarText {
+        val sb = SpannableStringBuilder()
+        for (span in spans) {
+            val start = sb.length
+            sb.append(span.text)
+            span.color?.let {
+                sb.setSpan(
+                    ForegroundCarColorSpan.create(spanColor(it)),
+                    start,
+                    sb.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
+        }
+        return CarText.create(sb)
     }
 
-    private fun resolve(spec: CarStringSpec): String =
-        carContext.getString(spec.resId, *spec.args.toTypedArray())
+    private fun spanColor(color: CarSpanColor): CarColor = when (color) {
+        CarSpanColor.GREEN -> CarColor.GREEN
+        CarSpanColor.YELLOW -> CarColor.YELLOW
+        CarSpanColor.BLUE -> CarColor.BLUE
+    }
+
+    /**
+     * A [CarBadge] rendered as a colored circle with its glyph centered (an empty
+     * glyph becomes a filled dot — the status indicator). Cached by badge so the
+     * 1 Hz re-render doesn't re-rasterize the same icon every second.
+     */
+    private fun badgeIcon(badge: CarBadge): CarIcon = badgeCache.getOrPut(badge) {
+        val size = 96
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val center = size / 2f
+        canvas.drawCircle(center, center, center, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = badge.bgArgb })
+        val fg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = badge.fgArgb }
+        if (badge.text.isEmpty()) {
+            canvas.drawCircle(center, center, size * 0.2f, fg)
+        } else {
+            fg.textAlign = Paint.Align.CENTER
+            fg.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            fg.textSize = if (badge.text.length <= 1) size * 0.5f else size * 0.32f
+            val fm = fg.fontMetrics
+            canvas.drawText(badge.text, center, center - (fm.ascent + fm.descent) / 2f, fg)
+        }
+        CarIcon.Builder(IconCompat.createWithBitmap(bmp)).build()
+    }
+
+    private val badgeCache = HashMap<CarBadge, CarIcon>()
 
     private companion object {
         const val TICK_MS = 1000L

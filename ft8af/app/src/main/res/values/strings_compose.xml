@@ -906,23 +906,12 @@
     <string name="car_screen_title" translatable="false">FT8AF</string>
     <string name="car_open_phone">Open FT8AF on your phone to start the FT8 engine</string>
     <string name="car_monitoring">Monitoring — TX off</string>
-    <string name="car_no_tx">No transmission queued</string>
     <string name="car_seq_step">Step %1$s (%2$d/%3$d)</string>
     <string name="car_slot_tx">TX slot · %1$d s</string>
     <string name="car_slot_rx">RX slot · %1$d s</string>
     <string name="car_decodes_action">Decodes</string>
     <string name="car_decodes_title">Recent decodes</string>
     <string name="car_no_decodes">No decodes yet</string>
-    <string name="car_pota_line">POTA %1$s · %2$d QSOs</string>
-    <string name="car_pota_to_validate">%1$d more to validate the activation</string>
-    <string name="car_pota_validated">Activation validated</string>
-    <string name="car_rota_line">ROTA %1$s · %2$d QSOs</string>
-    <string name="car_rota_miles">%1$s mi driven this activation</string>
-    <string name="car_decodes_last_cycle">%1$d decodes last cycle</string>
-    <string name="car_session_line">Session · %1$d QSOs</string>
-    <string name="car_session_last">Last logged %1$s · %2$s · %3$d min</string>
-    <string name="car_session_last_noband">Last logged %1$s · %2$d min</string>
-    <string name="car_session_none">No QSOs logged yet</string>
 
     <!-- ROTA (Roads On The Air) trip mode -->
     <string name="rota_title">Roads On The Air (ROTA)</string>
