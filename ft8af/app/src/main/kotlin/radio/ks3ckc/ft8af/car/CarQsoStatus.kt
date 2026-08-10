@@ -173,6 +173,12 @@ internal const val CAR_AMBER_BG = 0xFF2B2114.toInt()
 internal const val CAR_GRAY_FG = 0xFF9AA0A6.toInt()
 internal const val CAR_GRAY_BG = 0xFF17181C.toInt()
 
+/** "1 QSO" / "0 QSOs" / "3 QSOs" — singular only at exactly one. */
+internal fun qsosLabel(count: Int): String = if (count == 1) "1 QSO" else "$count QSOs"
+
+/** "1 decode" / "12 decodes" — singular only at exactly one. */
+internal fun decodesLabel(count: Int): String = if (count == 1) "1 decode" else "$count decodes"
+
 /**
  * QSOs a POTA activation needs before it counts under the POTA program rules.
  * There is no constant for this in the POTA session code (the phone UI never
@@ -244,7 +250,7 @@ internal fun carStatusDashRow(
  */
 internal fun carBandDashRow(freqHz: Long, bandName: String, modeName: String, decodeCount: Int): CarDashRow {
     val title = listOf(CarSpan("${formatMhz(freqHz)} MHz · $modeName"))
-    val secondary = if (decodeCount > 0) listOf(CarSpan("$decodeCount decodes last cycle")) else null
+    val secondary = if (decodeCount > 0) listOf(CarSpan("${decodesLabel(decodeCount)} last cycle")) else null
     val badge = CarBadge(bandName.trim().ifEmpty { "RF" }, CAR_BLUE_FG, CAR_BLUE_BG)
     return CarDashRow(badge, title, secondary, CAR_ROW_BAND)
 }
@@ -256,7 +262,7 @@ internal fun carBandDashRow(freqHz: Long, bandName: String, modeName: String, de
  */
 internal fun carPotaDashRow(parkRefsDisplay: String?, qsoCount: Int): CarDashRow? {
     if (parkRefsDisplay.isNullOrBlank()) return null
-    val title = listOf(CarSpan("POTA $parkRefsDisplay"), CarSpan(" · $qsoCount QSOs", CarSpanColor.GREEN))
+    val title = listOf(CarSpan("POTA $parkRefsDisplay"), CarSpan(" · ${qsosLabel(qsoCount)}", CarSpanColor.GREEN))
     val remaining = (POTA_ACTIVATION_TARGET - qsoCount).coerceAtLeast(0)
     val secondary = listOf(
         CarSpan(if (remaining > 0) "$remaining more to validate the activation" else "Activation validated"),
@@ -271,7 +277,7 @@ internal fun carPotaDashRow(parkRefsDisplay: String?, qsoCount: Int): CarDashRow
  */
 internal fun carRotaDashRow(active: Boolean, tripName: String?, qsoCount: Int, miles: Double): CarDashRow? {
     if (!active || tripName.isNullOrBlank()) return null
-    val title = listOf(CarSpan("ROTA $tripName · $qsoCount QSOs"))
+    val title = listOf(CarSpan("ROTA $tripName · ${qsosLabel(qsoCount)}"))
     val secondary = listOf(CarSpan("${formatMiles(miles)} mi driven this activation"))
     return CarDashRow(CarBadge("R", CAR_AMBER_FG, CAR_AMBER_BG), title, secondary, CAR_ROW_ACTIVATION)
 }
@@ -289,7 +295,7 @@ internal fun carSessionDashRow(
     lastQsoBandName: String?,
     lastQsoMinutesAgo: Int?,
 ): CarDashRow {
-    val title = listOf(CarSpan("Session · $sessionQsoCount QSOs"))
+    val title = listOf(CarSpan("Session · ${qsosLabel(sessionQsoCount)}"))
     val call = lastQsoCallsign?.takeIf { it.isNotBlank() }
     val secondary = if (call != null && lastQsoMinutesAgo != null) {
         val band = lastQsoBandName?.takeIf { it.isNotBlank() }

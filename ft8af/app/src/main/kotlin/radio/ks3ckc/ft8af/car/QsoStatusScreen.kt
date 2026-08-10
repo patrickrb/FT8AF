@@ -155,7 +155,10 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
         val rotaRow = carRotaDashRow(rota.active, rota.tripName, rota.sentQsos + rota.pendingQsos, rota.miles)
         val sessionRow = carSessionDashRow(
             sessionQsoCount = GeneralVariables.QSL_Callsign_list_today.size,
-            lastQsoCallsign = target,
+            // Last *logged* callsign (worked-list is appended in completion order),
+            // not the current TX target — those differ when calling CQ right after a
+            // QSO completes, and the target would then hide a real "last logged" line.
+            lastQsoCallsign = GeneralVariables.QSL_Callsign_list.lastOrNull(),
             lastQsoBandName = currentBandName(),
             lastQsoMinutesAgo = minutesAgo(UtcTimer.getSystemTime(), ts.mutableQsoCompletedAt.value),
         )

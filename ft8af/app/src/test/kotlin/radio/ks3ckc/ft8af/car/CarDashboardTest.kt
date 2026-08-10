@@ -198,4 +198,27 @@ class CarDashboardTest {
         assertThat(minutesAgo(41 * 60_000L + 1L, 1L)).isEqualTo(41)
         assertThat(minutesAgo(30_000L, 1L)).isEqualTo(0)
     }
+
+    // -- singular/plural labels --
+
+    @Test
+    fun qsosLabel_singularOnlyAtOne() {
+        assertThat(qsosLabel(0)).isEqualTo("0 QSOs")
+        assertThat(qsosLabel(1)).isEqualTo("1 QSO")
+        assertThat(qsosLabel(2)).isEqualTo("2 QSOs")
+    }
+
+    @Test
+    fun decodesLabel_singularOnlyAtOne() {
+        assertThat(decodesLabel(1)).isEqualTo("1 decode")
+        assertThat(decodesLabel(12)).isEqualTo("12 decodes")
+    }
+
+    @Test
+    fun rows_useSingularAtCountOfOne() {
+        assertThat(text(carPotaDashRow("K-1234", 1)!!.title)).isEqualTo("POTA K-1234 · 1 QSO")
+        assertThat(text(carRotaDashRow(true, "Route 66", 1, 1.0)!!.title)).isEqualTo("ROTA Route 66 · 1 QSO")
+        assertThat(text(carSessionDashRow(1, "JA1XYZ", "20m", 41).title)).isEqualTo("Session · 1 QSO")
+        assertThat(text(carBandDashRow(14_074_000L, "20m", "FT8", 1).secondary!!)).isEqualTo("1 decode last cycle")
+    }
 }
