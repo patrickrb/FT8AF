@@ -47,10 +47,13 @@ class CarAppManifestWiringTest {
             context.packageName,
             PackageManager.GET_META_DATA,
         )
-        assertThat(appInfo.metaData).isNotNull()
-        assertThat(appInfo.metaData.getInt("com.google.android.gms.car.application"))
+        // Read the (platform-nullable) meta-data bundle once into a non-null local so a
+        // dropped meta-data block fails here with an actionable message instead of an NPE
+        // on a later getInt().
+        val metaData = checkNotNull(appInfo.metaData) { "app has no meta-data — Android Auto wiring missing" }
+        assertThat(metaData.getInt("com.google.android.gms.car.application"))
             .isEqualTo(R.xml.automotive_app_desc)
-        assertThat(appInfo.metaData.getInt("androidx.car.app.minCarApiLevel")).isEqualTo(1)
+        assertThat(metaData.getInt("androidx.car.app.minCarApiLevel")).isEqualTo(1)
     }
 
     @Test
