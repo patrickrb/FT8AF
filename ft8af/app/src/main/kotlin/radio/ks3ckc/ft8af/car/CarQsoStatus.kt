@@ -137,31 +137,196 @@ internal fun selectCarPaneRows(priorities: List<Int>, limit: Int): List<Int> {
         .sorted()
 }
 
+// --- Design dashboard model (Pane template "1a") ---------------------------
+// The status pane follows the FT8AF Android Auto design doc: every row carries a
+// colored circular leading badge and its text uses colored emphasis spans. The
+// decision/format/color logic is decided here (pure, unit-tested); QsoStatusScreen
+// only renders the badges as bitmaps and the spans as CarText.
+
+/** Standard car text-emphasis colors (host renders its own accessible shade). */
+internal enum class CarSpanColor { GREEN, YELLOW, BLUE }
+
+/** A run of row text, optionally emphasized with a [CarSpanColor]. */
+internal data class CarSpan(val text: String, val color: CarSpanColor? = null)
+
 /**
- * "POTA K-1234 · 3 QSOs" (multi-park refs arrive pre-joined as "K-1234 + K-5678").
- * Null when no activation is running, which removes the row entirely.
+ * The colored leading badge on a row: a short glyph ("P", "R", "Σ", "20m", or ""
+ * for a plain dot) drawn in [fgArgb] over a filled circle of [bgArgb].
  */
-internal fun buildCarPotaLine(parkRefsDisplay: String?, qsoCount: Int?): CarStringSpec? {
-    if (parkRefsDisplay.isNullOrBlank()) return null
-    return CarStringSpec(R.string.car_pota_line, listOf(parkRefsDisplay, qsoCount ?: 0))
+internal data class CarBadge(val text: String, val fgArgb: Int, val bgArgb: Int)
+
+/** One dashboard row: leading [badge], [title] runs, optional [secondary] runs, and row [priority]. */
+internal data class CarDashRow(
+    val badge: CarBadge,
+    val title: List<CarSpan>,
+    val secondary: List<CarSpan>? = null,
+    val priority: Int = CAR_ROW_ACTIVATION,
+)
+
+// Palette from the FT8AF Android Auto design doc (fg glyph / bg circle per role).
+internal const val CAR_GREEN_FG = 0xFF81C995.toInt()
+internal const val CAR_GREEN_BG = 0xFF0D2818.toInt()
+internal const val CAR_BLUE_FG = 0xFF8AB4F8.toInt()
+internal const val CAR_BLUE_BG = 0xFF1F2430.toInt()
+internal const val CAR_AMBER_FG = 0xFFFFB45C.toInt()
+internal const val CAR_AMBER_BG = 0xFF2B2114.toInt()
+internal const val CAR_GRAY_FG = 0xFF9AA0A6.toInt()
+internal const val CAR_GRAY_BG = 0xFF17181C.toInt()
+
+/** "1 QSO" / "0 QSOs" / "3 QSOs" — singular only at exactly one. */
+internal fun qsosLabel(count: Int): String = if (count == 1) "1 QSO" else "$count QSOs"
+
+/** "1 decode" / "12 decodes" — singular only at exactly one. */
+internal fun decodesLabel(count: Int): String = if (count == 1) "1 decode" else "$count decodes"
+
+/**
+ * QSOs a POTA activation needs before it counts under the POTA program rules.
+ * There is no constant for this in the POTA session code (the phone UI never
+ * shows a remaining-to-validate figure), so the well-known program rule lives
+ * here where the car dashboard uses it.
+ */
+internal const val POTA_ACTIVATION_TARGET = 10
+
+/** "0.0" / "12.3" — one decimal, locale-independent so tests are stable. */
+internal fun formatMiles(miles: Double): String =
+    String.format(java.util.Locale.US, "%.1f", miles)
+
+/**
+ * Whole minutes between [thenMs] and [nowMs] for the "last logged … N min" line.
+ * Returns null when there is no timestamp (0/null) or the clock is skewed so [thenMs]
+ * is in the future, so the session row degrades to "No QSOs logged yet" rather than
+ * showing a nonsense figure.
+ */
+internal fun minutesAgo(nowMs: Long, thenMs: Long?): Int? {
+    if (thenMs == null || thenMs <= 0L) return null
+    val delta = nowMs - thenMs
+    if (delta < 0L) return null
+    return (delta / 60_000L).toInt()
 }
 
 /**
- * "ROTA Route 66 · 12 QSOs · 45.3 mi"; null when no trip is running. The QSO
- * count is sent+pending so contacts logged out of coverage still show, and the
- * miles match the trip notification's one-decimal format.
+ * The status row: a green dot badge (gray when TX is off), a "<state> · <countdown>"
+ * title (countdown green while armed), and a secondary that names the target with a
+ * yellow SNR and the TX-queue state — "Waiting for W1ABC · −8 dB · no TX queued".
  */
-internal fun buildCarRotaLine(
-    active: Boolean,
-    tripName: String,
-    sentQsos: Int,
-    pendingQsos: Int,
-    miles: Double,
-): CarStringSpec? {
-    if (!active) return null
-    val name = tripName.trim().ifEmpty { "trip" }
-    val milesLabel = String.format(java.util.Locale.US, "%.1f", miles)
-    return CarStringSpec(R.string.car_rota_line, listOf(name, sentQsos + pendingQsos, milesLabel))
+internal fun carStatusDashRow(
+    txState: CarTxState,
+    secondsRemaining: Int,
+    target: String?,
+    snrLabel: String?,
+    txMessage: String?,
+    hunting: Boolean,
+): CarDashRow {
+    val (stateWord, countdown, armed) = when (txState) {
+        CarTxState.TRANSMITTING -> Triple("Transmitting", " · $secondsRemaining s left", true)
+        CarTxState.ARMED_RX -> Triple("Receiving", " · next TX in $secondsRemaining s", true)
+        CarTxState.OFF -> Triple("Monitoring", " · TX off", false)
+    }
+    val title = listOf(CarSpan(stateWord), CarSpan(countdown, if (armed) CarSpanColor.GREEN else null))
+
+    val lead = when {
+        target != null && txState == CarTxState.TRANSMITTING -> "Working $target"
+        target != null -> "Waiting for $target"
+        txState == CarTxState.OFF -> "Monitoring — TX off"
+        hunting -> "Hunting for CQ"
+        else -> "Calling CQ"
+    }
+    val secondary = mutableListOf(CarSpan(lead))
+    if (target != null && snrLabel != null) {
+        secondary.add(CarSpan(" · "))
+        secondary.add(CarSpan(snrLabel, CarSpanColor.YELLOW))
+    }
+    if (txState != CarTxState.OFF) {
+        secondary.add(CarSpan(" · " + (txMessage?.takeIf { it.isNotEmpty() } ?: "no TX queued")))
+    }
+    val badge = if (armed) CarBadge("", CAR_GREEN_FG, CAR_GREEN_BG) else CarBadge("", CAR_GRAY_FG, CAR_GRAY_BG)
+    return CarDashRow(badge, title, secondary, CAR_ROW_HEADLINE)
+}
+
+/**
+ * The band row: a blue badge showing the band name ("20m"), a "14.074 MHz · FT8"
+ * title, and a "N decodes last cycle" secondary (dropped when the last cycle was
+ * silent, so the row shows the frequency alone rather than "0 decodes").
+ */
+internal fun carBandDashRow(freqHz: Long, bandName: String, modeName: String, decodeCount: Int): CarDashRow {
+    val title = listOf(CarSpan("${formatMhz(freqHz)} MHz · $modeName"))
+    val secondary = if (decodeCount > 0) listOf(CarSpan("${decodesLabel(decodeCount)} last cycle")) else null
+    val badge = CarBadge(bandName.trim().ifEmpty { "RF" }, CAR_BLUE_FG, CAR_BLUE_BG)
+    return CarDashRow(badge, title, secondary, CAR_ROW_BAND)
+}
+
+/**
+ * The POTA row: amber "P" badge, "POTA <park> · N QSOs" title (green QSO count),
+ * and a "N more to validate the activation" / "Activation validated" secondary
+ * (POTA's [POTA_ACTIVATION_TARGET]-QSO program rule). Null when no activation runs.
+ */
+internal fun carPotaDashRow(parkRefsDisplay: String?, qsoCount: Int): CarDashRow? {
+    if (parkRefsDisplay.isNullOrBlank()) return null
+    val title = listOf(CarSpan("POTA $parkRefsDisplay"), CarSpan(" · ${qsosLabel(qsoCount)}", CarSpanColor.GREEN))
+    val remaining = (POTA_ACTIVATION_TARGET - qsoCount).coerceAtLeast(0)
+    val secondary = listOf(
+        CarSpan(if (remaining > 0) "$remaining more to validate the activation" else "Activation validated"),
+    )
+    return CarDashRow(CarBadge("P", CAR_AMBER_FG, CAR_AMBER_BG), title, secondary, CAR_ROW_ACTIVATION)
+}
+
+/**
+ * The ROTA row: amber "R" badge, "ROTA <trip> · N QSOs" title (QSOs = sent+pending
+ * so out-of-coverage contacts still count), and a "X.X mi driven this activation"
+ * secondary. Null when no trip is running or the trip has no name.
+ */
+internal fun carRotaDashRow(active: Boolean, tripName: String?, qsoCount: Int, miles: Double): CarDashRow? {
+    if (!active || tripName.isNullOrBlank()) return null
+    val title = listOf(CarSpan("ROTA $tripName · ${qsosLabel(qsoCount)}"))
+    val secondary = listOf(CarSpan("${formatMiles(miles)} mi driven this activation"))
+    return CarDashRow(CarBadge("R", CAR_AMBER_FG, CAR_AMBER_BG), title, secondary, CAR_ROW_ACTIVATION)
+}
+
+/**
+ * The session-summary row shown when no POTA/ROTA activation is running (the design's
+ * "activation rows drop out, session stats take the slot"): gray "Σ" badge,
+ * "Session · N QSOs" title, and a "Last logged JA1XYZ · 20m · 41 min" secondary that
+ * degrades to a band-less form, then to "No QSOs logged yet" when the last contact or
+ * its timestamp is unknown.
+ */
+internal fun carSessionDashRow(
+    sessionQsoCount: Int,
+    lastQsoCallsign: String?,
+    lastQsoBandName: String?,
+    lastQsoMinutesAgo: Int?,
+): CarDashRow {
+    val title = listOf(CarSpan("Session · ${qsosLabel(sessionQsoCount)}"))
+    val call = lastQsoCallsign?.takeIf { it.isNotBlank() }
+    val secondary = if (call != null && lastQsoMinutesAgo != null) {
+        val band = lastQsoBandName?.takeIf { it.isNotBlank() }
+        if (band != null) {
+            listOf(CarSpan("Last logged $call · $band · $lastQsoMinutesAgo min"))
+        } else {
+            listOf(CarSpan("Last logged $call · $lastQsoMinutesAgo min"))
+        }
+    } else {
+        listOf(CarSpan("No QSOs logged yet"))
+    }
+    return CarDashRow(CarBadge("Σ", CAR_GRAY_FG, CAR_GRAY_BG), title, secondary, CAR_ROW_ACTIVATION)
+}
+
+/**
+ * Assembles the pane in design order: status, band, then the POTA and/or ROTA
+ * activation rows — or, when neither is active, the single [session] row in their
+ * place. The Screen then applies [selectCarPaneRows] so the band row (not an
+ * activation) is the first to drop on a row-limited host.
+ */
+internal fun buildCarDashboardRows(
+    status: CarDashRow,
+    band: CarDashRow,
+    pota: CarDashRow?,
+    rota: CarDashRow?,
+    session: CarDashRow,
+): List<CarDashRow> {
+    val rows = mutableListOf(status, band)
+    val activations = listOfNotNull(pota, rota)
+    if (activations.isEmpty()) rows.add(session) else rows.addAll(activations)
+    return rows
 }
 
 /** One row of the car's recent-decodes list. */

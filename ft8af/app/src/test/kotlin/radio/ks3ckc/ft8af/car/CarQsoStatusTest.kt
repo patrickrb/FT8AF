@@ -216,46 +216,9 @@ class CarQsoStatusTest {
         assertThat(shouldInvalidateForTick(lastSecond = -1, newSecond = 15)).isTrue()
     }
 
-    // --- POTA / ROTA activation rows ---------------------------------------
-
-    @Test
-    fun buildCarPotaLine_nullOrBlankPark_hidesRow() {
-        assertThat(buildCarPotaLine(null, 3)).isNull()
-        assertThat(buildCarPotaLine("", 3)).isNull()
-        assertThat(buildCarPotaLine("  ", 3)).isNull()
-    }
-
-    @Test
-    fun buildCarPotaLine_formatsParkAndCount() {
-        val spec = buildCarPotaLine("K-1234 + K-5678", 7)!!
-        assertThat(spec.resId).isEqualTo(R.string.car_pota_line)
-        assertThat(spec.args).containsExactly("K-1234 + K-5678", 7).inOrder()
-    }
-
-    @Test
-    fun buildCarPotaLine_nullCount_showsZero() {
-        assertThat(buildCarPotaLine("K-1234", null)!!.args).containsExactly("K-1234", 0).inOrder()
-    }
-
-    @Test
-    fun buildCarRotaLine_inactiveTrip_hidesRow() {
-        assertThat(buildCarRotaLine(false, "Route 66", 5, 2, 12.0)).isNull()
-    }
-
-    @Test
-    fun buildCarRotaLine_sumsSentAndPendingQsos_andFormatsMiles() {
-        val spec = buildCarRotaLine(true, "Route 66", 10, 2, 45.34)!!
-        assertThat(spec.resId).isEqualTo(R.string.car_rota_line)
-        // 12 = 10 sent + 2 still queued offline; miles use the trip
-        // notification's one-decimal format.
-        assertThat(spec.args).containsExactly("Route 66", 12, "45.3").inOrder()
-    }
-
-    @Test
-    fun buildCarRotaLine_blankTripName_fallsBackToTrip() {
-        assertThat(buildCarRotaLine(true, "   ", 0, 0, 0.0)!!.args)
-            .containsExactly("trip", 0, "0.0").inOrder()
-    }
+    // --- Pane row selection ------------------------------------------------
+    // The status/band/POTA/ROTA/session row content, badges, and color spans are
+    // built by the design dashboard helpers, covered in CarDashboardTest.
 
     @Test
     fun selectCarPaneRows_underLimit_keepsAllInOrder() {
