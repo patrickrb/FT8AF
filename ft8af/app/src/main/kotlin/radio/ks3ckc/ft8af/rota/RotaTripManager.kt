@@ -330,11 +330,22 @@ object RotaTripManager {
     }
 
     /**
-     * Give up on a trip that can't be delivered (bad key, deleted trip). Drops
-     * the local queue and forgets the trip — the end-of-trip ADIF upload from the
-     * logbook remains the way to publish it.
+     * Give up on a trip: drop the local queue and forget it — the end-of-trip
+     * ADIF upload from the logbook remains the way to publish its contacts.
+     *
+     * The server row is still completed, best-effort. Discarding used to be
+     * local-only, which stranded a created trip as `active` forever: the site
+     * called the rover live for a day and badged the trip active after that,
+     * with no client left that could end it. One fire-and-forget attempt is
+     * deliberate — for the failure cases this button also serves (bad key,
+     * deleted trip) the call fails and the row was unreachable anyway.
      */
     fun abandonTrip() {
+        // Snapshot before clearTrip wipes them; the coroutine below outlives it.
+        val tripId = RotaSettings.tripId
+        val pendingCreate = RotaSettings.tripPendingCreate
+        val baseUrl = RotaSettings.baseUrl
+        val apiKey = RotaSettings.apiKey
         RotaCqSession.release()
         stopTracking()
         queue?.clear()
@@ -344,6 +355,13 @@ object RotaTripManager {
         resumeHandshakePending = false
         _state.value = RotaTripState()
         log("abandonTrip — local queue dropped")
+        if (shouldCompleteAbandonedTrip(tripId, pendingCreate, apiKey)) {
+            scope.launch {
+                RotaClient.completeTrip(baseUrl, apiKey, tripId)
+                    .onSuccess { log("abandonTrip — server trip $tripId completed") }
+                    .onFailure { log("abandonTrip — server complete failed (${it.message}); row may stay active") }
+            }
+        }
     }
 
     private fun defaultTripName(startedMs: Long): String {
@@ -753,3 +771,15 @@ object RotaTripManager {
         }
     }
 }
+
+/**
+ * Whether abandoning a trip should still complete it server-side. Only when a
+ * server row actually exists to complete: a trip still pending creation has no
+ * id (and nothing to strand), and without an API key the call cannot succeed —
+ * skipping it keeps the abandon path free of a doomed network attempt.
+ */
+internal fun shouldCompleteAbandonedTrip(
+    tripId: String,
+    pendingCreate: Boolean,
+    apiKey: String,
+): Boolean = tripId.isNotBlank() && !pendingCreate && apiKey.isNotBlank()

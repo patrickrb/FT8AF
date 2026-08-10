@@ -936,7 +936,7 @@
     <string name="rota_end_trip">End trip</string>
     <string name="rota_ending">Finishing up — uploading the rest…</string>
     <string name="rota_abandon">Discard local trip</string>
-    <string name="rota_abandon_desc">Stops tracking and drops anything not yet uploaded</string>
+    <string name="rota_abandon_desc">Discard stops tracking, drops anything not yet uploaded, and still ends the trip on roadsontheair.com</string>
     <string name="rota_stat_miles">Miles</string>
     <string name="rota_stat_qsos">Contacts sent</string>
     <string name="rota_stat_pending">Waiting to upload</string>

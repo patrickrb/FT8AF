@@ -557,6 +557,13 @@ private fun ActiveTripCard(
                 Text(stringResource(R.string.rota_abandon), color = TextMuted)
             }
         }
+        // Discard is not the harmless-looking local cleanup it reads as — it
+        // throws away undelivered data. Say what it does before it's tapped.
+        Text(
+            text = stringResource(R.string.rota_abandon_desc),
+            color = TextFaint,
+            fontSize = 11.sp,
+        )
     }
 }
 
