@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		035DDD710715AAC0100E0871 /* Colors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FD3B4836E62F9DC32FAB0DE /* Colors.swift */; };
 		072D76FFDC706DE3E537A3C2 /* BlockedCallsignsSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8FFDE0644205A9AE050BC0 /* BlockedCallsignsSettings.swift */; };
+		092F3A3A654939270685CC27 /* ParkPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55F3AF234143FDFFA45B0AC8 /* ParkPickerSheet.swift */; };
+		094BBB2F12228E68B26D2DB1 /* PotaParkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8887498A3FE21F5B9ADAE63A /* PotaParkService.swift */; };
 		0FD449B6C15FD3407D8E3BC0 /* LogbookCharts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DFF1DC42A9F8F8066F97F7 /* LogbookCharts.swift */; };
 		208767EE6D89D470D7C88E77 /* WaterfallScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E4787AD687D89D858D3C075 /* WaterfallScreen.swift */; };
 		26F661F120C34995BFF73F2D /* FT8DSP in Frameworks */ = {isa = PBXBuildFile; productRef = 93510ED81B9D113E387D0D45 /* FT8DSP */; };
@@ -90,6 +92,7 @@
 		4E09812700CD93E6187CC4BC /* LiveEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEngine.swift; sourceTree = "<group>"; };
 		504C9AD4C6667267DFCABEF9 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		5306EE5215AE14F95F3329F8 /* FilterChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterChip.swift; sourceTree = "<group>"; };
+		55F3AF234143FDFFA45B0AC8 /* ParkPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkPickerSheet.swift; sourceTree = "<group>"; };
 		64B1202A7633AE8CBBFCF2C3 /* TxStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TxStrip.swift; sourceTree = "<group>"; };
 		654EF0B6A0E279E65F355821 /* FT8AF.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FT8AF.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B9E40312EA203F05764FA56 /* QsoLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QsoLogStore.swift; sourceTree = "<group>"; };
@@ -100,6 +103,7 @@
 		82A0D66684F5C2F323454D9B /* FT8AFKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FT8AFKit; path = ../FT8AFKit; sourceTree = SOURCE_ROOT; };
 		8493B7CF97F9744DED622F15 /* ToastOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastOverlay.swift; sourceTree = "<group>"; };
 		87C51D7CB8A8FA5C3F883285 /* geist_mono_bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = geist_mono_bold.ttf; sourceTree = "<group>"; };
+		8887498A3FE21F5B9ADAE63A /* PotaParkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PotaParkService.swift; sourceTree = "<group>"; };
 		89642B9763C7FA33CFF0EE57 /* RadioAudioSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadioAudioSettings.swift; sourceTree = "<group>"; };
 		8BDDB723455CB7AE2BB68EF0 /* WorldMapCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorldMapCanvas.swift; sourceTree = "<group>"; };
 		91DB096C5FC7481CA1B7B49B /* LogbookStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogbookStats.swift; sourceTree = "<group>"; };
@@ -274,6 +278,7 @@
 		948E7F983E403C535796BAB0 /* POTA */ = {
 			isa = PBXGroup;
 			children = (
+				55F3AF234143FDFFA45B0AC8 /* ParkPickerSheet.swift */,
 				B35E490F93FDCACEC4FBF66F /* PotaScreen.swift */,
 			);
 			path = POTA;
@@ -330,6 +335,7 @@
 				4E09812700CD93E6187CC4BC /* LiveEngine.swift */,
 				D131B05E27A96EC4BEB28782 /* OnlineLogService.swift */,
 				FA66E8CE63C02CC35A2BC010 /* PotaActivationStore.swift */,
+				8887498A3FE21F5B9ADAE63A /* PotaParkService.swift */,
 				7E27EE4248BF38A15E0F3B2D /* PotaService.swift */,
 				6B9E40312EA203F05764FA56 /* QsoLogStore.swift */,
 				29B5962B70F4510D76A5BC0A /* TxPlayerService.swift */,
@@ -464,7 +470,9 @@
 				6F7F961AB6678F3E6E60A97A /* LoggingSettings.swift in Sources */,
 				72300AB5D2B37428777C824D /* MapScreen.swift in Sources */,
 				8EF984B5816F012A2DF93FDF /* OnlineLogService.swift in Sources */,
+				092F3A3A654939270685CC27 /* ParkPickerSheet.swift in Sources */,
 				6A8A11D49F8CA3F24D9DED29 /* PotaActivationStore.swift in Sources */,
+				094BBB2F12228E68B26D2DB1 /* PotaParkService.swift in Sources */,
 				595BBF17D95723947D5BFFC4 /* PotaScreen.swift in Sources */,
 				B4122A07A833C6746F51D5D6 /* PotaService.swift in Sources */,
 				4D87F21162B4DCEC806D8785 /* QsoCelebration.swift in Sources */,
