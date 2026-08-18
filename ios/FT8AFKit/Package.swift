@@ -84,10 +84,14 @@ let package = Package(
         .target(
             name: "FT8Engine",
             dependencies: ["FT8DSP"],
-            // us_grid_states.json is the SAME table the Android app ships in
-            // assets/ (Maidenhead 4-char square -> USPS state code). Bundled as
-            // a package resource so UsStateLookup can read it via Bundle.module.
+            // Bundled data the engine reads at runtime via Bundle.module, the
+            // same files the Android app ships in assets/:
+            //  - cty.dat (AD1C country file) backs the DXCC/CQ-zone resolver;
+            //    a plain .copy so it is read verbatim, not compiled/processed.
+            //  - us_grid_states.json (Maidenhead 4-char square -> USPS state
+            //    code) backs UsStateLookup.
             resources: [
+                .copy("Resources/cty.dat"),
                 .process("Resources/us_grid_states.json"),
             ]
         ),

@@ -52,6 +52,12 @@ public final class QsoEngine {
     public var freqMhz: String = ""
     public var active: Bool = false
     public var autoReturnToCq: Bool = true
+    /// CQ modifier inserted between "CQ" and our callsign — the iOS analog of
+    /// Android's `GeneralVariables.toModifier`. Empty for a plain "CQ <call>
+    /// <grid>"; "POTA" while a POTA activation is running, so CQs go out as
+    /// "CQ POTA <call> <grid>". Set/cleared by the engine wiring (LiveEngine)
+    /// from the activation state.
+    public var cqModifier: String = ""
 
     private var stage: TxStage = .idle
     private var target: String?
@@ -98,7 +104,7 @@ public final class QsoEngine {
         resetQso()
         active = true
         stage = .cq
-        pendingTx = "CQ \(myCall) \(myGrid)"
+        pendingTx = buildCqMessage(modifier: cqModifier, myCall: myCall, myGrid: myGrid)
     }
 
     /// Begin answering a specific decoded CQ (operator tapped a station).
@@ -330,11 +336,28 @@ public final class QsoEngine {
         if autoReturnToCq {
             resetQso()
             stage = .cq
-            pendingTx = "CQ \(myCall) \(myGrid)"
+            pendingTx = buildCqMessage(modifier: cqModifier, myCall: myCall, myGrid: myGrid)
         } else {
             stop()
         }
     }
+}
+
+/// Build the CQ transmit message, optionally with a CQ modifier (e.g. "POTA")
+/// inserted between "CQ" and the callsign — the iOS analog of Android building
+/// "CQ <toModifier> <call> <grid>" via `Ft8Message`. FT8 only packs a standard
+/// CQ modifier of 1–4 alphanumeric characters ("CQ POTA W1AW FN31"); a modifier
+/// outside that shape (empty, too long, punctuation) is dropped so we never hand
+/// the encoder a message it can't pack. Callsign/grid are passed through
+/// verbatim (already uppercased by the engine).
+func buildCqMessage(modifier: String, myCall: String, myGrid: String) -> String {
+    let mod = modifier.trimmingCharacters(in: .whitespaces).uppercased()
+    let valid = (1...4).contains(mod.count)
+        && mod.allSatisfy { $0.isLetter || $0.isNumber }
+    if valid {
+        return "CQ \(mod) \(myCall) \(myGrid)"
+    }
+    return "CQ \(myCall) \(myGrid)"
 }
 
 /// FT8 reports are clamped to roughly [-30, +30].

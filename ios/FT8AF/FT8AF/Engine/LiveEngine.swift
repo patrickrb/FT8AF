@@ -737,6 +737,16 @@ final class LiveEngine {
         // Assign a unique ID based on the current record count.
         let nextId = Int64((appState.logbook.records.map { $0.id ?? 0 }.max() ?? 0) + 1)
         record.id = nextId
+        // Stamp POTA ADIF fields (Android: PotaSessionManager.stampQso). MY_SIG /
+        // MY_SIG_INFO mark it as part of our own activation; SIG / SIG_INFO record
+        // the worked station's park when they're a currently-spotted activator
+        // (park-to-park). Both are no-ops when their input is nil.
+        let stamp = potaQsoStamp(
+            activationParkRef: appState.pota.current?.parkRef,
+            workedParkRef: PotaSpots.parkRef(
+                forCallsign: record.call, in: PotaService.shared.spots)
+        )
+        applyPotaStamp(stamp, to: &record)
         appState.logbook.records.insert(record, at: 0)
         QsoLogStore.save(appState.logbook.records)
         // Broadcast the logged QSO over the WSJT-X UDP interface.
@@ -907,6 +917,10 @@ final class LiveEngine {
         qso.band = s.band
         qso.freqMhz = bandToFreqMhz(s.band)
         qso.autoReturnToCq = s.autoCQAfterQSO
+        // While a POTA activation is running, transmit "CQ POTA <call> <grid>"
+        // (Android forces GeneralVariables.toModifier = "POTA" on start and
+        // clears it on end — mirrored here so every CQ-building path picks it up).
+        qso.cqModifier = appState.pota.isActivating ? potaSigProgram : ""
     }
 
     /// Reflect QSO engine status into the UI TxState.

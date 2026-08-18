@@ -60,6 +60,11 @@ extension Adif {
                 potaField(&out, "MY_SIG", "POTA")
                 // Pinned to this single park (not the comma-separated activation ref).
                 potaField(&out, "MY_SIG_INFO", parkRef)
+                // Park-to-park: the worked station's park, stamped at log time when
+                // they were a spotted activator. Empty (omitted) for a normal QSO.
+                // Matches Android's buildActivationAdif SIG/SIG_INFO emission.
+                potaField(&out, "SIG", r.sig)
+                potaField(&out, "SIG_INFO", r.sigInfo)
                 out += "<EOR>\n"
             }
             return PotaDocument(

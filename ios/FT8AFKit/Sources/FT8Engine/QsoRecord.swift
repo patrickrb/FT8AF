@@ -27,6 +27,15 @@ public struct QsoRecord: Equatable, Codable {
     /// Whether this QSO has been accepted by the QRZ.com logbook
     /// (Android: QSLTable.synced_qrz).
     public var syncedQrz: Bool
+    /// POTA activation ADIF fields (Android: QSLTable.my_sig / my_sig_info /
+    /// sig / sig_info). `mySig`/`mySigInfo` = "POTA"/<my park ref> when this QSO
+    /// was logged during our own activation; `sig`/`sigInfo` = "POTA"/<their
+    /// park ref> for a park-to-park contact with a spotted activator. All empty
+    /// for a normal QSO. Stamped at log time by `potaQsoStamp`.
+    public var mySig: String
+    public var mySigInfo: String
+    public var sig: String
+    public var sigInfo: String
 
     public init(
         id: Int64? = nil,
@@ -45,7 +54,11 @@ public struct QsoRecord: Equatable, Codable {
         myGridsquare: String,
         comment: String,
         syncedCloudlog: Bool = false,
-        syncedQrz: Bool = false
+        syncedQrz: Bool = false,
+        mySig: String = "",
+        mySigInfo: String = "",
+        sig: String = "",
+        sigInfo: String = ""
     ) {
         self.id = id
         self.call = call
@@ -64,6 +77,10 @@ public struct QsoRecord: Equatable, Codable {
         self.comment = comment
         self.syncedCloudlog = syncedCloudlog
         self.syncedQrz = syncedQrz
+        self.mySig = mySig
+        self.mySigInfo = mySigInfo
+        self.sig = sig
+        self.sigInfo = sigInfo
     }
 
     /// Custom decode so JSON logs written before the sync flags existed still
@@ -88,5 +105,9 @@ public struct QsoRecord: Equatable, Codable {
         comment = try c.decode(String.self, forKey: .comment)
         syncedCloudlog = try c.decodeIfPresent(Bool.self, forKey: .syncedCloudlog) ?? false
         syncedQrz = try c.decodeIfPresent(Bool.self, forKey: .syncedQrz) ?? false
+        mySig = try c.decodeIfPresent(String.self, forKey: .mySig) ?? ""
+        mySigInfo = try c.decodeIfPresent(String.self, forKey: .mySigInfo) ?? ""
+        sig = try c.decodeIfPresent(String.self, forKey: .sig) ?? ""
+        sigInfo = try c.decodeIfPresent(String.self, forKey: .sigInfo) ?? ""
     }
 }
