@@ -75,7 +75,7 @@ final class LiveEngine {
         qsoEngine = qso
 
         // Fresh TX safety-net + caller-queue state for this session.
-        supervisor = TxSupervisor(nowMs: Int64(Date().timeIntervalSince1970 * 1000))
+        supervisor = TxSupervisor(nowMs: nowMs())
         callerQueue.removeAll()
         appState.tx.queuedCallers = []
 
@@ -84,6 +84,10 @@ final class LiveEngine {
 
         let accumulator = audio.accumulator
         let rxOffset = rxOffsetMs
+        // Seed the decode loop with the current whole-clock offset so its first
+        // slot boundary is anchored correctly; it re-reads the live value each
+        // slot via readClockOffsetMs below.
+        let initialClockOffset = currentClockOffsetMs()
 
         // Build the MainActor state-mutation closures here, on the main actor, so
         // the background loops never reference `AppState` directly. The closures
@@ -108,6 +112,17 @@ final class LiveEngine {
                 deep: appState.settings.deepDecode,
                 early: appState.settings.earlyDecode
             )
+        }
+        // Live whole-clock offset (NTP + manual) for the decode loop's slot/TX
+        // time math, read on the main actor each slot so a change applies live.
+        let readClockOffsetMs: @Sendable @MainActor () -> Int64 = {
+            appState.clock
+                .clockOffset(manualMs: appState.settings.manualClockOffsetMs)
+                .combinedMs
+        }
+        // Publish the mean decode DT for the clock-health indicator.
+        let applyClockDt: @Sendable @MainActor (Float) -> Void = { dt in
+            appState.clock.dtOffsetSec = dt
         }
         let applyWaterfall: @Sendable @MainActor (WaterfallUpdate) -> Void = { update in
             let wf = appState.waterfall
@@ -140,8 +155,11 @@ final class LiveEngine {
                     await self?.runDecodeLoop(
                         accumulator: accumulator,
                         initialRxOffset: rxOffset,
+                        initialClockOffsetMs: initialClockOffset,
                         readDecodeOptions: readDecodeOptions,
-                        applyDecodes: applyDecodes
+                        readClockOffsetMs: readClockOffsetMs,
+                        applyDecodes: applyDecodes,
+                        applyClockDt: applyClockDt
                     )
                 }
                 // Waterfall pipeline
@@ -255,7 +273,7 @@ final class LiveEngine {
     /// Mirrors Android `forceLogAndMoveOn`.
     func forceLogAndMoveOn(nextCallsign: String? = nil) {
         guard let qso = qsoEngine, let appState else { return }
-        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let nowMs = nowMs()
 
         if case .completed(let record)? = qso.forceLog() {
             logCompletedQso(record)
@@ -285,7 +303,7 @@ final class LiveEngine {
         appState.tx.targetSnr = nil
         appState.tx.conversationLog.removeAll()
         supervisor.resetAttempts()
-        supervisor.resetWatchdog(nowMs: Int64(Date().timeIntervalSince1970 * 1000))
+        supervisor.resetWatchdog(nowMs: nowMs())
         syncQsoStatusToUI()
     }
 
@@ -364,14 +382,19 @@ final class LiveEngine {
     private nonisolated func runDecodeLoop(
         accumulator: SlotAccumulator,
         initialRxOffset: Int64,
+        initialClockOffsetMs: Int64,
         readDecodeOptions: @escaping @Sendable @MainActor () -> DecodeOptions,
-        applyDecodes: @escaping @Sendable @MainActor ([DecodeMessage]) -> Void
+        readClockOffsetMs: @escaping @Sendable @MainActor () -> Int64,
+        applyDecodes: @escaping @Sendable @MainActor ([DecodeMessage]) -> Void,
+        applyClockDt: @escaping @Sendable @MainActor (Float) -> Void
     ) async {
         var rxOffsetMs = initialRxOffset
         // Seed one slot back so the first completed slot still decodes (the
-        // scheduler fires when `audioSlotID > lastDecodedAudioSlot`).
+        // scheduler fires when `audioSlotID > lastDecodedAudioSlot`). The seed
+        // uses the whole-clock offset so it lands on the same slot grid the loop
+        // will use below.
         var lastDecodedAudioSlot: Int64 = SlotClock.rxSlotID(
-            atUtcMs: Int64(Date().timeIntervalSince1970 * 1000),
+            atUtcMs: Int64(Date().timeIntervalSince1970 * 1000) + initialClockOffsetMs,
             rxOffsetMs: rxOffsetMs
         ) - 1
 
@@ -379,8 +402,14 @@ final class LiveEngine {
             try? await Task.sleep(for: .milliseconds(200))
             if Task.isCancelled { break }
 
-            let opts = await MainActor.run { readDecodeOptions() }
-            let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+            // Read the live decode options and whole-clock offset in one hop.
+            let (opts, clockOffsetMs) = await MainActor.run {
+                (readDecodeOptions(), readClockOffsetMs())
+            }
+            // The whole-clock correction (NTP + manual) shifts every slot/TX
+            // time read below; DtCalibrator's rxOffsetMs is applied separately
+            // inside rxSlotID (RX-only capture-latency comp).
+            let nowMs = Int64(Date().timeIntervalSince1970 * 1000) + clockOffsetMs
 
             // Decide whether to decode now (boundary vs. early), which slot's
             // audio, and how big a trailing window — see DecodeScheduler.
@@ -411,6 +440,11 @@ final class LiveEngine {
                     rxOffsetMs: rxOffsetMs,
                     decodedDtSec: dtValues
                 )
+                // Publish the mean DT for the clock-health indicator (a
+                // consistent bias across the stations we hear proxies our own
+                // clock offset — mirrors Android's ClockSync source).
+                let meanDt = dtValues.reduce(0, +) / Float(dtValues.count)
+                await MainActor.run { applyClockDt(meanDt) }
             }
 
             // With early decode the reply must wait out the rest of the cycle so
@@ -473,7 +507,7 @@ final class LiveEngine {
         OnlineLogService.shared.enqueuePskDecodes(decoded, dialFreqHz: dialHz, appState: appState)
 
         let settings = appState.settings
-        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let nowMs = nowMs()
 
         // Log incoming RX messages addressed to us for the conversation panel.
         let myCall = settings.myCall.uppercased()
@@ -521,7 +555,7 @@ final class LiveEngine {
             // Find the decoded message from this station to use as autoOpenMessage.
             if let answerMsg = decoded.first(where: { $0.callFrom.uppercased() == dx.uppercased() }) {
                 appState.tx.autoOpenMessage = DecodeMessage(
-                    utcTime: Self.utcTimeString(from: Int64(Date().timeIntervalSince1970 * 1000)),
+                    utcTime: Self.utcTimeString(from: nowMs),
                     callFrom: answerMsg.callFrom,
                     callTo: answerMsg.callTo,
                     snr: answerMsg.snr,
@@ -761,7 +795,7 @@ final class LiveEngine {
 
     /// Restart both TX safety nets (fresh CQ run / new target).
     private func armSupervisor() {
-        supervisor.resetWatchdog(nowMs: Int64(Date().timeIntervalSince1970 * 1000))
+        supervisor.resetWatchdog(nowMs: nowMs())
         supervisor.resetAttempts()
     }
 
@@ -796,7 +830,7 @@ final class LiveEngine {
     /// than that much leading audio would be clipped, the slot is skipped.
     private func beginTxPlayback(message: String, samples: [Float]) {
         guard let appState else { return }
-        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let nowMs = nowMs()
         let clipMs = TxTiming.lateStartClipMs(
             msIntoCycle: SlotClock.msIntoCycle(atUtcMs: nowMs)
         )
@@ -909,6 +943,30 @@ final class LiveEngine {
 
     // MARK: - Helpers
 
+    /// Wall clock (epoch ms) shifted by the unified whole-clock correction
+    /// (NTP + manual). This is the single accessor every MainActor slot/TX/log
+    /// time read routes through, so a manual or NTP offset moves RX slot
+    /// detection, TX key-up, and logged UTC together — matching Android's
+    /// `UtcTimer.getSystemTime()`. Distinct from DtCalibrator's RX-only
+    /// rxOffsetMs, which is applied separately inside `rxSlotID`.
+    private func nowMs() -> Int64 {
+        let wallMs = Int64(Date().timeIntervalSince1970 * 1000)
+        guard let appState else { return wallMs }
+        return appState.clock
+            .clockOffset(manualMs: appState.settings.manualClockOffsetMs)
+            .apply(toUtcMs: wallMs)
+    }
+
+    /// The current combined whole-clock offset (ms) for the detached decode loop
+    /// to fold into its wall-clock reads. Read on the MainActor each slot so a
+    /// live manual/NTP change applies without restarting the session.
+    private func currentClockOffsetMs() -> Int64 {
+        guard let appState else { return 0 }
+        return appState.clock
+            .clockOffset(manualMs: appState.settings.manualClockOffsetMs)
+            .combinedMs
+    }
+
     /// Push current user settings into the QSO engine.
     private func syncSettingsToQso() {
         guard let qso = qsoEngine, let appState else { return }
@@ -992,7 +1050,7 @@ final class LiveEngine {
                 appState.waterfall.txFreqHz = txHz
             }
             let msg = DecodeMessage(
-                utcTime: Self.utcTimeString(from: Int64(Date().timeIntervalSince1970 * 1000)),
+                utcTime: Self.utcTimeString(from: self.nowMs()),
                 callFrom: call, callTo: "", snr: Int(snr),
                 freqHz: appState.waterfall.txFreqHz, grid: grid, extra: "", slotIndex: 0
             )
@@ -1043,7 +1101,7 @@ final class LiveEngine {
             udp.clearReplayCache()
         }
         udp.sendStatus(buildUdpStatus())
-        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let nowMs = nowMs()
         if nowMs - lastUdpHeartbeatMs >= 15_000 {
             lastUdpHeartbeatMs = nowMs
             udp.sendHeartbeat(version: Self.appVersion)
@@ -1080,7 +1138,7 @@ final class LiveEngine {
 
     private func broadcastUdpDecodes(_ decoded: [DecodedMessage]) {
         guard udp.isEnabled, !decoded.isEmpty else { return }
-        let timeMs = UInt32(Int64(Date().timeIntervalSince1970 * 1000) % 86_400_000)
+        let timeMs = UInt32(nowMs() % 86_400_000)
         for m in decoded {
             let text = m.rawText.isEmpty ? "\(m.callTo) \(m.callFrom) \(m.extra)" : m.rawText
             udp.sendDecode(WsjtxCodec.Decode(

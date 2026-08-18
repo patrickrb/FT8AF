@@ -15,6 +15,10 @@ struct DecodeScreen: View {
                     .font(.ft8afUI(size: 18, weight: .bold))
                     .foregroundStyle(textPrimary)
 
+                // Clock-sync health from the mean decode DT.
+                ClockSyncIndicator(offsetSec: appState.clock.dtOffsetSec)
+                    .padding(.leading, 8)
+
                 Spacer()
 
                 // Compact mode toggle
