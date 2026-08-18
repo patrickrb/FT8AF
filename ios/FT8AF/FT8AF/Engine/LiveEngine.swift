@@ -509,6 +509,11 @@ final class LiveEngine {
         let settings = appState.settings
         let nowMs = nowMs()
 
+        // Keep the live POTA spot cache warm while an activation is running so
+        // park-to-park QSO stamping can resolve worked calls even when the Hunt
+        // tab (the only other refresh driver) isn't visible.
+        maybeRefreshPotaSpotsForActivation(nowMs: nowMs)
+
         // Log incoming RX messages addressed to us for the conversation panel.
         let myCall = settings.myCall.uppercased()
         if !myCall.isEmpty {
@@ -791,6 +796,28 @@ final class LiveEngine {
         OnlineLogService.shared.handleQsoLogged(record, appState: appState)
         // Trigger QSO celebration animation.
         appState.tx.qsoCompletedAt = Date()
+    }
+
+    /// POTA activation-time spot-feed cadence, matching Android's
+    /// `PotaSpotsRepository` (60 s) and the Hunt tab's `.task` loop.
+    private static let potaActivationSpotRefreshIntervalMs: Int64 = 60_000
+
+    /// Poll the live POTA spot feed while an activation is running, so the P2P
+    /// lookup (`PotaSpots.parkRef`) sees current activators even when the Hunt
+    /// tab isn't driving `PotaService.refresh()`. The decision is the pure,
+    /// kit-tested `shouldRefreshPotaSpots`; the shared `lastRefreshMs` timestamp
+    /// dedupes this against the Hunt-tab poller (no double fetch when both run),
+    /// and the fetch is fired off-loop so the decode path never blocks on it.
+    private func maybeRefreshPotaSpotsForActivation(nowMs: Int64) {
+        guard let appState else { return }
+        let svc = PotaService.shared
+        guard PotaSpots.shouldRefreshPotaSpots(
+            isActivating: appState.pota.isActivating,
+            lastRefreshMs: svc.lastRefreshMs,
+            nowMs: nowMs,
+            intervalMs: Self.potaActivationSpotRefreshIntervalMs
+        ) else { return }
+        Task { await svc.refresh() }
     }
 
     /// Restart both TX safety nets (fresh CQ run / new target).
