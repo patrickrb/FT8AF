@@ -72,6 +72,7 @@
 		F3CB49EBF218C3BB9FAE02D6 /* DecodeRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11DF7123A737FE9F5236677F /* DecodeRow.swift */; };
 		F4E60463DA065CDAE7B84EF3 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E706B1D26B550FE4D798B68 /* Accelerate.framework */; };
 		F56F35C07C7374F28A21ADE3 /* AudioRouteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B94D7FBAC132C5854796F79 /* AudioRouteController.swift */; };
+		F6878A4D126EF8AA903D1582 /* PotaSelfSpotService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F16B3079DF2D804F3F08F77 /* PotaSelfSpotService.swift */; };
 		F917448B524020C565485D03 /* SplashScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3A872FCC168F7F5523C8D69 /* SplashScreen.swift */; };
 		FEB99CFFD070BA6B893ADC83 /* WaterfallCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = B681B14FC4FED15C628471DF /* WaterfallCanvas.swift */; };
 /* End PBXBuildFile section */
@@ -115,6 +116,7 @@
 		91DB096C5FC7481CA1B7B49B /* LogbookStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogbookStats.swift; sourceTree = "<group>"; };
 		93DFF1DC42A9F8F8066F97F7 /* LogbookCharts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogbookCharts.swift; sourceTree = "<group>"; };
 		9BCE0C13DF4842EC394EFADF /* MapScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapScreen.swift; sourceTree = "<group>"; };
+		9F16B3079DF2D804F3F08F77 /* PotaSelfSpotService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PotaSelfSpotService.swift; sourceTree = "<group>"; };
 		A3A872FCC168F7F5523C8D69 /* SplashScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashScreen.swift; sourceTree = "<group>"; };
 		A41EFDE500F865A3B393171D /* FT8AFTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FT8AFTab.swift; sourceTree = "<group>"; };
 		A53063BBF11F97C62BC0AFC9 /* AppTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTabView.swift; sourceTree = "<group>"; };
@@ -344,6 +346,7 @@
 				D131B05E27A96EC4BEB28782 /* OnlineLogService.swift */,
 				FA66E8CE63C02CC35A2BC010 /* PotaActivationStore.swift */,
 				8887498A3FE21F5B9ADAE63A /* PotaParkService.swift */,
+				9F16B3079DF2D804F3F08F77 /* PotaSelfSpotService.swift */,
 				7E27EE4248BF38A15E0F3B2D /* PotaService.swift */,
 				6B9E40312EA203F05764FA56 /* QsoLogStore.swift */,
 				58F3A88D466226E098AA8666 /* SntpSyncService.swift */,
@@ -484,6 +487,7 @@
 				6A8A11D49F8CA3F24D9DED29 /* PotaActivationStore.swift in Sources */,
 				094BBB2F12228E68B26D2DB1 /* PotaParkService.swift in Sources */,
 				595BBF17D95723947D5BFFC4 /* PotaScreen.swift in Sources */,
+				F6878A4D126EF8AA903D1582 /* PotaSelfSpotService.swift in Sources */,
 				B4122A07A833C6746F51D5D6 /* PotaService.swift in Sources */,
 				4D87F21162B4DCEC806D8785 /* QsoCelebration.swift in Sources */,
 				E375A4D50C25F5437C2C9F7F /* QsoLogStore.swift in Sources */,
