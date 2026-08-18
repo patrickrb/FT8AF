@@ -19,6 +19,13 @@ final class PotaService {
     /// Human-readable failure from the last fetch, nil after a success.
     var lastError: String?
     var lastUpdatedAt: Date?
+    /// Epoch-ms timestamp of the last refresh *attempt* (set when a fetch
+    /// actually starts, before the network round-trip). Shared dedupe point for
+    /// both refresh drivers: the Hunt-tab `.task` poller and LiveEngine's
+    /// activation-time poller route through the same value, so an activation
+    /// refresh won't pile on right after a Hunt refresh (and vice-versa). Nil
+    /// until the first fetch. See `PotaSpots.shouldRefreshPotaSpots`.
+    private(set) var lastRefreshMs: Int64?
     /// Hunt-tab constraint: Android hunts FT8-relevant spots only; the toggle
     /// lets the operator peek at the full feed.
     var ft8Only = true
@@ -36,6 +43,9 @@ final class PotaService {
         if isLoading { return }
         guard let url = URL(string: PotaSpots.activatorSpotsURLString) else { return }
         isLoading = true
+        // Stamp the attempt now (not on success) so both pollers dedupe against
+        // a fetch that's in flight, and a failing endpoint isn't hammered.
+        lastRefreshMs = Int64(Date().timeIntervalSince1970 * 1000)
         defer { isLoading = false }
 
         var req = URLRequest(url: url)

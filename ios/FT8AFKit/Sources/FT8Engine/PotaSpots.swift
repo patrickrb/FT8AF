@@ -161,6 +161,24 @@ public enum PotaSpots {
         return ref
     }
 
+    // MARK: - Activation-time refresh cadence
+
+    /// Whether the live spot cache should be refreshed *now* to keep an
+    /// in-progress activation's park-to-park lookup (`parkRef(forCallsign:in:)`)
+    /// current, given when it was last refreshed. Mirrors Android's always-on
+    /// `PotaSpotsRepository` poller: true only while an activation is running and
+    /// the last refresh is at least `intervalMs` old (or there has never been
+    /// one). Lets the engine poll the feed during an activation regardless of the
+    /// visible tab, deduped against the Hunt-tab poller because both update the
+    /// shared last-refresh timestamp. `nowMs`/`lastRefreshMs` are epoch ms.
+    public static func shouldRefreshPotaSpots(
+        isActivating: Bool, lastRefreshMs: Int64?, nowMs: Int64, intervalMs: Int64
+    ) -> Bool {
+        guard isActivating else { return false }
+        guard let last = lastRefreshMs else { return true }
+        return nowMs - last >= intervalMs
+    }
+
     // MARK: - Tolerant JSON field extraction
 
     private static func str(_ any: Any?) -> String {
