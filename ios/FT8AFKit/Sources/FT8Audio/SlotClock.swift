@@ -8,23 +8,25 @@ import Foundation
 /// pushes the effective time slightly negative (matches Rust `div_euclid` /
 /// `rem_euclid`, which the desktop relies on).
 public enum SlotClock {
+    /// Default cycle length (FT8, ms). Mode-parameterized callers pass the
+    /// active `ModeProfile.cycleMs`; the default keeps FT8 callers unchanged.
     public static let cycleMs: Int64 = 15_000
 
-    /// The slot index containing `nowMs` (15 s slots since the epoch).
-    public static func slotID(atUtcMs nowMs: Int64) -> Int64 {
+    /// The slot index containing `nowMs` (`cycleMs`-length slots since the epoch).
+    public static func slotID(atUtcMs nowMs: Int64, cycleMs: Int64 = SlotClock.cycleMs) -> Int64 {
         floorDiv(nowMs, cycleMs)
     }
 
-    /// Milliseconds elapsed into the current 15 s slot (0..<15000).
-    public static func msIntoCycle(atUtcMs nowMs: Int64) -> Int64 {
+    /// Milliseconds elapsed into the current slot (0..<cycleMs).
+    public static func msIntoCycle(atUtcMs nowMs: Int64, cycleMs: Int64 = SlotClock.cycleMs) -> Int64 {
         floorMod(nowMs, cycleMs)
     }
 
     /// The RX-window slot index. The RX boundary runs on a clock shifted later by
-    /// the capture-latency compensation (`rxOffsetMs`) so the sliced 15 s slot
-    /// aligns with the audio that has actually arrived in the buffer; UTC display
-    /// and TX still use the unshifted clock.
-    public static func rxSlotID(atUtcMs nowMs: Int64, rxOffsetMs: Int64) -> Int64 {
+    /// the capture-latency compensation (`rxOffsetMs`) so the sliced slot aligns
+    /// with the audio that has actually arrived in the buffer; UTC display and TX
+    /// still use the unshifted clock.
+    public static func rxSlotID(atUtcMs nowMs: Int64, rxOffsetMs: Int64, cycleMs: Int64 = SlotClock.cycleMs) -> Int64 {
         floorDiv(nowMs - rxOffsetMs, cycleMs)
     }
 

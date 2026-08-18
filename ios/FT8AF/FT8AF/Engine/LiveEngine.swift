@@ -105,12 +105,19 @@ final class LiveEngine {
         let readSpectrumWidthHz: @Sendable @MainActor () -> Int = {
             appState.settings.spectrumWidthHz
         }
+        // Live slot length for the waterfall's UTC-boundary gridline: read each
+        // tick so an FT8↔FT4 switch re-grids the labels (7.5 s vs 15 s) without
+        // restarting. WaterfallTimestampGate re-baselines on a slotMs change.
+        let readSlotMs: @Sendable @MainActor () -> Int64 = {
+            appState.settings.mode.profile.cycleMs
+        }
         // Live decode options for the decode loop: read on the main actor each
         // slot so toggling deep/early decode applies without restarting.
         let readDecodeOptions: @Sendable @MainActor () -> DecodeOptions = {
             DecodeOptions(
                 deep: appState.settings.deepDecode,
-                early: appState.settings.earlyDecode
+                early: appState.settings.earlyDecode,
+                profile: appState.settings.mode.profile
             )
         }
         // Live whole-clock offset (NTP + manual) for the decode loop's slot/TX
@@ -167,6 +174,7 @@ final class LiveEngine {
                     await self?.runWaterfallLoop(
                         accumulator: accumulator,
                         readSpectrumWidthHz: readSpectrumWidthHz,
+                        readSlotMs: readSlotMs,
                         applyWaterfall: applyWaterfall
                     )
                 }
@@ -397,6 +405,12 @@ final class LiveEngine {
             atUtcMs: Int64(Date().timeIntervalSince1970 * 1000) + initialClockOffsetMs,
             rxOffsetMs: rxOffsetMs
         ) - 1
+        // The cadence the slot cursor above was computed under (the pre-loop
+        // seed used the default FT8 grid). A mode switch changes it and forces a
+        // reseed, since slot indices aren't comparable across cycle lengths.
+        // Seeding this to the FT8 default means an FT8 session never reseeds/skips
+        // on the first tick (byte-identical startup); an FT4 session reseeds once.
+        var lastCycleMs: Int64 = SlotClock.cycleMs
 
         while !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(200))
@@ -406,10 +420,24 @@ final class LiveEngine {
             let (opts, clockOffsetMs) = await MainActor.run {
                 (readDecodeOptions(), readClockOffsetMs())
             }
+            let profile = opts.profile
             // The whole-clock correction (NTP + manual) shifts every slot/TX
             // time read below; DtCalibrator's rxOffsetMs is applied separately
             // inside rxSlotID (RX-only capture-latency comp).
             let nowMs = Int64(Date().timeIntervalSince1970 * 1000) + clockOffsetMs
+
+            // Mode switch (or first pass): the slot grid changed length, so the
+            // cursor from the old cadence is meaningless. Reseed one slot back on
+            // the new grid — the RX clock cleanly restarts without tearing down
+            // the audio session — and skip this tick so we don't decode a
+            // stale-width window straddling the switch.
+            if profile.cycleMs != lastCycleMs {
+                lastCycleMs = profile.cycleMs
+                lastDecodedAudioSlot = SlotClock.rxSlotID(
+                    atUtcMs: nowMs, rxOffsetMs: rxOffsetMs, cycleMs: profile.cycleMs
+                ) - 1
+                continue
+            }
 
             // Decide whether to decode now (boundary vs. early), which slot's
             // audio, and how big a trailing window — see DecodeScheduler.
@@ -418,7 +446,8 @@ final class LiveEngine {
                 rxOffsetMs: rxOffsetMs,
                 earlyDecode: opts.early,
                 lastDecodedAudioSlotID: lastDecodedAudioSlot,
-                sampleRate: Int(FT8.sampleRate)
+                sampleRate: Int(FT8.sampleRate),
+                profile: profile
             ) else { continue }
             lastDecodedAudioSlot = plan.audioSlotID
 
@@ -427,7 +456,7 @@ final class LiveEngine {
             let samples = accumulator.takeTrailing(plan.windowSamples)
             // Share the engine-lifetime hash table so `<...>` compound calls
             // resolve across slots (a fresh decoder is built each slot).
-            let decoder = FT8Decoder(hashTable: hashTable)
+            let decoder = FT8Decoder(isFT8: profile.isFT8, hashTable: hashTable)
             decoder.setDeep(opts.deep) // raise LDPC iterations when deep decode is on
             decoder.feedSlot(samples)
             // decodeSlotDeep runs the initial pass and, only when deep decode is
@@ -455,7 +484,8 @@ final class LiveEngine {
             // clock). Zero when decoding at the boundary already.
             let txBoundaryDelayMs = DecodeScheduler.replyBoundaryDelayMs(
                 earlyDecode: opts.early,
-                msIntoCycle: SlotClock.msIntoCycle(atUtcMs: nowMs)
+                msIntoCycle: SlotClock.msIntoCycle(atUtcMs: nowMs, cycleMs: profile.cycleMs),
+                profile: profile
             )
 
             // Map to UI messages and update state on MainActor.
@@ -834,6 +864,17 @@ final class LiveEngine {
     private func scheduleTx(message: String, freqHz: Float, boundaryDelayMs: Int64 = 0) {
         guard let appState else { return }
         guard !appState.tx.isTuning else { return } // tune and FT8 TX are exclusive
+        // FT4 TX is DEFERRED: the iOS `FT8Encoder` only synthesizes FT8 waveforms
+        // (`ft8_encode`, 79 tones, 0.160 s / BT 2.0), and the whole TX audio
+        // pipeline (late-start slack, sequencer cadence) is FT8-tuned and
+        // unvalidated on-air for FT4. The native `ft4_encode` + parameterized
+        // `synth_gfsk_offset` make enabling it a bounded future change, but until
+        // it can be verified transmitting we run FT4 as RX + timing only — never
+        // key a mutilated / off-grid signal. FT8 is unaffected.
+        guard appState.settings.mode.profile.isFT8 else { return }
+        // Capture the profile NOW so a mid-delay FT8->FT4 mode switch can't make
+        // beginTxPlayback clip this (FT8) signal with FT4 timing.
+        let profile = appState.settings.mode.profile
         guard let samples = FT8Encoder.generateFT8(message, baseFreqHz: freqHz) else { return }
 
         // Wait out the cycle remainder for an early-decoded reply, then the
@@ -846,7 +887,7 @@ final class LiveEngine {
                 try? await Task.sleep(for: .milliseconds(totalDelayMs))
             }
             guard !Task.isCancelled else { return }
-            self?.beginTxPlayback(message: message, samples: samples)
+            self?.beginTxPlayback(message: message, samples: samples, profile: profile)
         }
     }
 
@@ -858,11 +899,16 @@ final class LiveEngine {
     /// them audible but undecodable (see CLAUDE.md, TX pipeline gotcha #2).
     /// The late-start-tolerance setting is a SKIP threshold instead: when more
     /// than that much leading audio would be clipped, the slot is skipped.
-    private func beginTxPlayback(message: String, samples: [Float]) {
+    private func beginTxPlayback(message: String, samples: [Float], profile: ModeProfile) {
         guard let appState else { return }
         let nowMs = nowMs()
+        // `profile` is captured at schedule time (see scheduleTx) so a mode
+        // switch during the TX delay can't clip this signal with another mode's
+        // timing. For FT8 (the only mode that reaches here today) the cycle +
+        // slack are byte-identical to the old constants (15000 / 2360).
         let clipMs = TxTiming.lateStartClipMs(
-            msIntoCycle: SlotClock.msIntoCycle(atUtcMs: nowMs)
+            msIntoCycle: SlotClock.msIntoCycle(atUtcMs: nowMs, cycleMs: profile.cycleMs),
+            slackMs: profile.slackMs
         )
         guard !TxTiming.shouldSkip(
             clipMs: clipMs,
@@ -913,6 +959,7 @@ final class LiveEngine {
     private nonisolated func runWaterfallLoop(
         accumulator: SlotAccumulator,
         readSpectrumWidthHz: @escaping @Sendable @MainActor () -> Int,
+        readSlotMs: @escaping @Sendable @MainActor () -> Int64,
         applyWaterfall: @escaping @Sendable @MainActor (WaterfallUpdate) -> Void
     ) async {
         let sampleRate = Int(FT8.sampleRate)
@@ -924,7 +971,8 @@ final class LiveEngine {
             try? await Task.sleep(for: .milliseconds(250))
             if Task.isCancelled { break }
 
-            let displayMaxHz = Float(await MainActor.run { readSpectrumWidthHz() })
+            let (widthHz, slotMs) = await MainActor.run { (readSpectrumWidthHz(), readSlotMs()) }
+            let displayMaxHz = Float(widthHz)
             let columns = WaterfallRowBuilder.columns(sampleRate: sampleRate, maxHz: displayMaxHz)
 
             let samples = accumulator.peekRecent(needed)
@@ -949,13 +997,14 @@ final class LiveEngine {
             let scale = maxPower > 0 ? 1.0 / maxPower : 1.0
             let spectrum = power.map { min($0 * scale, 1.0) }
 
-            // Stamp the UTC label once on the first row of each FT8 period
-            // (label shows the period start, matching Android).
+            // Stamp the UTC label once on the first row of each slot period
+            // (label shows the period start, matching Android). slotMs tracks the
+            // active mode (15 s FT8 / 7.5 s FT4); the gate re-baselines on change.
             let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
             var timestamp: String?
-            if timestampGate.shouldDraw(utcMs: nowMs) {
+            if timestampGate.shouldDraw(utcMs: nowMs, slotMs: slotMs) {
                 timestamp = WaterfallTimestampGate.utcLabel(
-                    forUtcMs: WaterfallTimestampGate.slotStartMs(utcMs: nowMs)
+                    forUtcMs: WaterfallTimestampGate.slotStartMs(utcMs: nowMs, slotMs: slotMs)
                 )
             }
 
@@ -1154,14 +1203,15 @@ final class LiveEngine {
         let qsoStatus = qsoEngine?.status()
         let dialMhz = Double(bandToFreqMhz(s?.band ?? "20M")) ?? 14.074
         let df = UInt32(max(0, Int(appState?.waterfall.txFreqHz ?? 1500)))
+        let profile = (s?.mode ?? .ft8).profile
         return WsjtxCodec.Status(
-            dialFreqHz: UInt64(dialMhz * 1_000_000), mode: "FT8",
-            dxCall: qsoStatus?.target ?? "", report: "", txMode: "FT8",
+            dialFreqHz: UInt64(dialMhz * 1_000_000), mode: profile.displayName,
+            dxCall: qsoStatus?.target ?? "", report: "", txMode: profile.displayName,
             txEnabled: qsoStatus?.active ?? false,
             transmitting: appState?.tx.isTransmitting ?? false, decoding: isRunning,
             rxDf: df, txDf: df, deCall: s?.myCall ?? "", deGrid: s?.myGrid ?? "",
             dxGrid: "", txWatchdog: false, subMode: "", fastMode: false,
-            specialOpMode: 0, freqTolerance: 0xFFFF_FFFF, trPeriod: 15,
+            specialOpMode: 0, freqTolerance: 0xFFFF_FFFF, trPeriod: profile.trPeriodSeconds,
             configName: "Default", txMessage: qsoStatus?.txMessage ?? ""
         )
     }
@@ -1169,11 +1219,12 @@ final class LiveEngine {
     private func broadcastUdpDecodes(_ decoded: [DecodedMessage]) {
         guard udp.isEnabled, !decoded.isEmpty else { return }
         let timeMs = UInt32(nowMs() % 86_400_000)
+        let modeName = (appState?.settings.mode ?? .ft8).rawValue
         for m in decoded {
             let text = m.rawText.isEmpty ? "\(m.callTo) \(m.callFrom) \(m.extra)" : m.rawText
             udp.sendDecode(WsjtxCodec.Decode(
                 isNew: true, timeMs: timeMs, snr: Int32(m.snr), deltaTime: Double(m.timeSec),
-                deltaFreq: UInt32(max(0, Int(m.freqHz))), mode: "FT8", message: text,
+                deltaFreq: UInt32(max(0, Int(m.freqHz))), mode: modeName, message: text,
                 lowConfidence: false, offAir: false
             ))
         }
@@ -1215,12 +1266,16 @@ struct WaterfallUpdate: Sendable {
 }
 
 /// Live decode toggles read on the main actor at the start of each slot and
-/// handed to the background decode loop: deep decode (LDPC iteration cap) and
-/// early decode (decode ~1.5 s before the boundary). Read fresh each slot so a
-/// settings change applies without restarting the session.
+/// handed to the background decode loop: deep decode (LDPC iteration cap),
+/// early decode (decode ~1.5 s before the boundary), and the active operating
+/// mode's `ModeProfile` (slot cadence + decoder protocol). Read fresh each slot
+/// so a settings change — including an FT8↔FT4 switch — applies without
+/// restarting the session; the loop reseeds its slot cursor when `cycleMs`
+/// changes so the new cadence takes effect cleanly.
 struct DecodeOptions: Sendable {
     let deep: Bool
     let early: Bool
+    let profile: ModeProfile
 }
 
 /// Initializer extension on DecodedMessage for constructing from individual
