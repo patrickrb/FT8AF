@@ -15,7 +15,6 @@ final class LiveEngine {
     private let audio = AudioCaptureService()
     private let txPlayer = TxPlayerService()
     private var engineTask: Task<Void, Never>?
-    private var rxOffsetMs: Int64 = 0
 
     // Persistent callsign-hash store, shared across every per-slot decoder so a
     // hashed compound call (`<...>`) resolves against a full call heard in an
@@ -78,12 +77,14 @@ final class LiveEngine {
         supervisor = TxSupervisor(nowMs: nowMs())
         callerQueue.removeAll()
         appState.tx.queuedCallers = []
+        // The automatic band-median DT correction is runtime-only: start each
+        // session from a clean slate and let the band re-discipline the clock.
+        appState.clock.autoOffsetMs = 0
 
         // Bring up the WSJT-X UDP interface for this session.
         setupUdp(appState: appState)
 
         let accumulator = audio.accumulator
-        let rxOffset = rxOffsetMs
         // Seed the decode loop with the current whole-clock offset so its first
         // slot boundary is anchored correctly; it re-reads the live value each
         // slot via readClockOffsetMs below.
@@ -120,8 +121,9 @@ final class LiveEngine {
                 profile: appState.settings.mode.profile
             )
         }
-        // Live whole-clock offset (NTP + manual) for the decode loop's slot/TX
-        // time math, read on the main actor each slot so a change applies live.
+        // Live whole-clock offset (NTP + manual + auto-DT) for the decode loop's
+        // slot/TX time math, read on the main actor each slot so a change applies
+        // live — including the auto-DT correction this loop itself publishes.
         let readClockOffsetMs: @Sendable @MainActor () -> Int64 = {
             appState.clock
                 .clockOffset(manualMs: appState.settings.manualClockOffsetMs)
@@ -130,6 +132,12 @@ final class LiveEngine {
         // Publish the mean decode DT for the clock-health indicator.
         let applyClockDt: @Sendable @MainActor (Float) -> Void = { dt in
             appState.clock.dtOffsetSec = dt
+        }
+        // Publish the automatic band-median DT correction (whole-clock). Folded
+        // into `clockOffset.combinedMs`, so the very next slot's `nowMs` — and
+        // therefore RX slot detection, TX key-up, and logged UTC — shift with it.
+        let applyAutoOffsetMs: @Sendable @MainActor (Int64) -> Void = { ms in
+            appState.clock.autoOffsetMs = ms
         }
         let applyWaterfall: @Sendable @MainActor (WaterfallUpdate) -> Void = { update in
             let wf = appState.waterfall
@@ -161,11 +169,11 @@ final class LiveEngine {
                 group.addTask {
                     await self?.runDecodeLoop(
                         accumulator: accumulator,
-                        initialRxOffset: rxOffset,
                         initialClockOffsetMs: initialClockOffset,
                         readDecodeOptions: readDecodeOptions,
                         readClockOffsetMs: readClockOffsetMs,
                         applyDecodes: applyDecodes,
+                        applyAutoOffsetMs: applyAutoOffsetMs,
                         applyClockDt: applyClockDt
                     )
                 }
@@ -389,14 +397,24 @@ final class LiveEngine {
     /// After decoding, feeds results to the QSO engine and handles TX scheduling.
     private nonisolated func runDecodeLoop(
         accumulator: SlotAccumulator,
-        initialRxOffset: Int64,
         initialClockOffsetMs: Int64,
         readDecodeOptions: @escaping @Sendable @MainActor () -> DecodeOptions,
         readClockOffsetMs: @escaping @Sendable @MainActor () -> Int64,
         applyDecodes: @escaping @Sendable @MainActor ([DecodeMessage]) -> Void,
+        applyAutoOffsetMs: @escaping @Sendable @MainActor (Int64) -> Void,
         applyClockDt: @escaping @Sendable @MainActor (Float) -> Void
     ) async {
-        var rxOffsetMs = initialRxOffset
+        // The automatic DT correction now feeds the WHOLE clock (folded into
+        // `readClockOffsetMs` / `nowMs` below), so the RX slice needs no separate
+        // capture-latency offset — the shifted clock corrects RX exactly once.
+        let rxOffsetMs: Int64 = 0
+        // Local mirror of the published whole-clock auto offset (this loop is its
+        // only writer). `DtCalibrator` reads it as its base and returns the next
+        // value, which we publish so the following slot's `nowMs` picks it up.
+        var autoOffsetMs: Int64 = 0
+        // Per-session calibrator state (confirmation streak for the two-slot
+        // same-sign gate); one instance mutated once per decoded slot.
+        var calibrator = DtCalibrator()
         // Seed one slot back so the first completed slot still decodes (the
         // scheduler fires when `audioSlotID > lastDecodedAudioSlot`). The seed
         // uses the whole-clock offset so it lands on the same slot grid the loop
@@ -421,9 +439,9 @@ final class LiveEngine {
                 (readDecodeOptions(), readClockOffsetMs())
             }
             let profile = opts.profile
-            // The whole-clock correction (NTP + manual) shifts every slot/TX
-            // time read below; DtCalibrator's rxOffsetMs is applied separately
-            // inside rxSlotID (RX-only capture-latency comp).
+            // The whole-clock correction (NTP + manual + automatic DT) shifts
+            // every slot/TX time read below; `rxOffsetMs` is a fixed 0 now that
+            // the auto-DT correction rides the whole clock (RX corrected once).
             let nowMs = Int64(Date().timeIntervalSince1970 * 1000) + clockOffsetMs
 
             // Mode switch (or first pass): the slot grid changed length, so the
@@ -465,18 +483,28 @@ final class LiveEngine {
             // subtraction). With deep off it is exactly one findSync+decodeAll.
             let decoded = decoder.decodeSlotDeep()
 
-            // DT calibration from this slot's decodes.
+            // DT calibration from this slot's decodes. The result feeds the
+            // WHOLE clock (autoOffsetMs) — MAD outlier rejection + a two-slot
+            // same-sign confirmation keep a single noisy slot from jerking it.
             if !decoded.isEmpty {
                 let dtValues = decoded.map(\.timeSec)
-                rxOffsetMs = DtCalibrator.calibrate(
-                    rxOffsetMs: rxOffsetMs,
+                let newAuto = calibrator.calibrate(
+                    autoOffsetMs: autoOffsetMs,
                     decodedDtSec: dtValues
                 )
                 // Publish the mean DT for the clock-health indicator (a
                 // consistent bias across the stations we hear proxies our own
                 // clock offset — mirrors Android's ClockSync source).
                 let meanDt = dtValues.reduce(0, +) / Float(dtValues.count)
-                await MainActor.run { applyClockDt(meanDt) }
+                if let newAuto {
+                    autoOffsetMs = newAuto
+                    await MainActor.run {
+                        applyAutoOffsetMs(newAuto)
+                        applyClockDt(meanDt)
+                    }
+                } else {
+                    await MainActor.run { applyClockDt(meanDt) }
+                }
             }
 
             // With early decode the reply must wait out the rest of the cycle so
@@ -1023,11 +1051,10 @@ final class LiveEngine {
     // MARK: - Helpers
 
     /// Wall clock (epoch ms) shifted by the unified whole-clock correction
-    /// (NTP + manual). This is the single accessor every MainActor slot/TX/log
-    /// time read routes through, so a manual or NTP offset moves RX slot
-    /// detection, TX key-up, and logged UTC together — matching Android's
-    /// `UtcTimer.getSystemTime()`. Distinct from DtCalibrator's RX-only
-    /// rxOffsetMs, which is applied separately inside `rxSlotID`.
+    /// (NTP + manual + automatic band-median DT). This is the single accessor
+    /// every MainActor slot/TX/log time read routes through, so an NTP, manual,
+    /// or auto-DT offset moves RX slot detection, TX key-up, and logged UTC
+    /// together — matching Android's `UtcTimer.getSystemTime()`.
     private func nowMs() -> Int64 {
         let wallMs = Int64(Date().timeIntervalSince1970 * 1000)
         guard let appState else { return wallMs }

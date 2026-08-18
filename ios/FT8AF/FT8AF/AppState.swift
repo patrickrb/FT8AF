@@ -267,9 +267,10 @@ final class SettingsState {
     // Tune
     var tuneTimeoutSec: Int = 30
     // Manual whole-clock correction (ms), ±5 s, persisted. Combined with the
-    // runtime NTP offset (`ClockState.ntpOffsetMs`) into the unified clock
-    // offset the engine adds to every wall-clock read (RX slot detection, TX
-    // key-up, logged UTC). Distinct from DtCalibrator's RX-only rxOffsetMs.
+    // runtime NTP offset (`ClockState.ntpOffsetMs`) and the automatic band-median
+    // DT correction (`ClockState.autoOffsetMs`) into the unified clock offset the
+    // engine adds to every wall-clock read (RX slot detection, TX key-up, logged
+    // UTC).
     var manualClockOffsetMs: Int = 0
     // Preferred audio input port name ("" = system default); matched by name
     // so the choice survives replug/relaunch.
@@ -370,11 +371,19 @@ final class ClockState {
     /// nil until the first decode this session. A consistent bias across the
     /// stations we hear proxies our own clock offset — the clock-health source.
     var dtOffsetSec: Float?
+    /// Automatic band-median DT correction (ms) from `DtCalibrator`, written by
+    /// the decode loop as it self-syncs the clock off the band. Whole-clock (it
+    /// moves RX + TX + logged UTC), runtime-only (reset to 0 each session, like
+    /// `ntpOffsetMs`). Mirrors Android's `ClockSelfSync` → `UtcTimer.delay`.
+    var autoOffsetMs: Int64 = 0
 
     /// The unified whole-clock offset combining NTP + the persisted manual
-    /// correction. The engine adds `combinedMs` to every wall-clock read.
+    /// correction + the automatic band-median DT correction. The engine adds
+    /// `combinedMs` to every wall-clock read.
     func clockOffset(manualMs: Int) -> ClockOffset {
-        ClockOffset(ntpOffsetMs: ntpOffsetMs, manualOffsetMs: Int64(manualMs))
+        ClockOffset(ntpOffsetMs: ntpOffsetMs,
+                    manualOffsetMs: Int64(manualMs),
+                    autoOffsetMs: autoOffsetMs)
     }
 }
 
