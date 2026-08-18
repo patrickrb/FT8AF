@@ -2,11 +2,13 @@ import Foundation
 
 /// Highlight category for a decode-list row, mirroring the Android
 /// `resolveQsoStatus` priority order (highest first):
-/// PENDING (to me) > POTA > NEW DXCC > NEW GRID > NEW BAND > WORKED > CQ.
+/// PENDING (to me) > POTA > NEW DXCC > NEW STATE > NEW GRID > NEW BAND >
+/// WORKED > CQ.
 public enum DecodeHighlight: String, CaseIterable, Sendable {
     case pending
     case pota
     case newDxcc
+    case newState
     case newGrid
     case newBand
     case worked
@@ -18,12 +20,20 @@ public enum DecodeHighlight: String, CaseIterable, Sendable {
 /// always-on because they reflect live on-air state, not logbook history.
 public struct HighlightToggles: Equatable, Sendable {
     public var newDxcc: Bool
+    public var newState: Bool
     public var newGrid: Bool
     public var newBand: Bool
     public var worked: Bool
 
-    public init(newDxcc: Bool = true, newGrid: Bool = true, newBand: Bool = true, worked: Bool = true) {
+    public init(
+        newDxcc: Bool = true,
+        newState: Bool = true,
+        newGrid: Bool = true,
+        newBand: Bool = true,
+        worked: Bool = true
+    ) {
         self.newDxcc = newDxcc
+        self.newState = newState
         self.newGrid = newGrid
         self.newBand = newBand
         self.worked = worked
@@ -51,12 +61,17 @@ public struct LogbookIndex: Sendable {
     public let workedGrids: Set<String>
     public let bandsByCall: [String: Set<String>]
     public let workedEntities: Set<String>
+    /// USPS state codes resolved from each logged QSO's grid (US-only, via
+    /// `UsStateLookup`). Mirrors Android's `GeneralVariables.workedStates`: a
+    /// decode from a state absent here is a "new state" for WAS chasing.
+    public let workedStates: Set<String>
 
     public init(qsos: [LoggedQso]) {
         var calls = Set<String>()
         var grids = Set<String>()
         var bands = [String: Set<String>]()
         var entities = Set<String>()
+        var states = Set<String>()
         for qso in qsos {
             let call = qso.call.uppercased()
             guard !call.isEmpty else { continue }
@@ -68,11 +83,15 @@ public struct LogbookIndex: Sendable {
             if let entity = DxccPrefix.entity(for: call) {
                 entities.insert(entity.name)
             }
+            if let state = UsStateLookup.state(forGrid: qso.grid) {
+                states.insert(state.uppercased())
+            }
         }
         workedCalls = calls
         workedGrids = grids
         bandsByCall = bands
         workedEntities = entities
+        workedStates = states
     }
 
     public static let empty = LogbookIndex(qsos: [])
@@ -141,6 +160,15 @@ public func classifyDecode(
        let entity = DxccPrefix.entity(for: call),
        !index.workedEntities.contains(entity.name) {
         return .newDxcc
+    }
+
+    // A new US state (Worked All States) outranks a new grid: WAS is one of the
+    // most-chased US awards, so an unworked state is more prized than a bare new
+    // grid field. Only US grids resolve (the table is US-only).
+    if toggles.newState,
+       let state = UsStateLookup.state(forGrid: grid),
+       !index.workedStates.contains(state.uppercased()) {
+        return .newState
     }
 
     let square = grid4(grid.uppercased())

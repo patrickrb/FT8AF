@@ -83,7 +83,13 @@ let package = Package(
         // cycle loop) is added here later as device code.
         .target(
             name: "FT8Engine",
-            dependencies: ["FT8DSP"]
+            dependencies: ["FT8DSP"],
+            // us_grid_states.json is the SAME table the Android app ships in
+            // assets/ (Maidenhead 4-char square -> USPS state code). Bundled as
+            // a package resource so UsStateLookup can read it via Bundle.module.
+            resources: [
+                .process("Resources/us_grid_states.json"),
+            ]
         ),
         .testTarget(
             name: "FT8EngineTests",
