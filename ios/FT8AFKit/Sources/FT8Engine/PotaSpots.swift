@@ -131,6 +131,36 @@ public enum PotaSpots {
         }
     }
 
+    // MARK: - Park-to-park activator lookup
+
+    /// Normalize a decoded callsign into the spot-cache match key. Port of
+    /// Android's `spotLookupKey`: strip the angle brackets FT8 non-standard /
+    /// hashed calls come wrapped in (`<K1ABC/P>`, or `<...>` when unresolved),
+    /// trim, and uppercase. Returns nil for an empty/whitespace-only result so
+    /// callers can bail early.
+    public static func spotLookupKey(_ callsign: String?) -> String? {
+        guard let raw = callsign else { return nil }
+        let key = raw
+            .replacingOccurrences(of: "<", with: "")
+            .replacingOccurrences(of: ">", with: "")
+            .trimmingCharacters(in: .whitespaces)
+            .uppercased()
+        return key.isEmpty ? nil : key
+    }
+
+    /// The park reference `callsign` is currently spotted activating, or nil when
+    /// they aren't a current activator. Port of Android
+    /// `PotaSpotsRepository.parkRefFor`: match the live spots by uppercased
+    /// activator call (after `spotLookupKey` normalization) and return their
+    /// non-empty reference. Used at QSO-log time to fill SIG/SIG_INFO for a
+    /// park-to-park contact.
+    public static func parkRef(forCallsign callsign: String?, in spots: [PotaSpot]) -> String? {
+        guard let key = spotLookupKey(callsign) else { return nil }
+        let ref = spots.first { $0.activator.uppercased() == key }?.reference
+        guard let ref, !ref.isEmpty else { return nil }
+        return ref
+    }
+
     // MARK: - Tolerant JSON field extraction
 
     private static func str(_ any: Any?) -> String {
