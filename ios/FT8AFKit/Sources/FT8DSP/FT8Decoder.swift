@@ -37,10 +37,17 @@ public final class FT8Decoder {
     private var candidates = [candidate_t](repeating: candidate_t(), count: FT8Decoder.maxCandidates)
     private var numCandidates = 0
     private var ldpcIters = FT8Decoder.ldpcItersNormal
-    private let hashtable = HashTable()
+    private let hashtable: HashTable
 
     /// Create a decoder for the given sample rate. `isFT8 = false` selects FT4.
-    public init(sampleRate: Int32 = FT8.sampleRate, isFT8: Bool = true) {
+    ///
+    /// `hashTable` is the callsign-hash store used to resolve hashed compound
+    /// calls (`<...>`). Pass a shared, long-lived table (as LiveEngine does) so
+    /// hashes resolve across slots even though a fresh decoder is built each
+    /// slot; the default is a private per-decoder table (same-slot resolution
+    /// only), which keeps standalone/one-shot decodes isolated.
+    public init(sampleRate: Int32 = FT8.sampleRate, isFT8: Bool = true, hashTable: HashTable = HashTable()) {
+        self.hashtable = hashTable
         var cfg = monitor_config_t()
         cfg.f_min = 100
         cfg.f_max = 3500
@@ -64,10 +71,10 @@ public final class FT8Decoder {
         let block = Int(mon.block_size)
         if block == 0 { return }
         monitor_reset(&mon)
-        // Reset the callsign cache per slot: hashes resolve only against calls
-        // seen "earlier in the same slot", and a never-cleared table would grow
-        // unbounded across slots on a long-lived decoder.
-        hashtable.clear()
+        // The callsign hash table is intentionally NOT cleared here: it persists
+        // across slots so a `<...>` hash resolves against a full compound call
+        // decoded in an earlier slot (matching Android's static hashList). The
+        // table bounds its own growth (see HashTable.capacity).
         samples.withUnsafeBufferPointer { buf in
             guard let base = buf.baseAddress else { return }
             var pos = 0
@@ -206,6 +213,9 @@ public final class FT8Decoder {
             // Free text + contest sub-types: full text already in rawText.
             m.extra = m.rawText
         }
+        // Drop CRC-collision garbage before it reaches the UI/log (mirrors
+        // Android Ft8Message.isJunkDecode). Free text / telemetry are exempt.
+        if isJunkDecode(i3: m.i3, n3: m.n3, callFrom: m.callFrom) { return nil }
         return m
     }
 }
