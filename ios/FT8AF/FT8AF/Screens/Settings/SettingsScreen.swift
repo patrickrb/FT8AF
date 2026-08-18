@@ -1,3 +1,4 @@
+import FT8Audio
 import FT8Engine
 import SwiftUI
 
@@ -146,6 +147,23 @@ struct SettingsScreen: View {
 
                 // Advanced section
                 Section {
+                    NavigationLink {
+                        TimeSyncSettings()
+                    } label: {
+                        HStack {
+                            Image(systemName: "clock.arrow.2.circlepath")
+                                .font(.ft8afUI(size: 14))
+                                .foregroundStyle(accent)
+                                .frame(width: 24)
+                            Text("Time Sync")
+                                .foregroundStyle(textPrimary)
+                            Spacer()
+                            Text(ClockHealth.offsetLabel(offsetSec: appState.clock.dtOffsetSec))
+                                .font(.ft8afMono(size: 14))
+                                .foregroundStyle(textMuted)
+                        }
+                    }
+
                     NavigationLink {
                         AdvancedSettings()
                     } label: {
