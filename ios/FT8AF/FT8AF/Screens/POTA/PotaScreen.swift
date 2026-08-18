@@ -15,6 +15,7 @@ struct PotaScreen: View {
     @State private var selectedTab: PotaTab = .hunt
     @State private var shareURLs: [URL] = []
     @State private var showShare = false
+    @State private var showParkPicker = false
 
     private var spotService: PotaService { PotaService.shared }
 
@@ -78,6 +79,23 @@ struct PotaScreen: View {
         .sheet(isPresented: $showShare) {
             PotaShareSheet(items: shareURLs)
         }
+        .sheet(isPresented: $showParkPicker) {
+            ParkPickerSheet(
+                myGrid: appState.settings.myGrid,
+                recentRefs: recentParkRefs
+            ) { reference in
+                appState.pota.parkInput = reference
+            }
+        }
+    }
+
+    /// Park references from activation history, newest first, for the picker's
+    /// "Recent" section. Each record's `parkRef` may be comma-joined (two-fers);
+    /// the picker splits + dedupes via `PotaParks.deduplicateRefs`.
+    private var recentParkRefs: [String] {
+        appState.pota.activations
+            .sorted { $0.startedAtMs > $1.startedAtMs }
+            .map(\.parkRef)
     }
 
     // MARK: - Activation persistence
@@ -135,6 +153,32 @@ struct PotaScreen: View {
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
                 }
+                .padding(.horizontal, 40)
+
+                // Search parks (recent + nearby picker); free-text entry above
+                // remains the fallback.
+                Button {
+                    showParkPicker = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.ft8afUI(size: 12, weight: .semibold))
+                        Text("Search parks")
+                            .font(.ft8afUI(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(accent)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 38)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(accent.opacity(0.12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .strokeBorder(accent.opacity(0.3), lineWidth: 1)
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
                 .padding(.horizontal, 40)
 
                 // Notes field
