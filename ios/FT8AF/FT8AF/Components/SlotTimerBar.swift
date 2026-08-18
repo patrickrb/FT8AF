@@ -1,16 +1,19 @@
 import FT8Audio
+import FT8DSP
 import SwiftUI
 
-/// Thin progress bar showing the current position in the 15 s FT8 cycle.
-/// Color alternates by slot parity: even slots = accent/orange, odd = signal/blue.
-/// Guard time (last ~2.36 s) is highlighted brighter.
+/// Thin progress bar showing the current position in the active mode's cycle
+/// (15 s FT8 / 7.5 s FT4). Color alternates by slot parity: even slots =
+/// accent/orange, odd = signal/blue. Guard time (the waveform-to-boundary
+/// slack) is highlighted brighter.
 struct SlotTimerBar: View {
+    @Environment(AppState.self) private var appState
+
     @State private var progress: Double = 0
     @State private var isGuard: Bool = false
     @State private var isEvenSlot: Bool = true
 
     private let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
-    private static let guardThresholdMs: Int64 = 12_640 // FT8 message duration
 
     var body: some View {
         GeometryReader { geo in
@@ -25,12 +28,14 @@ struct SlotTimerBar: View {
         }
         .frame(height: 3)
         .onReceive(timer) { _ in
+            let profile = appState.settings.mode.profile
             let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-            let ms = SlotClock.msIntoCycle(atUtcMs: nowMs)
-            progress = Double(ms) / Double(SlotClock.cycleMs)
-            isGuard = ms >= Self.guardThresholdMs
+            let ms = SlotClock.msIntoCycle(atUtcMs: nowMs, cycleMs: profile.cycleMs)
+            progress = Double(ms) / Double(profile.cycleMs)
+            // Guard band = the mode's message duration to the slot boundary.
+            isGuard = ms >= profile.waveformMs
             // Determine slot parity from current slot ID
-            let slotID = SlotClock.rxSlotID(atUtcMs: nowMs, rxOffsetMs: 0)
+            let slotID = SlotClock.rxSlotID(atUtcMs: nowMs, rxOffsetMs: 0, cycleMs: profile.cycleMs)
             isEvenSlot = SlotClock.parity(slotID: slotID) == 0
         }
     }

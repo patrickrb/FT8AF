@@ -1,3 +1,4 @@
+import FT8DSP
 import FT8Engine
 import SwiftUI
 import UIKit
@@ -36,9 +37,25 @@ struct TxStrip: View {
 
                 // Right: mode + frequency + tune chips
                 HStack(spacing: 6) {
-                    // Mode pill — static "FT8" (FT4/FT2 deferred; plain,
-                    // non-interactive).
-                    TxChip(label: "FT8", color: accent)
+                    // Mode pill — pick FT8 / FT4. FT4 is RX + timing only for
+                    // now (TX deferred). FT2 is out of scope (no iOS decode
+                    // entry point). Switching re-grids the slot clock live.
+                    Menu {
+                        Picker("Mode", selection: Binding(
+                            get: { settings.mode },
+                            set: { newMode in
+                                settings.mode = newMode
+                                SettingsPersistence.save(appState.settings)
+                            }
+                        )) {
+                            ForEach(Mode.allCases) { m in
+                                Text(m.rawValue).tag(m)
+                            }
+                        }
+                    } label: {
+                        TxChip(label: settings.mode.rawValue, color: accent)
+                    }
+                    .buttonStyle(.plain)
 
                     // Tappable frequency/band chip
                     Button { onOpenFrequencyPicker() } label: {

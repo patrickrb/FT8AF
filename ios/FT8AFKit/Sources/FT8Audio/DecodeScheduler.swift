@@ -1,3 +1,4 @@
+import FT8DSP
 import Foundation
 
 /// Pure timing math for the RX decode loop: at each poll tick it decides whether
@@ -70,16 +71,18 @@ public enum DecodeScheduler {
         rxOffsetMs: Int64,
         earlyDecode: Bool,
         lastDecodedAudioSlotID: Int64,
-        sampleRate: Int
+        sampleRate: Int,
+        profile: ModeProfile = .ft8
     ) -> Plan? {
-        let currentSlot = SlotClock.rxSlotID(atUtcMs: nowMs, rxOffsetMs: rxOffsetMs)
+        let cycleMs = profile.cycleMs
+        let currentSlot = SlotClock.rxSlotID(atUtcMs: nowMs, rxOffsetMs: rxOffsetMs, cycleMs: cycleMs)
         // RX-shifted position within the current slot (audio-aligned clock).
-        let msInto = SlotClock.msIntoCycle(atUtcMs: nowMs - rxOffsetMs)
+        let msInto = SlotClock.msIntoCycle(atUtcMs: nowMs - rxOffsetMs, cycleMs: cycleMs)
 
         if earlyDecode {
-            // Decode the in-progress slot once it is ~13.5 s along.
+            // Decode the in-progress slot once it is ~earlyDecodeMillis along.
             let audioSlot = currentSlot
-            guard audioSlot > lastDecodedAudioSlotID, msInto >= earlyDecodeMillis else {
+            guard audioSlot > lastDecodedAudioSlotID, msInto >= profile.earlyDecodeMillis else {
                 return nil
             }
             // Window = audio captured since slot start (>= earlyDecodeMillis).
@@ -92,13 +95,13 @@ public enum DecodeScheduler {
                 windowSamples: windowSampleCount(windowMs: msInto, sampleRate: sampleRate)
             )
         } else {
-            // Decode the slot that just ended, over the full 15 s slot.
+            // Decode the slot that just ended, over the full slot.
             let audioSlot = currentSlot - 1
             guard audioSlot > lastDecodedAudioSlotID else { return nil }
             return Plan(
                 audioSlotID: audioSlot,
                 replySlotID: audioSlot + 1,
-                windowSamples: windowSampleCount(windowMs: SlotClock.cycleMs, sampleRate: sampleRate)
+                windowSamples: windowSampleCount(windowMs: cycleMs, sampleRate: sampleRate)
             )
         }
     }
@@ -110,8 +113,12 @@ public enum DecodeScheduler {
     ///
     /// - Parameter msIntoCycle: the unshifted `SlotClock.msIntoCycle(nowMs)` (TX
     ///   uses the unshifted clock, unlike the RX-aligned `plan` above).
-    public static func replyBoundaryDelayMs(earlyDecode: Bool, msIntoCycle: Int64) -> Int64 {
+    public static func replyBoundaryDelayMs(
+        earlyDecode: Bool,
+        msIntoCycle: Int64,
+        profile: ModeProfile = .ft8
+    ) -> Int64 {
         guard earlyDecode else { return 0 }
-        return max(0, SlotClock.cycleMs - msIntoCycle)
+        return max(0, profile.cycleMs - msIntoCycle)
     }
 }

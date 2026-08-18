@@ -1,4 +1,5 @@
 import FT8Audio
+import FT8DSP
 import FT8Engine
 import Foundation
 import Observation
@@ -204,6 +205,10 @@ final class SettingsState {
     var myCall: String = ""
     var myGrid: String = ""
     var band: String = "20M"
+    // Operating mode. FT8 (15 s) is the default; FT4 (7.5 s) is RX + timing
+    // only for now — FT4 TX is deferred (see LiveEngine.scheduleTx). The active
+    // `ModeProfile` (via `mode.profile`) drives all slot/decode/waterfall timing.
+    var mode: Mode = .ft8
     var rigModel: RigModel = .none
     var pttMode: PttMode = .vox
     var txPowerWatts: Int = 5
@@ -383,6 +388,7 @@ enum SettingsPersistence {
         d.set(s.myCall, forKey: key("myCall"))
         d.set(s.myGrid, forKey: key("myGrid"))
         d.set(s.band, forKey: key("band"))
+        d.set(s.mode.rawValue, forKey: key("mode"))
         d.set(s.rigModel.rawValue, forKey: key("rigModel"))
         d.set(s.pttMode.rawValue, forKey: key("pttMode"))
         d.set(s.txPowerWatts, forKey: key("txPowerWatts"))
@@ -435,6 +441,7 @@ enum SettingsPersistence {
         if let v = d.string(forKey: key("myCall")) { s.myCall = v }
         if let v = d.string(forKey: key("myGrid")) { s.myGrid = v }
         if let v = d.string(forKey: key("band")) { s.band = v }
+        if let v = d.string(forKey: key("mode")), let m = Mode(rawValue: v) { s.mode = m }
         if let v = d.string(forKey: key("rigModel")),
            let m = RigModel(rawValue: v) { s.rigModel = m }
         if let v = d.string(forKey: key("pttMode")),

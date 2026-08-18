@@ -1,3 +1,4 @@
+import FT8DSP
 import SwiftUI
 
 struct TransmissionSettings: View {
@@ -69,6 +70,24 @@ struct TransmissionSettings: View {
             } header: {
                 Text("Audio")
                     .foregroundStyle(textMuted)
+            }
+            .listRowBackground(bgSurface)
+
+            // Mode selection
+            Section {
+                Picker("Mode", selection: $settings.mode) {
+                    ForEach(Mode.allCases) { m in
+                        Text(m.rawValue).tag(m)
+                    }
+                }
+                .foregroundStyle(textPrimary)
+            } header: {
+                Text("Mode")
+                    .foregroundStyle(textMuted)
+            } footer: {
+                Text("FT4 receives and shows timing; FT4 transmit is not yet enabled. FT8 transmits normally.")
+                    .font(.ft8afUI(size: 11))
+                    .foregroundStyle(textFaint)
             }
             .listRowBackground(bgSurface)
 
@@ -218,6 +237,7 @@ struct TransmissionSettings: View {
         .onChange(of: settings.pttMode) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.txVolume) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.band) { _, _ in SettingsPersistence.save(appState.settings) }
+        .onChange(of: settings.mode) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.huntCallsCQ) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.autoCallFollow) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.earlyDecode) { _, _ in SettingsPersistence.save(appState.settings) }

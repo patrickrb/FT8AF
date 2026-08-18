@@ -1,5 +1,6 @@
 import XCTest
 @testable import FT8Engine
+import FT8DSP
 
 final class TxTimingTests: XCTestCase {
 
@@ -77,5 +78,33 @@ final class TxTimingTests: XCTestCase {
         XCTAssertEqual(TxTiming.clipSampleCount(clipMs: 640, sampleRate: 12_000), 7680)
         XCTAssertEqual(TxTiming.clipSampleCount(clipMs: 1000, sampleRate: 12_000), 12_000)
         XCTAssertEqual(TxTiming.clipSampleCount(clipMs: -5, sampleRate: 12_000), 0)
+    }
+
+    // MARK: FT4 slack — the clip math must use the FT4 profile's 2460 ms slack
+
+    /// FT4's waveform is 5.04 s in a 7.5 s cycle, so its physical slack is 2460
+    /// ms (not FT8's 2360). A normal on-time FT4 TX firing within that slack
+    /// clips nothing (the leading Costas array is preserved); only the overrun
+    /// past 2460 ms is clipped. This mirrors the FT8 on-time invariant with the
+    /// mode-specific slack the LiveEngine now passes.
+    func testFT4OnTimeStartClipsNothingWithinFT4Slack() {
+        let slack = ModeProfile.ft4.slackMs
+        XCTAssertEqual(slack, 2_460)
+        XCTAssertEqual(TxTiming.lateStartClipMs(msIntoCycle: 0, slackMs: slack), 0)
+        XCTAssertEqual(TxTiming.lateStartClipMs(msIntoCycle: 800, slackMs: slack), 0)
+        XCTAssertEqual(TxTiming.lateStartClipMs(msIntoCycle: 2_460, slackMs: slack), 0)
+        // Just past the FT4 slack: only the overrun is clipped.
+        XCTAssertEqual(TxTiming.lateStartClipMs(msIntoCycle: 2_461, slackMs: slack), 1)
+        XCTAssertEqual(TxTiming.lateStartClipMs(msIntoCycle: 3_000, slackMs: slack), 540)
+    }
+
+    /// At an msInto within FT8's slack but past nothing for FT4 either — the
+    /// wider FT4 slack means a start that would clip under a hypothetical
+    /// smaller slack still clips nothing here. Guards that slack is per-mode.
+    func testFT4SlackIsWiderThanFT8() {
+        XCTAssertGreaterThan(ModeProfile.ft4.slackMs, ModeProfile.ft8.slackMs)
+        // 2400 ms in: clipped under nothing for either mode (both slacks > 2400).
+        XCTAssertEqual(TxTiming.lateStartClipMs(msIntoCycle: 2_400, slackMs: ModeProfile.ft4.slackMs), 0)
+        XCTAssertEqual(TxTiming.lateStartClipMs(msIntoCycle: 2_400, slackMs: ModeProfile.ft8.slackMs), 40)
     }
 }
