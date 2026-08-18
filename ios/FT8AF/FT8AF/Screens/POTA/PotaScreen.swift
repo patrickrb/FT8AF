@@ -16,6 +16,9 @@ struct PotaScreen: View {
     @State private var shareURLs: [URL] = []
     @State private var showShare = false
     @State private var showParkPicker = false
+    /// True while a self-spot POST is in flight (drives the button spinner and
+    /// prevents double-posts). One user tap per activation — never automatic.
+    @State private var isSelfSpotting = false
 
     private var spotService: PotaService { PotaService.shared }
 
@@ -293,6 +296,40 @@ struct PotaScreen: View {
             )
             .padding(.horizontal, 16)
 
+            // Self-spot to pota.app so hunters can find this activation. Explicit
+            // user action only (never automatic); posts the current dial + FT8
+            // for every park in the activation.
+            Button {
+                selfSpot(for: current)
+            } label: {
+                HStack(spacing: 6) {
+                    if isSelfSpotting {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(accent)
+                    } else {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                            .font(.ft8afUI(size: 13, weight: .semibold))
+                    }
+                    Text(isSelfSpotting ? "Spotting…" : "Self-Spot")
+                        .font(.ft8afUI(size: 14, weight: .bold))
+                }
+                .foregroundStyle(isSelfSpotting ? textFaint : accent)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(accent.opacity(isSelfSpotting ? 0.05 : 0.14))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .strokeBorder(accent.opacity(isSelfSpotting ? 0.1 : 0.3), lineWidth: 1)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(isSelfSpotting)
+            .padding(.horizontal, 16)
+
             // Export ADIF (share sheet) — one file per park, MY_SIG_INFO pinned.
             Button {
                 exportAdif(for: current)
@@ -406,6 +443,47 @@ struct PotaScreen: View {
             return "\(hrs):\(String(format: "%02d", mins))"
         }
         return "\(mins)m"
+    }
+
+    // MARK: - Self-spot
+
+    /// Post a POTA self-spot for the active activation so hunters can find it.
+    /// Mirrors Android's `onSelfSpot`: requires a callsign, spots every park ref
+    /// at the current dial + FT8, and toasts the outcome. Only reachable from the
+    /// active-session view, so an activation is always in progress.
+    private func selfSpot(for activation: PotaActivationRecord) {
+        guard !isSelfSpotting else { return }
+        let myCall = appState.settings.myCall.trimmingCharacters(in: .whitespaces)
+        guard !myCall.isEmpty else {
+            appState.toast.show("Set your callsign in Settings first", icon: "exclamationmark.triangle")
+            return
+        }
+        let refs = activation.parkRefs
+        guard !refs.isEmpty else { return }
+        let freqKhz = PotaSelfSpot.frequencyKhz(forBand: appState.settings.band)
+
+        isSelfSpotting = true
+        Task {
+            let outcome = await PotaSelfSpotService.shared.selfSpotAll(
+                activator: myCall,
+                spotter: myCall,
+                frequencyKhz: freqKhz,
+                mode: "FT8",
+                references: refs)
+            isSelfSpotting = false
+            if outcome.successCount == outcome.total {
+                let msg = outcome.total == 1
+                    ? "Spotted on pota.app"
+                    : "Spotted \(outcome.successCount) parks on pota.app"
+                appState.toast.show(msg, icon: "antenna.radiowaves.left.and.right")
+            } else if outcome.successCount > 0 {
+                appState.toast.show(
+                    "Spotted \(outcome.successCount)/\(outcome.total) parks",
+                    icon: "exclamationmark.triangle")
+            } else {
+                appState.toast.show("Self-spot failed", icon: "exclamationmark.triangle")
+            }
+        }
     }
 
     // MARK: - ADIF export
