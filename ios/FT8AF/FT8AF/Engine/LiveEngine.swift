@@ -430,8 +430,11 @@ final class LiveEngine {
             let decoder = FT8Decoder(hashTable: hashTable)
             decoder.setDeep(opts.deep) // raise LDPC iterations when deep decode is on
             decoder.feedSlot(samples)
-            decoder.findSync()
-            let decoded = decoder.decodeAll()
+            // decodeSlotDeep runs the initial pass and, only when deep decode is
+            // on, the subtract-and-redecode loop that recovers weak signals
+            // hidden under stronger overlapping ones (Android's deep-decode
+            // subtraction). With deep off it is exactly one findSync+decodeAll.
+            let decoded = decoder.decodeSlotDeep()
 
             // DT calibration from this slot's decodes.
             if !decoded.isEmpty {
