@@ -17,6 +17,12 @@ final class LiveEngine {
     private var engineTask: Task<Void, Never>?
     private var rxOffsetMs: Int64 = 0
 
+    // Persistent callsign-hash store, shared across every per-slot decoder so a
+    // hashed compound call (`<...>`) resolves against a full call heard in an
+    // earlier slot (matching Android's static hashList). Lives for the engine's
+    // lifetime; bounds its own growth internally.
+    private let hashTable = HashTable()
+
     // WSJT-X UDP interface (broadcast + inbound requests).
     private let udp = WsjtxUdpService()
     private var udpStatusTask: Task<Void, Never>?
@@ -369,7 +375,9 @@ final class LiveEngine {
 
             // Extract the slot's audio and decode.
             let samples = accumulator.takeSlot()
-            let decoder = FT8Decoder()
+            // Share the engine-lifetime hash table so `<...>` compound calls
+            // resolve across slots (a fresh decoder is built each slot).
+            let decoder = FT8Decoder(hashTable: hashTable)
             decoder.feedSlot(samples)
             decoder.findSync()
             let decoded = decoder.decodeAll()
