@@ -19,6 +19,12 @@ struct PotaScreen: View {
     /// True while a self-spot POST is in flight (drives the button spinner and
     /// prevents double-posts). One user tap per activation — never automatic.
     @State private var isSelfSpotting = false
+    /// True while an authenticated ADIF upload is in flight (button spinner).
+    @State private var isUploading = false
+    /// Presents the hosted-UI OAuth WebView. Set when an upload needs sign-in.
+    @State private var showLogin = false
+    /// The activation to (re-)upload once sign-in completes.
+    @State private var pendingUploadActivation: PotaActivationRecord?
 
     private var spotService: PotaService { PotaService.shared }
 
@@ -81,6 +87,16 @@ struct PotaScreen: View {
         }
         .sheet(isPresented: $showShare) {
             PotaShareSheet(items: shareURLs)
+        }
+        .sheet(isPresented: $showLogin) {
+            PotaLoginSheet { success in
+                showLogin = false
+                // On a successful sign-in, resume the upload that triggered it.
+                if success, let activation = pendingUploadActivation {
+                    uploadActivation(activation)
+                }
+                pendingUploadActivation = nil
+            }
         }
         .sheet(isPresented: $showParkPicker) {
             ParkPickerSheet(
@@ -330,6 +346,35 @@ struct PotaScreen: View {
             .disabled(isSelfSpotting)
             .padding(.horizontal, 16)
 
+            // Upload to POTA (authenticated). Signs in via the hosted-UI WebView
+            // first when there's no usable token, then uploads one file per park.
+            Button {
+                uploadActivation(current)
+            } label: {
+                HStack(spacing: 6) {
+                    if isUploading {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(bgApp)
+                    } else {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.ft8afUI(size: 13, weight: .semibold))
+                    }
+                    Text(isUploading ? "Uploading…" : "Upload to POTA")
+                        .font(.ft8afUI(size: 14, weight: .bold))
+                }
+                .foregroundStyle(bgApp)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(accent.opacity(qsoCount > 0 ? 1 : 0.4))
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(qsoCount == 0 || isUploading)
+            .padding(.horizontal, 16)
+
             // Export ADIF (share sheet) — one file per park, MY_SIG_INFO pinned.
             Button {
                 exportAdif(for: current)
@@ -514,6 +559,84 @@ struct PotaScreen: View {
         showShare = true
     }
 
+    // MARK: - Authenticated upload
+
+    /// Build the per-park ADIF documents and upload each to POTA's authenticated
+    /// `/adif` endpoint. Mirrors Android's `uploadActivation` + `startUpload`
+    /// flow: a missing/revoked token (or a 401) presents the hosted-UI login
+    /// WebView and, on success, resumes this upload. Failures are classified into
+    /// a user-facing toast.
+    private func uploadActivation(_ activation: PotaActivationRecord) {
+        guard !isUploading else { return }
+        let docs = Adif.potaActivationExport(
+            records: appState.logbook.records, activation: activation)
+        guard !docs.isEmpty else {
+            appState.toast.show("No QSOs in this activation yet", icon: "tree")
+            return
+        }
+
+        isUploading = true
+        Task {
+            guard let token = await PotaAuthService.shared.idToken() else {
+                // Never signed in / refresh token revoked — prompt for login and
+                // resume this upload when it succeeds.
+                isUploading = false
+                promptLogin(for: activation)
+                return
+            }
+
+            var uploaded = 0
+            var firstFailure: PotaUpload.FailureKind?
+            var needsLogin = false
+            for doc in docs {
+                let outcome = await PotaUploadService.shared.uploadAdif(
+                    idToken: token, filename: doc.filename, adif: doc.content)
+                switch outcome {
+                case .success:
+                    uploaded += 1
+                case .unauthorized:
+                    needsLogin = true
+                case .failure(let kind):
+                    if firstFailure == nil { firstFailure = kind }
+                }
+                if needsLogin { break }
+            }
+            isUploading = false
+
+            if needsLogin {
+                promptLogin(for: activation)
+            } else if uploaded == docs.count {
+                let msg = docs.count == 1
+                    ? "Uploaded to pota.app"
+                    : "Uploaded \(uploaded) parks to pota.app"
+                appState.toast.show(msg, icon: "checkmark.circle")
+            } else {
+                appState.toast.show(uploadFailureMessage(firstFailure),
+                                    icon: "exclamationmark.triangle")
+            }
+        }
+    }
+
+    private func promptLogin(for activation: PotaActivationRecord) {
+        pendingUploadActivation = activation
+        showLogin = true
+    }
+
+    /// Map an upload failure to a user-facing message, mirroring Android's
+    /// `UploadFailureKind` strings.
+    private func uploadFailureMessage(_ kind: PotaUpload.FailureKind?) -> String {
+        switch kind {
+        case .busy:
+            return "POTA is busy — try again in a moment"
+        case .serverError:
+            return "POTA rejected the log — check your park reference"
+        case .network:
+            return "Upload failed — check your connection"
+        case .other, nil:
+            return "Upload failed"
+        }
+    }
+
     // MARK: - Hunt Tab
 
     private var huntTab: some View {
@@ -693,6 +816,23 @@ struct PotaScreen: View {
             Text("\(activation.qsoCount) QSO\(activation.qsoCount == 1 ? "" : "s")")
                 .font(.ft8afMono(size: 11, weight: .semibold))
                 .foregroundStyle(activation.qsoCount >= 10 ? statusConfirmed : textMuted)
+
+            if activation.qsoCount > 0 {
+                Button {
+                    uploadActivation(activation)
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.ft8afUI(size: 14, weight: .semibold))
+                        .foregroundStyle(accent)
+                        .frame(width: 34, height: 34)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(accent.opacity(0.14))
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(isUploading)
+            }
 
             Button {
                 exportAdif(for: activation)
