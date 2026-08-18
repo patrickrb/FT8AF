@@ -179,15 +179,12 @@ struct DecodeRow: View {
         return parts.joined(separator: " ")
     }
 
-    /// DXCC entity name for the location line ("United States" → "USA"
-    /// shorthand, matching the Android abbreviation).
+    /// Location line for the row: a resolved US state ("CT, USA") when the grid
+    /// maps to one, else the DXCC entity name ("United States" → "USA"
+    /// shorthand). Logic lives in `decodeLocationText` (FT8Engine) so it is
+    /// testable; the view is a thin caller.
     private var locationText: String? {
-        guard let entity = DxccPrefix.entity(for: message.callFrom) else { return nil }
-        switch entity.name {
-        case "United States": return "USA"
-        case "United Kingdom": return "UK"
-        default: return entity.name
-        }
+        decodeLocationText(callFrom: message.callFrom, grid: message.grid)
     }
 }
 
@@ -226,6 +223,7 @@ private struct StatusPillView: View {
         case .pending: return "PENDING"
         case .pota: return "POTA"
         case .newDxcc: return "NEW DXCC"
+        case .newState: return "NEW STATE"
         case .newGrid: return "NEW GRID"
         case .newBand: return "NEW BAND"
         case .worked: return "WORKED"
@@ -238,6 +236,7 @@ private struct StatusPillView: View {
         case .pending: return accent          // amber — needs the operator's action
         case .pota: return statusConfirmed    // green
         case .newDxcc: return statusNew       // purple
+        case .newState: return statusState    // teal
         case .newGrid: return statusWarn      // yellow
         case .newBand: return statusWorked    // cyan
         case .worked: return statusWorked     // cyan

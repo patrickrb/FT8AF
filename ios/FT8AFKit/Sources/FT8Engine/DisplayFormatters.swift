@@ -17,20 +17,28 @@ public func relativeAge(secondsAgo: Int) -> String {
     }
 }
 
+/// Great-circle distance in kilometers between two latitude/longitude points
+/// (degrees). Shared haversine used by grid-based distance and by the POTA park
+/// picker's nearby ranking (`PotaParks`), mirroring Android's
+/// `MaidenheadGrid.getDist`.
+public func haversineKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double) -> Double {
+    let earthRadiusKm = 6371.0
+    let dLat = (lat2 - lat1) * .pi / 180
+    let dLon = (lon2 - lon1) * .pi / 180
+    let a = lat1 * .pi / 180
+    let b = lat2 * .pi / 180
+    let sinDLat = sin(dLat / 2)
+    let sinDLon = sin(dLon / 2)
+    let h = sinDLat * sinDLat + cos(a) * cos(b) * sinDLon * sinDLon
+    return 2 * earthRadiusKm * asin(min(1, sqrt(h)))
+}
+
 /// Great-circle distance in kilometers between two Maidenhead locators, or
 /// nil when either grid is malformed (uses the shared `gridToLatLon`, which
 /// also rejects the "RR73"/"RR" sign-off tokens).
 public func gridDistanceKm(from myGrid: String, to theirGrid: String) -> Double? {
     guard let a = gridToLatLon(myGrid), let b = gridToLatLon(theirGrid) else { return nil }
-    let earthRadiusKm = 6371.0
-    let dLat = (b.0 - a.0) * .pi / 180
-    let dLon = (b.1 - a.1) * .pi / 180
-    let lat1 = a.0 * .pi / 180
-    let lat2 = b.0 * .pi / 180
-    let sinDLat = sin(dLat / 2)
-    let sinDLon = sin(dLon / 2)
-    let h = sinDLat * sinDLat + cos(lat1) * cos(lat2) * sinDLon * sinDLon
-    return 2 * earthRadiusKm * asin(min(1, sqrt(h)))
+    return haversineKm(lat1: a.0, lon1: a.1, lat2: b.0, lon2: b.1)
 }
 
 /// Kilometers → miles.

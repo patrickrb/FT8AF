@@ -84,11 +84,16 @@ let package = Package(
         .target(
             name: "FT8Engine",
             dependencies: ["FT8DSP"],
-            // cty.dat (AD1C country file) backs the DXCC/CQ-zone resolver. Bundled
-            // as a plain copy so Bundle.module can read it verbatim at runtime; it
-            // is not a compiled/processed asset. Same file the Android app ships in
-            // app/src/main/assets/cty.dat.
-            resources: [.copy("Resources/cty.dat")]
+            // Bundled data the engine reads at runtime via Bundle.module, the
+            // same files the Android app ships in assets/:
+            //  - cty.dat (AD1C country file) backs the DXCC/CQ-zone resolver;
+            //    a plain .copy so it is read verbatim, not compiled/processed.
+            //  - us_grid_states.json (Maidenhead 4-char square -> USPS state
+            //    code) backs UsStateLookup.
+            resources: [
+                .copy("Resources/cty.dat"),
+                .process("Resources/us_grid_states.json"),
+            ]
         ),
         .testTarget(
             name: "FT8EngineTests",

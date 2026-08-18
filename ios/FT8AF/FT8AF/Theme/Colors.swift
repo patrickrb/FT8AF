@@ -43,6 +43,7 @@ let targetBorder = Color(red: 0xF4/255, green: 0x72/255, blue: 0xB6/255).opacity
 let statusNew       = Color(red: 0xC0/255, green: 0x84/255, blue: 0xFC/255)
 let statusNeeded    = Color(red: 0xFF/255, green: 0xAF/255, blue: 0x5E/255)
 let statusWorked    = Color(red: 0x5C/255, green: 0xD6/255, blue: 0xE8/255)
+let statusState     = Color(red: 0x2D/255, green: 0xD4/255, blue: 0xBF/255) // teal — new US state (WAS)
 let statusConfirmed = Color(red: 0x4A/255, green: 0xDE/255, blue: 0x80/255)
 let statusCq        = Color(red: 0xFF/255, green: 0xAF/255, blue: 0x5E/255)
 let statusWarn      = Color(red: 0xFA/255, green: 0xCC/255, blue: 0x15/255)

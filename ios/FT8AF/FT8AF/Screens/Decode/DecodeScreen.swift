@@ -119,6 +119,7 @@ struct DecodeScreen: View {
         let index = logbookIndex
         let toggles = HighlightToggles(
             newDxcc: settings.highlightNewDxcc,
+            newState: settings.highlightNewState,
             newGrid: settings.highlightNewGrid,
             newBand: settings.highlightNewBand,
             worked: settings.highlightWorked
@@ -233,6 +234,15 @@ struct DecodeScreen: View {
             return msgs.filter {
                 guard let entity = DxccPrefix.entity(for: $0.callFrom) else { return true }
                 return !worked.contains(entity.name)
+            }
+        case .newState:
+            // CQ stations from a US state the operator hasn't worked yet
+            // (mirrors Android's "New State" filter: checkIsCQ() && fromNewState).
+            let workedStates = logbookIndex.workedStates
+            return msgs.filter {
+                guard isCQMessage(callTo: $0.callTo),
+                      let state = UsStateLookup.state(forGrid: $0.grid) else { return false }
+                return !workedStates.contains(state.uppercased())
             }
         case .needed:
             // CQ stations not yet worked.

@@ -73,6 +73,10 @@ struct DecodeFilterSettings: View {
                     color: statusNew, isOn: $settings.highlightNewDxcc
                 )
                 highlightToggle(
+                    "New State", description: "Teal pill for unworked US states (WAS)",
+                    color: statusState, isOn: $settings.highlightNewState
+                )
+                highlightToggle(
                     "New Grid", description: "Yellow pill for unworked grid squares",
                     color: statusWarn, isOn: $settings.highlightNewGrid
                 )
@@ -135,6 +139,7 @@ struct DecodeFilterSettings: View {
         .onChange(of: settings.dxOnly) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.continentFilter) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.highlightNewDxcc) { _, _ in SettingsPersistence.save(appState.settings) }
+        .onChange(of: settings.highlightNewState) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.highlightNewGrid) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.highlightNewBand) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.highlightWorked) { _, _ in SettingsPersistence.save(appState.settings) }
