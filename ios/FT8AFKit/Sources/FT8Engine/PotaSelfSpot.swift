@@ -115,7 +115,10 @@ public enum PotaSelfSpot {
             [
                 "activator": activator.uppercased(),
                 "spotter": spotter.uppercased(),
-                "frequency": String(format: "%.1f", frequencyKhz),
+                // POSIX locale so the decimal separator is always "." — a
+                // comma-decimal device locale would otherwise POST "14074,0"
+                // and the spot would be rejected/misparsed.
+                "frequency": String(format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), frequencyKhz),
                 "reference": reference.uppercased(),
                 "mode": mode,
                 "source": PotaSelfSpot.source,

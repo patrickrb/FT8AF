@@ -89,6 +89,17 @@ final class PotaSelfSpotTests: XCTestCase {
         XCTAssertEqual(rounded["frequency"] as? String, "7074.1")
     }
 
+    func testRequestBodyFrequencyUsesDotDecimalRegardlessOfLocale() throws {
+        // The frequency string is formatted with a POSIX locale, so it must
+        // always use "." — a comma-decimal locale must never POST "14074,0".
+        let body = try decodedBody(PotaSelfSpot.Request(
+            activator: "W1AW", spotter: "W1AW", frequencyKhz: 14_074.0,
+            mode: "FT8", reference: "US-0001"))
+        let freq = body["frequency"] as? String
+        XCTAssertEqual(freq, "14074.0")
+        XCTAssertFalse(freq?.contains(",") ?? true)
+    }
+
     func testRequestDefaultCommentMatchesAndroid() throws {
         let body = try decodedBody(PotaSelfSpot.Request(
             activator: "W1AW", spotter: "W1AW", frequencyKhz: 14_074.0,
