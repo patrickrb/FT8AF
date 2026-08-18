@@ -1,3 +1,4 @@
+import FT8Audio
 import FT8Engine
 import Foundation
 import Observation
@@ -14,6 +15,7 @@ final class AppState {
     let tx = TxState()
     let pota = PotaState()
     let toast = ToastState()
+    let clock = ClockState()
 
     /// The live engine is set once by `FT8AFApp` at startup. Views access it
     /// through `appState.engine` instead of a separate `@Environment` entry,
@@ -245,6 +247,11 @@ final class SettingsState {
     var distanceInMiles: Bool = false
     // Tune
     var tuneTimeoutSec: Int = 30
+    // Manual whole-clock correction (ms), ±5 s, persisted. Combined with the
+    // runtime NTP offset (`ClockState.ntpOffsetMs`) into the unified clock
+    // offset the engine adds to every wall-clock read (RX slot detection, TX
+    // key-up, logged UTC). Distinct from DtCalibrator's RX-only rxOffsetMs.
+    var manualClockOffsetMs: Int = 0
     // Preferred audio input port name ("" = system default); matched by name
     // so the choice survives replug/relaunch.
     var preferredInputPort: String = ""
@@ -324,6 +331,34 @@ final class PotaState {
     var isActivating: Bool { current != nil }
 }
 
+// MARK: - Clock
+
+/// Runtime clock-sync state (the persisted manual correction lives in
+/// `SettingsState.manualClockOffsetMs`). Combined via `clockOffset` into the
+/// unified whole-clock correction the engine applies to RX + TX + logged UTC.
+@Observable @MainActor
+final class ClockState {
+    /// NTP-derived correction (ms) from the most recent "Sync now"; 0 until a
+    /// successful sync this install (not persisted — re-fetched on demand).
+    var ntpOffsetMs: Int64 = 0
+    /// When the last successful NTP sync landed (for the settings readout).
+    var lastSyncDate: Date?
+    /// Human-readable failure from the last sync attempt, or nil.
+    var lastSyncError: String?
+    /// True while a sync request is in flight (drives the button spinner).
+    var isSyncing: Bool = false
+    /// Mean decode DT (seconds) of the most recent slot that decoded anything;
+    /// nil until the first decode this session. A consistent bias across the
+    /// stations we hear proxies our own clock offset — the clock-health source.
+    var dtOffsetSec: Float?
+
+    /// The unified whole-clock offset combining NTP + the persisted manual
+    /// correction. The engine adds `combinedMs` to every wall-clock read.
+    func clockOffset(manualMs: Int) -> ClockOffset {
+        ClockOffset(ntpOffsetMs: ntpOffsetMs, manualOffsetMs: Int64(manualMs))
+    }
+}
+
 // MARK: - Settings Persistence
 
 enum SettingsPersistence {
@@ -374,6 +409,7 @@ enum SettingsPersistence {
         d.set(s.distanceInMiles, forKey: key("distanceInMiles"))
         d.set(s.tuneTimeoutSec, forKey: key("tuneTimeoutSec"))
         d.set(s.preferredInputPort, forKey: key("preferredInputPort"))
+        d.set(s.manualClockOffsetMs, forKey: key("manualClockOffsetMs"))
     }
 
     @MainActor static func load(into s: SettingsState) {
@@ -489,6 +525,12 @@ enum SettingsPersistence {
         }
         if let v = d.string(forKey: key("preferredInputPort")) {
             s.preferredInputPort = v
+        }
+        if d.object(forKey: key("manualClockOffsetMs")) != nil {
+            // Coerce a persisted value into the allowed ±5 s range in case an
+            // older/edited build wrote something out of bounds.
+            s.manualClockOffsetMs = Int(ClockOffset.clampManualMs(
+                Int64(d.integer(forKey: key("manualClockOffsetMs")))))
         }
     }
 
