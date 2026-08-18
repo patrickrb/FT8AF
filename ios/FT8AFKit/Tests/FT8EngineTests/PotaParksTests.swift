@@ -278,4 +278,13 @@ final class PotaParksTests: XCTestCase {
             PotaParks.locationParksURLString(locationCode: "us-pa"),
             "https://api.pota.app/location/parks/US-PA")
     }
+
+    func testEndpointURLsEncodeSinglePathSegment() {
+        // A ref/code containing '/' must be percent-encoded so it can't inject
+        // extra path segments into the request URL.
+        XCTAssertEqual(
+            PotaParks.parkURLString(reference: "us-1/../admin"),
+            "https://api.pota.app/park/US-1%2F..%2FADMIN")
+        XCTAssertFalse(PotaParks.locationParksURLString(locationCode: "a/b").contains("/parks/A/B"))
+    }
 }

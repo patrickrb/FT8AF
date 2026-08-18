@@ -280,6 +280,13 @@ public enum PotaParks {
     }
 
     private static func urlEncode(_ s: String) -> String {
-        s.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? s
+        // Encode as a SINGLE path segment: `.urlPathAllowed` permits `/` (and
+        // `%`), so a user-typed ref/location code could otherwise inject extra
+        // path segments. Restrict to RFC 3986 unreserved chars so `/`, `%`, etc.
+        // are percent-encoded. Real refs ("US-1234") / codes ("US-PA") are
+        // unaffected.
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        return s.addingPercentEncoding(withAllowedCharacters: allowed) ?? s
     }
 }
