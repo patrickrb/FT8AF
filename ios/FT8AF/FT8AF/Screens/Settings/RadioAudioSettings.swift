@@ -84,6 +84,10 @@ struct RadioAudioSettings: View {
             } header: {
                 Text("Audio")
                     .foregroundStyle(textMuted)
+            } footer: {
+                Text("FT-891 via DigiRig: connect the DigiRig over USB-C, then pick it as the Input above and as the Output with the route button. On the radio, enable Data-VOX and set the VOX gain; set PTT Mode to VOX (Transmission settings). TX audio then keys the radio automatically.")
+                    .font(.ft8afUI(size: 11))
+                    .foregroundStyle(textFaint)
             }
             .listRowBackground(bgSurface)
 

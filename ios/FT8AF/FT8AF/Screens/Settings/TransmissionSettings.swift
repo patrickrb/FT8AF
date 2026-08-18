@@ -29,10 +29,14 @@ struct TransmissionSettings: View {
             }
             .listRowBackground(bgSurface)
 
-            // PTT Mode
+            // PTT Mode — only VOX works on iOS (see footer). Any non-VOX value
+            // persisted by an older build is coerced back to VOX for display.
             Section {
-                Picker("PTT Mode", selection: $settings.pttMode) {
-                    ForEach(PttMode.allCases) { mode in
+                Picker("PTT Mode", selection: Binding(
+                    get: { PttMode.selectableOnIOS.contains(settings.pttMode) ? settings.pttMode : .vox },
+                    set: { settings.pttMode = $0 }
+                )) {
+                    ForEach(PttMode.selectableOnIOS) { mode in
                         Text(mode.rawValue).tag(mode)
                     }
                 }
@@ -41,7 +45,7 @@ struct TransmissionSettings: View {
                 Text("PTT Control")
                     .foregroundStyle(textMuted)
             } footer: {
-                Text("VOX: use audio-triggered PTT. CAT/RTS/DTR: hardware control via rig connection")
+                Text("VOX keys the radio from the transmit audio. CAT/RTS/DTR PTT need a wired CAT connection, which iOS/iPadOS doesn't allow over USB. (A future Wi-Fi/rigctld bridge could add CAT PTT.)")
                     .foregroundStyle(textFaint)
             }
             .listRowBackground(bgSurface)

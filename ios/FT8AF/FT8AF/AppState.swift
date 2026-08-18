@@ -182,6 +182,7 @@ enum RigModel: String, CaseIterable, Identifiable {
     case ft991a = "FT-991A"
     case ft710 = "FT-710"
     case ft450d = "FT-450D"
+    case ft891 = "FT-891"
     case ts590s = "TS-590S"
     case k3 = "K3/K3S"
     case kx3 = "KX3"
@@ -198,6 +199,12 @@ enum PttMode: String, CaseIterable, Identifiable {
     case dtr = "DTR"
 
     var id: String { rawValue }
+
+    /// The PTT modes actually usable on iOS/iPadOS. Only VOX works: CAT/RTS/DTR
+    /// PTT all need a wired serial/CAT link the platform won't allow over USB.
+    /// The other cases are retained (a future Wi-Fi/rigctld bridge may use them)
+    /// but are not offered in the picker today.
+    static let selectableOnIOS: [PttMode] = [.vox]
 }
 
 @Observable @MainActor
