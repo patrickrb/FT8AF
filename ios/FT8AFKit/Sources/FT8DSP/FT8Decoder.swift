@@ -30,14 +30,22 @@ public struct DecodedMessage: Equatable, Hashable {
 public final class FT8Decoder {
     private static let maxCandidates = 140
     private static let minScore: Int32 = 10
-    private static let ldpcItersNormal: Int32 = 20
-    private static let ldpcItersDeep: Int32 = 30
+    /// LDPC belief-propagation iteration caps (mirror ft8af_glue decode_params.h
+    /// `FT8AF_LDPC_ITERS_FAST` / `_DEEP`). Deep decode's only effect in this
+    /// Swift wrapper is raising the iteration cap; see `setDeep`.
+    public static let ldpcItersNormal: Int32 = 20
+    public static let ldpcItersDeep: Int32 = 30
 
     private var mon = monitor_t()
     private var candidates = [candidate_t](repeating: candidate_t(), count: FT8Decoder.maxCandidates)
     private var numCandidates = 0
-    private var ldpcIters = FT8Decoder.ldpcItersNormal
+    /// Current LDPC iteration cap fed to `ft8_decode`. Exposed read-only so
+    /// callers/tests can confirm `setDeep` took effect.
+    public private(set) var ldpcIterations = FT8Decoder.ldpcItersNormal
     private let hashtable: HashTable
+
+    /// Whether deep decode is currently active (iteration cap raised).
+    public var isDeep: Bool { ldpcIterations == FT8Decoder.ldpcItersDeep }
 
     /// Create a decoder for the given sample rate. `isFT8 = false` selects FT4.
     ///
@@ -62,7 +70,7 @@ public final class FT8Decoder {
 
     /// Set deep-decode mode (more LDPC iterations). Mirrors `setDecodeMode`.
     public func setDeep(_ deep: Bool) {
-        ldpcIters = deep ? FT8Decoder.ldpcItersDeep : FT8Decoder.ldpcItersNormal
+        ldpcIterations = deep ? FT8Decoder.ldpcItersDeep : FT8Decoder.ldpcItersNormal
     }
 
     /// Feed a full slot of mono Float samples (12 kHz) through the monitor:
@@ -113,7 +121,7 @@ public final class FT8Decoder {
             var cand = candidates[idx]
             var message = ftx_message_t()
             var status = decode_status_t()
-            let ok = ft8_decode(&mon.wf, &cand, ldpcIters, &message, &status)
+            let ok = ft8_decode(&mon.wf, &cand, ldpcIterations, &message, &status)
             if !ok { continue }
             if let msg = buildMessage(cand: &cand, message: &message, iface: &iface) {
                 // Keep the first (highest-score) decode of each unique message.

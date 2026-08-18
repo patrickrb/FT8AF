@@ -210,6 +210,10 @@ final class SettingsState {
     var autoCallFollow: Bool = false
     var earlyDecode: Bool = false
     var autoCQAfterQSO: Bool = false
+    // Deep decode: raise the LDPC iteration cap for weaker-signal recovery at a
+    // small per-slot CPU cost. Default ON to match Android's
+    // `GeneralVariables.deepDecodeMode = true`.
+    var deepDecode: Bool = true
     // TX safety
     var txWatchdogMin: Int = 0          // 0 = off
     var stopAfterAttempts: Int = 0      // 0 = off
@@ -344,6 +348,7 @@ enum SettingsPersistence {
         d.set(s.huntCallsCQ, forKey: key("huntCallsCQ"))
         d.set(s.autoCallFollow, forKey: key("autoCallFollow"))
         d.set(s.earlyDecode, forKey: key("earlyDecode"))
+        d.set(s.deepDecode, forKey: key("deepDecode"))
         d.set(s.autoCQAfterQSO, forKey: key("autoCQAfterQSO"))
         d.set(s.txWatchdogMin, forKey: key("txWatchdogMin"))
         d.set(s.stopAfterAttempts, forKey: key("stopAfterAttempts"))
@@ -415,6 +420,9 @@ enum SettingsPersistence {
         }
         if d.object(forKey: key("earlyDecode")) != nil {
             s.earlyDecode = d.bool(forKey: key("earlyDecode"))
+        }
+        if d.object(forKey: key("deepDecode")) != nil {
+            s.deepDecode = d.bool(forKey: key("deepDecode"))
         }
         if d.object(forKey: key("autoCQAfterQSO")) != nil {
             s.autoCQAfterQSO = d.bool(forKey: key("autoCQAfterQSO"))
