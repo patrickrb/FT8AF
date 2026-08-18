@@ -83,7 +83,12 @@ let package = Package(
         // cycle loop) is added here later as device code.
         .target(
             name: "FT8Engine",
-            dependencies: ["FT8DSP"]
+            dependencies: ["FT8DSP"],
+            // cty.dat (AD1C country file) backs the DXCC/CQ-zone resolver. Bundled
+            // as a plain copy so Bundle.module can read it verbatim at runtime; it
+            // is not a compiled/processed asset. Same file the Android app ships in
+            // app/src/main/assets/cty.dat.
+            resources: [.copy("Resources/cty.dat")]
         ),
         .testTarget(
             name: "FT8EngineTests",
