@@ -39,6 +39,17 @@ public final class FT8Decoder {
     private var mon = monitor_t()
     private var candidates = [candidate_t](repeating: candidate_t(), count: FT8Decoder.maxCandidates)
     private var numCandidates = 0
+
+    /// The codec sample rate (needed by the time-domain subtraction, which works
+    /// in the raw sample domain rather than the waterfall).
+    let sampleRate: Int32
+    /// Retained copy of the samples last fed through the monitor. The subtract-
+    /// and-redecode loop edits this in place (removing each decoded signal) and
+    /// re-runs the STFT over it — mirroring ft8_decoder_state.samples/num_fed in
+    /// the Android JNI glue, which keeps the slot's audio for exactly this. Only
+    /// the block-aligned prefix [0, numFed) was actually processed by the monitor.
+    private(set) var fedSamples: [Float] = []
+    private(set) var numFed = 0
     /// Current LDPC iteration cap fed to `ft8_decode`. Exposed read-only so
     /// callers/tests can confirm `setDeep` took effect.
     public private(set) var ldpcIterations = FT8Decoder.ldpcItersNormal
@@ -56,6 +67,7 @@ public final class FT8Decoder {
     /// only), which keeps standalone/one-shot decodes isolated.
     public init(sampleRate: Int32 = FT8.sampleRate, isFT8: Bool = true, hashTable: HashTable = HashTable()) {
         self.hashtable = hashTable
+        self.sampleRate = sampleRate
         var cfg = monitor_config_t()
         cfg.f_min = 100
         cfg.f_max = 3500
@@ -83,12 +95,49 @@ public final class FT8Decoder {
         // across slots so a `<...>` hash resolves against a full compound call
         // decoded in an earlier slot (matching Android's static hashList). The
         // table bounds its own growth (see HashTable.capacity).
+        // Retain the samples so the deep-decode subtract loop can edit them in
+        // place and re-run the STFT (see runSubtractLoop / rerunMonitor).
+        fedSamples = samples
+        numFed = (samples.count / block) * block
         samples.withUnsafeBufferPointer { buf in
             guard let base = buf.baseAddress else { return }
             var pos = 0
             while pos + block <= buf.count {
                 monitor_process(&mon, base + pos)
                 pos += block
+            }
+        }
+    }
+
+    /// Recompute the waterfall from the (possibly subtraction-edited) retained
+    /// samples, so the next `findSync` sees the residual. Mirrors the
+    /// wf_dirty branch of Android's DecoderFt8FindSync.
+    internal func rerunMonitor() {
+        let block = Int(mon.block_size)
+        if block == 0 || numFed <= 0 { return }
+        monitor_reset(&mon)
+        fedSamples.withUnsafeBufferPointer { buf in
+            guard let base = buf.baseAddress else { return }
+            var pos = 0
+            while pos + block <= numFed {
+                monitor_process(&mon, base + pos)
+                pos += block
+            }
+        }
+    }
+
+    /// Coherently subtract one decoded signal's GFSK waveform from the retained
+    /// samples, in place (the native WSJT-X-style time-domain subtraction). The
+    /// caller must `rerunMonitor` before decoding again. Returns false (samples
+    /// unchanged) on degenerate input, matching `ft8_subtract_signal_time`.
+    @discardableResult
+    internal func subtractSignalTime(a91: [UInt8], freqHz: Float, timeSec: Float) -> Bool {
+        guard numFed > 0, a91.count >= 10 else { return false }
+        return fedSamples.withUnsafeMutableBufferPointer { sp -> Bool in
+            guard let sbase = sp.baseAddress else { return false }
+            return a91.withUnsafeBufferPointer { ap in
+                ft8_subtract_signal_time(&mon, sbase, Int32(numFed), sampleRate,
+                                         ap.baseAddress, freqHz, timeSec)
             }
         }
     }
