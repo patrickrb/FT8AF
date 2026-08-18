@@ -168,6 +168,38 @@ final class FT8DecoderTests: XCTestCase {
         XCTAssertGreaterThan(wf.hzPerCol, 0)
         XCTAssertTrue(wf.bins.contains { $0 > 0 }, "signal should light up some bins")
     }
+
+    /// setDeep is the only knob the deep-decode setting turns: it raises the
+    /// LDPC iteration cap (20 -> 30). Assert that observable effect so the
+    /// LiveEngine wiring (`decoder.setDeep(settings.deepDecode)`) has a defined,
+    /// tested contract.
+    func testSetDeepRaisesLdpcIterations() {
+        let dec = FT8Decoder()
+        XCTAssertEqual(dec.ldpcIterations, FT8Decoder.ldpcItersNormal, "defaults to normal")
+        XCTAssertFalse(dec.isDeep)
+
+        dec.setDeep(true)
+        XCTAssertEqual(dec.ldpcIterations, FT8Decoder.ldpcItersDeep)
+        XCTAssertEqual(dec.ldpcIterations, 30)
+        XCTAssertTrue(dec.isDeep)
+
+        dec.setDeep(false)
+        XCTAssertEqual(dec.ldpcIterations, FT8Decoder.ldpcItersNormal)
+        XCTAssertEqual(dec.ldpcIterations, 20)
+        XCTAssertFalse(dec.isDeep)
+    }
+
+    /// Deep decode must still decode a clean signal (more iterations is a
+    /// superset of the normal effort — it never regresses an easy decode).
+    func testDeepDecodeStillDecodesCleanSignal() {
+        let text = "CQ K1ABC FN42"
+        guard let s = slot(for: text, baseFreqHz: 1500) else { return XCTFail("encode failed") }
+        let dec = FT8Decoder()
+        dec.setDeep(true)
+        dec.feedSlot(s)
+        dec.findSync()
+        XCTAssertTrue(dec.decodeAll().contains { $0.rawText == text })
+    }
 }
 
 /// Pure-logic tests for the hash table + helpers (no monitor needed).

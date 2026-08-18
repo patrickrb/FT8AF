@@ -101,6 +101,14 @@ final class LiveEngine {
         let readSpectrumWidthHz: @Sendable @MainActor () -> Int = {
             appState.settings.spectrumWidthHz
         }
+        // Live decode options for the decode loop: read on the main actor each
+        // slot so toggling deep/early decode applies without restarting.
+        let readDecodeOptions: @Sendable @MainActor () -> DecodeOptions = {
+            DecodeOptions(
+                deep: appState.settings.deepDecode,
+                early: appState.settings.earlyDecode
+            )
+        }
         let applyWaterfall: @Sendable @MainActor (WaterfallUpdate) -> Void = { update in
             let wf = appState.waterfall
             // Width changed live: the new rows span a different band, so drop
@@ -132,6 +140,7 @@ final class LiveEngine {
                     await self?.runDecodeLoop(
                         accumulator: accumulator,
                         initialRxOffset: rxOffset,
+                        readDecodeOptions: readDecodeOptions,
                         applyDecodes: applyDecodes
                     )
                 }
@@ -355,29 +364,42 @@ final class LiveEngine {
     private nonisolated func runDecodeLoop(
         accumulator: SlotAccumulator,
         initialRxOffset: Int64,
+        readDecodeOptions: @escaping @Sendable @MainActor () -> DecodeOptions,
         applyDecodes: @escaping @Sendable @MainActor ([DecodeMessage]) -> Void
     ) async {
         var rxOffsetMs = initialRxOffset
-        var lastSlotID: Int64 = SlotClock.rxSlotID(
+        // Seed one slot back so the first completed slot still decodes (the
+        // scheduler fires when `audioSlotID > lastDecodedAudioSlot`).
+        var lastDecodedAudioSlot: Int64 = SlotClock.rxSlotID(
             atUtcMs: Int64(Date().timeIntervalSince1970 * 1000),
             rxOffsetMs: rxOffsetMs
-        )
+        ) - 1
 
         while !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(200))
             if Task.isCancelled { break }
 
+            let opts = await MainActor.run { readDecodeOptions() }
             let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-            let currentSlot = SlotClock.rxSlotID(atUtcMs: nowMs, rxOffsetMs: rxOffsetMs)
 
-            guard currentSlot != lastSlotID else { continue }
-            lastSlotID = currentSlot
+            // Decide whether to decode now (boundary vs. early), which slot's
+            // audio, and how big a trailing window — see DecodeScheduler.
+            guard let plan = DecodeScheduler.plan(
+                nowMs: nowMs,
+                rxOffsetMs: rxOffsetMs,
+                earlyDecode: opts.early,
+                lastDecodedAudioSlotID: lastDecodedAudioSlot,
+                sampleRate: Int(FT8.sampleRate)
+            ) else { continue }
+            lastDecodedAudioSlot = plan.audioSlotID
 
-            // Extract the slot's audio and decode.
-            let samples = accumulator.takeSlot()
+            // Extract the slot's audio (full 15 s, or the ~13.5 s early window)
+            // and decode.
+            let samples = accumulator.takeTrailing(plan.windowSamples)
             // Share the engine-lifetime hash table so `<...>` compound calls
             // resolve across slots (a fresh decoder is built each slot).
             let decoder = FT8Decoder(hashTable: hashTable)
+            decoder.setDeep(opts.deep) // raise LDPC iterations when deep decode is on
             decoder.feedSlot(samples)
             decoder.findSync()
             let decoded = decoder.decodeAll()
@@ -391,9 +413,17 @@ final class LiveEngine {
                 )
             }
 
+            // With early decode the reply must wait out the rest of the cycle so
+            // it keys up at the boundary rather than ~1.5 s early (unshifted TX
+            // clock). Zero when decoding at the boundary already.
+            let txBoundaryDelayMs = DecodeScheduler.replyBoundaryDelayMs(
+                earlyDecode: opts.early,
+                msIntoCycle: SlotClock.msIntoCycle(atUtcMs: nowMs)
+            )
+
             // Map to UI messages and update state on MainActor.
             let utcTime = Self.utcTimeString(from: nowMs)
-            let slotIndex = Int(SlotClock.parity(slotID: currentSlot))
+            let slotIndex = Int(SlotClock.parity(slotID: plan.replySlotID))
             let uiMessages = decoded.map { msg in
                 DecodeMessage(
                     utcTime: utcTime,
@@ -413,7 +443,8 @@ final class LiveEngine {
 
             // Feed decoded messages to QSO engine and handle TX on main actor.
             await MainActor.run { [decoded] in
-                self.processQsoRx(decoded, slotID: currentSlot)
+                self.processQsoRx(decoded, slotID: plan.replySlotID,
+                                  txBoundaryDelayMs: txBoundaryDelayMs)
             }
         }
     }
@@ -421,7 +452,12 @@ final class LiveEngine {
     // MARK: - QSO processing + TX scheduling (MainActor)
 
     /// Process decoded messages through the QSO engine and schedule TX if needed.
-    private func processQsoRx(_ decoded: [DecodedMessage], slotID: Int64) {
+    ///
+    /// `txBoundaryDelayMs` defers TX key-up to the upcoming cycle boundary: with
+    /// early decode this RX pass runs ~1.5 s before the boundary, so a reply must
+    /// wait that long to still start at the top of its slot (0 at the boundary).
+    private func processQsoRx(_ decoded: [DecodedMessage], slotID: Int64,
+                              txBoundaryDelayMs: Int64 = 0) {
         guard let qso = qsoEngine, let appState else { return }
 
         // Sync latest settings into the engine before processing.
@@ -563,8 +599,9 @@ final class LiveEngine {
                 // beginTxPlayback also signals qso.notifyTransmitted() once the
                 // audio actually keys, so a courtesy "73" only wraps the QSO up
                 // after it's on the air (scheduleTx here is fire-and-forget: it
-                // defers playback by the operator's TX delay).
-                scheduleTx(message: txMsg, freqHz: appState.waterfall.txFreqHz)
+                // defers playback by the boundary wait + the operator's TX delay).
+                scheduleTx(message: txMsg, freqHz: appState.waterfall.txFreqHz,
+                           boundaryDelayMs: txBoundaryDelayMs)
             }
         }
     }
@@ -719,16 +756,19 @@ final class LiveEngine {
 
     /// Generate FT8 audio and play it, honoring the operator's TX delay and
     /// the late-start clip rule.
-    private func scheduleTx(message: String, freqHz: Float) {
+    private func scheduleTx(message: String, freqHz: Float, boundaryDelayMs: Int64 = 0) {
         guard let appState else { return }
         guard !appState.tx.isTuning else { return } // tune and FT8 TX are exclusive
         guard let samples = FT8Encoder.generateFT8(message, baseFreqHz: freqHz) else { return }
 
-        let txDelayMs = max(0, appState.settings.txDelayMs)
+        // Wait out the cycle remainder for an early-decoded reply, then the
+        // operator's TX delay. beginTxPlayback re-checks the real cycle position,
+        // so an overshoot still clips/skips correctly.
+        let totalDelayMs = max(0, boundaryDelayMs) + Int64(max(0, appState.settings.txDelayMs))
         txScheduleTask?.cancel()
         txScheduleTask = Task { @MainActor [weak self] in
-            if txDelayMs > 0 {
-                try? await Task.sleep(for: .milliseconds(txDelayMs))
+            if totalDelayMs > 0 {
+                try? await Task.sleep(for: .milliseconds(totalDelayMs))
             }
             guard !Task.isCancelled else { return }
             self?.beginTxPlayback(message: message, samples: samples)
@@ -1069,6 +1109,15 @@ struct WaterfallUpdate: Sendable {
     let timestamp: String?
     let inputPeak: Float
     let inputRms: Float
+}
+
+/// Live decode toggles read on the main actor at the start of each slot and
+/// handed to the background decode loop: deep decode (LDPC iteration cap) and
+/// early decode (decode ~1.5 s before the boundary). Read fresh each slot so a
+/// settings change applies without restarting the session.
+struct DecodeOptions: Sendable {
+    let deep: Bool
+    let early: Bool
 }
 
 /// Initializer extension on DecodedMessage for constructing from individual
