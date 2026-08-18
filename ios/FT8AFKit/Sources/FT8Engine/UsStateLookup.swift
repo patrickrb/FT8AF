@@ -51,9 +51,14 @@ public enum UsStateLookup {
 ///   - grid: the sender's Maidenhead grid (drives the US-state lookup).
 /// - Returns: the location string, or nil when nothing is known.
 public func decodeLocationText(callFrom: String, grid: String) -> String? {
-    let country = DxccPrefix.entity(for: callFrom)?.name
+    // Normalize the way classifyDecode does before resolving, so a decode with
+    // stray whitespace around the call/grid still yields the right entity and
+    // state (an untrimmed call would miss the DXCC table and blank the line).
+    let call = callFrom.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+    let normGrid = grid.trimmingCharacters(in: .whitespacesAndNewlines)
+    let country = DxccPrefix.entity(for: call)?.name
     let isUs = country == "United States"
-    if let state = UsStateLookup.state(forGrid: grid) {
+    if let state = UsStateLookup.state(forGrid: normGrid) {
         if isUs || country == nil { return "\(state), USA" }
         return "\(state), \(country!)"
     }

@@ -76,4 +76,11 @@ final class UsStateLookupTests: XCTestCase {
     func testLocationLineNilWhenNothingKnown() {
         XCTAssertNil(decodeLocationText(callFrom: "", grid: ""))
     }
+
+    func testLocationLineNormalizesWhitespaceAndCase() {
+        // Untrimmed / lowercase call and grid must still resolve (the decode
+        // path can hand us padded tokens) — otherwise the DXCC lookup misses
+        // and the line blanks out.
+        XCTAssertEqual(decodeLocationText(callFrom: " k5abc ", grid: " EM12 "), "TX, USA")
+    }
 }
