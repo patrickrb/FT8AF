@@ -467,7 +467,8 @@ final class LiveEngine {
                     freqHz: msg.freqHz,
                     grid: msg.grid,
                     extra: msg.extra,
-                    slotIndex: slotIndex
+                    slotIndex: slotIndex,
+                    dtSec: msg.timeSec
                 )
             }
 

@@ -69,8 +69,16 @@ struct DecodeFilterSettings: View {
 
             Section {
                 highlightToggle(
+                    "New POTA", description: "Amber pill for a park you haven't hunted yet",
+                    color: accent, isOn: $settings.highlightNewPota
+                )
+                highlightToggle(
                     "New DXCC", description: "Purple pill for unworked DXCC entities",
                     color: statusNew, isOn: $settings.highlightNewDxcc
+                )
+                highlightToggle(
+                    "New Zone", description: "Blue pill for unworked CQ zones (WAZ)",
+                    color: statusZone, isOn: $settings.highlightNewZone
                 )
                 highlightToggle(
                     "New State", description: "Teal pill for unworked US states (WAS)",
@@ -79,6 +87,10 @@ struct DecodeFilterSettings: View {
                 highlightToggle(
                     "New Grid", description: "Yellow pill for unworked grid squares",
                     color: statusWarn, isOn: $settings.highlightNewGrid
+                )
+                highlightToggle(
+                    "New Prefix", description: "Pink pill for unworked WPX prefixes",
+                    color: target, isOn: $settings.highlightNewPrefix
                 )
                 highlightToggle(
                     "New Band", description: "Cyan pill for stations never worked on this band",
@@ -112,6 +124,17 @@ struct DecodeFilterSettings: View {
                 }
                 .tint(textMuted)
 
+                Toggle(isOn: $settings.showBeamHeading) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Beam Heading")
+                            .foregroundStyle(textPrimary)
+                        Text("Show short-path bearing to each station in the decode list")
+                            .font(.ft8afUI(size: 12))
+                            .foregroundStyle(textFaint)
+                    }
+                }
+                .tint(accent)
+
                 NavigationLink {
                     BlockedCallsignsSettings()
                 } label: {
@@ -138,12 +161,16 @@ struct DecodeFilterSettings: View {
         .onChange(of: settings.showOnlyCQ) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.dxOnly) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.continentFilter) { _, _ in SettingsPersistence.save(appState.settings) }
+        .onChange(of: settings.highlightNewPota) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.highlightNewDxcc) { _, _ in SettingsPersistence.save(appState.settings) }
+        .onChange(of: settings.highlightNewZone) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.highlightNewState) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.highlightNewGrid) { _, _ in SettingsPersistence.save(appState.settings) }
+        .onChange(of: settings.highlightNewPrefix) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.highlightNewBand) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.highlightWorked) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.distanceInMiles) { _, _ in SettingsPersistence.save(appState.settings) }
+        .onChange(of: settings.showBeamHeading) { _, _ in SettingsPersistence.save(appState.settings) }
     }
 
     private func highlightToggle(

@@ -30,7 +30,10 @@ enum DecodeFilter: String, CaseIterable {
     case cq = "CQ Calls"
     case cqPota = "CQ POTA"
     case newDxcc = "New DXCC"
+    case newZone = "New Zone"
     case newState = "New State"
+    case newGrid = "New Grid"
+    case newPrefix = "New Prefix"
     case needed = "Needed"
     case forMe = "For Me"
 }
@@ -56,6 +59,11 @@ struct DecodeMessage: Identifiable, Equatable {
     var grid: String
     var extra: String
     var slotIndex: Int
+    /// DT (seconds): how far into the RX window this signal started, straight
+    /// from the decoder (`DecodedMessage.timeSec`). Rendered per-row like
+    /// WSJT-X. Defaulted so the non-decode construction sites (UDP reply,
+    /// auto-open) can omit it.
+    var dtSec: Float = 0
     /// Wall-clock arrival of the decode. Defaulted to construction time so
     /// every existing `DecodeMessage(...)` call site (LiveEngine creates
     /// messages the moment a slot decodes) gets the correct arrival without
@@ -238,13 +246,19 @@ final class SettingsState {
     var qrzLogbookApiKey: String = ""
     var pskReporterEnabled: Bool = false
     // Decode highlights & filters
+    var highlightNewPota: Bool = true
     var highlightNewDxcc: Bool = true
+    var highlightNewZone: Bool = true
     var highlightNewState: Bool = true
     var highlightNewGrid: Bool = true
+    var highlightNewPrefix: Bool = true
     var highlightNewBand: Bool = true
     var highlightWorked: Bool = true
     var continentFilter: String = "All"   // All / NA / SA / EU / AF / AS / OC / AN
     var distanceInMiles: Bool = false
+    /// Opt-in short-path beam heading in the decode row's meta line (default OFF,
+    /// like Android's `showBeamHeading`): only beam operators want the extra column.
+    var showBeamHeading: Bool = false
     // Tune
     var tuneTimeoutSec: Int = 30
     // Manual whole-clock correction (ms), ±5 s, persisted. Combined with the
@@ -400,13 +414,17 @@ enum SettingsPersistence {
         d.set(s.qrzLogbookEnabled, forKey: key("qrzLogbookEnabled"))
         d.set(s.qrzLogbookApiKey, forKey: key("qrzLogbookApiKey"))
         d.set(s.pskReporterEnabled, forKey: key("pskReporterEnabled"))
+        d.set(s.highlightNewPota, forKey: key("highlightNewPota"))
         d.set(s.highlightNewDxcc, forKey: key("highlightNewDxcc"))
+        d.set(s.highlightNewZone, forKey: key("highlightNewZone"))
         d.set(s.highlightNewState, forKey: key("highlightNewState"))
         d.set(s.highlightNewGrid, forKey: key("highlightNewGrid"))
+        d.set(s.highlightNewPrefix, forKey: key("highlightNewPrefix"))
         d.set(s.highlightNewBand, forKey: key("highlightNewBand"))
         d.set(s.highlightWorked, forKey: key("highlightWorked"))
         d.set(s.continentFilter, forKey: key("continentFilter"))
         d.set(s.distanceInMiles, forKey: key("distanceInMiles"))
+        d.set(s.showBeamHeading, forKey: key("showBeamHeading"))
         d.set(s.tuneTimeoutSec, forKey: key("tuneTimeoutSec"))
         d.set(s.preferredInputPort, forKey: key("preferredInputPort"))
         d.set(s.manualClockOffsetMs, forKey: key("manualClockOffsetMs"))
@@ -499,14 +517,23 @@ enum SettingsPersistence {
         if d.object(forKey: key("pskReporterEnabled")) != nil {
             s.pskReporterEnabled = d.bool(forKey: key("pskReporterEnabled"))
         }
+        if d.object(forKey: key("highlightNewPota")) != nil {
+            s.highlightNewPota = d.bool(forKey: key("highlightNewPota"))
+        }
         if d.object(forKey: key("highlightNewDxcc")) != nil {
             s.highlightNewDxcc = d.bool(forKey: key("highlightNewDxcc"))
+        }
+        if d.object(forKey: key("highlightNewZone")) != nil {
+            s.highlightNewZone = d.bool(forKey: key("highlightNewZone"))
         }
         if d.object(forKey: key("highlightNewState")) != nil {
             s.highlightNewState = d.bool(forKey: key("highlightNewState"))
         }
         if d.object(forKey: key("highlightNewGrid")) != nil {
             s.highlightNewGrid = d.bool(forKey: key("highlightNewGrid"))
+        }
+        if d.object(forKey: key("highlightNewPrefix")) != nil {
+            s.highlightNewPrefix = d.bool(forKey: key("highlightNewPrefix"))
         }
         if d.object(forKey: key("highlightNewBand")) != nil {
             s.highlightNewBand = d.bool(forKey: key("highlightNewBand"))
@@ -519,6 +546,9 @@ enum SettingsPersistence {
         }
         if d.object(forKey: key("distanceInMiles")) != nil {
             s.distanceInMiles = d.bool(forKey: key("distanceInMiles"))
+        }
+        if d.object(forKey: key("showBeamHeading")) != nil {
+            s.showBeamHeading = d.bool(forKey: key("showBeamHeading"))
         }
         if d.object(forKey: key("tuneTimeoutSec")) != nil {
             s.tuneTimeoutSec = d.integer(forKey: key("tuneTimeoutSec"))
