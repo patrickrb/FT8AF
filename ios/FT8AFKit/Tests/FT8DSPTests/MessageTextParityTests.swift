@@ -4,9 +4,11 @@ import CFT8
 
 /// Parity coverage for the message TEXT that `FT8Decoder.buildMessage` puts in
 /// `DecodedMessage.rawText` (the string the QSO log/decode list shows), checked
-/// against Android `Ft8Message.getMessageText()` for every special FT8 message
-/// type (Field Day, DXpedition, RTTY Roundup, WWROF, telemetry, free text, CQ,
-/// standard).
+/// against Android `Ft8Message.getMessageText()`. Covers the standard + CQ
+/// common path plus the special contest/utility types this file builds payloads
+/// for: Field Day, RTTY Roundup, DXpedition, WWROF, and telemetry. (Free-text /
+/// EU-VHF / Contesting are discussed in the report but not asserted here — iOS
+/// already emits the fuller ft8_lib text for them.)
 ///
 /// KEY FINDING (see the FT8AF report): the shared `ft8_lib`
 /// `ftx_message_decode` — the exact call `buildMessage` uses to fill
@@ -77,7 +79,10 @@ final class MessageTextParityTests: XCTestCase {
         var iface = makeHashInterface()
         var buf = [CChar](repeating: 0, count: 64)
         let rc = buf.withUnsafeMutableBufferPointer { ftx_message_decode(&msg, &iface, $0.baseAddress) }
-        guard rc == FTX_MESSAGE_RC_OK else { return "" }
+        guard rc == FTX_MESSAGE_RC_OK else {
+            XCTFail("ftx_message_decode failed rc=\(rc)")
+            return ""
+        }
         return buf.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
     }
 
