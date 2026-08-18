@@ -9,13 +9,13 @@ final class PotaAdifTests: XCTestCase {
     private func rec(
         call: String, grid: String = "FN31", mode: String = "FT8",
         qsoDate: String = "20260713", timeOn: String = "123000",
-        timeOff: String = "123115"
+        timeOff: String = "123115", sig: String = "", sigInfo: String = ""
     ) -> QsoRecord {
         QsoRecord(
             call: call, gridsquare: grid, mode: mode, rstSent: "-05", rstRcvd: "-08",
             qsoDate: qsoDate, timeOn: timeOn, qsoDateOff: qsoDate, timeOff: timeOff,
             band: "20M", freq: "14.074", stationCallsign: "KD2OGR",
-            myGridsquare: "FN20", comment: "")
+            myGridsquare: "FN20", comment: "", sig: sig, sigInfo: sigInfo)
     }
 
     private func activation(
@@ -84,6 +84,34 @@ final class PotaAdifTests: XCTestCase {
             records: [rec(call: "W1AW", mode: "FT8")], activation: activation())
         XCTAssertTrue(docs[0].content.contains("<MODE:3>FT8 "))
         XCTAssertFalse(docs[0].content.contains("SUBMODE"))
+    }
+
+    // MARK: - Park-to-park SIG / SIG_INFO
+
+    func testParkToParkQsoEmitsSigAndSigInfo() {
+        let docs = Adif.potaActivationExport(
+            records: [rec(call: "K1ABC", sig: "POTA", sigInfo: "K-1234")],
+            activation: activation())
+        let content = docs[0].content
+        // Our own park.
+        XCTAssertTrue(content.contains("<MY_SIG:4>POTA "))
+        XCTAssertTrue(content.contains("<MY_SIG_INFO:7>US-7443 "))
+        // Their park (park-to-park).
+        XCTAssertTrue(content.contains("<SIG:4>POTA "))
+        XCTAssertTrue(content.contains("<SIG_INFO:6>K-1234 "))
+        // SIG must follow MY_SIG_INFO (matches Android field order).
+        let mySigInfoRange = content.range(of: "<MY_SIG_INFO")!
+        let sigRange = content.range(of: "<SIG:")!
+        XCTAssertTrue(sigRange.lowerBound > mySigInfoRange.lowerBound)
+    }
+
+    func testNormalQsoOmitsSigAndSigInfo() {
+        let docs = Adif.potaActivationExport(
+            records: [rec(call: "W1AW")], activation: activation())
+        let content = docs[0].content
+        XCTAssertTrue(content.contains("<MY_SIG:4>POTA "))
+        XCTAssertFalse(content.contains("<SIG:"))
+        XCTAssertFalse(content.contains("<SIG_INFO:"))
     }
 
     // MARK: - Multi-park (two-fer)
