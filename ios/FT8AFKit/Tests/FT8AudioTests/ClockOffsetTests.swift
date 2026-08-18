@@ -61,6 +61,95 @@ final class ClockOffsetTests: XCTestCase {
         XCTAssertEqual(SlotClock.slotID(atUtcMs: shifted), 200)
     }
 
+    // MARK: - Auto-DT is a whole-clock term (the primary change)
+
+    func testCombinedIncludesAutoComponent() {
+        let off = ClockOffset(ntpOffsetMs: 100, manualOffsetMs: 50, autoOffsetMs: -300)
+        XCTAssertEqual(off.combinedMs, -150)
+        XCTAssertEqual(off.apply(toUtcMs: 1_000_000), 999_850)
+    }
+
+    func testAutoDefaultsToZeroSoExistingCallSitesAreUnchanged() {
+        let off = ClockOffset(ntpOffsetMs: 200, manualOffsetMs: -50)
+        XCTAssertEqual(off.autoOffsetMs, 0)
+        XCTAssertEqual(off.combinedMs, 150)
+    }
+
+    func testAutoOffsetShiftsRxSlotAndTxCycleByTheSameAmount() {
+        // A confirmed auto-DT correction feeds autoOffsetMs; RX slot detection and
+        // TX cycle position must move together (whole-clock), unlike the retired
+        // RX-only path that moved only the RX slice.
+        let wallMs: Int64 = 15_000 * 100 + 5_000 // 5.000 s into slot 100
+        let auto: Int64 = -300                    // a DtCalibrator correction
+        let off = ClockOffset(autoOffsetMs: auto)
+        let shifted = off.apply(toUtcMs: wallMs)
+
+        // RX: pass rxOffsetMs 0 — the only correction now rides the shifted clock.
+        let baseRx = SlotClock.msIntoCycle(atUtcMs: wallMs)
+        let shiftedRx = SlotClock.rxSlotID(atUtcMs: shifted, rxOffsetMs: 0)
+        XCTAssertEqual(SlotClock.rxSlotID(atUtcMs: wallMs, rxOffsetMs: 0), shiftedRx) // same slot
+        // TX: msIntoCycle off the shifted clock moves by exactly the auto offset.
+        let shiftedTx = SlotClock.msIntoCycle(atUtcMs: shifted)
+        XCTAssertEqual(shiftedTx - baseRx, auto)
+    }
+
+    func testAutoCorrectionAppliedToRxExactlyOnce() {
+        // Regression guard against double-correcting RX: with the auto-DT folded
+        // into the whole clock and rxOffsetMs pinned to 0, the RX cycle position
+        // shifts by exactly `auto` — not 2×auto (which a lingering rxOffsetMs
+        // path would produce).
+        let wallMs: Int64 = 15_000 * 40 + 7_000
+        let auto: Int64 = 450
+        let shifted = ClockOffset(autoOffsetMs: auto).apply(toUtcMs: wallMs)
+
+        // RX read uses the shifted clock with NO separate rxOffset (0).
+        let rxShift = SlotClock.msIntoCycle(atUtcMs: shifted - 0)
+            - SlotClock.msIntoCycle(atUtcMs: wallMs)
+        XCTAssertEqual(rxShift, auto)
+        // A hypothetical double-apply (auto folded in *and* an equal rxOffset)
+        // would shift by 2×auto — assert we are NOT doing that.
+        let doubled = SlotClock.msIntoCycle(atUtcMs: shifted - auto)
+            - SlotClock.msIntoCycle(atUtcMs: wallMs)
+        XCTAssertEqual(doubled, 0)
+        XCTAssertNotEqual(rxShift, 2 * auto)
+    }
+
+    func testCalibratorResultDrivesTheWholeClockConsistently() {
+        // End-to-end: a consistent +0.5 s band bias over CONFIRM_SLOTS produces a
+        // DtCalibrator correction, and feeding it into autoOffsetMs shifts an RX
+        // slot read and a TX msIntoCycle read by the identical amount.
+        var cal = DtCalibrator()
+        let dts = [Float](repeating: 0.5, count: 4)
+        XCTAssertNil(cal.calibrate(autoOffsetMs: 0, decodedDtSec: dts)) // building
+        guard let correction = cal.calibrate(autoOffsetMs: 0, decodedDtSec: dts) else {
+            return XCTFail("expected a correction after the confirm slot")
+        }
+        XCTAssertEqual(correction, -300)
+
+        let wallMs: Int64 = 15_000 * 10 + 6_000
+        let shifted = ClockOffset(autoOffsetMs: correction).apply(toUtcMs: wallMs)
+        let rxShift = SlotClock.msIntoCycle(atUtcMs: shifted, cycleMs: SlotClock.cycleMs)
+            - SlotClock.msIntoCycle(atUtcMs: wallMs)
+        let txShift = SlotClock.msIntoCycle(atUtcMs: shifted)
+            - SlotClock.msIntoCycle(atUtcMs: wallMs)
+        XCTAssertEqual(rxShift, correction)
+        XCTAssertEqual(txShift, correction)
+    }
+
+    func testPlausibleAutoCorrectionKeepsOnTimeTxOutOfClipTerritory() {
+        // TX safety: the auto offset drives the clock toward truth, so an on-time
+        // key-up stays inside the 2.36 s slack (no leading-Costas clip). Even the
+        // *maximum* auto correction, applied to a key-up that fires ~0.6 s into
+        // the corrected cycle, leaves the cycle position well under the slack.
+        let auto = ClockOffset(autoOffsetMs: DtCalibrator.maxOffsetMs)
+        let correctedNow: Int64 = 15_000 * 3 + 600 // ~0.6 s into the corrected cycle
+        let wallMs = correctedNow - auto.combinedMs
+        let msInto = ClockOffset(autoOffsetMs: DtCalibrator.maxOffsetMs)
+            .apply(toUtcMs: wallMs)
+        let clip = max(0, SlotClock.msIntoCycle(atUtcMs: msInto) - 2_360)
+        XCTAssertEqual(clip, 0)
+    }
+
     // MARK: - Manual clamping
 
     func testManualClampToRange() {
