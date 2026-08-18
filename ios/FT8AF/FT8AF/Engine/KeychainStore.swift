@@ -13,8 +13,10 @@ import Security
 /// EncryptedSharedPreferences (Keystore-backed at-rest encryption for the
 /// refresh token) without the SharedPreferences surface.
 enum KeychainStore {
-    /// Namespacing service string. Ties items to this app; a reinstall starts
-    /// fresh (the user signs in again), matching the Android behaviour.
+    /// Namespacing service string. Ties items to this app. Note: unlike
+    /// Android's EncryptedSharedPreferences (wiped on uninstall), iOS Keychain
+    /// items can survive an app reinstall, so a signed-in session may persist
+    /// across reinstalls; `signOut()` is the reliable way to clear it.
     private static let service = "radio.ks3ckc.ft8af.pota"
 
     /// Store (or replace) a string for `account`. Returns false on any OSStatus

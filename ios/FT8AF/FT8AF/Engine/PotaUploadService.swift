@@ -7,7 +7,8 @@ import Foundation
 /// all live in the kit.
 ///
 /// Direct port of Android's `PotaClient.uploadAdif`: raw-JWT Authorization
-/// header, single multipart `adif` part, up to 3 attempts with 1s/2s/4s backoff,
+/// header, single multipart `adif` part, up to 3 attempts with exponential
+/// backoff between them (1s, then 2s),
 /// retrying ONLY on 502/503/504 or a transport error (a 4xx / plain 500 is
 /// terminal). A 401/403 surfaces as `.unauthorized` so the caller can re-prompt
 /// for sign-in and retry.

@@ -200,12 +200,16 @@ public enum PotaAuth {
         guard let comps = URLComponents(string: url) else { return .notRedirect }
         // Exact scheme (https) + host (pota.app), case-insensitive; reject any
         // explicit port (the real redirect carries none).
+        // The registered redirect is exactly https://pota.app/ , so pin the
+        // path to the root ("" or "/") in addition to scheme/host/no-port —
+        // defence in depth against a code being lifted from any other pota.app
+        // URL. An https URL with a host has an empty or "/"-prefixed path.
+        let path = comps.path
         guard comps.scheme?.lowercased() == "https",
               comps.host?.lowercased() == "pota.app",
-              comps.port == nil
+              comps.port == nil,
+              path.isEmpty || path == "/"
         else { return .notRedirect }
-        // Path is always "/" or deeper for an https URL with a host; the redirect
-        // lives at the origin root, so accept any path on the exact host.
         let code = comps.queryItems?.first(where: { $0.name == "code" })?.value
         if let code, !code.isEmpty { return .withCode(code) }
         return .noCode

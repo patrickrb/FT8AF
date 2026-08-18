@@ -148,6 +148,9 @@ final class PotaAuthTests: XCTestCase {
         // Explicit alternate port.
         XCTAssertEqual(PotaAuth.classifyRedirect("https://pota.app:8443/?code=steal"),
                        .notRedirect)
+        // Non-root path on the exact host — the redirect only ever lands at "/".
+        XCTAssertEqual(PotaAuth.classifyRedirect("https://pota.app/login/callback?code=steal"),
+                       .notRedirect)
         // Different host entirely.
         XCTAssertEqual(PotaAuth.classifyRedirect("https://notpota.app/?code=steal"),
                        .notRedirect)

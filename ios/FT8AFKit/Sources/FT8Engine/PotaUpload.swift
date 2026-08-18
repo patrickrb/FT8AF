@@ -14,7 +14,10 @@ public enum PotaUpload {
     public static let baseURL = "https://api.pota.app"
     public static let userAgent = "ft8af-1.0"
 
-    /// Total upload attempts (the initial try plus retries) before giving up.
+    /// Total upload attempts (the initial try plus retries) before giving up —
+    /// matches Android's MAX_UPLOAD_ATTEMPTS. With 3 attempts the sleeps used are
+    /// backoffSeconds(1)=1s and backoffSeconds(2)=2s (the 4s the formula would
+    /// yield for a 4th attempt is never reached).
     public static let maxAttempts = 3
 
     /// HTTP statuses that mean POTA's backend was *transiently* unavailable (a
