@@ -115,10 +115,12 @@ public enum PotaSelfSpot {
             [
                 "activator": activator.uppercased(),
                 "spotter": spotter.uppercased(),
-                // POSIX locale so the decimal separator is always "." — a
-                // comma-decimal device locale would otherwise POST "14074,0"
-                // and the spot would be rejected/misparsed.
-                "frequency": String(format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), frequencyKhz),
+                // Plain String(format:) uses the C locale, not the user's, so
+                // the decimal separator is always "." (never a comma) — the
+                // `frequency` field can't be corrupted by the device locale.
+                // (Do NOT pass an explicit locale: the localized overload rounds
+                // via NSNumber and changes half-up behavior, e.g. 7074.05.)
+                "frequency": String(format: "%.1f", frequencyKhz),
                 "reference": reference.uppercased(),
                 "mode": mode,
                 "source": PotaSelfSpot.source,
