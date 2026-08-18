@@ -103,7 +103,8 @@ final class TxTimingTests: XCTestCase {
     /// smaller slack still clips nothing here. Guards that slack is per-mode.
     func testFT4SlackIsWiderThanFT8() {
         XCTAssertGreaterThan(ModeProfile.ft4.slackMs, ModeProfile.ft8.slackMs)
-        // 2400 ms in: clipped under nothing for either mode (both slacks > 2400).
+        // 2400 ms in: FT4's wider 2460 ms slack clips nothing, but FT8's 2360 ms
+        // slack is already exceeded, so FT8 clips the 40 ms overage.
         XCTAssertEqual(TxTiming.lateStartClipMs(msIntoCycle: 2_400, slackMs: ModeProfile.ft4.slackMs), 0)
         XCTAssertEqual(TxTiming.lateStartClipMs(msIntoCycle: 2_400, slackMs: ModeProfile.ft8.slackMs), 40)
     }

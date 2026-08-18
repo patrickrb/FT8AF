@@ -84,7 +84,8 @@ public struct ModeProfile: Equatable, Sendable {
         self.sampleRate = sampleRate
         // Compute in Double then round, matching Android `Math.round(...)`.
         self.waveformMs = Int64((Double(numTones) * Double(symbolPeriod) * 1000.0).rounded())
-        self.slackMs = cycleMs - Int64((Double(numTones) * Double(symbolPeriod) * 1000.0).rounded())
+        // Reuse waveformMs so slack can never drift if the rounding changes.
+        self.slackMs = cycleMs - self.waveformMs
         self.slotSamples = Int(sampleRate) * Int(cycleMs) / 1000
     }
 

@@ -872,6 +872,9 @@ final class LiveEngine {
         // it can be verified transmitting we run FT4 as RX + timing only — never
         // key a mutilated / off-grid signal. FT8 is unaffected.
         guard appState.settings.mode.profile.isFT8 else { return }
+        // Capture the profile NOW so a mid-delay FT8->FT4 mode switch can't make
+        // beginTxPlayback clip this (FT8) signal with FT4 timing.
+        let profile = appState.settings.mode.profile
         guard let samples = FT8Encoder.generateFT8(message, baseFreqHz: freqHz) else { return }
 
         // Wait out the cycle remainder for an early-decoded reply, then the
@@ -884,7 +887,7 @@ final class LiveEngine {
                 try? await Task.sleep(for: .milliseconds(totalDelayMs))
             }
             guard !Task.isCancelled else { return }
-            self?.beginTxPlayback(message: message, samples: samples)
+            self?.beginTxPlayback(message: message, samples: samples, profile: profile)
         }
     }
 
@@ -896,13 +899,13 @@ final class LiveEngine {
     /// them audible but undecodable (see CLAUDE.md, TX pipeline gotcha #2).
     /// The late-start-tolerance setting is a SKIP threshold instead: when more
     /// than that much leading audio would be clipped, the slot is skipped.
-    private func beginTxPlayback(message: String, samples: [Float]) {
+    private func beginTxPlayback(message: String, samples: [Float], profile: ModeProfile) {
         guard let appState else { return }
         let nowMs = nowMs()
-        // Use the active mode's cycle + physical slack so the clip math is
-        // correct per mode. For FT8 (the only mode that reaches here today) this
-        // is byte-identical to the old constants (15000 / 2360).
-        let profile = appState.settings.mode.profile
+        // `profile` is captured at schedule time (see scheduleTx) so a mode
+        // switch during the TX delay can't clip this signal with another mode's
+        // timing. For FT8 (the only mode that reaches here today) the cycle +
+        // slack are byte-identical to the old constants (15000 / 2360).
         let clipMs = TxTiming.lateStartClipMs(
             msIntoCycle: SlotClock.msIntoCycle(atUtcMs: nowMs, cycleMs: profile.cycleMs),
             slackMs: profile.slackMs
