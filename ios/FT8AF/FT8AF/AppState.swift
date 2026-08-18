@@ -28,6 +28,7 @@ enum DecodeFilter: String, CaseIterable {
     case cq = "CQ Calls"
     case cqPota = "CQ POTA"
     case newDxcc = "New DXCC"
+    case newState = "New State"
     case needed = "Needed"
     case forMe = "For Me"
 }
@@ -232,6 +233,7 @@ final class SettingsState {
     var pskReporterEnabled: Bool = false
     // Decode highlights & filters
     var highlightNewDxcc: Bool = true
+    var highlightNewState: Bool = true
     var highlightNewGrid: Bool = true
     var highlightNewBand: Bool = true
     var highlightWorked: Bool = true
@@ -359,6 +361,7 @@ enum SettingsPersistence {
         d.set(s.qrzLogbookApiKey, forKey: key("qrzLogbookApiKey"))
         d.set(s.pskReporterEnabled, forKey: key("pskReporterEnabled"))
         d.set(s.highlightNewDxcc, forKey: key("highlightNewDxcc"))
+        d.set(s.highlightNewState, forKey: key("highlightNewState"))
         d.set(s.highlightNewGrid, forKey: key("highlightNewGrid"))
         d.set(s.highlightNewBand, forKey: key("highlightNewBand"))
         d.set(s.highlightWorked, forKey: key("highlightWorked"))
@@ -454,6 +457,9 @@ enum SettingsPersistence {
         }
         if d.object(forKey: key("highlightNewDxcc")) != nil {
             s.highlightNewDxcc = d.bool(forKey: key("highlightNewDxcc"))
+        }
+        if d.object(forKey: key("highlightNewState")) != nil {
+            s.highlightNewState = d.bool(forKey: key("highlightNewState"))
         }
         if d.object(forKey: key("highlightNewGrid")) != nil {
             s.highlightNewGrid = d.bool(forKey: key("highlightNewGrid"))

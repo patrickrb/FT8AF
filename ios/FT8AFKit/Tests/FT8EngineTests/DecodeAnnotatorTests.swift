@@ -79,8 +79,10 @@ final class DecodeAnnotatorTests: XCTestCase {
     }
 
     func testNewGridWhenEntityWorked() {
-        // USA entity is worked (W1AW), but EM12 is a new grid.
-        XCTAssertEqual(classify(from: "K5ABC", to: "CQ", grid: "EM12"), .newGrid)
+        // USA entity is worked (W1AW). IO91 is a new grid that resolves to no US
+        // state (non-US locator), so NEW GRID is the highest category left.
+        // (EM12 would now win as NEW STATE — see testNewStateBeatsNewGrid.)
+        XCTAssertEqual(classify(from: "K5ABC", to: "CQ", grid: "IO91"), .newGrid)
     }
 
     func testNewBandWhenGridAndEntityWorked() {
@@ -114,8 +116,9 @@ final class DecodeAnnotatorTests: XCTestCase {
 
     func testNewGridToggleFallsThrough() {
         let t = HighlightToggles(newGrid: false)
-        // K5ABC: entity worked, grid EM12 new but gated off, never worked → CQ.
-        XCTAssertEqual(classify(from: "K5ABC", to: "CQ", grid: "EM12", toggles: t), .cq)
+        // K5ABC: entity worked, non-US grid IO91 new but gated off, never
+        // worked → CQ. (IO91 resolves to no state, so NEW STATE stays out of it.)
+        XCTAssertEqual(classify(from: "K5ABC", to: "CQ", grid: "IO91", toggles: t), .cq)
     }
 
     func testNewBandToggleFallsThrough() {
@@ -126,6 +129,37 @@ final class DecodeAnnotatorTests: XCTestCase {
     func testWorkedToggleFallsThrough() {
         let t = HighlightToggles(worked: false)
         XCTAssertEqual(classify(from: "W1AW", to: "CQ", grid: "FN31", band: "20M", toggles: t), .cq)
+    }
+
+    // MARK: - New State (Worked All States)
+
+    func testNewStateBeatsNewGrid() {
+        // K5ABC: US entity worked; EM12 -> TX is an unworked state (index only
+        // has CT). NEW STATE outranks NEW GRID, matching Android.
+        XCTAssertEqual(classify(from: "K5ABC", to: "CQ", grid: "EM12"), .newState)
+    }
+
+    func testNewDxccBeatsNewState() {
+        // VK3ABC (Australia) is an unworked entity even though EM12 -> TX is an
+        // unworked state → NEW DXCC still wins (higher priority).
+        XCTAssertEqual(classify(from: "VK3ABC", to: "CQ", grid: "EM12"), .newDxcc)
+    }
+
+    func testNewStateToggleFallsThrough() {
+        // With NEW STATE gated off, EM12 is still an unworked grid → NEW GRID.
+        let t = HighlightToggles(newState: false)
+        XCTAssertEqual(classify(from: "K5ABC", to: "CQ", grid: "EM12", toggles: t), .newGrid)
+    }
+
+    func testWorkedStateIsNotNew() {
+        // K1XYZ (unworked US call) in FN31 -> CT, which is already worked; the
+        // grid FN31 is also worked, so nothing "new" remains → plain CQ.
+        XCTAssertEqual(classify(from: "K1XYZ", to: "CQ", grid: "FN31"), .cq)
+    }
+
+    func testIndexTracksWorkedStates() {
+        // W1AW FN31 -> CT is a worked state; DL4RCK JO31 is non-US (no state).
+        XCTAssertEqual(index.workedStates, ["CT"])
     }
 
     // MARK: - Grid validity
