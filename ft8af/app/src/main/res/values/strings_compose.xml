@@ -677,6 +677,7 @@
     <string name="language_name_id" translatable="false">Bahasa Indonesia</string>
     <string name="language_name_uk" translatable="false">Українська</string>
     <string name="language_name_ar" translatable="false">العربية</string>
+    <string name="language_name_pt_br" translatable="false">Português (Brasil)</string>
 
     <string name="tx_audio_dropped">TX audio failed — no signal was sent this cycle (USB audio error)</string>
     <string name="cq_offset_moved">CQ offset moved to a clear spot: %1$d Hz</string>
