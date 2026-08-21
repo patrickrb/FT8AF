@@ -2835,13 +2835,14 @@ public class FT8TransmitSignal {
             for (int i = 0; i < callerQueue.size(); i++) {
                 if (callerQueue.get(i).callsign.equals(callsign)) {
                     QueuedCaller existing = callerQueue.get(i);
-                    existing.snr = msg.hasSnr() ? msg.snr : 0;
-                    existing.queuedTimeMs = System.currentTimeMillis();
-                    // They called again: refresh the given-up clock. Only ever
-                    // forward — an evidence list can replay an older slot's
-                    // decode after a newer one has already been counted.
-                    existing.lastHeardUtc = Math.max(existing.lastHeardUtc, msg.utcTime);
-                    mutableCallerQueue.postValue(new ArrayList<>(callerQueue));
+                    // They called again: refresh SNR and the given-up clock. Only
+                    // publish a snapshot when something the UI or the pick policy
+                    // can see actually changed — refreshCallerQueue() runs this for
+                    // every pass, and a deep pass re-delivering the same decode
+                    // would otherwise post an identical list each time.
+                    if (existing.refresh(msg.hasSnr() ? msg.snr : 0, msg.utcTime)) {
+                        mutableCallerQueue.postValue(new ArrayList<>(callerQueue));
+                    }
                     return;
                 }
             }

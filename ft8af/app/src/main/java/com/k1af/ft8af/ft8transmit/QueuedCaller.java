@@ -32,4 +32,28 @@ public class QueuedCaller {
         this.queuedTimeMs = System.currentTimeMillis();
         this.lastHeardUtc = lastHeardUtc;
     }
+
+    /**
+     * The station called again: take the new SNR and move {@link #lastHeardUtc}
+     * forward to {@code heardUtc} (never backward — an evidence list can replay an
+     * older slot's decode after a newer one has already been counted).
+     *
+     * @return true if the SNR or the last-heard slot actually changed, i.e. the
+     *         queue snapshot the UI and the pick policy see is different now; a
+     *         re-delivery of the same decode returns false so callers can skip
+     *         republishing an identical list
+     */
+    public boolean refresh(int newSnr, long heardUtc) {
+        queuedTimeMs = System.currentTimeMillis();
+        boolean changed = false;
+        if (snr != newSnr) {
+            snr = newSnr;
+            changed = true;
+        }
+        if (heardUtc > lastHeardUtc) {
+            lastHeardUtc = heardUtc;
+            changed = true;
+        }
+        return changed;
+    }
 }

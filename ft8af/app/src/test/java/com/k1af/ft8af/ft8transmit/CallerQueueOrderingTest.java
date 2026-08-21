@@ -226,4 +226,41 @@ public class CallerQueueOrderingTest {
         CallerQueueOrdering.pruneGivenUp(q, now, FT8_SLOT_MS);
         assertThat(q.get(CallerQueueOrdering.pickNextIndex(q, true)).callsign).isEqualTo("QUIET");
     }
+
+    // ---- QueuedCaller.refresh: report whether anything visible changed ----
+
+    @Test
+    public void refresh_sameDecodeRedelivered_reportsNoChange() {
+        QueuedCaller c = heardAt("A", 1_000L);
+        c.snr = -7;
+        assertThat(c.refresh(-7, 1_000L)).isFalse();
+        assertThat(c.snr).isEqualTo(-7);
+        assertThat(c.lastHeardUtc).isEqualTo(1_000L);
+    }
+
+    @Test
+    public void refresh_newerSlot_movesLastHeardForwardAndReportsChange() {
+        QueuedCaller c = heardAt("A", 1_000L);
+        c.snr = -7;
+        assertThat(c.refresh(-7, 31_000L)).isTrue();
+        assertThat(c.lastHeardUtc).isEqualTo(31_000L);
+    }
+
+    @Test
+    public void refresh_olderSlotReplayed_neverMovesLastHeardBackward() {
+        // An evidence list can replay an older slot's decode after a newer one
+        // has already been counted; the given-up clock must not rewind.
+        QueuedCaller c = heardAt("A", 31_000L);
+        c.snr = -7;
+        assertThat(c.refresh(-7, 1_000L)).isFalse();
+        assertThat(c.lastHeardUtc).isEqualTo(31_000L);
+    }
+
+    @Test
+    public void refresh_snrChangeAlone_reportsChange() {
+        QueuedCaller c = heardAt("A", 1_000L);
+        c.snr = -7;
+        assertThat(c.refresh(-3, 1_000L)).isTrue();
+        assertThat(c.snr).isEqualTo(-3);
+    }
 }
