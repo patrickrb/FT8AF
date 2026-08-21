@@ -574,6 +574,9 @@
     <string name="settings_time_suggest_none">No decodes yet — start receiving to get a suggestion.</string>
     <string name="settings_time_suggest_label">Recent average DT: %1$s</string>
     <string name="settings_time_suggest_apply">Apply suggested correction</string>
+    <string name="settings_time_suggest_auto">Auto-sync is on — corrections from decodes are applied for you, no tap needed.</string>
+    <string name="settings_time_suggest_auto_waiting">Waiting for agreeing decodes before the first auto-correction…</string>
+    <string name="settings_time_suggest_auto_last">Last auto-correction: %1$s at %2$s</string>
     <string name="settings_time_correction_gps_locked">GPS clock discipline is controlling the clock — turn it off below to adjust manually.</string>
 
     <!-- ===== Settings: Time Sync (self-syncing clock from decodes) ===== -->

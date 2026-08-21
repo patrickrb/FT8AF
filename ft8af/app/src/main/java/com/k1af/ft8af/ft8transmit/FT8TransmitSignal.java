@@ -1978,6 +1978,11 @@ public class FT8TransmitSignal {
             GeneralVariables.noReplyCount = 0;
         }
 
+        // Who else is calling me this pass, and who has stopped. Done before any
+        // branch below returns, so the queue reflects live callers on every cycle
+        // of a QSO — not just the ones where the partner went quiet.
+        refreshCallerQueue(messages);
+
         // update the QSO list; if not already recorded, save it
         updateQSlRecordList(newOrder, toCallsign);
 
@@ -2832,6 +2837,10 @@ public class FT8TransmitSignal {
                     QueuedCaller existing = callerQueue.get(i);
                     existing.snr = msg.hasSnr() ? msg.snr : 0;
                     existing.queuedTimeMs = System.currentTimeMillis();
+                    // They called again: refresh the given-up clock. Only ever
+                    // forward — an evidence list can replay an older slot's
+                    // decode after a newer one has already been counted.
+                    existing.lastHeardUtc = Math.max(existing.lastHeardUtc, msg.utcTime);
                     mutableCallerQueue.postValue(new ArrayList<>(callerQueue));
                     return;
                 }
@@ -2840,7 +2849,7 @@ public class FT8TransmitSignal {
             if (callerQueue.size() < MAX_QUEUE_SIZE) {
                 callerQueue.add(new QueuedCaller(
                         callsign, msg.freq_hz, msg.getSequence(), msg.hasSnr() ? msg.snr : 0,
-                        msg.i3, msg.n3, msg.extraInfo));
+                        msg.i3, msg.n3, msg.extraInfo, msg.utcTime));
                 mutableCallerQueue.postValue(new ArrayList<>(callerQueue));
                 GeneralVariables.fileLog("QSO: enqueue caller " + callsign
                         + " (queue size " + callerQueue.size() + ")");
@@ -2849,10 +2858,75 @@ public class FT8TransmitSignal {
     }
 
     /**
+     * Keep the caller queue in step with the stations actually calling us this
+     * pass: every decode addressed to me from someone other than the current
+     * partner is enqueued (or, if already queued, has its last-heard slot
+     * refreshed), and anyone who has stopped calling is pruned.
+     *
+     * <p>Before this, callers were only enqueued on cycles where the partner went
+     * silent (the scan lived behind the "no reply" branch), so a smooth QSO never
+     * recorded who was waiting, and nothing ever removed a caller who had given
+     * up. Runs on every pass — fast and evidence-only alike, since deep passes
+     * find callers the fast pass missed — while a QSO is in progress. In the CQ
+     * baseline direct callers are answered on the spot instead.
+     *
+     * @param messages this pass's decodes
+     */
+    private void refreshCallerQueue(ArrayList<Ft8Message> messages) {
+        if (functionOrder == 6 || toCallsign == null || !toCallsign.haveTargetCallsign()) {
+            pruneGivenUpCallers();
+            return;
+        }
+        for (Ft8Message msg : messages) {
+            if (isExcludeMessage(msg)) continue;// own slot / other band / excluded prefix
+            if (!GeneralVariables.checkIsMyCallsign(msg.getCallsignTo())) continue;
+            if (GeneralVariables.checkFun5(msg.extraInfo)) continue;// a 73 is not a call
+            if (checkCallsignIsCallTo(msg.getCallsignFrom(), toCallsign.callsign)) continue;// the partner
+            enqueueCaller(msg);
+        }
+        pruneGivenUpCallers();
+    }
+
+    /**
+     * Drop queued callers that have not called us within the last full cycle —
+     * they have given up, and calling them wastes overs while a live caller waits
+     * (see {@link CallerQueueOrdering#hasGivenUp}). Publishes the queue when it
+     * changes so the QSO panel's chips track who is actually still calling.
+     */
+    private void pruneGivenUpCallers() {
+        synchronized (callerQueue) {
+            List<QueuedCaller> gone = CallerQueueOrdering.pruneGivenUp(callerQueue,
+                    UtcTimer.getSystemTime(), GeneralVariables.currentMode().slotMillis);
+            if (!gone.isEmpty()) {
+                StringBuilder names = new StringBuilder();
+                for (QueuedCaller c : gone) {
+                    if (names.length() > 0) names.append(", ");
+                    names.append(c.callsign);
+                }
+                GeneralVariables.fileLog("QSO: dropped queued caller(s) no longer calling: "
+                        + names + " (" + callerQueue.size() + " left in queue)");
+                mutableCallerQueue.postValue(new ArrayList<>(callerQueue));
+            }
+        }
+    }
+
+    /** Package-visible for tests: a snapshot of the callsigns currently queued. */
+    ArrayList<String> queuedCallsigns() {
+        ArrayList<String> out = new ArrayList<>();
+        synchronized (callerQueue) {
+            for (QueuedCaller c : callerQueue) out.add(c.callsign);
+        }
+        return out;
+    }
+
+    /**
      * Dequeue the next caller and start a QSO with them via setTransmit().
-     * Skips stale or excluded callers. Returns true if a caller was started.
+     * Callers who have stopped calling are pruned first, then stale/excluded ones
+     * skipped. Returns true if a caller was started; false when nobody fresh is
+     * waiting — the caller falls back to CQ (or a direct caller this cycle).
      */
     public boolean dequeueNextCaller() {
+        pruneGivenUpCallers();
         synchronized (callerQueue) {
             while (!callerQueue.isEmpty()) {
                 // Pileup pick order: FIFO by default, or the strongest waiting
@@ -3308,6 +3382,20 @@ public class FT8TransmitSignal {
             // The clip math below is recomputed each pass, so the replay is timed against
             // when IT starts, not when the original over did.
             do {
+                // A decode that advanced the QSO during the PTT settle above — after
+                // isTransmitting was raised but before any audio started — has already
+                // asked for a swap. Honour it here by picking up the new message before
+                // the first sample plays. Otherwise playFT8Signal() resets the cancel
+                // flags, plays the OLD over in full, and only then replays the new one
+                // ~13 s into the slot, where the clip math strips nearly all of it.
+                if (transmitSignal.consumeTxRestart()) {
+                    msg = transmitSignal.currentTransmitMessage();
+                    transmitSignal.orderAtKeyUp = transmitSignal.functionOrder;
+                    transmitSignal.postTransmittingMessage(msg);
+                    GeneralVariables.fileLog("QSO: TX message updated before audio start, slot="
+                            + transmitSignal.sequential + " order=" + transmitSignal.functionOrder
+                            + " msg=[" + msg.getMessageText() + "]");
+                }
                 ModeProfile mode = GeneralVariables.currentMode();
                 int msIntoCycle = (int) (UtcTimer.getSystemTime() % mode.slotMillis);
                 int msMaxStart = mode.audioSlackMillis; // last moment we can start without overrunning

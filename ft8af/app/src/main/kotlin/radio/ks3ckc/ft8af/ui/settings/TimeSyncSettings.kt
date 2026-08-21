@@ -78,6 +78,13 @@ fun TimeSyncSettings(
     // Null until the first decode this session.
     val avgDtSec by mainViewModel.mutableTimerOffset.observeAsState()
 
+    // Last self-sync correction (timestamp), so the Suggestion card can show that
+    // auto-sync is doing the work. Seeded from .value like the GPS readout so a
+    // correction applied before this screen opened still shows.
+    val lastSelfSync by GeneralVariables.mutableSelfSyncApplied.observeAsState(
+        GeneralVariables.mutableSelfSyncApplied.value
+    )
+
     // While GPS discipline owns the clock, each fix rewrites UtcTimer.delay behind this
     // screen's back — and disabling it restores the pre-GPS offset. Re-read the live value
     // on every posted sync and on toggle changes so the "Current" readout can't go stale.
@@ -224,15 +231,45 @@ fun TimeSyncSettings(
                             fontSize = 15.sp,
                             fontFamily = GeistMonoFamily,
                         )
-                        Text(
-                            text = stringResource(R.string.settings_time_suggest_apply),
-                            color = Accent,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier
-                                .clickable { apply(suggestedCorrectionMs(correctionMs, dt)) }
-                                .padding(vertical = 6.dp),
-                        )
+                        if (showSuggestionApply(autoSyncFromDecodes, disciplineFromGps)) {
+                            Text(
+                                text = stringResource(R.string.settings_time_suggest_apply),
+                                color = Accent,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .clickable { apply(suggestedCorrectionMs(correctionMs, dt)) }
+                                    .padding(vertical = 6.dp),
+                            )
+                        } else if (disciplineFromGps) {
+                            Text(
+                                text = stringResource(R.string.settings_time_correction_gps_locked),
+                                color = TextMuted,
+                                fontSize = 13.sp,
+                            )
+                        } else {
+                            // Auto-sync owns this: say so instead of asking for a tap.
+                            Text(
+                                text = stringResource(R.string.settings_time_suggest_auto),
+                                color = TextMuted,
+                                fontSize = 13.sp,
+                            )
+                            val syncMs = lastSelfSync
+                            Text(
+                                text = if (syncMs == null) {
+                                    stringResource(R.string.settings_time_suggest_auto_waiting)
+                                } else {
+                                    stringResource(
+                                        R.string.settings_time_suggest_auto_last,
+                                        formatOffsetMs(GeneralVariables.selfSyncLastStepMs),
+                                        UtcTimer.getDatetimeStr(syncMs),
+                                    )
+                                },
+                                color = if (syncMs == null) TextMuted else TextPrimary,
+                                fontSize = 14.sp,
+                                fontFamily = GeistMonoFamily,
+                            )
+                        }
                     }
                 }
             }

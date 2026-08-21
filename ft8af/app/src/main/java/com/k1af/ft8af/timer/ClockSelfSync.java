@@ -24,9 +24,17 @@ import java.util.Arrays;
  * — proportional gain always converges, a step cap can refuse the truth forever).
  *
  * <p>Robustness per slot: a median (not mean) over the slot's DTs, MAD-based
- * outlier rejection on top of it, a minimum surviving-sample count, a deadband
- * matching the UI's "good clock" threshold, and two-consecutive-slot same-sign
- * confirmation before any correction is applied.
+ * outlier rejection on top of it, a deadband, and consecutive-slot same-sign
+ * confirmation before any correction is applied. A slot with few surviving
+ * decodes (a quiet POTA band, one station calling CQ) still counts as evidence
+ * — it just needs one more confirming slot than a well-populated one, because a
+ * single station's DT is also that station's clock error.
+ *
+ * <p>The deadband is deliberately tighter than the UI's "good clock" threshold
+ * (0.30 s): the estimator used to stop there, which parked the clock a quarter
+ * second off and left the operator re-applying the manual suggestion every few
+ * minutes. Driving the residual under {@link #DEADBAND_SEC} makes the auto-sync
+ * toggle actually replace that chore.
  *
  * <p>Pure Java, no Android imports (the {@link GeneralVariables} references are
  * {@code static final int} constant expressions, inlined at compile time), so
@@ -36,20 +44,40 @@ import java.util.Arrays;
 public class ClockSelfSync {
 
     /** Minimum surviving (post-outlier-rejection) decodes for a slot to count. */
-    public static final int MIN_SLOT_SAMPLES = 4;
+    public static final int MIN_SLOT_SAMPLES = 1;
 
     /**
-     * |median DT| at/below this (seconds) is left alone. Matches
-     * {@code CLOCK_SYNC_GOOD_SEC} in {@code ui/components/ClockSync.kt} — the
-     * threshold the clock-health indicator already calls "good".
+     * Surviving decodes at/above which a slot is "well populated": the median is
+     * a real consensus and {@link #CONFIRM_SLOTS} slots are enough. Below this a
+     * slot is "sparse" and needs {@link #SPARSE_CONFIRM_SLOTS}.
      */
-    public static final float DEADBAND_SEC = 0.30f;
+    public static final int FULL_CONFIDENCE_SAMPLES = 4;
+
+    /**
+     * |median DT| at/below this (seconds) is left alone. Half the 0.30 s the
+     * clock-health indicator ({@code CLOCK_SYNC_GOOD_SEC} in
+     * {@code ui/components/ClockSync.kt}) calls "good", so auto-sync lands the
+     * clock comfortably inside "good" rather than right on its edge. Two DT
+     * measurement steps (the decoder's time oversampling is 80 ms), so it does
+     * not chase measurement noise.
+     */
+    public static final float DEADBAND_SEC = 0.15f;
 
     /** Proportional gain applied to the measured error (damps the feedback loop). */
     public static final float GAIN = 0.5f;
 
-    /** Consecutive qualifying same-sign slots required before a correction is applied. */
+    /**
+     * Consecutive qualifying same-sign slots required before a correction is
+     * applied, when the confirming slot is well populated.
+     */
     public static final int CONFIRM_SLOTS = 2;
+
+    /**
+     * Consecutive qualifying same-sign slots required when the confirming slot
+     * is sparse (fewer than {@link #FULL_CONFIDENCE_SAMPLES} survivors). One
+     * extra slot of agreement before trusting what may be a single station.
+     */
+    public static final int SPARSE_CONFIRM_SLOTS = 3;
 
     /** Absolute floor (seconds) for the MAD-based rejection threshold. */
     static final float MAD_FLOOR_SEC = 0.2f;
@@ -147,10 +175,18 @@ public class ClockSelfSync {
     }
 
     /**
+     * Consecutive same-sign slots needed before a slot with {@code survivors}
+     * post-rejection decodes may apply a correction.
+     */
+    static int confirmSlotsFor(int survivors) {
+        return survivors >= FULL_CONFIDENCE_SAMPLES ? CONFIRM_SLOTS : SPARSE_CONFIRM_SLOTS;
+    }
+
+    /**
      * Per-slot decision. Feeds one slot's decode DTs (seconds) through outlier
-     * rejection, the sample-count gate, the deadband, and the two-slot same-sign
-     * confirmation, and returns the NEW total clock delay (ms) to apply — or
-     * null for no action this slot.
+     * rejection, the sample-count gate, the deadband, and the consecutive-slot
+     * same-sign confirmation ({@link #confirmSlotsFor}), and returns the NEW
+     * total clock delay (ms) to apply — or null for no action this slot.
      *
      * @param dtSec          this slot's per-decode DTs (seconds), own-TX echoes
      *                       already filtered out
@@ -180,7 +216,7 @@ public class ClockSelfSync {
         } else {
             streak++;
         }
-        if (streak < CONFIRM_SLOTS) {
+        if (streak < confirmSlotsFor(survivors.length)) {
             return null;
         }
         int newDelay = clampDelayMs(

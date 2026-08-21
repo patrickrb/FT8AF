@@ -102,17 +102,73 @@ public class ClockSelfSyncTest {
         assertThat(sync.onSlotDecodes(slot(1.0f, ClockSelfSync.MIN_SLOT_SAMPLES - 1), 0))
                 .isNull();
         assertThat(sync.onSlotDecodes(new float[0], 0)).isNull();
+        assertThat(sync.onSlotDecodes(null, 0)).isNull();
     }
 
     @Test
-    public void sparseSlot_doesNotTouchConfirmationState() {
+    public void emptySlot_doesNotTouchConfirmationState() {
         ClockSelfSync sync = new ClockSelfSync();
         // Slot 1: qualifying out-of-deadband slot starts the streak.
         assertThat(sync.onSlotDecodes(slot(1.0f, 4), 0)).isNull();
-        // Slot 2: too few samples — must NOT reset the streak.
-        assertThat(sync.onSlotDecodes(slot(1.0f, 2), 0)).isNull();
+        // Slot 2: nothing decoded — must NOT reset the streak.
+        assertThat(sync.onSlotDecodes(new float[0], 0)).isNull();
         // Slot 3: same sign again — confirmation completes, correction applied.
         assertThat(sync.onSlotDecodes(slot(1.0f, 4), 0)).isNotNull();
+    }
+
+    // ------------------------------------------------------------------
+    // Sparse slots (quiet band): they count, but need one more confirmation
+    // ------------------------------------------------------------------
+
+    @Test
+    public void confirmSlotsFor_fullSlotsNeedTwo_sparseSlotsNeedThree() {
+        assertThat(ClockSelfSync.confirmSlotsFor(ClockSelfSync.FULL_CONFIDENCE_SAMPLES))
+                .isEqualTo(ClockSelfSync.CONFIRM_SLOTS);
+        assertThat(ClockSelfSync.confirmSlotsFor(10)).isEqualTo(ClockSelfSync.CONFIRM_SLOTS);
+        assertThat(ClockSelfSync.confirmSlotsFor(ClockSelfSync.FULL_CONFIDENCE_SAMPLES - 1))
+                .isEqualTo(ClockSelfSync.SPARSE_CONFIRM_SLOTS);
+        assertThat(ClockSelfSync.confirmSlotsFor(1)).isEqualTo(ClockSelfSync.SPARSE_CONFIRM_SLOTS);
+    }
+
+    @Test
+    public void singleStationEverySlot_correctsAfterThreeAgreeingSlots() {
+        // The POTA case that never used to sync: one station heard per slot.
+        // Three consecutive same-sign slots are required, then it steps.
+        ClockSelfSync sync = new ClockSelfSync();
+        assertThat(sync.onSlotDecodes(slot(1.0f, 1), 0)).isNull();
+        assertThat(sync.onSlotDecodes(slot(1.0f, 1), 0)).isNull();
+        assertThat(sync.onSlotDecodes(slot(1.0f, 1), 0)).isEqualTo(-500);
+    }
+
+    @Test
+    public void sparseThenFullSlot_fullSlotConfirmsOnItsOwnRule() {
+        // A sparse first slot starts the streak; a well-populated second slot
+        // is a real consensus and may confirm with the normal two-slot rule.
+        ClockSelfSync sync = new ClockSelfSync();
+        assertThat(sync.onSlotDecodes(slot(1.0f, 2), 0)).isNull();
+        assertThat(sync.onSlotDecodes(slot(1.0f, 4), 0)).isEqualTo(-500);
+    }
+
+    @Test
+    public void fullThenSparseSlot_sparseSlotWaitsForAThird() {
+        // Reverse order: the sparse slot is the one asking to act, so the
+        // stricter rule applies to it.
+        ClockSelfSync sync = new ClockSelfSync();
+        assertThat(sync.onSlotDecodes(slot(1.0f, 4), 0)).isNull();
+        assertThat(sync.onSlotDecodes(slot(1.0f, 2), 0)).isNull();
+        assertThat(sync.onSlotDecodes(slot(1.0f, 2), 0)).isEqualTo(-500);
+    }
+
+    @Test
+    public void sparseSlotOfOppositeSign_restartsStreak() {
+        // A lone station disagreeing with the previous slots is not ignored as
+        // "too few samples" — it restarts the streak like any other slot.
+        ClockSelfSync sync = new ClockSelfSync();
+        assertThat(sync.onSlotDecodes(slot(1.0f, 4), 0)).isNull();
+        assertThat(sync.onSlotDecodes(slot(-1.0f, 1), 0)).isNull();
+        // Back to positive: first slot of a new streak, not a confirmation.
+        assertThat(sync.onSlotDecodes(slot(1.0f, 4), 0)).isNull();
+        assertThat(sync.onSlotDecodes(slot(1.0f, 4), 0)).isEqualTo(-500);
     }
 
     @Test
@@ -120,12 +176,22 @@ public class ClockSelfSyncTest {
         ClockSelfSync sync = new ClockSelfSync();
         // Start a streak with an out-of-deadband slot...
         assertThat(sync.onSlotDecodes(slot(1.0f, 4), 0)).isNull();
-        // ...then a healthy slot (|median| <= 0.30) clears it...
-        assertThat(sync.onSlotDecodes(slot(0.25f, 4), 0)).isNull();
+        // ...then a healthy slot (|median| <= 0.15) clears it...
+        assertThat(sync.onSlotDecodes(slot(0.10f, 4), 0)).isNull();
         // ...so the next qualifying slot is a FIRST slot again (null), not a second.
         assertThat(sync.onSlotDecodes(slot(1.0f, 4), 0)).isNull();
         // And only its confirmation acts.
         assertThat(sync.onSlotDecodes(slot(1.0f, 4), 0)).isNotNull();
+    }
+
+    @Test
+    public void quarterSecondResidual_isNoLongerLeftAlone() {
+        // The field complaint: the old 0.30 s deadband parked the clock ~0.25 s
+        // off and the operator kept applying the manual suggestion. 0.25 s must
+        // now be corrected.
+        ClockSelfSync sync = new ClockSelfSync();
+        assertThat(sync.onSlotDecodes(slot(0.25f, 4), 0)).isNull();
+        assertThat(sync.onSlotDecodes(slot(0.25f, 4), 0)).isEqualTo(-125);
     }
 
     @Test
@@ -238,9 +304,9 @@ public class ClockSelfSyncTest {
                 prevAbs = Math.abs(trueErrorSec);
             }
         }
-        // 1500 -> 750 -> 375 -> 187.5 ms: three corrections, two slots each.
+        // 1500 -> 750 -> 375 -> 187.5 -> 93.75 ms: four corrections, two slots each.
         assertThat(Math.abs(trueErrorSec)).isAtMost(ClockSelfSync.DEADBAND_SEC);
-        assertThat(slots).isAtMost(6);
+        assertThat(slots).isAtMost(8);
     }
 
     // ------------------------------------------------------------------

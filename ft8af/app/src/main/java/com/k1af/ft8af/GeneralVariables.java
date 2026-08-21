@@ -580,6 +580,10 @@ public class GeneralVariables {
     //to UtcTimer.delay. The last-sync *timestamp* is the retained value of mutableGpsClockSync
     //below, so there's no separate field for it.
     public static volatile int gpsClockOffsetMs = 0;
+    //Runtime status for the Time Sync UI (not persisted): the step (ms, signed) the last
+    //self-sync correction applied to UtcTimer.delay. Its timestamp is the retained value of
+    //mutableSelfSyncApplied below.
+    public static volatile int selfSyncLastStepMs = 0;
 
     /**
      * The dial the app is entitled to COMMAND, as opposed to {@link #band}, which is
@@ -637,6 +641,10 @@ public class GeneralVariables {
     //Posted each time a GPS fix disciplines the clock, so the Time Sync screen can recompose
     //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.
     public static MutableLiveData<Long> mutableGpsClockSync = new MutableLiveData<>();
+    //Posted each time the self-syncing clock (ClockSelfSync) applies a correction, so the
+    //Time Sync screen can show that auto-sync is doing the work instead of asking the
+    //operator to apply the suggestion by hand. Carries the UtcTimer.getSystemTime() timestamp.
+    public static MutableLiveData<Long> mutableSelfSyncApplied = new MutableLiveData<>();
     // Successfully QSL'd callsigns (current band). Rebuilt wholesale on the DB thread
     // (DatabaseOpr.GetAllQSLCallsign), appended to on the TX thread (addQSLCallsign), and
     // read concurrently from decode/UI threads and the NanoHTTPD web-logbook worker. It is
