@@ -450,6 +450,7 @@
     <string name="settings_time_suggest_label">Recent average DT: %1$s</string>
     <string name="settings_time_suggest_apply">Apply suggested correction</string>
     <string name="settings_time_correction_gps_locked">GPS clock discipline is controlling the clock — turn it off below to adjust manually.</string>
+    <string name="settings_time_correction_ntp_locked">NTP clock discipline is controlling the clock — turn it off below to adjust manually.</string>
 
     <!-- ===== Settings: Time Sync (GPS clock discipline, issue #373) ===== -->
     <string name="settings_gps_clock_section">GPS Clock Discipline</string>
@@ -460,6 +461,17 @@
     <string name="settings_gps_clock_waiting">Waiting for a GPS fix…</string>
     <string name="settings_gps_clock_last_sync">Last GPS sync: %1$s UTC</string>
     <string name="settings_gps_clock_offset">Applied offset: %1$s</string>
+
+    <!-- ===== Settings: Time Sync (NTP clock discipline) ===== -->
+    <string name="settings_ntp_clock_section">NTP Clock Discipline</string>
+    <string name="settings_ntp_clock_toggle">Discipline clock from NTP</string>
+    <string name="settings_ntp_clock_toggle_desc">Periodically sync from a network time server to align the FT8 cycle to true UTC. Overrides the manual correction while on. Needs internet access.</string>
+    <string name="settings_ntp_clock_server_label">NTP server</string>
+    <string name="settings_ntp_clock_server_hint">e.g. a.ntp.br</string>
+    <string name="settings_ntp_clock_waiting">Waiting for the first NTP sync…</string>
+    <string name="settings_ntp_clock_last_sync">Last NTP sync: %1$s UTC</string>
+    <string name="settings_ntp_clock_offset">Applied offset: %1$s</string>
+    <string name="settings_ntp_clock_sync_failed">Last sync attempt failed — retrying…</string>
 
     <!-- ===== Settings: operator identity ===== -->
     <string name="settings_auto_update_grid">Auto-update Grid (GPS)</string>

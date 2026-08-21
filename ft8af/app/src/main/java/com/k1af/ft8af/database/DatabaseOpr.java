@@ -2673,6 +2673,17 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.gpsClockIntervalMinutes =
                             com.k1af.ft8af.location.GpsClockUpdater.parseIntervalMinutes(result);
                 }
+                if (name.equalsIgnoreCase("disciplineClockFromNtp")) {//Discipline clock from NTP (parallel to GPS)
+                    GeneralVariables.disciplineClockFromNtp = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("ntpServer")) {//NTP server hostname/IP for periodic clock discipline
+                    GeneralVariables.ntpServer = result.trim().isEmpty()
+                            ? GeneralVariables.DEFAULT_NTP_SERVER : result.trim();
+                }
+                if (name.equalsIgnoreCase("ntpClockIntervalMin")) {//NTP discipline update interval (minutes)
+                    GeneralVariables.ntpClockIntervalMinutes =
+                            com.k1af.ft8af.timer.NtpClockUpdater.parseIntervalMinutes(result);
+                }
                 if (name.equalsIgnoreCase("pttDelay")) {//PTT delay setting
                     GeneralVariables.pttDelay = result.equals("") ? 100 : Integer.parseInt(result);
                 }

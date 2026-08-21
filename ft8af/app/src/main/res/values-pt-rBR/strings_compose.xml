@@ -439,6 +439,7 @@
     <string name="settings_time_suggest_label">Média recente de DT: %1$s</string>
     <string name="settings_time_suggest_apply">Aplicar correção sugerida</string>
     <string name="settings_time_correction_gps_locked">A disciplina de relógio por GPS está controlando o relógio — desative-a abaixo para ajustar manualmente.</string>
+    <string name="settings_time_correction_ntp_locked">A disciplina de relógio por NTP está controlando o relógio — desative-a abaixo para ajustar manualmente.</string>
 
     <!-- ===== Settings: Time Sync (GPS clock discipline, issue #373) ===== -->
     <string name="settings_gps_clock_section">Disciplina de Relógio por GPS</string>
@@ -449,6 +450,17 @@
     <string name="settings_gps_clock_waiting">Aguardando um fix de GPS…</string>
     <string name="settings_gps_clock_last_sync">Última sincronização GPS: %1$s UTC</string>
     <string name="settings_gps_clock_offset">Offset aplicado: %1$s</string>
+
+    <!-- ===== Settings: Time Sync (NTP clock discipline) ===== -->
+    <string name="settings_ntp_clock_section">Disciplina de Relógio por NTP</string>
+    <string name="settings_ntp_clock_toggle">Disciplinar relógio por NTP</string>
+    <string name="settings_ntp_clock_toggle_desc">Sincroniza periodicamente com um servidor de hora de rede para alinhar o ciclo FT8 ao UTC verdadeiro. Substitui a correção manual enquanto ativado. Requer acesso à internet.</string>
+    <string name="settings_ntp_clock_server_label">Servidor NTP</string>
+    <string name="settings_ntp_clock_server_hint">ex.: a.ntp.br</string>
+    <string name="settings_ntp_clock_waiting">Aguardando a primeira sincronização NTP…</string>
+    <string name="settings_ntp_clock_last_sync">Última sincronização NTP: %1$s UTC</string>
+    <string name="settings_ntp_clock_offset">Offset aplicado: %1$s</string>
+    <string name="settings_ntp_clock_sync_failed">Última tentativa de sincronização falhou — tentando novamente…</string>
 
     <!-- ===== Settings: operator identity ===== -->
     <string name="settings_auto_update_grid">Atualizar Grade Automaticamente (GPS)</string>
