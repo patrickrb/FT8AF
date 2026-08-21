@@ -641,6 +641,30 @@ public class GeneralVariables {
     //Posted each time a GPS fix disciplines the clock, so the Time Sync screen can recompose
     //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.
     public static MutableLiveData<Long> mutableGpsClockSync = new MutableLiveData<>();
+    public static final String DEFAULT_NTP_SERVER = "a.ntp.br";//Default NTP server for clock discipline.
+    public static boolean disciplineClockFromNtp = false;//Discipline the app clock (UtcTimer.delay) from a network NTP server, periodically. Off by default. Mutually exclusive with disciplineClockFromGPS — TimeSyncSettings enforces this by disabling the other on toggle.
+    public static String ntpServer = DEFAULT_NTP_SERVER;//NTP server hostname/IP for periodic clock discipline. Resolved for both A and AAAA records (dual-stack) by NtpClockUpdater.
+    public static int ntpClockIntervalMinutes = 5;//How often to re-sync from the NTP server. Clamped 1-30 by NtpClockUpdater.
+    //Runtime status for the Time Sync UI (not persisted): the offset the last successful NTP
+    //sync applied to UtcTimer.delay. The last-sync *timestamp* is the retained value of
+    //mutableNtpClockSync below, so there's no separate field for it.
+    public static volatile int ntpClockOffsetMs = 0;
+    //Posted each time an NTP sync disciplines the clock, so the Time Sync screen can recompose
+    //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.
+    public static MutableLiveData<Long> mutableNtpClockSync = new MutableLiveData<>();
+    //Posted true when the most recent NTP sync attempt exhausted every resolved address
+    //without success (no network, blocked UDP port, bad server name); posted false right
+    //before applying a successful sync. Unlike GPS, NTP failure is common enough (no
+    //internet, restrictive NAT) that silent periodic retries with zero feedback would look
+    //broken, so the Time Sync screen surfaces it.
+    public static MutableLiveData<Boolean> mutableNtpClockSyncFailed = new MutableLiveData<>();
+
+    /** Trimmed NTP server, falling back to {@link #DEFAULT_NTP_SERVER} when unset/blank. */
+    public static String getNtpServer() {
+        if (ntpServer == null || ntpServer.trim().isEmpty()) return DEFAULT_NTP_SERVER;
+        return ntpServer.trim();
+    }
+
     //Posted each time the self-syncing clock (ClockSelfSync) applies a correction, so the
     //Time Sync screen can show that auto-sync is doing the work instead of asking the
     //operator to apply the suggestion by hand. Carries the UtcTimer.getSystemTime() timestamp.
