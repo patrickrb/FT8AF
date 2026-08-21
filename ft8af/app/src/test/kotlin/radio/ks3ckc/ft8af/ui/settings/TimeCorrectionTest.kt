@@ -73,4 +73,22 @@ class TimeCorrectionTest {
         assertThat(formatOffsetMs(660)).isEqualTo("+0.7 s")
         assertThat(formatOffsetMs(-660)).isEqualTo("-0.7 s")
     }
+
+    @Test
+    fun suggestionApply_offeredOnlyWhenNothingAutomaticOwnsTheClock() {
+        assertThat(showSuggestionApply(autoSyncFromDecodes = false, disciplineFromGps = false)).isTrue()
+    }
+
+    @Test
+    fun suggestionApply_hiddenWhileAutoSyncIsOn() {
+        // The field complaint: with auto-sync enabled the operator was still being
+        // asked to apply the residual by hand. Auto-sync owns it now.
+        assertThat(showSuggestionApply(autoSyncFromDecodes = true, disciplineFromGps = false)).isFalse()
+    }
+
+    @Test
+    fun suggestionApply_hiddenWhileGpsDisciplinesTheClock() {
+        assertThat(showSuggestionApply(autoSyncFromDecodes = false, disciplineFromGps = true)).isFalse()
+        assertThat(showSuggestionApply(autoSyncFromDecodes = true, disciplineFromGps = true)).isFalse()
+    }
 }

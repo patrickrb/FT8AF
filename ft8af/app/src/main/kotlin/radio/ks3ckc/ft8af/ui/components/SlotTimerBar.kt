@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.Size
 import androidx.compose.runtime.withFrameMillis
+import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.timer.UtcTimer
 import radio.ks3ckc.ft8af.theme.Accent
 import radio.ks3ckc.ft8af.theme.Border
@@ -60,7 +61,13 @@ fun SlotTimerBar(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (offsetSec != null) {
-            ClockSyncIndicator(offsetSec = offsetSec)
+            // Read on every frame-driven recomposition, so a toggle in Settings shows
+            // up here without extra plumbing.
+            ClockSyncIndicator(
+                offsetSec = offsetSec,
+                autoSyncFromDecodes = GeneralVariables.autoSyncClockFromDecodes,
+                disciplineFromGps = GeneralVariables.disciplineClockFromGPS,
+            )
         }
         Box(
             modifier = Modifier

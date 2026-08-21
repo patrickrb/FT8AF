@@ -575,11 +575,15 @@ public class GeneralVariables {
     public static boolean autoUpdateGridFromGPS = false;//Use device GPS to keep Maidenhead grid current
     public static boolean disciplineClockFromGPS = false;//Discipline the app clock (UtcTimer.delay) from GPS satellite time (issue #373). Off by default — consensual.
     public static int gpsClockIntervalMinutes = 5;//How often to re-read GPS time for clock discipline. Clamped 1-30 by GpsClockUpdater.
-    public static boolean autoSyncClockFromDecodes = false;//Self-syncing clock: continuously trim UtcTimer.delay from the median decode DT (see ClockSelfSync). Inert while disciplineClockFromGPS is on. Off by default.
+    public static boolean autoSyncClockFromDecodes = true;//Self-syncing clock: continuously trim UtcTimer.delay from the median decode DT (see ClockSelfSync). Inert while disciplineClockFromGPS is on. ON by default (PR #758): the band is the time source every operator has, and the estimator is conservative enough (median + MAD rejection + deadband + confirmation) to run unattended.
     //Runtime status for the Time Sync UI (not persisted): the offset the last GPS fix applied
     //to UtcTimer.delay. The last-sync *timestamp* is the retained value of mutableGpsClockSync
     //below, so there's no separate field for it.
     public static volatile int gpsClockOffsetMs = 0;
+    //Runtime status for the Time Sync UI (not persisted): the step (ms, signed) the last
+    //self-sync correction applied to UtcTimer.delay. Its timestamp is the retained value of
+    //mutableSelfSyncApplied below.
+    public static volatile int selfSyncLastStepMs = 0;
 
     /**
      * The dial the app is entitled to COMMAND, as opposed to {@link #band}, which is
@@ -637,6 +641,10 @@ public class GeneralVariables {
     //Posted each time a GPS fix disciplines the clock, so the Time Sync screen can recompose
     //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.
     public static MutableLiveData<Long> mutableGpsClockSync = new MutableLiveData<>();
+    //Posted each time the self-syncing clock (ClockSelfSync) applies a correction, so the
+    //Time Sync screen can show that auto-sync is doing the work instead of asking the
+    //operator to apply the suggestion by hand. Carries the UtcTimer.getSystemTime() timestamp.
+    public static MutableLiveData<Long> mutableSelfSyncApplied = new MutableLiveData<>();
     // Successfully QSL'd callsigns (current band). Rebuilt wholesale on the DB thread
     // (DatabaseOpr.GetAllQSLCallsign), appended to on the TX thread (addQSLCallsign), and
     // read concurrently from decode/UI threads and the NanoHTTPD web-logbook worker. It is
