@@ -88,6 +88,7 @@ internal val SUPPORTED_LANGUAGES: List<AppLanguage> = listOf(
     AppLanguage("id", R.string.language_name_id),
     AppLanguage("uk", R.string.language_name_uk),
     AppLanguage("ar", R.string.language_name_ar),
+    AppLanguage("pt-BR", R.string.language_name_pt_br),
 )
 
 /**
