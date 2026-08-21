@@ -56,4 +56,25 @@ class ClockSyncTest {
         assertThat(clockSyncOffsetLabel(null)).isEqualTo("—")
         assertThat(clockSyncOffsetLabel(Float.NaN)).isEqualTo("—")
     }
+
+    @Test
+    fun autoBadge_noneWhenManualOnly() {
+        assertThat(clockSyncAutoBadge(autoSyncFromDecodes = false, disciplineFromGps = false)).isNull()
+    }
+
+    @Test
+    fun autoBadge_autoWhenSelfSyncOwnsTheClock() {
+        assertThat(clockSyncAutoBadge(autoSyncFromDecodes = true, disciplineFromGps = false))
+            .isEqualTo(com.k1af.ft8af.R.string.clock_sync_badge_auto)
+    }
+
+    @Test
+    fun autoBadge_gpsWinsOverSelfSync() {
+        // The estimator stands down while GPS disciplines the clock, so GPS is what
+        // the operator is actually relying on.
+        assertThat(clockSyncAutoBadge(autoSyncFromDecodes = true, disciplineFromGps = true))
+            .isEqualTo(com.k1af.ft8af.R.string.clock_sync_badge_gps)
+        assertThat(clockSyncAutoBadge(autoSyncFromDecodes = false, disciplineFromGps = true))
+            .isEqualTo(com.k1af.ft8af.R.string.clock_sync_badge_gps)
+    }
 }

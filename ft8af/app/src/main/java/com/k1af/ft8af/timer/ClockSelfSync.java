@@ -16,12 +16,16 @@ import java.util.Arrays;
  * RX window — our clock is fast — so the correction <em>subtracts</em> from the
  * current delay. Negative DT adds. The goal is to drive the measured DT toward 0.
  *
- * <p><b>Damping, not step-limiting.</b> Each applied correction shifts the next
- * slot's measured DT, so a full-step correction would ring. A proportional gain
- * ({@link #GAIN}) halves the error per step instead. There is deliberately NO
- * hard cap on step size: see the long comment in {@code GpsClockUpdater} (a step
- * limiter shipped there once and locked in a bad baseline for a whole activation
- * — proportional gain always converges, a step cap can refuse the truth forever).
+ * <p><b>Acquire fast, track gently.</b> A clock that is plainly off (|median| &gt;
+ * {@link #ACQUIRE_SEC}, confirmed by a well-populated slot) is corrected in full
+ * at once — that is the "it just works" moment after launch. Inside that band
+ * the loop tracks: each applied correction shifts the next slot's measured DT,
+ * and the decoder's DT is quantised (~80 ms), so a proportional gain
+ * ({@link #GAIN}) halves the residual per step rather than chasing noise. There
+ * is deliberately NO hard cap on step size: see the long comment in
+ * {@code GpsClockUpdater} (a step limiter shipped there once and locked in a bad
+ * baseline for a whole activation — proportional gain always converges, a step
+ * cap can refuse the truth forever).
  *
  * <p>Robustness per slot: a median (not mean) over the slot's DTs, MAD-based
  * outlier rejection on top of it, a deadband, and consecutive-slot same-sign
@@ -63,7 +67,25 @@ public class ClockSelfSync {
      */
     public static final float DEADBAND_SEC = 0.15f;
 
-    /** Proportional gain applied to the measured error (damps the feedback loop). */
+    /**
+     * |median DT| above this (seconds) means the clock is plainly off — not a
+     * tracking residual but an acquisition problem (fresh launch, phone drifted
+     * offline). Acquisition is fast and decisive: a well-populated slot acts on
+     * its own (no second slot to confirm) and the full error is removed in one
+     * step ({@link #ACQUIRE_GAIN}). Half a second is well clear of both the
+     * deadband and the measurement noise, so a single consensus of four or more
+     * stations that far out cannot be a fluke.
+     */
+    public static final float ACQUIRE_SEC = 0.5f;
+
+    /** Gain used while acquiring (|median| &gt; {@link #ACQUIRE_SEC}): take the whole error. */
+    public static final float ACQUIRE_GAIN = 1.0f;
+
+    /**
+     * Proportional gain applied to a tracking-band error (|median| within
+     * {@link #ACQUIRE_SEC}): halves the residual per step so the loop cannot
+     * ring on the decoder's ~80 ms DT quantisation.
+     */
     public static final float GAIN = 0.5f;
 
     /**
@@ -176,10 +198,19 @@ public class ClockSelfSync {
 
     /**
      * Consecutive same-sign slots needed before a slot with {@code survivors}
-     * post-rejection decodes may apply a correction.
+     * post-rejection decodes and median {@code medianSec} may apply a correction.
+     * A well-populated slot that is plainly off ({@link #ACQUIRE_SEC}) acts at
+     * once; a well-populated tracking slot needs one confirming slot; a sparse
+     * slot always needs two.
      */
-    static int confirmSlotsFor(int survivors) {
-        return survivors >= FULL_CONFIDENCE_SAMPLES ? CONFIRM_SLOTS : SPARSE_CONFIRM_SLOTS;
+    static int confirmSlotsFor(int survivors, float medianSec) {
+        if (survivors < FULL_CONFIDENCE_SAMPLES) return SPARSE_CONFIRM_SLOTS;
+        return Math.abs(medianSec) > ACQUIRE_SEC ? 1 : CONFIRM_SLOTS;
+    }
+
+    /** Gain for a confirmed error: the whole thing while acquiring, half while tracking. */
+    static float gainFor(float medianSec) {
+        return Math.abs(medianSec) > ACQUIRE_SEC ? ACQUIRE_GAIN : GAIN;
     }
 
     /**
@@ -216,11 +247,11 @@ public class ClockSelfSync {
         } else {
             streak++;
         }
-        if (streak < confirmSlotsFor(survivors.length)) {
+        if (streak < confirmSlotsFor(survivors.length, median)) {
             return null;
         }
         int newDelay = clampDelayMs(
-                currentDelayMs - Math.round(median * 1000f * GAIN));
+                currentDelayMs - Math.round(median * 1000f * gainFor(median)));
         streak = 0;
         streakSign = 0;
         return newDelay;

@@ -582,7 +582,7 @@
     <!-- ===== Settings: Time Sync (self-syncing clock from decodes) ===== -->
     <string name="settings_selfsync_section">Self-Syncing Clock</string>
     <string name="settings_selfsync_toggle">Auto-sync clock from decodes</string>
-    <string name="settings_selfsync_toggle_desc">Continuously trim the clock using the median DT of received stations — the band itself becomes the time source. No internet or GPS needed. Unavailable while GPS clock discipline is on.</string>
+    <string name="settings_selfsync_toggle_desc">On by default. Keeps the clock locked to the stations you hear — the band itself is the time source, no internet or GPS needed. A clock that is clearly off is fixed from the first busy slot; small drift is trimmed gently. Unavailable while GPS clock discipline is on.</string>
 
     <!-- ===== Settings: Time Sync (GPS clock discipline, issue #373) ===== -->
     <string name="settings_gps_clock_section">GPS Clock Discipline</string>
@@ -864,6 +864,9 @@
     <string name="clock_sync_unknown">no decodes</string>
     <!-- %1$s = signed offset e.g. "+0.1 s"; %2$s = status word e.g. "in sync" -->
     <string name="clock_sync_cd">Clock sync: average decode offset %1$s, %2$s</string>
+    <string name="clock_sync_cd_auto">Clock sync: average decode offset %1$s, %2$s, %3$s</string>
+    <string name="clock_sync_badge_auto" translatable="false">AUTO</string>
+    <string name="clock_sync_badge_gps" translatable="false">GPS</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Language</string>
