@@ -31,6 +31,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,6 +46,7 @@ import radio.ks3ckc.ft8af.ui.components.EmptyStateWaves
 import radio.ks3ckc.ft8af.ui.components.FilterChips
 import radio.ks3ckc.ft8af.ui.components.TopBar
 import radio.ks3ckc.ft8af.ui.components.TopBarSubtitle
+import radio.ks3ckc.ft8af.ui.components.topBarActionMetrics
 
 /**
  * Main decode screen. Observes the ViewModel's LiveData for decoded FT8 messages,
@@ -203,6 +205,9 @@ fun DecodeScreen(
     // GeneralVariables.clearDecodesEveryCycle / DB key "clearDecodesEveryCycle".
     var clearEachCycle by rememberSaveable { mutableStateOf(GeneralVariables.clearDecodesEveryCycle) }
 
+    // Top-bar action sizing: tight 36.dp icons on a phone, roomier ones on a tablet.
+    val actionMetrics = topBarActionMetrics(LocalConfiguration.current.screenWidthDp)
+
     // Format UTC time for the subtitle
     val utcString = if (utcTime > 0L) {
         UtcTimer.getTimeStr(utcTime)
@@ -224,13 +229,13 @@ fun DecodeScreen(
                         text = stringResource(R.string.decode_subtitle, utcString, decodedCount),
                     )
                 },
-                // The three icons keep their 36.dp size but sit shoulder to
-                // shoulder: the pt-BR subtitle is wide enough that the default
-                // 8.dp gap pushed the last one past the right edge.
-                actionSpacing = 0.dp,
+                // On a phone the three icons sit shoulder to shoulder: the pt-BR
+                // subtitle is wide enough that the default 8.dp gap pushed the
+                // last one past the right edge. A tablet gets real gaps.
+                actionSpacing = actionMetrics.spacing,
                 actions = {
                     IconButton(
-                        modifier = Modifier.size(36.dp),
+                        modifier = Modifier.size(actionMetrics.buttonSize),
                         onClick = {
                             clearEachCycle = !clearEachCycle
                             GeneralVariables.clearDecodesEveryCycle = clearEachCycle
@@ -240,11 +245,12 @@ fun DecodeScreen(
                         },
                     ) {
                         radio.ks3ckc.ft8af.ui.components.FT8AFIcons.AutoClear(
+                            size = actionMetrics.iconSize,
                             color = if (clearEachCycle) Accent else TextMuted,
                         )
                     }
                     IconButton(
-                        modifier = Modifier.size(36.dp),
+                        modifier = Modifier.size(actionMetrics.buttonSize),
                         onClick = {
                             compactMode = !compactMode
                             GeneralVariables.simpleCallItemMode = compactMode
@@ -252,19 +258,26 @@ fun DecodeScreen(
                         },
                     ) {
                         if (compactMode) {
-                            radio.ks3ckc.ft8af.ui.components.FT8AFIcons.ViewExpanded(color = TextMuted)
+                            radio.ks3ckc.ft8af.ui.components.FT8AFIcons.ViewExpanded(
+                                size = actionMetrics.iconSize,
+                                color = TextMuted,
+                            )
                         } else {
-                            radio.ks3ckc.ft8af.ui.components.FT8AFIcons.ViewCompact(color = TextMuted)
+                            radio.ks3ckc.ft8af.ui.components.FT8AFIcons.ViewCompact(
+                                size = actionMetrics.iconSize,
+                                color = TextMuted,
+                            )
                         }
                     }
                     IconButton(
-                        modifier = Modifier.size(36.dp),
+                        modifier = Modifier.size(actionMetrics.buttonSize),
                         onClick = { mainViewModel.clearFt8MessageList() },
                         enabled = messageList?.isNotEmpty() == true,
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Delete,
                             contentDescription = stringResource(R.string.decode_clear_list),
+                            modifier = Modifier.size(actionMetrics.iconSize),
                             tint = TextMuted,
                         )
                     }
