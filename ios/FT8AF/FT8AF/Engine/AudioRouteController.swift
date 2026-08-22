@@ -91,8 +91,9 @@ final class AudioRouteController {
 
     /// Map an AVFoundation port type onto the platform-neutral kind. Shared
     /// with `AudioCaptureService.usbAudioPresent` so both sides agree on what
-    /// counts as USB.
-    static func kind(of type: AVAudioSession.Port) -> AudioPortKind {
+    /// counts as USB. Pure, hence `nonisolated` — the capture service calls it
+    /// off the main actor.
+    nonisolated static func kind(of type: AVAudioSession.Port) -> AudioPortKind {
         switch type {
         case .builtInMic: return .builtInMic
         case .builtInSpeaker: return .speaker
