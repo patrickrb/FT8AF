@@ -7,10 +7,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
@@ -333,10 +331,14 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     }
 
     Box(modifier = Modifier.fillMaxSize().background(BgApp)) {
+        // Keep the content clear of the display cutout (and the status bar, should it
+        // ever be visible) — the Box behind still paints BgApp into the padded band so a
+        // notched phone shows app background beside the camera, not a black strip.
+        // Which sides, and why: see AppInsets.kt.
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)),
+                .windowInsetsPadding(appContentInsets(WindowInsets.safeDrawing)),
         ) {
             // SWR lockout banner — red warning at top when SWR halt triggered
             if (swrLocked) {
