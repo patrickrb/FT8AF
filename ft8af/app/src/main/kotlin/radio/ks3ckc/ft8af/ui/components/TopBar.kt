@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import radio.ks3ckc.ft8af.theme.TextMuted
@@ -21,6 +22,7 @@ fun TopBar(
     title: String,
     modifier: Modifier = Modifier,
     subtitle: @Composable (() -> Unit)? = null,
+    actionSpacing: Dp = 8.dp,
     actions: @Composable (RowScope.() -> Unit)? = null,
 ) {
     Row(
@@ -30,7 +32,11 @@ fun TopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.Top,
     ) {
-        Column {
+        // Weighted so the title/subtitle column is measured with whatever is left
+        // *after* the actions, instead of the other way round: a long subtitle
+        // (e.g. the pt-BR "… decodificados neste ciclo") would otherwise eat the
+        // full width and push the action icons off the right edge.
+        Column(modifier = Modifier.weight(1f, fill = false)) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineLarge.copy(
@@ -45,7 +51,7 @@ fun TopBar(
             }
         }
         if (actions != null) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(actionSpacing)) {
                 actions()
             }
         }

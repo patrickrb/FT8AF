@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -223,8 +224,13 @@ fun DecodeScreen(
                         text = stringResource(R.string.decode_subtitle, utcString, decodedCount),
                     )
                 },
+                // The three icons keep their 36.dp size but sit shoulder to
+                // shoulder: the pt-BR subtitle is wide enough that the default
+                // 8.dp gap pushed the last one past the right edge.
+                actionSpacing = 0.dp,
                 actions = {
                     IconButton(
+                        modifier = Modifier.size(36.dp),
                         onClick = {
                             clearEachCycle = !clearEachCycle
                             GeneralVariables.clearDecodesEveryCycle = clearEachCycle
@@ -238,6 +244,7 @@ fun DecodeScreen(
                         )
                     }
                     IconButton(
+                        modifier = Modifier.size(36.dp),
                         onClick = {
                             compactMode = !compactMode
                             GeneralVariables.simpleCallItemMode = compactMode
@@ -251,6 +258,7 @@ fun DecodeScreen(
                         }
                     }
                     IconButton(
+                        modifier = Modifier.size(36.dp),
                         onClick = { mainViewModel.clearFt8MessageList() },
                         enabled = messageList?.isNotEmpty() == true,
                     ) {
