@@ -503,7 +503,8 @@ public class GeneralVariables {
     //mutableNtpClockSync below, so there's no separate field for it.
     public static volatile int ntpClockOffsetMs = 0;
     //Posted each time an NTP sync disciplines the clock, so the Time Sync screen can recompose
-    //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.
+    //its "last sync"/offset readout. Carries the disciplined UTC timestamp (System.currentTimeMillis()
+    //plus the applied offset), not the raw system clock reading.
     public static MutableLiveData<Long> mutableNtpClockSync = new MutableLiveData<>();
     //Posted true when the most recent NTP sync attempt exhausted every resolved address
     //without success (no network, blocked UDP port, bad server name); posted false right

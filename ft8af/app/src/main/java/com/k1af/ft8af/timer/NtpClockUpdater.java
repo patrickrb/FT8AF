@@ -211,8 +211,8 @@ public class NtpClockUpdater {
         GeneralVariables.mutableNtpClockSyncFailed.postValue(true);
     }
 
-    /** Compute, sanity-check, and apply the offset from a single NTP reply. */
-    private void applySyncResult(long serverTransmitMs) {
+    /** Compute, sanity-check, and apply the offset from a single NTP reply. Package-private, for tests. */
+    void applySyncResult(long serverTransmitMs) {
         long nowSystemMs = System.currentTimeMillis();
         // Sample once and feed the same reading to the evaluation and the log, so a logged
         // "REJECTED" offset can't disagree with the number actually judged against the bound.
@@ -224,6 +224,7 @@ public class NtpClockUpdater {
             if (isRunning()) {
                 GeneralVariables.fileLog("NtpClock: REJECTED sync offset=" + rawOffsetMs
                         + "ms (absMax=" + MAX_SANE_OFFSET_MS + "ms) — clock left at " + UtcTimer.delay + "ms");
+                GeneralVariables.mutableNtpClockSyncFailed.postValue(true);
             }
             return;
         }
