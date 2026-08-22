@@ -96,12 +96,19 @@ internal fun clockSyncStatusText(level: ClockSyncLevel): Int = when (level) {
 /**
  * Which automatic clock source, if any, is disciplining the clock right now — shown as a
  * small badge on the pill so the operator can see the DT is being handled for them.
- * GPS wins when both are on, because the self-sync estimator stands down while GPS
- * discipline is active (see MainViewModel.afterDecode). Null means manual only.
+ * GPS or NTP wins over self-sync when both are on, because the estimator stands down
+ * while either discipline is active (see ClockSelfSync.mayRun). GPS and NTP are mutually
+ * exclusive in the settings UI; GPS is listed first only as the tie-break for a
+ * hand-edited config. Null means manual only.
  */
-internal fun clockSyncAutoBadge(autoSyncFromDecodes: Boolean, disciplineFromGps: Boolean): Int? =
+internal fun clockSyncAutoBadge(
+    autoSyncFromDecodes: Boolean,
+    disciplineFromGps: Boolean,
+    disciplineFromNtp: Boolean = false,
+): Int? =
     when {
         disciplineFromGps -> R.string.clock_sync_badge_gps
+        disciplineFromNtp -> R.string.clock_sync_badge_ntp
         autoSyncFromDecodes -> R.string.clock_sync_badge_auto
         else -> null
     }
@@ -118,13 +125,14 @@ internal fun ClockSyncIndicator(
     modifier: Modifier = Modifier,
     autoSyncFromDecodes: Boolean = false,
     disciplineFromGps: Boolean = false,
+    disciplineFromNtp: Boolean = false,
 ) {
     val level = clockSyncLevel(offsetSec)
     val color = clockSyncColor(level)
     val offsetLabel = clockSyncOffsetLabel(offsetSec)
     val statusWord = stringResource(clockSyncStatusText(level))
     val label = stringResource(R.string.clock_sync_label)
-    val badgeRes = clockSyncAutoBadge(autoSyncFromDecodes, disciplineFromGps)
+    val badgeRes = clockSyncAutoBadge(autoSyncFromDecodes, disciplineFromGps, disciplineFromNtp)
     val badge = badgeRes?.let { stringResource(it) }
     val cd = if (badge == null) {
         stringResource(R.string.clock_sync_cd, offsetLabel, statusWord)

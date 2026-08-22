@@ -10,6 +10,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,9 +25,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,6 +45,8 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import com.k1af.ft8af.location.GpsClockUpdater
+import com.k1af.ft8af.timer.ClockSelfSync
+import com.k1af.ft8af.timer.NtpClockUpdater
 import com.k1af.ft8af.timer.UtcTimer
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.GlassCard
@@ -74,6 +85,17 @@ fun TimeSyncSettings(
         GeneralVariables.mutableGpsClockSync.value
     )
 
+    // NTP clock discipline — parallel to GPS, mutually exclusive with it.
+    var disciplineFromNtp by remember { mutableStateOf(GeneralVariables.disciplineClockFromNtp) }
+    var ntpServerInput by remember { mutableStateOf(TextFieldValue(GeneralVariables.getNtpServer())) }
+    var ntpIntervalMin by remember { mutableIntStateOf(GeneralVariables.ntpClockIntervalMinutes) }
+    val lastNtpSync by GeneralVariables.mutableNtpClockSync.observeAsState(
+        GeneralVariables.mutableNtpClockSync.value
+    )
+    val ntpSyncFailed by GeneralVariables.mutableNtpClockSyncFailed.observeAsState(
+        GeneralVariables.mutableNtpClockSyncFailed.value
+    )
+
     // Latest cycle's average decode DT (seconds), posted in MainViewModel.afterDecode.
     // Null until the first decode this session.
     val avgDtSec by mainViewModel.mutableTimerOffset.observeAsState()
@@ -85,10 +107,11 @@ fun TimeSyncSettings(
         GeneralVariables.mutableSelfSyncApplied.value
     )
 
-    // While GPS discipline owns the clock, each fix rewrites UtcTimer.delay behind this
-    // screen's back — and disabling it restores the pre-GPS offset. Re-read the live value
-    // on every posted sync and on toggle changes so the "Current" readout can't go stale.
-    LaunchedEffect(lastGpsSync, disciplineFromGps) {
+    // While GPS or NTP discipline owns the clock, each sync rewrites UtcTimer.delay behind
+    // this screen's back — and disabling it restores the pre-discipline offset. Re-read the
+    // live value on every posted sync and on toggle changes so the "Current" readout can't
+    // go stale.
+    LaunchedEffect(lastGpsSync, lastNtpSync, disciplineFromGps, disciplineFromNtp) {
         correctionMs = UtcTimer.delay
     }
 
@@ -129,10 +152,10 @@ fun TimeSyncSettings(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    // While GPS discipline owns the clock the manual controls are inert —
-                    // editing them would fight the next GPS fix and overwrite the persisted
-                    // manual value. Disable them and say why.
-                    val manualEnabled = !disciplineFromGps
+                    // While GPS or NTP discipline owns the clock the manual controls are
+                    // inert — editing them would fight the next sync and overwrite the
+                    // persisted manual value. Disable them and say why.
+                    val manualEnabled = !disciplineFromGps && !disciplineFromNtp
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -143,9 +166,10 @@ fun TimeSyncSettings(
                         StepButton("+0.1", Modifier.weight(1f), manualEnabled) { apply(stepCorrectionMs(correctionMs, 100)) }
                         StepButton("+0.5", Modifier.weight(1f), manualEnabled) { apply(stepCorrectionMs(correctionMs, 500)) }
                     }
-                    if (disciplineFromGps) {
+                    val lockedMessageRes = clockLockedMessageRes(disciplineFromGps, disciplineFromNtp)
+                    if (lockedMessageRes != null) {
                         Text(
-                            text = stringResource(R.string.settings_time_correction_gps_locked),
+                            text = stringResource(lockedMessageRes),
                             color = TextMuted,
                             fontSize = 13.sp,
                             textAlign = TextAlign.Center,
@@ -183,9 +207,10 @@ fun TimeSyncSettings(
                     label = stringResource(R.string.settings_selfsync_toggle),
                     description = stringResource(R.string.settings_selfsync_toggle_desc),
                     toggle = autoSyncFromDecodes,
-                    // Same lock-out as the manual controls: while GPS discipline owns
-                    // the clock this estimator must not fight it, so the row is inert.
-                    enabled = !disciplineFromGps,
+                    // Same lock-out as the manual controls: while GPS or NTP discipline
+                    // owns the clock this estimator must not fight it, so the row is
+                    // inert. Mirrors the decode-time gate (ClockSelfSync.mayRun).
+                    enabled = !disciplineFromGps && !disciplineFromNtp,
                     onToggleChange = { checked ->
                         autoSyncFromDecodes = checked
                         GeneralVariables.autoSyncClockFromDecodes = checked
@@ -231,7 +256,8 @@ fun TimeSyncSettings(
                             fontSize = 15.sp,
                             fontFamily = GeistMonoFamily,
                         )
-                        if (showSuggestionApply(autoSyncFromDecodes, disciplineFromGps)) {
+                        val suggestLockedRes = clockLockedMessageRes(disciplineFromGps, disciplineFromNtp)
+                        if (showSuggestionApply(autoSyncFromDecodes, disciplineFromGps, disciplineFromNtp)) {
                             Text(
                                 text = stringResource(R.string.settings_time_suggest_apply),
                                 color = Accent,
@@ -241,9 +267,9 @@ fun TimeSyncSettings(
                                     .clickable { apply(suggestedCorrectionMs(correctionMs, dt)) }
                                     .padding(vertical = 6.dp),
                             )
-                        } else if (disciplineFromGps) {
+                        } else if (suggestLockedRes != null) {
                             Text(
-                                text = stringResource(R.string.settings_time_correction_gps_locked),
+                                text = stringResource(suggestLockedRes),
                                 color = TextMuted,
                                 fontSize = 13.sp,
                             )
@@ -285,10 +311,24 @@ fun TimeSyncSettings(
                     description = stringResource(R.string.settings_gps_clock_toggle_desc),
                     toggle = disciplineFromGps,
                     onToggleChange = { checked ->
-                        // On enable, make sure we have location permission — the
-                        // updater silently no-ops without it (same pattern as the
-                        // GPS grid toggle).
                         if (checked) {
+                            // Mutual exclusion: stop+persist NTP off first (synchronously)
+                            // so its stop() restores UtcTimer.delay to the shared
+                            // pre-discipline baseline before GPS captures its own baseline
+                            // — otherwise GPS would capture NTP's still-applied offset
+                            // instead of the true pre-discipline value.
+                            if (disciplineFromNtp) {
+                                disciplineFromNtp = false
+                                GeneralVariables.disciplineClockFromNtp = false
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "disciplineClockFromNtp", "0", null,
+                                )
+                                NtpClockUpdater.refresh(context)
+                            }
+
+                            // Make sure we have location permission — the updater
+                            // silently no-ops without it (same pattern as the GPS
+                            // grid toggle).
                             val granted = ContextCompat.checkSelfPermission(
                                 context, Manifest.permission.ACCESS_FINE_LOCATION,
                             ) == PackageManager.PERMISSION_GRANTED
@@ -334,7 +374,7 @@ fun TimeSyncSettings(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            for (min in GPS_INTERVAL_OPTIONS) {
+                            for (min in CLOCK_INTERVAL_OPTIONS) {
                                 IntervalChip(
                                     label = stringResource(R.string.settings_gps_clock_interval_value, min),
                                     selected = gpsIntervalMin == min,
@@ -383,11 +423,169 @@ fun TimeSyncSettings(
                 }
             }
         }
+
+        // =====================================================================
+        // NTP CLOCK DISCIPLINE
+        // =====================================================================
+        SettingsSection(title = stringResource(R.string.settings_ntp_clock_section)) {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                SettingsRow(
+                    label = stringResource(R.string.settings_ntp_clock_toggle),
+                    description = stringResource(R.string.settings_ntp_clock_toggle_desc),
+                    toggle = disciplineFromNtp,
+                    onToggleChange = { checked ->
+                        if (checked && disciplineFromGps) {
+                            // Symmetric mutual exclusion: stop+persist GPS off first so
+                            // its stop() restores UtcTimer.delay to the shared
+                            // pre-discipline baseline before NTP captures its own.
+                            disciplineFromGps = false
+                            GeneralVariables.disciplineClockFromGPS = false
+                            mainViewModel.databaseOpr.writeConfig(
+                                "disciplineClockFromGPS", "0", null,
+                            )
+                            GpsClockUpdater.refresh(context)
+                        }
+                        disciplineFromNtp = checked
+                        GeneralVariables.disciplineClockFromNtp = checked
+                        mainViewModel.databaseOpr.writeConfig(
+                            "disciplineClockFromNtp", if (checked) "1" else "0", null,
+                        )
+                        if (checked) {
+                            // NTP takes over the clock; the self-sync estimator stands
+                            // down (ClockSelfSync.mayRun) — clear its streak so stale
+                            // pre-NTP evidence can't act if NTP is later disabled.
+                            mainViewModel.clockSelfSync.reset()
+                        }
+                        NtpClockUpdater.refresh(context)
+                    },
+                )
+            }
+
+            if (disciplineFromNtp) {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        fun commitNtpServer() {
+                            val normalized = normalizeNtpServer(ntpServerInput.text)
+                            // Keep the caret at the end of the committed text rather than
+                            // letting a fresh TextFieldValue reset it to position 0.
+                            ntpServerInput = TextFieldValue(normalized, TextRange(normalized.length))
+                            GeneralVariables.ntpServer = normalized
+                            mainViewModel.databaseOpr.writeConfig("ntpServer", normalized, null)
+                            // No NtpClockUpdater.refresh() needed: the next scheduled
+                            // sync reads GeneralVariables.getNtpServer() live.
+                        }
+
+                        OutlinedTextField(
+                            value = ntpServerInput,
+                            onValueChange = { ntpServerInput = it },
+                            label = { Text(stringResource(R.string.settings_ntp_clock_server_label)) },
+                            placeholder = {
+                                Text(
+                                    text = stringResource(R.string.settings_ntp_clock_server_hint),
+                                    color = TextFaint,
+                                )
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { commitNtpServer() }),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                cursorColor = Accent,
+                                focusedBorderColor = Accent,
+                                unfocusedBorderColor = BorderStrong,
+                                focusedLabelColor = Accent,
+                                unfocusedLabelColor = TextMuted,
+                            ),
+                            textStyle = TextStyle(fontFamily = GeistMonoFamily, fontSize = 15.sp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onFocusChanged { if (!it.isFocused) commitNtpServer() },
+                        )
+
+                        Text(
+                            text = stringResource(R.string.settings_gps_clock_interval),
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            for (min in CLOCK_INTERVAL_OPTIONS) {
+                                IntervalChip(
+                                    label = stringResource(R.string.settings_gps_clock_interval_value, min),
+                                    selected = ntpIntervalMin == min,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    ntpIntervalMin = min
+                                    GeneralVariables.ntpClockIntervalMinutes = min
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "ntpClockIntervalMin", min.toString(), null,
+                                    )
+                                    NtpClockUpdater.refresh(context)
+                                }
+                            }
+                        }
+
+                        // Status readout: last sync + applied offset, waiting, or failed.
+                        val syncMs = lastNtpSync
+                        when {
+                            syncMs == null && ntpSyncFailed == true -> {
+                                Text(
+                                    text = stringResource(R.string.settings_ntp_clock_sync_failed),
+                                    color = TextMuted,
+                                    fontSize = 14.sp,
+                                )
+                            }
+                            syncMs == null -> {
+                                Text(
+                                    text = stringResource(R.string.settings_ntp_clock_waiting),
+                                    color = TextMuted,
+                                    fontSize = 14.sp,
+                                )
+                            }
+                            else -> {
+                                Text(
+                                    text = stringResource(
+                                        R.string.settings_ntp_clock_last_sync,
+                                        UtcTimer.getDatetimeStr(syncMs),
+                                    ),
+                                    color = TextPrimary,
+                                    fontSize = 14.sp,
+                                    fontFamily = GeistMonoFamily,
+                                )
+                                Text(
+                                    text = stringResource(
+                                        R.string.settings_ntp_clock_offset,
+                                        formatOffsetMs(GeneralVariables.ntpClockOffsetMs),
+                                    ),
+                                    color = if (GeneralVariables.ntpClockOffsetMs == 0) TextPrimary else Accent,
+                                    fontSize = 14.sp,
+                                    fontFamily = GeistMonoFamily,
+                                )
+                                if (ntpSyncFailed == true) {
+                                    Text(
+                                        text = stringResource(R.string.settings_ntp_clock_sync_failed),
+                                        color = TextMuted,
+                                        fontSize = 12.sp,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
-/** Update-interval presets (minutes) offered for GPS clock discipline. */
-private val GPS_INTERVAL_OPTIONS = intArrayOf(1, 5, 10, 15, 30)
+/** Update-interval presets (minutes) offered for GPS/NTP clock discipline. */
+private val CLOCK_INTERVAL_OPTIONS = intArrayOf(1, 5, 10, 15, 30)
 
 /**
  * A bordered, tappable interval chip that highlights when selected. Local to this screen.

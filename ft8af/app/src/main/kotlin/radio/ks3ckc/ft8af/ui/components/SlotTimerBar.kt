@@ -67,6 +67,7 @@ fun SlotTimerBar(
                 offsetSec = offsetSec,
                 autoSyncFromDecodes = GeneralVariables.autoSyncClockFromDecodes,
                 disciplineFromGps = GeneralVariables.disciplineClockFromGPS,
+                disciplineFromNtp = GeneralVariables.disciplineClockFromNtp,
             )
         }
         Box(

@@ -160,6 +160,18 @@ public class ClockSelfSync {
         return Arrays.copyOf(survivors, kept);
     }
 
+    /**
+     * Whether the estimator may act this slot. It runs only when the operator has it on
+     * AND nothing authoritative owns the clock: GPS and NTP discipline each rewrite
+     * {@link UtcTimer#delay} on their own schedule, and a second writer nudging the same
+     * field from decode DTs would fight every one of their corrections. One definition,
+     * shared by the decode-time gate and the settings screen's lock-out.
+     */
+    public static boolean mayRun(boolean autoSyncFromDecodes, boolean disciplineFromGps,
+                                 boolean disciplineFromNtp) {
+        return autoSyncFromDecodes && !disciplineFromGps && !disciplineFromNtp;
+    }
+
     /** Clamp to the shared manual-correction range (±5000 ms). */
     static int clampDelayMs(int ms) {
         return Math.max(GeneralVariables.MANUAL_TIME_CORRECTION_MIN_MS,

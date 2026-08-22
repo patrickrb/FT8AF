@@ -91,4 +91,10 @@ class TimeCorrectionTest {
         assertThat(showSuggestionApply(autoSyncFromDecodes = false, disciplineFromGps = true)).isFalse()
         assertThat(showSuggestionApply(autoSyncFromDecodes = true, disciplineFromGps = true)).isFalse()
     }
+
+    @Test
+    fun suggestionApply_hiddenWhileNtpDisciplinesTheClock() {
+        assertThat(showSuggestionApply(autoSyncFromDecodes = false, disciplineFromGps = false, disciplineFromNtp = true)).isFalse()
+        assertThat(showSuggestionApply(autoSyncFromDecodes = true, disciplineFromGps = false, disciplineFromNtp = true)).isFalse()
+    }
 }
