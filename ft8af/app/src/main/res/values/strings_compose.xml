@@ -583,7 +583,7 @@
     <!-- ===== Settings: Time Sync (self-syncing clock from decodes) ===== -->
     <string name="settings_selfsync_section">Self-Syncing Clock</string>
     <string name="settings_selfsync_toggle">Auto-sync clock from decodes</string>
-    <string name="settings_selfsync_toggle_desc">On by default. Keeps the clock locked to the stations you hear — the band itself is the time source, no internet or GPS needed. A clock that is clearly off is fixed from the first busy slot; small drift is trimmed gently. Unavailable while GPS clock discipline is on.</string>
+    <string name="settings_selfsync_toggle_desc">On by default. Keeps the clock locked to the stations you hear — the band itself is the time source, no internet or GPS needed. A clock that is clearly off is fixed from the first busy slot; small drift is trimmed gently. Unavailable while GPS or NTP clock discipline is on.</string>
 
     <!-- ===== Settings: Time Sync (GPS clock discipline, issue #373) ===== -->
     <string name="settings_gps_clock_section">GPS Clock Discipline</string>
