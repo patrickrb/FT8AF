@@ -61,11 +61,15 @@ internal fun suggestedCorrectionMs(currentDelayMs: Int, avgDtSec: Float): Int =
  * Only when nothing automatic owns the clock. With auto-sync on, the estimator
  * is already driving the same DT toward zero — offering the tap on top of it
  * made operators keep applying the residual by hand (and every manual apply
- * fights the estimator's next step). With GPS discipline on, the manual
+ * fights the estimator's next step). With GPS or NTP discipline on, the manual
  * controls are locked for the same reason, and the suggestion must be too.
  */
-internal fun showSuggestionApply(autoSyncFromDecodes: Boolean, disciplineFromGps: Boolean): Boolean =
-    !autoSyncFromDecodes && !disciplineFromGps
+internal fun showSuggestionApply(
+    autoSyncFromDecodes: Boolean,
+    disciplineFromGps: Boolean,
+    disciplineFromNtp: Boolean = false,
+): Boolean =
+    !autoSyncFromDecodes && !disciplineFromGps && !disciplineFromNtp
 
 /**
  * Human-readable offset, e.g. "+0.6 s", "-0.3 s", "0.0 s". Used for both the

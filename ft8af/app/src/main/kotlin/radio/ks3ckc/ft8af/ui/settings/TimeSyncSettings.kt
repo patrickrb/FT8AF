@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -44,6 +45,7 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import com.k1af.ft8af.location.GpsClockUpdater
+import com.k1af.ft8af.timer.ClockSelfSync
 import com.k1af.ft8af.timer.NtpClockUpdater
 import com.k1af.ft8af.timer.UtcTimer
 import radio.ks3ckc.ft8af.theme.*
@@ -205,9 +207,10 @@ fun TimeSyncSettings(
                     label = stringResource(R.string.settings_selfsync_toggle),
                     description = stringResource(R.string.settings_selfsync_toggle_desc),
                     toggle = autoSyncFromDecodes,
-                    // Same lock-out as the manual controls: while GPS discipline owns
-                    // the clock this estimator must not fight it, so the row is inert.
-                    enabled = !disciplineFromGps,
+                    // Same lock-out as the manual controls: while GPS or NTP discipline
+                    // owns the clock this estimator must not fight it, so the row is
+                    // inert. Mirrors the decode-time gate (ClockSelfSync.mayRun).
+                    enabled = !disciplineFromGps && !disciplineFromNtp,
                     onToggleChange = { checked ->
                         autoSyncFromDecodes = checked
                         GeneralVariables.autoSyncClockFromDecodes = checked
@@ -253,7 +256,8 @@ fun TimeSyncSettings(
                             fontSize = 15.sp,
                             fontFamily = GeistMonoFamily,
                         )
-                        if (showSuggestionApply(autoSyncFromDecodes, disciplineFromGps)) {
+                        val suggestLockedRes = clockLockedMessageRes(disciplineFromGps, disciplineFromNtp)
+                        if (showSuggestionApply(autoSyncFromDecodes, disciplineFromGps, disciplineFromNtp)) {
                             Text(
                                 text = stringResource(R.string.settings_time_suggest_apply),
                                 color = Accent,
@@ -263,9 +267,9 @@ fun TimeSyncSettings(
                                     .clickable { apply(suggestedCorrectionMs(correctionMs, dt)) }
                                     .padding(vertical = 6.dp),
                             )
-                        } else if (disciplineFromGps) {
+                        } else if (suggestLockedRes != null) {
                             Text(
-                                text = stringResource(R.string.settings_time_correction_gps_locked),
+                                text = stringResource(suggestLockedRes),
                                 color = TextMuted,
                                 fontSize = 13.sp,
                             )
@@ -446,6 +450,12 @@ fun TimeSyncSettings(
                         mainViewModel.databaseOpr.writeConfig(
                             "disciplineClockFromNtp", if (checked) "1" else "0", null,
                         )
+                        if (checked) {
+                            // NTP takes over the clock; the self-sync estimator stands
+                            // down (ClockSelfSync.mayRun) — clear its streak so stale
+                            // pre-NTP evidence can't act if NTP is later disabled.
+                            mainViewModel.clockSelfSync.reset()
+                        }
                         NtpClockUpdater.refresh(context)
                     },
                 )
@@ -459,7 +469,9 @@ fun TimeSyncSettings(
                     ) {
                         fun commitNtpServer() {
                             val normalized = normalizeNtpServer(ntpServerInput.text)
-                            ntpServerInput = TextFieldValue(normalized)
+                            // Keep the caret at the end of the committed text rather than
+                            // letting a fresh TextFieldValue reset it to position 0.
+                            ntpServerInput = TextFieldValue(normalized, TextRange(normalized.length))
                             GeneralVariables.ntpServer = normalized
                             mainViewModel.databaseOpr.writeConfig("ntpServer", normalized, null)
                             // No NtpClockUpdater.refresh() needed: the next scheduled

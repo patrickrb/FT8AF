@@ -679,10 +679,11 @@ public class MainViewModel extends ViewModel {
                     // that pass's own (deduped, echo-filtered) messages. Deep/late
                     // passes re-deliver the same slot and are skipped by the isDeep
                     // gate; beginSlot() dedupes by slot utc as a second line of
-                    // defense. GPS discipline owns the clock when enabled, so this
-                    // stands down (and clears its state) rather than fight it.
-                    if (GeneralVariables.autoSyncClockFromDecodes
-                            && !GeneralVariables.disciplineClockFromGPS) {
+                    // defense. GPS or NTP discipline owns the clock when enabled, so
+                    // this stands down (and clears its state) rather than fight it.
+                    if (ClockSelfSync.mayRun(GeneralVariables.autoSyncClockFromDecodes,
+                            GeneralVariables.disciplineClockFromGPS,
+                            GeneralVariables.disciplineClockFromNtp)) {
                         float[] dtSamples = new float[messages.size()];
                         for (int i = 0; i < messages.size(); i++) {
                             dtSamples[i] = messages.get(i).time_sec;
@@ -710,7 +711,7 @@ public class MainViewModel extends ViewModel {
                                     + dtSamples.length + " decodes, slot utc=" + utc + ")");
                         }
                     } else {
-                        // Feature off or GPS disciplining: drop any half-built
+                        // Feature off or GPS/NTP disciplining: drop any half-built
                         // confirmation streak so stale state can't act later.
                         clockSelfSync.reset();
                     }

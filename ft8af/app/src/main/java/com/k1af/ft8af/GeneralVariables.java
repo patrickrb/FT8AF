@@ -575,7 +575,7 @@ public class GeneralVariables {
     public static boolean autoUpdateGridFromGPS = false;//Use device GPS to keep Maidenhead grid current
     public static boolean disciplineClockFromGPS = false;//Discipline the app clock (UtcTimer.delay) from GPS satellite time (issue #373). Off by default — consensual.
     public static int gpsClockIntervalMinutes = 5;//How often to re-read GPS time for clock discipline. Clamped 1-30 by GpsClockUpdater.
-    public static boolean autoSyncClockFromDecodes = true;//Self-syncing clock: continuously trim UtcTimer.delay from the median decode DT (see ClockSelfSync). Inert while disciplineClockFromGPS is on. ON by default (PR #758): the band is the time source every operator has, and the estimator is conservative enough (median + MAD rejection + deadband + confirmation) to run unattended.
+    public static boolean autoSyncClockFromDecodes = true;//Self-syncing clock: continuously trim UtcTimer.delay from the median decode DT (see ClockSelfSync). Inert while disciplineClockFromGPS or disciplineClockFromNtp is on (see ClockSelfSync.mayRun). ON by default (PR #758): the band is the time source every operator has, and the estimator is conservative enough (median + MAD rejection + deadband + confirmation) to run unattended.
     //Runtime status for the Time Sync UI (not persisted): the offset the last GPS fix applied
     //to UtcTimer.delay. The last-sync *timestamp* is the retained value of mutableGpsClockSync
     //below, so there's no separate field for it.
@@ -641,7 +641,7 @@ public class GeneralVariables {
     //Posted each time a GPS fix disciplines the clock, so the Time Sync screen can recompose
     //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.
     public static MutableLiveData<Long> mutableGpsClockSync = new MutableLiveData<>();
-    public static final String DEFAULT_NTP_SERVER = "a.ntp.br";//Default NTP server for clock discipline.
+    public static final String DEFAULT_NTP_SERVER = "pool.ntp.org";//Default NTP server for clock discipline: the worldwide anycast pool, which resolves to servers near the device. Regional pools (a.ntp.br, time.nist.gov, …) can be typed in.
     public static boolean disciplineClockFromNtp = false;//Discipline the app clock (UtcTimer.delay) from a network NTP server, periodically. Off by default. Mutually exclusive with disciplineClockFromGPS — TimeSyncSettings enforces this by disabling the other on toggle.
     public static String ntpServer = DEFAULT_NTP_SERVER;//NTP server hostname/IP for periodic clock discipline. Resolved for both A and AAAA records (dual-stack) by NtpClockUpdater.
     public static int ntpClockIntervalMinutes = 5;//How often to re-sync from the NTP server. Clamped 1-30 by NtpClockUpdater.

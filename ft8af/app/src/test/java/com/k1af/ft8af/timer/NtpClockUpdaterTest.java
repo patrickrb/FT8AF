@@ -10,6 +10,10 @@ import androidx.test.core.app.ApplicationProvider;
 
 import com.k1af.ft8af.GeneralVariables;
 
+import org.apache.commons.net.ntp.NtpV3Impl;
+import org.apache.commons.net.ntp.TimeInfo;
+import org.apache.commons.net.ntp.TimeStamp;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -42,6 +46,58 @@ public class NtpClockUpdaterTest {
     @Test
     public void offset_zeroWhenClocksMatch() {
         assertThat(NtpClockUpdater.ntpClockOffsetMs(10_000L, 10_000L)).isEqualTo(0);
+    }
+
+    @Test
+    public void offset_sharesUtcTimersIntClamp() {
+        // One definition with the one-shot "Sync now": an absurd delta clamps, not overflows.
+        assertThat(NtpClockUpdater.ntpClockOffsetMs(Long.MAX_VALUE, 0L))
+                .isEqualTo(UtcTimer.ntpClockOffsetMs(Long.MAX_VALUE, 0L));
+        assertThat(NtpClockUpdater.ntpClockOffsetMs(Long.MAX_VALUE, 0L)).isEqualTo(Integer.MAX_VALUE);
+    }
+
+    // ---- referenceUtcMs: RTT-compensated server "now" from a reply ----
+
+    /** Whole-second epoch base so NTP fixed-point conversion is exact in the tests. */
+    private static final long T0 = 1_700_000_000_000L;
+
+    private static TimeInfo reply(long originateMs, long receiveMs, long transmitMs, long returnMs) {
+        NtpV3Impl msg = new NtpV3Impl();
+        if (originateMs != 0) msg.setOriginateTimeStamp(TimeStamp.getNtpTime(originateMs));
+        if (receiveMs != 0) msg.setReceiveTimeStamp(TimeStamp.getNtpTime(receiveMs));
+        if (transmitMs != 0) msg.setTransmitTime(TimeStamp.getNtpTime(transmitMs));
+        return new TimeInfo(msg, returnMs);
+    }
+
+    @Test
+    public void reference_cancelsHalfTheRoundTrip() {
+        // t1 = T0 sent, t4 = T0+1000 received (1 s RTT); the server stamped both t2 and t3
+        // at T0+3000, so it is 2500 ms ahead: ((t2-t1)+(t3-t4))/2 = (3000+2000)/2.
+        TimeInfo info = reply(T0, T0 + 3000, T0 + 3000, T0 + 1000);
+        assertThat(NtpClockUpdater.referenceUtcMs(info)).isEqualTo(T0 + 1000 + 2500);
+        // The raw transmit stamp would have under-corrected by half the RTT (500 ms).
+        assertThat(info.getMessage().getTransmitTimeStamp().getTime()).isEqualTo(T0 + 3000);
+    }
+
+    @Test
+    public void reference_fallsBackToTransmitStampWithoutOriginate() {
+        // No originate stamp: commons-net can still derive offset = t3 - t4, which lands
+        // on the transmit stamp exactly — the pre-compensation behaviour.
+        TimeInfo info = reply(0, 0, T0 + 3000, T0 + 1000);
+        assertThat(NtpClockUpdater.referenceUtcMs(info)).isEqualTo(T0 + 3000);
+    }
+
+    @Test
+    public void reference_emptyReplyIsRejectedByTheSanityBound() {
+        // Nothing stamped at all: commons-net can't compute an offset (null), so the raw
+        // transmit stamp is used — and a zero NTP timestamp does NOT decode to Java time 0:
+        // TimeStamp maps it to the 2036 era rollover (2085978496000). The `<= 0` guard in
+        // isOffsetSane therefore never sees it; what actually refuses an empty reply is the
+        // hour-scale sanity bound (the implied correction is ~10 years).
+        TimeInfo info = reply(0, 0, 0, T0 + 1000);
+        long ref = NtpClockUpdater.referenceUtcMs(info);
+        assertThat(ref).isEqualTo(2_085_978_496_000L);
+        assertThat(NtpClockUpdater.computeAppliedOffset(true, ref, T0 + 1000)).isNull();
     }
 
     // ---- isOffsetSane: reject bad/implausible replies ----

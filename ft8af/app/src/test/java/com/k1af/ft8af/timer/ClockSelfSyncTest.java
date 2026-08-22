@@ -23,6 +23,26 @@ import java.util.Arrays;
  */
 public class ClockSelfSyncTest {
 
+    // ---- mayRun: the decode-time gate shared with the settings lock-out ----
+
+    @Test
+    public void mayRun_onlyWhenEnabledAndNothingAuthoritativeOwnsTheClock() {
+        assertThat(ClockSelfSync.mayRun(true, false, false)).isTrue();
+        assertThat(ClockSelfSync.mayRun(false, false, false)).isFalse();
+    }
+
+    @Test
+    public void mayRun_standsDownForGpsDiscipline() {
+        assertThat(ClockSelfSync.mayRun(true, true, false)).isFalse();
+    }
+
+    @Test
+    public void mayRun_standsDownForNtpDiscipline() {
+        // NTP rewrites UtcTimer.delay on its own schedule; a second writer would fight it.
+        assertThat(ClockSelfSync.mayRun(true, false, true)).isFalse();
+        assertThat(ClockSelfSync.mayRun(true, true, true)).isFalse();
+    }
+
     /** A slot of {@code n} identical DTs (survives rejection unchanged). */
     private static float[] slot(float dtSec, int n) {
         float[] a = new float[n];

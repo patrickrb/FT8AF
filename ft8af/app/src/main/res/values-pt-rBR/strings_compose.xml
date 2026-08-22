@@ -456,7 +456,7 @@
     <string name="settings_ntp_clock_toggle">Disciplinar relógio por NTP</string>
     <string name="settings_ntp_clock_toggle_desc">Sincroniza periodicamente com um servidor de hora de rede para alinhar o ciclo FT8 ao UTC verdadeiro. Substitui a correção manual enquanto ativado. Requer acesso à internet.</string>
     <string name="settings_ntp_clock_server_label">Servidor NTP</string>
-    <string name="settings_ntp_clock_server_hint">ex.: a.ntp.br</string>
+    <string name="settings_ntp_clock_server_hint">ex.: pool.ntp.org</string>
     <string name="settings_ntp_clock_waiting">Aguardando a primeira sincronização NTP…</string>
     <string name="settings_ntp_clock_last_sync">Última sincronização NTP: %1$s UTC</string>
     <string name="settings_ntp_clock_offset">Offset aplicado: %1$s</string>
@@ -676,12 +676,10 @@
     <!-- Android Auto status screens (read-only). Headlines reuse the qsopanel_* strings. -->
     <string name="car_open_phone">Abra o FT8AF no seu celular para iniciar o motor FT8</string>
     <string name="car_monitoring">Monitorando — TX desligado</string>
-    <string name="car_no_tx">Nenhuma transmissão na fila</string>
     <string name="car_seq_step">Etapa %1$s (%2$d/%3$d)</string>
     <string name="car_slot_tx">Slot de TX · %1$d s</string>
     <string name="car_slot_rx">Slot de RX · %1$d s</string>
     <string name="car_decodes_action">Decodificações</string>
     <string name="car_decodes_title">Decodificações recentes</string>
     <string name="car_no_decodes">Nenhuma decodificação ainda</string>
-    <string name="car_pota_line">POTA %1$s · %2$d QSOs</string>
 </resources>

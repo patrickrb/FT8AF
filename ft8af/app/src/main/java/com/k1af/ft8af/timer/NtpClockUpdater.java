@@ -45,10 +45,12 @@ public class NtpClockUpdater {
 
     /**
      * A sync implying a correction larger than this is treated as bad data and ignored (see
-     * {@link #isOffsetSane}). Matches {@link GpsClockUpdater#MAX_SANE_OFFSET_MS}: the offset
-     * is written straight into {@link UtcTimer#delay}, which moves the whole FT8 cycle grid,
-     * so an hour-scale "correction" can only be a corrupt/spoofed reply or a badly
-     * misconfigured server.
+     * {@link #isOffsetSane}). Deliberately looser than {@link GpsClockUpdater#MAX_SANE_OFFSET_MS}
+     * (60 s): a GPS fix hours out is a mock provider or a bogus fix, but an NTP reply hours
+     * out is usually a device whose clock really is hours wrong (dead RTC, timezone set by
+     * hand, no network for weeks) — exactly the case NTP exists to fix, and what the one-shot
+     * "Sync now" ({@link UtcTimer#syncTime}) already corrects with no bound at all. Past an
+     * hour the reply itself is the suspect (corrupt/spoofed packet, misconfigured server).
      */
     static final long MAX_SANE_OFFSET_MS = 60L * 60L * 1000L;
 
@@ -197,8 +199,7 @@ public class NtpClockUpdater {
             try {
                 timeClient.setDefaultTimeout(NTP_TIMEOUT_MS);
                 TimeInfo timeInfo = timeClient.getTime(address);
-                long serverTransmitMs = timeInfo.getMessage().getTransmitTimeStamp().getTime();
-                applySyncResult(serverTransmitMs);
+                applySyncResult(referenceUtcMs(timeInfo));
                 return; // got a reply (accepted or rejected) — connectivity succeeded
             } catch (IOException e) {
                 Log.d(TAG, "NTP attempt failed for " + address + ": " + e.getMessage());
@@ -211,8 +212,18 @@ public class NtpClockUpdater {
         GeneralVariables.mutableNtpClockSyncFailed.postValue(true);
     }
 
-    /** Compute, sanity-check, and apply the offset from a single NTP reply. Package-private, for tests. */
-    void applySyncResult(long serverTransmitMs) {
+    /**
+     * Compute, sanity-check, and apply the offset from a single NTP reply. Package-private,
+     * for tests.
+     *
+     * <p>{@code synchronized} on the same monitor as {@link #stop()}: the running check and
+     * the write to {@link UtcTimer#delay} must be one atomic step, or a reply that arrives
+     * while the user flips the toggle off could pass the check, lose the race to stop()'s
+     * baseline restore, and then re-write the clock with a now-unwanted NTP offset.
+     *
+     * @param serverTransmitMs the server's UTC "now" as of this call — see {@link #referenceUtcMs}
+     */
+    synchronized void applySyncResult(long serverTransmitMs) {
         long nowSystemMs = System.currentTimeMillis();
         // Sample once and feed the same reading to the evaluation and the log, so a logged
         // "REJECTED" offset can't disagree with the number actually judged against the bound.
@@ -253,10 +264,23 @@ public class NtpClockUpdater {
      * device clock is more than one cycle out.
      */
     static int ntpClockOffsetMs(long serverTransmitMs, long nowSystemMs) {
-        long offset = serverTransmitMs - nowSystemMs;
-        if (offset > Integer.MAX_VALUE) offset = Integer.MAX_VALUE;
-        if (offset < Integer.MIN_VALUE) offset = Integer.MIN_VALUE;
-        return (int) offset;
+        // Same arithmetic (and int clamp) the one-shot "Sync now" uses; one definition.
+        return UtcTimer.ntpClockOffsetMs(serverTransmitMs, nowSystemMs);
+    }
+
+    /**
+     * The server's UTC "now" as of the moment its reply arrived. Uses the RFC 4330 offset
+     * {@code ((t2 - t1) + (t3 - t4)) / 2}, which cancels the symmetric half of the network
+     * round trip — reading the transmit timestamp alone would leave the clock behind the
+     * server by half the RTT (tens to hundreds of ms on mobile data), a bias every sync
+     * would then re-apply. Falls back to the raw transmit timestamp when the reply carries
+     * no originate timestamp to compute against (commons-net reports {@code null}).
+     */
+    static long referenceUtcMs(TimeInfo timeInfo) {
+        timeInfo.computeDetails();
+        Long offsetMs = timeInfo.getOffset();
+        if (offsetMs != null) return timeInfo.getReturnTime() + offsetMs;
+        return timeInfo.getMessage().getTransmitTimeStamp().getTime();
     }
 
     /**

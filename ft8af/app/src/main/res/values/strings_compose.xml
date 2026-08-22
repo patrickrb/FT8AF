@@ -600,7 +600,7 @@
     <string name="settings_ntp_clock_toggle">Discipline clock from NTP</string>
     <string name="settings_ntp_clock_toggle_desc">Periodically sync from a network time server to align the FT8 cycle to true UTC. Overrides the manual correction while on. Needs internet access.</string>
     <string name="settings_ntp_clock_server_label">NTP server</string>
-    <string name="settings_ntp_clock_server_hint">e.g. a.ntp.br</string>
+    <string name="settings_ntp_clock_server_hint">e.g. pool.ntp.org</string>
     <string name="settings_ntp_clock_waiting">Waiting for the first NTP sync…</string>
     <string name="settings_ntp_clock_last_sync">Last NTP sync: %1$s UTC</string>
     <string name="settings_ntp_clock_offset">Applied offset: %1$s</string>
@@ -879,6 +879,7 @@
     <string name="clock_sync_cd_auto">Clock sync: average decode offset %1$s, %2$s, %3$s</string>
     <string name="clock_sync_badge_auto" translatable="false">AUTO</string>
     <string name="clock_sync_badge_gps" translatable="false">GPS</string>
+    <string name="clock_sync_badge_ntp" translatable="false">NTP</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Language</string>

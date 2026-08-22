@@ -77,4 +77,20 @@ class ClockSyncTest {
         assertThat(clockSyncAutoBadge(autoSyncFromDecodes = false, disciplineFromGps = true))
             .isEqualTo(com.k1af.ft8af.R.string.clock_sync_badge_gps)
     }
+
+    @Test
+    fun autoBadge_ntpWinsOverSelfSync() {
+        // Same stand-down rule as GPS: while NTP disciplines the clock the estimator is
+        // inert, so NTP is what the operator is actually relying on.
+        assertThat(clockSyncAutoBadge(autoSyncFromDecodes = true, disciplineFromGps = false, disciplineFromNtp = true))
+            .isEqualTo(com.k1af.ft8af.R.string.clock_sync_badge_ntp)
+        assertThat(clockSyncAutoBadge(autoSyncFromDecodes = false, disciplineFromGps = false, disciplineFromNtp = true))
+            .isEqualTo(com.k1af.ft8af.R.string.clock_sync_badge_ntp)
+    }
+
+    @Test
+    fun autoBadge_gpsTieBreaksOverNtpIfBothSomehowOn() {
+        assertThat(clockSyncAutoBadge(autoSyncFromDecodes = true, disciplineFromGps = true, disciplineFromNtp = true))
+            .isEqualTo(com.k1af.ft8af.R.string.clock_sync_badge_gps)
+    }
 }

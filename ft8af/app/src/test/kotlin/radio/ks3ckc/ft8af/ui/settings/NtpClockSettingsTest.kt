@@ -24,7 +24,14 @@ class NtpClockSettingsTest {
 
     @Test
     fun normalize_passesThroughNonBlankUnchangedOnceTrimmed() {
-        assertThat(normalizeNtpServer("pool.ntp.org")).isEqualTo("pool.ntp.org")
+        assertThat(normalizeNtpServer("time.nist.gov")).isEqualTo("time.nist.gov")
+    }
+
+    @Test
+    fun defaultServer_isTheWorldwidePool() {
+        // Not a national server: the app ships everywhere, and pool.ntp.org resolves to
+        // servers near the device. Regional pools stay one text field away.
+        assertThat(GeneralVariables.DEFAULT_NTP_SERVER).isEqualTo("pool.ntp.org")
     }
 
     @Test
