@@ -467,7 +467,7 @@
     <string name="settings_ntp_clock_toggle">Discipline clock from NTP</string>
     <string name="settings_ntp_clock_toggle_desc">Periodically sync from a network time server to align the FT8 cycle to true UTC. Overrides the manual correction while on. Needs internet access.</string>
     <string name="settings_ntp_clock_server_label">NTP server</string>
-    <string name="settings_ntp_clock_server_hint">e.g. a.ntp.br</string>
+    <string name="settings_ntp_clock_server_hint">e.g. time.windows.com</string>
     <string name="settings_ntp_clock_waiting">Waiting for the first NTP sync…</string>
     <string name="settings_ntp_clock_last_sync">Last NTP sync: %1$s UTC</string>
     <string name="settings_ntp_clock_offset">Applied offset: %1$s</string>

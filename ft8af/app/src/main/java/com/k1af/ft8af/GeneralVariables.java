@@ -494,7 +494,7 @@ public class GeneralVariables {
     //Posted each time a GPS fix disciplines the clock, so the Time Sync screen can recompose
     //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.
     public static MutableLiveData<Long> mutableGpsClockSync = new MutableLiveData<>();
-    public static final String DEFAULT_NTP_SERVER = "a.ntp.br";//Default NTP server for clock discipline.
+    public static final String DEFAULT_NTP_SERVER = "time.windows.com";//Default NTP server for clock discipline — the same one Windows syncs to out of the box, so it's reachable worldwide rather than tied to one country's pool.
     public static boolean disciplineClockFromNtp = false;//Discipline the app clock (UtcTimer.delay) from a network NTP server, periodically. Off by default. Mutually exclusive with disciplineClockFromGPS — TimeSyncSettings enforces this by disabling the other on toggle.
     public static String ntpServer = DEFAULT_NTP_SERVER;//NTP server hostname/IP for periodic clock discipline. Resolved for both A and AAAA records (dual-stack) by NtpClockUpdater.
     public static int ntpClockIntervalMinutes = 5;//How often to re-sync from the NTP server. Clamped 1-30 by NtpClockUpdater.
