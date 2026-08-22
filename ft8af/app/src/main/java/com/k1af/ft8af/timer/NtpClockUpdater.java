@@ -217,21 +217,36 @@ public class NtpClockUpdater {
         // Sample once and feed the same reading to the evaluation and the log, so a logged
         // "REJECTED" offset can't disagree with the number actually judged against the bound.
         int rawOffsetMs = ntpClockOffsetMs(serverTransmitMs, nowSystemMs);
-        Integer offsetMs = computeAppliedOffset(isRunning(), serverTransmitMs, nowSystemMs);
+
+        boolean wasRunning;
+        Integer offsetMs;
+        int previousDelayMs;
+        // The running check and the clock writes have to be one step against stop(): checking
+        // outside the lock lets a reply that arrives mid-stop() pass the check and then
+        // overwrite the baseline stop() just restored, leaving the clock NTP-disciplined after
+        // the user disabled it. Logging and LiveData posts stay outside — fileLog does file
+        // I/O and stop() runs on the main thread.
+        synchronized (this) {
+            wasRunning = running;
+            previousDelayMs = UtcTimer.delay;
+            offsetMs = computeAppliedOffset(wasRunning, serverTransmitMs, nowSystemMs);
+            if (offsetMs != null) {
+                UtcTimer.delay = offsetMs;
+                GeneralVariables.ntpClockOffsetMs = offsetMs;
+            }
+        }
 
         if (offsetMs == null) {
             Log.d(TAG, "Ignoring NTP reply (not running or implausible): serverTransmitMs=" + serverTransmitMs);
-            if (isRunning()) {
+            if (wasRunning) {
                 GeneralVariables.fileLog("NtpClock: REJECTED sync offset=" + rawOffsetMs
-                        + "ms (absMax=" + MAX_SANE_OFFSET_MS + "ms) — clock left at " + UtcTimer.delay + "ms");
+                        + "ms (absMax=" + MAX_SANE_OFFSET_MS + "ms) — clock left at " + previousDelayMs + "ms");
                 GeneralVariables.mutableNtpClockSyncFailed.postValue(true);
             }
             return;
         }
 
-        GeneralVariables.fileLog("NtpClock: applied offset " + offsetMs + "ms (was " + UtcTimer.delay + "ms)");
-        UtcTimer.delay = offsetMs;
-        GeneralVariables.ntpClockOffsetMs = offsetMs;
+        GeneralVariables.fileLog("NtpClock: applied offset " + offsetMs + "ms (was " + previousDelayMs + "ms)");
         GeneralVariables.mutableNtpClockSyncFailed.postValue(false);
         // The UI renders this as "... UTC", so post the disciplined time, not the raw
         // (possibly-wrong) system clock we just computed a correction for.

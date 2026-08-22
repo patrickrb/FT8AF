@@ -382,8 +382,9 @@ fun TimeSyncSettings(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         fun commitNtpServer() {
-                            val normalized = normalizeNtpServer(ntpServerInput.text)
-                            ntpServerInput = TextFieldValue(normalized)
+                            val committed = ntpServerCommitValue(ntpServerInput)
+                            val normalized = committed.text
+                            ntpServerInput = committed
                             GeneralVariables.ntpServer = normalized
                             mainViewModel.databaseOpr.writeConfig("ntpServer", normalized, null)
                             // No NtpClockUpdater.refresh() needed: the next scheduled

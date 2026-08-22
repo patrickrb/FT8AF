@@ -244,6 +244,65 @@ public class NtpClockUpdaterTest {
     }
 
     @Test
+    public void applySyncResult_afterStop_leavesRestoredBaseline() {
+        // The clock must stay at the baseline stop() restored, not be re-disciplined by a
+        // reply that was already in flight when the user turned NTP off.
+        Context ctx = ApplicationProvider.getApplicationContext();
+        int originalDelay = 1234;
+        UtcTimer.delay = originalDelay;
+        try {
+            GeneralVariables.disciplineClockFromNtp = true;
+            NtpClockUpdater.refresh(ctx);
+            GeneralVariables.disciplineClockFromNtp = false;
+            NtpClockUpdater.refresh(ctx);
+
+            NtpClockUpdater.getInstance(ctx).applySyncResult(System.currentTimeMillis() + 3_000L);
+
+            assertThat(UtcTimer.delay).isEqualTo(originalDelay);
+        } finally {
+            UtcTimer.delay = 0;
+        }
+    }
+
+    @Test
+    public void applySyncResult_writesClockUnderTheSameLockAsStop() throws Exception {
+        // The running check and the clock writes have to be one atomic step against stop(),
+        // or a reply arriving mid-stop() passes the check and then overwrites the baseline
+        // stop() just restored. Holding the instance monitor here must therefore keep the
+        // apply path from touching UtcTimer.delay until the monitor is released.
+        Context ctx = ApplicationProvider.getApplicationContext();
+        NtpClockUpdater updater = NtpClockUpdater.getInstance(ctx);
+        UtcTimer.delay = 0;
+        GeneralVariables.disciplineClockFromNtp = true;
+        NtpClockUpdater.refresh(ctx);
+        try {
+            Thread applier = new Thread(
+                    () -> updater.applySyncResult(System.currentTimeMillis() + 3_000L));
+            synchronized (updater) {
+                applier.start();
+                awaitBlocked(applier);
+                assertThat(UtcTimer.delay).isEqualTo(0);
+            }
+            applier.join(5_000);
+            assertThat(applier.isAlive()).isFalse();
+            assertThat(UtcTimer.delay).isGreaterThan(2_000);
+        } finally {
+            GeneralVariables.disciplineClockFromNtp = false;
+            NtpClockUpdater.refresh(ctx);
+            UtcTimer.delay = 0;
+        }
+    }
+
+    /** Spin until {@code t} is parked on a monitor, so the assertion under the lock is meaningful. */
+    private static void awaitBlocked(Thread t) throws InterruptedException {
+        long deadline = System.nanoTime() + 5_000_000_000L;
+        while (t.getState() != Thread.State.BLOCKED && System.nanoTime() < deadline) {
+            Thread.sleep(1);
+        }
+        assertThat(t.getState()).isEqualTo(Thread.State.BLOCKED);
+    }
+
+    @Test
     public void applySyncResult_acceptedWhileRunning_clearsSyncFailed() {
         Context ctx = ApplicationProvider.getApplicationContext();
         GeneralVariables.disciplineClockFromNtp = true;
