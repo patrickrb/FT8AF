@@ -32,4 +32,28 @@ public enum AudioSessionPolicy {
     public static func playAndRecordOptions(usbAudioConnected: Bool) -> PlayAndRecordOption {
         usbAudioConnected ? [.allowBluetooth] : [.defaultToSpeaker, .allowBluetooth]
     }
+
+    /// Options to put the session into `.playAndRecord` with *before* the USB
+    /// check can be trusted. `AVAudioSession.availableInputs` (and the current
+    /// route's inputs) only reflect input-capable ports once the session is in
+    /// an input-capable category, so under the default playback category a
+    /// DigiRig that's already plugged in at launch is invisible. Bootstrapping
+    /// with the no-speaker-pin options means the USB-present case then needs no
+    /// second category change at all; the bare-device case applies
+    /// `.defaultToSpeaker` right after.
+    public static let bootstrapOptions: PlayAndRecordOption = [.allowBluetooth]
+
+    /// Whether a USB audio interface (DigiRig etc.) is attached, judged from
+    /// the session's selectable inputs and the active route's inputs/outputs —
+    /// any of the three listing a USB port counts. Pure, so each path is
+    /// host-testable; the app maps `AVAudioSession.Port` to `AudioPortKind`.
+    public static func usbAudioPresent(
+        availableInputs: [AudioPortKind],
+        routeInputs: [AudioPortKind],
+        routeOutputs: [AudioPortKind]
+    ) -> Bool {
+        availableInputs.contains(.usb)
+            || routeInputs.contains(.usb)
+            || routeOutputs.contains(.usb)
+    }
 }

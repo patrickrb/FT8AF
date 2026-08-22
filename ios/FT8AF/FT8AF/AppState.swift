@@ -205,6 +205,14 @@ enum PttMode: String, CaseIterable, Identifiable {
     /// The other cases are retained (a future Wi-Fi/rigctld bridge may use them)
     /// but are not offered in the picker today.
     static let selectableOnIOS: [PttMode] = [.vox]
+
+    /// The mode to actually run with on iOS: `self` when it's usable here,
+    /// otherwise VOX. A CAT/RTS/DTR value persisted by an older build is
+    /// migrated through this when settings load, so the model, the settings
+    /// summary and the next save all agree — not just the picker's display.
+    var coercedForIOS: PttMode {
+        Self.selectableOnIOS.contains(self) ? self : .vox
+    }
 }
 
 @Observable @MainActor
@@ -460,8 +468,10 @@ enum SettingsPersistence {
         if let v = d.string(forKey: key("mode")), let m = Mode(rawValue: v) { s.mode = m }
         if let v = d.string(forKey: key("rigModel")),
            let m = RigModel(rawValue: v) { s.rigModel = m }
+        // Migrate a CAT/RTS/DTR value from an older build to VOX — the only
+        // mode that works on iOS (see `PttMode.coercedForIOS`).
         if let v = d.string(forKey: key("pttMode")),
-           let m = PttMode(rawValue: v) { s.pttMode = m }
+           let m = PttMode(rawValue: v) { s.pttMode = m.coercedForIOS }
         if d.object(forKey: key("txPowerWatts")) != nil {
             s.txPowerWatts = d.integer(forKey: key("txPowerWatts"))
         }

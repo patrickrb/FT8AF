@@ -41,11 +41,33 @@ final class AudioCaptureService: @unchecked Sendable {
     /// capturing. Throws if the audio session or engine fails to start.
     func start() throws {
         let session = AVAudioSession.sharedInstance()
-        try applySessionCategory(session)
-        try session.setActive(true)
+        // Observers first, so the route change that activation itself emits
+        // (e.g. iOS picking up an already-attached DigiRig) is never missed.
+        addObservers()
+        do {
+            // Bootstrap: under the default playback category the session lists
+            // no inputs at all, so `usbAudioPresent` would read a plugged-in
+            // DigiRig as absent and pin output to the speaker — TX then never
+            // reaches the radio. Put the session into `.playAndRecord` with the
+            // neutral (no speaker pin) options and activate it, and only THEN
+            // evaluate the USB-dependent policy against real port lists.
+            if session.category != .playAndRecord {
+                try session.setCategory(
+                    .playAndRecord,
+                    options: Self.categoryOptions(from: AudioSessionPolicy.bootstrapOptions)
+                )
+            }
+            try session.setActive(true)
+            try applySessionCategory(session)
 
-        try installTapAndStart()
+            try installTapAndStart()
+        } catch {
+            removeObservers()
+            throw error
+        }
+    }
 
+    private func addObservers() {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleInterruption),
@@ -73,6 +95,24 @@ final class AudioCaptureService: @unchecked Sendable {
             selector: #selector(handleConfigChange),
             name: .AVAudioEngineConfigurationChange,
             object: engine
+        )
+    }
+
+    private func removeObservers() {
+        NotificationCenter.default.removeObserver(
+            self,
+            name: AVAudioSession.interruptionNotification,
+            object: nil
+        )
+        NotificationCenter.default.removeObserver(
+            self,
+            name: .AVAudioEngineConfigurationChange,
+            object: engine
+        )
+        NotificationCenter.default.removeObserver(
+            self,
+            name: AVAudioSession.routeChangeNotification,
+            object: nil
         )
     }
 
@@ -127,21 +167,7 @@ final class AudioCaptureService: @unchecked Sendable {
         _isRunning = false
         lock.unlock()
 
-        NotificationCenter.default.removeObserver(
-            self,
-            name: AVAudioSession.interruptionNotification,
-            object: nil
-        )
-        NotificationCenter.default.removeObserver(
-            self,
-            name: .AVAudioEngineConfigurationChange,
-            object: engine
-        )
-        NotificationCenter.default.removeObserver(
-            self,
-            name: AVAudioSession.routeChangeNotification,
-            object: nil
-        )
+        removeObservers()
     }
 
     // MARK: - Session routing policy
@@ -173,14 +199,17 @@ final class AudioCaptureService: @unchecked Sendable {
     }
 
     /// True when a USB audio interface (DigiRig etc.) is attached, as either a
-    /// selectable input or the active input/output route.
+    /// selectable input or the active input/output route. Only meaningful once
+    /// the session is in an input-capable category (see `start()`); the
+    /// decision itself lives in `AudioSessionPolicy.usbAudioPresent` so every
+    /// detection path is host-tested.
     static func usbAudioPresent(in session: AVAudioSession) -> Bool {
-        if (session.availableInputs ?? []).contains(where: { $0.portType == .usbAudio }) {
-            return true
-        }
         let route = session.currentRoute
-        return route.inputs.contains(where: { $0.portType == .usbAudio })
-            || route.outputs.contains(where: { $0.portType == .usbAudio })
+        return AudioSessionPolicy.usbAudioPresent(
+            availableInputs: (session.availableInputs ?? []).map { AudioRouteController.kind(of: $0.portType) },
+            routeInputs: route.inputs.map { AudioRouteController.kind(of: $0.portType) },
+            routeOutputs: route.outputs.map { AudioRouteController.kind(of: $0.portType) }
+        )
     }
 
     /// Map the platform-neutral routing decision onto AVFoundation's option set.

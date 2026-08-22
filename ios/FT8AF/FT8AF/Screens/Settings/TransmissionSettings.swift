@@ -29,11 +29,13 @@ struct TransmissionSettings: View {
             }
             .listRowBackground(bgSurface)
 
-            // PTT Mode — only VOX works on iOS (see footer). Any non-VOX value
-            // persisted by an older build is coerced back to VOX for display.
+            // PTT Mode — only VOX works on iOS (see footer). A non-VOX value
+            // from an older build is migrated to VOX when settings load
+            // (`SettingsPersistence.load`); the coercion here is only a belt
+            // and braces so the picker never shows a tag it doesn't offer.
             Section {
                 Picker("PTT Mode", selection: Binding(
-                    get: { PttMode.selectableOnIOS.contains(settings.pttMode) ? settings.pttMode : .vox },
+                    get: { settings.pttMode.coercedForIOS },
                     set: { settings.pttMode = $0 }
                 )) {
                     ForEach(PttMode.selectableOnIOS) { mode in
