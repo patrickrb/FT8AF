@@ -1,8 +1,10 @@
 package com.k1af.ft8af.timer;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.robolectric.Shadows.shadowOf;
 
 import android.content.Context;
+import android.os.Looper;
 
 import androidx.test.core.app.ApplicationProvider;
 
@@ -202,6 +204,58 @@ public class NtpClockUpdaterTest {
             assertThat(UtcTimer.delay).isEqualTo(originalDelay);
         } finally {
             UtcTimer.delay = 0;
+        }
+    }
+
+    // ---- applySyncResult: UI failure-flag wiring for a rejected-while-running reply ----
+
+    @Test
+    public void applySyncResult_rejectedWhileRunning_marksSyncFailed() {
+        // A reply with no usable transmit timestamp is rejected by computeAppliedOffset even
+        // while running; the Time Sync screen must still be told the attempt failed, or it's
+        // left showing stale/"Waiting..." status forever despite sync attempts being rejected.
+        Context ctx = ApplicationProvider.getApplicationContext();
+        GeneralVariables.disciplineClockFromNtp = true;
+        NtpClockUpdater.refresh(ctx);
+        try {
+            GeneralVariables.mutableNtpClockSyncFailed.setValue(false);
+            NtpClockUpdater.getInstance(ctx).applySyncResult(0L);
+            shadowOf(Looper.getMainLooper()).idle();
+            assertThat(GeneralVariables.mutableNtpClockSyncFailed.getValue()).isTrue();
+        } finally {
+            GeneralVariables.disciplineClockFromNtp = false;
+            NtpClockUpdater.refresh(ctx);
+        }
+    }
+
+    @Test
+    public void applySyncResult_rejectedWhileNotRunning_leavesSyncFailedUntouched() {
+        // A reply that races past a disable is silently dropped — it must not report a
+        // failure the UI has no running sync to attribute it to.
+        Context ctx = ApplicationProvider.getApplicationContext();
+        GeneralVariables.disciplineClockFromNtp = false;
+        NtpClockUpdater.refresh(ctx);
+        GeneralVariables.mutableNtpClockSyncFailed.setValue(false);
+
+        NtpClockUpdater.getInstance(ctx).applySyncResult(0L);
+        shadowOf(Looper.getMainLooper()).idle();
+
+        assertThat(GeneralVariables.mutableNtpClockSyncFailed.getValue()).isFalse();
+    }
+
+    @Test
+    public void applySyncResult_acceptedWhileRunning_clearsSyncFailed() {
+        Context ctx = ApplicationProvider.getApplicationContext();
+        GeneralVariables.disciplineClockFromNtp = true;
+        NtpClockUpdater.refresh(ctx);
+        try {
+            GeneralVariables.mutableNtpClockSyncFailed.setValue(true);
+            NtpClockUpdater.getInstance(ctx).applySyncResult(System.currentTimeMillis());
+            shadowOf(Looper.getMainLooper()).idle();
+            assertThat(GeneralVariables.mutableNtpClockSyncFailed.getValue()).isFalse();
+        } finally {
+            GeneralVariables.disciplineClockFromNtp = false;
+            NtpClockUpdater.refresh(ctx);
         }
     }
 }
