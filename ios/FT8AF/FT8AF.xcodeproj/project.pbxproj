@@ -13,6 +13,7 @@
 		092F3A3A654939270685CC27 /* ParkPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55F3AF234143FDFFA45B0AC8 /* ParkPickerSheet.swift */; };
 		094BBB2F12228E68B26D2DB1 /* PotaParkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8887498A3FE21F5B9ADAE63A /* PotaParkService.swift */; };
 		0FD449B6C15FD3407D8E3BC0 /* LogbookCharts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DFF1DC42A9F8F8066F97F7 /* LogbookCharts.swift */; };
+		1418BC3ED37E2C61C4A09ED1 /* PttModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2EBE7CC0F661A6451447578 /* PttModeTests.swift */; };
 		208767EE6D89D470D7C88E77 /* WaterfallScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E4787AD687D89D858D3C075 /* WaterfallScreen.swift */; };
 		26F661F120C34995BFF73F2D /* FT8DSP in Frameworks */ = {isa = PBXBuildFile; productRef = 93510ED81B9D113E387D0D45 /* FT8DSP */; };
 		303BF422AF4C5F94DF696E5D /* FT8Rig in Frameworks */ = {isa = PBXBuildFile; productRef = 4E7B6368450390C0D64A5715 /* FT8Rig */; };
@@ -20,6 +21,7 @@
 		3BA2BC0EFAF62534D39C3A4A /* DecodeFilterSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A88688AC6AFBEDC8AC3EF844 /* DecodeFilterSettings.swift */; };
 		3BCBA78527E44AD070AA1E48 /* AudioRoutePickerButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4217D8419318D6A336873605 /* AudioRoutePickerButton.swift */; };
 		3E123C57BE6C3282B2D616C5 /* PotaAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9A6A51948436E153F5CB8F4 /* PotaAuthService.swift */; };
+		434629940DB32DDFFA313E4F /* AudioCaptureSessionOptionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DB508B1F2E7EBB815B8C9B2 /* AudioCaptureSessionOptionsTests.swift */; };
 		49DFEC8ED0237764EA3EE3BF /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF21F5D95598018B8A46ED8D /* AppState.swift */; };
 		4C0C9DCC39ED6528F0D4CDFF /* RadioAudioSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89642B9763C7FA33CFF0EE57 /* RadioAudioSettings.swift */; };
 		4D87F21162B4DCEC806D8785 /* QsoCelebration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC8DAEDCAE1AD9DE02EB1480 /* QsoCelebration.swift */; };
@@ -41,6 +43,7 @@
 		771EC057824C1F3698C6DC9B /* FFTProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F287F167508A8E4114F44116 /* FFTProcessor.swift */; };
 		7F9F3D670DE6755252D023A3 /* TransmissionSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B08B1AA6951B99CEFAA521F /* TransmissionSettings.swift */; };
 		7FC3449767DCA16F70133366 /* DecodeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C79C0E0096ADDC018120C361 /* DecodeScreen.swift */; };
+		7FF97BE16C182502CA0E4F40 /* RigModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB78DA6983B10ABE10319476 /* RigModelTests.swift */; };
 		80F7FFDDEE3AEE3E706C4A2B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 076A186C88F9B5A2FFAAB073 /* Assets.xcassets */; };
 		8DA0D562E25925F56B638B00 /* GridDistance.swift in Sources */ = {isa = PBXBuildFile; fileRef = E429D8A3556534F05374F12A /* GridDistance.swift */; };
 		8EA75A450404FB948C0A6CDC /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504C9AD4C6667267DFCABEF9 /* SettingsScreen.swift */; };
@@ -81,6 +84,16 @@
 		FEB99CFFD070BA6B893ADC83 /* WaterfallCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = B681B14FC4FED15C628471DF /* WaterfallCanvas.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		34AA4D4FEB73CD5B47771AEB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 765E5D7980EA2125D03F7F74 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B9605E495383A032BC1DF832;
+			remoteInfo = FT8AF;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		0244EBDFC2ADDAE77418FF53 /* ActiveQsoPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveQsoPanel.swift; sourceTree = "<group>"; };
 		0290AFE608DC2FC9E1A83E16 /* QsoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QsoSheet.swift; sourceTree = "<group>"; };
@@ -94,6 +107,7 @@
 		2A9EBD1E2440476261F01908 /* ClockSyncIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockSyncIndicator.swift; sourceTree = "<group>"; };
 		2CFCB3285583184390D9E9BF /* AboutScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutScreen.swift; sourceTree = "<group>"; };
 		33CCA018AEEE169EDCA338FD /* LogbookAwards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogbookAwards.swift; sourceTree = "<group>"; };
+		37860F113FBD71CA51712822 /* FT8AFTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = FT8AFTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B94D7FBAC132C5854796F79 /* AudioRouteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRouteController.swift; sourceTree = "<group>"; };
 		4217D8419318D6A336873605 /* AudioRoutePickerButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRoutePickerButton.swift; sourceTree = "<group>"; };
 		467569ADBF392233E7AA71DC /* TimeSyncSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeSyncSettings.swift; sourceTree = "<group>"; };
@@ -110,6 +124,7 @@
 		6B9E40312EA203F05764FA56 /* QsoLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QsoLogStore.swift; sourceTree = "<group>"; };
 		6F1E760AEB31EF3855951728 /* FT8AFApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FT8AFApp.swift; sourceTree = "<group>"; };
 		76108617D9AEDEE84BAD1054 /* LogbookScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogbookScreen.swift; sourceTree = "<group>"; };
+		7DB508B1F2E7EBB815B8C9B2 /* AudioCaptureSessionOptionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureSessionOptionsTests.swift; sourceTree = "<group>"; };
 		7E27EE4248BF38A15E0F3B2D /* PotaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PotaService.swift; sourceTree = "<group>"; };
 		800081E79EC795EBDE2E077E /* SlotTimerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlotTimerBar.swift; sourceTree = "<group>"; };
 		82A0D66684F5C2F323454D9B /* FT8AFKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FT8AFKit; path = ../FT8AFKit; sourceTree = SOURCE_ROOT; };
@@ -133,6 +148,7 @@
 		B681B14FC4FED15C628471DF /* WaterfallCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterfallCanvas.swift; sourceTree = "<group>"; };
 		B9A6A51948436E153F5CB8F4 /* PotaAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PotaAuthService.swift; sourceTree = "<group>"; };
 		BB0565117E35A6C64BBF519D /* LoggingSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggingSettings.swift; sourceTree = "<group>"; };
+		BB78DA6983B10ABE10319476 /* RigModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RigModelTests.swift; sourceTree = "<group>"; };
 		BD0187218903BBFF71931246 /* QsoPathMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QsoPathMap.swift; sourceTree = "<group>"; };
 		BE0DCBA7E647113F08F32531 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		BF1653386B026C49C8A42365 /* geist_mono_medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = geist_mono_medium.ttf; sourceTree = "<group>"; };
@@ -151,6 +167,7 @@
 		E0CA452882C4980BED953078 /* Typography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Typography.swift; sourceTree = "<group>"; };
 		E429D8A3556534F05374F12A /* GridDistance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridDistance.swift; sourceTree = "<group>"; };
 		F287F167508A8E4114F44116 /* FFTProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFTProcessor.swift; sourceTree = "<group>"; };
+		F2EBE7CC0F661A6451447578 /* PttModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PttModeTests.swift; sourceTree = "<group>"; };
 		F3C698656C5709343F4AEEF0 /* FrequencyPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrequencyPickerSheet.swift; sourceTree = "<group>"; };
 		FA66E8CE63C02CC35A2BC010 /* PotaActivationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PotaActivationStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -255,6 +272,7 @@
 			isa = PBXGroup;
 			children = (
 				975A228795DCD722F01F06F6 /* FT8AF */,
+				9B7275A7FD0D009727520B66 /* FT8AFTests */,
 				233187321B70BBF49A9D862B /* Packages */,
 				619D5D4BD9524DA75C5309CA /* Frameworks */,
 				D3689D7765BE6F880B857542 /* Products */,
@@ -333,6 +351,16 @@
 			path = Fonts;
 			sourceTree = "<group>";
 		};
+		9B7275A7FD0D009727520B66 /* FT8AFTests */ = {
+			isa = PBXGroup;
+			children = (
+				7DB508B1F2E7EBB815B8C9B2 /* AudioCaptureSessionOptionsTests.swift */,
+				F2EBE7CC0F661A6451447578 /* PttModeTests.swift */,
+				BB78DA6983B10ABE10319476 /* RigModelTests.swift */,
+			);
+			path = FT8AFTests;
+			sourceTree = "<group>";
+		};
 		9B85E3FDCB60E378E9DF2E12 /* Logbook */ = {
 			isa = PBXGroup;
 			children = (
@@ -380,6 +408,7 @@
 			isa = PBXGroup;
 			children = (
 				654EF0B6A0E279E65F355821 /* FT8AF.app */,
+				37860F113FBD71CA51712822 /* FT8AFTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -387,6 +416,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		1FE6E1214059B488E0B7FD39 /* FT8AFTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AFD0EA8F2919EED66EBF13FA /* Build configuration list for PBXNativeTarget "FT8AFTests" */;
+			buildPhases = (
+				6C8FBE6B1C7BA0617BFB87CC /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				95AD9F511435BF32DF7A839D /* PBXTargetDependency */,
+			);
+			name = FT8AFTests;
+			packageProductDependencies = (
+			);
+			productName = FT8AFTests;
+			productReference = 37860F113FBD71CA51712822 /* FT8AFTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		B9605E495383A032BC1DF832 /* FT8AF */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 5650222F2CAD932AA253AC9A /* Build configuration list for PBXNativeTarget "FT8AF" */;
@@ -439,6 +486,7 @@
 			projectRoot = "";
 			targets = (
 				B9605E495383A032BC1DF832 /* FT8AF */,
+				1FE6E1214059B488E0B7FD39 /* FT8AFTests */,
 			);
 		};
 /* End PBXProject section */
@@ -528,9 +576,44 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6C8FBE6B1C7BA0617BFB87CC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				434629940DB32DDFFA313E4F /* AudioCaptureSessionOptionsTests.swift in Sources */,
+				1418BC3ED37E2C61C4A09ED1 /* PttModeTests.swift in Sources */,
+				7FF97BE16C182502CA0E4F40 /* RigModelTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		95AD9F511435BF32DF7A839D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B9605E495383A032BC1DF832 /* FT8AF */;
+			targetProxy = 34AA4D4FEB73CD5B47771AEB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		0D905AEF9B4064D507A611EF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = radio.ks3ckc.ft8af.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FT8AF.app/FT8AF";
+			};
+			name = Release;
+		};
 		114B2295BA5908B5A5B022F2 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -603,6 +686,23 @@
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
+		};
+		72962CD90D3D986A46A9725D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = radio.ks3ckc.ft8af.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FT8AF.app/FT8AF";
+			};
+			name = Debug;
 		};
 		B8017F482621D5FE508648E3 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -692,6 +792,15 @@
 			buildConfigurations = (
 				114B2295BA5908B5A5B022F2 /* Debug */,
 				B8017F482621D5FE508648E3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AFD0EA8F2919EED66EBF13FA /* Build configuration list for PBXNativeTarget "FT8AFTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				72962CD90D3D986A46A9725D /* Debug */,
+				0D905AEF9B4064D507A611EF /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
