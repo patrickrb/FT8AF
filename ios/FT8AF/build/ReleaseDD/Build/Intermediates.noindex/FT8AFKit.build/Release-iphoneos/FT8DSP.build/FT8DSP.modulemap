@@ -1,0 +1,4 @@
+module FT8DSP {
+header "FT8DSP-Swift.h"
+export *
+}

@@ -55,7 +55,6 @@ import com.k1af.ft8af.R
 import com.k1af.ft8af.ft8signal.FT8Package
 import com.k1af.ft8af.location.GridLocationUpdater
 import radio.ks3ckc.ft8af.theme.*
-import radio.ks3ckc.ft8af.ui.rota.RoadTripScreen
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 import radio.ks3ckc.ft8af.ui.components.SettingsRow
 import radio.ks3ckc.ft8af.ui.components.TopBar
@@ -71,7 +70,6 @@ private enum class SettingsCategory {
     DECODE_FILTERS,
     VOICE,
     LOGGING,
-    ROAD_TRIP,
     ADVANCED,
     USB_DIAGNOSTICS,
     ABOUT,
@@ -147,8 +145,6 @@ fun SettingsScreen(
                 VoiceSettings(mainViewModel, onBack = { currentCategory = null })
             SettingsCategory.LOGGING ->
                 LoggingSettings(mainViewModel, onBack = { currentCategory = null })
-            SettingsCategory.ROAD_TRIP ->
-                RoadTripScreen(onBack = { currentCategory = null })
             SettingsCategory.ADVANCED ->
                 AdvancedSettings(mainViewModel, onBack = { currentCategory = null })
             SettingsCategory.USB_DIAGNOSTICS ->
@@ -335,13 +331,6 @@ private fun SettingsLanding(
                         label = stringResource(R.string.settings_cat_logging),
                         showChevron = true,
                         onClick = { onOpenCategory(SettingsCategory.LOGGING) },
-                    )
-                    SectionDivider()
-                    SettingsRow(
-                        label = stringResource(R.string.rota_title),
-                        description = stringResource(R.string.rota_settings_desc),
-                        showChevron = true,
-                        onClick = { onOpenCategory(SettingsCategory.ROAD_TRIP) },
                     )
                     SectionDivider()
                     SettingsRow(

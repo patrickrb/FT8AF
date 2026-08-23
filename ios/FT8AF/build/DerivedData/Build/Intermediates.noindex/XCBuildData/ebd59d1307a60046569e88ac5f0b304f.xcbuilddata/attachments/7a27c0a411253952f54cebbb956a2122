@@ -1,0 +1,78 @@
+{
+  "" : {
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8DSP-master.dia",
+    "emit-module-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8DSP-master-emit-module.d",
+    "emit-module-diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8DSP-master-emit-module.dia",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8DSP-master.swiftdeps"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/Constants.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/Constants.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/Constants.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/Constants.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/Constants.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/Constants.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/Constants.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/Constants.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/Constants~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/FT8Decoder.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Decoder.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Decoder.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Decoder.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Decoder.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Decoder.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Decoder.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Decoder.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Decoder~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/FT8Encoder.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Encoder.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Encoder.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Encoder.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Encoder.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Encoder.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Encoder.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Encoder.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Encoder~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/FT8Hash.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Hash.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Hash.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Hash.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Hash.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Hash.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Hash.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Hash.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Hash~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/HashTable.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/HashTable.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/HashTable.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/HashTable.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/HashTable.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/HashTable.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/HashTable.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/HashTable.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/HashTable~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/JunkFilter.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/JunkFilter.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/JunkFilter.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/JunkFilter.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/JunkFilter.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/JunkFilter.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/JunkFilter.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/JunkFilter.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/JunkFilter~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/SubtractDecode.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/SubtractDecode.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/SubtractDecode.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/SubtractDecode.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/SubtractDecode.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/SubtractDecode.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/SubtractDecode.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/SubtractDecode.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8DSP.build/Objects-normal/arm64/SubtractDecode~partial.swiftmodule"
+  }
+}

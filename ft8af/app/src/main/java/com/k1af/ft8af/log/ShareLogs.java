@@ -320,9 +320,6 @@ public class ShareLogs {
                 .mySigInfo(col(cursor, "my_sig_info"))
                 .sig(col(cursor, "sig"))
                 .sigInfo(col(cursor, "sig_info"))
-                // Operator position, when the QSO was logged with one.
-                .myLat(colDouble(cursor, "my_lat"))
-                .myLon(colDouble(cursor, "my_lon"))
                 // comment is always emitted (null renders as an empty field), as before.
                 .comment(col(cursor, "comment"));
         if (!isSWL) {
@@ -337,13 +334,6 @@ public class ShareLogs {
         int idx = cursor.getColumnIndex(column);
         if (idx < 0) return null;
         return cursor.getString(idx);
-    }
-
-    /** Nullable double read — absent column and SQL NULL both mean "no position". */
-    private static Double colDouble(android.database.Cursor cursor, String column) {
-        int idx = cursor.getColumnIndex(column);
-        if (idx < 0 || cursor.isNull(idx)) return null;
-        return cursor.getDouble(idx);
     }
 
     /** Cursor int value, or 0 when the column is absent. */

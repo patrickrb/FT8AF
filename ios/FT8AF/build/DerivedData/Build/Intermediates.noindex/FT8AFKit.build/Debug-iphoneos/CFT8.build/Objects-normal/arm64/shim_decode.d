@@ -1,0 +1,13 @@
+dependencies: \
+  /Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/CFT8/include/module.modulemap \
+  /Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/CFT8/shim_decode.c \
+  /Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/CFT8/../../../../ft8af/app/src/main/cpp/ft8_lib/ft8/decode.c \
+  /Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/CFT8/../../../../ft8af/app/src/main/cpp/ft8_lib/ft8/decode.h \
+  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/include/module.modulemap \
+  /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/include/c_standard_library.modulemap \
+  /Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/CFT8/../../../../ft8af/app/src/main/cpp/ft8_lib/ft8/constants.h \
+  /Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/CFT8/../../../../ft8af/app/src/main/cpp/ft8_lib/ft8/message.h \
+  /Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/CFT8/../../../../ft8af/app/src/main/cpp/ft8_lib/ft8/crc.h \
+  /Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/CFT8/../../../../ft8af/app/src/main/cpp/ft8_lib/ft8/ldpc.h \
+  /Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/CFT8/../../../../ft8af/app/src/main/cpp/ft8_lib/ft8/osd.h \
+  /Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/CFT8/../../../../ft8af/app/src/main/cpp/ft8_lib/ft8/unpack.h

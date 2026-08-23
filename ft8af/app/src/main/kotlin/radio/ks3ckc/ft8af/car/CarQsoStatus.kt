@@ -115,7 +115,7 @@ internal fun formatSnrLabel(snr: Int?): String? = snr?.let { if (it > 0) "+$it d
 
 // --- Pane row priorities ---------------------------------------------------
 // Lower value = kept first when the host's pane row limit is tight. The
-// POTA/ROTA activation rows outrank the band row on purpose: on a 3-row host an
+// POTA activation row outranks the band row on purpose: on a 3-row host an
 // active activation replaces the band line rather than being silently dropped.
 internal const val CAR_ROW_HEADLINE = 0
 internal const val CAR_ROW_SEQ_SLOT = 1
@@ -186,10 +186,6 @@ internal fun decodesLabel(count: Int): String = if (count == 1) "1 decode" else 
  * here where the car dashboard uses it.
  */
 internal const val POTA_ACTIVATION_TARGET = 10
-
-/** "0.0" / "12.3" — one decimal, locale-independent so tests are stable. */
-internal fun formatMiles(miles: Double): String =
-    String.format(java.util.Locale.US, "%.1f", miles)
 
 /**
  * Whole minutes between [thenMs] and [nowMs] for the "last logged … N min" line.
@@ -271,19 +267,7 @@ internal fun carPotaDashRow(parkRefsDisplay: String?, qsoCount: Int): CarDashRow
 }
 
 /**
- * The ROTA row: amber "R" badge, "ROTA <trip> · N QSOs" title (QSOs = sent+pending
- * so out-of-coverage contacts still count), and a "X.X mi driven this activation"
- * secondary. Null when no trip is running or the trip has no name.
- */
-internal fun carRotaDashRow(active: Boolean, tripName: String?, qsoCount: Int, miles: Double): CarDashRow? {
-    if (!active || tripName.isNullOrBlank()) return null
-    val title = listOf(CarSpan("ROTA $tripName · ${qsosLabel(qsoCount)}"))
-    val secondary = listOf(CarSpan("${formatMiles(miles)} mi driven this activation"))
-    return CarDashRow(CarBadge("R", CAR_AMBER_FG, CAR_AMBER_BG), title, secondary, CAR_ROW_ACTIVATION)
-}
-
-/**
- * The session-summary row shown when no POTA/ROTA activation is running (the design's
+ * The session-summary row shown when no POTA activation is running (the design's
  * "activation rows drop out, session stats take the slot"): gray "Σ" badge,
  * "Session · N QSOs" title, and a "Last logged JA1XYZ · 20m · 41 min" secondary that
  * degrades to a band-less form, then to "No QSOs logged yet" when the last contact or
@@ -311,20 +295,19 @@ internal fun carSessionDashRow(
 }
 
 /**
- * Assembles the pane in design order: status, band, then the POTA and/or ROTA
- * activation rows — or, when neither is active, the single [session] row in their
- * place. The Screen then applies [selectCarPaneRows] so the band row (not an
- * activation) is the first to drop on a row-limited host.
+ * Assembles the pane in design order: status, band, then the POTA activation row —
+ * or, when it is not active, the single [session] row in its place. The Screen then
+ * applies [selectCarPaneRows] so the band row (not an activation) is the first to
+ * drop on a row-limited host.
  */
 internal fun buildCarDashboardRows(
     status: CarDashRow,
     band: CarDashRow,
     pota: CarDashRow?,
-    rota: CarDashRow?,
     session: CarDashRow,
 ): List<CarDashRow> {
     val rows = mutableListOf(status, band)
-    val activations = listOfNotNull(pota, rota)
+    val activations = listOfNotNull(pota)
     if (activations.isEmpty()) rows.add(session) else rows.addAll(activations)
     return rows
 }

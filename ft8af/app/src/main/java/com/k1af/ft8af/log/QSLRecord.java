@@ -48,11 +48,6 @@ public class QSLRecord {
     private String mySigInfo;
     private String sig;
     private String sigInfo;
-    // Where the operator was when this contact was made. Boxed because null is a real
-    // answer — no fix, permission denied, or a row logged before the columns existed —
-    // and 0.0 is a genuine position, so it cannot stand in for "unknown".
-    private Double myLat;
-    private Double myLon;
     public boolean isQSL = false;//Manual confirmation
     public boolean isLotW_import = false;//Whether imported from external data; requires database comparison to determine
     public boolean isLotW_QSL = false;//Whether confirmed via LoTW
@@ -256,38 +251,6 @@ public class QSLRecord {
         if (map.containsKey("MY_SIG_INFO")) mySigInfo = map.get("MY_SIG_INFO");
         if (map.containsKey("SIG")) sig = map.get("SIG");
         if (map.containsKey("SIG_INFO")) sigInfo = map.get("SIG_INFO");
-
-        // Operator position on import. The APP_ROTA_ decimal pair is preferred over the
-        // standard MY_LAT/MY_LON because it is what this app wrote and round-trips
-        // exactly; the standard fields are the fallback for logs from anywhere else.
-        // APP_RTOTA_ is the pre-rename spelling — still read so archived exports and
-        // logs from older builds keep their exact coordinates.
-        Double lat = parseAdifDecimal(map.get(AdifRecord.APP_ROTA_LAT));
-        Double lon = parseAdifDecimal(map.get(AdifRecord.APP_ROTA_LON));
-        if (lat == null || lon == null) {
-            lat = parseAdifDecimal(map.get(AdifRecord.LEGACY_APP_ROTA_LAT));
-            lon = parseAdifDecimal(map.get(AdifRecord.LEGACY_APP_ROTA_LON));
-        }
-        if (lat == null || lon == null) {
-            lat = AdifFormat.parseLocation(map.get("MY_LAT"));
-            lon = AdifFormat.parseLocation(map.get("MY_LON"));
-        }
-        // Both or neither: half a coordinate places a QSO on the equator or the meridian.
-        if (lat != null && lon != null) {
-            myLat = lat;
-            myLon = lon;
-        }
-    }
-
-    /** Plain decimal-degree parse for the APP_ROTA_ fields; null when unusable. */
-    private static Double parseAdifDecimal(String raw) {
-        if (raw == null || raw.trim().isEmpty()) return null;
-        try {
-            double v = Double.parseDouble(raw.trim());
-            return Double.isFinite(v) ? v : null;
-        } catch (NumberFormatException e) {
-            return null;
-        }
     }
 
     /**
@@ -443,28 +406,6 @@ public class QSLRecord {
 
     public void setTime_on(String time_on) {
         this.time_on = time_on;
-    }
-
-    /** Operator latitude at QSO time, or null when the app had no position to record. */
-    public Double getMyLat() {
-        return myLat;
-    }
-
-    public void setMyLat(Double myLat) {
-        this.myLat = myLat;
-    }
-
-    public Double getMyLon() {
-        return myLon;
-    }
-
-    public void setMyLon(Double myLon) {
-        this.myLon = myLon;
-    }
-
-    /** True once both halves of a position are present — the only usable state. */
-    public boolean hasMyPosition() {
-        return myLat != null && myLon != null;
     }
 
     public String getMySig() {

@@ -1,0 +1,18 @@
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/OnlineLogSync.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/OnlineLogSync.swiftconstvalues"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/OnlineLogSync.d"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/OnlineLogSync.swiftdeps"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/OnlineLogSync.o"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/OnlineLogSync.dia"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/DxccResolver.swift":
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/DxccResolver.d"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/DxccResolver.o"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/DxccResolver.dia"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/DxccResolver.swiftconstvalues"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/DxccResolver.swiftdeps"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/OnlineLogAdif.swift":
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/OnlineLogAdif.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/OnlineLogAdif.dia"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/OnlineLogAdif.swiftconstvalues"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/OnlineLogAdif.o"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/OnlineLogAdif.d"

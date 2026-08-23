@@ -36,7 +36,6 @@ import com.k1af.ft8af.database.OperationBand
 import com.k1af.ft8af.rigs.BaseRigOperation
 import com.k1af.ft8af.timer.UtcTimer
 import radio.ks3ckc.ft8af.pota.PotaSessionManager
-import radio.ks3ckc.ft8af.rota.RotaTripManager
 import radio.ks3ckc.ft8af.ui.components.slotTimerState
 
 /**
@@ -147,12 +146,10 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
             modeName = mode.displayName,
             decodeCount = vm.currentMessages?.size ?: 0,
         )
-        // Activation rows while a POTA/ROTA is live, otherwise a session-summary row.
+        // Activation row while a POTA is live, otherwise a session-summary row.
         // Plain StateFlow reads are enough for freshness — the 1 Hz tick re-renders.
         val pota = PotaSessionManager.currentActivation.value
-        val rota = RotaTripManager.state.value
         val potaRow = carPotaDashRow(pota?.parkRefsDisplay, pota?.qsoCount ?: 0)
-        val rotaRow = carRotaDashRow(rota.active, rota.tripName, rota.sentQsos + rota.pendingQsos, rota.miles)
         val sessionRow = carSessionDashRow(
             sessionQsoCount = GeneralVariables.QSL_Callsign_list_today.size,
             // Last *logged* callsign (worked-list is appended in completion order),
@@ -163,7 +160,7 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
             lastQsoMinutesAgo = minutesAgo(UtcTimer.getSystemTime(), ts.mutableQsoCompletedAt.value),
         )
 
-        val dashRows = buildCarDashboardRows(statusRow, bandRow, potaRow, rotaRow, sessionRow)
+        val dashRows = buildCarDashboardRows(statusRow, bandRow, potaRow, sessionRow)
         val builtRows = dashRows.map { renderDashRow(it) }
         val pane = Pane.Builder().apply {
             selectCarPaneRows(dashRows.map { it.priority }, paneRowLimit(carContext))

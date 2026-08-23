@@ -40,13 +40,11 @@ import kotlin.math.sin
  * ```
  * adb shell am broadcast -a ft8af.DEBUG_INJECT \
  *   --es call W1ABC --es grid FN42 --es opgrid EM29 --es park K-1234 \
- *   --es rota "Route 66" --ei snr -8 --ei decodes 8 --ei psk 6 --ei qsos 12 --ei wf 6
+ *   --ei snr -8 --ei decodes 8 --ei psk 6 --ei qsos 12 --ei wf 6
  * ```
  * `decodes` adds N sample decode dots; `psk` adds N "who heard me" rings; `qsos`
  * adds N demo logbook entries; `wf` streams a waterfall with N tone traces (be on
- * the Waterfall tab to see it fill). `rota` starts a real offline ROTA trip
- * (pendingCreate — no server or API key needed) so the car pane's ROTA row
- * renders; end it from the phone's ROTA screen. All extras are optional;
+ * the Waterfall tab to see it fill). All extras are optional;
  * [parseDebugInject] fills sensible defaults.
  */
 class DebugInjectReceiver : BroadcastReceiver() {
@@ -142,11 +140,6 @@ internal fun applyDebugInject(spec: DebugInjectSpec, vm: MainViewModel) {
     // notes=null matches a real no-notes activation (PotaScreen passes
     // notes.ifBlank { null }); keeps the demo POTA card clean for screenshots.
     spec.parkRef?.let { PotaSessionManager.start(listOf(it), null) }
-
-    // A real offline trip (deferred server create), not forged state: the car
-    // row, notification, and phone ROTA screen all show it, and demo QSOs below
-    // queue into it via the normal RotaTripManager.onQsoLogged path.
-    spec.rotaTrip?.let { radio.ks3ckc.ft8af.rota.RotaTripManager.startTrip(it, "private") }
 
     // Demo logbook QSOs — written straight into QSLTable through the app's own
     // insert path, so the Logbook tab (which re-queries the DB on load, not the
@@ -299,7 +292,6 @@ internal data class DebugInjectSpec(
     val partnerGrid: String,
     val snr: Int,
     val parkRef: String?,
-    val rotaTrip: String?,
     val decodes: Int,
     val psk: Int,
     val qsos: Int,
@@ -321,8 +313,6 @@ internal fun parseDebugInject(get: (String) -> String?): DebugInjectSpec {
         partnerGrid = (str("grid") ?: DEFAULT_GRID).uppercase(),
         snr = str("snr")?.toIntOrNull() ?: DEFAULT_SNR,
         parkRef = str("park")?.uppercase(),
-        // Trip names are free text — no uppercasing.
-        rotaTrip = str("rota"),
         decodes = str("decodes")?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
         psk = str("psk")?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
         qsos = str("qsos")?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
