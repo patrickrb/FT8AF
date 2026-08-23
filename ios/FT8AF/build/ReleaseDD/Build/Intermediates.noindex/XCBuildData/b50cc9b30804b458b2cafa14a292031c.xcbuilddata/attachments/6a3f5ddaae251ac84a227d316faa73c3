@@ -1,0 +1,270 @@
+{
+  "" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AF-master.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AF-master.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AF-master.dia",
+    "emit-module-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AF-master-emit-module.d",
+    "emit-module-diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AF-master-emit-module.dia",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AF-master.swiftdeps"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/AppState.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AppState.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AppState.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AppState.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/ActiveQsoPanel.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/ActiveQsoPanel.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/ActiveQsoPanel.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/ActiveQsoPanel.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/AudioRoutePickerButton.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AudioRoutePickerButton.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AudioRoutePickerButton.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AudioRoutePickerButton.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/FilterChip.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FilterChip.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FilterChip.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FilterChip.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/FrequencyPickerSheet.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FrequencyPickerSheet.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FrequencyPickerSheet.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FrequencyPickerSheet.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/QsoCelebration.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/QsoCelebration.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/QsoCelebration.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/QsoCelebration.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/QsoPathMap.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/QsoPathMap.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/QsoPathMap.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/QsoPathMap.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/SlotTimerBar.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/SlotTimerBar.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/SlotTimerBar.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/SlotTimerBar.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/ToastOverlay.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/ToastOverlay.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/ToastOverlay.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/ToastOverlay.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/TransmitGlow.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/TransmitGlow.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/TransmitGlow.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/TransmitGlow.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/TxStrip.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/TxStrip.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/TxStrip.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/TxStrip.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Engine/AudioCaptureService.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AudioCaptureService.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AudioCaptureService.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AudioCaptureService.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Engine/AudioRouteController.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AudioRouteController.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AudioRouteController.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AudioRouteController.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Engine/FFTProcessor.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FFTProcessor.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FFTProcessor.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FFTProcessor.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Engine/LiveEngine.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LiveEngine.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LiveEngine.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LiveEngine.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Engine/OnlineLogService.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/OnlineLogService.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/OnlineLogService.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/OnlineLogService.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Engine/PotaActivationStore.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/PotaActivationStore.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/PotaActivationStore.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/PotaActivationStore.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Engine/PotaService.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/PotaService.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/PotaService.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/PotaService.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Engine/QsoLogStore.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/QsoLogStore.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/QsoLogStore.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/QsoLogStore.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Engine/TxPlayerService.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/TxPlayerService.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/TxPlayerService.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/TxPlayerService.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/FT8AFApp.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AFApp.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AFApp.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AFApp.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Navigation/AppTabView.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AppTabView.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AppTabView.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AppTabView.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Navigation/FT8AFTab.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AFTab.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AFTab.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AFTab.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Decode/DecodeRow.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeRow.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeRow.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeRow.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Decode/DecodeScreen.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeScreen.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeScreen.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeScreen.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Decode/QsoSheet.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/QsoSheet.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/QsoSheet.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/QsoSheet.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Logbook/ExportLogSheet.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/ExportLogSheet.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/ExportLogSheet.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/ExportLogSheet.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Logbook/LogbookAwards.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LogbookAwards.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LogbookAwards.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LogbookAwards.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Logbook/LogbookCharts.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LogbookCharts.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LogbookCharts.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LogbookCharts.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Logbook/LogbookScreen.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LogbookScreen.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LogbookScreen.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LogbookScreen.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Logbook/LogbookStats.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LogbookStats.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LogbookStats.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LogbookStats.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Map/AzimuthalMapCanvas.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AzimuthalMapCanvas.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AzimuthalMapCanvas.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AzimuthalMapCanvas.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Map/MapScreen.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/MapScreen.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/MapScreen.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/MapScreen.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Map/WorldMapCanvas.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/WorldMapCanvas.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/WorldMapCanvas.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/WorldMapCanvas.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/POTA/PotaScreen.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/PotaScreen.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/PotaScreen.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/PotaScreen.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Settings/AboutScreen.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AboutScreen.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AboutScreen.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AboutScreen.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Settings/AdvancedSettings.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AdvancedSettings.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AdvancedSettings.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/AdvancedSettings.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Settings/BlockedCallsignsSettings.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/BlockedCallsignsSettings.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/BlockedCallsignsSettings.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/BlockedCallsignsSettings.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Settings/DecodeFilterSettings.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeFilterSettings.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeFilterSettings.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeFilterSettings.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Settings/LoggingSettings.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LoggingSettings.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LoggingSettings.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/LoggingSettings.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Settings/RadioAudioSettings.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/RadioAudioSettings.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/RadioAudioSettings.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/RadioAudioSettings.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Settings/SettingsScreen.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/SettingsScreen.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/SettingsScreen.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/SettingsScreen.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Settings/TransmissionSettings.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/TransmissionSettings.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/TransmissionSettings.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/TransmissionSettings.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/SplashScreen.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/SplashScreen.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/SplashScreen.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/SplashScreen.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Waterfall/FrequencyRuler.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FrequencyRuler.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FrequencyRuler.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/FrequencyRuler.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Waterfall/SpectrumStrip.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/SpectrumStrip.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/SpectrumStrip.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/SpectrumStrip.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Waterfall/WaterfallCanvas.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/WaterfallCanvas.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/WaterfallCanvas.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/WaterfallCanvas.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Waterfall/WaterfallScreen.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/WaterfallScreen.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/WaterfallScreen.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/WaterfallScreen.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Theme/Colors.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/Colors.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/Colors.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/Colors.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Theme/Typography.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/Typography.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/Typography.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/Typography.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Util/GridDistance.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/GridDistance.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/GridDistance.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/GridDistance.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "index-unit-output-path" : "/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AF.build/Release-iphoneos/FT8AF.build/Objects-normal/arm64/GeneratedAssetSymbols.o"
+  }
+}

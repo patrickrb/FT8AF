@@ -1,0 +1,30 @@
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Engine/OnlineLogService.swift":
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/OnlineLogService.swiftdeps"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/OnlineLogService.d"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/OnlineLogService.o"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/OnlineLogService.dia"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/OnlineLogService.swiftconstvalues"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Settings/LoggingSettings.swift":
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/LoggingSettings.dia"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/LoggingSettings.d"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/LoggingSettings.o"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/LoggingSettings.swiftconstvalues"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/LoggingSettings.swiftdeps"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/POTA/PotaScreen.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/PotaScreen.swiftconstvalues"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/PotaScreen.swiftdeps"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/PotaScreen.d"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/PotaScreen.o"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/PotaScreen.dia"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Engine/PotaActivationStore.swift":
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/PotaActivationStore.swiftdeps"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/PotaActivationStore.swiftconstvalues"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/PotaActivationStore.o"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/PotaActivationStore.dia"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/PotaActivationStore.d"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Map/MapScreen.swift":
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/MapScreen.d"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/MapScreen.o"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/MapScreen.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/MapScreen.dia"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/MapScreen.swiftconstvalues"

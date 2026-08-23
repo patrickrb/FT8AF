@@ -1,0 +1,18 @@
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/DerivedSources/resource_bundle_accessor.swift":
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/resource_bundle_accessor.o"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/resource_bundle_accessor.swiftconstvalues"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/resource_bundle_accessor.d"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/resource_bundle_accessor.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/resource_bundle_accessor.dia"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/BeamHeading.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/BeamHeading.swiftconstvalues"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/BeamHeading.o"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/BeamHeading.dia"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/BeamHeading.swiftdeps"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/BeamHeading.d"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/Adif.swift":
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/Adif.o"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/Adif.swiftconstvalues"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/Adif.d"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/Adif.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/Adif.dia"

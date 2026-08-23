@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>logFormatVersion</key>
+	<integer>11</integer>
+	<key>logs</key>
+	<dict>
+		<key>3B679A04-86A6-4E33-9955-AD91E11F69FC</key>
+		<dict>
+			<key>className</key>
+			<string>IDECommandLineBuildLog</string>
+			<key>documentTypeString</key>
+			<string>&lt;nil&gt;</string>
+			<key>domainType</key>
+			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
+			<key>fileName</key>
+			<string>3B679A04-86A6-4E33-9955-AD91E11F69FC.xcactivitylog</string>
+			<key>hasPrimaryLog</key>
+			<true/>
+			<key>primaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>W</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>0</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>1</integer>
+			</dict>
+			<key>schemeIdentifier-containerName</key>
+			<string>FT8AF project</string>
+			<key>schemeIdentifier-schemeName</key>
+			<string>FT8AF</string>
+			<key>schemeIdentifier-sharedScheme</key>
+			<integer>1</integer>
+			<key>signature</key>
+			<string>Building project FT8AF with scheme FT8AF and configuration Debug</string>
+			<key>timeStartedRecording</key>
+			<real>808705210.56008399</real>
+			<key>timeStoppedRecording</key>
+			<real>808705228.068259</real>
+			<key>title</key>
+			<string>Building project FT8AF with scheme FT8AF and configuration Debug</string>
+			<key>uniqueIdentifier</key>
+			<string>3B679A04-86A6-4E33-9955-AD91E11F69FC</string>
+		</dict>
+	</dict>
+</dict>
+</plist>

@@ -1,0 +1,18 @@
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/DecodeAnnotator.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.swiftconstvalues"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.dia"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.d"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.o"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/DisplayFormatters.swift":
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DisplayFormatters.dia"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DisplayFormatters.d"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DisplayFormatters.swiftconstvalues"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DisplayFormatters.swiftdeps"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DisplayFormatters.o"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/DxccPrefix.swift":
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DxccPrefix.d"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DxccPrefix.swiftdeps"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DxccPrefix.o"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DxccPrefix.swiftconstvalues"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DxccPrefix.dia"

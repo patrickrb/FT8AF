@@ -5,10 +5,10 @@ import org.junit.Test
 
 /**
  * Tests for the pure Android Auto dashboard helpers (design "1a" Pane): the
- * status/band/POTA/ROTA/session row builders, their colored badges and emphasis
- * spans, the "N to validate" figure, mileage formatting, and the "minutes ago"
- * clamp. The Screen only rasterizes the badges and applies the spans, so these
- * tests pin the row content, ordering, and color rules.
+ * status/band/POTA/session row builders, their colored badges and emphasis
+ * spans, the "N to validate" figure, and the "minutes ago" clamp. The Screen
+ * only rasterizes the badges and applies the spans, so these tests pin the row
+ * content, ordering, and color rules.
  */
 class CarDashboardTest {
 
@@ -118,22 +118,6 @@ class CarDashboardTest {
         }
     }
 
-    // -- carRotaDashRow --
-
-    @Test
-    fun rota_nullWhenInactiveOrBlank() {
-        assertThat(carRotaDashRow(false, "Route 66", 5, 12.0)).isNull()
-        assertThat(carRotaDashRow(true, "  ", 5, 12.0)).isNull()
-    }
-
-    @Test
-    fun rota_titleAndMilesSecondary() {
-        val row = carRotaDashRow(true, "Route 66", 0, 0.0)!!
-        assertThat(text(row.title)).isEqualTo("ROTA Route 66 · 0 QSOs")
-        assertThat(text(row.secondary!!)).isEqualTo("0.0 mi driven this activation")
-        assertThat(row.badge).isEqualTo(CarBadge("R", CAR_AMBER_FG, CAR_AMBER_BG))
-    }
-
     // -- carSessionDashRow --
 
     @Test
@@ -159,36 +143,29 @@ class CarDashboardTest {
     private val session = carSessionDashRow(5, "JA1XYZ", "20m", 41)
 
     @Test
-    fun dashboard_bothActive_statusBandPotaRota_noSession() {
+    fun dashboard_potaActive_statusBandPota_noSession() {
         val rows = buildCarDashboardRows(
             status, band,
-            carPotaDashRow("K-1234", 3), carRotaDashRow(true, "Route 66", 2, 8.7), session,
+            carPotaDashRow("K-1234", 3), session,
         )
-        assertThat(rows.map { it.badge.text }).containsExactly("", "20m", "P", "R").inOrder()
-        assertThat(text(rows[3].title)).isEqualTo("ROTA Route 66 · 2 QSOs")
+        assertThat(rows.map { it.badge.text }).containsExactly("", "20m", "P").inOrder()
+        assertThat(text(rows[2].title)).isEqualTo("POTA K-1234 · 3 QSOs")
     }
 
     @Test
     fun dashboard_neitherActive_collapsesToSession() {
-        val rows = buildCarDashboardRows(status, band, null, null, session)
+        val rows = buildCarDashboardRows(status, band, null, session)
         assertThat(rows).hasSize(3)
         assertThat(rows[2].badge.text).isEqualTo("Σ")
     }
 
     @Test
     fun dashboard_onlyPota_noSessionRow() {
-        val rows = buildCarDashboardRows(status, band, carPotaDashRow("K-1234", 3), null, session)
+        val rows = buildCarDashboardRows(status, band, carPotaDashRow("K-1234", 3), session)
         assertThat(rows.map { it.badge.text }).containsExactly("", "20m", "P").inOrder()
     }
 
-    // -- formatMiles / minutesAgo --
-
-    @Test
-    fun formatMiles_oneDecimal_localeIndependent() {
-        assertThat(formatMiles(0.0)).isEqualTo("0.0")
-        assertThat(formatMiles(12.34)).isEqualTo("12.3")
-        assertThat(formatMiles(12.36)).isEqualTo("12.4")
-    }
+    // -- minutesAgo --
 
     @Test
     fun minutesAgo_nullOnMissingOrFutureTimestamp_flooredOtherwise() {
@@ -217,7 +194,6 @@ class CarDashboardTest {
     @Test
     fun rows_useSingularAtCountOfOne() {
         assertThat(text(carPotaDashRow("K-1234", 1)!!.title)).isEqualTo("POTA K-1234 · 1 QSO")
-        assertThat(text(carRotaDashRow(true, "Route 66", 1, 1.0)!!.title)).isEqualTo("ROTA Route 66 · 1 QSO")
         assertThat(text(carSessionDashRow(1, "JA1XYZ", "20m", 41).title)).isEqualTo("Session · 1 QSO")
         assertThat(text(carBandDashRow(14_074_000L, "20m", "FT8", 1).secondary!!)).isEqualTo("1 decode last cycle")
     }

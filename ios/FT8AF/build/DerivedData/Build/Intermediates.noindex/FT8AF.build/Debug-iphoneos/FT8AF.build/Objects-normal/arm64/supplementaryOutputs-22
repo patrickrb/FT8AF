@@ -1,0 +1,36 @@
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Engine/AudioRouteController.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/AudioRouteController.swiftconstvalues"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/AudioRouteController.d"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/AudioRouteController.o"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/AudioRouteController.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/AudioRouteController.dia"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/AudioRoutePickerButton.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/AudioRoutePickerButton.swiftconstvalues"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/AudioRoutePickerButton.d"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/AudioRoutePickerButton.swiftdeps"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/AudioRoutePickerButton.o"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/AudioRoutePickerButton.dia"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Map/AzimuthalMapCanvas.swift":
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/AzimuthalMapCanvas.o"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/AzimuthalMapCanvas.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/AzimuthalMapCanvas.dia"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/AzimuthalMapCanvas.swiftconstvalues"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/AzimuthalMapCanvas.d"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Theme/Colors.swift":
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/Colors.d"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/Colors.o"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/Colors.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/Colors.dia"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/Colors.swiftconstvalues"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/ClockSyncIndicator.swift":
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/ClockSyncIndicator.dia"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/ClockSyncIndicator.swiftdeps"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/ClockSyncIndicator.swiftconstvalues"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/ClockSyncIndicator.o"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/ClockSyncIndicator.d"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Settings/BlockedCallsignsSettings.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/BlockedCallsignsSettings.swiftconstvalues"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/BlockedCallsignsSettings.o"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/BlockedCallsignsSettings.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/BlockedCallsignsSettings.dia"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/BlockedCallsignsSettings.d"

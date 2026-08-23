@@ -1,0 +1,18 @@
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/QsoEngine.swift":
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/QsoEngine.o"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/QsoEngine.swiftdeps"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/QsoEngine.swiftconstvalues"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/QsoEngine.dia"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/QsoEngine.d"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/PskReporter.swift":
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/PskReporter.d"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/PskReporter.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/PskReporter.dia"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/PskReporter.swiftconstvalues"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/PskReporter.o"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/QrzLogbookClient.swift":
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/QrzLogbookClient.o"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/QrzLogbookClient.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/QrzLogbookClient.dia"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/QrzLogbookClient.d"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/QrzLogbookClient.swiftconstvalues"

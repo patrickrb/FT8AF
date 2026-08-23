@@ -1,0 +1,18 @@
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/CloudlogClient.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/CloudlogClient.swiftconstvalues"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/CloudlogClient.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/CloudlogClient.dia"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/CloudlogClient.o"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/CloudlogClient.d"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/CallerQueue.swift":
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/CallerQueue.o"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/CallerQueue.d"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/CallerQueue.swiftconstvalues"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/CallerQueue.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/CallerQueue.dia"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/DecodeAnnotator.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.swiftconstvalues"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.o"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.d"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.dia"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.swiftdeps"
