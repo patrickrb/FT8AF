@@ -48,13 +48,9 @@ struct TxStrip: View {
                         Picker("Mode", selection: Binding(
                             get: { settings.mode },
                             set: { newMode in
-                                // Leaving FT8 for an RX-only mode must stop any armed
-                                // CQ/QSO and Hunt so the engine isn't left "transmitting"
-                                // with no audio (scheduleTx would silently drop the TX).
-                                if !newMode.profile.isFT8 {
-                                    if tx.isActivated { onStop() }
-                                    if tx.huntEnabled { onHunt() }
-                                }
+                                // Leaving FT8 for an RX-only mode disarms TX/Hunt — via the
+                                // shared engine method so every mode picker behaves the same.
+                                appState.engine?.handleModeChange(to: newMode)
                                 settings.mode = newMode
                                 SettingsPersistence.save(appState.settings)
                             }

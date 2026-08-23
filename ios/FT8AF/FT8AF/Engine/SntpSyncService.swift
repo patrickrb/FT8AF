@@ -86,8 +86,16 @@ enum SntpSyncService {
                                 finish(.failure(.invalidResponse))
                                 return
                             }
-                            finish(.success(Sntp.offsetMs(
-                                referenceUnixMs: refMs, deviceNowMs: deviceNowMs)))
+                            let offset = Sntp.offsetMs(
+                                referenceUnixMs: refMs, deviceNowMs: deviceNowMs)
+                            // Drop an implausible correction (> 1 h) rather than
+                            // shoving the clock by a bad/rogue timestamp — matches
+                            // Android's NtpClockUpdater sane-offset guard.
+                            guard Sntp.isOffsetSane(offset) else {
+                                finish(.failure(.invalidResponse))
+                                return
+                            }
+                            finish(.success(offset))
                         }
                     })
                 case .failed(let err):

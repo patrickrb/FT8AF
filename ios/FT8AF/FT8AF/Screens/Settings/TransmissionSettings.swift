@@ -243,7 +243,12 @@ struct TransmissionSettings: View {
         .onChange(of: settings.pttMode) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.txVolume) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.band) { _, _ in SettingsPersistence.save(appState.settings) }
-        .onChange(of: settings.mode) { _, _ in SettingsPersistence.save(appState.settings) }
+        .onChange(of: settings.mode) { _, newMode in
+            // Same RX-only disarm as the TxStrip mode picker: selecting FT4 here must
+            // also stop an armed CQ/QSO + Hunt (shared engine method), not just persist.
+            appState.engine?.handleModeChange(to: newMode)
+            SettingsPersistence.save(appState.settings)
+        }
         .onChange(of: settings.huntCallsCQ) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.autoCallFollow) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.earlyDecode) { _, _ in SettingsPersistence.save(appState.settings) }

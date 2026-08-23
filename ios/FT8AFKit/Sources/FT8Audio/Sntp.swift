@@ -26,9 +26,22 @@ public enum Sntp {
 
     /// Extract the server's Transmit Timestamp (bytes 40..47) from a response
     /// and convert it to Unix epoch milliseconds. Returns `nil` when the packet
-    /// is too short or carries a zero (unset / Kiss-o'-Death) timestamp.
+    /// is too short, fails the header sanity checks, or carries a zero (unset /
+    /// Kiss-o'-Death) timestamp.
+    ///
+    /// The header checks reject anything we can't trust as an authoritative
+    /// server time — otherwise any 48-byte UDP payload with a nonzero seconds
+    /// field would be accepted and could shift the RX/TX/QSO clock by years:
+    ///  - LI (leap indicator) == 3 → the server is unsynchronized ("alarm").
+    ///  - Mode != 4 → not a server-mode reply to our Mode-3 client request.
+    ///  - Stratum 0 → a Kiss-o'-Death packet (no time); 16..255 are reserved.
     public static func transmitTimeUnixMs(fromResponse bytes: [UInt8]) -> Int64? {
         guard bytes.count >= packetSize else { return nil }
+        let leapIndicator = (bytes[0] >> 6) & 0x3
+        let mode = bytes[0] & 0x7
+        let stratum = bytes[1]
+        guard leapIndicator != 3, mode == 4, stratum >= 1, stratum <= 15 else { return nil }
+
         let seconds = beUInt32(bytes, at: 40)
         let fraction = beUInt32(bytes, at: 44)
         if seconds == 0 { return nil } // no valid timestamp in the reply
@@ -47,6 +60,18 @@ public enum Sntp {
     /// `ntpClockOffsetMs`.
     public static func offsetMs(referenceUnixMs: Int64, deviceNowMs: Int64) -> Int64 {
         referenceUnixMs - deviceNowMs
+    }
+
+    /// The largest clock correction (ms) an SNTP reply may apply — one hour,
+    /// mirroring Android's `NtpClockUpdater.MAX_SANE_OFFSET_MS`. A larger jump is
+    /// treated as a bad/rogue response and dropped so a corrupt timestamp can't
+    /// shove the RX/TX/QSO clock by an implausible amount.
+    public static let maxSaneOffsetMs: Int64 = 60 * 60 * 1000
+
+    /// Whether an offset is within the sane bound (`abs(offset) <= maxSaneOffsetMs`).
+    /// Callers reject an out-of-bound offset instead of applying it.
+    public static func isOffsetSane(_ offsetMs: Int64) -> Bool {
+        abs(offsetMs) <= maxSaneOffsetMs
     }
 
     /// Read a big-endian (network byte order) 32-bit unsigned int at `offset`.
