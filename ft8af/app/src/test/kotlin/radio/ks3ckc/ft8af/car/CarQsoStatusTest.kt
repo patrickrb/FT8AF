@@ -217,7 +217,7 @@ class CarQsoStatusTest {
     }
 
     // --- Pane row selection ------------------------------------------------
-    // The status/band/POTA/ROTA/session row content, badges, and color spans are
+    // The status/band/POTA/session row content, badges, and color spans are
     // built by the design dashboard helpers, covered in CarDashboardTest.
 
     @Test
@@ -229,13 +229,13 @@ class CarQsoStatusTest {
 
     @Test
     fun selectCarPaneRows_tightLimit_dropsBandBeforeActivationRows() {
-        // Build order: headline, seq/slot, band, POTA, ROTA.
+        // Build order: headline, seq/slot, band, then activation rows.
         val p = listOf(
             CAR_ROW_HEADLINE, CAR_ROW_SEQ_SLOT, CAR_ROW_BAND,
             CAR_ROW_ACTIVATION, CAR_ROW_ACTIVATION,
         )
-        // 3-row host: band is sacrificed, POTA survives (earlier activation row
-        // wins the tie against ROTA).
+        // 3-row host: band is sacrificed, the earlier activation row survives
+        // (wins the tie against the later one).
         assertThat(selectCarPaneRows(p, 3)).containsExactly(0, 1, 3).inOrder()
         // 4-row host: both activation rows fit; band is still the one dropped.
         assertThat(selectCarPaneRows(p, 4)).containsExactly(0, 1, 3, 4).inOrder()

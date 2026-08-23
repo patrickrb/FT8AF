@@ -1,0 +1,18 @@
+{
+  "" : {
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Rig.build/Objects-normal/arm64/FT8Rig-master.dia",
+    "emit-module-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Rig.build/Objects-normal/arm64/FT8Rig-master-emit-module.d",
+    "emit-module-diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Rig.build/Objects-normal/arm64/FT8Rig-master-emit-module.dia",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Rig.build/Objects-normal/arm64/FT8Rig-master.swiftdeps"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Rig/RigDriver.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Rig.build/Objects-normal/arm64/RigDriver.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Rig.build/Objects-normal/arm64/RigDriver.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Rig.build/Objects-normal/arm64/RigDriver.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8Rig.build/Objects-normal/arm64/RigDriver.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Rig.build/Objects-normal/arm64/RigDriver.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Rig.build/Objects-normal/arm64/RigDriver.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Rig.build/Objects-normal/arm64/RigDriver.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Rig.build/Objects-normal/arm64/RigDriver~partial.swiftmodule"
+  }
+}

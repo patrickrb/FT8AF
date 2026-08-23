@@ -288,13 +288,6 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     , "sig TEXT");
             alterTable(sqLiteDatabase, "QSLTable", "sig_info"
                     , "sig_info TEXT");
-            // Where the operator was when the contact was made. REAL and nullable:
-            // rows logged before this column existed genuinely have no position, and
-            // 0/0 is a real place in the Gulf of Guinea, not a "missing" marker.
-            alterTable(sqLiteDatabase, "QSLTable", "my_lat"
-                    , "my_lat REAL");
-            alterTable(sqLiteDatabase, "QSLTable", "my_lon"
-                    , "my_lon REAL");
 
         } else {
             sqLiteDatabase.execSQL("CREATE TABLE QSLTable (\n" +
@@ -323,9 +316,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     "my_sig TEXT,\n" +//POTA: activator's program ("POTA")
                     "my_sig_info TEXT,\n" +//POTA: activator's park ref
                     "sig TEXT,\n" +//POTA: worked station's program
-                    "sig_info TEXT,\n" +//POTA: worked station's park ref
-                    "my_lat REAL,\n" +//Operator's latitude at QSO time (null = unknown)
-                    "my_lon REAL)");//Operator's longitude at QSO time
+                    "sig_info TEXT)");//POTA: worked station's park ref
         }
 
 
@@ -1309,8 +1300,6 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 .mySigInfo(colStr(cursor, "my_sig_info"))
                 .sig(colStr(cursor, "sig"))
                 .sigInfo(colStr(cursor, "sig_info"))
-                .myLat(colDouble(cursor, "my_lat"))
-                .myLon(colDouble(cursor, "my_lon"))
                 .comment(colStr(cursor, "comment"));
     }
 
@@ -1326,19 +1315,6 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         return idx < 0 ? 0 : cursor.getInt(idx);
     }
 
-    /**
-     * Cursor double read that tolerates the column being absent <i>or</i> null.
-     *
-     * <p>Returns a boxed {@code Double} rather than a primitive because null is a real
-     * answer here: a QSO logged before the position columns existed, or with location
-     * permission denied, has no coordinates — and 0.0 is a valid position in the Gulf of
-     * Guinea, so it cannot double as "unknown".
-     */
-    private static Double colDouble(Cursor cursor, String column) {
-        int idx = cursor.getColumnIndex(column);
-        if (idx < 0 || cursor.isNull(idx)) return null;
-        return cursor.getDouble(idx);
-    }
 
     /**
      * Populate the "already worked" DXCC / CQ-zone / ITU-zone sets from the logbook.
@@ -1508,23 +1484,6 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 record,
                 radio.ks3ckc.ft8af.pota.PotaSpotsRepository.parkRefFor(record.getToCallsign()));
 
-        // Stamp where the operator was, for every real-time contact — not just during an
-        // ROTA trip. The ADIF this ends up in is the copy that reaches roadsontheair.com, QRZ,
-        // Cloudlog and LoTW, and a QSO without a position can only ever be placed at the
-        // grid's centre by whoever reads it.
-        //
-        // Two guards, both load-bearing. `appendToAdifFile` is false for bulk ADIF
-        // imports, which must not be branded with today's coordinates; and a record that
-        // already carries a position (imported, or replayed) keeps the one it came with.
-        if (appendToAdifFile && !record.hasMyPosition()) {
-            radio.ks3ckc.ft8af.location.RoverFix fix =
-                    radio.ks3ckc.ft8af.location.RoverPosition.INSTANCE.current(context);
-            if (fix != null) {
-                record.setMyLat(fix.getLatitude());
-                record.setMyLon(fix.getLongitude());
-            }
-        }
-
         String querySQL;
         if (!checkQSLCallsign(record)) {//If record doesn't exist, add it
             querySQL = "INSERT INTO  QslCallsigns (callsign" +
@@ -1574,8 +1533,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         if (!checkIsQSL(record)) {//If log data doesn't exist, add it
             querySQL = "INSERT INTO QSLTable(call, isQSL,isLotW_import,isLotW_QSL,gridsquare, mode, rst_sent, rst_rcvd, qso_date, " +
                     "time_on, qso_date_off, time_off, band, freq, station_callsign, my_gridsquare," +
-                    "comment,my_sig,my_sig_info,sig,sig_info,my_lat,my_lon)" +
-                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+                    "comment,my_sig,my_sig_info,sig,sig_info)" +
+                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
             db.execSQL(querySQL, new String[]{record.getToCallsign()
                     , String.valueOf(record.isQSL ? 1 : 0)
@@ -1598,11 +1557,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     , record.getMySig()
                     , record.getMySigInfo()
                     , record.getSig()
-                    , record.getSigInfo()
-                    // Bound as strings like every other value here; SQLite's REAL column
-                    // affinity converts them on the way in, and a null binds as NULL.
-                    , record.getMyLat() == null ? null : String.valueOf(record.getMyLat())
-                    , record.getMyLon() == null ? null : String.valueOf(record.getMyLon())});
+                    , record.getSigInfo()});
             // If this QSO was logged during an active POTA activation, bump its qso_count.
             if (record.getMySigInfo() != null && !record.getMySigInfo().isEmpty()) {
                 db.execSQL("UPDATE pota_activation SET qso_count = qso_count + 1 "
@@ -1617,11 +1572,6 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             // or missing SD can never break QSO logging (AdifLogFile.logQso itself never throws).
             if (appendToAdifFile) {
                 com.k1af.ft8af.log.AdifLogFile.logQso(context, record);
-                // ROTA trip mode: queue the contact for the live road-trip feed. Gated on
-                // the same appendToAdifFile flag as the ADIF mirror, so a bulk log import
-                // can't inject a thousand historic QSOs into today's drive. No-op unless a
-                // trip is running; never throws (see RotaTripManager.onQsoLogged).
-                radio.ks3ckc.ft8af.rota.RotaTripManager.onQsoLogged(record);
             }
             if (afterInsertQSLData!=null){
                 afterInsertQSLData.doAfterInsert(false,true);//New QSL
