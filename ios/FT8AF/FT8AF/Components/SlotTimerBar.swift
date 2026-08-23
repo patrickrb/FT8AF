@@ -29,7 +29,13 @@ struct SlotTimerBar: View {
         .frame(height: 3)
         .onReceive(timer) { _ in
             let profile = appState.settings.mode.profile
-            let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+            // Use the same corrected clock LiveEngine schedules RX/TX with (NTP +
+            // manual + auto-DT), so the bar and its parity never show a different
+            // slot than the engine is actually using after a sync.
+            let offsetMs = appState.clock
+                .clockOffset(manualMs: appState.settings.manualClockOffsetMs)
+                .combinedMs
+            let nowMs = Int64(Date().timeIntervalSince1970 * 1000) + offsetMs
             let ms = SlotClock.msIntoCycle(atUtcMs: nowMs, cycleMs: profile.cycleMs)
             progress = Double(ms) / Double(profile.cycleMs)
             // Guard band = the mode's message duration to the slot boundary.

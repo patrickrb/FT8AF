@@ -43,6 +43,10 @@ public final class FT8Decoder {
     /// The codec sample rate (needed by the time-domain subtraction, which works
     /// in the raw sample domain rather than the waterfall).
     let sampleRate: Int32
+    /// Whether this decoder is running the FT8 protocol (vs. FT4). The subtract-
+    /// and-redecode deep loop re-synthesizes FT8 tones, so it is only valid for
+    /// FT8; FT4 uses the single decode pass. Exposed read-only for that gate/tests.
+    public let isFT8: Bool
     /// Retained copy of the samples last fed through the monitor. The subtract-
     /// and-redecode loop edits this in place (removing each decoded signal) and
     /// re-runs the STFT over it — mirroring ft8_decoder_state.samples/num_fed in
@@ -68,6 +72,7 @@ public final class FT8Decoder {
     public init(sampleRate: Int32 = FT8.sampleRate, isFT8: Bool = true, hashTable: HashTable = HashTable()) {
         self.hashtable = hashTable
         self.sampleRate = sampleRate
+        self.isFT8 = isFT8
         var cfg = monitor_config_t()
         cfg.f_min = 100
         cfg.f_max = 3500

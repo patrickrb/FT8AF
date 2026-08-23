@@ -18,6 +18,10 @@ struct TxStrip: View {
     var body: some View {
         let tx = appState.tx
         let settings = appState.settings
+        // FT4 is RX + timing only for now (scheduleTx rejects non-FT8), so TX/Hunt
+        // must be inert in non-FT8 modes — otherwise Call CQ arms the sequencer and
+        // shows an active TX state that never produces audio.
+        let txAllowed = settings.mode.profile.isFT8
 
         VStack(spacing: 10) {
             // Info row: status + frequency/mode chips + expand chevron
@@ -44,6 +48,13 @@ struct TxStrip: View {
                         Picker("Mode", selection: Binding(
                             get: { settings.mode },
                             set: { newMode in
+                                // Leaving FT8 for an RX-only mode must stop any armed
+                                // CQ/QSO and Hunt so the engine isn't left "transmitting"
+                                // with no audio (scheduleTx would silently drop the TX).
+                                if !newMode.profile.isFT8 {
+                                    if tx.isActivated { onStop() }
+                                    if tx.huntEnabled { onHunt() }
+                                }
                                 settings.mode = newMode
                                 SettingsPersistence.save(appState.settings)
                             }
@@ -156,8 +167,11 @@ struct TxStrip: View {
                     activeColor: signal,
                     style: .secondary
                 ) { onHunt() }
+                .disabled(!txAllowed)
+                .opacity(txAllowed ? 1 : 0.4)
 
-                // CQ / STOP button
+                // CQ / STOP button. In RX-only modes Call CQ is disabled, but STOP
+                // stays live so an FT8-armed run can still be stopped after a switch.
                 ActionButton(
                     label: tx.isActivated ? "STOP" : "CALL CQ",
                     icon: tx.isActivated ? "xmark" : "antenna.radiowaves.left.and.right",
@@ -171,6 +185,8 @@ struct TxStrip: View {
                         onCallCQ()
                     }
                 }
+                .disabled(!txAllowed && !tx.isActivated)
+                .opacity((!txAllowed && !tx.isActivated) ? 0.4 : 1)
 
                 // TX slot toggle
                 ActionButton(
