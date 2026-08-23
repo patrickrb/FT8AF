@@ -9,11 +9,28 @@ name: Android CI & Release
 #   PR to dev/staging/main -> build-only (unsigned), tests
 #   push to dev            -> build-only sanity, NO release (dev builds never
 #                             reach the Releases page)
-#   push to staging        -> android-dev.<run#> PRERELEASE + Play internal
-#   push to main           -> android-v<auto-bump> release + Play production
+#   push to staging        -> android-dev.<run#> PRERELEASE + Play internal,
+#                             versionName <x.y.z>-dev.<run#> where x.y.z is the
+#                             semver Claude picks from the changes since the
+#                             last production tag (see "Versioning" below)
+#   push to main           -> android-v<x.y.z> release + Play production, reusing
+#                             the semver + notes of the staging build it promotes
 #   android-v* tag push    -> release + Play production
 # Feature work lands on dev; the dev build is cut only when dev -> staging
 # merges, and production only when staging -> main merges.
+#
+# Versioning + release notes (ported from Sorrel's play-beta.yml): on a staging
+# push the build job collects the PRs, commits and diff size since the latest
+# android-v* tag and asks Claude (structured output) for the semver bump and
+# the Play release notes. The notes go into the GitHub Release body and the Play
+# "what's new"; the chosen version is stashed in the prerelease body as a hidden
+# marker so the later main push ships the SAME version production-side instead
+# of re-rolling the decision. A staging/main push whose diff since the last
+# production tag touches nothing under ft8af/ (an iOS- or desktop-only
+# promotion) builds but does not cut a release, so no empty versions are made.
+# Requires the ANTHROPIC_API_KEY repository secret; without it (or on an API
+# failure) the run warns, falls back to a patch bump, and uses the PR titles as
+# notes rather than blocking the release.
 #
 # PATH-FILTERED: on pull requests and dev pushes this whole pipeline only runs
 # when Android-relevant files change (ft8af/** — which includes the shared
@@ -364,77 +381,362 @@ jobs:
       - name: Fetch tags
         run: git fetch --tags --force
 
-      - name: Determine release tag
-        id: tag
+      - name: Determine release lane
+        id: lane
         run: |
           set -euo pipefail
           # Release lanes (everything else — dev push, PRs — is build-only):
-          #   android-v* tag push -> production release, Play production
-          #   push to main        -> auto-bumped android-v* tag, Play production
-          #   push to staging     -> android-dev.<run#> tag, PRERELEASE, Play internal
+          #   android-v* tag push -> "tag":        production release, Play production
+          #   push to main        -> "production": android-v<x.y.z> tag, Play production
+          #   push to staging     -> "dev":        android-dev.<run#> tag, PRERELEASE,
+          #                                        Play internal
           # The dev build is cut on staging, NOT on dev: dev pushes never reach
           # this release path. The android- prefix keeps these tags separate from
           # the desktop-v* lane on the Releases page (issue: per-platform tags).
-          # Bumps seed from a legacy bare v* tag when no android-v* exists yet so
-          # the version sequence stays continuous with pre-split releases.
           if [[ "${GITHUB_REF}" == refs/tags/android-v* ]]; then
-            echo "release_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-            echo "version_name=${GITHUB_REF_NAME#android-v}" >> "$GITHUB_OUTPUT"
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-            echo "play_track=production" >> "$GITHUB_OUTPUT"
+            lane=tag
           elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            # Auto-bump the last component from the latest android-v* tag (or a
-            # legacy v* tag for continuity), e.g. android-v1.2 -> android-v1.3.
-            latest=$(git tag --list 'android-v*' --sort=-v:refname | head -n1)
-            base="${latest#android-v}"
-            if [[ -z "$base" ]]; then
-              legacy=$(git tag --list 'v*' --sort=-v:refname | head -n1)
-              base="${legacy#v}"
-            fi
-            if [[ -z "$base" ]]; then
-              new_ver="0.1"
-            else
-              IFS='.' read -ra parts <<< "$base"
-              last_idx=$((${#parts[@]} - 1))
-              parts[$last_idx]=$((parts[$last_idx] + 1))
-              new_ver="$(IFS=.; echo "${parts[*]}")"
-            fi
-            new_tag="android-v$new_ver"
-            echo "Latest android tag: ${latest:-<none>} -> new tag: $new_tag"
-            echo "release_tag=$new_tag" >> "$GITHUB_OUTPUT"
-            echo "version_name=$new_ver" >> "$GITHUB_OUTPUT"
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-            echo "play_track=production" >> "$GITHUB_OUTPUT"
+            lane=production
           elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/staging" ]]; then
-            # staging pushes (a dev -> staging merge) cut a run-numbered
-            # PRERELEASE, published to the Play internal track. Distinct prefix so
-            # it sorts separately from android-v* and so the Play releaseName
-            # disambiguates it from production candidates.
-            new_tag="android-dev.${GITHUB_RUN_NUMBER}"
-            # Derive the base semver from the latest android-v* (or legacy v*) so
-            # the APK reads e.g. "1.1.0-dev.42" instead of a bare run number.
-            latest=$(git tag --list 'android-v*' --sort=-v:refname | head -n1)
-            base_ver="${latest#android-v}"
-            if [[ -z "$base_ver" ]]; then
-              legacy=$(git tag --list 'v*' --sort=-v:refname | head -n1)
-              base_ver="${legacy#v}"
-            fi
-            base_ver="${base_ver:-0.0.0}"
-            echo "release_tag=$new_tag" >> "$GITHUB_OUTPUT"
-            echo "version_name=${base_ver}-dev.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
-            echo "play_track=internal" >> "$GITHUB_OUTPUT"
+            lane=dev
           else
-            # dev push, PR, or other branch — build only, no release
-            echo "release_tag=" >> "$GITHUB_OUTPUT"
-            echo "version_name=" >> "$GITHUB_OUTPUT"
-            echo "should_release=false" >> "$GITHUB_OUTPUT"
-            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-            echo "play_track=" >> "$GITHUB_OUTPUT"
+            lane=none
           fi
+          echo "Release lane: $lane"
+          echo "lane=$lane" >> "$GITHUB_OUTPUT"
+
+      - name: Collect changes since the last production release
+        id: changes
+        if: steps.lane.outputs.lane == 'production' || steps.lane.outputs.lane == 'dev'
+        run: |
+          set -euo pipefail
+          # Baseline = the latest android-v* production tag (a legacy bare v* tag
+          # if no android-v* exists yet, so numbering stays continuous with
+          # pre-split releases). Everything from there to HEAD is what this
+          # release ships: on staging that is the dev -> staging promotion (plus
+          # any earlier promotions not yet shipped to production); on main it is
+          # the staging -> main promotion.
+          PREV_TAG=$(git tag --list 'android-v*' --sort=-v:refname | head -n1)
+          if [[ -z "$PREV_TAG" ]]; then
+            PREV_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+          fi
+          if [[ -n "$PREV_TAG" ]]; then
+            PREV_VERSION="${PREV_TAG#android-v}"
+            PREV_VERSION="${PREV_VERSION#v}"
+            RANGE="$PREV_TAG..HEAD"
+          else
+            # No release tag at all: start from 0.0.0 and use the last 30
+            # commits (or the whole history when shorter) as the log.
+            PREV_VERSION="0.0.0"
+            BASE=$(git rev-list --max-count=31 HEAD | tail -n 1)
+            RANGE="$BASE..HEAD"
+          fi
+          echo "Previous production release: ${PREV_TAG:-<none>} (version $PREV_VERSION); range $RANGE"
+
+          ALL=$(git diff --name-only "$RANGE")
+          # Only files that end up in the APK count: ft8af/ (which includes the
+          # shared native core under ft8af/app/src/main/cpp). ios/, desktop/,
+          # docs and CI don't — a promotion touching none of ft8af/ builds but
+          # cuts no release.
+          ANDROID_FILES=$(printf '%s\n' "$ALL" | grep -E '^ft8af/' || true)
+          if [[ -z "$ANDROID_FILES" ]]; then
+            echo "::notice::Nothing under ft8af/ changed since ${PREV_TAG:-the baseline} — building only, not cutting a release."
+            android_changed=false
+          else
+            android_changed=true
+          fi
+
+          # Commit log, merged PRs (number, branch, title) and size signals for
+          # the semver decision. The promotion merges themselves (dev -> staging,
+          # staging -> main) are not PRs worth listing.
+          # Newest first; capped so a very long range can't balloon the prompt —
+          # the PR list and size figures carry the overall picture anyway.
+          LOG=$(git log --no-merges --pretty='- %s' "$RANGE" | head -n 400)
+          LOG_TOTAL=$(git rev-list --no-merges --count "$RANGE")
+          if (( LOG_TOTAL > 400 )); then
+            LOG+=$'\n'"- … and $((LOG_TOTAL - 400)) older commits not listed"
+          fi
+          PRS=""
+          while read -r sha; do
+            subj=$(git show -s --format=%s "$sha")
+            num_branch=$(sed -nE 's#^Merge pull request (\#[0-9]+) from [^/]+/(.*)$#\1 \2#p' <<< "$subj")
+            [[ -z "$num_branch" ]] && continue
+            case "$num_branch" in *" dev"|*" staging") continue ;; esac
+            title=$(git show -s --format=%b "$sha" | sed -n '1p')
+            PRS+="- ${num_branch}${title:+: $title}"$'\n'
+          done < <(git rev-list --merges "$RANGE")
+          COUNT=$LOG_TOTAL
+          STAT=$(git diff --shortstat "$RANGE" -- ft8af/ | sed 's/^ *//')
+          TOTAL=$(printf '%s\n' "$ALL" | grep -c . || true)
+          ANDROID=$(printf '%s\n' "$ANDROID_FILES" | grep -c . || true)
+          AREAS=$(printf '%s\n' "$ALL" \
+            | sed -E 's#^ft8af/app/src/main/(java/com/k1af/ft8af|kotlin/radio/ks3ckc/ft8af)/#app:#; s#^ft8af/app/src/test/(java/com/k1af/ft8af|kotlin/radio/ks3ckc/ft8af)/#app-tests:#; s#^ft8af/app/src/main/cpp/#native:#; s#^ft8af/app/src/main/res/#app-res:#' \
+            | awk -F/ '{ print (NF > 1 ? $1 "/" $2 : $1) }' | sort | uniq -c | sort -rn | head -25 \
+            | awk '{ printf "- %s (%d files)\n", $2, $1 }')
+
+          {
+            echo "prev_tag=$PREV_TAG"
+            echo "prev_version=$PREV_VERSION"
+            echo "android_changed=$android_changed"
+            echo "log<<COMMITS_EOF"
+            echo "${LOG:-(no commits in range)}"
+            echo "COMMITS_EOF"
+            echo "prs<<PRS_EOF"
+            echo "${PRS:-(no pull-request merges in range)}"
+            echo "PRS_EOF"
+            echo "size<<SIZE_EOF"
+            echo "$COUNT commits; ${STAT:-no file changes under ft8af/}; $ANDROID of $TOTAL changed files are in the Android app (ft8af/)"
+            echo ""
+            echo "Changed files by area:"
+            echo "$AREAS"
+            echo "SIZE_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Look up the promoted staging candidate
+        id: candidate
+        # A main push promotes a staging build that already chose a semver and
+        # wrote release notes. Reuse them so production ships the version the
+        # internal testers ran rather than re-rolling Claude's decision. The
+        # staging prerelease body carries both inside hidden HTML-comment markers
+        # (see "Write release notes"). Falls through (found=false) for staging
+        # builds that predate the markers, so Claude decides on main instead.
+        if: steps.lane.outputs.lane == 'production' && steps.changes.outputs.android_changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREV_TAG: ${{ steps.changes.outputs.prev_tag }}
+        run: |
+          set -euo pipefail
+          cand=""
+          for tag in $(git tag --list 'android-dev.*' --sort=-v:refname); do
+            # Newest staging build that is part of this main HEAD and was not
+            # already shipped by the previous production release.
+            if git merge-base --is-ancestor "$tag" HEAD 2>/dev/null \
+               && { [[ -z "$PREV_TAG" ]] || ! git merge-base --is-ancestor "$tag" "$PREV_TAG" 2>/dev/null; }; then
+              cand="$tag"; break
+            fi
+          done
+          if [[ -z "$cand" ]]; then
+            echo "No unshipped android-dev.* build reachable from HEAD — Claude will version this release."
+            echo "found=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          BODY=$(gh release view "$cand" --json body -q .body 2>/dev/null | tr -d '\r' || true)
+          VERSION=$(sed -nE 's#.*<!-- ft8af-version: ([0-9]+\.[0-9]+\.[0-9]+) -->.*#\1#p' <<< "$BODY" | head -n1)
+          if [[ -z "$VERSION" ]]; then
+            echo "Candidate $cand has no version marker (pre-dates AI versioning) — Claude will version this release."
+            echo "found=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          awk '/<!-- ft8af-notes-start -->/{f=1; next} /<!-- ft8af-notes-end -->/{f=0} f' <<< "$BODY" > notes.txt
+          echo "Promoting $cand: version $VERSION"
+          echo "Notes:"; cat notes.txt
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "tag=$cand" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes and semver bump with Claude
+        id: ai
+        if: >-
+          (steps.lane.outputs.lane == 'production' || steps.lane.outputs.lane == 'dev')
+          && steps.changes.outputs.android_changed == 'true'
+          && steps.candidate.outputs.found != 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PREV_VERSION: ${{ steps.changes.outputs.prev_version }}
+          COMMIT_LOG: ${{ steps.changes.outputs.log }}
+          PR_LIST: ${{ steps.changes.outputs.prs }}
+          CHANGE_SIZE: ${{ steps.changes.outputs.size }}
+        run: |
+          set -euo pipefail
+          # Never block a release on the AI step: with no key or a failed call,
+          # warn loudly, take a patch bump and use the PR titles as the notes.
+          fallback() {
+            echo "::warning title=AI versioning fell back::$1 — using a patch bump and the PR titles as release notes. Set the ANTHROPIC_API_KEY secret / check the step log."
+            echo "bump=patch" >> "$GITHUB_OUTPUT"
+            echo "source=fallback" >> "$GITHUB_OUTPUT"
+            # PR titles, whole lines only, up to Play's 500-char limit.
+            printf '%s\n' "$PR_LIST" | sed -E 's/^- #[0-9]+ [^:]*: ?//; s/^- #[0-9]+ //' \
+              | awk '{ if (n + length($0) + 1 > 500) exit; print; n += length($0) + 1 }' > notes.txt
+            [[ -s notes.txt ]] || echo "Bug fixes and improvements." > notes.txt
+            exit 0
+          }
+          [[ -n "$ANTHROPIC_API_KEY" ]] || fallback "ANTHROPIC_API_KEY is not set"
+
+          SCHEMA='{
+            "type": "object",
+            "properties": {
+              "bump": {
+                "type": "string",
+                "enum": ["major", "minor", "patch"],
+                "description": "Semver bump implied by the content and size of the change"
+              },
+              "notes": {
+                "type": "string",
+                "description": "Google Play release notes, plain text, under 400 characters"
+              }
+            },
+            "required": ["bump", "notes"],
+            "additionalProperties": false
+          }'
+          cat > prompt.txt <<PROMPT_EOF
+          FT8AF is an Android app for the FT8/FT4 amateur-radio digital modes: it decodes and transmits over a rig's USB audio and CAT control, runs the QSO cycle, keeps a logbook, and has POTA/ROTA, contest, WSJT-X UDP, rig-meter and voice-assistant features. You are cutting a release for the Play internal testing track; the same notes ship with the production release when this build is promoted.
+
+          Previous released version: ${PREV_VERSION}
+
+          Pull requests merged since that release:
+          ${PR_LIST}
+
+          Commits since that release:
+          ${COMMIT_LOG}
+
+          Size of the change since that release:
+          ${CHANGE_SIZE}
+
+          Decide the semver bump from both the content and the size of the Android change:
+          - 'major' only for a breaking or fundamentally changed experience: users must act on something, the app is redesigned, a rig or feature stops being supported, or core functionality is removed.
+          - 'minor' when there is a new user-visible feature or capability (a new mode, rig, integration, screen or setting), or when the change is large (many commits or files across several areas of the app) even if no single piece is a headline feature.
+          - 'patch' for bug fixes, polish, copy, performance, refactors, and changes that are small in both scope and size.
+          Only the Android app counts: changes confined to ios/, desktop/, docs, or CI don't count toward the bump or belong in the notes.
+
+          Write the Google Play release notes for testers: plain language a ham radio operator understands, lead with what's new or fixed for them, no commit jargon, no PR numbers, no markdown, no headings, at most 400 characters.
+          PROMPT_EOF
+          # Request goes via a file: a long commit range makes the body far too
+          # big to pass as a single argv string (the kernel caps one argument at
+          # 128 KiB).
+          jq -n --rawfile prompt prompt.txt --argjson schema "$SCHEMA" '{
+            model: "claude-opus-5",
+            max_tokens: 4096,
+            fallbacks: "default",
+            output_config: {format: {type: "json_schema", schema: $schema}},
+            messages: [{role: "user", content: $prompt}]
+          }' > request.json
+          if ! RESP=$(curl -sSf --max-time 300 https://api.anthropic.com/v1/messages \
+              -H "x-api-key: $ANTHROPIC_API_KEY" \
+              -H "anthropic-version: 2023-06-01" \
+              -H "anthropic-beta: server-side-fallback-2026-07-01" \
+              -H "content-type: application/json" \
+              -d @request.json); then
+            fallback "the Claude API request failed"
+          fi
+          STOP=$(jq -r '.stop_reason // empty' <<< "$RESP")
+          if [[ "$STOP" != "end_turn" ]]; then
+            echo "Response: $RESP"
+            fallback "Claude did not complete (stop_reason=${STOP:-none})"
+          fi
+          # Structured outputs guarantee the text block is valid JSON matching the schema.
+          TEXT=$(jq -r '[.content[] | select(.type == "text")][0].text' <<< "$RESP")
+          BUMP=$(jq -er '.bump' <<< "$TEXT") || fallback "Claude's answer had no bump"
+          # Prompt targets <=400 chars; the hard truncation guards Play's 500-char limit.
+          jq -r '.notes' <<< "$TEXT" | head -c 500 > notes.txt
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+          echo "source=claude" >> "$GITHUB_OUTPUT"
+          echo "Claude chose bump: $BUMP"
+          echo "Notes:"; cat notes.txt
+
+      - name: Compute version and release tag
+        id: tag
+        env:
+          LANE: ${{ steps.lane.outputs.lane }}
+          ANDROID_CHANGED: ${{ steps.changes.outputs.android_changed }}
+          PREV_TAG: ${{ steps.changes.outputs.prev_tag }}
+          PREV_VERSION: ${{ steps.changes.outputs.prev_version }}
+          CAND_FOUND: ${{ steps.candidate.outputs.found }}
+          CAND_TAG: ${{ steps.candidate.outputs.tag }}
+          CAND_VERSION: ${{ steps.candidate.outputs.version }}
+          BUMP: ${{ steps.ai.outputs.bump }}
+          BUMP_SOURCE: ${{ steps.ai.outputs.source }}
+        run: |
+          set -euo pipefail
+          release_tag=""; version_name=""; should_release=false; is_prerelease=false; play_track=""; version_source=""
+          case "$LANE" in
+            tag)
+              release_tag="${GITHUB_REF_NAME}"
+              version_name="${GITHUB_REF_NAME#android-v}"
+              should_release=true; play_track=production; version_source="pushed tag"
+              ;;
+            production|dev)
+              if [[ "$ANDROID_CHANGED" != "true" ]]; then
+                echo "No Android changes since ${PREV_TAG:-the baseline}: build only."
+              else
+                if [[ "$CAND_FOUND" == "true" ]]; then
+                  version="$CAND_VERSION"; version_source="promoted from $CAND_TAG"
+                else
+                  version=$(.github/scripts/android-next-version.sh "$PREV_VERSION" "$BUMP")
+                  version_source="$BUMP bump ($BUMP_SOURCE) from ${PREV_VERSION}"
+                fi
+                if [[ "$LANE" == "production" ]]; then
+                  # Guard against a version that was already tagged (e.g. the same
+                  # candidate promoted twice): step the patch until the tag is free.
+                  while git rev-parse -q --verify "refs/tags/android-v$version" > /dev/null; do
+                    echo "::warning::Tag android-v$version already exists — stepping the patch version."
+                    version=$(.github/scripts/android-next-version.sh "$version" patch)
+                  done
+                  release_tag="android-v$version"
+                  version_name="$version"
+                  play_track=production
+                else
+                  # staging: a run-numbered PRERELEASE on the Play internal track.
+                  # Distinct tag prefix so it sorts separately from android-v*;
+                  # the APK reads e.g. "0.150.0-dev.1041".
+                  release_tag="android-dev.${GITHUB_RUN_NUMBER}"
+                  version_name="${version}-dev.${GITHUB_RUN_NUMBER}"
+                  is_prerelease=true
+                  play_track=internal
+                fi
+                should_release=true
+                echo "version=$version" >> "$GITHUB_OUTPUT"
+              fi
+              ;;
+            *)
+              echo "dev push, PR, or other branch — build only, no release."
+              ;;
+          esac
+          echo "Release: tag=${release_tag:-<none>} versionName=${version_name:-<default>} release=$should_release prerelease=$is_prerelease track=${play_track:-<none>} (${version_source:-n/a})"
+          {
+            echo "release_tag=$release_tag"
+            echo "version_name=$version_name"
+            echo "should_release=$should_release"
+            echo "is_prerelease=$is_prerelease"
+            echo "play_track=$play_track"
+            echo "version_source=$version_source"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Write release notes (GitHub body + Play what's-new)
+        if: steps.tag.outputs.should_release == 'true'
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          VERSION_NAME: ${{ steps.tag.outputs.version_name }}
+          VERSION_SOURCE: ${{ steps.tag.outputs.version_source }}
+        run: |
+          set -euo pipefail
+          # notes.txt comes from Claude, the fallback, or the promoted staging
+          # candidate; the android-v* tag-push lane has none.
+          mkdir -p distribution/whatsnew
+          if [[ -s notes.txt ]]; then
+            head -c 500 notes.txt > distribution/whatsnew/whatsnew-en-US
+          else
+            echo "FT8AF $VERSION_NAME" > distribution/whatsnew/whatsnew-en-US
+          fi
+          {
+            if [[ -s notes.txt ]]; then
+              echo "## Release notes"
+              echo ""
+              # Hidden markers: the main-push "candidate" step reads the version
+              # and notes back out of a staging prerelease through these.
+              echo "<!-- ft8af-notes-start -->"
+              cat notes.txt
+              echo ""
+              echo "<!-- ft8af-notes-end -->"
+              echo ""
+            fi
+            if [[ -n "$VERSION" ]]; then
+              echo "<!-- ft8af-version: $VERSION -->"
+            fi
+            echo "_Version \`$VERSION_NAME\` — $VERSION_SOURCE._"
+            echo ""
+            echo "---"
+            echo "Vibecoded with spite on I-70 enroute to Dayton Hamvention."
+            echo ""
+          } > release-body.md
+          echo "::group::release-body.md"; cat release-body.md; echo "::endgroup::"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -577,16 +879,14 @@ jobs:
           # the Releases page.
           target_commitish: ${{ github.sha }}
           files: ft8af/app/build/outputs/apk/release/FT8AF-*.apk
+          # The body (Claude's notes + version markers + signature) is PREPENDED
+          # to GitHub's auto-generated "What's Changed" PR list.
+          body_path: release-body.md
           generate_release_notes: true
           # android-dev.* releases are flagged as prerelease so they sort under
           # the latest android-v* and don't get picked up by downstream tooling
           # that looks for "latest release".
           prerelease: ${{ steps.tag.outputs.is_prerelease == 'true' }}
-          append_body: true
-          body: |
-
-            ---
-            Vibecoded with spite on I-70 enroute to Dayton Hamvention.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -616,6 +916,9 @@ jobs:
           track: ${{ steps.tag.outputs.play_track }}
           status: completed
           releaseName: ${{ steps.tag.outputs.release_tag }}
+          # Claude's release notes (whatsnew-en-US), written by "Write release
+          # notes" above — shows up as the track's "Release notes" in Console.
+          whatsNewDirectory: distribution/whatsnew
           # Let Google auto-send the release for review (the normal path). Do NOT
           # set this true: that bypass is only accepted while the app has
           # review-gated changes pending. Once it's a normal reviewed app, Google
@@ -632,6 +935,28 @@ jobs:
         if: steps.tag.outputs.should_release == 'true' && steps.play_publish.outcome == 'failure'
         run: |
           echo "::warning::Play publish (track=${{ steps.tag.outputs.play_track }}) failed for ${{ steps.tag.outputs.release_tag }} (non-blocking). The signed AAB built and the GitHub Release was created; only the Play upload did not complete. Check the 'Publish AAB to Play' step log — common causes are an upgrade-path rejection or an expired Play edit."
+
+      - name: Release summary
+        if: steps.tag.outputs.should_release == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.release_tag }}
+          VERSION_NAME: ${{ steps.tag.outputs.version_name }}
+          VERSION_SOURCE: ${{ steps.tag.outputs.version_source }}
+          PLAY_TRACK: ${{ steps.tag.outputs.play_track }}
+          PLAY_OUTCOME: ${{ steps.play_publish.outcome }}
+        run: |
+          {
+            echo "## Android release $RELEASE_TAG"
+            echo ""
+            echo "- **versionName:** \`$VERSION_NAME\` ($VERSION_SOURCE)"
+            echo "- **versionCode:** $((GITHUB_RUN_NUMBER + 1000))"
+            echo "- **Play track:** \`$PLAY_TRACK\` (publish: $PLAY_OUTCOME)"
+            echo ""
+            echo "### Release notes"
+            echo ""
+            if [[ -s notes.txt ]]; then cat notes.txt; else echo "_(none — tag-push lane)_"; fi
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
 
   android-gate:
     name: android-gate

@@ -41,15 +41,48 @@ final class AudioCaptureService: @unchecked Sendable {
     /// capturing. Throws if the audio session or engine fails to start.
     func start() throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, options: [.defaultToSpeaker, .allowBluetooth])
-        try session.setActive(true)
+        // Observers first, so the route change that activation itself emits
+        // (e.g. iOS picking up an already-attached DigiRig) is never missed.
+        addObservers()
+        do {
+            // Bootstrap: under the default playback category the session lists
+            // no inputs at all, so `usbAudioPresent` would read a plugged-in
+            // DigiRig as absent and pin output to the speaker — TX then never
+            // reaches the radio. Put the session into `.playAndRecord` with the
+            // neutral (no speaker pin) options and activate it, and only THEN
+            // evaluate the USB-dependent policy against real port lists.
+            if session.category != .playAndRecord {
+                try session.setCategory(
+                    .playAndRecord,
+                    options: Self.categoryOptions(from: AudioSessionPolicy.bootstrapOptions)
+                )
+            }
+            try session.setActive(true)
+            try applySessionCategory(session)
 
-        try installTapAndStart()
+            try installTapAndStart()
+        } catch {
+            removeObservers()
+            throw error
+        }
+    }
 
+    private func addObservers() {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleInterruption),
             name: AVAudioSession.interruptionNotification,
+            object: nil
+        )
+        // A DigiRig (or any USB audio interface) attach/detach must flip the
+        // output-routing policy: with USB present we drop `.defaultToSpeaker`
+        // so TX audio follows to the interface (feeding the radio's Data-VOX),
+        // and restore it when USB goes away so a bare device still plays RX
+        // audibly. Re-apply the category on every route change.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRouteChange),
+            name: AVAudioSession.routeChangeNotification,
             object: nil
         )
         // The engine stops itself when the audio hardware configuration
@@ -62,6 +95,24 @@ final class AudioCaptureService: @unchecked Sendable {
             selector: #selector(handleConfigChange),
             name: .AVAudioEngineConfigurationChange,
             object: engine
+        )
+    }
+
+    private func removeObservers() {
+        NotificationCenter.default.removeObserver(
+            self,
+            name: AVAudioSession.interruptionNotification,
+            object: nil
+        )
+        NotificationCenter.default.removeObserver(
+            self,
+            name: .AVAudioEngineConfigurationChange,
+            object: engine
+        )
+        NotificationCenter.default.removeObserver(
+            self,
+            name: AVAudioSession.routeChangeNotification,
+            object: nil
         )
     }
 
@@ -116,16 +167,71 @@ final class AudioCaptureService: @unchecked Sendable {
         _isRunning = false
         lock.unlock()
 
-        NotificationCenter.default.removeObserver(
-            self,
-            name: AVAudioSession.interruptionNotification,
-            object: nil
+        removeObservers()
+    }
+
+    // MARK: - Session routing policy
+
+    /// Configure the shared session's `.playAndRecord` category with the
+    /// output-routing policy that suits the current hardware: speaker on a bare
+    /// device, follow-the-USB-interface when one is attached (see
+    /// `AudioSessionPolicy`). Also clears a lingering speaker override when USB
+    /// audio is present so TX reaches the interface.
+    private func applySessionCategory(_ session: AVAudioSession) throws {
+        let usb = Self.usbAudioPresent(in: session)
+        let options = Self.categoryOptions(from:
+            AudioSessionPolicy.playAndRecordOptions(usbAudioConnected: usb))
+
+        // Only re-set the category when it actually changes — re-setting it
+        // emits a `.categoryChange` route-change notification, which would
+        // re-enter this method and loop.
+        if session.category != .playAndRecord || session.categoryOptions != options {
+            try session.setCategory(.playAndRecord, options: options)
+        }
+
+        // With USB active, undo any leftover forced-speaker override so output
+        // falls back to the interface. Guarded on "currently stuck on speaker"
+        // so we never disturb an explicit route-picker choice.
+        if usb,
+           session.currentRoute.outputs.contains(where: { $0.portType == .builtInSpeaker }) {
+            try? session.overrideOutputAudioPort(.none)
+        }
+    }
+
+    /// True when a USB audio interface (DigiRig etc.) is attached, as either a
+    /// selectable input or the active input/output route. Only meaningful once
+    /// the session is in an input-capable category (see `start()`); the
+    /// decision itself lives in `AudioSessionPolicy.usbAudioPresent` so every
+    /// detection path is host-tested.
+    static func usbAudioPresent(in session: AVAudioSession) -> Bool {
+        let route = session.currentRoute
+        return AudioSessionPolicy.usbAudioPresent(
+            availableInputs: (session.availableInputs ?? []).map { AudioRouteController.kind(of: $0.portType) },
+            routeInputs: route.inputs.map { AudioRouteController.kind(of: $0.portType) },
+            routeOutputs: route.outputs.map { AudioRouteController.kind(of: $0.portType) }
         )
-        NotificationCenter.default.removeObserver(
-            self,
-            name: .AVAudioEngineConfigurationChange,
-            object: engine
-        )
+    }
+
+    /// Map the platform-neutral routing decision onto AVFoundation's option set.
+    static func categoryOptions(from opts: PlayAndRecordOption) -> AVAudioSession.CategoryOptions {
+        var result: AVAudioSession.CategoryOptions = []
+        if opts.contains(.defaultToSpeaker) { result.insert(.defaultToSpeaker) }
+        if opts.contains(.allowBluetooth) { result.insert(.allowBluetooth) }
+        return result
+    }
+
+    @objc private func handleRouteChange(_ notification: Notification) {
+        // Ignore the notifications our own category/override changes emit, to
+        // avoid re-entering `applySessionCategory` in a loop.
+        if let reasonValue = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+           let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue),
+           reason == .categoryChange || reason == .override {
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            try? self.applySessionCategory(AVAudioSession.sharedInstance())
+        }
     }
 
     // MARK: - Private

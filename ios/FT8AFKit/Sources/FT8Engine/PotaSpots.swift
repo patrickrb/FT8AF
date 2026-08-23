@@ -131,6 +131,54 @@ public enum PotaSpots {
         }
     }
 
+    // MARK: - Park-to-park activator lookup
+
+    /// Normalize a decoded callsign into the spot-cache match key. Port of
+    /// Android's `spotLookupKey`: strip the angle brackets FT8 non-standard /
+    /// hashed calls come wrapped in (`<K1ABC/P>`, or `<...>` when unresolved),
+    /// trim, and uppercase. Returns nil for an empty/whitespace-only result so
+    /// callers can bail early.
+    public static func spotLookupKey(_ callsign: String?) -> String? {
+        guard let raw = callsign else { return nil }
+        let key = raw
+            .replacingOccurrences(of: "<", with: "")
+            .replacingOccurrences(of: ">", with: "")
+            .trimmingCharacters(in: .whitespaces)
+            .uppercased()
+        return key.isEmpty ? nil : key
+    }
+
+    /// The park reference `callsign` is currently spotted activating, or nil when
+    /// they aren't a current activator. Port of Android
+    /// `PotaSpotsRepository.parkRefFor`: match the live spots by uppercased
+    /// activator call (after `spotLookupKey` normalization) and return their
+    /// non-empty reference. Used at QSO-log time to fill SIG/SIG_INFO for a
+    /// park-to-park contact.
+    public static func parkRef(forCallsign callsign: String?, in spots: [PotaSpot]) -> String? {
+        guard let key = spotLookupKey(callsign) else { return nil }
+        let ref = spots.first { $0.activator.uppercased() == key }?.reference
+        guard let ref, !ref.isEmpty else { return nil }
+        return ref
+    }
+
+    // MARK: - Activation-time refresh cadence
+
+    /// Whether the live spot cache should be refreshed *now* to keep an
+    /// in-progress activation's park-to-park lookup (`parkRef(forCallsign:in:)`)
+    /// current, given when it was last refreshed. Mirrors Android's always-on
+    /// `PotaSpotsRepository` poller: true only while an activation is running and
+    /// the last refresh is at least `intervalMs` old (or there has never been
+    /// one). Lets the engine poll the feed during an activation regardless of the
+    /// visible tab, deduped against the Hunt-tab poller because both update the
+    /// shared last-refresh timestamp. `nowMs`/`lastRefreshMs` are epoch ms.
+    public static func shouldRefreshPotaSpots(
+        isActivating: Bool, lastRefreshMs: Int64?, nowMs: Int64, intervalMs: Int64
+    ) -> Bool {
+        guard isActivating else { return false }
+        guard let last = lastRefreshMs else { return true }
+        return nowMs - last >= intervalMs
+    }
+
     // MARK: - Tolerant JSON field extraction
 
     private static func str(_ any: Any?) -> String {

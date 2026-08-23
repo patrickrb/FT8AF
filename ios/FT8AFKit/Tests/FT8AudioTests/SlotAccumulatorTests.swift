@@ -100,4 +100,34 @@ final class SlotAccumulatorTests: XCTestCase {
         XCTAssertTrue(acc.isEmpty)
         XCTAssertEqual(acc.count, 0)
     }
+
+    func testTakeTrailingReturnsMostRecentWindow() {
+        let acc = SlotAccumulator()
+        // Push a full slot's worth; take the most recent 13.5 s early window.
+        acc.push((0..<FT8.slotSamples).map { Float($0) })
+        let early = 162_000 // 13.5 s at 12 kHz
+        let win = acc.takeTrailing(early)
+        XCTAssertEqual(win.count, early)
+        // The most recent `early` samples, in order, flush to the end.
+        XCTAssertEqual(win.first, Float(FT8.slotSamples - early))
+        XCTAssertEqual(win.last, Float(FT8.slotSamples - 1))
+    }
+
+    func testTakeTrailingFrontPadsWhenUnderfilled() {
+        let acc = SlotAccumulator()
+        let n = 1000
+        acc.push((0..<n).map { Float($0) })
+        let want = 4000
+        let win = acc.takeTrailing(want)
+        XCTAssertEqual(win.count, want)
+        XCTAssertTrue(win[0..<(want - n)].allSatisfy { $0 == 0 }) // padded head
+        XCTAssertEqual(win[want - n], 0)
+        XCTAssertEqual(win[want - 1], Float(n - 1))
+    }
+
+    func testTakeSlotMatchesTakeTrailingFullSlot() {
+        let acc = SlotAccumulator()
+        acc.push((0..<(FT8.slotSamples + 3000)).map { Float($0) })
+        XCTAssertEqual(acc.takeSlot(), acc.takeTrailing(FT8.slotSamples))
+    }
 }

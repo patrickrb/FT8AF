@@ -6,10 +6,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import android.widget.Toast
@@ -50,9 +53,10 @@ import radio.ks3ckc.ft8af.ui.components.shouldPersistSection
 import radio.ks3ckc.ft8af.hunt.huntPriorityFromConfig
 import radio.ks3ckc.ft8af.ui.components.FT8AFTab
 import radio.ks3ckc.ft8af.ui.components.FrequencyPickerSheet
+import radio.ks3ckc.ft8af.ui.components.BandModeSheet
 import radio.ks3ckc.ft8af.ui.components.HoundSetupSheet
 import radio.ks3ckc.ft8af.ui.components.HuntOptionsSheet
-import radio.ks3ckc.ft8af.ui.components.huntStripSubtitle
+import radio.ks3ckc.ft8af.hunt.HuntPriority
 import radio.ks3ckc.ft8af.ui.components.formatMhz
 import radio.ks3ckc.ft8af.ui.components.QsoCelebration
 import radio.ks3ckc.ft8af.ui.components.SlotTimerBar
@@ -215,6 +219,13 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     // Frequency picker sheet state
     var showFrequencyPicker by rememberSaveable { mutableStateOf(false) }
 
+    // Band & Mode sheet (option 3b) — opened from the strip's band/mode row.
+    var showBandModeSheet by rememberSaveable { mutableStateOf(false) }
+    // Daytime hint for the band sheet's "Best now · …" copy (local wall-clock).
+    val isDaytimeHint = remember {
+        java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) in 8..17
+    }
+
     // A tapped Needed-DX notification asks us to jump to the Decode tab (DecodeScreen
     // then scrolls to + highlights the alerted station).
     val preselectCallsign by mainViewModel.mutablePreselectCallsign.observeAsState()
@@ -328,8 +339,14 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     }
 
     Box(modifier = Modifier.fillMaxSize().background(BgApp)) {
+        // Keep the content clear of the display cutout (and the status bar, should it
+        // ever be visible) — the Box behind still paints BgApp into the padded band so a
+        // notched phone shows app background beside the camera, not a black strip.
+        // Which sides, and why: see AppInsets.kt.
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(appContentInsets(WindowInsets.safeDrawing)),
         ) {
             // SWR lockout banner — red warning at top when SWR halt triggered
             if (swrLocked) {
@@ -431,25 +448,42 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 offsetSec = avgDtSec,
             )
 
-            // TX status strip — always visible above tab bar
+            // TX status strip — always visible above tab bar (redesigned, option 3a). The
+            // slot bar + clock-sync pill remain in the SlotTimerBar above; the strip's
+            // status row shows the plain-language "next transmit window" countdown.
+            val slotMillis = ModeProfile.fromId(operatingMode).slotMillis.toLong()
+            val bandModeLabel = "$frequencyLabel · $modeName"
+            val huntOptionLabel = if (huntEnabled) {
+                stringResource(
+                    when (huntPriority) {
+                        HuntPriority.LATEST -> R.string.hunt_priority_latest
+                        HuntPriority.STRONGEST -> R.string.hunt_priority_strongest
+                        HuntPriority.WEAKEST -> R.string.hunt_priority_weakest
+                        HuntPriority.FARTHEST -> R.string.hunt_priority_farthest
+                        HuntPriority.POTA_FIRST -> R.string.hunt_priority_pota
+                        HuntPriority.NEW_DXCC_FIRST -> R.string.hunt_priority_new_dxcc
+                        HuntPriority.NEW_GRID_FIRST -> R.string.hunt_priority_new_grid
+                    },
+                )
+            } else {
+                stringResource(R.string.tx_hunt_off)
+            }
             TxStrip(
                 isTransmitting = isTransmitting,
                 isActivated = isActivated,
-                frequencyLabel = frequencyLabel,
+                bandModeLabel = bandModeLabel,
+                slotMillis = slotMillis,
                 txSlot = txSlot,
                 huntEnabled = huntEnabled,
-                modeName = modeName,
-                modeSwitchEnabled = !isTransmitting,
+                huntOptionLabel = huntOptionLabel,
                 dxEnabled = dxEnabled,
                 catState = catState,
                 showCatChip = showCatChip,
-                expanded = qsoPanelExpanded,
                 txVolume = txVolume,
                 showVolumeSlider = showVolumeSlider,
                 cqModifier = cqModifier,
                 isFreeTextMode = isFreeTextMode,
                 fieldDayEnabled = fieldDayEnabled,
-                huntPriorityTag = huntStripSubtitle(huntPriority),
                 isTuning = isTuning,
                 tuneRemainingSec = tuneRemainingSec,
                 onToggleTune = {
@@ -520,7 +554,7 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                         mainViewModel.databaseOpr.writeConfig("toModifier", "", null)
                     }
                 },
-                onLongPressCQ = { showCqOptions = true },
+                onOpenCqOptions = { showCqOptions = true },
                 onToggleDx = {
                     if (dxEnabled || GeneralVariables.houndMode) {
                         mainViewModel.stopHoundMode()
@@ -529,9 +563,7 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                         showHoundSetup = true
                     }
                 },
-                onToggleSlot = {
-                    val current = mainViewModel.ft8TransmitSignal.sequential
-                    val newSlot = if (current == 0) 1 else 0
+                onSelectTxPeriod = { newSlot ->
                     mainViewModel.ft8TransmitSignal.sequential = newSlot
                     mainViewModel.ft8TransmitSignal.mutableSequential.postValue(newSlot)
                     // Switching slots mid-QSO abandons the current contact.
@@ -541,31 +573,9 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                     }
                 },
                 onToggleHunt = { setHuntEnabled(!huntEnabled) },
-                onLongPressHunt = { showHuntOptions = true },
-                onCycleMode = {
-                    // Cycle through the shipped ModeProfile entries in declaration order
-                    // (FT8 -> FT4 -> FT2 -> ...), wrapping around. An unknown current mode
-                    // (indexOfFirst == -1) falls back to the first entry (FT8).
-                    val modes = ModeProfile.values()
-                    val curIdx = modes.indexOfFirst { it.id == operatingMode }
-                    val next = modes[(curIdx + 1) % modes.size].id
-                    if (mainViewModel.setOperatingMode(next)) {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.app_mode_switched, ModeProfile.fromId(next).displayName),
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                    } else {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.app_mode_switch_busy),
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                    }
-                },
+                onOpenHuntOptions = { showHuntOptions = true },
                 onReconnectCat = { mainViewModel.reconnectRig() },
-                onOpenFrequencyPicker = { showFrequencyPicker = true },
-                onToggleExpand = { qsoPanelExpanded = !qsoPanelExpanded },
+                onOpenBandMode = { showBandModeSheet = true },
             )
 
             // Bottom tab bar
@@ -593,6 +603,41 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             onSelect = { idx ->
                 selectBandIndex(mainViewModel, context, idx)
                 showFrequencyPicker = false
+            },
+        )
+
+        // Band & Mode sheet (option 3b) — mode toggle + curated band list, opened from the
+        // strip's band/mode row. Picking a band retunes (CAT if connected) and closes.
+        BandModeSheet(
+            visible = showBandModeSheet,
+            selectedModeId = operatingMode,
+            currentBandIndex = bandIndex,
+            catConnected = catState == CatConnectionState.CONNECTED,
+            isDaytime = isDaytimeHint,
+            onDismiss = { showBandModeSheet = false },
+            onSelectMode = { modeId ->
+                // Was the strip's mode-pill cycle; now a direct pick from the sheet.
+                if (mainViewModel.setOperatingMode(modeId)) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.app_mode_switched, ModeProfile.fromId(modeId).displayName),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.app_mode_switch_busy),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            },
+            onSelectBand = { idx ->
+                selectBandIndex(mainViewModel, context, idx)
+                showBandModeSheet = false
+            },
+            onOpenAllBands = {
+                showBandModeSheet = false
+                showFrequencyPicker = true
             },
         )
 

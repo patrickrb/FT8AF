@@ -16,17 +16,29 @@ import java.util.Arrays;
  * RX window — our clock is fast — so the correction <em>subtracts</em> from the
  * current delay. Negative DT adds. The goal is to drive the measured DT toward 0.
  *
- * <p><b>Damping, not step-limiting.</b> Each applied correction shifts the next
- * slot's measured DT, so a full-step correction would ring. A proportional gain
- * ({@link #GAIN}) halves the error per step instead. There is deliberately NO
- * hard cap on step size: see the long comment in {@code GpsClockUpdater} (a step
- * limiter shipped there once and locked in a bad baseline for a whole activation
- * — proportional gain always converges, a step cap can refuse the truth forever).
+ * <p><b>Acquire fast, track gently.</b> A clock that is plainly off (|median| &gt;
+ * {@link #ACQUIRE_SEC}, confirmed by a well-populated slot) is corrected in full
+ * at once — that is the "it just works" moment after launch. Inside that band
+ * the loop tracks: each applied correction shifts the next slot's measured DT,
+ * and the decoder's DT is quantised (~80 ms), so a proportional gain
+ * ({@link #GAIN}) halves the residual per step rather than chasing noise. There
+ * is deliberately NO hard cap on step size: see the long comment in
+ * {@code GpsClockUpdater} (a step limiter shipped there once and locked in a bad
+ * baseline for a whole activation — proportional gain always converges, a step
+ * cap can refuse the truth forever).
  *
  * <p>Robustness per slot: a median (not mean) over the slot's DTs, MAD-based
- * outlier rejection on top of it, a minimum surviving-sample count, a deadband
- * matching the UI's "good clock" threshold, and two-consecutive-slot same-sign
- * confirmation before any correction is applied.
+ * outlier rejection on top of it, a deadband, and consecutive-slot same-sign
+ * confirmation before any correction is applied. A slot with few surviving
+ * decodes (a quiet POTA band, one station calling CQ) still counts as evidence
+ * — it just needs one more confirming slot than a well-populated one, because a
+ * single station's DT is also that station's clock error.
+ *
+ * <p>The deadband is deliberately tighter than the UI's "good clock" threshold
+ * (0.30 s): the estimator used to stop there, which parked the clock a quarter
+ * second off and left the operator re-applying the manual suggestion every few
+ * minutes. Driving the residual under {@link #DEADBAND_SEC} makes the auto-sync
+ * toggle actually replace that chore.
  *
  * <p>Pure Java, no Android imports (the {@link GeneralVariables} references are
  * {@code static final int} constant expressions, inlined at compile time), so
@@ -36,20 +48,58 @@ import java.util.Arrays;
 public class ClockSelfSync {
 
     /** Minimum surviving (post-outlier-rejection) decodes for a slot to count. */
-    public static final int MIN_SLOT_SAMPLES = 4;
+    public static final int MIN_SLOT_SAMPLES = 1;
 
     /**
-     * |median DT| at/below this (seconds) is left alone. Matches
-     * {@code CLOCK_SYNC_GOOD_SEC} in {@code ui/components/ClockSync.kt} — the
-     * threshold the clock-health indicator already calls "good".
+     * Surviving decodes at/above which a slot is "well populated": the median is
+     * a real consensus and {@link #CONFIRM_SLOTS} slots are enough. Below this a
+     * slot is "sparse" and needs {@link #SPARSE_CONFIRM_SLOTS}.
      */
-    public static final float DEADBAND_SEC = 0.30f;
+    public static final int FULL_CONFIDENCE_SAMPLES = 4;
 
-    /** Proportional gain applied to the measured error (damps the feedback loop). */
+    /**
+     * |median DT| at/below this (seconds) is left alone. Half the 0.30 s the
+     * clock-health indicator ({@code CLOCK_SYNC_GOOD_SEC} in
+     * {@code ui/components/ClockSync.kt}) calls "good", so auto-sync lands the
+     * clock comfortably inside "good" rather than right on its edge. Two DT
+     * measurement steps (the decoder's time oversampling is 80 ms), so it does
+     * not chase measurement noise.
+     */
+    public static final float DEADBAND_SEC = 0.15f;
+
+    /**
+     * |median DT| above this (seconds) means the clock is plainly off — not a
+     * tracking residual but an acquisition problem (fresh launch, phone drifted
+     * offline). Acquisition is fast and decisive: a well-populated slot acts on
+     * its own (no second slot to confirm) and the full error is removed in one
+     * step ({@link #ACQUIRE_GAIN}). Half a second is well clear of both the
+     * deadband and the measurement noise, so a single consensus of four or more
+     * stations that far out cannot be a fluke.
+     */
+    public static final float ACQUIRE_SEC = 0.5f;
+
+    /** Gain used while acquiring (|median| &gt; {@link #ACQUIRE_SEC}): take the whole error. */
+    public static final float ACQUIRE_GAIN = 1.0f;
+
+    /**
+     * Proportional gain applied to a tracking-band error (|median| within
+     * {@link #ACQUIRE_SEC}): halves the residual per step so the loop cannot
+     * ring on the decoder's ~80 ms DT quantisation.
+     */
     public static final float GAIN = 0.5f;
 
-    /** Consecutive qualifying same-sign slots required before a correction is applied. */
+    /**
+     * Consecutive qualifying same-sign slots required before a correction is
+     * applied, when the confirming slot is well populated.
+     */
     public static final int CONFIRM_SLOTS = 2;
+
+    /**
+     * Consecutive qualifying same-sign slots required when the confirming slot
+     * is sparse (fewer than {@link #FULL_CONFIDENCE_SAMPLES} survivors). One
+     * extra slot of agreement before trusting what may be a single station.
+     */
+    public static final int SPARSE_CONFIRM_SLOTS = 3;
 
     /** Absolute floor (seconds) for the MAD-based rejection threshold. */
     static final float MAD_FLOOR_SEC = 0.2f;
@@ -110,6 +160,18 @@ public class ClockSelfSync {
         return Arrays.copyOf(survivors, kept);
     }
 
+    /**
+     * Whether the estimator may act this slot. It runs only when the operator has it on
+     * AND nothing authoritative owns the clock: GPS and NTP discipline each rewrite
+     * {@link UtcTimer#delay} on their own schedule, and a second writer nudging the same
+     * field from decode DTs would fight every one of their corrections. One definition,
+     * shared by the decode-time gate and the settings screen's lock-out.
+     */
+    public static boolean mayRun(boolean autoSyncFromDecodes, boolean disciplineFromGps,
+                                 boolean disciplineFromNtp) {
+        return autoSyncFromDecodes && !disciplineFromGps && !disciplineFromNtp;
+    }
+
     /** Clamp to the shared manual-correction range (±5000 ms). */
     static int clampDelayMs(int ms) {
         return Math.max(GeneralVariables.MANUAL_TIME_CORRECTION_MIN_MS,
@@ -147,10 +209,27 @@ public class ClockSelfSync {
     }
 
     /**
+     * Consecutive same-sign slots needed before a slot with {@code survivors}
+     * post-rejection decodes and median {@code medianSec} may apply a correction.
+     * A well-populated slot that is plainly off ({@link #ACQUIRE_SEC}) acts at
+     * once; a well-populated tracking slot needs one confirming slot; a sparse
+     * slot always needs two.
+     */
+    static int confirmSlotsFor(int survivors, float medianSec) {
+        if (survivors < FULL_CONFIDENCE_SAMPLES) return SPARSE_CONFIRM_SLOTS;
+        return Math.abs(medianSec) > ACQUIRE_SEC ? 1 : CONFIRM_SLOTS;
+    }
+
+    /** Gain for a confirmed error: the whole thing while acquiring, half while tracking. */
+    static float gainFor(float medianSec) {
+        return Math.abs(medianSec) > ACQUIRE_SEC ? ACQUIRE_GAIN : GAIN;
+    }
+
+    /**
      * Per-slot decision. Feeds one slot's decode DTs (seconds) through outlier
-     * rejection, the sample-count gate, the deadband, and the two-slot same-sign
-     * confirmation, and returns the NEW total clock delay (ms) to apply — or
-     * null for no action this slot.
+     * rejection, the sample-count gate, the deadband, and the consecutive-slot
+     * same-sign confirmation ({@link #confirmSlotsFor}), and returns the NEW
+     * total clock delay (ms) to apply — or null for no action this slot.
      *
      * @param dtSec          this slot's per-decode DTs (seconds), own-TX echoes
      *                       already filtered out
@@ -180,11 +259,11 @@ public class ClockSelfSync {
         } else {
             streak++;
         }
-        if (streak < CONFIRM_SLOTS) {
+        if (streak < confirmSlotsFor(survivors.length, median)) {
             return null;
         }
         int newDelay = clampDelayMs(
-                currentDelayMs - Math.round(median * 1000f * GAIN));
+                currentDelayMs - Math.round(median * 1000f * gainFor(median)));
         streak = 0;
         streakSign = 0;
         return newDelay;

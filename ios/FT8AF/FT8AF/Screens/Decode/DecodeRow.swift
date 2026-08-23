@@ -24,6 +24,7 @@ struct DecodeRow: View {
     var compact: Bool = false
     var now: Date = Date()
     var distanceInMiles: Bool = false
+    var showBeamHeading: Bool = false
 
     private var isCQ: Bool { isCQMessage(callTo: message.callTo) }
     private var isToMe: Bool { isDirectedToMe(callTo: message.callTo, myCall: myCall) }
@@ -128,9 +129,25 @@ struct DecodeRow: View {
             MetaText("\(message.snr) dB")
             MetaText("\(Int(message.freqHz)) Hz")
 
+            // DT, as WSJT-X shows it: how far into our RX window this signal
+            // started. Amber when the offset is far enough out to act on.
+            MetaText(
+                "DT \(formatDecodeDt(message.dtSec))",
+                color: isDecodeDtNotable(message.dtSec) ? statusWarn : textFaint
+            )
+
             let distance = gridDistanceText(from: myGrid, to: message.grid, inMiles: distanceInMiles)
             if !distance.isEmpty {
                 MetaText(distance)
+            }
+
+            // Beam heading (short-path bearing) — opt-in, for beam operators who
+            // want to know which way to turn the antenna at a glance.
+            if showBeamHeading {
+                let heading = beamHeadingText(fromGrid: myGrid, toGrid: message.grid)
+                if !heading.isEmpty {
+                    MetaText(heading)
+                }
             }
 
             Spacer(minLength: 4)
@@ -179,15 +196,12 @@ struct DecodeRow: View {
         return parts.joined(separator: " ")
     }
 
-    /// DXCC entity name for the location line ("United States" → "USA"
-    /// shorthand, matching the Android abbreviation).
+    /// Location line for the row: a resolved US state ("CT, USA") when the grid
+    /// maps to one, else the DXCC entity name ("United States" → "USA"
+    /// shorthand). Logic lives in `decodeLocationText` (FT8Engine) so it is
+    /// testable; the view is a thin caller.
     private var locationText: String? {
-        guard let entity = DxccPrefix.entity(for: message.callFrom) else { return nil }
-        switch entity.name {
-        case "United States": return "USA"
-        case "United Kingdom": return "UK"
-        default: return entity.name
-        }
+        decodeLocationText(callFrom: message.callFrom, grid: message.grid)
     }
 }
 
@@ -224,9 +238,13 @@ private struct StatusPillView: View {
     private var label: String {
         switch highlight {
         case .pending: return "PENDING"
+        case .newPota: return "NEW POTA"
         case .pota: return "POTA"
         case .newDxcc: return "NEW DXCC"
+        case .newZone: return "NEW ZONE"
+        case .newState: return "NEW STATE"
         case .newGrid: return "NEW GRID"
+        case .newPrefix: return "NEW PREFIX"
         case .newBand: return "NEW BAND"
         case .worked: return "WORKED"
         case .cq: return "CQ"
@@ -236,9 +254,13 @@ private struct StatusPillView: View {
     private var hue: Color {
         switch highlight {
         case .pending: return accent          // amber — needs the operator's action
+        case .newPota: return accent          // amber — a park not yet hunted
         case .pota: return statusConfirmed    // green
         case .newDxcc: return statusNew       // purple
+        case .newZone: return statusZone      // blue
+        case .newState: return statusState    // teal
         case .newGrid: return statusWarn      // yellow
+        case .newPrefix: return target        // pink
         case .newBand: return statusWorked    // cyan
         case .worked: return statusWorked     // cyan
         case .cq: return statusCq             // amber
@@ -312,11 +334,15 @@ private struct MessageLabel: View {
 /// Small monospaced metadata text used in the bottom info row.
 private struct MetaText: View {
     let text: String
-    init(_ text: String) { self.text = text }
+    let color: Color
+    init(_ text: String, color: Color = textFaint) {
+        self.text = text
+        self.color = color
+    }
 
     var body: some View {
         Text(text)
             .font(.ft8afMono(size: 10.5))
-            .foregroundStyle(textFaint)
+            .foregroundStyle(color)
     }
 }

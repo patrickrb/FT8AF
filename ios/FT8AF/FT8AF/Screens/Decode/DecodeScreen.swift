@@ -15,6 +15,10 @@ struct DecodeScreen: View {
                     .font(.ft8afUI(size: 18, weight: .bold))
                     .foregroundStyle(textPrimary)
 
+                // Clock-sync health from the mean decode DT.
+                ClockSyncIndicator(offsetSec: appState.clock.dtOffsetSec)
+                    .padding(.leading, 8)
+
                 Spacer()
 
                 // Compact mode toggle
@@ -118,8 +122,12 @@ struct DecodeScreen: View {
         let settings = appState.settings
         let index = logbookIndex
         let toggles = HighlightToggles(
+            newPota: settings.highlightNewPota,
             newDxcc: settings.highlightNewDxcc,
+            newZone: settings.highlightNewZone,
+            newState: settings.highlightNewState,
             newGrid: settings.highlightNewGrid,
+            newPrefix: settings.highlightNewPrefix,
             newBand: settings.highlightNewBand,
             worked: settings.highlightWorked
         )
@@ -156,7 +164,8 @@ struct DecodeScreen: View {
                                         message.callFrom.uppercased() == targetCall,
                                     compact: decode.compactMode,
                                     now: timeline.date,
-                                    distanceInMiles: settings.distanceInMiles
+                                    distanceInMiles: settings.distanceInMiles,
+                                    showBeamHeading: settings.showBeamHeading
                                 )
                                 .id(message.id)
                                 .onTapGesture {
@@ -185,7 +194,7 @@ struct DecodeScreen: View {
     /// New DXCC / Needed chips.
     private var logbookIndex: LogbookIndex {
         LogbookIndex(qsos: appState.logbook.records.map {
-            LoggedQso(call: $0.call, grid: $0.gridsquare, band: $0.band)
+            LoggedQso(call: $0.call, grid: $0.gridsquare, band: $0.band, park: $0.sigInfo)
         })
     }
 
@@ -233,6 +242,43 @@ struct DecodeScreen: View {
             return msgs.filter {
                 guard let entity = DxccPrefix.entity(for: $0.callFrom) else { return true }
                 return !worked.contains(entity.name)
+            }
+        case .newZone:
+            // CQ stations from a CQ zone (WAZ) the operator hasn't worked yet
+            // (mirrors Android's "New Zone" filter: checkIsCQ() && fromCq).
+            let workedZones = logbookIndex.workedZones
+            return msgs.filter {
+                guard isCQMessage(callTo: $0.callTo),
+                      let zone = DxccPrefix.cqZone(for: $0.callFrom), zone > 0 else { return false }
+                return !workedZones.contains(zone)
+            }
+        case .newGrid:
+            // CQ stations whose Maidenhead grid field the operator hasn't logged
+            // yet (mirrors Android's "New Grid" filter: checkIsCQ() && isNewGrid).
+            let workedGrids = logbookIndex.workedGrids
+            return msgs.filter {
+                guard isCQMessage(callTo: $0.callTo) else { return false }
+                let square = String($0.grid.uppercased().prefix(4))
+                return square.count >= 4 && gridToLatLon(square) != nil &&
+                    !workedGrids.contains(square)
+            }
+        case .newPrefix:
+            // CQ stations whose WPX prefix the operator hasn't logged yet
+            // (mirrors Android's "New Prefix" filter: checkIsCQ() && isNewPrefix).
+            let workedPrefixes = logbookIndex.workedPrefixes
+            return msgs.filter {
+                guard isCQMessage(callTo: $0.callTo),
+                      let prefix = wpxPrefix($0.callFrom) else { return false }
+                return !workedPrefixes.contains(prefix)
+            }
+        case .newState:
+            // CQ stations from a US state the operator hasn't worked yet
+            // (mirrors Android's "New State" filter: checkIsCQ() && fromNewState).
+            let workedStates = logbookIndex.workedStates
+            return msgs.filter {
+                guard isCQMessage(callTo: $0.callTo),
+                      let state = UsStateLookup.state(forGrid: $0.grid) else { return false }
+                return !workedStates.contains(state.uppercased())
             }
         case .needed:
             // CQ stations not yet worked.

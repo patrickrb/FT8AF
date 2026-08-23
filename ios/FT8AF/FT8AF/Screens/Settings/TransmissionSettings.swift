@@ -1,3 +1,4 @@
+import FT8DSP
 import SwiftUI
 
 struct TransmissionSettings: View {
@@ -28,10 +29,16 @@ struct TransmissionSettings: View {
             }
             .listRowBackground(bgSurface)
 
-            // PTT Mode
+            // PTT Mode — only VOX works on iOS (see footer). A non-VOX value
+            // from an older build is migrated to VOX when settings load
+            // (`SettingsPersistence.load`); the coercion here is only a belt
+            // and braces so the picker never shows a tag it doesn't offer.
             Section {
-                Picker("PTT Mode", selection: $settings.pttMode) {
-                    ForEach(PttMode.allCases) { mode in
+                Picker("PTT Mode", selection: Binding(
+                    get: { settings.pttMode.coercedForIOS },
+                    set: { settings.pttMode = $0 }
+                )) {
+                    ForEach(PttMode.selectableOnIOS) { mode in
                         Text(mode.rawValue).tag(mode)
                     }
                 }
@@ -40,7 +47,7 @@ struct TransmissionSettings: View {
                 Text("PTT Control")
                     .foregroundStyle(textMuted)
             } footer: {
-                Text("VOX: use audio-triggered PTT. CAT/RTS/DTR: hardware control via rig connection")
+                Text("VOX keys the radio from the transmit audio. CAT/RTS/DTR PTT need a wired CAT connection, which iOS/iPadOS doesn't allow over USB. (A future Wi-Fi/rigctld bridge could add CAT PTT.)")
                     .foregroundStyle(textFaint)
             }
             .listRowBackground(bgSurface)
@@ -69,6 +76,24 @@ struct TransmissionSettings: View {
             } header: {
                 Text("Audio")
                     .foregroundStyle(textMuted)
+            }
+            .listRowBackground(bgSurface)
+
+            // Mode selection
+            Section {
+                Picker("Mode", selection: $settings.mode) {
+                    ForEach(Mode.allCases) { m in
+                        Text(m.rawValue).tag(m)
+                    }
+                }
+                .foregroundStyle(textPrimary)
+            } header: {
+                Text("Mode")
+                    .foregroundStyle(textMuted)
+            } footer: {
+                Text("FT4 receives and shows timing; FT4 transmit is not yet enabled. FT8 transmits normally.")
+                    .font(.ft8afUI(size: 11))
+                    .foregroundStyle(textFaint)
             }
             .listRowBackground(bgSurface)
 
@@ -218,6 +243,7 @@ struct TransmissionSettings: View {
         .onChange(of: settings.pttMode) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.txVolume) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.band) { _, _ in SettingsPersistence.save(appState.settings) }
+        .onChange(of: settings.mode) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.huntCallsCQ) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.autoCallFollow) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.earlyDecode) { _, _ in SettingsPersistence.save(appState.settings) }

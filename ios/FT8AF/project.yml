@@ -60,3 +60,29 @@ targets:
       - package: FT8AFKit
         product: FT8Rig
       - sdk: Accelerate.framework
+
+  # Unit tests for app-level types that can't live in FT8AFKit (SwiftUI /
+  # AVAudioSession-typed helpers, UI enums). Pure host-testable decisions live
+  # in FT8AFKit; these exercise the thin app layer on a simulator.
+  FT8AFTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - FT8AFTests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true
+        PRODUCT_BUNDLE_IDENTIFIER: radio.ks3ckc.ft8af.tests
+    dependencies:
+      - target: FT8AF
+
+schemes:
+  FT8AF:
+    build:
+      targets:
+        FT8AF: all
+    test:
+      targets:
+        - FT8AFTests
+    run:
+      config: Debug

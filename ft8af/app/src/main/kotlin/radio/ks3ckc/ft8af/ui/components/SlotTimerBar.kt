@@ -18,18 +18,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.Size
 import androidx.compose.runtime.withFrameMillis
+import com.k1af.ft8af.GeneralVariables
+import com.k1af.ft8af.R
 import com.k1af.ft8af.timer.UtcTimer
+import kotlinx.coroutines.delay
 import radio.ks3ckc.ft8af.theme.Accent
 import radio.ks3ckc.ft8af.theme.Border
 import radio.ks3ckc.ft8af.theme.GeistMonoFamily
+import radio.ks3ckc.ft8af.theme.InterFamily
 import radio.ks3ckc.ft8af.theme.Signal
 import radio.ks3ckc.ft8af.theme.TextMuted
+import radio.ks3ckc.ft8af.theme.TextPrimary
 
 @Composable
 fun SlotTimerBar(
@@ -60,7 +69,14 @@ fun SlotTimerBar(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (offsetSec != null) {
-            ClockSyncIndicator(offsetSec = offsetSec)
+            // Read on every frame-driven recomposition, so a toggle in Settings shows
+            // up here without extra plumbing.
+            ClockSyncIndicator(
+                offsetSec = offsetSec,
+                autoSyncFromDecodes = GeneralVariables.autoSyncClockFromDecodes,
+                disciplineFromGps = GeneralVariables.disciplineClockFromGPS,
+                disciplineFromNtp = GeneralVariables.disciplineClockFromNtp,
+            )
         }
         Box(
             modifier = Modifier
@@ -126,4 +142,59 @@ internal fun slotTimerState(nowMs: Long, slotMillis: Long): SlotTimerState {
     // disagree if the bar is ever driven by a non-global slot.
     val currentSlot = UtcTimer.sequential(nowMs, slot.toInt())
     return SlotTimerState(progress, secondsRemaining, currentSlot)
+}
+
+/**
+ * The redesigned strip's status-row countdown: "Next transmit window in Xs", with the seconds
+ * in the mono data font and the rest in Inter. Self-ticks ~4x/second (enough for a per-second
+ * countdown) so it doesn't churn the whole composition every frame.
+ */
+@Composable
+fun NextTxWindowLabel(
+    slotMillis: Long,
+    txSlot: Int,
+    modifier: Modifier = Modifier,
+) {
+    var nowMs by remember { mutableLongStateOf(UtcTimer.getSystemTime()) }
+
+    LaunchedEffect(slotMillis, txSlot) {
+        while (true) {
+            nowMs = UtcTimer.getSystemTime()
+            delay(250L)
+        }
+    }
+
+    val seconds = nextTxWindowSeconds(nowMs, slotMillis, txSlot)
+    val prefix = stringResource(R.string.tx_next_window)
+    val text = buildAnnotatedString {
+        withStyle(SpanStyle(fontFamily = InterFamily, color = TextMuted, fontWeight = FontWeight.Normal)) {
+            append(prefix)
+            append(" ")
+        }
+        withStyle(SpanStyle(fontFamily = GeistMonoFamily, color = TextPrimary)) {
+            append("${seconds}s")
+        }
+    }
+
+    Text(text = text, fontSize = 11.sp, maxLines = 1, modifier = modifier)
+}
+
+/**
+ * Seconds until the start of the operator's next transmit slot, given the current time, the
+ * slot length, and which parity ([txSlot]: 0 = 1st/even, 1 = 2nd/odd) the operator transmits on.
+ * Walks forward to the next slot boundary whose parity matches and returns the wall-clock
+ * seconds until it (rounded up); while the operator is *in* their own slot it points at the
+ * following one, so it always describes a genuinely upcoming window. Pure/testable; guards a
+ * non-positive [slotMillis] like [slotTimerState].
+ */
+internal fun nextTxWindowSeconds(nowMs: Long, slotMillis: Long, txSlot: Int): Int {
+    val slot = if (slotMillis > 0L) slotMillis else 15_000L
+    val parity = ((txSlot.toLong() % 2) + 2) % 2
+    val currentIndex = Math.floorDiv(nowMs, slot)
+    var nextIndex = currentIndex + 1
+    if ((((nextIndex % 2) + 2) % 2) != parity) {
+        nextIndex += 1
+    }
+    val boundaryMs = nextIndex * slot
+    return (((boundaryMs - nowMs) + 999L) / 1000L).toInt()
 }

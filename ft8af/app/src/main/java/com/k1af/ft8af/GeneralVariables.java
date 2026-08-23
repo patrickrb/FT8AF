@@ -575,11 +575,15 @@ public class GeneralVariables {
     public static boolean autoUpdateGridFromGPS = false;//Use device GPS to keep Maidenhead grid current
     public static boolean disciplineClockFromGPS = false;//Discipline the app clock (UtcTimer.delay) from GPS satellite time (issue #373). Off by default — consensual.
     public static int gpsClockIntervalMinutes = 5;//How often to re-read GPS time for clock discipline. Clamped 1-30 by GpsClockUpdater.
-    public static boolean autoSyncClockFromDecodes = false;//Self-syncing clock: continuously trim UtcTimer.delay from the median decode DT (see ClockSelfSync). Inert while disciplineClockFromGPS is on. Off by default.
+    public static boolean autoSyncClockFromDecodes = true;//Self-syncing clock: continuously trim UtcTimer.delay from the median decode DT (see ClockSelfSync). Inert while disciplineClockFromGPS or disciplineClockFromNtp is on (see ClockSelfSync.mayRun). ON by default (PR #758): the band is the time source every operator has, and the estimator is conservative enough (median + MAD rejection + deadband + confirmation) to run unattended.
     //Runtime status for the Time Sync UI (not persisted): the offset the last GPS fix applied
     //to UtcTimer.delay. The last-sync *timestamp* is the retained value of mutableGpsClockSync
     //below, so there's no separate field for it.
     public static volatile int gpsClockOffsetMs = 0;
+    //Runtime status for the Time Sync UI (not persisted): the step (ms, signed) the last
+    //self-sync correction applied to UtcTimer.delay. Its timestamp is the retained value of
+    //mutableSelfSyncApplied below.
+    public static volatile int selfSyncLastStepMs = 0;
 
     /**
      * The dial the app is entitled to COMMAND, as opposed to {@link #band}, which is
@@ -637,6 +641,35 @@ public class GeneralVariables {
     //Posted each time a GPS fix disciplines the clock, so the Time Sync screen can recompose
     //its "last sync"/offset readout. Carries the sync's System.currentTimeMillis() timestamp.
     public static MutableLiveData<Long> mutableGpsClockSync = new MutableLiveData<>();
+    public static final String DEFAULT_NTP_SERVER = "pool.ntp.org";//Default NTP server for clock discipline: the worldwide anycast pool, which resolves to servers near the device. Regional pools (a.ntp.br, time.nist.gov, …) can be typed in.
+    public static boolean disciplineClockFromNtp = false;//Discipline the app clock (UtcTimer.delay) from a network NTP server, periodically. Off by default. Mutually exclusive with disciplineClockFromGPS — TimeSyncSettings enforces this by disabling the other on toggle.
+    public static String ntpServer = DEFAULT_NTP_SERVER;//NTP server hostname/IP for periodic clock discipline. Resolved for both A and AAAA records (dual-stack) by NtpClockUpdater.
+    public static int ntpClockIntervalMinutes = 5;//How often to re-sync from the NTP server. Clamped 1-30 by NtpClockUpdater.
+    //Runtime status for the Time Sync UI (not persisted): the offset the last successful NTP
+    //sync applied to UtcTimer.delay. The last-sync *timestamp* is the retained value of
+    //mutableNtpClockSync below, so there's no separate field for it.
+    public static volatile int ntpClockOffsetMs = 0;
+    //Posted each time an NTP sync disciplines the clock, so the Time Sync screen can recompose
+    //its "last sync"/offset readout. Carries the disciplined UTC timestamp (System.currentTimeMillis()
+    //plus the applied offset), not the raw system clock reading.
+    public static MutableLiveData<Long> mutableNtpClockSync = new MutableLiveData<>();
+    //Posted true when the most recent NTP sync attempt exhausted every resolved address
+    //without success (no network, blocked UDP port, bad server name); posted false right
+    //before applying a successful sync. Unlike GPS, NTP failure is common enough (no
+    //internet, restrictive NAT) that silent periodic retries with zero feedback would look
+    //broken, so the Time Sync screen surfaces it.
+    public static MutableLiveData<Boolean> mutableNtpClockSyncFailed = new MutableLiveData<>();
+
+    /** Trimmed NTP server, falling back to {@link #DEFAULT_NTP_SERVER} when unset/blank. */
+    public static String getNtpServer() {
+        if (ntpServer == null || ntpServer.trim().isEmpty()) return DEFAULT_NTP_SERVER;
+        return ntpServer.trim();
+    }
+
+    //Posted each time the self-syncing clock (ClockSelfSync) applies a correction, so the
+    //Time Sync screen can show that auto-sync is doing the work instead of asking the
+    //operator to apply the suggestion by hand. Carries the UtcTimer.getSystemTime() timestamp.
+    public static MutableLiveData<Long> mutableSelfSyncApplied = new MutableLiveData<>();
     // Successfully QSL'd callsigns (current band). Rebuilt wholesale on the DB thread
     // (DatabaseOpr.GetAllQSLCallsign), appended to on the TX thread (addQSLCallsign), and
     // read concurrently from decode/UI threads and the NanoHTTPD web-logbook worker. It is

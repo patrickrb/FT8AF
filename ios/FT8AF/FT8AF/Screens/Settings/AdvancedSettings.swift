@@ -82,6 +82,26 @@ struct AdvancedSettings: View {
             }
             .listRowBackground(bgSurface)
 
+            // Decode section
+            Section {
+                Toggle(isOn: $settings.deepDecode) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Deep Decode")
+                            .foregroundStyle(textPrimary)
+                        Text("More LDPC iterations to recover weaker signals")
+                            .font(.ft8afUI(size: 11))
+                            .foregroundStyle(textFaint)
+                    }
+                }
+                .tint(accent)
+            } header: {
+                Text("Decode").foregroundStyle(textMuted)
+            } footer: {
+                Text("Deep decode raises the error-correction effort each slot, pulling out a few more weak signals for a small extra CPU cost. On by default; turn off to save battery on slower devices.")
+                    .foregroundStyle(textFaint)
+            }
+            .listRowBackground(bgSurface)
+
             // WSJT-X UDP section
             Section {
                 Toggle(isOn: $settings.udpEnabled) {
@@ -161,6 +181,7 @@ struct AdvancedSettings: View {
         .onChange(of: settings.pttDelayMs) { _, _ in SettingsPersistence.save(settings) }
         .onChange(of: settings.txDelayMs) { _, _ in SettingsPersistence.save(settings) }
         .onChange(of: settings.lateStartToleranceMs) { _, _ in SettingsPersistence.save(settings) }
+        .onChange(of: settings.deepDecode) { _, _ in SettingsPersistence.save(settings) }
         .onChange(of: settings.udpEnabled) { _, _ in SettingsPersistence.save(settings) }
         .onChange(of: settings.udpHost) { _, _ in SettingsPersistence.save(settings) }
         .onChange(of: settings.udpPort) { _, _ in SettingsPersistence.save(settings) }

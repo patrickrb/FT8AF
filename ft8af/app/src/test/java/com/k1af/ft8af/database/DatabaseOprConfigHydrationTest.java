@@ -362,11 +362,13 @@ public class DatabaseOprConfigHydrationTest {
     }
 
     @Test
-    public void autoSyncClockFromDecodes_absentRowLeavesDefaultOff() {
-        GeneralVariables.autoSyncClockFromDecodes = false;
-        // No row written for the key at all (fresh install / pre-feature backup).
+    public void autoSyncClockFromDecodes_absentRowLeavesDefaultOn() {
+        // The feature is on by default (PR #758). No row written for the key at
+        // all (fresh install / pre-feature backup) must keep it on — hydration
+        // only acts on rows that exist, never writes a default back as "0".
+        GeneralVariables.autoSyncClockFromDecodes = true;
         hydrate();
-        assertThat(GeneralVariables.autoSyncClockFromDecodes).isFalse();
+        assertThat(GeneralVariables.autoSyncClockFromDecodes).isTrue();
     }
 
     @Test

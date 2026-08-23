@@ -51,6 +51,7 @@ import com.k1af.ft8af.database.DatabaseOpr
 import com.k1af.ft8af.database.OnAfterQueryConfig
 import com.k1af.ft8af.database.OperationBand
 import com.k1af.ft8af.location.GpsClockUpdater
+import com.k1af.ft8af.timer.NtpClockUpdater
 import com.k1af.ft8af.location.GridLocationUpdater
 import com.k1af.ft8af.log.ImportSharedLogs
 import com.k1af.ft8af.wave.UsbAudioNative
@@ -418,8 +419,18 @@ class ComposeMainActivity : AppCompatActivity() {
                     }
                     GridLocationUpdater.refresh(applicationContext, mainViewModel)
                 }
+                // Defensive: a hand-edited or pre-feature-restore config could have both
+                // flags persisted true. Enforce the mutual-exclusion invariant here too —
+                // GPS wins as the original feature — before either updater starts.
+                if (GeneralVariables.disciplineClockFromGPS && GeneralVariables.disciplineClockFromNtp) {
+                    GeneralVariables.disciplineClockFromNtp = false
+                    mainViewModel.databaseOpr.writeConfig("disciplineClockFromNtp", "0", null)
+                }
                 if (GeneralVariables.disciplineClockFromGPS) {
                     GpsClockUpdater.refresh(applicationContext)
+                }
+                if (GeneralVariables.disciplineClockFromNtp) {
+                    NtpClockUpdater.refresh(applicationContext)
                 }
                 mainViewModel.ft8TransmitSignal.setTimer_sec(GeneralVariables.transmitDelay)
 

@@ -12,7 +12,7 @@ import org.junit.Test
 class CallerQueueDisplayTest {
 
     private fun caller(call: String, snr: Int) =
-        QueuedCaller(call, 1000f, 0, snr, 0, 0, "")
+        QueuedCaller(call, 1000f, 0, snr, 0, 0, "", 0L)
 
     @Test
     fun fifo_preservesQueueOrder() {

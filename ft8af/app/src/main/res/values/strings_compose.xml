@@ -119,6 +119,36 @@
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_cq_options">CQ message options (modifier, free text, Field Day)</string>
     <string name="tx_hunt_options">Hunt options (priority, smart filters)</string>
+    <!-- Redesigned TX strip (option 3a) -->
+    <string name="tx_status_listening">Listening</string>
+    <string name="tx_status_transmitting">Transmitting</string>
+    <string name="tx_status_tuning">Tuning</string>
+    <string name="tx_next_window">Next transmit window in</string>
+    <string name="tx_call_cq_subtitle">Start calling for contacts</string>
+    <string name="tx_more">MORE</string>
+    <string name="tx_band_mode_label">BAND &amp; MODE</string>
+    <string name="tx_period_label">TX PERIOD</string>
+    <string name="tx_period_first">1st (even)</string>
+    <string name="tx_period_second">2nd (odd)</string>
+    <string name="tx_dx">DX</string>
+    <string name="tx_hunt_off">Off</string>
+
+    <!-- ===== Band &amp; Mode sheet (option 3b) ===== -->
+    <string name="band_sheet_title">Band &amp; mode</string>
+    <string name="band_sheet_subtitle">Your radio retunes when you pick a band</string>
+    <string name="band_sheet_close">Close</string>
+    <string name="band_sheet_all_bands">All bands &amp; custom frequency</string>
+    <string name="band_hint_20m_best">Best now · daytime, worldwide</string>
+    <string name="band_hint_20m">Daytime, worldwide</string>
+    <string name="band_hint_40m">Evenings and nights</string>
+    <string name="band_hint_17m">Quieter daytime band</string>
+    <string name="band_hint_15m">Good when the sun is active</string>
+    <string name="band_hint_10m">Long distance when open</string>
+    <string name="band_hint_80m">Local, evenings</string>
+
+    <!-- Plain-language CAT chip labels for the redesigned TX strip -->
+    <string name="cat_status_linked">Radio linked</string>
+    <string name="cat_status_not_linked">Radio not linked</string>
 
     <!-- ===== Hunt options sheet ===== -->
     <string name="hunt_priority_title">HUNT PRIORITY</string>
@@ -574,12 +604,16 @@
     <string name="settings_time_suggest_none">No decodes yet — start receiving to get a suggestion.</string>
     <string name="settings_time_suggest_label">Recent average DT: %1$s</string>
     <string name="settings_time_suggest_apply">Apply suggested correction</string>
+    <string name="settings_time_suggest_auto">Auto-sync is on — corrections from decodes are applied for you, no tap needed.</string>
+    <string name="settings_time_suggest_auto_waiting">Waiting for agreeing decodes before the first auto-correction…</string>
+    <string name="settings_time_suggest_auto_last">Last auto-correction: %1$s at %2$s</string>
     <string name="settings_time_correction_gps_locked">GPS clock discipline is controlling the clock — turn it off below to adjust manually.</string>
+    <string name="settings_time_correction_ntp_locked">NTP clock discipline is controlling the clock — turn it off below to adjust manually.</string>
 
     <!-- ===== Settings: Time Sync (self-syncing clock from decodes) ===== -->
     <string name="settings_selfsync_section">Self-Syncing Clock</string>
     <string name="settings_selfsync_toggle">Auto-sync clock from decodes</string>
-    <string name="settings_selfsync_toggle_desc">Continuously trim the clock using the median DT of received stations — the band itself becomes the time source. No internet or GPS needed. Unavailable while GPS clock discipline is on.</string>
+    <string name="settings_selfsync_toggle_desc">On by default. Keeps the clock locked to the stations you hear — the band itself is the time source, no internet or GPS needed. A clock that is clearly off is fixed from the first busy slot; small drift is trimmed gently. Unavailable while GPS or NTP clock discipline is on.</string>
 
     <!-- ===== Settings: Time Sync (GPS clock discipline, issue #373) ===== -->
     <string name="settings_gps_clock_section">GPS Clock Discipline</string>
@@ -590,6 +624,17 @@
     <string name="settings_gps_clock_waiting">Waiting for a GPS fix…</string>
     <string name="settings_gps_clock_last_sync">Last GPS sync: %1$s UTC</string>
     <string name="settings_gps_clock_offset">Applied offset: %1$s</string>
+
+    <!-- ===== Settings: Time Sync (NTP clock discipline) ===== -->
+    <string name="settings_ntp_clock_section">NTP Clock Discipline</string>
+    <string name="settings_ntp_clock_toggle">Discipline clock from NTP</string>
+    <string name="settings_ntp_clock_toggle_desc">Periodically sync from a network time server to align the FT8 cycle to true UTC. Overrides the manual correction while on. Needs internet access.</string>
+    <string name="settings_ntp_clock_server_label">NTP server</string>
+    <string name="settings_ntp_clock_server_hint">e.g. pool.ntp.org</string>
+    <string name="settings_ntp_clock_waiting">Waiting for the first NTP sync…</string>
+    <string name="settings_ntp_clock_last_sync">Last NTP sync: %1$s UTC</string>
+    <string name="settings_ntp_clock_offset">Applied offset: %1$s</string>
+    <string name="settings_ntp_clock_sync_failed">Last sync attempt failed — retrying…</string>
 
     <!-- ===== Settings: operator identity ===== -->
     <string name="settings_auto_update_grid">Auto-update Grid (GPS)</string>
@@ -861,6 +906,10 @@
     <string name="clock_sync_unknown">no decodes</string>
     <!-- %1$s = signed offset e.g. "+0.1 s"; %2$s = status word e.g. "in sync" -->
     <string name="clock_sync_cd">Clock sync: average decode offset %1$s, %2$s</string>
+    <string name="clock_sync_cd_auto">Clock sync: average decode offset %1$s, %2$s, %3$s</string>
+    <string name="clock_sync_badge_auto" translatable="false">AUTO</string>
+    <string name="clock_sync_badge_gps" translatable="false">GPS</string>
+    <string name="clock_sync_badge_ntp" translatable="false">NTP</string>
 
     <!-- ===== Settings: language picker ===== -->
     <string name="settings_language">Language</string>
@@ -884,6 +933,7 @@
     <string name="language_name_id" translatable="false">Bahasa Indonesia</string>
     <string name="language_name_uk" translatable="false">Українська</string>
     <string name="language_name_ar" translatable="false">العربية</string>
+    <string name="language_name_pt_br" translatable="false">Português (Brasil)</string>
 
     <string name="tx_audio_dropped">TX audio failed — no signal was sent this cycle (USB audio error)</string>
     <string name="cq_offset_moved">CQ offset moved to a clear spot: %1$d Hz</string>

@@ -16,8 +16,11 @@ import org.robolectric.RuntimeEnvironment
  * src/main/assets and Robolectric serves it to the test.
  *
  * The map is keyed by the uppercased first four characters of the grid; only a
- * couple of stable, documented entries are asserted directly (BK08 -> HI,
- * BO19 -> AK) plus the guard branches that short-circuit before any asset read.
+ * couple of stable, documented entries are asserted directly (BL11 -> HI is
+ * Honolulu, BP51 -> AK is Anchorage) plus the guard branches that short-circuit
+ * before any asset read. The table itself is generated — see
+ * scripts/generate-us-grid-states.mjs — so anchors are city grids that no
+ * regeneration can plausibly move, not arbitrary cells.
  */
 @RunWith(RobolectricTestRunner::class)
 class UsStateLookupTest {
@@ -37,28 +40,28 @@ class UsStateLookupTest {
     @Test
     fun stateFromGrid_tooShortGrid_returnsNull() {
         // Fewer than 4 characters cannot key the 4-char map.
-        assertThat(UsStateLookup.stateFromGrid(context, "BK0")).isNull()
+        assertThat(UsStateLookup.stateFromGrid(context, "BL1")).isNull()
     }
 
     @Test
     fun stateFromGrid_knownHawaiiGrid_returnsHI() {
-        assertThat(UsStateLookup.stateFromGrid(context, "BK08")).isEqualTo("HI")
+        assertThat(UsStateLookup.stateFromGrid(context, "BL11")).isEqualTo("HI")
     }
 
     @Test
     fun stateFromGrid_knownAlaskaGrid_returnsAK() {
-        assertThat(UsStateLookup.stateFromGrid(context, "BO19")).isEqualTo("AK")
+        assertThat(UsStateLookup.stateFromGrid(context, "BP51")).isEqualTo("AK")
     }
 
     @Test
     fun stateFromGrid_lowercaseGrid_isUppercasedBeforeLookup() {
-        assertThat(UsStateLookup.stateFromGrid(context, "bk08")).isEqualTo("HI")
+        assertThat(UsStateLookup.stateFromGrid(context, "bl11")).isEqualTo("HI")
     }
 
     @Test
     fun stateFromGrid_usesOnlyFirstFourCharacters() {
         // A 6-character grid (subsquare appended) keys on its first four chars.
-        assertThat(UsStateLookup.stateFromGrid(context, "BK08aa")).isEqualTo("HI")
+        assertThat(UsStateLookup.stateFromGrid(context, "BL11ah")).isEqualTo("HI")
     }
 
     @Test
@@ -76,7 +79,7 @@ class UsStateLookupTest {
         val previous = Locale.getDefault()
         try {
             Locale.setDefault(Locale("tr", "TR"))
-            assertThat(UsStateLookup.stateFromGrid(context, "bk08")).isEqualTo("HI")
+            assertThat(UsStateLookup.stateFromGrid(context, "bl11")).isEqualTo("HI")
         } finally {
             Locale.setDefault(previous)
         }

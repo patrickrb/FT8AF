@@ -150,6 +150,44 @@ final class PotaSpotsTests: XCTestCase {
         XCTAssertNil(PotaSpots.band(forFrequencyKhz: 144_174))  // 2m: not in the picker
     }
 
+    // MARK: - Activation-time refresh cadence
+
+    private let interval: Int64 = 60_000
+
+    func testShouldRefreshTrueWhenActivatingAndNeverRefreshed() {
+        XCTAssertTrue(PotaSpots.shouldRefreshPotaSpots(
+            isActivating: true, lastRefreshMs: nil, nowMs: 1_000_000, intervalMs: interval))
+    }
+
+    func testShouldRefreshTrueWhenActivatingAndStale() {
+        // Last refresh well beyond the interval.
+        XCTAssertTrue(PotaSpots.shouldRefreshPotaSpots(
+            isActivating: true, lastRefreshMs: 0, nowMs: 90_000, intervalMs: interval))
+    }
+
+    func testShouldRefreshFalseWhenNotActivating() {
+        // Even with no prior refresh, an idle app must not poll the feed.
+        XCTAssertFalse(PotaSpots.shouldRefreshPotaSpots(
+            isActivating: false, lastRefreshMs: nil, nowMs: 1_000_000, intervalMs: interval))
+        XCTAssertFalse(PotaSpots.shouldRefreshPotaSpots(
+            isActivating: false, lastRefreshMs: 0, nowMs: 90_000, intervalMs: interval))
+    }
+
+    func testShouldRefreshFalseWhenActivatingButWithinInterval() {
+        // Refreshed 59 s ago — the Hunt tab (or a prior activation tick) just
+        // fetched, so don't double-fetch.
+        XCTAssertFalse(PotaSpots.shouldRefreshPotaSpots(
+            isActivating: true, lastRefreshMs: 1_000, nowMs: 60_000, intervalMs: interval))
+    }
+
+    func testShouldRefreshTrueAtExactlyIntervalBoundary() {
+        // Elapsed == intervalMs counts as due (>=), one ms less does not.
+        XCTAssertTrue(PotaSpots.shouldRefreshPotaSpots(
+            isActivating: true, lastRefreshMs: 0, nowMs: interval, intervalMs: interval))
+        XCTAssertFalse(PotaSpots.shouldRefreshPotaSpots(
+            isActivating: true, lastRefreshMs: 0, nowMs: interval - 1, intervalMs: interval))
+    }
+
     // MARK: - Helpers
 
     private func date(iso: String) -> Date {

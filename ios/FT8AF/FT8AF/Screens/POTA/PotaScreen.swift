@@ -15,6 +15,16 @@ struct PotaScreen: View {
     @State private var selectedTab: PotaTab = .hunt
     @State private var shareURLs: [URL] = []
     @State private var showShare = false
+    @State private var showParkPicker = false
+    /// True while a self-spot POST is in flight (drives the button spinner and
+    /// prevents double-posts). One user tap per activation — never automatic.
+    @State private var isSelfSpotting = false
+    /// True while an authenticated ADIF upload is in flight (button spinner).
+    @State private var isUploading = false
+    /// Presents the hosted-UI OAuth WebView. Set when an upload needs sign-in.
+    @State private var showLogin = false
+    /// The activation to (re-)upload once sign-in completes.
+    @State private var pendingUploadActivation: PotaActivationRecord?
 
     private var spotService: PotaService { PotaService.shared }
 
@@ -78,6 +88,33 @@ struct PotaScreen: View {
         .sheet(isPresented: $showShare) {
             PotaShareSheet(items: shareURLs)
         }
+        .sheet(isPresented: $showLogin) {
+            PotaLoginSheet { success in
+                showLogin = false
+                // On a successful sign-in, resume the upload that triggered it.
+                if success, let activation = pendingUploadActivation {
+                    uploadActivation(activation)
+                }
+                pendingUploadActivation = nil
+            }
+        }
+        .sheet(isPresented: $showParkPicker) {
+            ParkPickerSheet(
+                myGrid: appState.settings.myGrid,
+                recentRefs: recentParkRefs
+            ) { reference in
+                appState.pota.parkInput = reference
+            }
+        }
+    }
+
+    /// Park references from activation history, newest first, for the picker's
+    /// "Recent" section. Each record's `parkRef` may be comma-joined (two-fers);
+    /// the picker splits + dedupes via `PotaParks.deduplicateRefs`.
+    private var recentParkRefs: [String] {
+        appState.pota.activations
+            .sorted { $0.startedAtMs > $1.startedAtMs }
+            .map(\.parkRef)
     }
 
     // MARK: - Activation persistence
@@ -135,6 +172,32 @@ struct PotaScreen: View {
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
                 }
+                .padding(.horizontal, 40)
+
+                // Search parks (recent + nearby picker); free-text entry above
+                // remains the fallback.
+                Button {
+                    showParkPicker = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.ft8afUI(size: 12, weight: .semibold))
+                        Text("Search parks")
+                            .font(.ft8afUI(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(accent)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 38)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(accent.opacity(0.12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .strokeBorder(accent.opacity(0.3), lineWidth: 1)
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
                 .padding(.horizontal, 40)
 
                 // Notes field
@@ -247,6 +310,69 @@ struct PotaScreen: View {
                             .strokeBorder(statusConfirmed.opacity(0.3), lineWidth: 1)
                     )
             )
+            .padding(.horizontal, 16)
+
+            // Self-spot to pota.app so hunters can find this activation. Explicit
+            // user action only (never automatic); posts the current dial + FT8
+            // for every park in the activation.
+            Button {
+                selfSpot(for: current)
+            } label: {
+                HStack(spacing: 6) {
+                    if isSelfSpotting {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(accent)
+                    } else {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                            .font(.ft8afUI(size: 13, weight: .semibold))
+                    }
+                    Text(isSelfSpotting ? "Spotting…" : "Self-Spot")
+                        .font(.ft8afUI(size: 14, weight: .bold))
+                }
+                .foregroundStyle(isSelfSpotting ? textFaint : accent)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(accent.opacity(isSelfSpotting ? 0.05 : 0.14))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .strokeBorder(accent.opacity(isSelfSpotting ? 0.1 : 0.3), lineWidth: 1)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(isSelfSpotting)
+            .padding(.horizontal, 16)
+
+            // Upload to POTA (authenticated). Signs in via the hosted-UI WebView
+            // first when there's no usable token, then uploads one file per park.
+            Button {
+                uploadActivation(current)
+            } label: {
+                HStack(spacing: 6) {
+                    if isUploading {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(bgApp)
+                    } else {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.ft8afUI(size: 13, weight: .semibold))
+                    }
+                    Text(isUploading ? "Uploading…" : "Upload to POTA")
+                        .font(.ft8afUI(size: 14, weight: .bold))
+                }
+                .foregroundStyle(bgApp)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(accent.opacity(qsoCount > 0 ? 1 : 0.4))
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(qsoCount == 0 || isUploading)
             .padding(.horizontal, 16)
 
             // Export ADIF (share sheet) — one file per park, MY_SIG_INFO pinned.
@@ -364,6 +490,47 @@ struct PotaScreen: View {
         return "\(mins)m"
     }
 
+    // MARK: - Self-spot
+
+    /// Post a POTA self-spot for the active activation so hunters can find it.
+    /// Mirrors Android's `onSelfSpot`: requires a callsign, spots every park ref
+    /// at the current dial + FT8, and toasts the outcome. Only reachable from the
+    /// active-session view, so an activation is always in progress.
+    private func selfSpot(for activation: PotaActivationRecord) {
+        guard !isSelfSpotting else { return }
+        let myCall = appState.settings.myCall.trimmingCharacters(in: .whitespaces)
+        guard !myCall.isEmpty else {
+            appState.toast.show("Set your callsign in Settings first", icon: "exclamationmark.triangle")
+            return
+        }
+        let refs = activation.parkRefs
+        guard !refs.isEmpty else { return }
+        let freqKhz = PotaSelfSpot.frequencyKhz(forBand: appState.settings.band)
+
+        isSelfSpotting = true
+        Task {
+            let outcome = await PotaSelfSpotService.shared.selfSpotAll(
+                activator: myCall,
+                spotter: myCall,
+                frequencyKhz: freqKhz,
+                mode: "FT8",
+                references: refs)
+            isSelfSpotting = false
+            if outcome.successCount == outcome.total {
+                let msg = outcome.total == 1
+                    ? "Spotted on pota.app"
+                    : "Spotted \(outcome.successCount) parks on pota.app"
+                appState.toast.show(msg, icon: "antenna.radiowaves.left.and.right")
+            } else if outcome.successCount > 0 {
+                appState.toast.show(
+                    "Spotted \(outcome.successCount)/\(outcome.total) parks",
+                    icon: "exclamationmark.triangle")
+            } else {
+                appState.toast.show("Self-spot failed", icon: "exclamationmark.triangle")
+            }
+        }
+    }
+
     // MARK: - ADIF export
 
     /// Build the per-park ADIF documents for an activation and hand them to the
@@ -390,6 +557,84 @@ struct PotaScreen: View {
         }
         shareURLs = urls
         showShare = true
+    }
+
+    // MARK: - Authenticated upload
+
+    /// Build the per-park ADIF documents and upload each to POTA's authenticated
+    /// `/adif` endpoint. Mirrors Android's `uploadActivation` + `startUpload`
+    /// flow: a missing/revoked token (or a 401) presents the hosted-UI login
+    /// WebView and, on success, resumes this upload. Failures are classified into
+    /// a user-facing toast.
+    private func uploadActivation(_ activation: PotaActivationRecord) {
+        guard !isUploading else { return }
+        let docs = Adif.potaActivationExport(
+            records: appState.logbook.records, activation: activation)
+        guard !docs.isEmpty else {
+            appState.toast.show("No QSOs in this activation yet", icon: "tree")
+            return
+        }
+
+        isUploading = true
+        Task {
+            guard let token = await PotaAuthService.shared.idToken() else {
+                // Never signed in / refresh token revoked — prompt for login and
+                // resume this upload when it succeeds.
+                isUploading = false
+                promptLogin(for: activation)
+                return
+            }
+
+            var uploaded = 0
+            var firstFailure: PotaUpload.FailureKind?
+            var needsLogin = false
+            for doc in docs {
+                let outcome = await PotaUploadService.shared.uploadAdif(
+                    idToken: token, filename: doc.filename, adif: doc.content)
+                switch outcome {
+                case .success:
+                    uploaded += 1
+                case .unauthorized:
+                    needsLogin = true
+                case .failure(let kind):
+                    if firstFailure == nil { firstFailure = kind }
+                }
+                if needsLogin { break }
+            }
+            isUploading = false
+
+            if needsLogin {
+                promptLogin(for: activation)
+            } else if uploaded == docs.count {
+                let msg = docs.count == 1
+                    ? "Uploaded to pota.app"
+                    : "Uploaded \(uploaded) parks to pota.app"
+                appState.toast.show(msg, icon: "checkmark.circle")
+            } else {
+                appState.toast.show(uploadFailureMessage(firstFailure),
+                                    icon: "exclamationmark.triangle")
+            }
+        }
+    }
+
+    private func promptLogin(for activation: PotaActivationRecord) {
+        pendingUploadActivation = activation
+        showLogin = true
+    }
+
+    /// Map an upload failure to a user-facing message, mirroring Android's
+    /// `UploadFailureKind` strings.
+    private func uploadFailureMessage(_ kind: PotaUpload.FailureKind?) -> String {
+        switch kind {
+        case .busy:
+            return "POTA is busy — try again in a moment"
+        case .serverError:
+            return "POTA rejected the log — check your park reference"
+        case .network:
+            return "Upload failed — check your connection"
+        case .other, nil:
+            return "Upload failed"
+        }
     }
 
     // MARK: - Hunt Tab
@@ -571,6 +816,23 @@ struct PotaScreen: View {
             Text("\(activation.qsoCount) QSO\(activation.qsoCount == 1 ? "" : "s")")
                 .font(.ft8afMono(size: 11, weight: .semibold))
                 .foregroundStyle(activation.qsoCount >= 10 ? statusConfirmed : textMuted)
+
+            if activation.qsoCount > 0 {
+                Button {
+                    uploadActivation(activation)
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.ft8afUI(size: 14, weight: .semibold))
+                        .foregroundStyle(accent)
+                        .frame(width: 34, height: 34)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(accent.opacity(0.14))
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(isUploading)
+            }
 
             Button {
                 exportAdif(for: activation)
