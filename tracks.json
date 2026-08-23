@@ -19,10 +19,10 @@
   ],
   "production": [
     {
-      "name": "2.0",
+      "name": "android-dev.1109",
       "status": "completed",
       "versionCodes": [
-        1327
+        2109
       ]
     }
   ]
