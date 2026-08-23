@@ -29,11 +29,59 @@ final class SntpTests: XCTestCase {
         let halfSecondFraction: UInt32 = 0x8000_0000 // 0.5 s
 
         var packet = [UInt8](repeating: 0, count: 48)
+        packet[0] = 0x24 // LI=0, VN=4, Mode=4 (server)
+        packet[1] = 1    // stratum 1 (primary)
         putBE(ntpSec, into: &packet, at: 40)
         putBE(halfSecondFraction, into: &packet, at: 44)
 
         let ms = Sntp.transmitTimeUnixMs(fromResponse: packet)
         XCTAssertEqual(ms, unixSec * 1_000 + 500)
+    }
+
+    // MARK: - Header validation
+
+    /// Build an otherwise-valid server response carrying a fixed timestamp, so a
+    /// test can flip one header byte and assert it is rejected.
+    private func validResponse(li: UInt8 = 0, mode: UInt8 = 4, stratum: UInt8 = 2) -> [UInt8] {
+        var packet = [UInt8](repeating: 0, count: 48)
+        packet[0] = (li << 6) | (4 << 3) | mode // VN=4
+        packet[1] = stratum
+        // NTP seconds 0xE8FE6F80 = 1_700_000_000 s Unix, fraction 0.5 s.
+        packet[40] = 0xE8; packet[41] = 0xFE; packet[42] = 0x6F; packet[43] = 0x80
+        packet[44] = 0x80
+        return packet
+    }
+
+    func testValidServerResponseAccepted() {
+        XCTAssertEqual(Sntp.transmitTimeUnixMs(fromResponse: validResponse()), 1_700_000_000_500)
+    }
+
+    func testRejectsUnsynchronizedLeapIndicator() {
+        // LI = 3 ("alarm", clock not synchronized) — even with a plausible timestamp.
+        XCTAssertNil(Sntp.transmitTimeUnixMs(fromResponse: validResponse(li: 3)))
+    }
+
+    func testRejectsNonServerMode() {
+        // Mode 3 (client) or 6 (control) is not a server-mode reply to our query.
+        XCTAssertNil(Sntp.transmitTimeUnixMs(fromResponse: validResponse(mode: 3)))
+        XCTAssertNil(Sntp.transmitTimeUnixMs(fromResponse: validResponse(mode: 6)))
+    }
+
+    func testRejectsKissOfDeathAndReservedStratum() {
+        // Stratum 0 = Kiss-o'-Death (no usable time); 16..255 are reserved.
+        XCTAssertNil(Sntp.transmitTimeUnixMs(fromResponse: validResponse(stratum: 0)))
+        XCTAssertNil(Sntp.transmitTimeUnixMs(fromResponse: validResponse(stratum: 16)))
+    }
+
+    // MARK: - Sane-offset bound
+
+    func testOffsetSaneBound() {
+        XCTAssertTrue(Sntp.isOffsetSane(0))
+        XCTAssertTrue(Sntp.isOffsetSane(Sntp.maxSaneOffsetMs))
+        XCTAssertTrue(Sntp.isOffsetSane(-Sntp.maxSaneOffsetMs))
+        XCTAssertFalse(Sntp.isOffsetSane(Sntp.maxSaneOffsetMs + 1))
+        // A year-scale jump (the failure the header/bound guards prevent) is rejected.
+        XCTAssertFalse(Sntp.isOffsetSane(365 * 24 * 60 * 60 * 1000))
     }
 
     // MARK: - Parse (literal captured bytes)

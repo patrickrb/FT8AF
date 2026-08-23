@@ -267,6 +267,17 @@ final class LiveEngine {
         appState.tx.huntEnabled.toggle()
     }
 
+    /// Apply the side effects of switching operating mode. FT4 is RX-only (see
+    /// `scheduleTx`), so leaving FT8 must stop any armed CQ/QSO and disarm Hunt —
+    /// otherwise the sequencer stays "active" while every transmit is rejected,
+    /// showing a silent TX state. Call this from every mode picker (TxStrip and
+    /// Settings) so the transition is identical wherever the mode is changed.
+    func handleModeChange(to newMode: Mode) {
+        guard !newMode.profile.isFT8 else { return }
+        if appState?.tx.isActivated == true { stopTx() }
+        if appState?.tx.huntEnabled == true { toggleHunt() }
+    }
+
     /// Switch TX slot parity (TX1 ↔ TX2).
     func toggleSlotParity() {
         guard let appState else { return }
