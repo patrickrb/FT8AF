@@ -32,7 +32,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -76,7 +75,7 @@ internal fun txStripActionState(isActivated: Boolean, huntEnabled: Boolean) = Tx
 
 /**
  * Label for the TUNE chip: the plain label when idle, "label countdown" while
- * the carrier is up (e.g. "TUNE 7s") so the operator sees the safety timeout
+ * the carrier is up (e.g. "Tune 7s") so the operator sees the safety timeout
  * running. Extracted so it can be unit-tested without Compose.
  */
 internal fun tuneChipLabel(label: String, isTuning: Boolean, remainingSec: Int): String =
@@ -100,49 +99,68 @@ internal fun cqStripSubtitle(
     else -> null
 }
 
+/**
+ * Which of the three status states the strip's status row shows, and whether the "next window"
+ * countdown should appear (only while Listening). Extracted so the mapping is unit-testable
+ * without Compose. The pulse-dot color is amber ([Accent]) for Tuning/Transmitting, cyan
+ * ([Signal]) for Listening.
+ */
+internal data class TxStatusVisuals(
+    val labelRes: Int,
+    val listening: Boolean,
+)
+
+internal fun txStatusVisuals(isTransmitting: Boolean, isTuning: Boolean): TxStatusVisuals = when {
+    isTuning -> TxStatusVisuals(R.string.tx_status_tuning, listening = false)
+    isTransmitting -> TxStatusVisuals(R.string.tx_status_transmitting, listening = false)
+    else -> TxStatusVisuals(R.string.tx_status_listening, listening = true)
+}
+
+/**
+ * The redesigned bottom-anchored TX strip (design option 3a). Rows: status + CAT chip, a
+ * tappable Band & Mode card, the primary Call CQ button (with an attached MORE split-button)
+ * alongside the Hunt tile, then the TX-period segmented control with Tune / DX. The slot
+ * progress bar and clock-sync pill stay in the separate [SlotTimerBar] rendered just above.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TxStrip(
     isTransmitting: Boolean,
     isActivated: Boolean,
-    frequencyLabel: String,
+    bandModeLabel: String,
+    slotMillis: Long,
     txSlot: Int,
     huntEnabled: Boolean,
-    modeName: String,
-    modeSwitchEnabled: Boolean,
+    huntOptionLabel: String,
+    onCallCQ: () -> Unit,
+    onStop: () -> Unit,
+    onSelectTxPeriod: (Int) -> Unit,
+    onToggleHunt: () -> Unit,
+    onOpenHuntOptions: () -> Unit,
+    onOpenBandMode: () -> Unit,
+    isTuning: Boolean = false,
     dxEnabled: Boolean = false,
     catState: CatConnectionState = CatConnectionState.DISCONNECTED,
     showCatChip: Boolean = false,
-    expanded: Boolean = false,
     txVolume: Int = 80,
     showVolumeSlider: Boolean = false,
     cqModifier: String = "",
     isFreeTextMode: Boolean = false,
     fieldDayEnabled: Boolean = false,
-    huntPriorityTag: String? = null,
-    isTuning: Boolean = false,
     tuneRemainingSec: Int = 0,
     onToggleTune: () -> Unit = {},
     onVolumeChange: (Int) -> Unit = {},
     onVolumeChangeFinished: () -> Unit = {},
-    onCallCQ: () -> Unit,
-    onStop: () -> Unit,
-    onLongPressCQ: () -> Unit = {},
-    onLongPressHunt: () -> Unit = {},
-    onToggleSlot: () -> Unit,
-    onToggleHunt: () -> Unit,
-    onCycleMode: () -> Unit,
+    onOpenCqOptions: () -> Unit = {},
     onToggleDx: () -> Unit = {},
     onReconnectCat: () -> Unit = {},
-    onOpenFrequencyPicker: () -> Unit,
-    onToggleExpand: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val bgColor = if (isTransmitting) {
         Brush.horizontalGradient(
             listOf(
-                Color(0x1FFFAF5E),  // rgba(255,175,94,0.12)
-                Color(0x0AFFAF5E),  // rgba(255,175,94,0.04)
+                Color(0x1FFFAF5E), // rgba(255,175,94,0.12)
+                Color(0x0AFFAF5E), // rgba(255,175,94,0.04)
             )
         )
     } else {
@@ -151,10 +169,6 @@ fun TxStrip(
 
     val actions = txStripActionState(isActivated, huntEnabled)
 
-    // Two stacked rows (vs. the old single cramped FlowRow): an info line with the small
-    // status/mode/frequency/DX chips, and a row of three large primary buttons
-    // (HUNT · CQ/STOP · TX slot) sized like the design prototype so the main action is a
-    // comfortable tap target on a phone.
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -167,199 +181,138 @@ fun TxStrip(
                     strokeWidth = 1f,
                 )
             }
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        // ---- Info row: status (left) · mode / frequency / DX chips (right) ----
+        // ---- Row 1: status + CAT chip ----
+        val status = txStatusVisuals(isTransmitting, isTuning)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            // Left: expand chevron (when QSO active) + pulse dot + state + CAT chip.
-            // weight(1f, fill=false) lets the status label ellipsize before it can shove
-            // the right-hand chips off screen on a narrow device.
             Row(
                 modifier = Modifier.weight(1f, fill = false),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (isActivated) {
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable { onToggleExpand() }
-                            .rotate(if (expanded) 0f else 180f),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        FT8AFIcons.ChevronDown(size = 14.dp, color = TextMuted, strokeWidth = 2f)
+                PulseDot(color = if (status.listening) Signal else Accent)
+                Column {
+                    Text(
+                        text = stringResource(status.labelRes),
+                        color = TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = InterFamily,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (status.listening) {
+                        NextTxWindowLabel(slotMillis = slotMillis, txSlot = txSlot)
                     }
                 }
-                PulseDot(color = if (isTransmitting) Accent else Signal)
-                Text(
-                    text = if (isTransmitting) stringResource(R.string.tx_transmitting)
-                    else stringResource(R.string.tx_listening),
-                    color = TextPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = GeistMonoFamily,
-                    letterSpacing = 0.02.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (showCatChip) {
-                    CatStatusChip(state = catState, onReconnect = onReconnectCat)
-                }
             }
-
-            // Right: mode pill, frequency/band pill, DX pill.
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                // Mode pill (FT8/FT4/FT2) — taps cycle the operating mode. Disabled
-                // mid-transmit so we never switch the cycle out from under a live TX.
-                TxChip(
-                    label = modeName,
-                    background = if (modeSwitchEnabled) Accent.copy(alpha = 0.18f) else BgSurface3,
-                    textColor = if (modeSwitchEnabled) Accent else TextFaint,
-                    bold = true,
-                    enabled = modeSwitchEnabled,
-                    onClick = onCycleMode,
-                )
-
-                // Frequency / band pill — opens the frequency picker.
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(BgSurface3)
-                        .clickable { onOpenFrequencyPicker() }
-                        .padding(horizontal = 10.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        text = frequencyLabel,
-                        color = TextPrimary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = GeistMonoFamily,
-                        letterSpacing = 0.02.sp,
-                        maxLines = 1,
-                        softWrap = false,
-                    )
-                    FT8AFIcons.ChevronDown(size = 12.dp, color = TextMuted, strokeWidth = 2f)
-                }
-
-                // DX (DXpedition Hound) toggle pill. On = working a Fox (call high,
-                // auto-QSY when answered). Mutually exclusive with HUNT/CQ.
-                TxChip(
-                    label = "DX",
-                    background = if (dxEnabled) Accent.copy(alpha = 0.18f) else BgSurface3,
-                    textColor = if (dxEnabled) Accent else TextMuted,
-                    bold = false,
-                    enabled = true,
-                    onClick = onToggleDx,
-                )
-
-                // TUNE toggle pill (issue #408): tap keys a steady carrier at the
-                // TX offset for antenna/amplifier tuning; tap again stops it. While
-                // active it turns red and counts down the code-enforced safety
-                // timeout. Locked off while the sequencer is armed/transmitting —
-                // tune and FT8 TX are mutually exclusive.
-                val tuneDescription = stringResource(R.string.tune_content_description)
-                Box(modifier = Modifier.semantics { contentDescription = tuneDescription }) {
-                    TxChip(
-                        label = tuneChipLabel(
-                            stringResource(R.string.tune_button), isTuning, tuneRemainingSec,
-                        ),
-                        background = when {
-                            isTuning -> StatusBad
-                            isActivated || isTransmitting -> BgSurface3.copy(alpha = 0.4f)
-                            else -> BgSurface3
-                        },
-                        textColor = when {
-                            isTuning -> Color.White
-                            isActivated || isTransmitting -> TextMuted.copy(alpha = 0.4f)
-                            else -> TextMuted
-                        },
-                        bold = isTuning,
-                        enabled = isTuning || (!isActivated && !isTransmitting),
-                        onClick = onToggleTune,
-                    )
-                }
+            if (showCatChip) {
+                CatStatusChip(state = catState, onReconnect = onReconnectCat)
             }
         }
 
-        // ---- Action row: HUNT · CQ/STOP · TX slot ----
+        // ---- Row 2: band & mode row (opens the Band & Mode sheet) ----
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(BgSurface3)
+                .border(1.dp, Border, RoundedCornerShape(12.dp))
+                .clickable { onOpenBandMode() }
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = stringResource(R.string.tx_band_mode_label),
+                color = TextFaint,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = InterFamily,
+                letterSpacing = 0.8.sp,
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = bandModeLabel,
+                    color = TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = GeistMonoFamily,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+                FT8AFIcons.ChevronDown(size = 14.dp, color = TextMuted, strokeWidth = 2f)
+            }
+        }
+
+        // ---- Row 3: Call CQ (+ MORE) · Hunt tile ----
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // HUNT — stacked icon + label. Locked off during an active CQ/QSO.
-            // The notch (and a long-press) opens the Hunt options sheet; the
-            // subtitle tag mirrors the armed non-default priority (like the CQ
-            // button's FREE/FD subtitle).
-            StackedActionButton(
-                modifier = Modifier.weight(1f),
-                label = stringResource(R.string.tx_hunt),
-                subtitle = huntPriorityTag,
-                background = when {
-                    actions.huntDisabled -> BgSurface3.copy(alpha = 0.4f)
-                    actions.huntActive -> Signal.copy(alpha = 0.18f)
-                    else -> BgSurface3
-                },
-                contentColor = when {
-                    actions.huntDisabled -> TextMuted.copy(alpha = 0.4f)
-                    actions.huntActive -> Signal
-                    else -> TextMuted
-                },
-                borderColor = if (actions.huntActive) Signal.copy(alpha = 0.5f) else Border,
-                enabled = !actions.huntDisabled,
-                onClick = onToggleHunt,
-                onLongClick = onLongPressHunt,
-                optionsContentDescription = stringResource(R.string.tx_hunt_options),
-            ) { color -> FT8AFIcons.Target(size = 18.dp, color = color, strokeWidth = 1.8f) }
-
-            // CQ / STOP — the primary action. Filled amber to call CQ, red to stop.
-            // Locked off while HUNT is armed (and no QSO yet).
-            // Long-press opens CQ options (modifier, free text, Field Day).
             val cqIsStop = actions.cqIsStop
-            val cqSubtitle = cqStripSubtitle(cqIsStop, isFreeTextMode, fieldDayEnabled, cqModifier)
-            PrimaryActionButton(
-                modifier = Modifier.weight(1.7f),
-                label = if (cqIsStop) stringResource(R.string.tx_stop) else stringResource(R.string.tx_call_cq),
+            val variantSubtitle = cqStripSubtitle(cqIsStop, isFreeTextMode, fieldDayEnabled, cqModifier)
+            val cqSubtitle = variantSubtitle
+                ?: if (!cqIsStop) stringResource(R.string.tx_call_cq_subtitle) else null
+            CallCqButton(
+                modifier = Modifier.weight(1.6f),
+                cqIsStop = cqIsStop,
+                cqDisabled = actions.cqDisabled,
                 subtitle = cqSubtitle,
-                background = when {
-                    cqIsStop -> StatusBad
-                    actions.cqDisabled -> Accent.copy(alpha = 0.35f)
-                    else -> Accent
-                },
-                contentColor = if (cqIsStop) Color.White else BgApp,
-                enabled = !actions.cqDisabled,
                 onClick = { if (cqIsStop) onStop() else onCallCQ() },
-                onLongClick = if (!cqIsStop) onLongPressCQ else null,
+                onOpenOptions = onOpenCqOptions,
                 optionsContentDescription = stringResource(R.string.tx_cq_options),
-            ) { color ->
-                if (cqIsStop) {
-                    FT8AFIcons.Close(size = 18.dp, color = color, strokeWidth = 2f)
-                } else {
-                    FT8AFIcons.Transmit(size = 18.dp, color = color, strokeWidth = 1.8f)
-                }
-            }
+                moreLabel = stringResource(R.string.tx_more),
+            )
 
-            // TX time-slot toggle — stacked arrow + TX1/TX2.
-            StackedActionButton(
+            HuntTile(
                 modifier = Modifier.weight(1f),
-                label = if (txSlot == 0) "TX1" else "TX2",
-                background = BgSurface3,
-                contentColor = TextMuted,
-                borderColor = Border,
+                huntEnabled = actions.huntActive,
+                huntDisabled = actions.huntDisabled,
+                optionLabel = huntOptionLabel,
+                onToggle = onToggleHunt,
+                onOpenOptions = onOpenHuntOptions,
+                optionsContentDescription = stringResource(R.string.tx_hunt_options),
+            )
+        }
+
+        // ---- Row 4: TX period segmented control · Tune · DX ----
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TxPeriodControl(
+                modifier = Modifier.weight(1.7f),
+                txSlot = txSlot,
+                onSelect = onSelectTxPeriod,
+            )
+            val tuneEnabled = isTuning || (!isActivated && !isTransmitting)
+            SecondaryButton(
+                modifier = Modifier.weight(0.45f),
+                label = tuneChipLabel(stringResource(R.string.tune_button), isTuning, tuneRemainingSec),
+                active = isTuning,
+                enabled = tuneEnabled,
+                onClick = onToggleTune,
+            )
+            SecondaryButton(
+                modifier = Modifier.weight(0.45f),
+                label = stringResource(R.string.tx_dx),
+                active = dxEnabled,
                 enabled = true,
-                onClick = onToggleSlot,
-            ) { color -> FT8AFIcons.ArrowUp(size = 18.dp, color = color, strokeWidth = 1.8f) }
+                onClick = onToggleDx,
+            )
         }
 
         // ---- Inline TX volume slider (togglable from Settings) ----
@@ -371,7 +324,6 @@ fun TxStrip(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                // Minus button
                 Box(
                     modifier = Modifier
                         .size(36.dp)
@@ -385,7 +337,7 @@ fun TxStrip(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "\u2212", // minus sign
+                        text = "−",
                         color = TextMuted,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
@@ -393,12 +345,9 @@ fun TxStrip(
                     )
                 }
 
-                // Slider
                 IntSlider(
                     value = txVolume,
-                    onValueChange = { v ->
-                        onVolumeChange(v.coerceIn(0, 100))
-                    },
+                    onValueChange = { v -> onVolumeChange(v.coerceIn(0, 100)) },
                     onValueChangeFinished = onVolumeChangeFinished,
                     valueRange = 0f..100f,
                     modifier = Modifier.weight(1f),
@@ -406,7 +355,6 @@ fun TxStrip(
                     activeTrackColor = Accent,
                 )
 
-                // Plus button
                 Box(
                     modifier = Modifier
                         .size(36.dp)
@@ -428,7 +376,6 @@ fun TxStrip(
                     )
                 }
 
-                // Percentage label
                 Text(
                     text = "${txVolume}%",
                     color = TextPrimary,
@@ -442,208 +389,325 @@ fun TxStrip(
     }
 }
 
-/** A small rounded text chip (mode / DX). Keeps button semantics when disabled. */
+/**
+ * The primary Call CQ button (72dp): amber with a stacked label + helper subtitle and an
+ * attached "MORE" split button that opens the CQ-variant options. Turns into the red STOP
+ * button (centered, no split) once a CQ/QSO is running.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TxChip(
+private fun CallCqButton(
+    cqIsStop: Boolean,
+    cqDisabled: Boolean,
+    subtitle: String?,
+    onClick: () -> Unit,
+    onOpenOptions: () -> Unit,
+    optionsContentDescription: String,
+    moreLabel: String,
+    modifier: Modifier = Modifier,
+) {
+    val background = when {
+        cqIsStop -> StatusBad
+        cqDisabled -> Accent.copy(alpha = 0.35f)
+        else -> Accent
+    }
+    val contentColor = if (cqIsStop) Color.White else BgApp
+
+    Row(
+        modifier = modifier
+            .height(72.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(background)
+            .combinedClickable(
+                enabled = !cqDisabled,
+                onClick = onClick,
+                onLongClick = if (!cqIsStop) onOpenOptions else null,
+            )
+            .padding(start = if (cqIsStop) 12.dp else 16.dp, end = if (cqIsStop) 12.dp else 4.dp),
+        horizontalArrangement = if (cqIsStop) {
+            Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+        } else {
+            Arrangement.SpaceBetween
+        },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (cqIsStop) {
+            FT8AFIcons.Close(size = 18.dp, color = contentColor, strokeWidth = 2f)
+            Text(
+                text = stringResource(R.string.tx_stop),
+                color = contentColor,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = InterFamily,
+                maxLines = 1,
+                softWrap = false,
+            )
+        } else {
+            Column {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FT8AFIcons.Transmit(size = 20.dp, color = contentColor, strokeWidth = 1.8f)
+                    Text(
+                        text = stringResource(R.string.tx_call_cq),
+                        color = contentColor,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = InterFamily,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        color = contentColor.copy(alpha = 0.65f),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontFamily = InterFamily,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
+
+            // Attached MORE split button — a discoverable, separately-tappable affordance
+            // for the CQ options (the whole button also long-presses to the same menu).
+            Column(
+                modifier = Modifier
+                    .size(width = 48.dp, height = 60.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(contentColor.copy(alpha = 0.16f))
+                    .clickable(enabled = !cqDisabled, onClick = onOpenOptions)
+                    .semantics { role = Role.Button; contentDescription = optionsContentDescription },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+            ) {
+                FT8AFIcons.ChevronDown(size = 18.dp, color = contentColor, strokeWidth = 2.2f)
+                Text(
+                    text = moreLabel,
+                    color = contentColor.copy(alpha = 0.65f),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = InterFamily,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The Hunt tile (72dp): tapping the tile toggles Hunt; the amber chip shows the active hunt
+ * option and, when tapped, opens the hunt-options picker. Dimmed and locked while a CQ/QSO is
+ * running (Hunt and calling CQ are mutually exclusive).
+ */
+@Composable
+private fun HuntTile(
+    huntEnabled: Boolean,
+    huntDisabled: Boolean,
+    optionLabel: String,
+    onToggle: () -> Unit,
+    onOpenOptions: () -> Unit,
+    optionsContentDescription: String,
+    modifier: Modifier = Modifier,
+) {
+    val contentAlpha = if (huntDisabled) 0.4f else 1f
+    Column(
+        modifier = modifier
+            .height(72.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (huntDisabled) BgSurface3.copy(alpha = 0.4f) else BgSurface3)
+            .border(1.dp, Border, RoundedCornerShape(14.dp))
+            .clickable(enabled = !huntDisabled) { onToggle() }
+            .padding(horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            FT8AFIcons.Target(size = 18.dp, color = TextMuted.copy(alpha = contentAlpha), strokeWidth = 1.8f)
+            Text(
+                text = stringResource(R.string.tx_hunt),
+                color = TextPrimary.copy(alpha = contentAlpha),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = InterFamily,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
+        HuntChip(
+            label = optionLabel,
+            active = huntEnabled,
+            enabled = !huntDisabled,
+            onClick = onOpenOptions,
+            contentDescription = optionsContentDescription,
+        )
+    }
+}
+
+@Composable
+private fun HuntChip(
     label: String,
-    background: Color,
-    textColor: Color,
-    bold: Boolean,
+    active: Boolean,
     enabled: Boolean,
+    onClick: () -> Unit,
+    contentDescription: String,
+) {
+    Row(
+        modifier = Modifier
+            .height(22.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(if (active) AccentSoft else BgSurface)
+            .then(
+                if (active) Modifier.border(1.dp, BorderAmber, RoundedCornerShape(999.dp))
+                else Modifier
+            )
+            .clickable(enabled = enabled, onClickLabel = contentDescription) { onClick() }
+            .semantics { role = Role.Button; this.contentDescription = contentDescription }
+            .padding(horizontal = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = label,
+            color = if (active) Accent else TextFaint,
+            fontSize = 10.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = InterFamily,
+            maxLines = 1,
+            softWrap = false,
+        )
+        FT8AFIcons.ChevronDown(
+            size = 10.dp,
+            color = if (active) Accent else TextFaint,
+            strokeWidth = 2.4f,
+        )
+    }
+}
+
+/**
+ * The TX-period card (52dp): a label plus a two-segment control choosing the 1st (even) or
+ * 2nd (odd) transmit slot. [txSlot] 0 selects "1st (even)", 1 selects "2nd (odd)".
+ */
+@Composable
+private fun TxPeriodControl(
+    txSlot: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .height(52.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(BgSurface3)
+            .border(1.dp, Border, RoundedCornerShape(12.dp))
+            .padding(start = 12.dp, end = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.tx_period_label),
+            color = TextFaint,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = InterFamily,
+            letterSpacing = 0.6.sp,
+            maxLines = 1,
+            softWrap = false,
+        )
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(9.dp))
+                .background(BgSurface)
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            PeriodSegment(
+                label = stringResource(R.string.tx_period_first),
+                selected = txSlot == 0,
+                modifier = Modifier.weight(1f),
+                onClick = { if (txSlot != 0) onSelect(0) },
+            )
+            PeriodSegment(
+                label = stringResource(R.string.tx_period_second),
+                selected = txSlot == 1,
+                modifier = Modifier.weight(1f),
+                onClick = { if (txSlot != 1) onSelect(1) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PeriodSegment(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(background)
-            // Disable via clickable(enabled=…) rather than dropping the modifier, so the
-            // chip keeps its button semantics and TalkBack still announces it as a disabled
-            // control instead of vanishing from accessibility entirely.
-            .clickable(enabled = enabled) { onClick() }
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+        modifier = modifier
+            .height(36.dp)
+            .clip(RoundedCornerShape(7.dp))
+            .background(if (selected) Accent.copy(alpha = 0.18f) else Color.Transparent)
+            .clickable { onClick() }
+            .padding(horizontal = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            color = textColor,
+            color = if (selected) Accent else TextMuted,
             fontSize = 11.sp,
-            fontWeight = if (bold) FontWeight.Bold else FontWeight.SemiBold,
-            fontFamily = GeistMonoFamily,
-            letterSpacing = 0.02.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            fontFamily = InterFamily,
             maxLines = 1,
             softWrap = false,
         )
     }
 }
 
-/** A large secondary button with the icon stacked above the label (HUNT, TX slot). */
-@OptIn(ExperimentalFoundationApi::class)
+/** A small 52dp secondary button (Tune / DX): amber-tinted when active, muted otherwise. */
 @Composable
-private fun StackedActionButton(
+private fun SecondaryButton(
     label: String,
-    background: Color,
-    contentColor: Color,
-    borderColor: Color,
+    active: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    subtitle: String? = null,
-    onLongClick: (() -> Unit)? = null,
-    optionsContentDescription: String = "",
-    icon: @Composable (Color) -> Unit,
 ) {
-    Row(
+    Box(
         modifier = modifier
-            .height(54.dp)
+            .height(52.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(background)
-            .border(1.dp, borderColor, RoundedCornerShape(12.dp))
-            .combinedClickable(
-                enabled = enabled,
-                onClick = onClick,
-                onLongClick = onLongClick,
+            .background(if (active) Accent.copy(alpha = 0.18f) else BgSurface3)
+            .border(
+                1.dp,
+                if (active) Accent.copy(alpha = 0.28f) else Border,
+                RoundedCornerShape(12.dp),
             )
-            .padding(horizontal = 4.dp, vertical = if (subtitle != null) 4.dp else 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 6.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(
-                if (subtitle != null) 1.dp else 3.dp, Alignment.CenterVertically,
-            ),
-        ) {
-            icon(contentColor)
-            Text(
-                text = label,
-                color = contentColor,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = GeistMonoFamily,
-                letterSpacing = 0.02.sp,
-                maxLines = 1,
-                softWrap = false,
-            )
-            if (subtitle != null) {
-                Text(
-                    text = subtitle,
-                    color = contentColor.copy(alpha = 0.6f),
-                    fontSize = 8.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = GeistMonoFamily,
-                    letterSpacing = 0.02.sp,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
-        }
-        if (onLongClick != null) {
-            // Same visible "more options" affordance as the CQ button — a plain
-            // tap opens the options sheet (discoverable), long-press on the whole
-            // button is the shortcut.
-            Box(
-                modifier = Modifier
-                    .size(width = 22.dp, height = 38.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(contentColor.copy(alpha = 0.16f))
-                    .clickable(enabled = enabled, onClick = onLongClick)
-                    .semantics {
-                        role = Role.Button
-                        contentDescription = optionsContentDescription
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                FT8AFIcons.ChevronDown(size = 14.dp, color = contentColor, strokeWidth = 2.2f)
-            }
-        }
-    }
-}
-
-/** The large primary button with the icon beside the label (CQ / STOP). */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun PrimaryActionButton(
-    label: String,
-    background: Color,
-    contentColor: Color,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    subtitle: String? = null,
-    onLongClick: (() -> Unit)? = null,
-    optionsContentDescription: String = "",
-    icon: @Composable (Color) -> Unit,
-) {
-    Row(
-        modifier = modifier
-            .height(54.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(background)
-            .combinedClickable(
-                enabled = enabled,
-                onClick = onClick,
-                onLongClick = onLongClick,
-            )
-            .padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        icon(contentColor)
-        if (subtitle != null) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = label,
-                    color = contentColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = GeistMonoFamily,
-                    letterSpacing = 0.04.sp,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-                Text(
-                    text = subtitle,
-                    color = contentColor.copy(alpha = 0.6f),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = GeistMonoFamily,
-                    letterSpacing = 0.02.sp,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
-        } else {
-            Text(
-                text = label,
-                color = contentColor,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = GeistMonoFamily,
-                letterSpacing = 0.04.sp,
-                maxLines = 1,
-                softWrap = false,
-            )
-        }
-        if (onLongClick != null) {
-            // A visible, separately-tappable "more options" affordance. A plain tap opens the
-            // CQ options sheet (discoverable), and the whole button still long-presses to the
-            // same sheet as a shortcut. Without this the sheet was effectively hidden — a tester
-            // reported they'd never have found the long-press.
-            Box(
-                modifier = Modifier
-                    .size(width = 30.dp, height = 38.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(contentColor.copy(alpha = 0.16f))
-                    .clickable(enabled = enabled, onClick = onLongClick)
-                    .semantics {
-                        role = Role.Button
-                        contentDescription = optionsContentDescription
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                FT8AFIcons.ChevronDown(size = 16.dp, color = contentColor, strokeWidth = 2.2f)
-            }
-        }
+        Text(
+            text = label,
+            color = when {
+                active -> Accent
+                enabled -> TextMuted
+                else -> TextMuted.copy(alpha = 0.4f)
+            },
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = InterFamily,
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 
@@ -673,17 +737,15 @@ private fun PulseDot(color: Color) {
         modifier = Modifier.size(22.dp),
         contentAlignment = Alignment.Center,
     ) {
-        // Pulse ring
         Box(
             modifier = Modifier
-                .size((6 + pulseSize * 2).dp)
+                .size((7 + pulseSize * 2).dp)
                 .clip(CircleShape)
                 .background(color.copy(alpha = pulseAlpha * 0.18f))
         )
-        // Solid dot
         Box(
             modifier = Modifier
-                .size(6.dp)
+                .size(7.dp)
                 .clip(CircleShape)
                 .background(color)
         )
