@@ -572,8 +572,11 @@ final class LiveEngine {
 
         // Keep the live POTA spot cache warm while an activation is running so
         // park-to-park QSO stamping can resolve worked calls even when the Hunt
-        // tab (the only other refresh driver) isn't visible.
-        maybeRefreshPotaSpotsForActivation(nowMs: nowMs)
+        // tab (the only other refresh driver) isn't visible. Rate-limited against
+        // PotaService.lastRefreshMs, which is stamped from raw Date() — so pass the
+        // raw wall clock (not the NTP/DT-corrected nowMs) or a backwards clock
+        // correction makes the delta negative and suppresses refreshes.
+        maybeRefreshPotaSpotsForActivation(nowMs: Int64(Date().timeIntervalSince1970 * 1000))
 
         // Log incoming RX messages addressed to us for the conversation panel.
         let myCall = settings.myCall.uppercased()

@@ -160,4 +160,28 @@ final class SubtractDecodeTests: XCTestCase {
 
         XCTAssertEqual(deepOff, single, "deep-off decodeSlotDeep equals a single pass")
     }
+
+    /// The subtract loop re-synthesizes FT8 tones, so it must run for FT8 only.
+    /// The `isFT8` flag the gate keys on is set from the initializer; guard the
+    /// wiring so an FT4 decoder can't silently start FT8-tone subtraction.
+    func testIsFt8FlagGatesSubtraction() {
+        XCTAssertTrue(FT8Decoder(isFT8: true).isFT8, "default/FT8 decoder reports FT8")
+        XCTAssertFalse(FT8Decoder(isFT8: false).isFT8, "FT4 decoder reports non-FT8")
+
+        // An FT4 deep decoder must run the single pass only (subtract loop gated
+        // off), so decodeSlotDeep never diverges from findSync + decodeAll.
+        guard let s = mixedSlot([("CQ K1ABC FN42", 1500, 0.5)]) else { return XCTFail("encode") }
+
+        let deep = FT8Decoder(isFT8: false)
+        deep.setDeep(true)
+        deep.feedSlot(s)
+        let ft4Deep = Set(deep.decodeSlotDeep().map { $0.rawText })
+
+        let single = FT8Decoder(isFT8: false)
+        single.feedSlot(s)
+        single.findSync()
+        let ft4Single = Set(single.decodeAll().map { $0.rawText })
+
+        XCTAssertEqual(ft4Deep, ft4Single, "FT4 decodeSlotDeep is a single pass (subtraction gated off)")
+    }
 }

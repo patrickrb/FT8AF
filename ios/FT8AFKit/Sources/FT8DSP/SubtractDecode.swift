@@ -48,7 +48,13 @@ public extension FT8Decoder {
     func decodeSlotDeep() -> [DecodedMessage] {
         findSync()
         var all = decodeAll()
-        guard isDeep else { return all }
+        // The subtract-and-redecode loop re-synthesizes FT8 tones (79 tones, BT 2.0,
+        // 0.160 s symbol) via `ft8_subtract_signal_time`, so it is only correct for FT8.
+        // In FT4 mode it would subtract the wrong waveform from the captured slot and
+        // pollute the residual, hurting subsequent weak-signal passes — so FT4 (and any
+        // non-FT8 protocol) runs the single decode pass only until the native routine is
+        // protocol-parameterized. FT8 is unaffected.
+        guard isDeep, isFT8 else { return all }
         runSubtractLoop(into: &all)
         return all
     }
