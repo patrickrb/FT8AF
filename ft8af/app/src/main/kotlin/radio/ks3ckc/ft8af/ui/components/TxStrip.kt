@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,10 +33,12 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -568,7 +572,13 @@ private fun HuntChip(
                 else Modifier
             )
             .clickable(enabled = enabled, onClickLabel = contentDescription) { onClick() }
-            .semantics { role = Role.Button; this.contentDescription = contentDescription }
+            .semantics {
+                role = Role.Button
+                this.contentDescription = contentDescription
+                // Surface the visible label ("Off" / the active priority) so a screen reader
+                // announces the current hunt option, not just "Hunt options".
+                stateDescription = label
+            }
             .padding(horizontal = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -656,7 +666,7 @@ private fun PeriodSegment(
             .height(36.dp)
             .clip(RoundedCornerShape(7.dp))
             .background(if (selected) Accent.copy(alpha = 0.18f) else Color.Transparent)
-            .clickable { onClick() }
+            .selectable(selected = selected, role = Role.RadioButton) { onClick() }
             .padding(horizontal = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -691,7 +701,9 @@ private fun SecondaryButton(
                 if (active) Accent.copy(alpha = 0.28f) else Border,
                 RoundedCornerShape(12.dp),
             )
-            .clickable(enabled = enabled) { onClick() }
+            // toggleable (not clickable) so TalkBack announces the on/off state — the DX
+            // button's label never changes, so color alone can't convey whether it's active.
+            .toggleable(value = active, enabled = enabled, onValueChange = { onClick() })
             .padding(horizontal = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -705,8 +717,10 @@ private fun SecondaryButton(
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             fontFamily = InterFamily,
-            maxLines = 1,
-            softWrap = false,
+            // The active "Tune 60s" countdown can be wider than the ~42dp available on a
+            // narrow phone; allow it to wrap to a second line instead of clipping the seconds.
+            maxLines = 2,
+            textAlign = TextAlign.Center,
         )
     }
 }

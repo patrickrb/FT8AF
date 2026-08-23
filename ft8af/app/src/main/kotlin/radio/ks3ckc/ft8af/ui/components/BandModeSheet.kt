@@ -3,6 +3,7 @@ package radio.ks3ckc.ft8af.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -217,12 +218,16 @@ fun BandModeSheet(
                 mostUsedBands(OperationBand.bandList, selectedModeId)
                     .filterNot { GeneralVariables.isBandExcluded(it.waveLength) }
             }
-            val selectedWave = OperationBand.bandList.getOrNull(currentBandIndex)?.waveLength
+            // Compare the exact band index, not just the wavelength: one band can have
+            // several dial entries (bands.txt lists 14.074 and 14.090 for 20m), so matching
+            // by wavelength would light up the curated 14.074 row while the rig is actually on
+            // 14.090. When the rig is on an alternate dial no curated row is marked (the full
+            // picker behind the footer owns alternates).
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (row in bands) {
                     BandSheetRow(
                         row = row,
-                        selected = row.waveLength == selectedWave,
+                        selected = row.bandIndex == currentBandIndex,
                         isDaytime = isDaytime,
                         onClick = { onSelectBand(row.bandIndex) },
                     )
@@ -269,7 +274,7 @@ private fun ModeSegment(
             .height(44.dp)
             .clip(RoundedCornerShape(7.dp))
             .background(if (selected) Accent.copy(alpha = 0.18f) else Color.Transparent)
-            .clickable { onClick() },
+            .selectable(selected = selected, role = Role.RadioButton) { onClick() },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -308,7 +313,7 @@ private fun BandSheetRow(
                 if (selected) Accent.copy(alpha = 0.28f) else Border,
                 RoundedCornerShape(12.dp),
             )
-            .clickable { onClick() }
+            .selectable(selected = selected, role = Role.RadioButton) { onClick() }
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
