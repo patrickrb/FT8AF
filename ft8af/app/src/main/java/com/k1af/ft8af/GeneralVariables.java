@@ -36,7 +36,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class GeneralVariables {
     private static final String TAG = "GeneralVariables";
     public static String VERSION = BuildConfig.VERSION_NAME;//Version number "0.62 (Beta 4)";
-    public static int VERSION_CODE = BuildConfig.VERSION_CODE;//Monotonic build number (CI: GITHUB_RUN_NUMBER + 100)
+    public static int VERSION_CODE = BuildConfig.VERSION_CODE;//Monotonic build number (CI: GITHUB_RUN_NUMBER + 1000)
     public static String BUILD_DATE = BuildConfig.apkBuildTime;//Build time
     public static int MESSAGE_COUNT = 3000;//Maximum message cache count
     public static boolean saveSWLMessage = false;//Save decoded messages switch
