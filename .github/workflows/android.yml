@@ -451,7 +451,10 @@ jobs:
           # staging -> main) are not PRs worth listing.
           # Newest first; capped so a very long range can't balloon the prompt —
           # the PR list and size figures carry the overall picture anyway.
-          LOG=$(git log --no-merges --pretty='- %s' "$RANGE" | head -n 400)
+          # `head` closing the pipe early makes the upstream git/sort take
+          # SIGPIPE; under `set -o pipefail` that would fail the whole step, so
+          # drop pipefail inside these truncating substitutions.
+          LOG=$(set +o pipefail; git log --no-merges --pretty='- %s' "$RANGE" | head -n 400)
           LOG_TOTAL=$(git rev-list --no-merges --count "$RANGE")
           if (( LOG_TOTAL > 400 )); then
             LOG+=$'\n'"- … and $((LOG_TOTAL - 400)) older commits not listed"
@@ -469,7 +472,7 @@ jobs:
           STAT=$(git diff --shortstat "$RANGE" -- ft8af/ | sed 's/^ *//')
           TOTAL=$(printf '%s\n' "$ALL" | grep -c . || true)
           ANDROID=$(printf '%s\n' "$ANDROID_FILES" | grep -c . || true)
-          AREAS=$(printf '%s\n' "$ALL" \
+          AREAS=$(set +o pipefail; printf '%s\n' "$ALL" \
             | sed -E 's#^ft8af/app/src/main/(java/com/k1af/ft8af|kotlin/radio/ks3ckc/ft8af)/#app:#; s#^ft8af/app/src/test/(java/com/k1af/ft8af|kotlin/radio/ks3ckc/ft8af)/#app-tests:#; s#^ft8af/app/src/main/cpp/#native:#; s#^ft8af/app/src/main/res/#app-res:#' \
             | awk -F/ '{ print (NF > 1 ? $1 "/" $2 : $1) }' | sort | uniq -c | sort -rn | head -25 \
             | awk '{ printf "- %s (%d files)\n", $2, $1 }')
