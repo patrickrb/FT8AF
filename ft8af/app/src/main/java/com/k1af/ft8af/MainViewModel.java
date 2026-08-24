@@ -750,7 +750,13 @@ public class MainViewModel extends ViewModel {
                 }
 
                 publishFt8MessageList();//post an immutable snapshot so the UI recomposes immediately
-                mutableTimerOffset.postValue(time_sec);//this cycle's time offset
+                // Slot-wide mean DT with own-TX echoes already excluded (see
+                // OwnTxEchoFilter.meanTimeOffsetSec). NaN can't happen here — messages
+                // is non-empty, so at least one decode survived — but never post it:
+                // the pill would render it as "unknown".
+                if (!Float.isNaN(time_sec)) {
+                    mutableTimerOffset.postValue(time_sec);//this cycle's time offset
+                }
 
 
                 findIncludedCallsigns(messages);//find matching messages and add to the call list
