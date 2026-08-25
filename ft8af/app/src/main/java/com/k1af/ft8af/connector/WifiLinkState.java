@@ -13,6 +13,12 @@ package com.k1af.ft8af.connector;
  * disconnected announced once — so the connector can drive the same
  * {@link OnConnectorStateChanged} pipeline every wired connector already uses. Pure (no Android
  * imports) so it is unit-testable.
+ *
+ * <p>Thread-safe: login results arrive on the UDP receive worker, send errors on whichever
+ * stream's sender failed, and a close from the UI thread — every transition and the
+ * {@link #isConnected()} read take the same monitor so two callbacks can't both see
+ * {@code terminal == false} and double-announce an edge, and a close can't interleave with a
+ * login and leave the chip lit after teardown.
  */
 public final class WifiLinkState {
 
@@ -27,8 +33,20 @@ public final class WifiLinkState {
     private boolean terminal = false;
 
     /** True between a {@link Emit#CONNECTED} and the following disconnect/error. */
-    public boolean isConnected() {
+    public synchronized boolean isConnected() {
         return announcedConnected && !terminal;
+    }
+
+    /**
+     * Start a fresh attempt. {@link WifiConnector#connect()} calls this before
+     * {@code wifiRig.start()} because a reconnect reuses the same connector instance: without
+     * it the {@code terminal} flag left behind by the previous close/error swallowed the next
+     * successful login, so the chip stuck on "connecting" and {@link #isConnected()} stayed
+     * false for the whole re-established session.
+     */
+    public synchronized void reset() {
+        announcedConnected = false;
+        terminal = false;
     }
 
     /**
@@ -36,7 +54,7 @@ public final class WifiLinkState {
      * are swallowed (the rig re-sends). A failure (bad user/password) is a terminal
      * {@link Emit#ERROR}.
      */
-    public Emit onLoginResult(boolean ok) {
+    public synchronized Emit onLoginResult(boolean ok) {
         if (terminal) return null;
         if (ok) {
             if (announcedConnected) return null;
@@ -52,7 +70,7 @@ public final class WifiLinkState {
      * ({@link Emit#DISCONNECTED}); before one it is a failed attempt ({@link Emit#ERROR}). Once
      * only — the stack fires it per stream.
      */
-    public Emit onSendError() {
+    public synchronized Emit onSendError() {
         if (terminal) return null;
         terminal = true;
         return announcedConnected ? Emit.DISCONNECTED : Emit.ERROR;
@@ -63,7 +81,7 @@ public final class WifiLinkState {
      * Emits {@link Emit#DISCONNECTED} only if we had announced a connect and haven't already
      * gone terminal.
      */
-    public Emit onClosed() {
+    public synchronized Emit onClosed() {
         if (terminal) return null;
         terminal = true;
         return announcedConnected ? Emit.DISCONNECTED : null;

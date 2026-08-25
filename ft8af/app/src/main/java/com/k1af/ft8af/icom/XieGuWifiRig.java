@@ -20,6 +20,9 @@ public class XieGuWifiRig extends WifiRig{
 
     @Override
     public void start(){
+        // Tag this attempt so handlers left over from a previous session can't report
+        // into the new one (see WifiRig.beginLinkSession).
+        final int session = beginLinkSession();
         opened=true;
         openAudio();//Open audio
         controlUdp=new XieGuControlUdp(userName,password,ip,port);
@@ -50,13 +53,13 @@ public class XieGuWifiRig extends WifiRig{
             public void OnUdpSendIOException(IcomUdpStyle style,IOException e) {
                 ToastMessage.show(String.format(GeneralVariables.getStringFromResource(
                         R.string.network_exception),IcomUdpBase.getUdpStyle(style),e.getMessage()));
-                notifySendError();
+                notifySendError(session);
                 close();
             }
 
             @Override
             public void OnLoginResponse(boolean authIsOK) {
-                notifyLoginResult(authIsOK);
+                notifyLoginResult(session, authIsOK);
                 if (authIsOK){
                     ToastMessage.show(GeneralVariables.getStringFromResource(R.string.login_succeed));
                 }else {

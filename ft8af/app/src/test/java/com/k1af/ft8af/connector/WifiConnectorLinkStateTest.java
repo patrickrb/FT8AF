@@ -96,4 +96,54 @@ public class WifiConnectorLinkStateTest {
         connector.disconnect(); // -> wifiRig.close() -> notifyClosed()
         assertThat(events).containsExactly("connecting", "connected", "disconnected").inOrder();
     }
+
+    @Test
+    public void reconnectAfterLinkDrop_announcesConnectedAgain() {
+        // MainViewModel.reconnectRig() calls connect() on this same connector instance. The
+        // previous drop left the link state terminal; without a reset the next login was
+        // swallowed and the chip stuck on "connecting" (Copilot review on #754).
+        connector.connect();
+        rig.onLinkStateChanged.onLoginResult(true);
+        rig.onLinkStateChanged.onSendError();
+        rig.close();
+        assertThat(connector.isConnected()).isFalse();
+
+        connector.connect();
+        assertThat(connector.isConnected()).isFalse(); // until the new login lands
+        rig.onLinkStateChanged.onLoginResult(true);
+        assertThat(events).containsExactly(
+                "connecting", "connected", "disconnected",
+                "connecting", "connected").inOrder();
+        assertThat(connector.isConnected()).isTrue();
+
+        // And the re-established session tears down cleanly, once.
+        connector.disconnect();
+        assertThat(events).containsExactly(
+                "connecting", "connected", "disconnected",
+                "connecting", "connected", "disconnected").inOrder();
+        assertThat(connector.isConnected()).isFalse();
+    }
+
+    @Test
+    public void reconnectAfterLoginFailure_announcesConnected() {
+        connector.connect();
+        rig.onLinkStateChanged.onLoginResult(false);
+        connector.connect();
+        rig.onLinkStateChanged.onLoginResult(true);
+        assertThat(events).containsExactly(
+                "connecting", "error:login failed", "connecting", "connected").inOrder();
+        assertThat(connector.isConnected()).isTrue();
+    }
+
+    @Test
+    public void reconnectAfterUserDisconnect_announcesConnected() {
+        connector.connect();
+        rig.onLinkStateChanged.onLoginResult(true);
+        connector.disconnect();
+        connector.connect();
+        rig.onLinkStateChanged.onLoginResult(true);
+        assertThat(events).containsExactly(
+                "connecting", "connected", "disconnected", "connecting", "connected").inOrder();
+        assertThat(connector.isConnected()).isTrue();
+    }
 }

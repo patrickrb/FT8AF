@@ -82,7 +82,11 @@ public class WifiConnector extends BaseRigConnector{
         super.connect();
         // Announce the attempt so the chip shows "connecting" (amber) immediately; the
         // CONNECTED/ERROR edge follows from the login response. A reconnect reuses this same
-        // connector instance, so start from a fresh link state each attempt.
+        // connector instance, so start from a fresh link state each attempt — otherwise the
+        // terminal flag from the previous close/error swallows the next login and the chip
+        // never leaves "connecting" (Copilot review on #754). Reset before start(): the login
+        // response can arrive on the receive worker before start() returns.
+        linkState.reset();
         if (getOnConnectorStateChanged() != null) {
             getOnConnectorStateChanged().onConnecting();
         }
