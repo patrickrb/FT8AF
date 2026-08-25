@@ -17,6 +17,7 @@ import com.k1af.ft8af.icom.IcomUdpBase.IcomUdpStyle;
 import com.k1af.ft8af.ui.ToastMessage;
 
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public abstract class WifiRig {
     private static final String TAG = "WifiRig";
@@ -25,6 +26,70 @@ public abstract class WifiRig {
         void onReceivedCivData(byte[] data);
 
         void onReceivedWaveData(byte[] data);
+    }
+
+    /**
+     * Link lifecycle events, surfaced so the connector can drive the CAT status chip and
+     * connect/disconnect toasts (issue #754). Fired from the concrete rig's stream-event
+     * handlers via the {@code notify*} helpers below.
+     */
+    public interface OnLinkStateChanged {
+        void onLoginResult(boolean ok);
+
+        void onSendError();
+
+        void onClosed();
+    }
+
+    public OnLinkStateChanged onLinkStateChanged;
+
+    public void setOnLinkStateChanged(OnLinkStateChanged onLinkStateChanged) {
+        this.onLinkStateChanged = onLinkStateChanged;
+    }
+
+    // Monotonic id of the current UDP session. start() creates a new ControlUdp every
+    // attempt but the previous one's stream-event handlers still point at this rig, so a
+    // late login response or send failure from the old sockets would otherwise be applied
+    // to the new attempt's link state. Concrete rigs capture beginLinkSession() in start()
+    // and pass it back through the session-checked notify* overloads.
+    private final AtomicInteger linkSession = new AtomicInteger();
+
+    /** Called at the top of {@link #start()}; returns the id the new handlers must carry. */
+    protected int beginLinkSession() {
+        return linkSession.incrementAndGet();
+    }
+
+    /** Package-visible for tests. */
+    int currentLinkSession() {
+        return linkSession.get();
+    }
+
+    /** Package-visible for tests: whether an event tagged {@code session} is still current. */
+    static boolean isCurrentSession(int session, int current) {
+        return session == current;
+    }
+
+    /** Concrete rigs call these from their stream-event handlers; null-safe. */
+    protected void notifyLoginResult(boolean ok) {
+        if (onLinkStateChanged != null) onLinkStateChanged.onLoginResult(ok);
+    }
+
+    /** As {@link #notifyLoginResult(boolean)}, but dropped when {@code session} is stale. */
+    protected void notifyLoginResult(int session, boolean ok) {
+        if (isCurrentSession(session, linkSession.get())) notifyLoginResult(ok);
+    }
+
+    protected void notifySendError() {
+        if (onLinkStateChanged != null) onLinkStateChanged.onSendError();
+    }
+
+    /** As {@link #notifySendError()}, but dropped when {@code session} is stale. */
+    protected void notifySendError(int session) {
+        if (isCurrentSession(session, linkSession.get())) notifySendError();
+    }
+
+    protected void notifyClosed() {
+        if (onLinkStateChanged != null) onLinkStateChanged.onClosed();
     }
 
     public ControlUdp controlUdp;

@@ -20,6 +20,9 @@ public class IComWifiRig extends WifiRig{
 
     @Override
     public void start(){
+        // Tag this attempt so handlers left over from a previous session can't report
+        // into the new one (see WifiRig.beginLinkSession).
+        final int session = beginLinkSession();
         opened=true;
         openAudio();//Open audio
         controlUdp=new IcomControlUdp(userName,password,ip,port);
@@ -51,11 +54,13 @@ public class IComWifiRig extends WifiRig{
             public void OnUdpSendIOException(IcomUdpStyle style,IOException e) {
                 ToastMessage.show(String.format(GeneralVariables.getStringFromResource(
                         R.string.network_exception),IcomUdpBase.getUdpStyle(style),e.getMessage()));
+                notifySendError(session);
                 close();
             }
 
             @Override
             public void OnLoginResponse(boolean authIsOK) {
+                notifyLoginResult(session, authIsOK);
                 if (authIsOK){
                     ToastMessage.show(GeneralVariables.getStringFromResource(R.string.login_succeed));
                 }else {
@@ -92,6 +97,7 @@ public class IComWifiRig extends WifiRig{
     @Override
     public void close(){
         opened=false;
+        notifyClosed();
         controlUdp.closeAll();
         closeAudio();
     }
