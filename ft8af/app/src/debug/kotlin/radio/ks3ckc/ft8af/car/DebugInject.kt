@@ -15,6 +15,7 @@ import radio.ks3ckc.ft8af.pota.PotaSessionManager
 import radio.ks3ckc.ft8af.pskreporter.PskReporterClient
 import radio.ks3ckc.ft8af.pskreporter.PskReporterSpot
 import radio.ks3ckc.ft8af.pskreporter.WhoHeardMeCache
+import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.floor
 import kotlin.math.sin
@@ -228,10 +229,12 @@ internal fun applyDebugInject(spec: DebugInjectSpec, vm: MainViewModel) {
                 ?: return@mapNotNull null
             PskReporterSpot(call, grid, ll.latitude, ll.longitude, 14_074_000L, -10 - (grid.hashCode() and 7), "FT8", 0L)
         }
-        // The phone map fetches its overlay live from pskreporter.info; route it
-        // to the same demo spots so "who heard me" rings render offline too.
-        PskReporterClient.spotsOverride = WhoHeardMeCache.spots
     }
+    // The phone map fetches its overlay live from pskreporter.info; route it to
+    // the same demo spots so "who heard me" rings render offline too. An inject
+    // with psk=0 hands the map back to the live fetch — the override is process
+    // state, so leaving it set would pin a previous inject's rings on the map.
+    PskReporterClient.spotsOverride = demoSpotsOverride(spec.psk, WhoHeardMeCache.spots)
 
     // notes=null matches a real no-notes activation (PotaScreen passes
     // notes.ifBlank { null }); keeps the demo POTA card clean for screenshots.
@@ -420,7 +423,9 @@ internal fun buildDemoQsoLog(count: Int, nowMillis: Long): List<DemoQso> {
  * A CQ decode. Built via the (i3,n3,callTo,callFrom,extra) constructor so
  * callsignTo is non-null ("CQ") — the phone's Decode list renders this same
  * object and calls checkIsCQ()/getMessageText(), both of which NPE on a bare
- * Ft8Message. i3=0,n3=0 = free-text, the safest render path.
+ * Ft8Message. i3=1,n3=0 = a standard (type 1) message, the same shape the live
+ * decoder produces for CQ and report frames, so every render path and the
+ * junk-decode plausibility check treat it exactly like a real decode.
  */
 private fun decodeMessage(d: DemoDecode, utcMillis: Long): Ft8Message =
     Ft8Message(1, 0, resolveDemoCallTo(d.callTo, GeneralVariables.myCallsign), d.callFrom, d.extra).apply {
@@ -443,9 +448,20 @@ private fun decodeMessage(d: DemoDecode, utcMillis: Long): Ft8Message =
         }
     }
 
-/** A signed FT8 report field: `-08`, `+02`, `-15`. */
+/**
+ * A signed FT8 report field: `-08`, `+02`, `-15`. Locale-pinned: the default
+ * locale's `%d` can render non-ASCII digits (Arabic-Indic, Thai), which is not a
+ * report FT8 stations exchange.
+ */
 internal fun formatDemoReport(snr: Int): String =
-    (if (snr < 0) "-" else "+") + String.format("%02d", kotlin.math.abs(snr))
+    (if (snr < 0) "-" else "+") + String.format(Locale.US, "%02d", kotlin.math.abs(snr))
+
+/**
+ * What the debug inject leaves in [PskReporterClient.spotsOverride]: the demo
+ * spots while `psk > 0`, null (live pskreporter.info fetch) otherwise.
+ */
+internal fun demoSpotsOverride(psk: Int, spots: List<PskReporterSpot>): List<PskReporterSpot>? =
+    if (psk > 0) spots else null
 
 /** What the [DebugInjectReceiver] extras resolve to; kept Android-free so it is unit-testable. */
 internal data class DebugInjectSpec(

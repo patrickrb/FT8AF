@@ -2,6 +2,8 @@ package radio.ks3ckc.ft8af.car
 
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
+import radio.ks3ckc.ft8af.pskreporter.PskReporterSpot
+import java.util.Locale
 
 /**
  * Unit tests for [parseDebugInject] — the pure extras→[DebugInjectSpec] mapping
@@ -299,6 +301,31 @@ class DebugInjectTest {
         assertThat(formatDemoReport(-15)).isEqualTo("-15")
         assertThat(formatDemoReport(2)).isEqualTo("+02")
         assertThat(formatDemoReport(0)).isEqualTo("+00")
+    }
+
+    /**
+     * The report must be ASCII regardless of the device locale: a default-locale
+     * `String.format("%02d")` renders Arabic-Indic digits under ar-EG.
+     */
+    @Test
+    fun formatDemoReport_isLocaleInvariant() {
+        val saved = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.forLanguageTag("ar-EG"))
+            assertThat(formatDemoReport(-8)).isEqualTo("-08")
+            assertThat(formatDemoReport(12)).isEqualTo("+12")
+        } finally {
+            Locale.setDefault(saved)
+        }
+    }
+
+    /** psk>0 routes the map to the demo spots; psk=0 hands it back to the live fetch. */
+    @Test
+    fun demoSpotsOverride_nullWhenNoPskRequested() {
+        val spots = listOf(PskReporterSpot("K7ABC", "CN87", 47.5, -122.3, 14_074_000L, -12, "FT8", 0L))
+        assertThat(demoSpotsOverride(3, spots)).isEqualTo(spots)
+        assertThat(demoSpotsOverride(0, spots)).isNull()
+        assertThat(demoSpotsOverride(0, emptyList())).isNull()
     }
 
     private companion object {
