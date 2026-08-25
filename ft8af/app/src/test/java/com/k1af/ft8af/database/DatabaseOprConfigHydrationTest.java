@@ -388,4 +388,33 @@ public class DatabaseOprConfigHydrationTest {
         assertThat(GeneralVariables.deepDecodeMode).isFalse();
         assertThat(GeneralVariables.keepScreenOn).isFalse();
     }
+
+    /**
+     * Issue #753: the Compose rig picker wrote {@code civ} in DECIMAL for three months
+     * ("164" for an IC-705's 0xA4) while hydration reads HEX, so the address came back as
+     * 0x164 -> truncated 0x64 and CAT frequency control silently died. Hydration must now
+     * recognise the decimal form and land on the real address.
+     */
+    @Test
+    public void decimalCivWrittenByOldPicker_isRepairedOnLoad() {
+        GeneralVariables.civAddress = 0x11;
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("civ", "164");           // IC-705 0xA4 written as decimal
+        opr.writeConfigSync(config);
+
+        hydrate();
+
+        assertThat(GeneralVariables.civAddress).isEqualTo(0xa4);
+    }
+
+    @Test
+    public void hexCivWithPrefix_isHonored() {
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("civ", "0x94");          // IC-7300
+        opr.writeConfigSync(config);
+
+        hydrate();
+
+        assertThat(GeneralVariables.civAddress).isEqualTo(0x94);
+    }
 }

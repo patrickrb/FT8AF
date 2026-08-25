@@ -42,6 +42,7 @@ import com.k1af.ft8af.database.ControlMode
 import com.k1af.ft8af.database.OperationBand
 import com.k1af.ft8af.database.RigNameList
 import com.k1af.ft8af.rigs.BaseRigOperation
+import com.k1af.ft8af.rigs.CivAddressConfig
 import com.k1af.ft8af.rigs.InstructionSet
 import com.k1af.ft8af.ui.AudioDeviceSpinnerAdapter
 import radio.ks3ckc.ft8af.PER_BAND_OUTPUT_LEVEL_KEY
@@ -200,8 +201,11 @@ fun RadioAudioSettings(
                 mainViewModel.databaseOpr.writeConfig(
                     "baudRate", GeneralVariables.baudRate.toString(), null,
                 )
+                // "civ" is a HEX key (rigaddress.txt, the legacy screen and the loader all
+                // agree). Writing Int.toString() here stored "164" for an IC-705's 0xA4,
+                // which reloaded as 0x64 and silently killed CAT frequency control (#753).
                 mainViewModel.databaseOpr.writeConfig(
-                    "civ", GeneralVariables.civAddress.toString(), null,
+                    "civ", CivAddressConfig.encode(GeneralVariables.civAddress), null,
                 )
             },
         )
