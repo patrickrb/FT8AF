@@ -189,15 +189,36 @@ public class ScoLinkTrackerTest {
         assertThat(t.attempts()).isEqualTo(3);
     }
 
+    // A timeout is a failed attempt, handled exactly like DISCONNECTED/ERROR:
+    // a spaced, deferred retry that onRetryDue() re-checks, not an immediate
+    // restart that would tear down a late CONNECTING/CONNECTED.
     @Test
-    public void connectTimeout_whileConnecting_restarts() {
+    public void connectTimeout_whileConnecting_schedulesDeferredRestart() {
         ScoLinkTracker t = new ScoLinkTracker();
         t.requestOn();
         t.onStateUpdate(CONNECTING, 0);
         Update u = t.onConnectTimeout();
-        assertThat(u.action).isEqualTo(Action.RESTART);
+        assertThat(u.action).isEqualTo(Action.NONE);
         assertThat(u.gaveUp).isFalse();
+        assertThat(u.retryDelayMs).isEqualTo(ScoLinkTracker.retryDelayMs(2));
         assertThat(t.attempts()).isEqualTo(2);
+        assertThat(t.linkState()).isEqualTo(DISCONNECTED);
+        // The retry balances the abandoned start with a stop+start.
+        assertThat(t.onRetryDue()).isEqualTo(Action.RESTART);
+        assertThat(t.linkState()).isEqualTo(CONNECTING);
+    }
+
+    @Test
+    public void connectTimeout_thenLateConnect_overtakesRetry() {
+        ScoLinkTracker t = new ScoLinkTracker();
+        t.requestOn();
+        t.onStateUpdate(CONNECTING, 0);
+        t.onConnectTimeout();
+        // The stack was just slow: CONNECTED lands during the retry delay.
+        Update late = t.onStateUpdate(CONNECTED, 7000);
+        assertThat(late.checkMicRouting).isTrue();
+        assertThat(t.onRetryDue()).isEqualTo(Action.NONE);
+        assertThat(t.linkState()).isEqualTo(CONNECTED);
     }
 
     @Test
@@ -215,7 +236,8 @@ public class ScoLinkTrackerTest {
         ScoLinkTracker t = new ScoLinkTracker();
         t.requestOn();
         for (int i = 1; i < ScoLinkTracker.MAX_ATTEMPTS; i++) {
-            assertThat(t.onConnectTimeout().action).isEqualTo(Action.RESTART);
+            assertThat(t.onConnectTimeout().retryDelayMs).isGreaterThan(0L);
+            assertThat(t.onRetryDue()).isEqualTo(Action.RESTART);
         }
         Update u = t.onConnectTimeout();
         assertThat(u.action).isEqualTo(Action.NONE);

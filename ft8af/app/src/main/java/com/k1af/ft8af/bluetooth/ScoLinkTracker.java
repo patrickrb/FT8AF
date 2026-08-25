@@ -198,21 +198,25 @@ public final class ScoLinkTracker {
 
     /**
      * {@link #CONNECT_TIMEOUT_MS} elapsed since the last start with no
-     * CONNECTED. Returns the action to take; {@code gaveUp} in the update is
-     * set when the budget is spent.
+     * CONNECTED. The attempt is counted as failed and — exactly like a
+     * DISCONNECTED/ERROR broadcast — a spaced retry is handed out via
+     * {@code retryDelayMs} for {@link #onRetryDue()} to re-check, so a late
+     * CONNECTING/CONNECTED that lands in the meantime overtakes the retry
+     * instead of being torn down by an immediate restart. {@code gaveUp} is set
+     * when the budget is spent.
      */
     public synchronized Update onConnectTimeout() {
         if (!wanted || linkState != AudioManager.SCO_AUDIO_STATE_CONNECTING) {
             return Update.NONE;
         }
+        linkState = AudioManager.SCO_AUDIO_STATE_DISCONNECTED;
+        connectedAtMs = -1;
         if (attempts >= MAX_ATTEMPTS) {
-            linkState = AudioManager.SCO_AUDIO_STATE_DISCONNECTED;
             return new Update(Action.NONE, 0, false, true);
         }
         attempts++;
-        retryPending = false;
-        markStarted();
-        return new Update(Action.RESTART, 0, false, false);
+        retryPending = true;
+        return new Update(Action.NONE, retryDelayMs(attempts), false, false);
     }
 
     private void markStarted() {
