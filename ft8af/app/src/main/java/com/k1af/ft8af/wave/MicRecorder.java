@@ -283,6 +283,37 @@ public class MicRecorder {
         return null;
     }
 
+    /**
+     * {@code AudioDeviceInfo.TYPE_*} the running AudioRecord is actually
+     * capturing from right now, {@code TYPE_UNKNOWN} if the OS reports none yet
+     * (not started / not routed), or {@code -1} when there is no AudioRecord to
+     * ask (USB-direct capture, init failure, API &lt; 24). Used after Bluetooth
+     * SCO connects to see whether the capture path followed the link
+     * (issue #759).
+     */
+    public synchronized int routedInputDeviceType() {
+        if (useUsbAudio || audioRecord == null) return -1;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return -1;
+        try {
+            AudioDeviceInfo routed = audioRecord.getRoutedDevice();
+            return routed == null ? AudioDeviceInfo.TYPE_UNKNOWN : routed.getType();
+        } catch (Exception e) {
+            return AudioDeviceInfo.TYPE_UNKNOWN;
+        }
+    }
+
+    /**
+     * {@code AudioDeviceInfo.TYPE_*} of the input the user pinned in Settings,
+     * or {@code -1} for "system default" / USB-direct / a pinned device that is
+     * no longer present.
+     */
+    public int chosenInputDeviceType() {
+        if (GeneralVariables.audioInputDeviceId <= 0) return -1;
+        AudioDeviceInfo chosen = findAudioDeviceById(
+                GeneralVariables.audioInputDeviceId, AudioManager.GET_DEVICES_INPUTS);
+        return chosen == null ? -1 : chosen.getType();
+    }
+
     public synchronized void start(){
         if (isRunning) return;
 
