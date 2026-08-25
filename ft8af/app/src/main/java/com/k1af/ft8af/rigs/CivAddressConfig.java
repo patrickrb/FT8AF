@@ -31,7 +31,60 @@ public final class CivAddressConfig {
     /** Default when nothing usable is stored: IC-705 / X6100 style {@code 0xA4}. */
     public static final int DEFAULT_ADDRESS = 0xA4;
 
+    /**
+     * Provenance marker config key. Every writer that stores {@code civ} in hex also writes
+     * {@code civFormat=hex}; the buggy decimal-writing picker never did. Its presence means
+     * the stored value is trusted verbatim — in particular a deliberate two-digit override
+     * that happens to be a decimal twin of the model address ({@code 0x88} on an IC-706)
+     * is never "repaired" away. Its absence marks a value of unknown provenance that gets
+     * the one-time model reconciliation and is then re-written canonically with the marker.
+     */
+    public static final String FORMAT_KEY = "civFormat";
+    /** The only value {@link #FORMAT_KEY} ever carries. */
+    public static final String FORMAT_HEX = "hex";
+
     private CivAddressConfig() {
+    }
+
+    /** Outcome of {@link #planRepair}: the address to use and whether to persist it. */
+    public static final class Repair {
+        /** The address the app should run with. */
+        public final int address;
+        /** True when {@code civ} (canonical hex) and {@link #FORMAT_KEY} must be written. */
+        public final boolean writeBack;
+
+        Repair(int address, boolean writeBack) {
+            this.address = address;
+            this.writeBack = writeBack;
+        }
+    }
+
+    /**
+     * Decides the one-time repair for the loaded CI-V address (#753).
+     *
+     * @param storedRaw    the {@code civ} string as found in the database, or null if absent
+     * @param formatKnown  whether {@link #FORMAT_KEY} was present with {@link #FORMAT_HEX}
+     * @param loaded       the address {@link #decode} produced from {@code storedRaw}
+     * @param modelAddress the selected rig model's default address
+     * @return the address to use, and whether to write it (and the marker) back
+     *
+     * <p>Rules: a marked value is trusted as-is — no model reconciliation, so user overrides
+     * survive. An unmarked value gets {@link #reconcileWithModel}. A write-back is due when
+     * the marker is missing (settles provenance once and for all, and fixes the three-digit
+     * decimal case whose decoded address already equals the model's) or when the stored
+     * text isn't the canonical {@link #encode} form.
+     */
+    public static Repair planRepair(String storedRaw, boolean formatKnown, int loaded,
+                                    int modelAddress) {
+        int resolved = formatKnown ? loaded : reconcileWithModel(loaded, modelAddress);
+        boolean canonical = storedRaw != null
+                && encode(resolved).equals(storedRaw.trim().toLowerCase(Locale.ROOT));
+        return new Repair(resolved, !formatKnown || !canonical);
+    }
+
+    /** True when a stored {@link #FORMAT_KEY} value says the {@code civ} key is hex. */
+    public static boolean isHexFormatMarker(String stored) {
+        return stored != null && FORMAT_HEX.equalsIgnoreCase(stored.trim());
     }
 
     /** True for a value that fits a CI-V address byte. */

@@ -2099,8 +2099,12 @@ public class MainViewModel extends ViewModel {
      * One-time repair for a CI-V address the 2026-05..08 Compose rig picker persisted in
      * decimal (#753). {@link com.k1af.ft8af.database.DatabaseOpr} already un-mangles the
      * unambiguous cases at load; the two-digit ones ("88" for an IC-706's 0x58) can only be
-     * told apart by comparing with the selected model, which needs the rig list. When the
-     * value is corrected it is also written back — in hex — so the fix sticks.
+     * told apart by comparing with the selected model, which needs the rig list — and only
+     * when the value's provenance is unknown ({@link CivAddressConfig#FORMAT_KEY} absent),
+     * so a deliberate override that a hex-aware writer stored is never touched. Whenever the
+     * marker is missing or the stored text isn't canonical hex, the value is written back
+     * canonically together with the marker, so the repair really is one-time — including
+     * the three-digit decimal case whose decoded address already matched the model.
      */
     private void repairCivAddressAgainstModel() {
         if (GeneralVariables.instructionSet != InstructionSet.ICOM
@@ -2113,15 +2117,25 @@ public class MainViewModel extends ViewModel {
             RigNameList.RigName model = RigNameList.getInstance(ctx)
                     .getRigNameByIndex(GeneralVariables.modelNo);
             int before = GeneralVariables.civAddress;
-            int after = CivAddressConfig.reconcileWithModel(before, model.address);
-            if (after != before) {
-                GeneralVariables.civAddress = after;
+            CivAddressConfig.Repair plan = CivAddressConfig.planRepair(
+                    GeneralVariables.civAddressStored, GeneralVariables.civAddressFormatKnown,
+                    before, model.address);
+            if (plan.address != before) {
+                GeneralVariables.civAddress = plan.address;
                 GeneralVariables.fileLog(String.format(java.util.Locale.US,
                         "CIV: repaired stored address 0x%02X -> 0x%02X (model %s)",
-                        before, after, model.modelName));
-                if (databaseOpr != null) {
-                    databaseOpr.writeConfig("civ", CivAddressConfig.encode(after), null);
-                }
+                        before, plan.address, model.modelName));
+            }
+            if (plan.writeBack && databaseOpr != null) {
+                String encoded = CivAddressConfig.encode(plan.address);
+                databaseOpr.writeConfig("civ", encoded, null);
+                databaseOpr.writeConfig(CivAddressConfig.FORMAT_KEY,
+                        CivAddressConfig.FORMAT_HEX, null);
+                GeneralVariables.civAddressStored = encoded;
+                GeneralVariables.civAddressFormatKnown = true;
+                GeneralVariables.fileLog(String.format(java.util.Locale.US,
+                        "CIV: stored address canonicalized to \"%s\" (+%s=%s)",
+                        encoded, CivAddressConfig.FORMAT_KEY, CivAddressConfig.FORMAT_HEX));
             }
         } catch (Exception e) {
             GeneralVariables.fileLog("CIV: repair skipped: " + e.getMessage());

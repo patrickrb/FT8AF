@@ -204,9 +204,14 @@ fun RadioAudioSettings(
                 // "civ" is a HEX key (rigaddress.txt, the legacy screen and the loader all
                 // agree). Writing Int.toString() here stored "164" for an IC-705's 0xA4,
                 // which reloaded as 0x64 and silently killed CAT frequency control (#753).
+                val encodedCiv = CivAddressConfig.encode(GeneralVariables.civAddress)
+                mainViewModel.databaseOpr.writeConfig("civ", encodedCiv, null)
+                // Provenance marker: tells the #753 repair this value is hex and trusted.
                 mainViewModel.databaseOpr.writeConfig(
-                    "civ", CivAddressConfig.encode(GeneralVariables.civAddress), null,
+                    CivAddressConfig.FORMAT_KEY, CivAddressConfig.FORMAT_HEX, null,
                 )
+                GeneralVariables.civAddressStored = encodedCiv
+                GeneralVariables.civAddressFormatKnown = true
             },
         )
     }

@@ -104,6 +104,80 @@ public class CivAddressConfigTest {
         assertThat(CivAddressConfig.reconcileWithModel(0x88, 0x100)).isEqualTo(0x88);
     }
 
+    // ---- planRepair (provenance marker + write-back) -----------------------------------
+
+    @Test
+    public void plan_unmarkedThreeDigitDecimal_isWrittenBackEvenThoughAddressMatchesModel() {
+        // Copilot review #774: "164" decodes to 0xA4 == model, so an address-only compare
+        // would never persist the fix and "164" would stay on disk forever.
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair("164", false, 0xA4, 0xA4);
+        assertThat(r.address).isEqualTo(0xA4);
+        assertThat(r.writeBack).isTrue();
+    }
+
+    @Test
+    public void plan_unmarkedTwoDigitDecimalTwin_isRepairedAndWrittenBack() {
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair("88", false, 0x88, 0x58);
+        assertThat(r.address).isEqualTo(0x58);
+        assertThat(r.writeBack).isTrue();
+    }
+
+    @Test
+    public void plan_markedOverrideThatIsDecimalTwinOfModel_isTrusted() {
+        // Copilot review #774: a user who deliberately set 0x88 on an IC-706 (model 0x58)
+        // through a hex-aware writer must not have it reset on every connectRig().
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair("88", true, 0x88, 0x58);
+        assertThat(r.address).isEqualTo(0x88);
+        assertThat(r.writeBack).isFalse();
+    }
+
+    @Test
+    public void plan_unmarkedCanonicalHex_isMarkedOnce() {
+        // Value is fine, but provenance is unknown: write the marker so it's settled.
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair("a4", false, 0xA4, 0xA4);
+        assertThat(r.address).isEqualTo(0xA4);
+        assertThat(r.writeBack).isTrue();
+    }
+
+    @Test
+    public void plan_markedCanonicalHex_isSteadyState() {
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair("a4", true, 0xA4, 0xA4);
+        assertThat(r.address).isEqualTo(0xA4);
+        assertThat(r.writeBack).isFalse();
+        // Case / whitespace differences don't count as non-canonical.
+        assertThat(CivAddressConfig.planRepair(" A4 ", true, 0xA4, 0xA4).writeBack).isFalse();
+    }
+
+    @Test
+    public void plan_markedButPrefixedHex_isCanonicalized() {
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair("0xA4", true, 0xA4, 0xA4);
+        assertThat(r.address).isEqualTo(0xA4);
+        assertThat(r.writeBack).isTrue();
+    }
+
+    @Test
+    public void plan_noStoredRow_isWrittenBackWithDefault() {
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair(null, false, 0xA4, 0xA4);
+        assertThat(r.address).isEqualTo(0xA4);
+        assertThat(r.writeBack).isTrue();
+    }
+
+    @Test
+    public void plan_markedUserOverride_neverReconciled() {
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair("5f", true, 0x5F, 0xA4);
+        assertThat(r.address).isEqualTo(0x5F);
+        assertThat(r.writeBack).isFalse();
+    }
+
+    @Test
+    public void isHexFormatMarker() {
+        assertThat(CivAddressConfig.isHexFormatMarker("hex")).isTrue();
+        assertThat(CivAddressConfig.isHexFormatMarker(" HEX ")).isTrue();
+        assertThat(CivAddressConfig.isHexFormatMarker("dec")).isFalse();
+        assertThat(CivAddressConfig.isHexFormatMarker("")).isFalse();
+        assertThat(CivAddressConfig.isHexFormatMarker(null)).isFalse();
+    }
+
     @Test
     public void decimalTwin_helper() {
         assertThat(CivAddressConfig.decimalTwin("88")).isEqualTo(88);

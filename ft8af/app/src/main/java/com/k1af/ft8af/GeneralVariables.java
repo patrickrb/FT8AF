@@ -512,6 +512,8 @@ public class GeneralVariables {
     public static int iaruRegion = 2;//Operator's IARU region (1/2/3), used to gate Message-Creator QSY frequency options to legal band edges. Default 2 (the Americas). See com.k1af.ft8af.message.SpecialMessage.
     public static boolean autoCQAfterQSO = false;//Auto-CQ: keep calling CQ after each completed QSO (chain without re-tapping). Refreshes the TX watchdog per QSO and forces pure CQ (ignores Hunt).
     public static int civAddress = 0xa4;//CI-V address
+    public static String civAddressStored = null;//Raw "civ" config text as hydrated (null = no row); lets the #753 repair see whether the on-disk form is canonical hex.
+    public static boolean civAddressFormatKnown = false;//True when config "civFormat=hex" was present: the stored civ value is trusted verbatim, no model reconciliation (#753).
     public static int baudRate = 19200;//Baud rate
     public static long band = 14074000;//Carrier frequency band
     public static int serialDataBits = 8;//Default is 8
