@@ -2305,6 +2305,79 @@ public class MainViewModel extends ViewModel {
         }
     }
 
+    // Tracks whether we've put the phone into Bluetooth headset (SCO) mode for audio, so
+    // refreshBluetoothHeadsetMode() only toggles on an actual change. setBlueToothOn() does a
+    // stop+start of SCO, which is disruptive to re-issue on every settings tap. (#723)
+    private boolean btHeadsetModeActive = false;
+
+    /**
+     * Bring the phone's Bluetooth headset (SCO) link up or down to match the current rig +
+     * audio-device selection (issue #723).
+     *
+     * <p>Before this, SCO was entered only when the <em>rig</em> connection was Bluetooth. A
+     * user on a USB/VOX rig who selected a Bluetooth headset as the FT8 mic got no SCO, so the
+     * app captured the built-in mic instead and the headset never appeared to work — the
+     * documented workaround was to launch FT8CN first purely to turn SCO on. This now also
+     * enters headset mode when the selected input or output device is a Bluetooth-SCO endpoint,
+     * and rebuilds the AudioRecord so capture actually routes over the link.
+     *
+     * <p>Idempotent and safe to call from launch and from each device-picker change.
+     */
+    public void refreshBluetoothHeadsetMode() {
+        AudioManager audioManager = (AudioManager) GeneralVariables.getMainContext()
+                .getSystemService(Context.AUDIO_SERVICE);
+        if (audioManager == null) return;
+
+        int inputType = audioDeviceType(audioManager,
+                GeneralVariables.audioInputDeviceId, AudioManager.GET_DEVICES_INPUTS);
+        int outputType = audioDeviceType(audioManager,
+                GeneralVariables.audioOutputDeviceId, AudioManager.GET_DEVICES_OUTPUTS);
+
+        boolean want = ScoPolicy.shouldEnterHeadsetMode(GeneralVariables.connectMode,
+                isBTConnected(), inputType, outputType);
+
+        // Cross-check the cached flag against the real SCO state: SCO drops by itself when
+        // the headset disconnects (and setBlueToothOn() can fail), so the flag alone would
+        // skip re-entering and leave the selected BT mic/speaker dead until restart.
+        boolean scoOn = audioManager.isBluetoothScoOn();
+        boolean bluetoothRig = GeneralVariables.connectMode == ConnectMode.BLUE_TOOTH;
+        switch (ScoPolicy.headsetModeAction(want, btHeadsetModeActive, scoOn, bluetoothRig)) {
+            case ScoPolicy.HEADSET_MODE_ENTER:
+                setBlueToothOn();
+                btHeadsetModeActive = true;
+                // Rebuild capture so the AudioRecord binds to the freshly-opened SCO route
+                // rather than the built-in mic it was created on.
+                reinitializeAudioInput();
+                break;
+            case ScoPolicy.HEADSET_MODE_LEAVE:
+                // Leave headset mode when the user picks a non-BT device — never from under
+                // a Bluetooth rig, whose TX/RX path owns SCO (headsetModeAction guards that).
+                setBlueToothOff();
+                btHeadsetModeActive = false;
+                reinitializeAudioInput();
+                break;
+            case ScoPolicy.HEADSET_MODE_FORGET:
+                // SCO already went away on its own; nothing to tear down.
+                btHeadsetModeActive = false;
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * {@link android.media.AudioDeviceInfo#getType()} of the routed device matching
+     * {@code deviceId} among {@code flags} (inputs or outputs), or -1 if none match (Default
+     * row, USB-direct entry, or nothing connected).
+     */
+    private int audioDeviceType(AudioManager audioManager, int deviceId, int flags) {
+        if (deviceId <= 0) return -1;
+        for (android.media.AudioDeviceInfo d : audioManager.getDevices(flags)) {
+            if (d.getId() == deviceId) return d.getType();
+        }
+        return -1;
+    }
+
     /**
      * Check whether the rig is connected. Two cases: rigBaseClass not created, or serial port connection failed.
      *
