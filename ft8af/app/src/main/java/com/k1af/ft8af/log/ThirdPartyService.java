@@ -69,15 +69,12 @@ public class ThirdPartyService {
      */
     public static List<StationProfile> FetchCloudlogStations(String address, String apiKey) {
         List<StationProfile> stations = new ArrayList<>();
-        if (address == null || address.isEmpty() || apiKey == null || apiKey.isEmpty()) {
+        String base = CloudlogEndpoint.normalizeBase(address);
+        if (base == null || apiKey == null || apiKey.trim().isEmpty()) {
             return stations;
         }
-        if (!address.endsWith("/")) {
-            address += "/";
-        }
         try {
-            String url = address + "api/station_info/" + apiKey;
-            String result = sendGetRequest(url);
+            String result = cloudlogGet(base, "api/station_info/" + apiKey.trim(), null);
             if (result == null || result.isEmpty()) return stations;
             JSONArray arr = new JSONArray(result);
             for (int i = 0; i < arr.length(); i++) {
@@ -117,11 +114,9 @@ public class ThirdPartyService {
                                                String gridsquare, String callsign,
                                                String city, String dxcc,
                                                boolean linkActiveLogbook) {
-        if (address == null || address.isEmpty() || apiKey == null || apiKey.isEmpty()) {
+        String base = CloudlogEndpoint.normalizeBase(address);
+        if (base == null || apiKey == null || apiKey.trim().isEmpty()) {
             return null;
-        }
-        if (!address.endsWith("/")) {
-            address += "/";
         }
         try {
             String body = buildCreateStationRequestJson(
@@ -132,8 +127,7 @@ public class ThirdPartyService {
                 Log.d(TAG, "createCloudlogStation aborted: could not build request body");
                 return null;
             }
-            String url = address + "api/create_station/" + apiKey;
-            String result = sendPostRequest(url, body);
+            String result = cloudlogPost(base, "api/create_station/" + apiKey.trim(), body, null);
             String id = parseCreateStationResponse(result);
             Log.d(TAG, "createCloudlogStation " + (id != null ? "created id" : "failed/no id"));
             return id;
@@ -337,13 +331,10 @@ public class ThirdPartyService {
      * explanation instead of a bare "0 uploaded".
      */
     public static boolean uploadAdifToCloudlog(String adif, StringBuilder failureOut) {
-        String address = GeneralVariables.getCloudlogServerAddress();
-        if (address == null || address.isEmpty()) {
+        String base = CloudlogEndpoint.normalizeBase(GeneralVariables.getCloudlogServerAddress());
+        if (base == null) {
             appendFailure(failureOut, "no server address configured");
             return false;
-        }
-        if (!address.endsWith("/")){
-            address+="/";
         }
         JSONStringer js = new JSONStringer();
         try {
@@ -352,7 +343,7 @@ public class ThirdPartyService {
             // Cloudlog's documented endpoint is /api/qso (no trailing slash). Wavelog and
             // Nextlog both 308-redirect when the trailing slash is present, which
             // HttpURLConnection won't follow on a POST.
-            String clRes = sendPostRequest(address+"api/qso", result, failureOut);
+            String clRes = cloudlogPost(base, "api/qso", result, failureOut);
             Log.d(TAG, "Cloudlog upload " + (clRes != null ? "succeeded" : "failed"));
             return clRes != null;
         }catch (Exception k){
@@ -362,32 +353,63 @@ public class ThirdPartyService {
             return false;
         }
     }
+
+    /** Outcome of {@link #checkCloudlogConnection()}: pass/fail plus a one-line reason. */
+    public static final class ConnectionCheck {
+        public final boolean ok;
+        /** Why it failed (HTTP status, transport error, bad key…); null when {@link #ok}. */
+        public final String detail;
+
+        ConnectionCheck(boolean ok, String detail) {
+            this.ok = ok;
+            this.detail = detail;
+        }
+    }
+
     public static boolean CheckCloudlogConnection(){
-        String address = GeneralVariables.getCloudlogServerAddress();
+        return checkCloudlogConnection().ok;
+    }
+
+    /**
+     * Verifies the configured Cloudlog/Wavelog/Nextlog address + API key via
+     * {@code api/auth/[key]} and says <em>why</em> when it fails. Before #756 every failure
+     * — a cleartext block, a 404 from a no-rewrite install, a typo, a dead host — collapsed
+     * to a bare "Fail" in the settings dialog with nothing in debug.log.
+     */
+    public static ConnectionCheck checkCloudlogConnection() {
+        String base = CloudlogEndpoint.normalizeBase(GeneralVariables.getCloudlogServerAddress());
         String apiKey = GeneralVariables.getCloudlogServerApiKey();
-        // Check if the address ends with /
-        if (!address.endsWith("/")){
-            address+="/";
+        if (base == null) {
+            return new ConnectionCheck(false, "no server address configured");
         }
-        try{
-            // The Cloudlog auth endpoint takes the key as a path segment, so the constructed
-            // URL is unavoidably credential-bearing. Do not log it.
-            String url = address + "api/auth/"+ apiKey;
-            String result = sendGetRequest(url);
-            if (result == null) {
-                Log.d(TAG, "Cloudlog connection failed: no response");
-                return false;
-            }
-            // Nextlog and Wavelog both implement /api/auth but return slightly different shapes
-            // (XML declaration, extra whitespace, etc.). Match on the meaningful markers so all
-            // three Cloudlog-compatible backends report Pass.
-            String compact = result.replaceAll("\\s+", "");
-            return compact.contains("<status>Valid</status>")
-                    && compact.contains("<rights>rw</rights>");
-        }catch (Exception e){
-            Log.d(TAG, "Cloudlog auth error: " + e.getClass().getSimpleName());
-            return false;
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            return new ConnectionCheck(false, "no API key configured");
         }
+        // The Cloudlog auth endpoint takes the key as a path segment, so the constructed
+        // URL is unavoidably credential-bearing; cloudlogGet redacts it before logging.
+        StringBuilder why = new StringBuilder();
+        String result = cloudlogGet(base, "api/auth/" + apiKey.trim(), why);
+        if (result == null) {
+            return new ConnectionCheck(false, why.length() > 0 ? why.toString() : "no response");
+        }
+        return interpretAuthResponse(result);
+    }
+
+    /**
+     * Interprets the body of {@code api/auth/[key]}. Nextlog and Wavelog both implement it
+     * but return slightly different shapes (XML declaration, extra whitespace, etc.), so
+     * match on the meaningful markers. Pure — unit-tested.
+     */
+    static ConnectionCheck interpretAuthResponse(String body) {
+        String compact = body == null ? "" : body.replaceAll("\\s+", "");
+        boolean valid = compact.contains("<status>Valid</status>");
+        boolean rw = compact.contains("<rights>rw</rights>");
+        if (valid && rw) return new ConnectionCheck(true, null);
+        if (valid) return new ConnectionCheck(false, "API key is read-only (needs rw rights)");
+        if (compact.contains("<status>")) {
+            return new ConnectionCheck(false, "API key rejected by server");
+        }
+        return new ConnectionCheck(false, "unexpected reply (not a Cloudlog API?)");
     }
 
     public static boolean CheckQRZConnection(){
@@ -767,16 +789,27 @@ public class ThirdPartyService {
      */
     static String sendPostRequest(String url, String json, StringBuilder failureOut)
             throws IOException {
+        return sendPostRequest(url, json, failureOut, null);
+    }
+
+    /**
+     * As {@link #sendPostRequest(String, String, StringBuilder)}, additionally reporting the
+     * final HTTP status in {@code statusOut[0]} (0 if none was received).
+     */
+    static String sendPostRequest(String url, String json, StringBuilder failureOut,
+                                  int[] statusOut) throws IOException {
         // HttpURLConnection does not auto-follow 30x on a POST. Walk redirects manually
         // (capped) so deployments that rewrite trailing slashes, http→https, or move
         // the API path still work.
         String currentUrl = url;
+        if (statusOut != null && statusOut.length > 0) statusOut[0] = 0;
         for (int hop = 0; hop < 5; hop++) {
             HttpURLConnection conn = null;
             BufferedReader reader = null;
             try {
                 URL urlObj = new URL(currentUrl);
                 conn = (HttpURLConnection) urlObj.openConnection();
+                applyTimeouts(conn);
                 conn.setDoOutput(true);
                 conn.setInstanceFollowRedirects(false);
                 conn.setRequestMethod("POST");
@@ -788,6 +821,7 @@ public class ThirdPartyService {
                 os.close();
 
                 int responseCode = conn.getResponseCode();
+                if (statusOut != null && statusOut.length > 0) statusOut[0] = responseCode;
                 // Cloudlog uses HTTP_CREATED as the response for successful record creation
                 if (responseCode == HttpURLConnection.HTTP_OK
                         || responseCode == HttpURLConnection.HTTP_CREATED) {
@@ -888,6 +922,7 @@ public class ThirdPartyService {
         try {
             URL urlObj = new URL(url);
             conn = (HttpURLConnection) urlObj.openConnection();
+            applyTimeouts(conn);
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
             conn.setDoOutput(true);
@@ -921,12 +956,23 @@ public class ThirdPartyService {
     }
 
     public static String sendGetRequest(String url) throws IOException {
+        return sendGetRequest(url, null);
+    }
+
+    /**
+     * As {@link #sendGetRequest(String)}, but reports the HTTP status in
+     * {@code statusOut[0]} when supplied (0 if the connection never produced one), so the
+     * caller can tell a 404 (try the other URL shape) from a 401/500 (stop).
+     */
+    static String sendGetRequest(String url, int[] statusOut) throws IOException {
         HttpURLConnection conn = null;
         BufferedReader reader = null;
+        if (statusOut != null && statusOut.length > 0) statusOut[0] = 0;
 
         try {
             URL urlObj = new URL(url);
             conn = (HttpURLConnection) urlObj.openConnection();
+            applyTimeouts(conn);
 
             // Set request method to GET
             conn.setRequestMethod("GET");
@@ -935,8 +981,10 @@ public class ThirdPartyService {
 
             // Get server response
             int responseCode = conn.getResponseCode();
+            if (statusOut != null && statusOut.length > 0) statusOut[0] = responseCode;
             if (responseCode == HttpURLConnection.HTTP_OK) {
-                reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                reader = new BufferedReader(new InputStreamReader(conn.getInputStream(),
+                        StandardCharsets.UTF_8));
                 StringBuilder response = new StringBuilder();
                 String line;
                 while ((line = reader.readLine()) != null) {
@@ -944,6 +992,7 @@ public class ThirdPartyService {
                 }
                 return response.toString();
             }
+            Log.d(TAG, "GET " + redactUrlApiKey(url) + " -> HTTP " + responseCode);
         } finally {
             if (conn != null) {
                 conn.disconnect();
@@ -952,6 +1001,87 @@ public class ThirdPartyService {
                 reader.close();
             }
         }
+        return null;
+    }
+
+    /**
+     * Connect/read timeouts for every logbook request. {@code HttpURLConnection} defaults
+     * to "forever", which on a LAN host that is off or firewalled left the Test Connection
+     * spinner running until the OS gave up on the SYN retries (issue #756).
+     */
+    static final int HTTP_CONNECT_TIMEOUT_MS = 10_000;
+    static final int HTTP_READ_TIMEOUT_MS = 20_000;
+
+    private static void applyTimeouts(HttpURLConnection conn) {
+        conn.setConnectTimeout(HTTP_CONNECT_TIMEOUT_MS);
+        conn.setReadTimeout(HTTP_READ_TIMEOUT_MS);
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Cloudlog / Wavelog / Nextlog request plumbing (issue #756)
+    // ---------------------------------------------------------------------------------
+
+    /**
+     * GET {@code path} under a Cloudlog-compatible base URL, trying each URL shape from
+     * {@link CloudlogEndpoint#candidates} in turn. A 404 moves on to the next shape (an
+     * install without URL rewriting only answers at {@code index.php/api/...}); any other
+     * status, or a transport error, stops. Returns the body on HTTP 200, else null with the
+     * reason appended to {@code failureOut}. Every attempt is written to debug.log with the
+     * API key redacted.
+     */
+    static String cloudlogGet(String base, String path, StringBuilder failureOut) {
+        String lastFailure = null;
+        for (String url : CloudlogEndpoint.candidates(base, path)) {
+            String shown = redactUrlApiKey(url);
+            int[] status = new int[1];
+            try {
+                String body = sendGetRequest(url, status);
+                if (body != null) {
+                    CloudlogEndpoint.rememberWorking(base, url);
+                    GeneralVariables.fileLog("Cloudlog: GET " + shown + " -> HTTP " + status[0]);
+                    return body;
+                }
+                lastFailure = CloudlogEndpoint.describeFailure(shown, status[0], null);
+                GeneralVariables.fileLog("Cloudlog: GET " + shown + " -> " + lastFailure);
+                if (status[0] != HttpURLConnection.HTTP_NOT_FOUND) break;
+            } catch (Exception e) {
+                lastFailure = CloudlogEndpoint.describeFailure(shown, 0, e);
+                GeneralVariables.fileLog("Cloudlog: GET " + shown + " -> " + lastFailure);
+                break;
+            }
+        }
+        appendFailure(failureOut, lastFailure);
+        return null;
+    }
+
+    /**
+     * POST counterpart of {@link #cloudlogGet}: same candidate walk, same 404-only
+     * fallback, same logging. Returns the body on HTTP 200/201, else null.
+     */
+    static String cloudlogPost(String base, String path, String json, StringBuilder failureOut) {
+        String lastFailure = null;
+        for (String url : CloudlogEndpoint.candidates(base, path)) {
+            String shown = redactUrlApiKey(url);
+            int[] status = new int[1];
+            StringBuilder why = new StringBuilder();
+            try {
+                String body = sendPostRequest(url, json, why, status);
+                if (body != null) {
+                    CloudlogEndpoint.rememberWorking(base, url);
+                    GeneralVariables.fileLog("Cloudlog: POST " + shown + " -> HTTP " + status[0]);
+                    return body;
+                }
+                lastFailure = why.length() > 0 ? why.toString()
+                        : CloudlogEndpoint.describeFailure(shown, status[0], null);
+                GeneralVariables.fileLog("Cloudlog: POST " + shown + " -> " + lastFailure);
+                if (status[0] != HttpURLConnection.HTTP_NOT_FOUND) break;
+            } catch (Exception e) {
+                lastFailure = CloudlogEndpoint.describeFailure(shown, 0, e);
+                GeneralVariables.fileLog("Cloudlog: POST " + shown + " -> " + lastFailure);
+                break;
+            }
+        }
+        appendFailure(failureOut, lastFailure);
         return null;
     }
 }

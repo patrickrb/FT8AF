@@ -1,8 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cleartext policy (issue #756).
+
+  The only user-supplied host in the app is the Cloudlog / Wavelog / Nextlog logbook
+  server, and those are very often self-hosted on a LAN over plain HTTP
+  (http://192.168.x.x/wavelog/). A base-config that forbids cleartext made
+  HttpURLConnection throw before a single packet left the phone, so "Test Connection"
+  failed with nothing in the server's access log or in tcpdump.
+
+  So: cleartext is permitted by default (that only affects addresses the user typed),
+  and every public API the app itself talks to is pinned to TLS below, so a typo,
+  a captive portal, or a downgrade attempt can't silently move those to http://.
+-->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false">
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+
+    <!-- Public services the app calls with hard-coded https:// URLs: never cleartext. -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">qrz.com</domain>
+        <domain includeSubdomains="true">pota.app</domain>
+        <domain includeSubdomains="true">pskreporter.info</domain>
+        <domain includeSubdomains="true">amazoncognito.com</domain>
+        <domain includeSubdomains="true">amazonaws.com</domain>
+        <domain includeSubdomains="true">github.com</domain>
+        <domain includeSubdomains="true">ft8af.app</domain>
+    </domain-config>
 </network-security-config>
