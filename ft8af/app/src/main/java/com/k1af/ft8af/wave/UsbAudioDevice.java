@@ -76,6 +76,12 @@ public class UsbAudioDevice {
     private int outputSampleRate = 48000;
     private int outputChannels = 2;
 
+    // UAC AudioControl interface (bInterfaceClass 1 / bInterfaceSubclass 1). Force-claiming
+    // it is what actually detaches the kernel's snd-usb-audio driver from the device —
+    // see detachKernelAudioDriver().
+    private UsbInterface controlInterface;
+    private boolean controlInterfaceClaimed;
+
     // Singleton active device for use by MicRecorder / FT8TransmitSignal
     private static UsbAudioDevice activeInputDevice;
     private static UsbAudioDevice activeOutputDevice;
@@ -185,7 +191,93 @@ public class UsbAudioDevice {
         }
 
         findEndpoints();
+        detachKernelAudioDriver();
         return endpointIn != null || endpointOut != null;
+    }
+
+    /**
+     * Detaches the kernel's USB-audio class driver from this device by force-claiming its
+     * AudioControl interface, so Android stops treating the rig's sound card as a headset
+     * while we drive it over libusb.
+     *
+     * <p>Why (2026-08-25 bench log): claiming only the streaming interfaces, as before, is a
+     * silent no-op for {@code snd-usb-audio} — it binds the card to the AudioControl
+     * interface and marks the streaming interfaces owned-but-unused, so the ALSA card
+     * survived our claim and Android kept the device registered as a {@code usb_headset}
+     * sink and source. Every sound Android routed there (our own DX-alert notification ding,
+     * a BT car-kit connect re-route, a nav prompt) made the kernel driver flip the playback
+     * interface's alt-setting under our in-flight iso URBs, which the kernel completes with
+     * {@code -ESHUTDOWN}: {@code nativeWrite} returned {@code rc=5 TRANSFER_NO_DEVICE}
+     * ~280 ms into the TX with the device still on the bus, and the cycle went out as dead
+     * air. 20 of 22 such failures in that log were preceded by a QSO-complete alert 1.9 s
+     * earlier. Disconnecting the driver at the AudioControl interface runs the real
+     * {@code usb_audio_disconnect}, which retires the ALSA card; nothing Android plays can
+     * reach the endpoint any more.
+     *
+     * <p>Side effect, by design: while the app holds the device, phone audio that Android
+     * would have routed into the rig's mic input is dropped instead (it was inaudible to the
+     * operator either way, and could have been keyed on air). The kernel does not rebind the
+     * driver on release; the card comes back on the next unplug/replug.
+     *
+     * <p>Not fatal: a device with no AudioControl interface, or a refused claim, is logged
+     * and the caller proceeds exactly as before.
+     */
+    private void detachKernelAudioDriver() {
+        if (connection == null || usbDevice == null) return;
+        // The per-cycle TX open runs while the session-long RX capture already holds the
+        // AudioControl interface on the same device: the driver is already gone, and a
+        // second force-claim would only steal the claim from the RX connection each cycle.
+        UsbAudioDevice holder = activeInputDevice;
+        if (holder != null && holder != this && holder.controlInterfaceClaimed
+                && usbDevice.equals(holder.usbDevice)) {
+            com.k1af.ft8af.GeneralVariables.fileLog(
+                    "UsbAudioDevice: kernel audio driver already detached by the RX session");
+            return;
+        }
+        int n = usbDevice.getInterfaceCount();
+        int[] classes = new int[n];
+        int[] subclasses = new int[n];
+        for (int i = 0; i < n; i++) {
+            UsbInterface iface = usbDevice.getInterface(i);
+            classes[i] = iface.getInterfaceClass();
+            subclasses[i] = iface.getInterfaceSubclass();
+        }
+        int idx = audioControlInterfaceIndex(classes, subclasses);
+        if (idx < 0) {
+            com.k1af.ft8af.GeneralVariables.fileLog(
+                    "UsbAudioDevice: no AudioControl interface — kernel audio driver left "
+                            + "attached (Android may still route sounds into this device)");
+            return;
+        }
+        controlInterface = usbDevice.getInterface(idx);
+        boolean ok;
+        try {
+            ok = connection.claimInterface(controlInterface, /*force=*/ true);
+        } catch (Exception e) {
+            ok = false;
+        }
+        controlInterfaceClaimed = ok;
+        com.k1af.ft8af.GeneralVariables.fileLog(String.format(
+                "UsbAudioDevice: kernel audio driver detach via AudioControl iface %d: %s",
+                controlInterface.getId(), ok ? "OK" : "claimInterface FAILED"));
+    }
+
+    /**
+     * Index of the first UAC AudioControl interface (class {@value #USB_CLASS_AUDIO},
+     * subclass {@value #USB_SUBCLASS_AUDIOCONTROL}) among a device's interfaces, given
+     * their {@code bInterfaceClass} / {@code bInterfaceSubclass} values in interface order;
+     * {@code -1} when there is none. Extra entries in the longer array are ignored.
+     *
+     * <p>Package-visible for tests.
+     */
+    static int audioControlInterfaceIndex(int[] classes, int[] subclasses) {
+        int n = Math.min(classes.length, subclasses.length);
+        for (int i = 0; i < n; i++) {
+            if (classes[i] == USB_CLASS_AUDIO && subclasses[i] == USB_SUBCLASS_AUDIOCONTROL) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private void findEndpoints() {
@@ -1037,6 +1129,12 @@ public class UsbAudioDevice {
                     connection.releaseInterface(streamingInterfaceOut);
                 }
             } catch (Exception ignored) {}
+            try {
+                if (controlInterfaceClaimed && controlInterface != null) {
+                    connection.releaseInterface(controlInterface);
+                }
+            } catch (Exception ignored) {}
+            controlInterfaceClaimed = false;
             connection.close();
             connection = null;
         }

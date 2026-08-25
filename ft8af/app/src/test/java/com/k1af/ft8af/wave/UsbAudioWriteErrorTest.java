@@ -17,8 +17,11 @@ import org.junit.Test;
  * {@code libusb_error} (setup failure), or a positive
  * {@code libusb_transfer_status} when a transfer dies after streaming started —
  * the field failure mode from the 2026-07-03 POTA log was {@code rc=5}
- * TRANSFER_NO_DEVICE (device fell off the bus mid-TX, RF into the USB link),
- * which used to be logged as UNKNOWN.
+ * TRANSFER_NO_DEVICE, which used to be logged as UNKNOWN. That status is the
+ * kernel flushing the endpoint under our URBs: usually Android routing a sound
+ * through the same card while its class driver was still attached (see
+ * {@link UsbAudioControlInterfaceTest}), occasionally the device really falling
+ * off the bus (a hub resetting under RF).
  */
 public class UsbAudioWriteErrorTest {
 
