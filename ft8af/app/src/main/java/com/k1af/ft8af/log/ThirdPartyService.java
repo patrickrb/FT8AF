@@ -760,17 +760,24 @@ public class ThirdPartyService {
     }
 
     /**
-     * Redacts a Cloudlog/Wavelog API key from a URL before it is logged. The key is a
-     * path segment following {@code create_station/}, {@code station_info/}, or
-     * {@code auth/}; this replaces that segment with {@code ***} so the credential never
-     * reaches logcat. Only the LOGGED string is redacted — the real request URL is
-     * unchanged. Returns null unchanged.
+     * Redacts credentials from a URL before it is logged. Two things are masked:
+     * <ul>
+     *   <li>the Cloudlog/Wavelog API key — a path segment following {@code create_station/},
+     *       {@code station_info/}, or {@code auth/} — replaced with {@code ***};</li>
+     *   <li>any authority user-info ({@code http://user:pw@host/…}) — replaced with
+     *       {@code ***@}. Self-hosted logbooks behind basic auth are entered exactly that
+     *       way, and {@link CloudlogEndpoint#normalizeBase} preserves it, so without this
+     *       every {@code Cloudlog: GET/POST} line in debug.log would carry the password.</li>
+     * </ul>
+     * Only the LOGGED string is redacted — the real request URL is unchanged. Returns null
+     * unchanged.
      */
     static String redactUrlApiKey(String url) {
         if (url == null) {
             return null;
         }
-        return url.replaceAll("(create_station/|station_info/|auth/)[^/?#\\s]+", "$1***");
+        String out = url.replaceFirst("^([A-Za-z][A-Za-z0-9+.\\-]*://)[^/?#@\\s]*@", "$1***@");
+        return out.replaceAll("(create_station/|station_info/|auth/)[^/?#\\s]+", "$1***");
     }
 
     public static String sendPostRequest(String url, String json) throws IOException {
@@ -1030,28 +1037,8 @@ public class ThirdPartyService {
      * API key redacted.
      */
     static String cloudlogGet(String base, String path, StringBuilder failureOut) {
-        String lastFailure = null;
-        for (String url : CloudlogEndpoint.candidates(base, path)) {
-            String shown = redactUrlApiKey(url);
-            int[] status = new int[1];
-            try {
-                String body = sendGetRequest(url, status);
-                if (body != null) {
-                    CloudlogEndpoint.rememberWorking(base, url);
-                    GeneralVariables.fileLog("Cloudlog: GET " + shown + " -> HTTP " + status[0]);
-                    return body;
-                }
-                lastFailure = CloudlogEndpoint.describeFailure(shown, status[0], null);
-                GeneralVariables.fileLog("Cloudlog: GET " + shown + " -> " + lastFailure);
-                if (status[0] != HttpURLConnection.HTTP_NOT_FOUND) break;
-            } catch (Exception e) {
-                lastFailure = CloudlogEndpoint.describeFailure(shown, 0, e);
-                GeneralVariables.fileLog("Cloudlog: GET " + shown + " -> " + lastFailure);
-                break;
-            }
-        }
-        appendFailure(failureOut, lastFailure);
-        return null;
+        return cloudlogRequest("GET", base, path, failureOut,
+                (url, status, why) -> sendGetRequest(url, status));
     }
 
     /**
@@ -1059,25 +1046,49 @@ public class ThirdPartyService {
      * fallback, same logging. Returns the body on HTTP 200/201, else null.
      */
     static String cloudlogPost(String base, String path, String json, StringBuilder failureOut) {
+        return cloudlogRequest("POST", base, path, failureOut,
+                (url, status, why) -> sendPostRequest(url, json, why, status));
+    }
+
+    /**
+     * One HTTP attempt against a single candidate URL. Returns the body on success or
+     * {@code null} on a non-success status (reporting the status in {@code statusOut[0]}
+     * and, optionally, a server-supplied reason in {@code why}); throws on transport
+     * failure. Package-private so the candidate walk can be unit-tested with a fake.
+     */
+    interface CloudlogTransport {
+        String call(String url, int[] statusOut, StringBuilder why) throws IOException;
+    }
+
+    /**
+     * The candidate walk shared by {@link #cloudlogGet} and {@link #cloudlogPost}: try each
+     * URL shape from {@link CloudlogEndpoint#candidates} in order; a 404 moves on to the
+     * next shape, any other status or a transport exception stops; the first success pins
+     * its shape via {@link CloudlogEndpoint#rememberWorking}. The reason for the last
+     * failed attempt is appended to {@code failureOut}.
+     */
+    static String cloudlogRequest(String verb, String base, String path,
+                                  StringBuilder failureOut, CloudlogTransport transport) {
         String lastFailure = null;
         for (String url : CloudlogEndpoint.candidates(base, path)) {
             String shown = redactUrlApiKey(url);
             int[] status = new int[1];
             StringBuilder why = new StringBuilder();
             try {
-                String body = sendPostRequest(url, json, why, status);
+                String body = transport.call(url, status, why);
                 if (body != null) {
                     CloudlogEndpoint.rememberWorking(base, url);
-                    GeneralVariables.fileLog("Cloudlog: POST " + shown + " -> HTTP " + status[0]);
+                    GeneralVariables.fileLog("Cloudlog: " + verb + " " + shown
+                            + " -> HTTP " + status[0]);
                     return body;
                 }
                 lastFailure = why.length() > 0 ? why.toString()
                         : CloudlogEndpoint.describeFailure(shown, status[0], null);
-                GeneralVariables.fileLog("Cloudlog: POST " + shown + " -> " + lastFailure);
+                GeneralVariables.fileLog("Cloudlog: " + verb + " " + shown + " -> " + lastFailure);
                 if (status[0] != HttpURLConnection.HTTP_NOT_FOUND) break;
             } catch (Exception e) {
                 lastFailure = CloudlogEndpoint.describeFailure(shown, 0, e);
-                GeneralVariables.fileLog("Cloudlog: POST " + shown + " -> " + lastFailure);
+                GeneralVariables.fileLog("Cloudlog: " + verb + " " + shown + " -> " + lastFailure);
                 break;
             }
         }

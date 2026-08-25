@@ -108,7 +108,7 @@ public final class CloudlogEndpoint {
         while (p.startsWith("/")) {
             p = p.substring(1);
         }
-        if (base.toLowerCase(Locale.ROOT).contains("index.php")) {
+        if (endsWithIndexPhpSegment(base)) {
             out.add(base + p);
             return out;
         }
@@ -123,6 +123,22 @@ public final class CloudlogEndpoint {
             out.add(rewritten);
         }
         return Collections.unmodifiableList(out);
+    }
+
+    /**
+     * True when a normalized base URL's <em>path</em> already ends in an {@code index.php/}
+     * segment, i.e. the user typed the no-rewrite form themselves and there is nothing to
+     * fall back to. Only the path is inspected: a host such as {@code index.php.example}
+     * or a directory merely containing the text ({@code /index.php-old/}) doesn't count.
+     */
+    static boolean endsWithIndexPhpSegment(String base) {
+        if (base == null) return false;
+        String rest = base;
+        int scheme = rest.indexOf("://");
+        if (scheme >= 0) rest = rest.substring(scheme + 3);
+        int slash = rest.indexOf('/');
+        String path = slash >= 0 ? rest.substring(slash) : "";
+        return path.toLowerCase(Locale.ROOT).endsWith("/" + INDEX_PHP);
     }
 
     /**
