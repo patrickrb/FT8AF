@@ -76,6 +76,12 @@ public class UsbAudioDevice {
     private int outputSampleRate = 48000;
     private int outputChannels = 2;
 
+    // UAC AudioControl interface (bInterfaceClass 1 / bInterfaceSubclass 1). Force-claiming
+    // it is what actually detaches the kernel's snd-usb-audio driver from the device —
+    // see detachKernelAudioDriver().
+    private UsbInterface controlInterface;
+    private boolean controlInterfaceClaimed;
+
     // Singleton active device for use by MicRecorder / FT8TransmitSignal
     private static UsbAudioDevice activeInputDevice;
     private static UsbAudioDevice activeOutputDevice;
@@ -185,7 +191,159 @@ public class UsbAudioDevice {
         }
 
         findEndpoints();
-        return endpointIn != null || endpointOut != null;
+        if (endpointIn == null && endpointOut == null) {
+            // Nothing we can stream on. Callers treat a false return as "nothing to
+            // close", so release the connection here rather than leaking it — and
+            // don't take Android's audio away from a device we can't use anyway.
+            connection.close();
+            connection = null;
+            return false;
+        }
+        detachKernelAudioDriver();
+        return true;
+    }
+
+    /**
+     * Detaches the kernel's USB-audio class driver from this device by force-claiming its
+     * AudioControl interface, so Android stops treating the rig's sound card as a headset
+     * while we drive it over libusb.
+     *
+     * <p>Why (2026-08-25 bench log): claiming only the streaming interfaces, as before, is a
+     * silent no-op for {@code snd-usb-audio} — it binds the card to the AudioControl
+     * interface and marks the streaming interfaces owned-but-unused, so the ALSA card
+     * survived our claim and Android kept the device registered as a {@code usb_headset}
+     * sink and source. Every sound Android routed there (our own DX-alert notification ding,
+     * a BT car-kit connect re-route, a nav prompt) made the kernel driver flip the playback
+     * interface's alt-setting under our in-flight iso URBs, which the kernel completes with
+     * {@code -ESHUTDOWN}: {@code nativeWrite} returned {@code rc=5 TRANSFER_NO_DEVICE}
+     * ~280 ms into the TX with the device still on the bus, and the cycle went out as dead
+     * air. 20 of 22 such failures in that log were preceded by a QSO-complete alert 1.9 s
+     * earlier. Disconnecting the driver at the AudioControl interface runs the real
+     * {@code usb_audio_disconnect}, which retires the ALSA card; nothing Android plays can
+     * reach the endpoint any more.
+     *
+     * <p>Side effect, by design: while the app holds the device, phone audio that Android
+     * would have routed into the rig's mic input is dropped instead (it was inaudible to the
+     * operator either way, and could have been keyed on air). The kernel does not rebind the
+     * driver on release; the card comes back on the next unplug/replug.
+     *
+     * <p>Not fatal: a device with no AudioControl interface, or a refused claim, is logged
+     * and the caller proceeds exactly as before.
+     */
+    private void detachKernelAudioDriver() {
+        if (connection == null || usbDevice == null) return;
+        // The per-cycle TX open runs while the session-long RX capture already holds the
+        // AudioControl interface on the same device: the driver is already gone, and a
+        // second force-claim would only steal the claim from the RX connection each cycle.
+        UsbAudioDevice holder = activeInputDevice;
+        boolean holderAlreadyDetached = holder != null && holder != this
+                && holder.controlInterfaceClaimed && usbDevice.equals(holder.usbDevice);
+
+        final UsbDevice dev = usbDevice;
+        final UsbDeviceConnection conn = connection;
+        KernelDetachResult result = detachKernelAudioDriver(new KernelDetachPort() {
+            @Override public int interfaceCount() { return dev.getInterfaceCount(); }
+            @Override public int interfaceClass(int i) {
+                return dev.getInterface(i).getInterfaceClass();
+            }
+            @Override public int interfaceSubclass(int i) {
+                return dev.getInterface(i).getInterfaceSubclass();
+            }
+            @Override public boolean forceClaim(int i) {
+                UsbInterface iface = dev.getInterface(i);
+                controlInterface = iface;
+                try {
+                    return conn.claimInterface(iface, /*force=*/ true);
+                } catch (Exception e) {
+                    return false;
+                }
+            }
+        }, holderAlreadyDetached);
+
+        controlInterfaceClaimed = result == KernelDetachResult.CLAIMED;
+        switch (result) {
+            case SKIPPED_HOLDER:
+                com.k1af.ft8af.GeneralVariables.fileLog(
+                        "UsbAudioDevice: kernel audio driver already detached by the RX session");
+                break;
+            case NO_CONTROL_INTERFACE:
+                com.k1af.ft8af.GeneralVariables.fileLog(
+                        "UsbAudioDevice: no AudioControl interface — kernel audio driver left "
+                                + "attached (Android may still route sounds into this device)");
+                break;
+            default:
+                com.k1af.ft8af.GeneralVariables.fileLog(String.format(
+                        "UsbAudioDevice: kernel audio driver detach via AudioControl iface %d: %s",
+                        controlInterface != null ? controlInterface.getId() : -1,
+                        result == KernelDetachResult.CLAIMED ? "OK" : "claimInterface FAILED"));
+                break;
+        }
+    }
+
+    /**
+     * The slice of {@link UsbDevice}/{@link UsbDeviceConnection} that
+     * {@link #detachKernelAudioDriver(KernelDetachPort, boolean)} needs, so the
+     * claim decision and its effect can be unit-tested without Android USB objects.
+     * Package-visible for tests.
+     */
+    interface KernelDetachPort {
+        int interfaceCount();
+        int interfaceClass(int index);
+        int interfaceSubclass(int index);
+        /** Force-claims interface {@code index}; returns the claim result. */
+        boolean forceClaim(int index);
+    }
+
+    /** Outcome of {@link #detachKernelAudioDriver(KernelDetachPort, boolean)}. */
+    enum KernelDetachResult {
+        /** Another open connection on the same device already holds the claim. */
+        SKIPPED_HOLDER,
+        /** The device exposes no UAC AudioControl interface; nothing was claimed. */
+        NO_CONTROL_INTERFACE,
+        /** The AudioControl interface was force-claimed; the kernel driver is gone. */
+        CLAIMED,
+        /** The claim was refused; the kernel driver may still be attached. */
+        CLAIM_FAILED
+    }
+
+    /**
+     * Decides whether to force-claim the AudioControl interface and does so through
+     * {@code port}. Exactly one {@link KernelDetachPort#forceClaim} call is made, on the
+     * first AudioControl interface, unless {@code holderAlreadyDetached} is set or the
+     * device has none. Package-visible for tests.
+     */
+    static KernelDetachResult detachKernelAudioDriver(KernelDetachPort port,
+                                                      boolean holderAlreadyDetached) {
+        if (holderAlreadyDetached) return KernelDetachResult.SKIPPED_HOLDER;
+        int n = port.interfaceCount();
+        int[] classes = new int[n];
+        int[] subclasses = new int[n];
+        for (int i = 0; i < n; i++) {
+            classes[i] = port.interfaceClass(i);
+            subclasses[i] = port.interfaceSubclass(i);
+        }
+        int idx = audioControlInterfaceIndex(classes, subclasses);
+        if (idx < 0) return KernelDetachResult.NO_CONTROL_INTERFACE;
+        return port.forceClaim(idx)
+                ? KernelDetachResult.CLAIMED : KernelDetachResult.CLAIM_FAILED;
+    }
+
+    /**
+     * Index of the first UAC AudioControl interface (class {@value #USB_CLASS_AUDIO},
+     * subclass {@value #USB_SUBCLASS_AUDIOCONTROL}) among a device's interfaces, given
+     * their {@code bInterfaceClass} / {@code bInterfaceSubclass} values in interface order;
+     * {@code -1} when there is none. Extra entries in the longer array are ignored.
+     *
+     * <p>Package-visible for tests.
+     */
+    static int audioControlInterfaceIndex(int[] classes, int[] subclasses) {
+        int n = Math.min(classes.length, subclasses.length);
+        for (int i = 0; i < n; i++) {
+            if (classes[i] == USB_CLASS_AUDIO && subclasses[i] == USB_SUBCLASS_AUDIOCONTROL) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private void findEndpoints() {
@@ -1037,6 +1195,12 @@ public class UsbAudioDevice {
                     connection.releaseInterface(streamingInterfaceOut);
                 }
             } catch (Exception ignored) {}
+            try {
+                if (controlInterfaceClaimed && controlInterface != null) {
+                    connection.releaseInterface(controlInterface);
+                }
+            } catch (Exception ignored) {}
+            controlInterfaceClaimed = false;
             connection.close();
             connection = null;
         }
@@ -1100,9 +1264,14 @@ public class UsbAudioDevice {
      * {@code libusb_transfer_status} (positive, stored by
      * {@code onOutputComplete} in {@code usb_audio_capture.cpp}). The positive
      * statuses were previously logged as {@code UNKNOWN}, which hid the actual
-     * field failure mode: {@code rc=5 TRANSFER_NO_DEVICE}, the device falling
-     * off the bus mid-transmission (typically RF into the USB link at TX
-     * power). Naming the code makes a dropped TX cycle diagnosable.
+     * field failure mode: {@code rc=5 TRANSFER_NO_DEVICE}. Despite the name,
+     * that status is the kernel tearing down our endpoint ({@code -ESHUTDOWN})
+     * while the device is usually still on the bus — historically Android
+     * playing a sound through the same card while its class driver was still
+     * attached (see {@link #detachKernelAudioDriver()}); a genuine bus removal
+     * mid-transfer shows up as {@code rc=-4 NO_DEVICE} together with a
+     * {@code usbDetach} in the log. Naming the code makes a dropped TX cycle
+     * diagnosable.
      *
      * <p>Package-visible for testing.
      */
@@ -1147,9 +1316,13 @@ public class UsbAudioDevice {
      * {@link #MAX_FALLBACK_ELAPSED_MS}), part of the FT8 message has already
      * been transmitted; restarting from the beginning mid-slot would key an
      * off-grid, overlapping signal that no receiver can decode — worse than
-     * dropping the cycle. Device-gone ({@code NO_DEVICE}/{@code
-     * TRANSFER_NO_DEVICE}) and cancelled ({@code TRANSFER_CANCELLED}, the user
-     * pressed STOP) failures never retry either, regardless of timing.
+     * dropping the cycle. Endpoint-torn-down failures never retry either,
+     * regardless of timing: {@code rc=-4 NO_DEVICE} means the device really
+     * left the bus, and {@code rc=5 TRANSFER_NO_DEVICE} means the kernel
+     * flushed our endpoint ({@code -ESHUTDOWN}) — usually with the device still
+     * attached, see {@link #detachKernelAudioDriver()} — and in both cases the
+     * audio already streamed can't be un-sent. Cancelled ({@code
+     * TRANSFER_CANCELLED}, the user pressed STOP) never retries.
      *
      * <p>Package-visible for testing.
      *
@@ -1158,7 +1331,7 @@ public class UsbAudioDevice {
      */
     static boolean shouldFallbackToUsbRequest(int rc, long elapsedMs) {
         if (rc == 0) return false;// success — nothing to fall back from
-        if (rc == -4 || rc == 5) return false;// device left the bus
+        if (rc == -4 || rc == 5) return false;// device gone (-4) or endpoint torn down (5)
         if (rc == 3) return false;// cancelled: the user stopped the TX
         return elapsedMs <= MAX_FALLBACK_ELAPSED_MS;
     }
