@@ -504,6 +504,9 @@ fun RadioAudioSettings(
                     mainViewModel.databaseOpr.writeConfig("usbAudioInputPid", "0", null)
                 }
                 audioInputName = audioInputAdapter.getDeviceDisplayName(position)
+                // Selecting a Bluetooth-SCO mic must actually bring SCO up (issue #723);
+                // deselecting it releases SCO unless a Bluetooth rig still needs it.
+                mainViewModel.refreshBluetoothHeadsetMode()
             },
         )
     }
@@ -539,6 +542,8 @@ fun RadioAudioSettings(
                     mainViewModel.databaseOpr.writeConfig("usbAudioOutputPid", "0", null)
                 }
                 audioOutputName = audioOutputAdapter.getDeviceDisplayName(position)
+                // Same for the speaker side: route playback over the BT headset (issue #723).
+                mainViewModel.refreshBluetoothHeadsetMode()
             },
         )
     }

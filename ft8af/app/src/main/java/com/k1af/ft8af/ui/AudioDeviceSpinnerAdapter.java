@@ -184,6 +184,20 @@ public class AudioDeviceSpinnerAdapter extends BaseAdapter {
         return view;
     }
 
+    /**
+     * {@link AudioDeviceInfo} type at a spinner position, or -1 for the "Default" row and USB
+     * entries (which don't correspond to a routed {@code AudioDeviceInfo}). Used to detect
+     * when the user picked a Bluetooth-SCO headset so SCO can be brought up (issue #723).
+     */
+    public int getDeviceType(int position) {
+        if (position <= 0) return -1;
+        int adPos = position - 1;
+        if (adPos < audioDeviceList.size()) {
+            return audioDeviceList.get(adPos).getType();
+        }
+        return -1;
+    }
+
     public String getDeviceDisplayName(int position) {
         if (position == 0) {
             return mContext.getString(R.string.audio_device_default);
