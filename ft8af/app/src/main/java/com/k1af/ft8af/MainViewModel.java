@@ -1994,12 +1994,15 @@ public class MainViewModel extends ViewModel {
             }
         });
 
-        iComWifiConnector.connect();
         connectRig();//assign baseRig
 
         baseRig.setControlMode(GeneralVariables.controlMode);
         baseRig.setOnRigStateChanged(onRigStateChanged);
         baseRig.setConnector(iComWifiConnector);
+        // Connect AFTER the rig-state listener is wired (setConnector above), otherwise the
+        // onConnecting/onConnected edges the connector now emits (#754) would fire into a
+        // null listener and the CAT chip would never leave grey.
+        iComWifiConnector.connect();
 
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {//connection takes time, wait before setting frequency
             @Override

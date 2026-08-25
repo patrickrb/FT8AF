@@ -27,6 +27,38 @@ public abstract class WifiRig {
         void onReceivedWaveData(byte[] data);
     }
 
+    /**
+     * Link lifecycle events, surfaced so the connector can drive the CAT status chip and
+     * connect/disconnect toasts (issue #754). Fired from the concrete rig's stream-event
+     * handlers via the {@code notify*} helpers below.
+     */
+    public interface OnLinkStateChanged {
+        void onLoginResult(boolean ok);
+
+        void onSendError();
+
+        void onClosed();
+    }
+
+    public OnLinkStateChanged onLinkStateChanged;
+
+    public void setOnLinkStateChanged(OnLinkStateChanged onLinkStateChanged) {
+        this.onLinkStateChanged = onLinkStateChanged;
+    }
+
+    /** Concrete rigs call these from their stream-event handlers; null-safe. */
+    protected void notifyLoginResult(boolean ok) {
+        if (onLinkStateChanged != null) onLinkStateChanged.onLoginResult(ok);
+    }
+
+    protected void notifySendError() {
+        if (onLinkStateChanged != null) onLinkStateChanged.onSendError();
+    }
+
+    protected void notifyClosed() {
+        if (onLinkStateChanged != null) onLinkStateChanged.onClosed();
+    }
+
     public ControlUdp controlUdp;
     // volatile: the UDP receive worker reads this to play RX audio while another
     // thread (UI disconnect, or a send-side network error routed through

@@ -50,11 +50,13 @@ public class XieGuWifiRig extends WifiRig{
             public void OnUdpSendIOException(IcomUdpStyle style,IOException e) {
                 ToastMessage.show(String.format(GeneralVariables.getStringFromResource(
                         R.string.network_exception),IcomUdpBase.getUdpStyle(style),e.getMessage()));
+                notifySendError();
                 close();
             }
 
             @Override
             public void OnLoginResponse(boolean authIsOK) {
+                notifyLoginResult(authIsOK);
                 if (authIsOK){
                     ToastMessage.show(GeneralVariables.getStringFromResource(R.string.login_succeed));
                 }else {
@@ -91,6 +93,7 @@ public class XieGuWifiRig extends WifiRig{
     @Override
     public void close(){
         opened=false;
+        notifyClosed();
         controlUdp.closeAll();
         closeAudio();
     }
