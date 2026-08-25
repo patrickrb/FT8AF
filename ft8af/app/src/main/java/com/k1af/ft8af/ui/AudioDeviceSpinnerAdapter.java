@@ -185,9 +185,12 @@ public class AudioDeviceSpinnerAdapter extends BaseAdapter {
     }
 
     /**
-     * {@link AudioDeviceInfo} type at a spinner position, or -1 for the "Default" row and USB
-     * entries (which don't correspond to a routed {@code AudioDeviceInfo}). Used to detect
-     * when the user picked a Bluetooth-SCO headset so SCO can be brought up (issue #723).
+     * {@link AudioDeviceInfo} type at a spinner position, or -1 for the "Default" row and the
+     * USB-direct entries appended after {@code audioDeviceList} (those are driven over libusb
+     * and have no routed {@code AudioDeviceInfo}). Android-routed USB devices such as
+     * {@link AudioDeviceInfo#TYPE_USB_DEVICE} are ordinary {@code audioDeviceList} rows and
+     * return their real type. Used to detect when the user picked a Bluetooth-SCO headset so
+     * SCO can be brought up (issue #723).
      */
     public int getDeviceType(int position) {
         if (position <= 0) return -1;

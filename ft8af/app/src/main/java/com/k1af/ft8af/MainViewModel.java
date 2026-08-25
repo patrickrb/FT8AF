@@ -2281,19 +2281,32 @@ public class MainViewModel extends ViewModel {
         boolean want = ScoPolicy.shouldEnterHeadsetMode(GeneralVariables.connectMode,
                 isBTConnected(), inputType, outputType);
 
-        if (want && !btHeadsetModeActive) {
-            setBlueToothOn();
-            btHeadsetModeActive = true;
-            // Rebuild capture so the AudioRecord binds to the freshly-opened SCO route rather
-            // than the built-in mic it was created on.
-            reinitializeAudioInput();
-        } else if (!want && btHeadsetModeActive
-                && GeneralVariables.connectMode != ConnectMode.BLUE_TOOTH) {
-            // Leave headset mode when the user picks a non-BT device — but never yank SCO out
-            // from under a Bluetooth rig, whose TX/RX path owns it.
-            setBlueToothOff();
-            btHeadsetModeActive = false;
-            reinitializeAudioInput();
+        // Cross-check the cached flag against the real SCO state: SCO drops by itself when
+        // the headset disconnects (and setBlueToothOn() can fail), so the flag alone would
+        // skip re-entering and leave the selected BT mic/speaker dead until restart.
+        boolean scoOn = audioManager.isBluetoothScoOn();
+        boolean bluetoothRig = GeneralVariables.connectMode == ConnectMode.BLUE_TOOTH;
+        switch (ScoPolicy.headsetModeAction(want, btHeadsetModeActive, scoOn, bluetoothRig)) {
+            case ScoPolicy.HEADSET_MODE_ENTER:
+                setBlueToothOn();
+                btHeadsetModeActive = true;
+                // Rebuild capture so the AudioRecord binds to the freshly-opened SCO route
+                // rather than the built-in mic it was created on.
+                reinitializeAudioInput();
+                break;
+            case ScoPolicy.HEADSET_MODE_LEAVE:
+                // Leave headset mode when the user picks a non-BT device — never from under
+                // a Bluetooth rig, whose TX/RX path owns SCO (headsetModeAction guards that).
+                setBlueToothOff();
+                btHeadsetModeActive = false;
+                reinitializeAudioInput();
+                break;
+            case ScoPolicy.HEADSET_MODE_FORGET:
+                // SCO already went away on its own; nothing to tear down.
+                btHeadsetModeActive = false;
+                break;
+            default:
+                break;
         }
     }
 

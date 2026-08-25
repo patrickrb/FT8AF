@@ -72,4 +72,40 @@ public final class ScoPolicy {
         return connectMode == ConnectMode.BLUE_TOOTH
                 || audioSelectionNeedsHeadsetMode(inputDeviceType, outputDeviceType);
     }
+
+    /** {@link #headsetModeAction}: nothing to do. */
+    public static final int HEADSET_MODE_KEEP = 0;
+    /** {@link #headsetModeAction}: bring SCO up and rebuild capture. */
+    public static final int HEADSET_MODE_ENTER = 1;
+    /** {@link #headsetModeAction}: take SCO down and rebuild capture. */
+    public static final int HEADSET_MODE_LEAVE = 2;
+    /** {@link #headsetModeAction}: SCO is already gone — just forget that we entered it. */
+    public static final int HEADSET_MODE_FORGET = 3;
+
+    /**
+     * What {@code refreshBluetoothHeadsetMode()} should do, given whether headset mode is
+     * wanted ({@link #shouldEnterHeadsetMode}), whether we believe we entered it
+     * ({@code enteredByUs}, the cached flag), and whether SCO is <em>actually</em> on right
+     * now ({@code AudioManager.isBluetoothScoOn()}).
+     *
+     * <p>The cached flag alone isn't trustworthy: SCO drops on its own when the headset
+     * disconnects, and {@code setBlueToothOn()} can fail, so a stale {@code true} would make
+     * every later refresh skip re-entering and leave the selected BT mic/speaker dead until
+     * restart (Copilot review on #723). Cross-checking the real SCO state fixes that while
+     * still avoiding the disruptive stop+start on every settings tap when SCO is really up.
+     *
+     * <p>A Bluetooth <em>rig</em> owns SCO for its TX/RX path, so headset mode is never left
+     * from here while one is connected — but a headset that dropped and came back still
+     * re-enters, because {@code want && !scoOn} always yields {@link #HEADSET_MODE_ENTER}.
+     */
+    public static int headsetModeAction(boolean want, boolean enteredByUs, boolean scoOn,
+                                        boolean bluetoothRig) {
+        if (want) {
+            return (enteredByUs && scoOn) ? HEADSET_MODE_KEEP : HEADSET_MODE_ENTER;
+        }
+        if (!enteredByUs || bluetoothRig) {
+            return HEADSET_MODE_KEEP;
+        }
+        return scoOn ? HEADSET_MODE_LEAVE : HEADSET_MODE_FORGET;
+    }
 }
