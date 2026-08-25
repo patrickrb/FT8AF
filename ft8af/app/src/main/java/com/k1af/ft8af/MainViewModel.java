@@ -44,6 +44,7 @@ import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -55,6 +56,7 @@ import androidx.lifecycle.ViewModelStoreOwner;
 import com.k1af.ft8af.callsign.CallsignDatabase;
 import com.k1af.ft8af.callsign.CallsignInfo;
 import com.k1af.ft8af.callsign.OnAfterQueryCallsignLocation;
+import com.k1af.ft8af.bluetooth.ScoLinkTracker;
 import com.k1af.ft8af.bluetooth.ScoPolicy;
 import com.k1af.ft8af.connector.BaseRigConnector;
 import com.k1af.ft8af.connector.BluetoothRigConnector;
@@ -126,6 +128,7 @@ import com.k1af.ft8af.timer.OnUtcTimer;
 import com.k1af.ft8af.timer.UtcTimer;
 import com.k1af.ft8af.ui.ToastMessage;
 import com.k1af.ft8af.wave.HamRecorder;
+import com.k1af.ft8af.wave.MicRecorder;
 import com.k1af.ft8af.wave.OnGetVoiceDataDone;
 import com.k1af.ft8af.x6100.X6100Radio;
 
@@ -2335,73 +2338,188 @@ public class MainViewModel extends ViewModel {
     }
 
 
+    // ---- Bluetooth SCO (hands-free audio link) -------------------------------
+    //
+    // All four entry points below go through ScoLinkTracker so that (a) a link
+    // that is already being built is never stopped and restarted underneath
+    // itself, (b) a start that fails or a link that drops is retried, bounded,
+    // and (c) once the link is up the AudioRecord is verified to be capturing
+    // from it. Issue #759 (Android 8.x: Bluetooth RX dead, TX fine).
+
+    private final ScoLinkTracker scoTracker = new ScoLinkTracker();
+    private final Handler scoHandler = new Handler(Looper.getMainLooper());
+    private final Runnable scoRetryRunnable = () -> applyScoAction(scoTracker.onRetryDue(), "retry");
+    private final Runnable scoConnectTimeoutRunnable = () -> {
+        ScoLinkTracker.Update u = scoTracker.onConnectTimeout();
+        if (u.gaveUp) {
+            GeneralVariables.fileLog("SCO: no CONNECTED within "
+                    + ScoLinkTracker.CONNECT_TIMEOUT_MS + "ms and retries exhausted ("
+                    + scoTracker.attempts() + " attempts) - giving up");
+        } else if (u.action != ScoLinkTracker.Action.NONE) {
+            GeneralVariables.fileLog("SCO: no CONNECTED within "
+                    + ScoLinkTracker.CONNECT_TIMEOUT_MS + "ms");
+        }
+        applyScoAction(u.action, "timeout");
+    };
+    private static final long SCO_MIC_ROUTE_CHECK_DELAY_MS = 300;
+
+    private AudioManager scoAudioManager() {
+        Context ctx = GeneralVariables.getMainContext();
+        if (ctx == null) return null;
+        return (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
+    }
+
+    /**
+     * Drive {@code AudioManager} per the tracker's decision. Returns whether
+     * anything was done.
+     */
+    private boolean applyScoAction(ScoLinkTracker.Action action, String why) {
+        if (action == ScoLinkTracker.Action.NONE) return false;
+        AudioManager audioManager = scoAudioManager();
+        if (audioManager == null) return false;
+        GeneralVariables.fileLog("SCO: " + action + " (" + why + ", attempt "
+                + scoTracker.attempts() + ")");
+        scoHandler.removeCallbacks(scoRetryRunnable);
+        scoHandler.removeCallbacks(scoConnectTimeoutRunnable);
+        switch (action) {
+            case STOP:
+                audioManager.setBluetoothScoOn(false);
+                audioManager.stopBluetoothSco();
+                audioManager.setSpeakerphoneOn(true);//exit headset mode
+                break;
+            case RESTART:
+                // A failed/abandoned start can leave AudioService's per-client
+                // start count at 1, where a bare start is a no-op - balance it.
+                audioManager.stopBluetoothSco();
+                // fall through
+            case START:
+                audioManager.setBluetoothScoOn(true);
+                audioManager.startBluetoothSco();//71ms
+                audioManager.setSpeakerphoneOn(false);//enter headset mode
+                scoHandler.postDelayed(scoConnectTimeoutRunnable, ScoLinkTracker.CONNECT_TIMEOUT_MS);
+                break;
+            default:
+                break;
+        }
+        return true;
+    }
+
+    /** Bring SCO up (after TX). Idempotent while a link is pending/up. */
     public void startSco() {
-        AudioManager audioManager = (AudioManager) GeneralVariables.getMainContext()
-                .getSystemService(Context.AUDIO_SERVICE);
+        AudioManager audioManager = scoAudioManager();
         if (audioManager == null) return;
         if (!audioManager.isBluetoothScoAvailableOffCall()) {
             //Bluetooth device does not support recording
             ToastMessage.show(getStringFromResource(R.string.does_not_support_recording));
             return;
         }
-        audioManager.setBluetoothScoOn(true);
-        audioManager.startBluetoothSco();//71ms
-        audioManager.setSpeakerphoneOn(false);//enter headset mode
+        applyScoAction(scoTracker.requestOn(), "startSco");
     }
 
+    /** Take SCO down (before TX). No-op unless we asked for it. */
     public void stopSco() {
-        AudioManager audioManager = (AudioManager) GeneralVariables.getMainContext()
-                .getSystemService(Context.AUDIO_SERVICE);
-        if (audioManager == null) return;
-        if (audioManager.isBluetoothScoOn()) {
-            audioManager.setBluetoothScoOn(false);
-            audioManager.stopBluetoothSco();
-            audioManager.setSpeakerphoneOn(true);//exit headset mode
-        }
-
+        applyScoAction(scoTracker.requestOff(), "stopSco");
     }
 
-
+    /** Enter Bluetooth headset mode: SCO up for RX audio from the rig. */
     public void setBlueToothOn() {
-        AudioManager audioManager = (AudioManager) GeneralVariables.getMainContext()
-                .getSystemService(Context.AUDIO_SERVICE);
+        AudioManager audioManager = scoAudioManager();
         if (audioManager == null) return;
         if (!audioManager.isBluetoothScoAvailableOffCall()) {
             //Bluetooth device does not support recording
             ToastMessage.show(getStringFromResource(R.string.does_not_support_recording));
         }
 
+        ScoLinkTracker.Action action = scoTracker.requestOn();
+        if (action == ScoLinkTracker.Action.NONE) {
+            GeneralVariables.fileLog("SCO: setBlueToothOn ignored, link already "
+                    + ScoLinkTracker.stateName(scoTracker.linkState()));
+            return;
+        }
         /*
         MODE_NORMAL corresponds to music playback. For speaker output, call audioManager.setSpeakerphoneOn(true).
         For headset or earpiece, set mode to MODE_IN_CALL (pre-3.0) or MODE_IN_COMMUNICATION (3.0+).
+        Stays NORMAL on purpose: TX audio goes out over A2DP (SCO is dropped
+        around PTT), and an in-call mode would pull media to the earpiece.
          */
         audioManager.setMode(AudioManager.MODE_NORMAL);//178ms
-        audioManager.setBluetoothScoOn(true);
-        audioManager.stopBluetoothSco();
-        audioManager.startBluetoothSco();//71ms
-        audioManager.setSpeakerphoneOn(false);//enter headset mode
+        applyScoAction(action, "setBlueToothOn");
 
         //entering Bluetooth headset mode
         ToastMessage.show(getStringFromResource(R.string.bluetooth_headset_mode));
-
     }
 
+    /** Leave Bluetooth headset mode. */
     public void setBlueToothOff() {
-
-        AudioManager audioManager = (AudioManager) GeneralVariables.getMainContext()
-                .getSystemService(Context.AUDIO_SERVICE);
+        AudioManager audioManager = scoAudioManager();
         if (audioManager == null) return;
-        if (audioManager.isBluetoothScoOn()) {
-            audioManager.setMode(AudioManager.MODE_NORMAL);
-            audioManager.setBluetoothScoOn(false);
-            audioManager.stopBluetoothSco();
-            audioManager.setSpeakerphoneOn(true);//exit headset mode
-        }
+        ScoLinkTracker.Action action = scoTracker.requestOff();
+        if (action == ScoLinkTracker.Action.NONE) return;
+        audioManager.setMode(AudioManager.MODE_NORMAL);
+        applyScoAction(action, "setBlueToothOff");
         //leaving Bluetooth headset mode
         ToastMessage.show(getStringFromResource(R.string.bluetooth_Headset_mode_cancelled));
-
     }
 
+    /**
+     * {@code AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED} landed (main thread).
+     * Logs every transition, retries a failed/dropped link while we want it,
+     * and once CONNECTED makes sure the mic is really on the headset.
+     */
+    public void onScoAudioStateUpdated(int state, int previousState) {
+        GeneralVariables.fileLog("SCO: state " + ScoLinkTracker.stateName(previousState)
+                + " -> " + ScoLinkTracker.stateName(state)
+                + " wanted=" + scoTracker.isWanted()
+                + " attempt=" + scoTracker.attempts());
+        ScoLinkTracker.Update u = scoTracker.onStateUpdate(state, SystemClock.elapsedRealtime());
+        if (state == AudioManager.SCO_AUDIO_STATE_CONNECTED) {
+            scoHandler.removeCallbacks(scoConnectTimeoutRunnable);
+            scoHandler.removeCallbacks(scoRetryRunnable);
+        }
+        if (u.gaveUp) {
+            GeneralVariables.fileLog("SCO: link failed " + scoTracker.attempts()
+                    + " times - giving up until the next request");
+        }
+        if (u.retryDelayMs > 0) {
+            GeneralVariables.fileLog("SCO: retry in " + u.retryDelayMs + "ms");
+            scoHandler.removeCallbacks(scoRetryRunnable);
+            scoHandler.postDelayed(scoRetryRunnable, u.retryDelayMs);
+        }
+        applyScoAction(u.action, "state");
+        if (u.checkMicRouting) {
+            // The policy re-route runs asynchronously in the audio server; give
+            // it a beat before asking where the record actually landed.
+            scoHandler.postDelayed(this::verifyMicOnScoLink, SCO_MIC_ROUTE_CHECK_DELAY_MS);
+        }
+    }
+
+    /**
+     * SCO is up: is the AudioRecord capturing from it? Android's own recipe is
+     * to create the record only after SCO_AUDIO_STATE_CONNECTED; ours already
+     * exists (opened at app start on the built-in mic), and on some builds -
+     * Oreo in the field - the force-use change never re-routes it. Rebuild it
+     * so the fresh open picks the headset.
+     */
+    private void verifyMicOnScoLink() {
+        if (!scoTracker.isWanted()
+                || scoTracker.linkState() != AudioManager.SCO_AUDIO_STATE_CONNECTED
+                || hamRecorder == null) {
+            return;
+        }
+        MicRecorder mic = hamRecorder.getMicRecorder();
+        int routed = mic.routedInputDeviceType();
+        int chosen = mic.chosenInputDeviceType();
+        boolean reinit = ScoLinkTracker.needsMicReinit(routed, chosen);
+        GeneralVariables.fileLog("SCO: mic routedType=" + routed + " chosenType=" + chosen
+                + (reinit ? " -> rebuilding AudioRecord on the SCO link" : " ok"));
+        if (!reinit) return;
+        reinitializeAudioInput();
+        scoHandler.postDelayed(() -> {
+            if (hamRecorder == null) return;
+            GeneralVariables.fileLog("SCO: mic after rebuild routedType="
+                    + hamRecorder.getMicRecorder().routedInputDeviceType());
+        }, SCO_MIC_ROUTE_CHECK_DELAY_MS);
+    }
 
     /**
      * Check whether Bluetooth is connected

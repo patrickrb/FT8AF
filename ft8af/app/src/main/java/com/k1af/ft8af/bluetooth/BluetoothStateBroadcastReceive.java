@@ -99,6 +99,20 @@ public class BluetoothStateBroadcastReceive extends BroadcastReceiver {
                 }
                 break;
 
+            case AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED:
+                // Registered since day one but never handled: the app had no idea
+                // whether its startBluetoothSco() ever produced a link, so a
+                // failed/dropped SCO was never retried and the AudioRecord was
+                // never rebuilt on top of it (issue #759). Not gated on connect
+                // mode: the tracker only acts when the app asked for SCO, and
+                // the transitions are worth having in debug.log regardless.
+                mainViewModel.onScoAudioStateUpdated(
+                        intent.getIntExtra(AudioManager.EXTRA_SCO_AUDIO_STATE,
+                                AudioManager.SCO_AUDIO_STATE_ERROR),
+                        intent.getIntExtra(AudioManager.EXTRA_SCO_AUDIO_PREVIOUS_STATE,
+                                AudioManager.SCO_AUDIO_STATE_ERROR));
+                break;
+
             case AudioManager.ACTION_AUDIO_BECOMING_NOISY:
                 if (shouldHandleBluetoothAudioRouting()) {
                     ToastMessage.show(GeneralVariables.getStringFromResource(R.string.sound_source_switched));

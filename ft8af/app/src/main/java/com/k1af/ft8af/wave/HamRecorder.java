@@ -210,6 +210,11 @@ public class HamRecorder {
         isRunning = false;
     }
 
+    /** The underlying mic capture, for routing introspection (issue #759). */
+    public MicRecorder getMicRecorder() {
+        return micRecorder;
+    }
+
     /**
      * Reinitialize the mic recorder to pick up newly connected USB audio devices.
      * Re-wires the data listener after reinit.
