@@ -363,6 +363,7 @@
     <string name="connect_xiegu_ip">Connect XIEGU Radio %s …</string>
     <string name="network_exception">%s : Network transmission exception : %s</string>
     <string name="login_succeed">Login succeeded !</string>
+    <string name="civ_address_ambiguous_hint">CI-V address is 0x%1$02X but the %2$s default is 0x%3$02X. If the rig uses the default, re-select it under Settings › Radio.</string>
     <string name="loging_failed">Login failed, invalid user name or password.</string>
     <string name="data_stream">Data stream</string>
     <string name="control_stream">Control stream</string>

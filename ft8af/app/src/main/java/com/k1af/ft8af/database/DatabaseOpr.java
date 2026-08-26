@@ -2687,7 +2687,17 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
 
                 if (name.equalsIgnoreCase("civ")) {
-                    GeneralVariables.civAddress = parseConfigInt(result, 0xa4, 16);
+                    // Hex on disk; also repairs the decimal strings an earlier Compose
+                    // picker wrote (#753). The two-digit ambiguity is settled against the
+                    // rig model in MainViewModel.connectRig().
+                    GeneralVariables.civAddress = com.k1af.ft8af.rigs.CivAddressConfig
+                            .decode(result, com.k1af.ft8af.rigs.CivAddressConfig.DEFAULT_ADDRESS);
+                    GeneralVariables.civAddressStored = result;
+                }
+                if (name.equalsIgnoreCase(com.k1af.ft8af.rigs.CivAddressConfig.FORMAT_KEY)) {
+                    // Provenance marker: present only when a hex-aware writer stored "civ".
+                    GeneralVariables.civAddressFormatKnown =
+                            com.k1af.ft8af.rigs.CivAddressConfig.isHexFormatMarker(result);
                 }
                 if (name.equalsIgnoreCase("baudRate")) {
                     GeneralVariables.baudRate = parseConfigInt(result, 19200);

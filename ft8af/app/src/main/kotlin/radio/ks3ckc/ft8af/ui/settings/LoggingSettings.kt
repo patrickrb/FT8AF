@@ -385,6 +385,7 @@ private fun CloudlogSettingsDialog(
 
     // Test connection state: null = idle, true = pass, false = fail
     var testResult by remember { mutableStateOf<Boolean?>(null) }
+    var testDetail by remember { mutableStateOf<String?>(null) }
     var isTesting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -553,17 +554,23 @@ private fun CloudlogSettingsDialog(
             ) {
                 TextButton(
                     onClick = {
-                        // Write current input values to GeneralVariables so the test uses them
-                        GeneralVariables.cloudlogServerAddress = addressInput.text
-                        GeneralVariables.cloudlogApiKey = apiKeyInput.text
-                        GeneralVariables.cloudlogStationID = stationIdInput.text
+                        // Write current input values to GeneralVariables so the test uses them.
+                        // Trimmed: a pasted trailing newline used to reach the URL builder
+                        // here while the station fetch below trimmed — two different fates
+                        // for the same field (#756).
+                        GeneralVariables.cloudlogServerAddress = addressInput.text.trim()
+                        GeneralVariables.cloudlogApiKey = apiKeyInput.text.trim()
+                        GeneralVariables.cloudlogStationID = stationIdInput.text.trim()
                         isTesting = true
                         testResult = null
+                        testDetail = null
                         scope.launch {
-                            val result = withContext(Dispatchers.IO) {
-                                ThirdPartyService.CheckCloudlogConnection()
+                            val check = withContext(Dispatchers.IO) {
+                                ThirdPartyService.checkCloudlogConnection()
                             }
+                            val result = check.ok
                             testResult = result
+                            testDetail = check.detail
                             isTesting = false
                             // On success, also fetch station profiles
                             if (result) {
@@ -605,6 +612,18 @@ private fun CloudlogSettingsDialog(
                         fontSize = 14.sp,
                     )
                 }
+            }
+            // Why it failed — HTTP status, host unreachable, key rejected… (#756). Technical
+            // by design: it is the same line that lands in debug.log, so a bug report and
+            // the screen say the same thing.
+            val detail = testDetail
+            if (testResult == false && !detail.isNullOrBlank()) {
+                Text(
+                    text = detail,
+                    color = StatusBad,
+                    fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
 
             Row(

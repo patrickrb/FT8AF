@@ -46,6 +46,8 @@ public class DatabaseOprConfigHydrationTest {
     private int origSerialParity;
 
     private int origCivAddress;
+    private String origCivAddressStored;
+    private boolean origCivAddressFormatKnown;
     private int origBaudRate;
     private long origBand;
     private int origBandListIndex;
@@ -64,6 +66,8 @@ public class DatabaseOprConfigHydrationTest {
         origSerialParity = GeneralVariables.serialParity;
 
         origCivAddress = GeneralVariables.civAddress;
+        origCivAddressStored = GeneralVariables.civAddressStored;
+        origCivAddressFormatKnown = GeneralVariables.civAddressFormatKnown;
         origBaudRate = GeneralVariables.baudRate;
         origBand = GeneralVariables.band;
         origBandListIndex = GeneralVariables.bandListIndex;
@@ -88,6 +92,8 @@ public class DatabaseOprConfigHydrationTest {
             GeneralVariables.serialParity = origSerialParity;
 
             GeneralVariables.civAddress = origCivAddress;
+            GeneralVariables.civAddressStored = origCivAddressStored;
+            GeneralVariables.civAddressFormatKnown = origCivAddressFormatKnown;
             GeneralVariables.baudRate = origBaudRate;
             GeneralVariables.band = origBand;
             GeneralVariables.bandListIndex = origBandListIndex;
@@ -387,5 +393,67 @@ public class DatabaseOprConfigHydrationTest {
 
         assertThat(GeneralVariables.deepDecodeMode).isFalse();
         assertThat(GeneralVariables.keepScreenOn).isFalse();
+    }
+
+    /**
+     * Issue #753: the Compose rig picker wrote {@code civ} in DECIMAL for three months
+     * ("164" for an IC-705's 0xA4) while hydration reads HEX, so the address came back as
+     * 0x164 -> truncated 0x64 and CAT frequency control silently died. Hydration must now
+     * recognise the decimal form and land on the real address.
+     */
+    @Test
+    public void decimalCivWrittenByOldPicker_isRepairedOnLoad() {
+        GeneralVariables.civAddress = 0x11;
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("civ", "164");           // IC-705 0xA4 written as decimal
+        opr.writeConfigSync(config);
+
+        hydrate();
+
+        assertThat(GeneralVariables.civAddress).isEqualTo(0xa4);
+    }
+
+    @Test
+    public void hexCivWithPrefix_isHonored() {
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("civ", "0x94");          // IC-7300
+        opr.writeConfigSync(config);
+
+        hydrate();
+
+        assertThat(GeneralVariables.civAddress).isEqualTo(0x94);
+    }
+
+    /**
+     * The #753 repair in {@code MainViewModel.connectRig()} needs the raw stored text (to
+     * know whether the on-disk form is canonical) and the {@code civFormat} provenance
+     * marker (to know whether to trust it verbatim). Both must come out of hydration.
+     */
+    @Test
+    public void civRawTextAndFormatMarker_areHydrated() {
+        GeneralVariables.civAddressStored = "stale";
+        GeneralVariables.civAddressFormatKnown = false;
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("civ", "164");
+        config.put("civFormat", "hex");
+        opr.writeConfigSync(config);
+
+        hydrate();
+
+        assertThat(GeneralVariables.civAddressStored).isEqualTo("164");
+        assertThat(GeneralVariables.civAddressFormatKnown).isTrue();
+    }
+
+    @Test
+    public void civFormatMarker_absentOrForeign_isNotTrusted() {
+        GeneralVariables.civAddressFormatKnown = true;
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("civ", "a4");
+        config.put("civFormat", "dec");     // anything but "hex" is not a hex marker
+        opr.writeConfigSync(config);
+
+        hydrate();
+
+        assertThat(GeneralVariables.civAddressFormatKnown).isFalse();
     }
 }

@@ -42,7 +42,6 @@ import radio.ks3ckc.ft8af.util.bluetoothAdapter
 import com.k1af.ft8af.service.RxForegroundService
 import com.k1af.ft8af.service.RxServiceController
 import com.k1af.ft8af.bluetooth.BluetoothStateBroadcastReceive
-import com.k1af.ft8af.bluetooth.ScoPolicy
 import com.k1af.ft8af.connector.CableSerialPort
 import com.k1af.ft8af.connector.ConnectMode
 import com.k1af.ft8af.callsign.CallsignDatabase
@@ -448,11 +447,10 @@ class ComposeMainActivity : AppCompatActivity() {
                 // review); gating on connect mode at all keeps a car/headphones paired
                 // for music from being yanked out of A2DP (the original bug).
                 Handler(Looper.getMainLooper()).post {
-                    if (ScoPolicy.shouldEnterHeadsetMode(
-                            GeneralVariables.connectMode, mainViewModel.isBTConnected())
-                    ) {
-                        mainViewModel.setBlueToothOn()
-                    }
+                    // Enter Bluetooth headset (SCO) mode if a Bluetooth rig is in use OR the
+                    // persisted audio device is a Bluetooth-SCO headset (issue #723). The
+                    // decision + AudioRecord rebuild live in the view model.
+                    mainViewModel.refreshBluetoothHeadsetMode()
                 }
 
                 // USB auto-connect is driven by the mutableSerialPorts observer; Bluetooth has

@@ -55,6 +55,8 @@ import androidx.lifecycle.ViewModelStoreOwner;
 import com.k1af.ft8af.callsign.CallsignDatabase;
 import com.k1af.ft8af.callsign.CallsignInfo;
 import com.k1af.ft8af.callsign.OnAfterQueryCallsignLocation;
+import com.k1af.ft8af.bluetooth.ScoLinkCoordinator;
+import com.k1af.ft8af.bluetooth.ScoLinkTracker;
 import com.k1af.ft8af.bluetooth.ScoPolicy;
 import com.k1af.ft8af.connector.BaseRigConnector;
 import com.k1af.ft8af.connector.BluetoothRigConnector;
@@ -92,6 +94,7 @@ import com.k1af.ft8af.log.ThirdPartyService;
 import com.k1af.ft8af.rigs.BaseRig;
 import com.k1af.ft8af.rigs.BaseRigOperation;
 import com.k1af.ft8af.rigs.CatConnectionState;
+import com.k1af.ft8af.rigs.CivAddressConfig;
 import com.k1af.ft8af.rigs.RetunePolicy;
 import com.k1af.ft8af.rigs.RigDialTarget;
 import com.k1af.ft8af.rigs.CatLiveness;
@@ -126,6 +129,7 @@ import com.k1af.ft8af.timer.OnUtcTimer;
 import com.k1af.ft8af.timer.UtcTimer;
 import com.k1af.ft8af.ui.ToastMessage;
 import com.k1af.ft8af.wave.HamRecorder;
+import com.k1af.ft8af.wave.MicRecorder;
 import com.k1af.ft8af.wave.OnGetVoiceDataDone;
 import com.k1af.ft8af.x6100.X6100Radio;
 
@@ -750,7 +754,13 @@ public class MainViewModel extends ViewModel {
                 }
 
                 publishFt8MessageList();//post an immutable snapshot so the UI recomposes immediately
-                mutableTimerOffset.postValue(time_sec);//this cycle's time offset
+                // Slot-wide mean DT with own-TX echoes already excluded (see
+                // OwnTxEchoFilter.meanTimeOffsetSec). NaN can't happen here — messages
+                // is non-empty, so at least one decode survived — but never post it:
+                // the pill would render it as "unknown".
+                if (!Float.isNaN(time_sec)) {
+                    mutableTimerOffset.postValue(time_sec);//this cycle's time offset
+                }
 
 
                 findIncludedCallsigns(messages);//find matching messages and add to the call list
@@ -1988,12 +1998,15 @@ public class MainViewModel extends ViewModel {
             }
         });
 
-        iComWifiConnector.connect();
         connectRig();//assign baseRig
 
         baseRig.setControlMode(GeneralVariables.controlMode);
         baseRig.setOnRigStateChanged(onRigStateChanged);
         baseRig.setConnector(iComWifiConnector);
+        // Connect AFTER the rig-state listener is wired (setConnector above), otherwise the
+        // onConnecting/onConnected edges the connector now emits (#754) would fire into a
+        // null listener and the CAT chip would never leave grey.
+        iComWifiConnector.connect();
 
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {//connection takes time, wait before setting frequency
             @Override
@@ -2089,6 +2102,65 @@ public class MainViewModel extends ViewModel {
 
 
     /**
+     * One-time repair for a CI-V address the 2026-05..08 Compose rig picker persisted in
+     * decimal (#753). {@link com.k1af.ft8af.database.DatabaseOpr} already un-mangles the
+     * unambiguous (three-digit) cases at load. The two-digit ones ("88" for an IC-706's
+     * 0x58) are ambiguous: the same text is what a deliberate 0x88 override written by the
+     * legacy hex field looks like, and there is no longer any UI to restore such an override
+     * — so they are never rewritten (Copilot review on #778). Instead, when the value's
+     * provenance is unknown ({@link CivAddressConfig#FORMAT_KEY} absent) and it is the
+     * model's decimal twin, the user is told once to re-select the rig if it uses the
+     * default; the picker then stores hex with the marker. Whenever the marker is missing or
+     * the stored text isn't canonical hex, the value is written back canonically together
+     * with the marker, so the repair (and the hint) really is one-time.
+     */
+    private void repairCivAddressAgainstModel() {
+        if (GeneralVariables.instructionSet != InstructionSet.ICOM
+                && GeneralVariables.instructionSet != InstructionSet.ICOM_756) {
+            return;
+        }
+        try {
+            android.content.Context ctx = GeneralVariables.getMainContext();
+            if (ctx == null) return;
+            RigNameList.RigName model = RigNameList.getInstance(ctx)
+                    .getRigNameByIndex(GeneralVariables.modelNo);
+            int before = GeneralVariables.civAddress;
+            CivAddressConfig.Repair plan = CivAddressConfig.planRepair(
+                    GeneralVariables.civAddressStored, GeneralVariables.civAddressFormatKnown,
+                    before, model.address);
+            if (plan.address != before) {
+                GeneralVariables.civAddress = plan.address;
+                GeneralVariables.fileLog(String.format(java.util.Locale.US,
+                        "CIV: repaired stored address 0x%02X -> 0x%02X (model %s)",
+                        before, plan.address, model.modelName));
+            }
+            if (plan.ambiguous) {
+                String hint = String.format(java.util.Locale.US,
+                        getStringFromResource(R.string.civ_address_ambiguous_hint),
+                        plan.address, model.modelName, model.address);
+                GeneralVariables.fileLog(String.format(java.util.Locale.US,
+                        "CIV: stored address 0x%02X is the decimal twin of model %s (0x%02X); "
+                                + "kept as-is, user hinted to re-select the rig",
+                        plan.address, model.modelName, model.address));
+                ToastMessage.show(hint);
+            }
+            if (plan.writeBack && databaseOpr != null) {
+                String encoded = CivAddressConfig.encode(plan.address);
+                databaseOpr.writeConfig("civ", encoded, null);
+                databaseOpr.writeConfig(CivAddressConfig.FORMAT_KEY,
+                        CivAddressConfig.FORMAT_HEX, null);
+                GeneralVariables.civAddressStored = encoded;
+                GeneralVariables.civAddressFormatKnown = true;
+                GeneralVariables.fileLog(String.format(java.util.Locale.US,
+                        "CIV: stored address canonicalized to \"%s\" (+%s=%s)",
+                        encoded, CivAddressConfig.FORMAT_KEY, CivAddressConfig.FORMAT_HEX));
+            }
+        } catch (Exception e) {
+            GeneralVariables.fileLog("CIV: repair skipped: " + e.getMessage());
+        }
+    }
+
+    /**
      * Create different rig models based on the instruction set
      */
     private void connectRig() {
@@ -2097,6 +2169,7 @@ public class MainViewModel extends ViewModel {
             baseRig.onDisconnecting();
         }
         baseRig = null;
+        repairCivAddressAgainstModel();
         //determine the rig type: ICOM, YAESU 2, YAESU 3
         switch (GeneralVariables.instructionSet) {
             case InstructionSet.ICOM:
@@ -2244,6 +2317,86 @@ public class MainViewModel extends ViewModel {
         }
     }
 
+    // Tracks whether we've put the phone into Bluetooth headset (SCO) mode for audio, so
+    // refreshBluetoothHeadsetMode() only toggles on an actual change. setBlueToothOn() does a
+    // stop+start of SCO, which is disruptive to re-issue on every settings tap. (#723)
+    private boolean btHeadsetModeActive = false;
+
+    /**
+     * Bring the phone's Bluetooth headset (SCO) link up or down to match the current rig +
+     * audio-device selection (issue #723).
+     *
+     * <p>Before this, SCO was entered only when the <em>rig</em> connection was Bluetooth. A
+     * user on a USB/VOX rig who selected a Bluetooth headset as the FT8 mic got no SCO, so the
+     * app captured the built-in mic instead and the headset never appeared to work — the
+     * documented workaround was to launch FT8CN first purely to turn SCO on. This now also
+     * enters headset mode when the selected input or output device is a Bluetooth-SCO endpoint,
+     * and rebuilds the AudioRecord so capture actually routes over the link.
+     *
+     * <p>Idempotent and safe to call from launch and from each device-picker change.
+     */
+    public void refreshBluetoothHeadsetMode() {
+        AudioManager audioManager = (AudioManager) GeneralVariables.getMainContext()
+                .getSystemService(Context.AUDIO_SERVICE);
+        if (audioManager == null) return;
+
+        int inputType = audioDeviceType(audioManager,
+                GeneralVariables.audioInputDeviceId, AudioManager.GET_DEVICES_INPUTS);
+        int outputType = audioDeviceType(audioManager,
+                GeneralVariables.audioOutputDeviceId, AudioManager.GET_DEVICES_OUTPUTS);
+
+        boolean want = ScoPolicy.shouldEnterHeadsetMode(GeneralVariables.connectMode,
+                isBTConnected(), inputType, outputType);
+
+        // Cross-check the cached flag against the coordinator's tracked link state: SCO
+        // drops by itself when the headset disconnects (and setBlueToothOn() can fail), so
+        // the flag alone would skip re-entering and leave the selected BT mic/speaker dead
+        // until restart. Not AudioManager.isBluetoothScoOn(): that only mirrors the legacy
+        // force-use flag, which the setSpeakerphoneOn(false) in the SCO sink clears on newer
+        // builds, so it can read false with the link up — and then a "deselect BT headset"
+        // would FORGET instead of LEAVE and the coordinator would keep SCO on (Copilot #778).
+        boolean linkUp = scoLink.isLinkUpOrPending();
+        boolean linkHeld = scoLink.isWanted();
+        boolean bluetoothRig = GeneralVariables.connectMode == ConnectMode.BLUE_TOOTH;
+        switch (ScoPolicy.headsetModeAction(want, btHeadsetModeActive, linkUp, linkHeld,
+                bluetoothRig)) {
+            case ScoPolicy.HEADSET_MODE_ENTER:
+                setBlueToothOn();
+                btHeadsetModeActive = true;
+                // Rebuild capture so the AudioRecord binds to the freshly-opened SCO route
+                // rather than the built-in mic it was created on.
+                reinitializeAudioInput();
+                break;
+            case ScoPolicy.HEADSET_MODE_LEAVE:
+                // Leave headset mode when the user picks a non-BT device — never from under
+                // a Bluetooth rig, whose TX/RX path owns SCO (headsetModeAction guards that).
+                setBlueToothOff();
+                btHeadsetModeActive = false;
+                reinitializeAudioInput();
+                break;
+            case ScoPolicy.HEADSET_MODE_FORGET:
+                // The coordinator no longer holds a request (TX stopSco / shutdown already
+                // took the link down); nothing to tear down.
+                btHeadsetModeActive = false;
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * {@link android.media.AudioDeviceInfo#getType()} of the routed device matching
+     * {@code deviceId} among {@code flags} (inputs or outputs), or -1 if none match (Default
+     * row, USB-direct entry, or nothing connected).
+     */
+    private int audioDeviceType(AudioManager audioManager, int deviceId, int flags) {
+        if (deviceId <= 0) return -1;
+        for (android.media.AudioDeviceInfo d : audioManager.getDevices(flags)) {
+            if (d.getId() == deviceId) return d.getType();
+        }
+        return -1;
+    }
+
     /**
      * Check whether the rig is connected. Two cases: rigBaseClass not created, or serial port connection failed.
      *
@@ -2329,73 +2482,145 @@ public class MainViewModel extends ViewModel {
     }
 
 
+    // ---- Bluetooth SCO (hands-free audio link) -------------------------------
+    //
+    // All entry points below go through ScoLinkCoordinator (one ScoLinkTracker
+    // driven on the main thread) so that (a) a link that is already being built
+    // is never stopped and restarted underneath itself, (b) a start that fails
+    // or a link that drops is retried, bounded, (c) once the link is up the
+    // AudioRecord is verified to be capturing from it, and (d) requests from
+    // the TX executor and the main-thread broadcasts/timers are applied in
+    // order, never interleaved. Issue #759 (Android 8.x: Bluetooth RX dead).
+
+    private final Handler scoHandler = new Handler(Looper.getMainLooper());
+    private final ScoLinkCoordinator scoLink = ScoLinkCoordinator.onMainThread(
+            new ScoLinkCoordinator.Sink() {
+                @Override
+                public void startSco() {
+                    AudioManager audioManager = scoAudioManager();
+                    if (audioManager == null) return;
+                    audioManager.setBluetoothScoOn(true);
+                    audioManager.startBluetoothSco();//71ms
+                    audioManager.setSpeakerphoneOn(false);//enter headset mode
+                }
+
+                @Override
+                public void stopScoForRestart() {
+                    AudioManager audioManager = scoAudioManager();
+                    if (audioManager != null) audioManager.stopBluetoothSco();
+                }
+
+                @Override
+                public void stopSco() {
+                    AudioManager audioManager = scoAudioManager();
+                    if (audioManager == null) return;
+                    audioManager.setBluetoothScoOn(false);
+                    audioManager.stopBluetoothSco();
+                    audioManager.setSpeakerphoneOn(true);//exit headset mode
+                }
+
+                @Override
+                public void verifyMicRouting() {
+                    verifyMicOnScoLink();
+                }
+
+                @Override
+                public void log(String message) {
+                    GeneralVariables.fileLog(message);
+                }
+            });
+
+    private AudioManager scoAudioManager() {
+        Context ctx = GeneralVariables.getMainContext();
+        if (ctx == null) return null;
+        return (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
+    }
+
+    /** Bring SCO up (after TX). Idempotent while a link is pending/up. */
     public void startSco() {
-        AudioManager audioManager = (AudioManager) GeneralVariables.getMainContext()
-                .getSystemService(Context.AUDIO_SERVICE);
+        AudioManager audioManager = scoAudioManager();
         if (audioManager == null) return;
         if (!audioManager.isBluetoothScoAvailableOffCall()) {
             //Bluetooth device does not support recording
             ToastMessage.show(getStringFromResource(R.string.does_not_support_recording));
             return;
         }
-        audioManager.setBluetoothScoOn(true);
-        audioManager.startBluetoothSco();//71ms
-        audioManager.setSpeakerphoneOn(false);//enter headset mode
+        scoLink.requestOn("startSco", null);
     }
 
+    /** Take SCO down (before TX). No-op unless we asked for it. */
     public void stopSco() {
-        AudioManager audioManager = (AudioManager) GeneralVariables.getMainContext()
-                .getSystemService(Context.AUDIO_SERVICE);
-        if (audioManager == null) return;
-        if (audioManager.isBluetoothScoOn()) {
-            audioManager.setBluetoothScoOn(false);
-            audioManager.stopBluetoothSco();
-            audioManager.setSpeakerphoneOn(true);//exit headset mode
-        }
-
+        scoLink.requestOff("stopSco", null);
     }
 
-
+    /** Enter Bluetooth headset mode: SCO up for RX audio from the rig. */
     public void setBlueToothOn() {
-        AudioManager audioManager = (AudioManager) GeneralVariables.getMainContext()
-                .getSystemService(Context.AUDIO_SERVICE);
+        AudioManager audioManager = scoAudioManager();
         if (audioManager == null) return;
         if (!audioManager.isBluetoothScoAvailableOffCall()) {
             //Bluetooth device does not support recording
             ToastMessage.show(getStringFromResource(R.string.does_not_support_recording));
         }
-
-        /*
-        MODE_NORMAL corresponds to music playback. For speaker output, call audioManager.setSpeakerphoneOn(true).
-        For headset or earpiece, set mode to MODE_IN_CALL (pre-3.0) or MODE_IN_COMMUNICATION (3.0+).
-         */
-        audioManager.setMode(AudioManager.MODE_NORMAL);//178ms
-        audioManager.setBluetoothScoOn(true);
-        audioManager.stopBluetoothSco();
-        audioManager.startBluetoothSco();//71ms
-        audioManager.setSpeakerphoneOn(false);//enter headset mode
-
-        //entering Bluetooth headset mode
-        ToastMessage.show(getStringFromResource(R.string.bluetooth_headset_mode));
-
+        scoLink.requestOn("setBlueToothOn", () -> {
+            /*
+            MODE_NORMAL corresponds to music playback. For speaker output, call audioManager.setSpeakerphoneOn(true).
+            For headset or earpiece, set mode to MODE_IN_CALL (pre-3.0) or MODE_IN_COMMUNICATION (3.0+).
+            Stays NORMAL on purpose: TX audio goes out over A2DP (SCO is dropped
+            around PTT), and an in-call mode would pull media to the earpiece.
+             */
+            audioManager.setMode(AudioManager.MODE_NORMAL);//178ms
+            //entering Bluetooth headset mode
+            ToastMessage.show(getStringFromResource(R.string.bluetooth_headset_mode));
+        });
     }
 
+    /** Leave Bluetooth headset mode. */
     public void setBlueToothOff() {
-
-        AudioManager audioManager = (AudioManager) GeneralVariables.getMainContext()
-                .getSystemService(Context.AUDIO_SERVICE);
+        AudioManager audioManager = scoAudioManager();
         if (audioManager == null) return;
-        if (audioManager.isBluetoothScoOn()) {
+        scoLink.requestOff("setBlueToothOff", () -> {
             audioManager.setMode(AudioManager.MODE_NORMAL);
-            audioManager.setBluetoothScoOn(false);
-            audioManager.stopBluetoothSco();
-            audioManager.setSpeakerphoneOn(true);//exit headset mode
-        }
-        //leaving Bluetooth headset mode
-        ToastMessage.show(getStringFromResource(R.string.bluetooth_Headset_mode_cancelled));
-
+            //leaving Bluetooth headset mode
+            ToastMessage.show(getStringFromResource(R.string.bluetooth_Headset_mode_cancelled));
+        });
     }
 
+    /**
+     * {@code AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED} landed (main thread).
+     * Logs every transition, retries a failed/dropped link while we want it,
+     * and once CONNECTED makes sure the mic is really on the headset.
+     */
+    public void onScoAudioStateUpdated(int state, int previousState) {
+        scoLink.onStateUpdated(state, previousState);
+    }
+
+    /**
+     * SCO is up: is the AudioRecord capturing from it? Android's own recipe is
+     * to create the record only after SCO_AUDIO_STATE_CONNECTED; ours already
+     * exists (opened at app start on the built-in mic), and on some builds -
+     * Oreo in the field - the force-use change never re-routes it. Rebuild it
+     * so the fresh open picks the headset.
+     */
+    private void verifyMicOnScoLink() {
+        if (!scoLink.isWanted()
+                || scoLink.linkState() != AudioManager.SCO_AUDIO_STATE_CONNECTED
+                || hamRecorder == null) {
+            return;
+        }
+        MicRecorder mic = hamRecorder.getMicRecorder();
+        int routed = mic.routedInputDeviceType();
+        int chosen = mic.chosenInputDeviceType();
+        boolean reinit = ScoLinkTracker.needsMicReinit(routed, chosen);
+        GeneralVariables.fileLog("SCO: mic routedType=" + routed + " chosenType=" + chosen
+                + (reinit ? " -> rebuilding AudioRecord on the SCO link" : " ok"));
+        if (!reinit) return;
+        reinitializeAudioInput();
+        scoHandler.postDelayed(() -> {
+            if (hamRecorder == null) return;
+            GeneralVariables.fileLog("SCO: mic after rebuild routedType="
+                    + hamRecorder.getMicRecorder().routedInputDeviceType());
+        }, ScoLinkCoordinator.MIC_ROUTE_CHECK_DELAY_MS);
+    }
 
     /**
      * Check whether Bluetooth is connected
@@ -2487,6 +2712,10 @@ public class MainViewModel extends ViewModel {
         // ViewModel is cleared while still "connected" the Timer thread would keep probing
         // the rig indefinitely. Tear it down here too.
         stopCatLivenessWatchdog();
+        // Drop the SCO retry/timeout timers and balance an outstanding start,
+        // else a retained ViewModel keeps restarting SCO after the activity is
+        // gone and AudioService is left holding our request.
+        scoLink.shutdown();
         PskReporterSender.INSTANCE.stop();
         WsjtxUdpService.INSTANCE.stop();
         getQTHThreadPool.shutdown();

@@ -14,6 +14,7 @@ import androidx.lifecycle.MutableLiveData;
 import com.k1af.ft8af.FT8Common;
 import com.k1af.ft8af.Ft8Message;
 import com.k1af.ft8af.GeneralVariables;
+import com.k1af.ft8af.OwnTxEchoFilter;
 import com.k1af.ft8af.ModeProfile;
 import com.k1af.ft8af.database.DatabaseOpr;
 import com.k1af.ft8af.ft8transmit.GenerateFT8;
@@ -264,7 +265,7 @@ public class FT8SignalListener {
                 decodeTimeSec.postValue(timeSec);// decode elapsed time
                 try {
                     if (onFt8Listen != null) {
-                        onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, false);
+                        onFt8Listen.afterDecode(utc, OwnTxEchoFilter.meanTimeOffsetSec(allMsg), UtcTimer.sequential(utc), msgs, false);
                     }
                 } finally {
                     // Released only after DELIVERY, not merely after decoding: the
@@ -283,7 +284,7 @@ public class FT8SignalListener {
                     timeSec = System.currentTimeMillis() - time;
                     decodeTimeSec.postValue(timeSec);// decode elapsed time
                     if (onFt8Listen != null) {
-                        onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, true);
+                        onFt8Listen.afterDecode(utc, OwnTxEchoFilter.meanTimeOffsetSec(allMsg), UtcTimer.sequential(utc), msgs, true);
                     }
 
                     // The subtract-and-redecode loop runs on the early buffer ONLY when no
@@ -313,7 +314,7 @@ public class FT8SignalListener {
                             timeSec = System.currentTimeMillis() - time;
                             decodeTimeSec.postValue(timeSec);// decode elapsed time
                             if (onFt8Listen != null) {
-                                onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, true);
+                                onFt8Listen.afterDecode(utc, OwnTxEchoFilter.meanTimeOffsetSec(allMsg), UtcTimer.sequential(utc), msgs, true);
                             }
 
                         } while (msgs.size() > 0 );
@@ -426,7 +427,7 @@ public class FT8SignalListener {
             return;
         }
         // isDeep=true: MainViewModel appends these without re-triggering auto-sequence.
-        onFt8Listen.afterDecode(utc, averageOffset(allMsg), UtcTimer.sequential(utc), msgs, true);
+        onFt8Listen.afterDecode(utc, OwnTxEchoFilter.meanTimeOffsetSec(allMsg), UtcTimer.sequential(utc), msgs, true);
     }
 
 
@@ -569,22 +570,6 @@ public class FT8SignalListener {
     private void subtractDecode(long decoder, A91List list, boolean fromSource) {
         if (fromSource) ReBuildSignal.subtractSignalFt2(decoder, list);
         else ReBuildSignal.subtractSignal(decoder, list);
-    }
-
-    /**
-     * Calculate the average time offset value.
-     *
-     * @param messages message list
-     * @return offset value
-     */
-    private float averageOffset(ArrayList<Ft8Message> messages) {
-        if (messages.size() == 0) return 0f;
-        float dt = 0;
-        //int dtAverage = 0;
-        for (Ft8Message msg : messages) {
-            dt += msg.time_sec;
-        }
-        return dt / messages.size();
     }
 
     /**
