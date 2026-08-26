@@ -81,7 +81,9 @@ public class CivAddressConfigTest {
     }
 
     @Test
-    public void reconcile_twoDigitDecimalTwinOfModel_isRepaired() {
+    public void reconcile_twoDigitDecimalTwinOfModel_resolvesToModel() {
+        // planRepair only uses this to *detect* the ambiguity (Copilot #778); the helper's
+        // own contract is unchanged.
         // Stored "88" for 0x58 (IC-706MKIIG) -> loaded 0x88; digits "88" in decimal == 0x58.
         assertThat(CivAddressConfig.reconcileWithModel(0x88, 0x58)).isEqualTo(0x58);
         // Stored "94" for 0x5E (IC-718).
@@ -116,10 +118,30 @@ public class CivAddressConfigTest {
     }
 
     @Test
-    public void plan_unmarkedTwoDigitDecimalTwin_isRepairedAndWrittenBack() {
+    public void plan_unmarkedTwoDigitDecimalTwin_isKeptFlaggedAmbiguousAndMarked() {
+        // Copilot review on #778: "88" on an IC-706 (0x58) is either the old picker's decimal
+        // write or a deliberate 0x88 override typed into the legacy hex field — with no UI
+        // left to restore an override, it must not be silently rewritten. Keep 0x88, mark
+        // it so this is a one-time event, and flag it so the user gets the re-select hint.
         CivAddressConfig.Repair r = CivAddressConfig.planRepair("88", false, 0x88, 0x58);
-        assertThat(r.address).isEqualTo(0x58);
+        assertThat(r.address).isEqualTo(0x88);
         assertThat(r.writeBack).isTrue();
+        assertThat(r.ambiguous).isTrue();
+    }
+
+    @Test
+    public void plan_unmarkedNonTwinMismatch_isNotAmbiguous() {
+        // 0x5F vs model 0xA4: "5f" can't be a decimal string, so it's a plain override.
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair("5f", false, 0x5F, 0xA4);
+        assertThat(r.address).isEqualTo(0x5F);
+        assertThat(r.writeBack).isTrue();   // marker still gets written
+        assertThat(r.ambiguous).isFalse();
+    }
+
+    @Test
+    public void plan_threeDigitDecimal_isNeverAmbiguous() {
+        // decode() already resolved "164" -> 0xA4 unambiguously; nothing to hint about.
+        assertThat(CivAddressConfig.planRepair("164", false, 0xA4, 0xA4).ambiguous).isFalse();
     }
 
     @Test
@@ -129,6 +151,7 @@ public class CivAddressConfigTest {
         CivAddressConfig.Repair r = CivAddressConfig.planRepair("88", true, 0x88, 0x58);
         assertThat(r.address).isEqualTo(0x88);
         assertThat(r.writeBack).isFalse();
+        assertThat(r.ambiguous).isFalse();   // known provenance: no hint either
     }
 
     @Test
@@ -137,6 +160,7 @@ public class CivAddressConfigTest {
         CivAddressConfig.Repair r = CivAddressConfig.planRepair("a4", false, 0xA4, 0xA4);
         assertThat(r.address).isEqualTo(0xA4);
         assertThat(r.writeBack).isTrue();
+        assertThat(r.ambiguous).isFalse();
     }
 
     @Test

@@ -39,13 +39,21 @@ public class WifiConnector extends BaseRigConnector{
         // the network path exactly as they do for USB/Bluetooth.
         this.wifiRig.setOnLinkStateChanged(new WifiRig.OnLinkStateChanged() {
             @Override
-            public void onLoginResult(boolean ok) {
-                emit(linkState.onLoginResult(ok), "login " + (ok ? "ok" : "failed"));
+            public void onSessionBegin(int session) {
+                // Fresh state for this attempt, scoped to its session id, at the instant the
+                // rig advances the counter — so an event from the previous session can no
+                // longer be admitted afterwards (Copilot review on #778).
+                linkState.reset(session);
             }
 
             @Override
-            public void onSendError() {
-                emit(linkState.onSendError(), "network send error");
+            public void onLoginResult(int session, boolean ok) {
+                emit(linkState.onLoginResult(session, ok), "login " + (ok ? "ok" : "failed"));
+            }
+
+            @Override
+            public void onSendError(int session) {
+                emit(linkState.onSendError(session), "network send error");
             }
 
             @Override
@@ -82,11 +90,12 @@ public class WifiConnector extends BaseRigConnector{
         super.connect();
         // Announce the attempt so the chip shows "connecting" (amber) immediately; the
         // CONNECTED/ERROR edge follows from the login response. A reconnect reuses this same
-        // connector instance, so start from a fresh link state each attempt — otherwise the
+        // connector instance, so each attempt needs a fresh link state — otherwise the
         // terminal flag from the previous close/error swallows the next login and the chip
-        // never leaves "connecting" (Copilot review on #754). Reset before start(): the login
-        // response can arrive on the receive worker before start() returns.
-        linkState.reset();
+        // never leaves "connecting" (Copilot review on #754). The reset itself happens in
+        // onSessionBegin(), which the rig fires from start() as it advances the session id:
+        // doing it here, before start(), left a window in which a late event from the old
+        // session still matched the current id and hit the reset state (Copilot #778).
         if (getOnConnectorStateChanged() != null) {
             getOnConnectorStateChanged().onConnecting();
         }

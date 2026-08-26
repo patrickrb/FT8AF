@@ -2104,13 +2104,15 @@ public class MainViewModel extends ViewModel {
     /**
      * One-time repair for a CI-V address the 2026-05..08 Compose rig picker persisted in
      * decimal (#753). {@link com.k1af.ft8af.database.DatabaseOpr} already un-mangles the
-     * unambiguous cases at load; the two-digit ones ("88" for an IC-706's 0x58) can only be
-     * told apart by comparing with the selected model, which needs the rig list — and only
-     * when the value's provenance is unknown ({@link CivAddressConfig#FORMAT_KEY} absent),
-     * so a deliberate override that a hex-aware writer stored is never touched. Whenever the
-     * marker is missing or the stored text isn't canonical hex, the value is written back
-     * canonically together with the marker, so the repair really is one-time — including
-     * the three-digit decimal case whose decoded address already matched the model.
+     * unambiguous (three-digit) cases at load. The two-digit ones ("88" for an IC-706's
+     * 0x58) are ambiguous: the same text is what a deliberate 0x88 override written by the
+     * legacy hex field looks like, and there is no longer any UI to restore such an override
+     * — so they are never rewritten (Copilot review on #778). Instead, when the value's
+     * provenance is unknown ({@link CivAddressConfig#FORMAT_KEY} absent) and it is the
+     * model's decimal twin, the user is told once to re-select the rig if it uses the
+     * default; the picker then stores hex with the marker. Whenever the marker is missing or
+     * the stored text isn't canonical hex, the value is written back canonically together
+     * with the marker, so the repair (and the hint) really is one-time.
      */
     private void repairCivAddressAgainstModel() {
         if (GeneralVariables.instructionSet != InstructionSet.ICOM
@@ -2131,6 +2133,16 @@ public class MainViewModel extends ViewModel {
                 GeneralVariables.fileLog(String.format(java.util.Locale.US,
                         "CIV: repaired stored address 0x%02X -> 0x%02X (model %s)",
                         before, plan.address, model.modelName));
+            }
+            if (plan.ambiguous) {
+                String hint = String.format(java.util.Locale.US,
+                        getStringFromResource(R.string.civ_address_ambiguous_hint),
+                        plan.address, model.modelName, model.address);
+                GeneralVariables.fileLog(String.format(java.util.Locale.US,
+                        "CIV: stored address 0x%02X is the decimal twin of model %s (0x%02X); "
+                                + "kept as-is, user hinted to re-select the rig",
+                        plan.address, model.modelName, model.address));
+                ToastMessage.show(hint);
             }
             if (plan.writeBack && databaseOpr != null) {
                 String encoded = CivAddressConfig.encode(plan.address);
@@ -2336,12 +2348,18 @@ public class MainViewModel extends ViewModel {
         boolean want = ScoPolicy.shouldEnterHeadsetMode(GeneralVariables.connectMode,
                 isBTConnected(), inputType, outputType);
 
-        // Cross-check the cached flag against the real SCO state: SCO drops by itself when
-        // the headset disconnects (and setBlueToothOn() can fail), so the flag alone would
-        // skip re-entering and leave the selected BT mic/speaker dead until restart.
-        boolean scoOn = audioManager.isBluetoothScoOn();
+        // Cross-check the cached flag against the coordinator's tracked link state: SCO
+        // drops by itself when the headset disconnects (and setBlueToothOn() can fail), so
+        // the flag alone would skip re-entering and leave the selected BT mic/speaker dead
+        // until restart. Not AudioManager.isBluetoothScoOn(): that only mirrors the legacy
+        // force-use flag, which the setSpeakerphoneOn(false) in the SCO sink clears on newer
+        // builds, so it can read false with the link up — and then a "deselect BT headset"
+        // would FORGET instead of LEAVE and the coordinator would keep SCO on (Copilot #778).
+        boolean linkUp = scoLink.isLinkUpOrPending();
+        boolean linkHeld = scoLink.isWanted();
         boolean bluetoothRig = GeneralVariables.connectMode == ConnectMode.BLUE_TOOTH;
-        switch (ScoPolicy.headsetModeAction(want, btHeadsetModeActive, scoOn, bluetoothRig)) {
+        switch (ScoPolicy.headsetModeAction(want, btHeadsetModeActive, linkUp, linkHeld,
+                bluetoothRig)) {
             case ScoPolicy.HEADSET_MODE_ENTER:
                 setBlueToothOn();
                 btHeadsetModeActive = true;
@@ -2357,7 +2375,8 @@ public class MainViewModel extends ViewModel {
                 reinitializeAudioInput();
                 break;
             case ScoPolicy.HEADSET_MODE_FORGET:
-                // SCO already went away on its own; nothing to tear down.
+                // The coordinator no longer holds a request (TX stopSco / shutdown already
+                // took the link down); nothing to tear down.
                 btHeadsetModeActive = false;
                 break;
             default:

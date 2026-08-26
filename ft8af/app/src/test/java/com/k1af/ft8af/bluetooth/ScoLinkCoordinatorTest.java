@@ -130,6 +130,25 @@ public class ScoLinkCoordinatorTest {
     }
 
     @Test
+    public void isLinkUpOrPending_tracksTheTrackerNotAudioManager() {
+        // The headset-mode refresh cross-checks this instead of isBluetoothScoOn()
+        // (Copilot review on #778).
+        assertThat(coordinator.isLinkUpOrPending()).isFalse();
+        coordinator.requestOn("test", null);
+        assertThat(coordinator.isLinkUpOrPending()).isTrue();   // optimistic CONNECTING
+        coordinator.onStateUpdated(CONNECTED, CONNECTING);
+        assertThat(coordinator.isLinkUpOrPending()).isTrue();
+        // Dropped underneath us: still wanted (held) but no longer up/pending.
+        coordinator.onStateUpdated(DISCONNECTED, CONNECTED);
+        assertThat(coordinator.isLinkUpOrPending()).isFalse();
+        assertThat(coordinator.isWanted()).isTrue();
+        // Released: neither.
+        coordinator.requestOff("test", null);
+        assertThat(coordinator.isLinkUpOrPending()).isFalse();
+        assertThat(coordinator.isWanted()).isFalse();
+    }
+
+    @Test
     public void requestOff_withoutStart_doesNothing() {
         List<String> applied = new ArrayList<>();
         coordinator.requestOff("test", () -> applied.add("off"));

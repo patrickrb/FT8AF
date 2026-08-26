@@ -26,11 +26,18 @@ public class WifiConnectorLinkStateTest {
             super("192.168.0.1", 50001, "user", "pw");
         }
 
-        @Override public void start() { opened = true; }
+        // Real rigs open every session through beginLinkSession(); the connector resets its
+        // link state on that edge (Copilot review on #778), so the fake must do the same.
+        @Override public void start() { beginLinkSession(); opened = true; }
         @Override public void setPttOn(boolean on) { }
         @Override public void sendCivData(byte[] data) { }
         @Override public void sendWaveData(float[] data) { }
         @Override public void close() { opened = false; notifyClosed(); }
+
+        // The unsessioned notifiers apply to the current session, exactly as a live
+        // handler passing the session it captured in start() would.
+        void login(boolean ok) { notifyLoginResult(ok); }
+        void sendError() { notifySendError(); }
     }
 
     private FakeWifiRig rig;
@@ -63,18 +70,18 @@ public class WifiConnectorLinkStateTest {
     @Test
     public void loginSuccess_emitsConnectedAndReportsConnected() {
         connector.connect();
-        rig.onLinkStateChanged.onLoginResult(true);
+        rig.login(true);
         assertThat(events).containsExactly("connecting", "connected").inOrder();
         assertThat(connector.isConnected()).isTrue();
         // Duplicate login packets don't re-announce.
-        rig.onLinkStateChanged.onLoginResult(true);
+        rig.login(true);
         assertThat(events).containsExactly("connecting", "connected").inOrder();
     }
 
     @Test
     public void loginFailure_emitsError() {
         connector.connect();
-        rig.onLinkStateChanged.onLoginResult(false);
+        rig.login(false);
         assertThat(events).containsExactly("connecting", "error:login failed").inOrder();
         assertThat(connector.isConnected()).isFalse();
     }
@@ -82,8 +89,8 @@ public class WifiConnectorLinkStateTest {
     @Test
     public void linkDropAfterConnect_emitsDisconnectedOnce() {
         connector.connect();
-        rig.onLinkStateChanged.onLoginResult(true);
-        rig.onLinkStateChanged.onSendError(); // network went away
+        rig.login(true);
+        rig.sendError(); // network went away
         rig.close();                          // teardown that follows
         assertThat(events).containsExactly("connecting", "connected", "disconnected").inOrder();
         assertThat(connector.isConnected()).isFalse();
@@ -92,7 +99,7 @@ public class WifiConnectorLinkStateTest {
     @Test
     public void userDisconnect_emitsDisconnected() {
         connector.connect();
-        rig.onLinkStateChanged.onLoginResult(true);
+        rig.login(true);
         connector.disconnect(); // -> wifiRig.close() -> notifyClosed()
         assertThat(events).containsExactly("connecting", "connected", "disconnected").inOrder();
     }
@@ -103,14 +110,14 @@ public class WifiConnectorLinkStateTest {
         // previous drop left the link state terminal; without a reset the next login was
         // swallowed and the chip stuck on "connecting" (Copilot review on #754).
         connector.connect();
-        rig.onLinkStateChanged.onLoginResult(true);
-        rig.onLinkStateChanged.onSendError();
+        rig.login(true);
+        rig.sendError();
         rig.close();
         assertThat(connector.isConnected()).isFalse();
 
         connector.connect();
         assertThat(connector.isConnected()).isFalse(); // until the new login lands
-        rig.onLinkStateChanged.onLoginResult(true);
+        rig.login(true);
         assertThat(events).containsExactly(
                 "connecting", "connected", "disconnected",
                 "connecting", "connected").inOrder();
@@ -127,9 +134,9 @@ public class WifiConnectorLinkStateTest {
     @Test
     public void reconnectAfterLoginFailure_announcesConnected() {
         connector.connect();
-        rig.onLinkStateChanged.onLoginResult(false);
+        rig.login(false);
         connector.connect();
-        rig.onLinkStateChanged.onLoginResult(true);
+        rig.login(true);
         assertThat(events).containsExactly(
                 "connecting", "error:login failed", "connecting", "connected").inOrder();
         assertThat(connector.isConnected()).isTrue();
@@ -138,10 +145,10 @@ public class WifiConnectorLinkStateTest {
     @Test
     public void reconnectAfterUserDisconnect_announcesConnected() {
         connector.connect();
-        rig.onLinkStateChanged.onLoginResult(true);
+        rig.login(true);
         connector.disconnect();
         connector.connect();
-        rig.onLinkStateChanged.onLoginResult(true);
+        rig.login(true);
         assertThat(events).containsExactly(
                 "connecting", "connected", "disconnected", "connecting", "connected").inOrder();
         assertThat(connector.isConnected()).isTrue();

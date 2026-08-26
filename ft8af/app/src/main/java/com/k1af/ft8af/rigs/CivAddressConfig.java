@@ -20,9 +20,14 @@ import java.util.Locale;
  *   <li>{@link #decode}: a hex parse that lands outside {@code 0x00..0xFF} can only be a
  *       decimal string of a real address (all three-digit decimals are ≥ {@code 0x100} as
  *       hex), so it is re-read as decimal.</li>
- *   <li>{@link #reconcileWithModel}: two-digit decimal strings ({@code "88"} for an IC-706's
- *       {@code 0x58}) are valid hex too, so they are resolved against the selected rig
- *       model's address instead.</li>
+ *   <li>Two-digit decimal strings ({@code "88"} for an IC-706's {@code 0x58}) are valid hex
+ *       too, and a value of unknown provenance can't be told from a deliberate hex override
+ *       that happens to be the model's decimal twin ({@code 0x88} typed into the legacy hex
+ *       field on an IC-706). Those are <b>not</b> auto-rewritten — the stored value is kept,
+ *       {@link #planRepair} flags it {@link Repair#ambiguous}, and the app tells the user to
+ *       re-select the rig if it uses the default (Copilot review on #778; the earlier
+ *       silent model reconciliation would have destroyed such an override with no UI left
+ *       to restore it). {@link #reconcileWithModel} is what that detection is built on.</li>
  * </ul>
  * Pure — no Android imports — so it is unit-testable.
  */
@@ -52,10 +57,19 @@ public final class CivAddressConfig {
         public final int address;
         /** True when {@code civ} (canonical hex) and {@link #FORMAT_KEY} must be written. */
         public final boolean writeBack;
+        /**
+         * True when the stored value was unmarked and its digits read in decimal are the
+         * selected model's address — it may be the old picker's decimal write <em>or</em> a
+         * deliberate hex override, and the two can't be told apart, so {@link #address} keeps
+         * the stored (hex) reading and the user should be told to re-select the rig if it
+         * really uses the model default.
+         */
+        public final boolean ambiguous;
 
-        Repair(int address, boolean writeBack) {
+        Repair(int address, boolean writeBack, boolean ambiguous) {
             this.address = address;
             this.writeBack = writeBack;
+            this.ambiguous = ambiguous;
         }
     }
 
@@ -68,18 +82,21 @@ public final class CivAddressConfig {
      * @param modelAddress the selected rig model's default address
      * @return the address to use, and whether to write it (and the marker) back
      *
-     * <p>Rules: a marked value is trusted as-is — no model reconciliation, so user overrides
-     * survive. An unmarked value gets {@link #reconcileWithModel}. A write-back is due when
-     * the marker is missing (settles provenance once and for all, and fixes the three-digit
+     * <p>Rules: the loaded value is always kept — a marked value because its provenance is
+     * known, an unmarked one because a two-digit decimal twin of the model address is
+     * indistinguishable from a deliberate hex override and must not be silently rewritten
+     * (it is reported as {@link Repair#ambiguous} instead). A write-back is due when the
+     * marker is missing (settles provenance once and for all, and fixes the three-digit
      * decimal case whose decoded address already equals the model's) or when the stored
      * text isn't the canonical {@link #encode} form.
      */
     public static Repair planRepair(String storedRaw, boolean formatKnown, int loaded,
                                     int modelAddress) {
-        int resolved = formatKnown ? loaded : reconcileWithModel(loaded, modelAddress);
+        boolean ambiguous = !formatKnown
+                && reconcileWithModel(loaded, modelAddress) != loaded;
         boolean canonical = storedRaw != null
-                && encode(resolved).equals(storedRaw.trim().toLowerCase(Locale.ROOT));
-        return new Repair(resolved, !formatKnown || !canonical);
+                && encode(loaded).equals(storedRaw.trim().toLowerCase(Locale.ROOT));
+        return new Repair(loaded, !formatKnown || !canonical, ambiguous);
     }
 
     /** True when a stored {@link #FORMAT_KEY} value says the {@code civ} key is hex. */
@@ -119,11 +136,12 @@ public final class CivAddressConfig {
     }
 
     /**
-     * Resolves the ambiguity {@link #decode} can't: a loaded address that doesn't match the
-     * selected rig model, but whose digits read in decimal do. Example: an IC-706MKIIG
-     * ({@code 0x58} = 88) saved as {@code "88"}, loaded as {@code 0x88}. Returns
-     * {@code modelAddress} in that case, otherwise {@code loaded} unchanged — a deliberate
-     * user override (rig configured to a non-default address) is left alone.
+     * The model-reconciled reading of a loaded address that doesn't match the selected rig
+     * model but whose digits read in decimal do. Example: an IC-706MKIIG ({@code 0x58} = 88)
+     * saved as {@code "88"}, loaded as {@code 0x88}. Returns {@code modelAddress} in that
+     * case, otherwise {@code loaded} unchanged. {@link #planRepair} uses it only to
+     * <em>detect</em> the ambiguity — it never applies the result, because the same stored
+     * text is also what a deliberate {@code 0x88} override looks like.
      */
     public static int reconcileWithModel(int loaded, int modelAddress) {
         if (!isValid(modelAddress) || loaded == modelAddress) return loaded;
