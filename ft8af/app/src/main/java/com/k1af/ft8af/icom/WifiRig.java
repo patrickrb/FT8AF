@@ -34,9 +34,17 @@ public abstract class WifiRig {
      * handlers via the {@code notify*} helpers below.
      */
     public interface OnLinkStateChanged {
-        void onLoginResult(boolean ok);
+        /**
+         * {@link #start()} opened a new UDP session. Fired from inside
+         * {@link #beginLinkSession()} — i.e. at the same instant the session counter
+         * advances — so a listener that resets per-attempt state here can't be handed an
+         * event from the previous session afterwards (every event carries its session id).
+         */
+        void onSessionBegin(int session);
 
-        void onSendError();
+        void onLoginResult(int session, boolean ok);
+
+        void onSendError(int session);
 
         void onClosed();
     }
@@ -54,9 +62,42 @@ public abstract class WifiRig {
     // and pass it back through the session-checked notify* overloads.
     private final AtomicInteger linkSession = new AtomicInteger();
 
-    /** Called at the top of {@link #start()}; returns the id the new handlers must carry. */
+    /**
+     * Called at the top of {@link #start()}; returns the id the new handlers must carry.
+     * Announces the new session to the link-state listener in the same step so its reset
+     * and the session advance are one edge (Copilot review on #778: resetting the connector
+     * state <em>before</em> {@code start()} left a window where a late event from the old
+     * session still matched the current id and landed on the freshly reset state).
+     */
     protected int beginLinkSession() {
-        return linkSession.incrementAndGet();
+        int session = linkSession.incrementAndGet();
+        if (onLinkStateChanged != null) onLinkStateChanged.onSessionBegin(session);
+        return session;
+    }
+
+    /** Whether an event tagged {@code session} belongs to the current attempt. */
+    protected boolean isCurrentSession(int session) {
+        return isCurrentSession(session, linkSession.get());
+    }
+
+    /**
+     * Gate for a stream-event callback: returns true when {@code session} is current and the
+     * callback should run as usual. For a stale session it runs {@code staleTeardown} (the
+     * orphaned sockets' own close — never the rig's current {@code controlUdp}) and returns
+     * false so the caller skips its toasts, notifications and {@code close()} (Copilot review
+     * on #778: a late send error or failed login from the old sockets used to call
+     * {@code close()} / {@code controlUdp.closeAll()} on the <em>new</em> session's field).
+     */
+    protected boolean admitSessionEvent(int session, Runnable staleTeardown) {
+        if (isCurrentSession(session)) return true;
+        if (staleTeardown != null) {
+            try {
+                staleTeardown.run();
+            } catch (RuntimeException e) {
+                Log.w(TAG, "Stale link session " + session + " teardown failed", e);
+            }
+        }
+        return false;
     }
 
     /** Package-visible for tests. */
@@ -69,23 +110,28 @@ public abstract class WifiRig {
         return session == current;
     }
 
-    /** Concrete rigs call these from their stream-event handlers; null-safe. */
+    /**
+     * Concrete rigs call these from their stream-event handlers; null-safe. The unsessioned
+     * forms apply to whatever session is current (for callers that have no id to carry).
+     */
     protected void notifyLoginResult(boolean ok) {
-        if (onLinkStateChanged != null) onLinkStateChanged.onLoginResult(ok);
+        notifyLoginResult(linkSession.get(), ok);
     }
 
-    /** As {@link #notifyLoginResult(boolean)}, but dropped when {@code session} is stale. */
+    /** Dropped here when {@code session} is stale; the listener re-checks under its own lock. */
     protected void notifyLoginResult(int session, boolean ok) {
-        if (isCurrentSession(session, linkSession.get())) notifyLoginResult(ok);
+        if (!isCurrentSession(session)) return;
+        if (onLinkStateChanged != null) onLinkStateChanged.onLoginResult(session, ok);
     }
 
     protected void notifySendError() {
-        if (onLinkStateChanged != null) onLinkStateChanged.onSendError();
+        notifySendError(linkSession.get());
     }
 
-    /** As {@link #notifySendError()}, but dropped when {@code session} is stale. */
+    /** Dropped here when {@code session} is stale; the listener re-checks under its own lock. */
     protected void notifySendError(int session) {
-        if (isCurrentSession(session, linkSession.get())) notifySendError();
+        if (!isCurrentSession(session)) return;
+        if (onLinkStateChanged != null) onLinkStateChanged.onSendError(session);
     }
 
     protected void notifyClosed() {

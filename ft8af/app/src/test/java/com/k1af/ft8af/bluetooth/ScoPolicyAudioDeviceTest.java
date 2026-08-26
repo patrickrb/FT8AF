@@ -28,55 +28,95 @@ public class ScoPolicyAudioDeviceTest {
         assertThat(ScoPolicy.TYPE_BLUETOOTH_SCO).isEqualTo(framework);
     }
 
-    // ---- headsetModeAction: cached flag cross-checked with real SCO state --------------
+    // ---- headsetModeAction: cached flag cross-checked with the coordinator's link state ----
+    // Args: (want, enteredByUs, linkUp, linkHeld, bluetoothRig). linkUp = tracker says
+    // CONNECTING/CONNECTED; linkHeld = coordinator still holds an SCO request (wanted).
 
     @Test
-    public void headsetModeAction_wantedAndReallyOn_keeps() {
-        assertThat(ScoPolicy.headsetModeAction(true, true, true, false))
+    public void headsetModeAction_wantedAndLinkUp_keeps() {
+        assertThat(ScoPolicy.headsetModeAction(true, true, true, true, false))
                 .isEqualTo(ScoPolicy.HEADSET_MODE_KEEP);
     }
 
     @Test
     public void headsetModeAction_wantedButNeverEntered_enters() {
-        assertThat(ScoPolicy.headsetModeAction(true, false, false, false))
+        assertThat(ScoPolicy.headsetModeAction(true, false, false, false, false))
                 .isEqualTo(ScoPolicy.HEADSET_MODE_ENTER);
     }
 
     @Test
-    public void headsetModeAction_wantedButScoDroppedBehindOurBack_reEnters() {
-        // Headset disconnected and came back (or setBlueToothOn() failed): the cached flag
-        // says active but SCO is really off — must not skip re-entering.
-        assertThat(ScoPolicy.headsetModeAction(true, true, false, false))
+    public void headsetModeAction_wantedButLinkDroppedBehindOurBack_reEnters() {
+        // Headset disconnected and came back (or the start failed and retries were
+        // exhausted): the cached flag says active but the link is down — must re-enter,
+        // whether or not the coordinator still nominally holds the request.
+        assertThat(ScoPolicy.headsetModeAction(true, true, false, true, false))
                 .isEqualTo(ScoPolicy.HEADSET_MODE_ENTER);
-        assertThat(ScoPolicy.headsetModeAction(true, true, false, true))
+        assertThat(ScoPolicy.headsetModeAction(true, true, false, false, false))
+                .isEqualTo(ScoPolicy.HEADSET_MODE_ENTER);
+        assertThat(ScoPolicy.headsetModeAction(true, true, false, false, true))
                 .isEqualTo(ScoPolicy.HEADSET_MODE_ENTER);
     }
 
     @Test
     public void headsetModeAction_notWantedAndNotOurs_keeps() {
         // SCO turned on by someone else (Bluetooth rig path, broadcast receiver): leave it.
-        assertThat(ScoPolicy.headsetModeAction(false, false, true, false))
+        assertThat(ScoPolicy.headsetModeAction(false, false, true, true, false))
                 .isEqualTo(ScoPolicy.HEADSET_MODE_KEEP);
     }
 
     @Test
     public void headsetModeAction_deselectedOnUsbRig_leaves() {
-        assertThat(ScoPolicy.headsetModeAction(false, true, true, false))
+        assertThat(ScoPolicy.headsetModeAction(false, true, true, true, false))
                 .isEqualTo(ScoPolicy.HEADSET_MODE_LEAVE);
     }
 
     @Test
-    public void headsetModeAction_deselectedButScoAlreadyGone_forgets() {
-        assertThat(ScoPolicy.headsetModeAction(false, true, false, false))
+    public void headsetModeAction_deselectedWhileCoordinatorRetrying_stillLeaves() {
+        // Copilot review on #778: the link is momentarily down (retry pending) but the
+        // coordinator still wants it. Deciding on AudioManager.isBluetoothScoOn() here read
+        // "off" and FORGOT, so the coordinator stayed wanted and brought SCO right back.
+        // The held request must be told to stop.
+        assertThat(ScoPolicy.headsetModeAction(false, true, false, true, false))
+                .isEqualTo(ScoPolicy.HEADSET_MODE_LEAVE);
+    }
+
+    @Test
+    public void headsetModeAction_deselectedAndNothingHeld_forgets() {
+        // TX stopSco()/shutdown already released the request: nothing to tear down.
+        assertThat(ScoPolicy.headsetModeAction(false, true, false, false, false))
                 .isEqualTo(ScoPolicy.HEADSET_MODE_FORGET);
     }
 
     @Test
     public void headsetModeAction_neverYanksScoFromBluetoothRig() {
-        assertThat(ScoPolicy.headsetModeAction(false, true, true, true))
+        assertThat(ScoPolicy.headsetModeAction(false, true, true, true, true))
                 .isEqualTo(ScoPolicy.HEADSET_MODE_KEEP);
-        assertThat(ScoPolicy.headsetModeAction(false, true, false, true))
+        assertThat(ScoPolicy.headsetModeAction(false, true, false, true, true))
                 .isEqualTo(ScoPolicy.HEADSET_MODE_KEEP);
+        assertThat(ScoPolicy.headsetModeAction(false, true, false, false, true))
+                .isEqualTo(ScoPolicy.HEADSET_MODE_KEEP);
+    }
+
+    // ---- profileChangeAction: what the BT broadcast receiver does on a profile change ----
+
+    @Test
+    public void profileChangeAction_bluetoothRig_entersAndLeavesDirectly() {
+        assertThat(ScoPolicy.profileChangeAction(ConnectMode.BLUE_TOOTH, true))
+                .isEqualTo(ScoPolicy.PROFILE_ENTER);
+        assertThat(ScoPolicy.profileChangeAction(ConnectMode.BLUE_TOOTH, false))
+                .isEqualTo(ScoPolicy.PROFILE_LEAVE);
+    }
+
+    @Test
+    public void profileChangeAction_otherRigs_runSelectionAwareRefresh() {
+        // Copilot review on #778: USB/VOX rig + selected BT headset — a headset reconnect
+        // after the SCO retry budget ran out was ignored, so RX stayed dead until restart.
+        assertThat(ScoPolicy.profileChangeAction(ConnectMode.USB_CABLE, true))
+                .isEqualTo(ScoPolicy.PROFILE_REFRESH);
+        assertThat(ScoPolicy.profileChangeAction(ConnectMode.USB_CABLE, false))
+                .isEqualTo(ScoPolicy.PROFILE_REFRESH);
+        assertThat(ScoPolicy.profileChangeAction(ConnectMode.NETWORK, true))
+                .isEqualTo(ScoPolicy.PROFILE_REFRESH);
     }
 
     @Test

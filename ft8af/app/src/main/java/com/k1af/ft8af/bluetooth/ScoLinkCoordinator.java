@@ -84,6 +84,17 @@ public final class ScoLinkCoordinator {
         return tracker.linkState();
     }
 
+    /**
+     * The link is CONNECTING or CONNECTED as far as the tracker knows — the state the
+     * headset-mode refresh cross-checks instead of {@code AudioManager.isBluetoothScoOn()},
+     * which only mirrors the legacy force-use flag (Copilot review on #778).
+     */
+    public boolean isLinkUpOrPending() {
+        int s = tracker.linkState();
+        return s == AudioManager.SCO_AUDIO_STATE_CONNECTING
+                || s == AudioManager.SCO_AUDIO_STATE_CONNECTED;
+    }
+
     public int attempts() {
         return tracker.attempts();
     }

@@ -106,6 +106,47 @@ public class WifiLinkStateTest {
         assertThat(s.onClosed()).isEqualTo(WifiLinkState.Emit.DISCONNECTED);
     }
 
+    // ---- session-scoped events (Copilot review on #778) ---------------------------------
+
+    @Test
+    public void reset_withSession_rejectsEventsFromOtherSessions() {
+        WifiLinkState s = new WifiLinkState();
+        s.reset(1);
+        assertThat(s.session()).isEqualTo(1);
+        // A late success from the previous session must not connect the fresh attempt...
+        assertThat(s.onLoginResult(0, true)).isNull();
+        assertThat(s.isConnected()).isFalse();
+        // ...nor terminally fail it, which would swallow the real login that follows.
+        assertThat(s.onLoginResult(0, false)).isNull();
+        assertThat(s.onSendError(0)).isNull();
+        assertThat(s.onLoginResult(1, true)).isEqualTo(WifiLinkState.Emit.CONNECTED);
+        assertThat(s.isConnected()).isTrue();
+    }
+
+    @Test
+    public void reset_withSession_dropsStaleSendErrorAfterReconnect() {
+        WifiLinkState s = new WifiLinkState();
+        s.reset(1);
+        s.onLoginResult(1, true);
+        s.onClosed();
+        s.reset(2);
+        s.onLoginResult(2, true);
+        // Old streams fail late: not a disconnect of the new link.
+        assertThat(s.onSendError(1)).isNull();
+        assertThat(s.isConnected()).isTrue();
+        assertThat(s.onSendError(2)).isEqualTo(WifiLinkState.Emit.DISCONNECTED);
+    }
+
+    @Test
+    public void unsessionedReset_keepsSessionId() {
+        WifiLinkState s = new WifiLinkState();
+        s.reset(5);
+        s.onLoginResult(5, false);
+        s.reset();
+        assertThat(s.session()).isEqualTo(5);
+        assertThat(s.onLoginResult(5, true)).isEqualTo(WifiLinkState.Emit.CONNECTED);
+    }
+
     @Test
     public void concurrentLogins_announceConnectedExactlyOnce() throws Exception {
         // The rig re-fires 0x60/0x50 and the receive worker isn't the only caller; with
