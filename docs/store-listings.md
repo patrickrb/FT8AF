@@ -93,6 +93,19 @@ The workflow is `.github/workflows/play-listings.yml`:
 Only locales whose text actually differs from Play are sent, so a rerun that
 changes nothing commits nothing.
 
+### Prerequisite: service account permission
+
+`PLAY_SERVICE_ACCOUNT_JSON` was set up for *releases*. Editing listings needs a
+separate grant — **Play Console → Users and permissions → the service account →
+App permissions → "Edit store listing, pricing & distribution"**. Without it the
+`listings.patch` call fails with a 403 that names the missing permission, and
+nothing is committed.
+
+Do a manual dry run (Actions → "Play store listings" → Run workflow, leave "Dry
+run" ticked) before the first merge to `main`. It exercises exactly the same
+API calls up to the commit, so a missing grant shows up there rather than on a
+release.
+
 Play's one-open-edit-per-app rule means a listing publish and an AAB upload must
 not overlap, or the second fails with *"This edit has expired"*. The publish job
 shares the `play-publish` concurrency group with `android.yml`, which serializes
