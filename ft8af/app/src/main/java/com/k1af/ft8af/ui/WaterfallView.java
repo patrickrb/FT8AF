@@ -214,32 +214,33 @@ public class WaterfallView extends View {
         if (txFrequency > 0 && freq_width > 0) {
             txMarkerPaint.setColor(0xFFEF4444);
             float halfBw = FT8_SIGNAL_BANDWIDTH_HZ / 2f;
-            float x1 = (txFrequency - halfBw) * freq_width;
-            float x2 = (txFrequency + halfBw) * freq_width;
+            float x1 = SpectrumTouchMath.freqHzToPixelX(
+                    txFrequency - halfBw, getWidth(), spectrumWidth);
+            float x2 = SpectrumTouchMath.freqHzToPixelX(
+                    txFrequency + halfBw, getWidth(), spectrumWidth);
             canvas.drawLine(x1, 0, x1, getHeight(), txMarkerPaint);
             canvas.drawLine(x2, 0, x2, getHeight(), txMarkerPaint);
         }
 
-        //Calculate frequency
-        if (touch_x > 0) {//Draw touch line
-            freq_hz = Math.round((float) spectrumWidth * (float) touch_x / (float) getWidth());
-            if (freq_hz > spectrumWidth - 100) {
-                freq_hz = spectrumWidth - 100;
-            }
-            if (freq_hz < 100) {
-                freq_hz = 100;
-            }
-
-            if (touch_x > getWidth() / 2) {
+        //Draw touch cursor. freq_hz is computed in setTouch_x so getFreq_hz()
+        //returns the current tap (issue #782) — reading it back here would be
+        //stale on the ACTION_UP event that commits the base frequency. The blue
+        //cursor is drawn at the pixel that maps back from freq_hz so it always
+        //lines up with the red TX-bandwidth markers.
+        if (touch_x > 0 && freq_hz > 0) {
+            float cursorX = SpectrumTouchMath.freqHzToPixelX(
+                    freq_hz, getWidth(), spectrumWidth);
+            if (cursorX < 0) cursorX = touch_x;
+            if (cursorX > getWidth() / 2f) {
                 fontPaint.setTextAlign(Paint.Align.RIGHT);
                 canvas.drawText(String.format("%dHz", freq_hz)
-                        , touch_x - 10, 250, fontPaint);
+                        , cursorX - 10, 250, fontPaint);
             } else {
                 fontPaint.setTextAlign(Paint.Align.LEFT);
                 canvas.drawText(String.format("%dHz", freq_hz)
-                        , touch_x + 10, 250, fontPaint);
+                        , cursorX + 10, 250, fontPaint);
             }
-            canvas.drawLine(touch_x, 0, touch_x, getHeight(), touchPaint);
+            canvas.drawLine(cursorX, 0, cursorX, getHeight(), touchPaint);
 
         }
         // Do NOT call invalidate() here. The view is invalidated externally
@@ -383,6 +384,12 @@ public class WaterfallView extends View {
 
     public void setTouch_x(int touch_x) {
         this.touch_x = touch_x;
+        // Compute freq_hz eagerly so a tap handler that reads getFreq_hz()
+        // immediately after this call sees the fresh position instead of
+        // whatever the last onDraw() left behind (issue #782). getWidth() is
+        // 0 until the view is measured; guard so an early tap doesn't
+        // divide by zero.
+        this.freq_hz = SpectrumTouchMath.touchToFreqHz(touch_x, getWidth(), spectrumWidth);
     }
 
     public void setDrawMessage(boolean drawMessage) {

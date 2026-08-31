@@ -18,8 +18,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -34,10 +36,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.animation.core.animateFloatAsState
+import com.k1af.ft8af.R
 import radio.ks3ckc.ft8af.theme.*
 
 @Composable
@@ -119,37 +127,71 @@ fun FT8AFBottomSheet(
                     ) { /* consume click */ },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // Drag handle — captures vertical drags to dismiss / minimize.
+                // Header row: centered drag handle + explicit close button on
+                // the right. A visible tappable close was missing (issue #782:
+                // "calling CQ -> 'more' has no back-button"). The drag handle
+                // and scrim already dismissed, but neither is discoverable —
+                // the close icon gives every sheet a plain Back affordance.
+                val closeDescription = stringResource(R.string.sheet_close)
                 Box(
                     modifier = Modifier
+                        .fillMaxWidth()
                         .padding(top = 10.dp, bottom = 4.dp)
-                        .width(72.dp)
-                        .height(20.dp)
-                        .pointerInput(Unit) {
-                            detectVerticalDragGestures(
-                                onDragEnd = {
-                                    if (dragOffset > dismissThresholdPx) {
-                                        onDismiss()
-                                    } else {
-                                        dragOffset = 0f
-                                    }
-                                },
-                                onDragCancel = { dragOffset = 0f },
-                                onVerticalDrag = { _, dy ->
-                                    val maxOffset = if (sheetHeightPx > 0f) sheetHeightPx else Float.MAX_VALUE
-                                    dragOffset = (dragOffset + dy).coerceIn(0f, maxOffset)
-                                },
-                            )
-                        },
-                    contentAlignment = Alignment.Center,
+                        .height(28.dp),
                 ) {
+                    // Drag handle — captures vertical drags to dismiss / minimize.
                     Box(
                         modifier = Modifier
-                            .width(36.dp)
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(99.dp))
-                            .background(Color(0x6694A3B8)) // rgba(148,163,184,0.40)
-                    )
+                            .align(Alignment.Center)
+                            .width(72.dp)
+                            .height(20.dp)
+                            .pointerInput(Unit) {
+                                detectVerticalDragGestures(
+                                    onDragEnd = {
+                                        if (dragOffset > dismissThresholdPx) {
+                                            onDismiss()
+                                        } else {
+                                            dragOffset = 0f
+                                        }
+                                    },
+                                    onDragCancel = { dragOffset = 0f },
+                                    onVerticalDrag = { _, dy ->
+                                        val maxOffset = if (sheetHeightPx > 0f) sheetHeightPx else Float.MAX_VALUE
+                                        dragOffset = (dragOffset + dy).coerceIn(0f, maxOffset)
+                                    },
+                                )
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(36.dp)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(99.dp))
+                                .background(Color(0x6694A3B8)) // rgba(148,163,184,0.40)
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 12.dp)
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x1F94A3B8))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = onDismiss,
+                            )
+                            .semantics {
+                                role = Role.Button
+                                contentDescription = closeDescription
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        FT8AFIcons.Close(size = 16.dp, color = TextMuted, strokeWidth = 2f)
+                    }
                 }
 
                 Column(

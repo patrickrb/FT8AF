@@ -112,7 +112,16 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             val fft = IntArray(data.size / 2)
             nativeFFT(data, fft, mainViewModel.deNoise)
 
-            val currentTxFreq = GeneralVariables.getBaseFrequency()
+            // While a tap cursor is active, keep the TX bandwidth markers on
+            // the touched frequency instead of snapping back to the base
+            // frequency on every audio tick (issue #782). The touched value
+            // clears when frequencyLineTimeout reaches 0 below, at which
+            // point currentTxFreq falls back to the committed base freq.
+            val currentTxFreq = if (touchedFreqHz > 0) {
+                touchedFreqHz.toFloat()
+            } else {
+                GeneralVariables.getBaseFrequency()
+            }
             val currentTxActive = mainViewModel.ft8TransmitSignal.mutableIsTransmitting.value ?: false
 
             viewHolder.columnar?.let { cView ->
@@ -187,10 +196,16 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             )
         }
 
+        // While the user is touching the spectrum, drive the TX bandwidth
+        // markers from the touched frequency so the red brackets follow the
+        // blue tap cursor live instead of snapping to the previous base
+        // frequency until ACTION_UP commits (issue #782).
+        val displayTxFreq = if (touchedFreqHz > 0) touchedFreqHz.toFloat() else txFreq
+
         // Spectrum strip (columnar view)
         ColumnarStrip(
             spectrumWidth = spectrumWidth,
-            txFrequency = txFreq,
+            txFrequency = displayTxFreq,
             txActive = isTransmitting,
             onViewCreated = { viewHolder.columnar = it },
             onTouch = { freqHz, _ ->
@@ -219,7 +234,7 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
         // Main waterfall display
         WaterfallCanvas(
             spectrumWidth = spectrumWidth,
-            txFrequency = txFreq,
+            txFrequency = displayTxFreq,
             txActive = isTransmitting,
             onViewCreated = { viewHolder.waterfall = it },
             onTouch = { freqHz, _ ->

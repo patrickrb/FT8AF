@@ -115,6 +115,7 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_cq_options">CQ message options (modifier, free text, Field Day)</string>
+    <string name="sheet_close">Close</string>
 
     <!-- ===== CQ options sheet (free text / saved custom CQ) ===== -->
     <string name="cq_directed_too_long">CQ + text + call doesn\'t fit in one FT8 message (max 13 chars, limited character set)</string>
