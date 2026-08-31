@@ -1,47 +1,70 @@
 FT8AF maakt van je Android-telefoon of -tablet een volwaardig FT8-station. Sluit je set aan via USB, tik op CQ en werk de wereld — zonder laptop.
 
-Decodeer elk signaal op de band in real time, zend standaard FT8-berichten uit en log je verbindingen automatisch. Of je nu portable werkt vanaf een heuveltop, een Field Day-station opbouwt of het gewoon thuis eenvoudig houdt: FT8AF geeft je alles wat je nodig hebt, in je broekzak.
+Vul je roepnaam in, zet de baudrate goed, kies je audioapparaat: de meeste operators roepen binnen een paar minuten CQ. De app stemt de set af, volgt je als je van band wisselt en logt de verbinding zodra de QSO rond is.
+
+Decodeer de hele band in real time en zend in FT8, FT4 en FT2 — portable vanaf een heuveltop, bij het activeren van een park, op Field Day of gewoon thuis.
 
 WAT JE NODIG HEBT
 • Een HF-set met een data- of USB-aansluiting
-• Een USB OTG-kabel of een USB-audio-interface
+• Een USB OTG-kabel of een USB-audio-interface, bijvoorbeeld een DigiRig
 • Een Android-telefoon of -tablet met Android 6.0 of hoger
 
 ONDERSTEUNDE SETS
-Werkt met de meeste HF-transceivers via CAT-besturing over USB: Yaesu, Icom, Kenwood, Elecraft en veel meer. Ook netwerksets als FlexRadio, Icom IP en Xiegu X6100 worden ondersteund. Besturingsmodi: CAT, VOX, RTS en DTR.
+De meeste HF-transceivers via CAT-besturing over USB (Yaesu, Icom, Kenwood, Elecraft en meer), plus netwerksets als FlexRadio, Icom IP en Xiegu X6100. Besturingsmodi: CAT, VOX, RTS en DTR.
 
 DECODEREN EN ZENDEN
-• FT8-decodering in real time, in snelle en diepe modus
+• FT8, FT4 en FT2, in real time gedecodeerd in snelle en diepe modus
 • Live waterval en spectrum met afstemmen door aanraking
 • CQ roepen, gerichte oproepen en vrije tekstberichten
+• Wissel van band in de app en de set volgt
 • Keuze van de zendperiode, TX-watchdog en automatische bewaking
-• De wachtrij met roepers houdt je bij de lopende QSO in plaats van achter het sterkste signaal aan
-• Automatisch volgen houdt de stations in de gaten die je wilt werken
+• Hound-modus voor het werken van DXpedities
+• DT bij elke decodering, zoals WSJT-X het doet
+
+JAAG OP WAT JE MIST
+• Hunt beantwoordt CQ's voor je, zodat je de opening besteedt aan verbindingen
+• Kies wie je antwoordt: nieuwste, sterkste, zwakste, verste, POTA/SOTA, nieuw DXCC of nieuwe locator
+• Markeringen NIEUW DXCC, NIEUWE LOCATOR en NIEUWE ZONE in de decodeerlijst
+• Een wachtrij met roepers houdt je bij het station dat je werkt, niet bij het sterkste
+
+PARKS ON THE AIR
+• Parken zoeken en activering bijhouden, ingebouwd
+• Self-spot naar pota.app zonder de app te verlaten
+• Park-naar-park-verbindingen, bijgehouden en geëxporteerd
+• Stuur je activeringslog rechtstreeks naar pota.app
 
 LOGBOEK
 • Verbindingen worden vanzelf gelogd zodra de QSO rond is
-• Bijhouden van DXCC en van CQ- en ITU-zones
+• Bijhouden van DXCC, CQ- en ITU-zones en Worked All States
 • Statistieken per band en per afstand
 • ADIF-bestanden importeren en exporteren
 • Logregels bewerken of verwijderen
 
-SYNCHRONISATIE MET LOGPLATFORMS
+LOGPLATFORMS SYNCHRONISEREN
 • Upload je QSO's naar Cloudlog, Wavelog, QRZ.com of Nextlog
 • Synchronisatiestatus per verbinding, zodat je weet wat er al staat
 • Verbinding testen vanuit Instellingen om je gegevens te controleren
 
 KAART EN PSK REPORTER
-• Interactieve kaart met de locatie van je verbindingen
-• De PSK Reporter-laag laat zien waar jouw signaal wereldwijd wordt ontvangen
+• Interactieve kaart van je verbindingen
+• De PSK Reporter-laag laat zien waar jouw signaal wereldwijd wordt gehoord
 • Locator en afstand bij elk gedecodeerd station
 
+ALTIJD OP TIJD
+FT8 heeft UTC op ongeveer een seconde nauwkeurig nodig. FT8AF synchroniseert via NTP, disciplineert de klok op gps of stelt zichzelf bij aan de hand van de DT van de signalen die het decodeert — je blijft in de periode, ook zonder internet en zonder bereik.
+
 AUDIO EN VERBINDINGEN
-• Ondersteuning voor USB-audioapparaten en bluetooth-audio
+• USB-audioapparaten, bluetooth-audio en bluetooth-headsets
 • Instelbare samplefrequentie en bitdiepte
 • Automatisch verbinden met de set zodra je de USB inplugt
 
+HANDSFREE
+• Gesproken meldingen als een station je roept of een QSO rond is
+• Spraakopdrachten met push-to-talk
+• Android Auto-statusscherm om vanuit de auto te werken
+
 GEMAAKT VOOR OPERATORS
-FT8AF is een gemoderniseerde fork van FT8CN van BG7YOZ, herbouwd met een eigentijdse Compose-interface, vertalingen in 17 talen en tientallen nieuwe functies en verbeteringen. Ontwikkeld door K1AF en N0rC tijdens een road trip naar de Hamvention, op de I-70 met 70 mph.
+FT8AF is een gemoderniseerde fork van FT8CN van BG7YOZ, herbouwd met een eigentijdse Compose-interface, vertaald in 17 talen en uitgebreid met honderden nieuwe functies en verbeteringen. Ontwikkeld door K1AF en N0rC tijdens een road trip naar de Hamvention, op de I-70 met 70 mph.
 
 Open source onder de MIT-licentie.
 https://github.com/patrickrb/FT8AF

@@ -1,47 +1,70 @@
 FT8AF, Android telefonunuzu veya tabletinizi eksiksiz bir FT8 istasyonuna dönüştürür. Telsizinizi USB ile bağlayın, CQ'ya dokunun ve dünyayı çalışın — bilgisayara gerek yok.
 
-Banttaki her sinyali gerçek zamanlı çözün, standart FT8 mesajları gönderin ve bağlantıları otomatik olarak kaydedin. İster bir tepeden portable çalışın, ister Field Day istasyonu kurun, ister evde işi basit tutun; FT8AF ihtiyacınız olan her şeyi cebinize koyar.
+Çağrı işaretinizi girin, baud hızını ayarlayın, ses aygıtınızı seçin: operatörlerin çoğu birkaç dakika içinde CQ çağırıyor. Uygulama telsizi ayarlar, bant değiştirdiğinizde sizi izler ve QSO biter bitmez bağlantıyı kaydeder.
+
+Bandın tamamını gerçek zamanlı çözün ve FT8, FT4 ve FT2 ile gönderin — bir tepeden portable, park aktive ederken, Field Day'de ya da sadece evde.
 
 NELERE İHTİYACINIZ VAR
 • Veri veya USB portu olan bir HF telsiz
-• Bir USB OTG kablosu ya da USB ses arayüzü
+• Bir USB OTG kablosu ya da USB ses arayüzü, örneğin bir DigiRig
 • Android 6.0 veya üzeri bir telefon ya da tablet
 
 DESTEKLENEN TELSİZLER
-USB üzerinden CAT kontrolüyle çoğu HF transceiver ile çalışır: Yaesu, Icom, Kenwood, Elecraft ve daha fazlası. FlexRadio, Icom IP ve Xiegu X6100 gibi ağ üzerinden çalışan telsizler de desteklenir. Kontrol modları: CAT, VOX, RTS ve DTR.
+USB üzerinden CAT kontrolüyle çoğu HF transceiver (Yaesu, Icom, Kenwood, Elecraft ve daha fazlası) ve FlexRadio, Icom IP, Xiegu X6100 gibi ağ telsizleri. Kontrol modları: CAT, VOX, RTS ve DTR.
 
 ÇÖZME VE GÖNDERME
-• Hızlı ve derin modlarla gerçek zamanlı FT8 çözme
+• FT8, FT4 ve FT2, hızlı ve derin modlarla gerçek zamanlı çözme
 • Canlı şelale ve spektrum, dokunarak ayar
 • CQ çağrısı, yönlendirilmiş çağrılar ve serbest metin mesajları
+• Uygulamada bandı değiştirin, telsiz sizi izlesin
 • TX periyodu seçimi, TX watchdog ve otomatik gözetim
-• Çağıran kuyruğu, en güçlü sinyalin peşinden koşmak yerine süren QSO'da kalmanızı sağlar
-• Otomatik takip, çalışmak istediğiniz istasyonları gözler
+• DXpedisyonları çalışmak için Hound modu
+• Her çözümde DT, WSJT-X'in yaptığı gibi
+
+EKSİKLERİNİZİ AVLAYIN
+• Hunt, CQ'lara sizin yerinize yanıt verir; açılımı bağlantı yaparak geçirirsiniz
+• Kime yanıt vereceğinizi seçin: en yeni, en güçlü, en zayıf, en uzak, POTA/SOTA, yeni DXCC veya yeni lokatör
+• Çözüm listesinde YENİ DXCC, YENİ LOKATÖR ve YENİ BÖLGE işaretleri
+• Çağıran kuyruğu, en güçlü sinyalde değil çalıştığınız istasyonda kalmanızı sağlar
+
+PARKS ON THE AIR
+• Park arama ve aktivasyon takibi yerleşik
+• Uygulamadan çıkmadan pota.app üzerinde self-spot
+• Parktan parka bağlantılar, takip edilir ve dışa aktarılır
+• Aktivasyon logunuzu doğrudan pota.app'e gönderin
 
 LOG DEFTERİ
 • QSO tamamlanınca bağlantılar kendiliğinden kaydedilir
-• DXCC ile CQ ve ITU bölgesi takibi
+• DXCC, CQ ve ITU bölgesi ile Worked All States takibi
 • Bant ve mesafe istatistikleri
 • ADIF dosyalarını içe ve dışa aktarma
 • Log kayıtlarını düzenleme ve silme
 
-LOG PLATFORMU EŞİTLEME
+LOG EŞİTLEME
 • QSO'larınızı Cloudlog, Wavelog, QRZ.com veya Nextlog'a yükleyin
 • Bağlantı başına eşitleme durumu — neyin yüklendiğini bilirsiniz
 • Kimlik bilgilerinizi doğrulamak için Ayarlar'dan bağlantı testi
 
 HARİTA VE PSK REPORTER
-• Bağlantılarınızın nerede olduğunu gösteren etkileşimli harita
-• PSK Reporter katmanı, sinyalinizin dünyada nerelerde alındığını gösterir
+• Bağlantılarınızın etkileşimli haritası
+• PSK Reporter katmanı, sinyalinizin dünyada nerede duyulduğunu gösterir
 • Çözülen her istasyon için lokatör ve mesafe
 
+HEP ZAMANINDA
+FT8, yaklaşık bir saniye doğrulukta UTC ister. FT8AF NTP ile eşitlenir, saati GPS'ten disipline eder ya da çözdüğü sinyallerin DT değerinden kendini ayarlar — internet ve şebeke olmadan da periyotta kalırsınız.
+
 SES VE BAĞLANTI
-• USB ses aygıtları ve Bluetooth ses desteği
+• USB ses aygıtları, Bluetooth ses ve Bluetooth kulaklıklar
 • Ayarlanabilir örnekleme hızı ve bit derinliği
 • USB takılınca telsize otomatik bağlanma
 
+ELLER SERBEST
+• Bir istasyon sizi çağırdığında veya QSO bittiğinde sesli bildirim
+• Bas-konuş sesli komutlar
+• Araçtan çalışmak için Android Auto durum ekranı
+
 OPERATÖRLER İÇİN YAPILDI
-FT8AF, BG7YOZ'un FT8CN uygulamasının modernleştirilmiş bir çatallamasıdır; güncel bir Compose arayüzü, 17 dilde yerelleştirme ve onlarca yeni özellik ve hata düzeltmesiyle yeniden inşa edilmiştir. K1AF ve N0rC tarafından, I-70 üzerinde saatte 70 mil hızla Hamvention'a giden bir yol yolculuğunda geliştirildi.
+FT8AF, BG7YOZ'un FT8CN uygulamasının modernleştirilmiş bir çatallamasıdır; güncel bir Compose arayüzü, 17 dile çeviri ve yüzlerce yeni özellik ve düzeltmeyle yeniden inşa edilmiştir. K1AF ve N0rC tarafından, I-70 üzerinde saatte 70 mil hızla Hamvention'a giderken geliştirildi.
 
 MIT Lisansı altında açık kaynak.
 https://github.com/patrickrb/FT8AF

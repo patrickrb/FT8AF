@@ -1,47 +1,70 @@
 FT8AF convierte tu celular o tablet Android en una estación de FT8 completa. Conecta la radio por USB, toca CQ y trabaja el mundo entero: sin computadora.
 
-Decodifica en tiempo real todas las señales de la banda, transmite mensajes FT8 estándar y registra los contactos automáticamente. Ya sea que operes en portable desde un cerro, armes una estación de Field Day o lo hagas simple desde casa, FT8AF te da todo lo que necesitas en el bolsillo.
+Pon tu indicativo, ajusta la velocidad del puerto, elige el dispositivo de audio: la mayoría de los operadores están llamando CQ a los pocos minutos. La app sintoniza el equipo, te sigue al cambiar de banda y registra el contacto apenas se cierra el QSO.
+
+Decodifica toda la banda en tiempo real y transmite en FT8, FT4 y FT2: en portable desde un cerro, activando un parque, en Field Day o simplemente desde casa.
 
 QUÉ NECESITAS
 • Un equipo de HF con puerto de datos o USB
-• Un cable USB OTG o una interfaz de audio USB
+• Un cable USB OTG o una interfaz de audio USB, como un DigiRig
 • Un celular o tablet con Android 6.0 o superior
 
 EQUIPOS COMPATIBLES
-Funciona con la mayoría de los transceptores de HF mediante control CAT por USB: Yaesu, Icom, Kenwood, Elecraft y muchos más. También admite equipos en red como FlexRadio, Icom IP y Xiegu X6100. Modos de control: CAT, VOX, RTS y DTR.
+La mayoría de los transceptores de HF mediante control CAT por USB (Yaesu, Icom, Kenwood, Elecraft y más), además de equipos en red como FlexRadio, Icom IP y Xiegu X6100. Modos de control: CAT, VOX, RTS y DTR.
 
 DECODIFICACIÓN Y TRANSMISIÓN
-• Decodificación FT8 en tiempo real con modos rápido y profundo
+• FT8, FT4 y FT2 decodificados en tiempo real, en modo rápido y profundo
 • Cascada y espectro en vivo con sintonía táctil
 • Llamadas de CQ, llamadas dirigidas y mensajes de texto libre
+• Cambia de banda en la app y la radio te sigue
 • Selección de periodo de TX, watchdog de TX y supervisión automática
-• La cola de llamadas te mantiene enfocado en el QSO en curso en lugar de perseguir la señal más fuerte
-• El seguimiento automático vigila las estaciones que quieres trabajar
+• Modo Hound para trabajar DXpediciones
+• DT en cada decodificación, como lo hace WSJT-X
+
+CAZA LO QUE TE FALTA
+• Hunt responde a los CQ por ti, para dedicar la apertura a trabajar estaciones
+• Elige a quién contestas: más reciente, más fuerte, más débil, más lejano, POTA/SOTA, nuevo DXCC o nuevo locator
+• Avisos de NUEVO DXCC, NUEVO LOCATOR y NUEVA ZONA en la lista de decodificaciones
+• La cola de llamadas te mantiene en la estación que trabajas, no en la que más suena
+
+PARKS ON THE AIR
+• Búsqueda de parques y seguimiento de la activación integrados
+• Autospot en pota.app sin salir de la app
+• Contactos parque a parque, registrados y exportados
+• Envía el log de tu activación directamente a pota.app
 
 LIBRO DE GUARDIA
 • Los contactos se registran solos al completarse el QSO
-• Seguimiento de DXCC y de zonas CQ e ITU
+• Seguimiento de DXCC, zonas CQ e ITU y Worked All States
 • Estadísticas por banda y por distancia
 • Importación y exportación de archivos ADIF
 • Edición y borrado de entradas del log
 
 SINCRONIZACIÓN CON PLATAFORMAS DE LOG
 • Sube tus QSO a Cloudlog, Wavelog, QRZ.com o Nextlog
-• Estado de sincronización por contacto para saber qué se subió
+• Estado de sincronización por contacto, para saber qué se subió
 • Prueba de conexión desde Configuración para verificar tus credenciales
 
 MAPA Y PSK REPORTER
 • Mapa interactivo con la ubicación de tus contactos
-• La capa de PSK Reporter muestra dónde se está recibiendo tu señal en todo el mundo
+• La capa de PSK Reporter muestra dónde se oye tu señal en el mundo
 • Locator y distancia de cada estación decodificada
 
+SIEMPRE EN HORA
+El FT8 necesita el UTC con un margen de un segundo. FT8AF sincroniza por NTP, disciplina el reloj con el GPS o se ajusta solo a partir del DT de las señales que decodifica: sigues en el periodo sin internet y sin señal celular.
+
 AUDIO Y CONECTIVIDAD
-• Compatible con dispositivos de audio USB y audio Bluetooth
+• Dispositivos de audio USB, audio Bluetooth y auriculares Bluetooth
 • Frecuencia de muestreo y profundidad de bits configurables
 • Conexión automática a la radio al conectar el USB
 
+MANOS LIBRES
+• Avisos hablados cuando una estación te llama o se cierra un QSO
+• Comandos de voz con pulsar para hablar
+• Pantalla de estado en Android Auto para operar desde el auto
+
 HECHO PARA RADIOAFICIONADOS
-FT8AF es un fork modernizado de FT8CN, de BG7YOZ, reconstruido con una interfaz Compose actual, localización en 17 idiomas y decenas de funciones nuevas y correcciones. Desarrollado por K1AF y N0rC en un viaje por carretera a la Hamvention, por la I-70 a 70 mph.
+FT8AF es un fork modernizado de FT8CN, de BG7YOZ, reconstruido con una interfaz Compose actual, traducido a 17 idiomas y con cientos de funciones nuevas y correcciones. Desarrollado por K1AF y N0rC en un viaje por carretera a la Hamvention, por la I-70 a 70 mph.
 
 Código abierto con licencia MIT.
 https://github.com/patrickrb/FT8AF

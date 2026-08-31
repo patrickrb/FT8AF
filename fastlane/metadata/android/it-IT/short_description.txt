@@ -1,1 +1,1 @@
-L'FT8 dal telefono: decodifica, trasmetti e logga i QSO senza computer
+FT8 e FT4 dal telefono: decodifica, trasmetti, logga e attiva parchi
