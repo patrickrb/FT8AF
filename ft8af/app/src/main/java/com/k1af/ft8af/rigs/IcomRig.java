@@ -22,6 +22,23 @@ import java.util.TimerTask;
 public class IcomRig extends BaseRig {
     private static final String TAG = "IcomRig";
 
+    /**
+     * How often the frequency-poll timer asks the rig for its current dial. Sized
+     * to the same 2 s cadence Yaesu38Rig / KenwoodTS590Rig / Elecraft use: fast
+     * enough that a user turning the VFO on the rig sees the app follow within
+     * a slot, slow enough that even a chatty CI-V stream stays comfortably below
+     * the rig's command rate. See {@link #startReadFreqTimer}.
+     */
+    static final long READ_FREQ_PERIOD_MS = 2000;
+    /**
+     * Small delay before the first frequency poll so a fresh connect can finish
+     * its USB-mode + set-frequency handshake ({@code setOperationBand}, ~800 ms
+     * from onConnected) before we start reading — otherwise the very first
+     * observed frequency could be the rig's power-on value, not the one we just
+     * asserted. See {@link #startReadFreqTimer}.
+     */
+    static final long READ_FREQ_START_DELAY_MS = 2000;
+
     private final int ctrAddress = 0xE0;//receive address, default 0xE0; rig reply can also be 0x00
     private byte[] dataBuffer = new byte[0];//data buffer
     private int alc = 0;
@@ -29,6 +46,7 @@ public class IcomRig extends BaseRig {
     private boolean alcMaxAlert = false;
     private boolean swrAlert = false;
     private Timer meterTimer;//Timer for querying meter
+    private Timer readFreqTimer;//Timer for polling frequency (rig->app dial follow)
 
     private boolean oldVersion = false;//for older rigs that may not support SWR query
     //private boolean isPttOn = false;
@@ -249,6 +267,67 @@ public class IcomRig extends BaseRig {
         }, 0, IComPacketTypes.METER_TIMER_PERIOD_MS);
     }
 
+    /**
+     * Poll the rig for its current dial every {@link #READ_FREQ_PERIOD_MS} so the
+     * app follows the operator turning the VFO on the rig itself (issue #753
+     * follow-up: after the CI-V address hex fix the app could command the rig,
+     * but rig&rarr;app dial updates still didn't land — every other CAT rig in
+     * this codebase runs its own frequency poll and IcomRig was the odd one out
+     * relying solely on {@link CatLiveness}'s 3 s liveness poll, which stops
+     * hard on an 8 s quiet timeout).
+     *
+     * <p>Suppressed while transmitting: an unsolicited CI-V read during TX can
+     * clobber the meter poll's SWR/ALC reads that {@link #startMeterTimer} runs
+     * at 500 ms, and a rig can't turn its VFO while keyed anyway. Follows the
+     * {@link ReadTaskAction} pattern already used by
+     * {@link Yaesu38Rig} / {@link KenwoodTS590Rig} / {@link ElecraftRig}.
+     */
+    public void startReadFreqTimer() {
+        readFreqTimer = new Timer();
+        readFreqTimer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                runReadFreqTick();
+            }
+        }, READ_FREQ_START_DELAY_MS, READ_FREQ_PERIOD_MS);
+    }
+
+    /**
+     * One tick of the frequency-poll timer, factored out so the decision path
+     * can be exercised from tests without waiting on wall-clock time. Package-
+     * private for the same reason.
+     */
+    void runReadFreqTick() {
+        switch (ReadTaskAction.decide(isConnected(), isPttOn())) {
+            case SKIP:
+                return;
+            case READ_METERS:
+                //Meter reads are handled by the dedicated meter timer (500 ms
+                //cadence); don't duplicate them here.
+                return;
+            case READ_FREQ:
+                readFreqFromRig();
+                break;
+        }
+    }
+
+    @Override
+    public void onDisconnecting() {
+        // Cancel our timers so a reconnect (which builds a fresh IcomRig via
+        // MainViewModel.connectRig -> baseRig.onDisconnecting) doesn't leak the
+        // previous instance's polling task or double-poll after re-connect.
+        if (readFreqTimer != null) {
+            readFreqTimer.cancel();
+            readFreqTimer.purge();
+            readFreqTimer = null;
+        }
+        if (meterTimer != null) {
+            meterTimer.cancel();
+            meterTimer.purge();
+            meterTimer = null;
+        }
+    }
+
 
     public String getFrequencyStr() {
         return BaseRigOperation.getFrequencyStr(getFreq());
@@ -260,5 +339,6 @@ public class IcomRig extends BaseRig {
         this.oldVersion = !newRig;//some older rigs do not support SWR query
         setCivAddress(civAddress);
         startMeterTimer();
+        startReadFreqTimer();
     }
 }
