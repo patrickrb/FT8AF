@@ -5,9 +5,11 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -228,6 +230,16 @@ private fun ActivateTab(onOpenActivation: (PotaActivation) -> Unit) {
         }
     }
 
+    // Tick once a minute so the per-row "5m ago" labels don't stay stuck at
+    // whatever they said when the list was first rendered.
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            nowMs = System.currentTimeMillis()
+            kotlinx.coroutines.delay(30_000)
+        }
+    }
+
     // Box host so ParkPickerSheet (a fillMaxSize scrim + sheet) overlays the tab
     // content. Without it the sheet is a trailing sibling of the fillMaxSize
     // Activate content in PotaScreen's Column, so it lays out into 0 leftover
@@ -416,7 +428,7 @@ private fun ActivateTab(onOpenActivation: (PotaActivation) -> Unit) {
                         )
                     }
                     items(contacts, key = { it.id }) { qso ->
-                        PotaContactRow(qso)
+                        PotaContactRow(qso, nowMs)
                     }
                 }
             }
@@ -531,8 +543,16 @@ private fun ActiveActivationCard(
 // Contact row
 // ---------------------------------------------------------------------------
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PotaContactRow(qso: PotaQso) {
+private fun PotaContactRow(qso: PotaQso, nowMs: Long) {
+    val context = LocalContext.current
+    // Prefer the relative "ago" readout; the raw stored HHMMz string is a
+    // fallback for imported/ADIF rows with no parsable qso_date so the column
+    // never shows a blank cell.
+    val qsoMs = remember(qso.qsoDate, qso.timeOn) { parseQsoUtcMs(qso.qsoDate, qso.timeOn) }
+    val agoLabel = qsoMs?.let { formatQsoTimeAgo(it, nowMs) } ?: formatQsoTimeUtc(qso.timeOn)
+    val utcLabel = formatQsoTimeUtc(qso.timeOn)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -560,8 +580,9 @@ private fun PotaContactRow(qso: PotaQso) {
             Row {
                 Text(
                     listOfNotNull(
-                        qso.grid.ifBlank { null },
+                        qso.mode.ifBlank { null },
                         qso.band.ifBlank { null },
+                        qso.grid.ifBlank { null },
                     ).joinToString(" · "),
                     color = TextMuted,
                     fontSize = 11.sp,
@@ -569,9 +590,18 @@ private fun PotaContactRow(qso: PotaQso) {
             }
         }
         Spacer(Modifier.width(6.dp))
-        Column(horizontalAlignment = Alignment.End) {
+        Column(
+            horizontalAlignment = Alignment.End,
+            modifier = Modifier
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = {
+                        Toast.makeText(context, utcLabel, Toast.LENGTH_SHORT).show()
+                    },
+                ),
+        ) {
             Text(
-                formatQsoTime(qso.timeOn),
+                agoLabel,
                 color = TextMuted,
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace,
@@ -913,6 +943,16 @@ private fun ActivationDetailScreen(
         contacts = withContext(Dispatchers.IO) { PotaSessionManager.getQsosForActivation(activation) }
     }
 
+    // Tick once a minute so the per-row "5m ago" labels stay fresh for a
+    // currently-open historical activation (same reason as ActivateTab).
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            nowMs = System.currentTimeMillis()
+            kotlinx.coroutines.delay(30_000)
+        }
+    }
+
     val loaded = contacts
     // Fall back to the live grid only while the activation is active — before the
     // first QSO carries my_gridsquare the map would otherwise be hidden. For a
@@ -1074,7 +1114,7 @@ private fun ActivationDetailScreen(
                     )
                 }
                 items(list, key = { it.id }) { qso ->
-                    PotaContactRow(qso)
+                    PotaContactRow(qso, nowMs)
                 }
             }
         }
@@ -1182,9 +1222,58 @@ private fun formatElapsed(ms: Long): String {
     return if (h > 0) "${h}h ${m}m" else "${m}m"
 }
 
-private fun formatQsoTime(timeOn: String): String {
+/**
+ * UTC readout for the long-press tooltip on a contact row: HH:MMz. Returns the
+ * raw value on short/malformed input (e.g. an ADIF import that dropped time_on
+ * entirely) rather than throwing, matching the pre-"ago" behaviour that used
+ * to be the primary display.
+ */
+internal fun formatQsoTimeUtc(timeOn: String): String {
     if (timeOn.length < 4) return timeOn
     return "${timeOn.substring(0, 2)}:${timeOn.substring(2, 4)}z"
+}
+
+/**
+ * Turn the stored `qso_date` (YYYYMMDD) + `time_on` into a GMT epoch millis
+ * instant, or `null` if the row lacks a usable date. `time_on` is normalized to
+ * HHMMSS using the same padding rule as [PotaQsoWindow.ROW_STAMP]: HHMM widens
+ * to HHMM00, odd-width values recover the dropped leading zero first. Both
+ * callers (the "ago" formatter and any future callers) treat the row as
+ * un-datable and fall back to the raw UTC readout when this returns null.
+ */
+internal fun parseQsoUtcMs(qsoDate: String, timeOn: String): Long? {
+    if (qsoDate.length != 8 || qsoDate.any { !it.isDigit() }) return null
+    val padded = when {
+        timeOn.isEmpty() -> "000000"
+        timeOn.any { !it.isDigit() } -> return null
+        timeOn.length % 2 == 1 -> ("0$timeOn" + "000000").substring(0, 6)
+        else -> (timeOn + "000000").substring(0, 6)
+    }
+    return try {
+        java.text.SimpleDateFormat("yyyyMMddHHmmss", java.util.Locale.US)
+            .apply { timeZone = java.util.TimeZone.getTimeZone("GMT") }
+            .parse(qsoDate + padded)
+            ?.time
+    } catch (_: java.text.ParseException) {
+        null
+    }
+}
+
+/**
+ * "just now" / "45s ago" / "5m ago" / "2h ago" / "3d ago". Clamps negative
+ * deltas to "just now" so clock skew (device time behind rig time, or a bogus
+ * imported timestamp) can't produce "-2m ago". Buckets flip on exact minute /
+ * hour / day boundaries so the display is consistent between rows.
+ */
+internal fun formatQsoTimeAgo(qsoTimeMs: Long, nowMs: Long): String {
+    val deltaSec = ((nowMs - qsoTimeMs) / 1000L).coerceAtLeast(0L)
+    return when {
+        deltaSec < 30L -> "just now"
+        deltaSec < 60L -> "${deltaSec}s ago"
+        deltaSec < 3600L -> "${deltaSec / 60L}m ago"
+        deltaSec < 86_400L -> "${deltaSec / 3600L}h ago"
+        else -> "${deltaSec / 86_400L}d ago"
+    }
 }
 
 private fun formatDateRange(row: PotaActivation): String {
