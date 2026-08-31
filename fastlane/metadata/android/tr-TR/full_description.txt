@@ -1,0 +1,47 @@
+FT8AF, Android telefonunuzu veya tabletinizi eksiksiz bir FT8 istasyonuna dönüştürür. Telsizinizi USB ile bağlayın, CQ'ya dokunun ve dünyayı çalışın — bilgisayara gerek yok.
+
+Banttaki her sinyali gerçek zamanlı çözün, standart FT8 mesajları gönderin ve bağlantıları otomatik olarak kaydedin. İster bir tepeden portable çalışın, ister Field Day istasyonu kurun, ister evde işi basit tutun; FT8AF ihtiyacınız olan her şeyi cebinize koyar.
+
+NELERE İHTİYACINIZ VAR
+• Veri veya USB portu olan bir HF telsiz
+• Bir USB OTG kablosu ya da USB ses arayüzü
+• Android 6.0 veya üzeri bir telefon ya da tablet
+
+DESTEKLENEN TELSİZLER
+USB üzerinden CAT kontrolüyle çoğu HF transceiver ile çalışır: Yaesu, Icom, Kenwood, Elecraft ve daha fazlası. FlexRadio, Icom IP ve Xiegu X6100 gibi ağ üzerinden çalışan telsizler de desteklenir. Kontrol modları: CAT, VOX, RTS ve DTR.
+
+ÇÖZME VE GÖNDERME
+• Hızlı ve derin modlarla gerçek zamanlı FT8 çözme
+• Canlı şelale ve spektrum, dokunarak ayar
+• CQ çağrısı, yönlendirilmiş çağrılar ve serbest metin mesajları
+• TX periyodu seçimi, TX watchdog ve otomatik gözetim
+• Çağıran kuyruğu, en güçlü sinyalin peşinden koşmak yerine süren QSO'da kalmanızı sağlar
+• Otomatik takip, çalışmak istediğiniz istasyonları gözler
+
+LOG DEFTERİ
+• QSO tamamlanınca bağlantılar kendiliğinden kaydedilir
+• DXCC ile CQ ve ITU bölgesi takibi
+• Bant ve mesafe istatistikleri
+• ADIF dosyalarını içe ve dışa aktarma
+• Log kayıtlarını düzenleme ve silme
+
+LOG PLATFORMU EŞİTLEME
+• QSO'larınızı Cloudlog, Wavelog, QRZ.com veya Nextlog'a yükleyin
+• Bağlantı başına eşitleme durumu — neyin yüklendiğini bilirsiniz
+• Kimlik bilgilerinizi doğrulamak için Ayarlar'dan bağlantı testi
+
+HARİTA VE PSK REPORTER
+• Bağlantılarınızın nerede olduğunu gösteren etkileşimli harita
+• PSK Reporter katmanı, sinyalinizin dünyada nerelerde alındığını gösterir
+• Çözülen her istasyon için lokatör ve mesafe
+
+SES VE BAĞLANTI
+• USB ses aygıtları ve Bluetooth ses desteği
+• Ayarlanabilir örnekleme hızı ve bit derinliği
+• USB takılınca telsize otomatik bağlanma
+
+OPERATÖRLER İÇİN YAPILDI
+FT8AF, BG7YOZ'un FT8CN uygulamasının modernleştirilmiş bir çatallamasıdır; güncel bir Compose arayüzü, 17 dilde yerelleştirme ve onlarca yeni özellik ve hata düzeltmesiyle yeniden inşa edilmiştir. K1AF ve N0rC tarafından, I-70 üzerinde saatte 70 mil hızla Hamvention'a giden bir yol yolculuğunda geliştirildi.
+
+MIT Lisansı altında açık kaynak.
+https://github.com/patrickrb/FT8AF

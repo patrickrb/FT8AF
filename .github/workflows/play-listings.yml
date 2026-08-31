@@ -1,0 +1,100 @@
+name: Play store listings
+
+# The localized Play Store listing text (title / short description / full
+# description, one directory per language) lives in fastlane/metadata/android
+# and is published from there by .github/scripts/publish_listings.py.
+#
+#   pull request touching the metadata -> validate only (no secrets, works from forks)
+#   push to main touching the metadata -> publish the changed locales to Play
+#   workflow_dispatch                  -> dry run by default; untick to publish
+#
+# Graphics (icon, feature graphic, screenshots) are NOT managed here — Play falls
+# back to the default language's graphics for locales that have none of their
+# own, and screenshots are still uploaded by hand. See docs/store-listings.md.
+#
+# Release notes are also not managed here: android.yml writes
+# distribution/whatsnew/whatsnew-en-US and hands it to the upload action.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'fastlane/metadata/android/**'
+      - '.github/scripts/publish_listings.py'
+      - '.github/workflows/play-listings.yml'
+  pull_request:
+    paths:
+      - 'fastlane/metadata/android/**'
+      - '.github/scripts/publish_listings.py'
+      - '.github/scripts/test_publish_listings.py'
+      - '.github/workflows/play-listings.yml'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (show the diff against Play, change nothing)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Cheap, secret-free gate: the unit tests also load the checked-in metadata
+  # tree and assert every locale is complete and within Play's character
+  # limits, so an over-long translation fails the PR instead of a publish.
+  validate:
+    name: Validate listing metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run publish_listings unit tests
+        run: python -m unittest discover -s .github/scripts -p 'test_*.py' -v
+
+  publish:
+    name: Publish listings to Play
+    needs: validate
+    # Only from the canonical repo — a fork has no PLAY_SERVICE_ACCOUNT_JSON and
+    # must never be able to push listing text to the production app.
+    if: >-
+      github.repository == 'patrickrb/FT8AF'
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    # Google Play allows only one open "edit" per app. android.yml serializes its
+    # release publishes under this same group; sharing it keeps a listing update
+    # from colliding with an AAB upload ("This edit has expired").
+    concurrency:
+      group: play-publish
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: pip install --quiet google-auth requests
+
+      - name: Publish
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          PACKAGE_NAME: radio.ks3ckc.ft8af
+          # workflow_dispatch honours the checkbox; a push to main always publishes.
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${PLAY_SERVICE_ACCOUNT_JSON:-}" ]]; then
+            echo "::error::PLAY_SERVICE_ACCOUNT_JSON is not set — cannot reach the Play API."
+            exit 1
+          fi
+          args=()
+          if [[ "$DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
+            echo "::notice::Dry run — the diff below is what a real run would send."
+          fi
+          python .github/scripts/publish_listings.py "${args[@]}"

@@ -1,0 +1,47 @@
+FT8AF promění váš telefon nebo tablet s Androidem v kompletní stanici pro FT8. Připojte transceiver přes USB, ťukněte na CQ a pracujte celý svět — bez počítače.
+
+Dekódujte v reálném čase všechny signály v pásmu, vysílejte standardní zprávy FT8 a zapisujte spojení automaticky. Ať už vysíláte portable z kopce, stavíte stanici na Field Day, nebo si to jen držíte jednoduché doma, FT8AF vám dá všechno potřebné do kapsy.
+
+CO POTŘEBUJETE
+• KV transceiver s datovým nebo USB portem
+• Kabel USB OTG nebo zvukové rozhraní USB
+• Telefon nebo tablet s Androidem 6.0 a novějším
+
+PODPOROVANÉ TRANSCEIVERY
+Funguje s většinou KV transceiverů přes CAT ovládání po USB: Yaesu, Icom, Kenwood, Elecraft a další. Podporuje i síťové transceivery jako FlexRadio, Icom IP a Xiegu X6100. Režimy ovládání: CAT, VOX, RTS a DTR.
+
+DEKÓDOVÁNÍ A VYSÍLÁNÍ
+• Dekódování FT8 v reálném čase, v rychlém i hlubokém režimu
+• Živý vodopád a spektrum s laděním dotykem
+• Volání CQ, směrovaná volání a zprávy volným textem
+• Volba vysílacího period, TX watchdog a automatický dohled
+• Fronta volajících vás udrží u probíhajícího QSO místo honby za nejsilnějším signálem
+• Automatické sledování hlídá stanice, které chcete udělat
+
+DENÍK
+• Spojení se zapíšou sama, jakmile je QSO hotové
+• Sledování DXCC a zón CQ a ITU
+• Statistiky podle pásma a vzdálenosti
+• Import a export souborů ADIF
+• Úprava a mazání záznamů v deníku
+
+SYNCHRONIZACE S LOGOVACÍMI PLATFORMAMI
+• Nahrávejte QSO do Cloudlogu, Wavelogu, na QRZ.com nebo do Nextlogu
+• Stav synchronizace u každého spojení — víte, co už odešlo
+• Test připojení v Nastavení pro ověření přihlašovacích údajů
+
+MAPA A PSK REPORTER
+• Interaktivní mapa ukazuje, kde jsou vaše spojení
+• Vrstva PSK Reporter ukazuje, kde po světě je slyšet váš signál
+• Lokátor a vzdálenost u každé dekódované stanice
+
+ZVUK A PŘIPOJENÍ
+• Podpora zvukových zařízení USB a zvuku přes Bluetooth
+• Nastavitelná vzorkovací frekvence a bitová hloubka
+• Automatické připojení k transceiveru po zapojení USB
+
+DĚLÁNO PRO OPERÁTORY
+FT8AF je modernizovaný fork FT8CN od BG7YOZ, přestavěný na současné rozhraní Compose, s překladem do 17 jazyků a desítkami nových funkcí a oprav. Vyvinuli K1AF a N0rC na cestě autem na Hamvention, po I-70 rychlostí 70 mph.
+
+Otevřený zdrojový kód pod licencí MIT.
+https://github.com/patrickrb/FT8AF

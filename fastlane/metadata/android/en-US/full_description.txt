@@ -1,0 +1,47 @@
+FT8AF turns your Android phone or tablet into a complete FT8 station. Plug your radio in over USB, tap CQ, and work the world — no laptop required.
+
+Decode every signal on the band in real time, transmit standard FT8 messages, and log contacts automatically. Whether you're operating portable from a summit, running a Field Day station, or just keeping it simple at home, FT8AF gives you everything you need in your pocket.
+
+WHAT YOU NEED
+• An HF radio with a data or USB port
+• A USB OTG cable or USB audio interface
+• An Android phone or tablet running Android 6.0+
+
+SUPPORTED RADIOS
+Works with most HF transceivers via USB CAT control, including Yaesu, Icom, Kenwood, Elecraft, and more. Also supports network radios like FlexRadio, Icom IP, and Xiegu X6100. Control modes include CAT, VOX, RTS, and DTR.
+
+DECODE & TRANSMIT
+• Real-time FT8 decoding with fast and deep decode modes
+• Live waterfall and spectrum display with touch-to-tune
+• CQ calling, directed calls, and free text messaging
+• TX slot selection, TX watchdog, and auto-supervision
+• Caller queue keeps you focused during an active QSO instead of chasing the loudest signal
+• Auto-follow watches for stations you want to work
+
+LOGBOOK
+• Contacts are logged automatically when a QSO completes
+• DXCC, CQ zone, and ITU zone tracking
+• Band and distance statistics
+• Import and export ADIF files
+• Edit or delete log entries
+
+LOGGING PLATFORM SYNC
+• Upload QSOs to Cloudlog, Wavelog, QRZ.com, or Nextlog
+• Per-contact sync status so you know what's been uploaded
+• Test connection from Settings to verify your credentials
+
+MAP & PSK REPORTER
+• Interactive map showing where your contacts are
+• PSK Reporter overlay shows where your signal is being received around the world
+• Grid square and distance display for every decoded station
+
+AUDIO & CONNECTIVITY
+• USB audio devices and Bluetooth audio support
+• Configurable sample rate and bit depth
+• Auto-connect to your radio on USB plug-in
+
+BUILT FOR OPERATORS
+FT8AF is a modernized fork of FT8CN by BG7YOZ, rebuilt with a modern Compose UI, localization in 17 languages, and dozens of new features and bug fixes. Developed by K1AF and N0rC on a road trip to hamvention on I-70 at 70mph.
+
+Open source under the MIT License.
+https://github.com/patrickrb/FT8AF

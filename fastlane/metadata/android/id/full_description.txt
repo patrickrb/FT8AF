@@ -1,0 +1,47 @@
+FT8AF mengubah ponsel atau tablet Android Anda menjadi stasiun FT8 yang lengkap. Sambungkan radio lewat USB, ketuk CQ, dan bekerjalah ke seluruh dunia — tanpa laptop.
+
+Dekode setiap sinyal di band secara real time, pancarkan pesan FT8 standar, dan catat kontak secara otomatis. Baik saat beroperasi portabel dari puncak bukit, mendirikan stasiun Field Day, atau sekadar santai di rumah, FT8AF memberi semua yang Anda butuhkan di dalam saku.
+
+YANG ANDA PERLUKAN
+• Radio HF dengan port data atau USB
+• Kabel USB OTG atau antarmuka audio USB
+• Ponsel atau tablet dengan Android 6.0 ke atas
+
+RADIO YANG DIDUKUNG
+Bekerja dengan sebagian besar transceiver HF melalui kontrol CAT lewat USB: Yaesu, Icom, Kenwood, Elecraft, dan banyak lagi. Radio jaringan seperti FlexRadio, Icom IP, dan Xiegu X6100 juga didukung. Mode kontrol: CAT, VOX, RTS, dan DTR.
+
+DEKODE & PANCAR
+• Dekode FT8 real time dengan mode cepat dan mendalam
+• Tampilan waterfall dan spektrum langsung, tuning cukup dengan sentuhan
+• Panggilan CQ, panggilan terarah, dan pesan teks bebas
+• Pemilihan slot pancar, TX watchdog, dan pengawasan otomatis
+• Antrean pemanggil menjaga Anda tetap fokus pada QSO yang sedang berjalan alih-alih mengejar sinyal terkuat
+• Auto-follow mengawasi stasiun yang ingin Anda kerjakan
+
+BUKU LOG
+• Kontak dicatat otomatis begitu QSO selesai
+• Pelacakan DXCC serta zona CQ dan ITU
+• Statistik per band dan per jarak
+• Impor dan ekspor berkas ADIF
+• Ubah atau hapus entri log
+
+SINKRONISASI PLATFORM LOG
+• Unggah QSO ke Cloudlog, Wavelog, QRZ.com, atau Nextlog
+• Status sinkronisasi per kontak, jadi Anda tahu apa yang sudah terunggah
+• Uji koneksi dari Pengaturan untuk memverifikasi kredensial Anda
+
+PETA & PSK REPORTER
+• Peta interaktif yang menunjukkan lokasi kontak Anda
+• Lapisan PSK Reporter memperlihatkan di mana sinyal Anda diterima di seluruh dunia
+• Grid locator dan jarak untuk setiap stasiun yang terdekode
+
+AUDIO & KONEKTIVITAS
+• Dukungan perangkat audio USB dan audio Bluetooth
+• Laju sampel dan kedalaman bit yang dapat diatur
+• Sambung otomatis ke radio saat USB dicolokkan
+
+DIBUAT UNTUK OPERATOR
+FT8AF adalah fork modern dari FT8CN karya BG7YOZ, dibangun ulang dengan antarmuka Compose masa kini, pelokalan dalam 17 bahasa, serta puluhan fitur baru dan perbaikan bug. Dikembangkan oleh K1AF dan N0rC dalam perjalanan darat menuju Hamvention, di jalan I-70 pada 70 mph.
+
+Sumber terbuka di bawah Lisensi MIT.
+https://github.com/patrickrb/FT8AF

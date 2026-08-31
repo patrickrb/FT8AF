@@ -1,0 +1,47 @@
+FT8AF convierte tu móvil o tablet Android en una estación de FT8 completa. Conecta la radio por USB, pulsa CQ y trabaja el mundo entero: sin ordenador.
+
+Decodifica en tiempo real todas las señales de la banda, transmite mensajes FT8 estándar y registra los contactos automáticamente. Tanto si operas en portable desde una cima, montas una estación de Field Day o lo haces sencillo desde casa, FT8AF te da todo lo que necesitas en el bolsillo.
+
+QUÉ NECESITAS
+• Un equipo de HF con puerto de datos o USB
+• Un cable USB OTG o una interfaz de audio USB
+• Un móvil o tablet con Android 6.0 o superior
+
+EQUIPOS COMPATIBLES
+Funciona con la mayoría de transceptores de HF mediante control CAT por USB: Yaesu, Icom, Kenwood, Elecraft y muchos más. También admite equipos en red como FlexRadio, Icom IP y Xiegu X6100. Modos de control: CAT, VOX, RTS y DTR.
+
+DECODIFICACIÓN Y TRANSMISIÓN
+• Decodificación FT8 en tiempo real con modos rápido y profundo
+• Cascada y espectro en vivo con sintonía táctil
+• Llamadas de CQ, llamadas dirigidas y mensajes de texto libre
+• Selección de periodo de TX, watchdog de TX y supervisión automática
+• La cola de llamadas te mantiene centrado en el QSO en curso en lugar de perseguir la señal más fuerte
+• El seguimiento automático vigila las estaciones que quieres trabajar
+
+LIBRO DE GUARDIA
+• Los contactos se registran solos al completarse el QSO
+• Seguimiento de DXCC y de zonas CQ e ITU
+• Estadísticas por banda y por distancia
+• Importación y exportación de archivos ADIF
+• Edición y borrado de entradas del log
+
+SINCRONIZACIÓN CON PLATAFORMAS DE LOG
+• Sube tus QSO a Cloudlog, Wavelog, QRZ.com o Nextlog
+• Estado de sincronización por contacto para saber qué se ha subido
+• Prueba de conexión desde Ajustes para verificar tus credenciales
+
+MAPA Y PSK REPORTER
+• Mapa interactivo con la ubicación de tus contactos
+• La capa de PSK Reporter muestra dónde se está recibiendo tu señal en todo el mundo
+• Locator y distancia de cada estación decodificada
+
+AUDIO Y CONECTIVIDAD
+• Compatible con dispositivos de audio USB y audio Bluetooth
+• Frecuencia de muestreo y profundidad de bits configurables
+• Conexión automática a la radio al enchufar el USB
+
+HECHO PARA RADIOAFICIONADOS
+FT8AF es un fork modernizado de FT8CN, de BG7YOZ, reconstruido con una interfaz Compose actual, localización en 17 idiomas y decenas de funciones nuevas y correcciones. Desarrollado por K1AF y N0rC en un viaje por carretera a la Hamvention, por la I-70 a 70 mph.
+
+Código abierto con licencia MIT.
+https://github.com/patrickrb/FT8AF
