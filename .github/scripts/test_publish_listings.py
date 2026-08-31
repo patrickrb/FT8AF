@@ -75,11 +75,19 @@ class FakeResponse:
 class FakeSession:
     """Stands in for the requests.Session play_session() builds, recording calls."""
 
-    def __init__(self, listings=None, edit_id="edit-1", commit_status=200, delete_status=200):
+    def __init__(
+        self,
+        listings=None,
+        edit_id="edit-1",
+        commit_status=200,
+        delete_status=200,
+        delete_exc=None,
+    ):
         self.listings = dict(listings or {})
         self.edit_id = edit_id
         self.commit_status = commit_status
         self.delete_status = delete_status
+        self.delete_exc = delete_exc
         self.patched = {}
         self.commits = []
         self.deletes = []
@@ -102,6 +110,8 @@ class FakeSession:
 
     def delete(self, url, timeout=None):
         self.deletes.append(url)
+        if self.delete_exc is not None:
+            raise self.delete_exc
         return FakeResponse({}, self.delete_status)
 
 
@@ -423,6 +433,24 @@ class AbandonEditTest(unittest.TestCase):
         self.assertIn("could not abandon edit e1", err.getvalue())
         self.assertIn("403", err.getvalue())
 
+    def test_transport_error_is_swallowed_and_named(self):
+        # A timeout or dropped connection must not escape either — this runs in a
+        # finally block, so it would mask whatever the caller was failing with.
+        s = FakeSession(delete_exc=OSError("connection reset"))
+        with captured() as (_, err):
+            self.assertFalse(pl.abandon_edit(s, "pkg", "e1"))
+        self.assertIn("could not abandon edit e1", err.getvalue())
+        self.assertIn("OSError", err.getvalue())
+        self.assertIn("connection reset", err.getvalue())
+
+    def test_keyboard_interrupt_is_not_swallowed(self):
+        # `except Exception` is deliberate: Ctrl-C during cleanup should still
+        # stop the run rather than be reported as a failed delete.
+        s = FakeSession(delete_exc=KeyboardInterrupt())
+        with captured():
+            with self.assertRaises(KeyboardInterrupt):
+                pl.abandon_edit(s, "pkg", "e1")
+
 
 class MainLifecycleTest(TempTreeTest):
     """End-to-end through main() with the Play session faked out."""
@@ -482,6 +510,21 @@ class MainLifecycleTest(TempTreeTest):
                     pl.main(["--root", self.tmp])
         self.assertIn("500", str(cm.exception))
         self.assertIn("could not abandon edit", err.getvalue())
+
+    def test_commit_failure_survives_a_cleanup_that_raises(self):
+        # The strongest form of the masking guard: the DELETE itself blows up
+        # mid-flight. The 500 from the commit must still be what propagates.
+        s = FakeSession(
+            listings={"en-US": listing(short="old short")},
+            commit_status=500,
+            delete_exc=OSError("connection reset"),
+        )
+        with mock.patch.object(pl, "play_session", return_value=s):
+            with captured() as (_, err):
+                with self.assertRaises(FakeHTTPError) as cm:
+                    pl.main(["--root", self.tmp])
+        self.assertIn("500", str(cm.exception))
+        self.assertIn("connection reset", err.getvalue())
 
     def test_pull_writes_the_tree_and_abandons_the_edit(self):
         s = FakeSession(listings={"fr-FR": listing(short="pulled")})

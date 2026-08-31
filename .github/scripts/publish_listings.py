@@ -186,21 +186,33 @@ def fetch_listings(s, package, edit_id):
 def abandon_edit(s, package, edit_id):
     """Delete an uncommitted edit. Returns True if Play accepted the delete.
 
-    Deliberately does not raise: this runs in a finally block, so raising here
-    would replace whatever the caller was already failing with (a commit error,
-    say) with a cleanup error. A failed delete is not fatal either — Play expires
+    Deliberately does not raise, for either an error status or a transport
+    failure: this runs in a finally block, so anything escaping here would
+    replace whatever the caller was already failing with (a commit error, say)
+    with a cleanup error. A failed delete is not fatal either — Play expires
     abandoned edits on its own — but it is worth saying out loud, because until
     it expires it is the app's one open edit.
     """
-    r = s.delete("%s/applications/%s/edits/%s" % (API, package, edit_id), timeout=30)
-    if not r.ok:
-        print(
-            "Warning: could not abandon edit %s (HTTP %s). It will expire on its own, "
-            "but until then a release publish may fail with \"This edit has expired\"."
-            % (edit_id, r.status_code),
-            file=sys.stderr,
-        )
-    return r.ok
+    trouble = None
+    try:
+        r = s.delete("%s/applications/%s/edits/%s" % (API, package, edit_id), timeout=30)
+    except Exception as e:
+        # Broad on purpose. A timeout or dropped connection here is exactly the
+        # case where the original failure matters most, and requests is imported
+        # lazily so its exception types are not in scope to name.
+        trouble = "%s: %s" % (type(e).__name__, e)
+    else:
+        if r.ok:
+            return True
+        trouble = "HTTP %s" % r.status_code
+
+    print(
+        "Warning: could not abandon edit %s (%s). It will expire on its own, but "
+        "until then a release publish may fail with \"This edit has expired\"."
+        % (edit_id, trouble),
+        file=sys.stderr,
+    )
+    return False
 
 
 def patch_listing(s, package, edit_id, locale, listing):
