@@ -6,14 +6,115 @@ imports requests/google-auth lazily so this module imports cleanly without them.
 
 Run from the repo root:  python -m unittest discover -s .github/scripts -p 'test_*.py'
 """
+import contextlib
+import io
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import publish_listings as pl
 
-REPO_METADATA = Path(__file__).resolve().parents[2] / "fastlane" / "metadata" / "android"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_METADATA = REPO_ROOT / "fastlane" / "metadata" / "android"
+APP_RES = REPO_ROOT / "ft8af" / "app" / "src" / "main" / "res"
+
+# Android resource qualifier -> Play Console locale code. Play codes are not the
+# resource qualifiers (values-in is Indonesian, Play calls it id), so the mapping
+# is spelled out rather than derived. Adding a language to the app means adding a
+# row here and a listing directory; test_every_app_language_has_a_listing fails
+# until both exist.
+RES_TO_PLAY = {
+    "values": "en-US",
+    "values-ar": "ar",
+    "values-cs": "cs-CZ",
+    "values-es": "es-ES",
+    "values-fr": "fr-FR",
+    "values-in": "id",
+    "values-it": "it-IT",
+    "values-ja": "ja-JP",
+    "values-ko": "ko-KR",
+    "values-nl": "nl-NL",
+    "values-pl": "pl-PL",
+    "values-pt-rBR": "pt-BR",
+    "values-ru": "ru-RU",
+    "values-tr": "tr-TR",
+    "values-uk": "uk",
+    "values-zh-rCN": "zh-CN",
+    "values-zh-rTW": "zh-TW",
+}
+
+# Play-only listings with no app-resource counterpart.
+PLAY_ONLY = {"es-419"}
+
+EXPECTED_LOCALES = set(RES_TO_PLAY.values()) | PLAY_ONLY
+
+
+class FakeHTTPError(Exception):
+    pass
+
+
+class FakeResponse:
+    def __init__(self, payload=None, status=200):
+        self._payload = {} if payload is None else payload
+        self.status_code = status
+
+    @property
+    def ok(self):
+        return self.status_code < 400
+
+    def raise_for_status(self):
+        if not self.ok:
+            raise FakeHTTPError("HTTP %d" % self.status_code)
+
+    def json(self):
+        return self._payload
+
+
+class FakeSession:
+    """Stands in for the requests.Session play_session() builds, recording calls."""
+
+    def __init__(self, listings=None, edit_id="edit-1", commit_status=200, delete_status=200):
+        self.listings = dict(listings or {})
+        self.edit_id = edit_id
+        self.commit_status = commit_status
+        self.delete_status = delete_status
+        self.patched = {}
+        self.commits = []
+        self.deletes = []
+
+    def get(self, url, timeout=None):
+        return FakeResponse(
+            {"listings": [dict(li, language=loc) for loc, li in sorted(self.listings.items())]}
+        )
+
+    def post(self, url, timeout=None):
+        if url.endswith(":commit"):
+            self.commits.append(url)
+            return FakeResponse({"id": self.edit_id}, self.commit_status)
+        return FakeResponse({"id": self.edit_id})
+
+    def patch(self, url, json=None, timeout=None):
+        locale = url.rsplit("/", 1)[-1]
+        self.patched[locale] = json
+        return FakeResponse(dict(json or {}, language=locale))
+
+    def delete(self, url, timeout=None):
+        self.deletes.append(url)
+        return FakeResponse({}, self.delete_status)
+
+
+def listing(title="FT8AF", short="short desc", full="full desc"):
+    return {"title": title, "shortDescription": short, "fullDescription": full}
+
+
+@contextlib.contextmanager
+def captured():
+    """Run with stdout and stderr captured; yields (out, err) StringIO buffers."""
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        yield out, err
 
 
 def write_locale(root, locale, title="FT8AF", short="short desc", full="full desc"):
@@ -211,13 +312,224 @@ class MainArgsTest(unittest.TestCase):
         self.assertEqual(pl.main(["--root", tmp, "--dry-run"]), 1)
 
 
+class RunPushTest(unittest.TestCase):
+    LOCAL = {"en-US": listing(), "fr-FR": listing(short="court")}
+
+    def test_identical_text_sends_nothing(self):
+        s = FakeSession(listings=dict(self.LOCAL))
+        with captured() as (out, _):
+            pushed = pl.run_push(s, "pkg", "e1", self.LOCAL, dry_run=False)
+        self.assertEqual(pushed, 0)
+        self.assertEqual(s.patched, {})
+        self.assertIn("unchanged", out.getvalue())
+
+    def test_only_changed_locales_are_patched(self):
+        remote = {"en-US": listing(), "fr-FR": listing(short="ancien")}
+        s = FakeSession(listings=remote)
+        with captured():
+            pushed = pl.run_push(s, "pkg", "e1", self.LOCAL, dry_run=False)
+        self.assertEqual(pushed, 1)
+        self.assertEqual(list(s.patched), ["fr-FR"])
+        self.assertEqual(s.patched["fr-FR"]["shortDescription"], "court")
+
+    def test_locale_absent_from_play_is_patched(self):
+        s = FakeSession(listings={"en-US": listing()})
+        with captured():
+            pushed = pl.run_push(s, "pkg", "e1", self.LOCAL, dry_run=False)
+        self.assertEqual(pushed, 1)
+        self.assertEqual(list(s.patched), ["fr-FR"])
+
+    def test_dry_run_reports_but_sends_nothing(self):
+        s = FakeSession(listings={"en-US": listing()})
+        with captured() as (out, _):
+            pushed = pl.run_push(s, "pkg", "e1", self.LOCAL, dry_run=True)
+        self.assertEqual(pushed, 0)
+        self.assertEqual(s.patched, {})
+        self.assertIn("DRY RUN", out.getvalue())
+        self.assertIn("fr-FR", out.getvalue())
+
+    def test_locales_only_on_play_are_reported_and_left_alone(self):
+        s = FakeSession(listings=dict(self.LOCAL, **{"de-DE": listing()}))
+        with captured() as (out, _):
+            pushed = pl.run_push(s, "pkg", "e1", self.LOCAL, dry_run=False)
+        self.assertEqual(pushed, 0)
+        self.assertNotIn("de-DE", s.patched)
+        self.assertIn("de-DE", out.getvalue())
+
+
+class RunPullTest(TempTreeTest):
+    def test_writes_every_remote_locale_to_disk(self):
+        s = FakeSession(listings={"en-US": listing(full="line one\nline two")})
+        with captured():
+            self.assertEqual(pl.run_pull(s, "pkg", "e1", self.tmp), 0)
+        d = Path(self.tmp) / "en-US"
+        self.assertEqual((d / "title.txt").read_text(encoding="utf-8"), "FT8AF\n")
+        self.assertEqual(
+            (d / "full_description.txt").read_text(encoding="utf-8"), "line one\nline two\n"
+        )
+
+    def test_pulled_tree_round_trips_through_load_metadata(self):
+        s = FakeSession(listings={"en-US": listing(), "ja-JP": listing(short="短い説明")})
+        with captured():
+            pl.run_pull(s, "pkg", "e1", self.tmp)
+        loaded = pl.load_metadata(self.tmp)
+        self.assertEqual(loaded["ja-JP"]["shortDescription"], "短い説明")
+
+    def test_null_field_from_play_is_written_as_empty(self):
+        # An unfilled listing field comes back as JSON null; str + rstrip would
+        # otherwise blow up on None.
+        s = FakeSession(listings={"en-US": dict(listing(), fullDescription=None)})
+        with captured():
+            pl.run_pull(s, "pkg", "e1", self.tmp)
+        self.assertEqual(
+            (Path(self.tmp) / "en-US" / "full_description.txt").read_text(encoding="utf-8"), "\n"
+        )
+
+    def test_no_remote_listings_writes_nothing(self):
+        s = FakeSession(listings={})
+        with captured() as (out, _):
+            self.assertEqual(pl.run_pull(s, "pkg", "e1", self.tmp), 0)
+        self.assertEqual(list(Path(self.tmp).iterdir()), [])
+        self.assertIn("nothing to pull", out.getvalue())
+
+    def test_unpublished_local_locale_is_kept_and_reported(self):
+        # The state this repo is in before the first publish: every non-English
+        # locale exists locally and on nothing else. Deleting them would destroy
+        # the very work --pull exists to protect.
+        write_locale(self.tmp, "ja-JP", short="unpublished")
+        s = FakeSession(listings={"en-US": listing()})
+        with captured() as (out, _):
+            pl.run_pull(s, "pkg", "e1", self.tmp)
+        self.assertTrue((Path(self.tmp) / "ja-JP" / "title.txt").is_file())
+        self.assertEqual(
+            pl.read_locale(Path(self.tmp) / "ja-JP")["shortDescription"], "unpublished"
+        )
+        self.assertIn("ja-JP", out.getvalue())
+        self.assertIn("left alone", out.getvalue())
+
+
+class AbandonEditTest(unittest.TestCase):
+    def test_successful_delete_is_quiet(self):
+        s = FakeSession()
+        with captured() as (out, err):
+            self.assertTrue(pl.abandon_edit(s, "pkg", "e1"))
+        self.assertEqual(len(s.deletes), 1)
+        self.assertEqual(err.getvalue(), "")
+
+    def test_failed_delete_warns_without_raising(self):
+        s = FakeSession(delete_status=403)
+        with captured() as (_, err):
+            self.assertFalse(pl.abandon_edit(s, "pkg", "e1"))
+        self.assertIn("could not abandon edit e1", err.getvalue())
+        self.assertIn("403", err.getvalue())
+
+
+class MainLifecycleTest(TempTreeTest):
+    """End-to-end through main() with the Play session faked out."""
+
+    def setUp(self):
+        super().setUp()
+        write_locale(self.tmp, "en-US", short="new short")
+
+    def run_main(self, session, argv):
+        with mock.patch.object(pl, "play_session", return_value=session):
+            with captured() as (out, err):
+                code = pl.main(["--root", self.tmp] + argv)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_changed_listing_is_patched_then_committed_and_the_edit_is_kept(self):
+        s = FakeSession(listings={"en-US": listing(short="old short")})
+        code, out, _ = self.run_main(s, [])
+        self.assertEqual(code, 0)
+        self.assertEqual(list(s.patched), ["en-US"])
+        self.assertEqual(len(s.commits), 1)
+        self.assertEqual(s.deletes, [], "a committed edit must not be deleted")
+        self.assertIn("Committed edit", out)
+
+    def test_dry_run_commits_nothing_and_abandons_the_edit(self):
+        s = FakeSession(listings={"en-US": listing(short="old short")})
+        code, out, _ = self.run_main(s, ["--dry-run"])
+        self.assertEqual(code, 0)
+        self.assertEqual(s.patched, {})
+        self.assertEqual(s.commits, [])
+        self.assertEqual(len(s.deletes), 1, "a dry-run edit must not be left open")
+
+    def test_no_op_run_abandons_the_edit(self):
+        s = FakeSession(listings={"en-US": listing(short="new short")})
+        code, out, _ = self.run_main(s, [])
+        self.assertEqual(code, 0)
+        self.assertEqual(s.commits, [])
+        self.assertEqual(len(s.deletes), 1)
+        self.assertIn("Nothing to do", out)
+
+    def test_commit_failure_still_abandons_the_edit(self):
+        s = FakeSession(listings={"en-US": listing(short="old short")}, commit_status=500)
+        with mock.patch.object(pl, "play_session", return_value=s):
+            with captured():
+                with self.assertRaises(FakeHTTPError):
+                    pl.main(["--root", self.tmp])
+        self.assertEqual(len(s.deletes), 1, "a failed commit must not leak the edit")
+
+    def test_commit_failure_is_not_masked_by_a_failing_cleanup(self):
+        # abandon_edit runs in a finally block; if it raised, the 500 from the
+        # commit would be replaced by a cleanup error and the real cause lost.
+        s = FakeSession(
+            listings={"en-US": listing(short="old short")}, commit_status=500, delete_status=403
+        )
+        with mock.patch.object(pl, "play_session", return_value=s):
+            with captured() as (_, err):
+                with self.assertRaises(FakeHTTPError) as cm:
+                    pl.main(["--root", self.tmp])
+        self.assertIn("500", str(cm.exception))
+        self.assertIn("could not abandon edit", err.getvalue())
+
+    def test_pull_writes_the_tree_and_abandons_the_edit(self):
+        s = FakeSession(listings={"fr-FR": listing(short="pulled")})
+        code, _, _ = self.run_main(s, ["--pull"])
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            pl.read_locale(Path(self.tmp) / "fr-FR")["shortDescription"], "pulled"
+        )
+        self.assertEqual(len(s.deletes), 1)
+
+    def test_bad_credentials_never_open_an_edit(self):
+        s = FakeSession()
+        with mock.patch.object(pl, "play_session", side_effect=pl.CredentialsError("nope")):
+            with captured() as (_, err):
+                code = pl.main(["--root", self.tmp, "--dry-run"])
+        self.assertEqual(code, 1)
+        self.assertIn("nope", err.getvalue())
+        self.assertEqual(s.deletes, [])
+
+
 class RepoMetadataTest(unittest.TestCase):
     """The listings actually checked in must always be publishable."""
 
     def test_repo_tree_loads_and_is_within_limits(self):
+        # Exact set, not a count: a locale quietly disappearing would otherwise
+        # still pass while its store page silently fell back to English.
         loaded = pl.load_metadata(REPO_METADATA)
-        self.assertIn("en-US", loaded, "en-US is the default listing and must exist")
-        self.assertGreaterEqual(len(loaded), 2)
+        self.assertEqual(set(loaded), EXPECTED_LOCALES)
+
+    def test_every_app_language_has_a_listing(self):
+        # The failure this guards against: someone adds values-xx to the app and
+        # ships a translated UI, but store visitors in that language still get an
+        # English listing because nobody added the metadata directory.
+        shipped = sorted(
+            d.name
+            for d in APP_RES.iterdir()
+            if d.is_dir() and (d / "strings_compose.xml").is_file()
+        )
+        self.assertTrue(shipped, "found no translated resource directories — wrong path?")
+
+        unmapped = [q for q in shipped if q not in RES_TO_PLAY]
+        self.assertEqual(
+            unmapped, [], "app language(s) with no Play locale mapping: %s" % unmapped
+        )
+
+        listings = set(pl.load_metadata(REPO_METADATA))
+        missing = sorted(RES_TO_PLAY[q] for q in shipped if RES_TO_PLAY[q] not in listings)
+        self.assertEqual(missing, [], "app language(s) with no store listing: %s" % missing)
 
     def test_every_locale_has_the_same_title(self):
         # FT8AF is a brand name; a locale drifting to a different title would be

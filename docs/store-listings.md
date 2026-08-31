@@ -124,6 +124,11 @@ python .github/scripts/publish_listings.py --pull      # overwrite the tree from
 it back down so the repo stops disagreeing with production, then commit the
 result. Without it the next publish would silently revert their edit.
 
+It only ever creates or overwrites locales Play returns. A locale that exists
+here but not on Play — every language before its first publish — is left alone
+and named in the output, because deleting it would throw away exactly the work
+being protected. Retiring a language means deleting its directory by hand.
+
 ## What this does *not* manage
 
 - **Graphics** — icon, feature graphic, and screenshots. Play falls back to the

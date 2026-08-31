@@ -84,12 +84,20 @@ def validate(locale, listing):
     return errors
 
 
+def locale_dirs(root):
+    """Return the locale directories under root, sorted. Dot-directories are skipped."""
+    root = Path(root)
+    if not root.is_dir():
+        return []
+    return sorted(d for d in root.iterdir() if d.is_dir() and not d.name.startswith("."))
+
+
 def load_metadata(root):
     """Load every locale directory under root. Raises MetadataError on any problem."""
     root = Path(root)
     if not root.is_dir():
         raise MetadataError("metadata root does not exist: %s" % root)
-    locales = sorted(d for d in root.iterdir() if d.is_dir() and not d.name.startswith("."))
+    locales = locale_dirs(root)
     if not locales:
         raise MetadataError("no locale directories under %s" % root)
     out = {}
@@ -175,6 +183,26 @@ def fetch_listings(s, package, edit_id):
     return {li["language"]: li for li in r.json().get("listings", [])}
 
 
+def abandon_edit(s, package, edit_id):
+    """Delete an uncommitted edit. Returns True if Play accepted the delete.
+
+    Deliberately does not raise: this runs in a finally block, so raising here
+    would replace whatever the caller was already failing with (a commit error,
+    say) with a cleanup error. A failed delete is not fatal either — Play expires
+    abandoned edits on its own — but it is worth saying out loud, because until
+    it expires it is the app's one open edit.
+    """
+    r = s.delete("%s/applications/%s/edits/%s" % (API, package, edit_id), timeout=30)
+    if not r.ok:
+        print(
+            "Warning: could not abandon edit %s (HTTP %s). It will expire on its own, "
+            "but until then a release publish may fail with \"This edit has expired\"."
+            % (edit_id, r.status_code),
+            file=sys.stderr,
+        )
+    return r.ok
+
+
 def patch_listing(s, package, edit_id, locale, listing):
     """PATCH one listing. PATCH (not PUT) so an existing promo video is left alone."""
     r = s.patch(
@@ -201,6 +229,19 @@ def run_pull(s, package, edit_id, root):
             with open(d / fname, "w", encoding="utf-8", newline="\n") as fh:
                 fh.write((li.get(field) or "").rstrip("\n") + "\n")
         print("pulled %s" % locale)
+
+    # Locales in the repo that Play has never seen are the normal state for a
+    # language whose listing has not been published yet — deleting them here
+    # would throw away exactly the work --pull is meant to protect. Name them so
+    # the operator can tell "not published yet" from "retired upstream"; a
+    # genuinely retired language is removed by hand.
+    local_only = [d.name for d in locale_dirs(root) if d.name not in remote]
+    if local_only:
+        print(
+            "\nNote: %d locale(s) exist here but not on Play, and were left alone: %s\n"
+            "      They are unpublished until the next push. Delete a directory by hand "
+            "only if that language is being retired." % (len(local_only), ", ".join(local_only))
+        )
     return 0
 
 
@@ -282,7 +323,7 @@ def main(argv=None):
         # A --dry-run / --pull / no-op edit is abandoned so it does not linger as
         # the app's one open edit and block the release publish in android.yml.
         if edit_id is not None:
-            s.delete("%s/applications/%s/edits/%s" % (API, args.package, edit_id), timeout=30)
+            abandon_edit(s, args.package, edit_id)
 
 
 if __name__ == "__main__":

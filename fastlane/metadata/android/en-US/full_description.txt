@@ -41,7 +41,7 @@ AUDIO & CONNECTIVITY
 • Auto-connect to your radio on USB plug-in
 
 BUILT FOR OPERATORS
-FT8AF is a modernized fork of FT8CN by BG7YOZ, rebuilt with a modern Compose UI, localization in 17 languages, and dozens of new features and bug fixes. Developed by K1AF and N0rC on a road trip to hamvention on I-70 at 70mph.
+FT8AF is a modernized fork of FT8CN by BG7YOZ, rebuilt with a modern Compose UI, localization in 17 languages, and dozens of new features and bug fixes. Developed by K1AF and N0rC on a road trip to Hamvention on I-70 at 70mph.
 
 Open source under the MIT License.
 https://github.com/patrickrb/FT8AF

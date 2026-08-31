@@ -14,7 +14,7 @@ DEKÓDOVÁNÍ A VYSÍLÁNÍ
 • Dekódování FT8 v reálném čase, v rychlém i hlubokém režimu
 • Živý vodopád a spektrum s laděním dotykem
 • Volání CQ, směrovaná volání a zprávy volným textem
-• Volba vysílacího period, TX watchdog a automatický dohled
+• Volba vysílací periody, TX watchdog a automatický dohled
 • Fronta volajících vás udrží u probíhajícího QSO místo honby za nejsilnějším signálem
 • Automatické sledování hlídá stanice, které chcete udělat
 
