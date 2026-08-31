@@ -24,6 +24,7 @@ import androidx.lifecycle.MutableLiveData;
 
 import com.k1af.ft8af.FT8Common;
 import com.k1af.ft8af.ModeProfile;
+import com.k1af.ft8af.bluetooth.AudioOutputRoutingPolicy;
 import com.k1af.ft8af.ft8listener.FastDecodeGate;
 import com.k1af.ft8af.Ft8Message;
 import com.k1af.ft8af.ft8signal.FT8Package;
@@ -1066,6 +1067,8 @@ public class FT8TransmitSignal {
             AudioDeviceInfo deviceInfo = findAudioDeviceById(
                     GeneralVariables.audioOutputDeviceId, AudioManager.GET_DEVICES_OUTPUTS);
             audioTrack.setPreferredDevice(deviceInfo); // null resets to default
+        } else {
+            applyDefaultOutputRoutingOverride(audioTrack);
         }
 
         // Skip leading samples if we started transmitting late, so audio still ends on the cycle boundary.
@@ -3222,6 +3225,8 @@ public class FT8TransmitSignal {
                 AudioDeviceInfo deviceInfo = findAudioDeviceById(
                         GeneralVariables.audioOutputDeviceId, AudioManager.GET_DEVICES_OUTPUTS);
                 track.setPreferredDevice(deviceInfo);
+            } else {
+                applyDefaultOutputRoutingOverride(track);
             }
             track.play();
             track.setVolume(1.0f);
@@ -3310,6 +3315,33 @@ public class FT8TransmitSignal {
             }
         }
         return null;
+    }
+
+    /**
+     * When the user picked "Default" output and a Bluetooth SCO link is up
+     * alongside a paired A2DP device, pin the AudioTrack to the A2DP device.
+     * On Android 8.1 (issue #759 follow-up) the OS routes the USAGE_MEDIA
+     * stream through SCO while the hands-free link is active, leaving TX
+     * inaudible on a rig that only listens for the A2DP music channel — the
+     * tester's exact "audio received, not transmitted" report, cured by
+     * manually picking A2DP. Leaves routing to the OS when there's nothing to
+     * steer to.
+     */
+    private static void applyDefaultOutputRoutingOverride(AudioTrack track) {
+        Context context = GeneralVariables.getMainContext();
+        if (context == null) return;
+        AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        if (audioManager == null) return;
+        AudioDeviceInfo[] outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+        int[] types = new int[outputs.length];
+        for (int i = 0; i < outputs.length; i++) {
+            types[i] = outputs[i].getType();
+        }
+        int idx = AudioOutputRoutingPolicy.pickDefaultOutputIndex(types);
+        if (idx == AudioOutputRoutingPolicy.LEAVE_TO_OS) return;
+        track.setPreferredDevice(outputs[idx]);
+        GeneralVariables.fileLog(
+                "playFT8Signal: default output steered to A2DP (SCO link present)");
     }
 
     private static class DoTransmitRunnable implements Runnable {
