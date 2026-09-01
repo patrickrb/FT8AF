@@ -23,6 +23,7 @@ import com.k1af.ft8af.wave.UsbAudioNative;
 import androidx.lifecycle.MutableLiveData;
 
 import com.k1af.ft8af.FT8Common;
+import com.k1af.ft8af.MainViewModel;
 import com.k1af.ft8af.ModeProfile;
 import com.k1af.ft8af.bluetooth.AudioOutputRoutingPolicy;
 import com.k1af.ft8af.ft8listener.FastDecodeGate;
@@ -3318,14 +3319,15 @@ public class FT8TransmitSignal {
     }
 
     /**
-     * When the user picked "Default" output and a Bluetooth SCO link is up
-     * alongside a paired A2DP device, pin the AudioTrack to the A2DP device.
-     * On Android 8.1 (issue #759 follow-up) the OS routes the USAGE_MEDIA
-     * stream through SCO while the hands-free link is active, leaving TX
-     * inaudible on a rig that only listens for the A2DP music channel — the
-     * tester's exact "audio received, not transmitted" report, cured by
-     * manually picking A2DP. Leaves routing to the OS when there's nothing to
-     * steer to.
+     * When the user picked "Default" output and <em>this app</em> is holding a
+     * Bluetooth SCO link, pin the AudioTrack to the A2DP endpoint of the same
+     * Bluetooth device. On Android 8.1 (issue #759 follow-up) the OS routes the
+     * USAGE_MEDIA stream through SCO while the hands-free link is active,
+     * leaving TX inaudible on a rig that only listens for the A2DP music
+     * channel — the tester's exact "audio received, not transmitted" report,
+     * cured by manually picking A2DP. Leaves routing to the OS whenever the
+     * conditions aren't met; see {@link AudioOutputRoutingPolicy} for why the
+     * enumerated device types alone are not enough to decide.
      */
     private static void applyDefaultOutputRoutingOverride(AudioTrack track) {
         Context context = GeneralVariables.getMainContext();
@@ -3334,14 +3336,36 @@ public class FT8TransmitSignal {
         if (audioManager == null) return;
         AudioDeviceInfo[] outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
         int[] types = new int[outputs.length];
+        String[] addresses = new String[outputs.length];
         for (int i = 0; i < outputs.length; i++) {
             types[i] = outputs[i].getType();
+            addresses[i] = outputs[i].getAddress();
         }
-        int idx = AudioOutputRoutingPolicy.pickDefaultOutputIndex(types);
+        int idx = AudioOutputRoutingPolicy.pickDefaultOutputIndex(
+                types, addresses, appHoldsScoSession());
         if (idx == AudioOutputRoutingPolicy.LEAVE_TO_OS) return;
-        track.setPreferredDevice(outputs[idx]);
-        GeneralVariables.fileLog(
-                "playFT8Signal: default output steered to A2DP (SCO link present)");
+        // setPreferredDevice returns false when the framework refuses the route.
+        // Log what actually happened: an unconditional "steered" line is worse
+        // than no line at all, because the next person debugging a dead TX would
+        // rule this out on the strength of it.
+        boolean applied = track.setPreferredDevice(outputs[idx]);
+        GeneralVariables.fileLog(applied
+                ? "playFT8Signal: default output steered to A2DP (app SCO session up)"
+                : "playFT8Signal: A2DP steering REJECTED by setPreferredDevice;"
+                        + " TX audio stays on the OS route");
+    }
+
+    /**
+     * Whether the app's own SCO link tracker says we currently hold a SCO
+     * session. Deliberately not {@code AudioManager.isBluetoothScoOn()}, which
+     * only mirrors the legacy force-use flag and is not trusted anywhere else in
+     * this codebase — see {@code ScoPolicy} / {@code ScoLinkCoordinator}.
+     * Returns false when the view model isn't up yet, which correctly means "no
+     * SCO session of ours".
+     */
+    private static boolean appHoldsScoSession() {
+        MainViewModel viewModel = MainViewModel.peekInstance();
+        return viewModel != null && viewModel.isScoLinkUpOrPending();
     }
 
     private static class DoTransmitRunnable implements Runnable {

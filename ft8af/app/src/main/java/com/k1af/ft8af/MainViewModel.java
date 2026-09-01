@@ -2492,6 +2492,17 @@ public class MainViewModel extends ViewModel {
     // the TX executor and the main-thread broadcasts/timers are applied in
     // order, never interleaved. Issue #759 (Android 8.x: Bluetooth RX dead).
 
+    /**
+     * Whether this app currently holds a SCO session (CONNECTING or CONNECTED),
+     * per the tracker rather than {@code AudioManager.isBluetoothScoOn()} — see
+     * {@link ScoLinkCoordinator#isLinkUpOrPending()}. Read by the TX path, which
+     * must not steer Default output onto a Bluetooth sink unless our own SCO link
+     * is the thing displacing the media route (see {@code AudioOutputRoutingPolicy}).
+     */
+    public boolean isScoLinkUpOrPending() {
+        return scoLink.isLinkUpOrPending();
+    }
+
     private final Handler scoHandler = new Handler(Looper.getMainLooper());
     private final ScoLinkCoordinator scoLink = ScoLinkCoordinator.onMainThread(
             new ScoLinkCoordinator.Sink() {
