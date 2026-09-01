@@ -6,6 +6,7 @@ import static org.junit.Assert.assertThrows;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -51,7 +52,7 @@ public class BluetoothSerialWriteTest {
     @Test
     public void connectedOpenSink_writesExactBytes() throws IOException {
         AtomicReference<byte[]> got = new AtomicReference<>();
-        byte[] src = "FA021074000;".getBytes();
+        byte[] src = "FA021074000;".getBytes(StandardCharsets.US_ASCII);
 
         BluetoothSerialSocket.writeIfConnected(true, got::set, src);
 
