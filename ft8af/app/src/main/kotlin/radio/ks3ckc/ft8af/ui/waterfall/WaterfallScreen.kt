@@ -117,11 +117,8 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             // frequency on every audio tick (issue #782). The touched value
             // clears when frequencyLineTimeout reaches 0 below, at which
             // point currentTxFreq falls back to the committed base freq.
-            val currentTxFreq = if (touchedFreqHz > 0) {
-                touchedFreqHz.toFloat()
-            } else {
-                GeneralVariables.getBaseFrequency()
-            }
+            val currentTxFreq =
+                displayTxFrequencyHz(touchedFreqHz, GeneralVariables.getBaseFrequency())
             val currentTxActive = mainViewModel.ft8TransmitSignal.mutableIsTransmitting.value ?: false
 
             viewHolder.columnar?.let { cView ->
@@ -200,7 +197,7 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
         // markers from the touched frequency so the red brackets follow the
         // blue tap cursor live instead of snapping to the previous base
         // frequency until ACTION_UP commits (issue #782).
-        val displayTxFreq = if (touchedFreqHz > 0) touchedFreqHz.toFloat() else txFreq
+        val displayTxFreq = displayTxFrequencyHz(touchedFreqHz, txFreq)
 
         // Spectrum strip (columnar view)
         ColumnarStrip(
@@ -435,6 +432,23 @@ private fun WaterfallCanvas(
 // ---------------------------------------------------------------------------
 // Frequency ruler (pure Compose)
 // ---------------------------------------------------------------------------
+
+/**
+ * Which frequency the red TX-bandwidth markers should bracket right now.
+ *
+ * While a tap cursor is active ([touchedFreqHz] > 0) the markers follow the
+ * touched column, so the reds track the blue cursor live during a drag instead
+ * of snapping back to the committed base frequency on every audio tick or
+ * recomposition (issue #782). When the cursor is cleared — the caller sets
+ * [touchedFreqHz] back to -1 once `frequencyLineTimeout` expires, or
+ * `SpectrumTouchMath.touchToFreqHz` returned -1 for an off-view drag — the
+ * markers fall back to [baseFreqHz].
+ *
+ * Extracted from the two call sites (the audio-tick observer and the strip /
+ * canvas composables) so the selection is exercised without Compose.
+ */
+internal fun displayTxFrequencyHz(touchedFreqHz: Int, baseFreqHz: Float): Float =
+    if (touchedFreqHz > 0) touchedFreqHz.toFloat() else baseFreqHz
 
 @Composable
 internal fun FrequencyRuler(spectrumWidth: Int, modifier: Modifier = Modifier) {

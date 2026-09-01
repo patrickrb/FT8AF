@@ -12,13 +12,47 @@ import org.junit.Test;
 public class SpectrumTouchMathTest {
 
     @Test
-    public void touchToFreqHz_leftEdgeMapsToZero() {
-        assertThat(SpectrumTouchMath.touchToFreqHz(0, 1000, 3500)).isEqualTo(0);
+    public void touchToFreqHz_leftEdgeClampsToMinTxAudio() {
+        // Unclamped this was 0, which every touch handler discards
+        // (`if (freqHz > 0)`) — so a left-edge tap silently did nothing.
+        assertThat(SpectrumTouchMath.touchToFreqHz(0, 1000, 3500))
+                .isEqualTo(SpectrumTouchMath.MIN_TX_AUDIO_HZ);
     }
 
     @Test
-    public void touchToFreqHz_rightEdgeMapsToSpectrumWidth() {
-        assertThat(SpectrumTouchMath.touchToFreqHz(1000, 1000, 3500)).isEqualTo(3500);
+    public void touchToFreqHz_rightEdgeClampsBelowSpectrumWidth() {
+        // Unclamped this committed 3500 Hz as the base frequency, a value the
+        // audio-frequency editor caps at spectrumWidth - 100.
+        assertThat(SpectrumTouchMath.touchToFreqHz(1000, 1000, 3500)).isEqualTo(3400);
+    }
+
+    @Test
+    public void touchToFreqHz_clampsBothEndsToTheEditorRange() {
+        // The whole point of the clamp: every value a tap can produce is one
+        // the audio-frequency editor would also accept.
+        int viewWidth = 1080;
+        int spectrumWidth = 3500;
+        for (int touchX = 0; touchX <= viewWidth; touchX += 9) {
+            int freq = SpectrumTouchMath.touchToFreqHz(touchX, viewWidth, spectrumWidth);
+            assertThat(freq).isAtLeast(SpectrumTouchMath.MIN_TX_AUDIO_HZ);
+            assertThat(freq).isAtMost(spectrumWidth - SpectrumTouchMath.TX_AUDIO_TOP_MARGIN_HZ);
+        }
+    }
+
+    @Test
+    public void touchToFreqHz_beyondRightEdgeIsRejected() {
+        // A drag that ran off the right edge is not a position on the
+        // spectrum; -1 makes the handlers ignore it rather than commit the
+        // clamped ceiling as if the user had tapped there.
+        assertThat(SpectrumTouchMath.touchToFreqHz(1001, 1000, 3500)).isEqualTo(-1);
+    }
+
+    @Test
+    public void touchToFreqHz_narrowSpectrumDoesNotInvertTheRange() {
+        // Defensive: a span narrower than the two 100 Hz margins must not
+        // produce a ceiling below the floor.
+        assertThat(SpectrumTouchMath.touchToFreqHz(1000, 1000, 150))
+                .isEqualTo(SpectrumTouchMath.MIN_TX_AUDIO_HZ);
     }
 
     @Test
@@ -51,7 +85,9 @@ public class SpectrumTouchMathTest {
         // Choose values that divide cleanly so no rounding artifacts creep in.
         int viewWidth = 3500;
         int spectrumWidth = 3500;
-        for (int freq : new int[]{0, 100, 1000, 2500, 3500}) {
+        // Only frequencies inside the clamped TX range round-trip; 0 and 3500
+        // are deliberately no longer reachable from a tap.
+        for (int freq : new int[]{100, 1000, 2500, 3400}) {
             float px = SpectrumTouchMath.freqHzToPixelX(freq, viewWidth, spectrumWidth);
             assertThat(SpectrumTouchMath.touchToFreqHz(Math.round(px), viewWidth, spectrumWidth))
                     .isEqualTo(freq);

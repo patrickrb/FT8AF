@@ -47,4 +47,30 @@ class WaterfallScreenTest {
 
         assertThat(clicked).isTrue()
     }
+
+    // -- displayTxFrequencyHz -------------------------------------------------
+
+    @Test
+    fun displayTxFrequencyHz_activeCursor_usesTouchedFrequency() {
+        // During a drag the red TX markers must track the blue tap cursor
+        // rather than the committed base frequency (issue #782).
+        assertThat(displayTxFrequencyHz(touchedFreqHz = 1450, baseFreqHz = 1200f))
+            .isEqualTo(1450f)
+    }
+
+    @Test
+    fun displayTxFrequencyHz_clearedCursor_fallsBackToBaseFrequency() {
+        // frequencyLineTimeout expired, so touchedFreqHz is back to -1.
+        assertThat(displayTxFrequencyHz(touchedFreqHz = -1, baseFreqHz = 1200f))
+            .isEqualTo(1200f)
+    }
+
+    @Test
+    fun displayTxFrequencyHz_rejectedTouch_fallsBackToBaseFrequency() {
+        // SpectrumTouchMath.touchToFreqHz returns -1 for an off-view drag and
+        // 0 is not a transmittable audio frequency; neither may displace the
+        // base frequency on the markers.
+        assertThat(displayTxFrequencyHz(touchedFreqHz = 0, baseFreqHz = 1200f))
+            .isEqualTo(1200f)
+    }
 }

@@ -136,8 +136,13 @@ fun FT8AFBottomSheet(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 10.dp, bottom = 4.dp)
-                        .height(28.dp),
+                        // Tall enough to hold a full-size touch target:
+                        // Modifier.size is coerced into the parent's
+                        // constraints, so the close button would silently
+                        // shrink back inside a shorter header. With the
+                        // vertical padding folded in, the drag handle's centre
+                        // stays at the same y it had at 10 dp + 28 dp.
+                        .height(MinTouchTargetSize),
                 ) {
                     // Drag handle — captures vertical drags to dismiss / minimize.
                     Box(
@@ -172,13 +177,17 @@ fun FT8AFBottomSheet(
                         )
                     }
 
+                    // The visible affordance is a 28 dp circle, but this is the
+                    // sheet's only obvious way out, so the *clickable* area is a
+                    // 48 dp box centered on it — Modifier.clickable does not
+                    // expand the hit region on its own, and 48 dp is Android's
+                    // minimum touch target. Padding is on the outer box so the
+                    // enlarged target does not push the circle off the edge.
                     Box(
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
-                            .padding(end = 12.dp)
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(Color(0x1F94A3B8))
+                            .padding(end = CloseTargetEndPadding)
+                            .size(MinTouchTargetSize)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
@@ -190,7 +199,15 @@ fun FT8AFBottomSheet(
                             },
                         contentAlignment = Alignment.Center,
                     ) {
-                        FT8AFIcons.Close(size = 16.dp, color = TextMuted, strokeWidth = 2f)
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x1F94A3B8)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            FT8AFIcons.Close(size = 16.dp, color = TextMuted, strokeWidth = 2f)
+                        }
                     }
                 }
 
@@ -220,3 +237,18 @@ fun FT8AFBottomSheet(
  */
 internal fun sheetBackHandlerActive(currentState: Boolean, targetState: Boolean): Boolean =
     currentState || targetState
+
+/**
+ * Android's minimum recommended touch-target size. `Modifier.clickable` does
+ * not enlarge a small child's hit region on its own, so any control smaller
+ * than this has to be centred inside a box of at least this size.
+ */
+internal val MinTouchTargetSize = 48.dp
+
+/**
+ * End padding for the close button's 48 dp target. The visible 28 dp circle
+ * should sit 12 dp in from the sheet edge, and the target wraps it in
+ * (48 - 28) / 2 = 10 dp of transparent margin, so the box needs only 2 dp of
+ * its own to land the circle in the same place it was before.
+ */
+private val CloseTargetEndPadding = 2.dp

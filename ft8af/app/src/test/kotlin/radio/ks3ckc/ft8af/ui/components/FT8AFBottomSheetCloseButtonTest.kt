@@ -1,10 +1,13 @@
 package radio.ks3ckc.ft8af.ui.components
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import org.junit.Rule
@@ -48,5 +51,21 @@ class FT8AFBottomSheetCloseButtonTest {
         composeRule.waitForIdle()
 
         assertThat(dismissed).isTrue()
+    }
+
+    @Test
+    fun closeButton_hitRegionMeetsMinimumTouchTarget() {
+        // The visible circle is 28 dp, but this is the sheet's only obvious
+        // escape control, so the clickable node itself must be at least the
+        // 48 dp Android minimum — Modifier.clickable does not enlarge a small
+        // child's hit region on its own.
+        composeRule.setContent {
+            FT8AFBottomSheet(visible = true, onDismiss = {}) {}
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithContentDescription("Close")
+            .assertWidthIsAtLeast(48.dp)
+            .assertHeightIsAtLeast(48.dp)
     }
 }
