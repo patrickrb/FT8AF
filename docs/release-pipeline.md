@@ -11,7 +11,8 @@ others (except a change to the shared native C core under
 ```
 feature/* ──PR──▶ dev ──PR──▶ staging ──PR──▶ main
                   │            │               │
-                  │            │               └─ PRODUCTION build → Releases only (NO Play publish)
+                  │            │               └─ PRODUCTION build → Releases only (no AAB to Play)
+                  │            │                  └─ manual run on the android-v* tag → Play production
                   │            └───────────────── DEV (prerelease) build → Releases + Play internal
                   └────────────────────────────── CI only, NO release
 ```
@@ -23,12 +24,21 @@ feature/* ──PR──▶ dev ──PR──▶ staging ──PR──▶ main
   platform: prerelease GitHub Releases + Play **internal** track for Android.
 - **staging → main** — promote the validated staging build. Merging this PR (a
   push to `main`) cuts the **production** build: full GitHub Releases with the
-  auto-bumped `android-v<x.y.z>` / `desktop-v<x.y.z>` tags. It publishes
-  **nothing to Google Play**.
-- **shipping to Play production is manual.** Push the `android-v<x.y.z>` tag the
-  `main` merge created (`git fetch --tags && git push origin android-v1.2.3`);
-  that tag push re-runs the Android release lane and uploads the AAB to the Play
-  **production** track. A merge to `main` on its own never reaches users.
+  auto-bumped `android-v<x.y.z>` / `desktop-v<x.y.z>` tags. It uploads **no app
+  binary to Google Play** — no AAB reaches any track. (Store *listing* text is a
+  separate pipeline: a `main` push touching `fastlane/metadata/android/**` still
+  runs `play-listings.yml`, which does publish listing changes to Play. See
+  [Store listings](#store-listings) below.)
+- **shipping the app to Play production is manual.** In **Actions → Android CI &
+  Release → Run workflow**, pick the `android-v<x.y.z>` tag the `main` merge
+  created as the ref and run it. That run takes the same release lane an
+  `android-v*` tag push takes and uploads the AAB to the Play **production**
+  track. A merge to `main` on its own never puts a build in front of users.
+
+  It has to be a manual run rather than a tag push: the `main` run creates the
+  `android-v<x.y.z>` ref itself (the GitHub Releases API creates the tag), so
+  `git push origin android-v<x.y.z>` is `Everything up-to-date` — it emits no
+  push event and starts no workflow.
 
 Source gates (enforced as required status checks):
 
@@ -78,7 +88,7 @@ Ported from Sorrel's `play-beta.yml`. On a push to `staging` the Android
 On the later push to `main` the job looks for the newest `android-dev.*` tag
 that is an ancestor of `HEAD` and not already shipped, reads the version and
 notes back out of those markers, and releases `android-v<x.y.z>` with the same
-notes — so when that tag is later pushed to Play, production ships exactly what
+notes — so when that tag is later shipped to Play, production ships exactly what
 the internal testers ran. If no such candidate exists (or it pre-dates the markers) Claude
 decides on `main` instead. An `android-v<x.y.z>` that already exists is stepped
 by a patch until free.
@@ -91,6 +101,17 @@ and has a self-test (`--self-test`).
 **Secret:** `ANTHROPIC_API_KEY` (repository secret). Without it, or if the API
 call fails, the run annotates a warning, takes a **patch** bump, and uses the
 PR titles as the notes — a release is never blocked on the AI step.
+
+## Store listings
+
+Play *store listing* text (title, descriptions, per-locale metadata) lives in
+`fastlane/metadata/android/` and ships through its own workflow,
+`play-listings.yml` — not through the Android release pipeline above. It
+publishes on a push to `main` that touches that directory, and can also be run
+manually (with a dry-run option). So a `main` merge that changes listing text
+does reach Google Play, even though it uploads no app binary; the two are
+deliberately independent, because listing copy and app builds ship on different
+cadences.
 
 ## One-time setup on GitHub (manual)
 
@@ -107,5 +128,5 @@ These cannot be done from a workflow file — do them in the repo settings:
    now lives on `staging`.
 4. **Play Console** → confirm the `PLAY_SERVICE_ACCOUNT_JSON` service account has
    release permission on the **production** track (it previously only needed
-   internal). Only a manually pushed `android-v*` tag publishes there — `main`
-   merges do not.
+   internal). Only a manual workflow run on an `android-v*` tag publishes an AAB
+   there — `main` merges do not.
