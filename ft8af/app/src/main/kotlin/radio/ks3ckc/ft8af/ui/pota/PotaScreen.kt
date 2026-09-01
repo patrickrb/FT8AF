@@ -579,11 +579,7 @@ private fun PotaContactRow(qso: PotaQso, nowMs: Long) {
             }
             Row {
                 Text(
-                    listOfNotNull(
-                        qso.mode.ifBlank { null },
-                        qso.band.ifBlank { null },
-                        qso.grid.ifBlank { null },
-                    ).joinToString(" · "),
+                    formatContactDetails(qso.mode, qso.band, qso.grid),
                     color = TextMuted,
                     fontSize = 11.sp,
                 )
@@ -1223,14 +1219,49 @@ private fun formatElapsed(ms: Long): String {
 }
 
 /**
- * UTC readout for the long-press tooltip on a contact row: HH:MMz. Returns the
- * raw value on short/malformed input (e.g. an ADIF import that dropped time_on
- * entirely) rather than throwing, matching the pre-"ago" behaviour that used
- * to be the primary display.
+ * Second line of a contact row: mode · band · grid, with blank fields (and the
+ * separators that would surround them) suppressed. All three are blank on a
+ * bare imported row, which must render as an empty string rather than a row of
+ * orphaned separators.
+ */
+internal fun formatContactDetails(mode: String, band: String, grid: String): String =
+    listOfNotNull(
+        mode.ifBlank { null },
+        band.ifBlank { null },
+        grid.ifBlank { null },
+    ).joinToString(" · ")
+
+/**
+ * Widen a stored `time_on` to 6-digit HHMMSS using the same rule as
+ * [PotaQsoWindow.ROW_STAMP] and DatabaseOpr's dedupe ORDER BY: empty is
+ * midnight, odd-width values recover a dropped leading zero (`"815"` is 08:15)
+ * before padding, even-width values just pad. Returns `null` for a
+ * non-numeric value, which no padding rule can rescue.
+ */
+internal fun normalizeAdifTimeOn(timeOn: String): String? = when {
+    timeOn.isEmpty() -> "000000"
+    timeOn.any { !it.isDigit() } -> null
+    timeOn.length % 2 == 1 -> ("0$timeOn" + "000000").substring(0, 6)
+    else -> (timeOn + "000000").substring(0, 6)
+}
+
+/**
+ * UTC readout for the long-press tooltip on a contact row: HH:MMz. Normalizes
+ * the variable-width `time_on` first ([normalizeAdifTimeOn]), so a dropped
+ * leading zero reads the same here as it does everywhere else — `"815"` and
+ * `"81530"` are both 08:15, not `"815"` and a nonsensical `"81:53z"`. Returns
+ * the raw value rather than throwing when the row simply has no usable time
+ * (empty / non-numeric / out-of-range clock fields, e.g. an ADIF import that
+ * dropped `time_on`), which is what the caller shows when the row can't be
+ * dated at all.
  */
 internal fun formatQsoTimeUtc(timeOn: String): String {
-    if (timeOn.length < 4) return timeOn
-    return "${timeOn.substring(0, 2)}:${timeOn.substring(2, 4)}z"
+    if (timeOn.isEmpty()) return timeOn
+    val padded = normalizeAdifTimeOn(timeOn) ?: return timeOn
+    val hh = padded.substring(0, 2)
+    val mm = padded.substring(2, 4)
+    if (hh.toInt() > 23 || mm.toInt() > 59) return timeOn
+    return "$hh:${mm}z"
 }
 
 /**
@@ -1243,15 +1274,20 @@ internal fun formatQsoTimeUtc(timeOn: String): String {
  */
 internal fun parseQsoUtcMs(qsoDate: String, timeOn: String): Long? {
     if (qsoDate.length != 8 || qsoDate.any { !it.isDigit() }) return null
-    val padded = when {
-        timeOn.isEmpty() -> "000000"
-        timeOn.any { !it.isDigit() } -> return null
-        timeOn.length % 2 == 1 -> ("0$timeOn" + "000000").substring(0, 6)
-        else -> (timeOn + "000000").substring(0, 6)
-    }
+    val padded = normalizeAdifTimeOn(timeOn) ?: return null
     return try {
         java.text.SimpleDateFormat("yyyyMMddHHmmss", java.util.Locale.US)
-            .apply { timeZone = java.util.TimeZone.getTimeZone("GMT") }
+            .apply {
+                timeZone = java.util.TimeZone.getTimeZone("GMT")
+                // SimpleDateFormat is lenient by default, which silently rolls
+                // impossible values into a neighbouring instant instead of
+                // rejecting them: "20260231" becomes 2026-03-03 and "256000"
+                // becomes 01:00 the next day. Those rows would then show a
+                // plausible-looking but wrong "ago" delta rather than falling
+                // back to the raw UTC readout, so demand a real calendar
+                // instant here.
+                isLenient = false
+            }
             .parse(qsoDate + padded)
             ?.time
     } catch (_: java.text.ParseException) {
