@@ -103,16 +103,23 @@ changes nothing commits nothing.
 
 ### Prerequisite: service account permission
 
-`PLAY_SERVICE_ACCOUNT_JSON` was set up for *releases*. Editing listings needs a
-separate grant — **Play Console → Users and permissions → the service account →
-App permissions → Store presence → "Manage store presence"**. Without it the
-`listings.patch` call fails with a 403 that names the missing permission, and
-nothing is committed.
+Editing listings is a different grant from releasing: the two Releases
+permissions cover uploading artifacts, so an account can push an AAB all day and
+still get a 403 on `listings.patch`. What it needs is **Play Console → Users and
+permissions → the service account → App permissions → Store presence → "Manage
+store presence"**.
+
+**For FT8AF this is already granted** (confirmed 2026-09-01), so the first
+publish should go straight through. It is written down because it is not implied
+by the release permission the account was set up with, and because revoking it
+would break listing publishes while leaving releases working — a failure that
+would otherwise be puzzling.
 
 **A dry run does not prove you have this grant.** It only reads listings, and
 reading them needs no edit permission — so an account that can read but not
-write passes the dry run and fails on the first real publish. Use the probe
-instead — as a manual run in the `check-permissions` mode, or locally:
+write passes the dry run and fails on the first real publish. If you ever need
+to check (after a permissions change, or when a publish 403s), use the probe —
+as a manual run in the `check-permissions` mode, or locally:
 
 ```bash
 python .github/scripts/publish_listings.py --check-permissions
