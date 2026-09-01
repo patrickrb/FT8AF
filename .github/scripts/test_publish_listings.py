@@ -731,6 +731,63 @@ class MainLifecycleTest(TempTreeTest):
         self.assertEqual(s.deletes, [])
 
 
+class WorkflowModesTest(unittest.TestCase):
+    """The workflow's dispatch modes must match the CLI they invoke.
+
+    Parsed by hand rather than with PyYAML: the validate job installs nothing,
+    and keeping this suite stdlib-only is what lets it stay that way.
+    """
+
+    WORKFLOW = REPO_ROOT / ".github" / "workflows" / "play-listings.yml"
+
+    # mode -> the flag the workflow passes for it. "publish" passes none.
+    MODE_FLAGS = {"dry-run": "--dry-run", "check-permissions": "--check-permissions", "publish": None}
+
+    def workflow_text(self):
+        return self.WORKFLOW.read_text(encoding="utf-8")
+
+    def declared_modes(self):
+        """The `options:` list under the mode input, in file order."""
+        text = self.workflow_text()
+        start = text.index("      mode:")
+        block = text[start : text.index("permissions:", start)]
+        opts = block[block.index("options:") :]
+        return [
+            ln.strip()[2:].strip()
+            for ln in opts.splitlines()
+            if ln.strip().startswith("- ")
+        ]
+
+    def test_workflow_offers_exactly_the_modes_we_support(self):
+        self.assertEqual(sorted(self.declared_modes()), sorted(self.MODE_FLAGS))
+
+    def test_every_mode_maps_to_a_real_cli_flag(self):
+        # Renaming a flag in build_arg_parser() without updating the workflow
+        # would otherwise only surface as a failed manual run against Play.
+        known = set()
+        for action in pl.build_arg_parser()._actions:
+            known.update(action.option_strings)
+        for mode in self.declared_modes():
+            flag = self.MODE_FLAGS[mode]
+            if flag is not None:
+                self.assertIn(flag, known, "mode %r passes unknown flag %s" % (mode, flag))
+
+    def test_workflow_handles_every_mode_it_offers(self):
+        text = self.workflow_text()
+        for mode in self.declared_modes():
+            self.assertIn("%s)" % mode, text, "mode %r has no case branch" % mode)
+
+    def test_default_mode_is_the_read_only_one(self):
+        text = self.workflow_text()
+        block = text[text.index("      mode:") : text.index("options:")]
+        self.assertIn("default: dry-run", block)
+
+    def test_parser_accepts_each_mode_flag(self):
+        for flag in filter(None, self.MODE_FLAGS.values()):
+            args = pl.build_arg_parser().parse_args([flag])
+            self.assertTrue(getattr(args, flag[2:].replace("-", "_")))
+
+
 class RepoMetadataTest(unittest.TestCase):
     """The listings actually checked in must always be publishable."""
 

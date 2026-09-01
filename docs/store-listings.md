@@ -88,9 +88,15 @@ The workflow is `.github/workflows/play-listings.yml`:
 - **Push to `main`** touching the metadata → publishes the changed locales. Since
   all PRs target `dev`, listing changes reach Play on the normal
   dev → staging → main promotion, alongside the release they belong to.
-- **Manual run** (Actions → "Play store listings" → Run workflow) → dry run by
-  default; it prints the diff against what is live and sends nothing. Untick
-  "Dry run" to publish without waiting for a merge to `main`.
+- **Manual run** (Actions → "Play store listings" → Run workflow) → pick a mode:
+  `dry-run` (the default; prints the diff, sends nothing), `check-permissions`
+  (the grant probe below), or `publish` (the real thing, without waiting for a
+  merge to `main`).
+
+Note that `workflow_dispatch` only appears once this workflow file exists on the
+repository's **default branch**, `main`. Until the first promotion carries it
+there, the manual run is not available and the PR-time validation is all that
+runs.
 
 Only locales whose text actually differs from Play are sent, so a rerun that
 changes nothing commits nothing.
@@ -106,7 +112,7 @@ nothing is committed.
 **A dry run does not prove you have this grant.** It only reads listings, and
 reading them needs no edit permission — so an account that can read but not
 write passes the dry run and fails on the first real publish. Use the probe
-instead:
+instead — as a manual run in the `check-permissions` mode, or locally:
 
 ```bash
 python .github/scripts/publish_listings.py --check-permissions

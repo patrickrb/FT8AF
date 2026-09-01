@@ -389,7 +389,14 @@ def run_push(s, package, edit_id, local, dry_run):
     return len(pending)
 
 
-def main(argv=None):
+def build_arg_parser():
+    """Build the CLI parser.
+
+    Separate from main() so the tests can introspect the real option strings and
+    check them against the modes play-listings.yml offers — renaming a flag here
+    without updating the workflow would otherwise only surface as a failed
+    manual run.
+    """
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dry-run", action="store_true", help="show the diff, change nothing")
     ap.add_argument("--pull", action="store_true", help="overwrite the local tree from Play")
@@ -400,6 +407,11 @@ def main(argv=None):
     )
     ap.add_argument("--root", default=str(DEFAULT_ROOT), help="metadata root directory")
     ap.add_argument("--package", default=os.environ.get("PACKAGE_NAME", DEFAULT_PACKAGE))
+    return ap
+
+
+def main(argv=None):
+    ap = build_arg_parser()
     args = ap.parse_args(argv)
 
     chosen = [
