@@ -270,7 +270,11 @@ def abandon_edit(s, package, edit_id):
 
 
 def patch_listing(s, package, edit_id, locale, listing):
-    """PATCH one listing. PATCH (not PUT) so an existing promo video is left alone."""
+    """PATCH an EXISTING listing, so a promo video already on it is left alone.
+
+    Only valid for a language Play already has: PATCH is an update, and the API
+    answers 404 for a language with no listing yet. Use put_listing to create.
+    """
     r = s.patch(
         "%s/applications/%s/edits/%s/listings/%s" % (API, package, edit_id, locale),
         json=listing,
@@ -278,6 +282,30 @@ def patch_listing(s, package, edit_id, locale, listing):
     )
     r.raise_for_status()
     return r.json()
+
+
+def put_listing(s, package, edit_id, locale, listing):
+    """PUT one listing, creating it if the language has none yet.
+
+    The body carries `language` because PUT replaces the whole resource. Nothing
+    is lost by replacing here: this is only used for languages Play has never
+    had a listing for, so there is no video or other field to preserve.
+    """
+    body = dict(listing, language=locale)
+    r = s.put(
+        "%s/applications/%s/edits/%s/listings/%s" % (API, package, edit_id, locale),
+        json=body,
+        timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def upsert_listing(s, package, edit_id, locale, listing, exists):
+    """Create or update one listing, whichever the language needs."""
+    if exists:
+        return patch_listing(s, package, edit_id, locale, listing)
+    return put_listing(s, package, edit_id, locale, listing)
 
 
 # --- Modes ------------------------------------------------------------------
@@ -348,7 +376,7 @@ def run_check(s, package, edit_id, local):
 
     print("Probing listings.patch on %s (%s)..." % (locale, note))
     try:
-        patch_listing(s, package, edit_id, locale, probe)
+        upsert_listing(s, package, edit_id, locale, probe, locale in remote)
     except Exception as e:
         status = getattr(getattr(e, "response", None), "status_code", None)
         if status in (401, 403):
@@ -404,8 +432,9 @@ def run_push(s, package, edit_id, local, dry_run):
         return 0
 
     for locale, listing in sorted(pending.items()):
-        patch_listing(s, package, edit_id, locale, listing)
-        print("pushed %s" % locale)
+        existed = locale in remote
+        upsert_listing(s, package, edit_id, locale, listing, existed)
+        print("pushed %s%s" % (locale, "" if existed else " (created)"))
     return len(pending)
 
 

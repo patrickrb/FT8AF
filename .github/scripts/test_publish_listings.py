@@ -98,6 +98,7 @@ class FakeSession:
         self.patch_status = patch_status
         self.patch_exc = patch_exc
         self.patched = {}
+        self.puts = {}
         self.commits = []
         self.deletes = []
 
@@ -118,6 +119,15 @@ class FakeSession:
         if self.patch_exc is not None:
             raise self.patch_exc
         r = FakeResponse(dict(json or {}, language=locale), self.patch_status)
+        r.raise_for_status()
+        return r
+
+    def put(self, url, json=None, timeout=None):
+        locale = url.rsplit("/", 1)[-1]
+        self.puts[locale] = json
+        if self.patch_exc is not None:
+            raise self.patch_exc
+        r = FakeResponse(dict(json or {}), self.patch_status)
         r.raise_for_status()
         return r
 
@@ -387,8 +397,52 @@ class MainArgsTest(unittest.TestCase):
         self.assertEqual(pl.main(["--root", tmp, "--dry-run"]), 1)
 
 
+class UpsertListingTest(unittest.TestCase):
+    """Creating a listing needs PUT; PATCH 404s on a language Play has never had.
+
+    This is the bug that broke the first real publish: 17 of 18 locales did not
+    exist on Play yet, and PATCH answered 404 Not Found on the first one.
+    """
+
+    def test_existing_locale_is_patched(self):
+        s = FakeSession()
+        pl.upsert_listing(s, "pkg", "e1", "en-US", listing(), exists=True)
+        self.assertIn("en-US", s.patched)
+        self.assertEqual(s.puts, {})
+
+    def test_new_locale_is_put(self):
+        s = FakeSession()
+        pl.upsert_listing(s, "pkg", "e1", "ar", listing(), exists=False)
+        self.assertIn("ar", s.puts)
+        self.assertEqual(s.patched, {})
+
+    def test_put_body_carries_the_language(self):
+        # PUT replaces the whole resource, and the API wants the language in it.
+        s = FakeSession()
+        pl.upsert_listing(s, "pkg", "e1", "ja-JP", listing(), exists=False)
+        self.assertEqual(s.puts["ja-JP"]["language"], "ja-JP")
+
+    def test_patch_body_does_not_add_a_language_field(self):
+        # PATCH is a partial update of an existing resource; sending extra
+        # fields risks clobbering what we deliberately preserve.
+        s = FakeSession()
+        pl.upsert_listing(s, "pkg", "e1", "en-US", listing(), exists=True)
+        self.assertNotIn("language", s.patched["en-US"])
+
+
 class RunPushTest(unittest.TestCase):
     LOCAL = {"en-US": listing(), "fr-FR": listing(short="court")}
+
+    def test_first_publish_creates_every_missing_locale(self):
+        # The real store state that broke: only en-US exists.
+        local = {"en-US": listing(short="new"), "ar": listing(), "ja-JP": listing()}
+        s = FakeSession(listings={"en-US": listing(short="old")})
+        with captured() as (out, _):
+            pushed = pl.run_push(s, "pkg", "e1", local, dry_run=False)
+        self.assertEqual(pushed, 3)
+        self.assertEqual(sorted(s.puts), ["ar", "ja-JP"])
+        self.assertEqual(sorted(s.patched), ["en-US"])
+        self.assertIn("(created)", out.getvalue())
 
     def test_identical_text_sends_nothing(self):
         s = FakeSession(listings=dict(self.LOCAL))
@@ -407,12 +461,15 @@ class RunPushTest(unittest.TestCase):
         self.assertEqual(list(s.patched), ["fr-FR"])
         self.assertEqual(s.patched["fr-FR"]["shortDescription"], "court")
 
-    def test_locale_absent_from_play_is_patched(self):
+    def test_locale_absent_from_play_is_created(self):
+        # Created with PUT, not PATCH: PATCH 404s on a language Play has never
+        # had a listing for.
         s = FakeSession(listings={"en-US": listing()})
         with captured():
             pushed = pl.run_push(s, "pkg", "e1", self.LOCAL, dry_run=False)
         self.assertEqual(pushed, 1)
-        self.assertEqual(list(s.patched), ["fr-FR"])
+        self.assertEqual(list(s.puts), ["fr-FR"])
+        self.assertEqual(s.patched, {})
 
     def test_dry_run_reports_but_sends_nothing(self):
         s = FakeSession(listings={"en-US": listing()})
@@ -498,7 +555,11 @@ class RunCheckTest(unittest.TestCase):
         s = FakeSession(listings={})
         with captured() as (out, _):
             self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_OK)
-        self.assertEqual(s.patched["en-US"], self.LOCAL["en-US"])
+        # Nothing is live, so the probe has to create rather than patch.
+        self.assertEqual(
+            {k: v for k, v in s.puts["en-US"].items() if k != "language"},
+            self.LOCAL["en-US"],
+        )
         self.assertIn("no listings live yet", out.getvalue())
 
     def test_denied_patch_reports_the_missing_grant(self):
