@@ -8,6 +8,7 @@ Run from the repo root:  python -m unittest discover -s .github/scripts -p 'test
 """
 import contextlib
 import io
+import re
 import shutil
 import tempfile
 import unittest
@@ -480,7 +481,7 @@ class RunCheckTest(unittest.TestCase):
     def test_patches_one_listing_and_never_commits(self):
         s = FakeSession(listings={"en-US": listing(short="live")})
         with captured() as (out, _):
-            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 0)
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_OK)
         self.assertEqual(list(s.patched), ["en-US"])
         self.assertEqual(s.commits, [], "the probe must never commit")
         self.assertIn("OK", out.getvalue())
@@ -496,14 +497,14 @@ class RunCheckTest(unittest.TestCase):
     def test_falls_back_to_repo_text_when_nothing_is_published(self):
         s = FakeSession(listings={})
         with captured() as (out, _):
-            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 0)
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_OK)
         self.assertEqual(s.patched["en-US"], self.LOCAL["en-US"])
         self.assertIn("no listings live yet", out.getvalue())
 
     def test_denied_patch_reports_the_missing_grant(self):
         s = FakeSession(listings={"en-US": listing()}, patch_status=403)
         with captured() as (_, err):
-            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 1)
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_DENIED)
         self.assertIn("DENIED", err.getvalue())
         self.assertIn("cannot edit listings", err.getvalue())
         self.assertIn("Edit store listing", err.getvalue())
@@ -511,7 +512,7 @@ class RunCheckTest(unittest.TestCase):
     def test_unauthenticated_is_also_a_denial(self):
         s = FakeSession(listings={"en-US": listing()}, patch_status=401)
         with captured() as (_, err):
-            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 1)
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_DENIED)
         self.assertIn("DENIED", err.getvalue())
 
     def test_server_error_is_inconclusive_not_a_grant_diagnosis(self):
@@ -519,23 +520,54 @@ class RunCheckTest(unittest.TestCase):
         # permissions that were fine all along.
         s = FakeSession(listings={"en-US": listing()}, patch_status=500)
         with captured() as (_, err):
-            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 2)
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_INCONCLUSIVE)
         self.assertIn("INCONCLUSIVE", err.getvalue())
         self.assertNotIn("Edit store listing", err.getvalue())
 
     def test_rate_limit_is_inconclusive(self):
         s = FakeSession(listings={"en-US": listing()}, patch_status=429)
         with captured() as (_, err):
-            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 2)
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_INCONCLUSIVE)
         self.assertIn("INCONCLUSIVE", err.getvalue())
 
     def test_transport_error_with_no_response_is_inconclusive(self):
         s = FakeSession(listings={"en-US": listing()}, patch_exc=OSError("timed out"))
         with captured() as (_, err):
-            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 2)
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_INCONCLUSIVE)
         self.assertIn("INCONCLUSIVE", err.getvalue())
         self.assertIn("timed out", err.getvalue())
         self.assertNotIn("Edit store listing", err.getvalue())
+
+
+class ExitCodeTest(unittest.TestCase):
+    """The probe's verdict codes must not collide with anything else."""
+
+    def test_verdict_codes_are_distinct_from_generic_failure(self):
+        codes = [pl.EXIT_OK, pl.EXIT_ERROR, pl.EXIT_DENIED, pl.EXIT_INCONCLUSIVE]
+        self.assertEqual(len(set(codes)), len(codes))
+
+    def test_no_verdict_code_collides_with_argparse_usage_error(self):
+        # argparse exits 2 on a bad flag. If a verdict used 2, a typo in the
+        # workflow would read as a real answer about the grant.
+        self.assertNotIn(2, (pl.EXIT_DENIED, pl.EXIT_INCONCLUSIVE))
+
+    def test_generic_failures_do_not_use_a_verdict_code(self):
+        # A missing key and unpublishable metadata both exit EXIT_ERROR, so the
+        # workflow can tell "the probe did not run" from "Play said no".
+        verdicts = (pl.EXIT_DENIED, pl.EXIT_INCONCLUSIVE)
+        self.assertNotIn(pl.EXIT_ERROR, verdicts)
+
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        with captured():
+            self.assertEqual(pl.main(["--root", tmp, "--check-permissions"]), pl.EXIT_ERROR)
+
+        write_locale(tmp, "en-US")
+        with mock.patch.object(pl, "play_session", side_effect=pl.CredentialsError("no key")):
+            with captured():
+                self.assertEqual(
+                    pl.main(["--root", tmp, "--check-permissions"]), pl.EXIT_ERROR
+                )
 
 
 class RunPullTest(TempTreeTest):
@@ -705,10 +737,39 @@ class MainLifecycleTest(TempTreeTest):
         self.assertEqual(s.commits, [], "the probe must never commit")
         self.assertEqual(len(s.deletes), 1, "the probe edit must be abandoned")
 
-    def test_check_permissions_returns_1_when_the_grant_is_missing(self):
+    def test_unreadable_listings_are_inconclusive_not_denied(self):
+        # fetch_listings failing means the probe never tested the grant.
+        s = FakeSession(listings={"en-US": listing()})
+        s.get = lambda url, timeout=None: (_ for _ in ()).throw(OSError("timed out"))
+        code, _, err = self.run_main(s, ["--check-permissions"])
+        self.assertEqual(code, pl.EXIT_INCONCLUSIVE)
+        self.assertIn("never got as far", err)
+        self.assertNotIn("Edit store listing", err)
+        self.assertEqual(len(s.deletes), 1, "the probe edit must still be abandoned")
+
+    def test_unopenable_edit_is_inconclusive_not_denied(self):
+        # A 5xx creating the edit used to escape as a traceback, which Python
+        # exits 1 for — indistinguishable from a denial at the workflow layer.
+        s = FakeSession()
+        s.post = lambda url, timeout=None: (_ for _ in ()).throw(OSError("play is down"))
+        code, _, err = self.run_main(s, ["--check-permissions"])
+        self.assertEqual(code, pl.EXIT_INCONCLUSIVE)
+        self.assertIn("could not open an edit", err)
+        self.assertNotIn("Edit store listing", err)
+
+    def test_a_failed_edit_open_still_raises_outside_probe_mode(self):
+        # Only the probe swallows this; a real publish must still fail loudly.
+        s = FakeSession(listings={"en-US": listing(short="old")})
+        s.post = lambda url, timeout=None: (_ for _ in ()).throw(OSError("play is down"))
+        with mock.patch.object(pl, "play_session", return_value=s):
+            with captured():
+                with self.assertRaises(OSError):
+                    pl.main(["--root", self.tmp])
+
+    def test_check_permissions_returns_denied_when_the_grant_is_missing(self):
         s = FakeSession(listings={"en-US": listing()}, patch_status=403)
         code, _, err = self.run_main(s, ["--check-permissions"])
-        self.assertEqual(code, 1)
+        self.assertEqual(code, pl.EXIT_DENIED)
         self.assertIn("Edit store listing", err)
         self.assertEqual(len(s.deletes), 1)
 
@@ -761,21 +822,47 @@ class WorkflowModesTest(unittest.TestCase):
     def test_workflow_offers_exactly_the_modes_we_support(self):
         self.assertEqual(sorted(self.declared_modes()), sorted(self.MODE_FLAGS))
 
-    def test_every_mode_maps_to_a_real_cli_flag(self):
-        # Renaming a flag in build_arg_parser() without updating the workflow
-        # would otherwise only surface as a failed manual run against Play.
+    def case_arm_flags(self):
+        """{mode: flag-or-None} read out of the run step's case arms.
+
+        The flag has to come from the workflow itself, not from MODE_FLAGS: a
+        typo like `args+=(--check-permissons)` is exactly the drift this guard
+        exists to catch, and comparing the table against itself would miss it.
+        """
+        text = self.workflow_text()
+        run = text[text.index('case "$MODE" in') :]
+        run = run[: run.index("esac")]
+        arms = {}
+        for arm in re.finditer(
+            r"^\s{10,}([a-z][a-z-]*)\)\s*\n(.*?)^\s+;;", run, re.S | re.M
+        ):
+            mode, body = arm.group(1), arm.group(2)
+            flags = re.findall(r"args\+=\(([^)]*)\)", body)
+            self.assertLessEqual(len(flags), 1, "mode %r appends args more than once" % mode)
+            arms[mode] = flags[0].strip() if flags else None
+        return arms
+
+    def test_every_mode_has_a_case_arm(self):
+        self.assertEqual(sorted(self.case_arm_flags()), sorted(self.declared_modes()))
+
+    def test_case_arms_pass_the_flags_we_expect(self):
+        self.assertEqual(self.case_arm_flags(), self.MODE_FLAGS)
+
+    def test_every_flag_the_workflow_passes_is_a_real_cli_flag(self):
+        # Catches both directions of drift: renaming a flag in
+        # build_arg_parser(), and mistyping one in the workflow. Either used to
+        # surface only as a failed manual run against Play.
         known = set()
         for action in pl.build_arg_parser()._actions:
             known.update(action.option_strings)
-        for mode in self.declared_modes():
-            flag = self.MODE_FLAGS[mode]
+        for mode, flag in self.case_arm_flags().items():
             if flag is not None:
                 self.assertIn(flag, known, "mode %r passes unknown flag %s" % (mode, flag))
 
-    def test_workflow_handles_every_mode_it_offers(self):
-        text = self.workflow_text()
-        for mode in self.declared_modes():
-            self.assertIn("%s)" % mode, text, "mode %r has no case branch" % mode)
+    def test_publish_arm_passes_no_flag(self):
+        # Publishing is the script's default; passing a flag for it would mean
+        # the workflow and the CLI disagree about what "no mode" means.
+        self.assertIsNone(self.case_arm_flags()["publish"])
 
     def test_default_mode_is_the_read_only_one(self):
         text = self.workflow_text()

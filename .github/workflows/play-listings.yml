@@ -135,10 +135,16 @@ jobs:
           set -e
 
           if [[ "$MODE" == "check-permissions" ]]; then
+            # Codes 3 and 4 are the probe's own verdicts; nothing else in the
+            # script produces them. A generic 1 (bad credentials, unreadable
+            # metadata, an unhandled API error) must NOT be reported as a
+            # missing grant — that sends someone to fix a permission that was
+            # never wrong. See the EXIT_* constants in publish_listings.py.
             case "$rc" in
               0) echo "::notice::The service account can edit listings." ;;
-              1) echo "::error::The service account cannot edit listings. Grant it Play Console -> Users and permissions -> App permissions -> 'Edit store listing, pricing & distribution'." ;;
-              *) echo "::warning::The probe reached no verdict — the API call failed for an unrelated reason (timeout, rate limit, Play 5xx). This says nothing about the grant; run it again." ;;
+              3) echo "::error::The service account cannot edit listings. Grant it Play Console -> Users and permissions -> App permissions -> 'Edit store listing, pricing & distribution'." ;;
+              4) echo "::warning::The probe reached no verdict — the API call failed for an unrelated reason (timeout, rate limit, Play 5xx). This says nothing about the grant; run it again." ;;
+              *) echo "::error::The probe did not run (exit $rc) — see the log above. This is not a verdict about the grant." ;;
             esac
           fi
           exit $rc

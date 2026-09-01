@@ -42,6 +42,17 @@ DEFAULT_ROOT = Path(__file__).resolve().parents[2] / "fastlane" / "metadata" / "
 # check locally first and name the offending file rather than surfacing a 400.
 LIMITS = {"title": 30, "shortDescription": 80, "fullDescription": 4000}
 
+# Exit codes. The probe's result is a verdict, not pass/fail, so it needs codes
+# that nothing else can produce: annotating an unrelated failure as "you are
+# missing the grant" sends someone to fix a permission that was never wrong.
+#
+# 2 is deliberately skipped — argparse exits 2 on a usage error, so a mistyped
+# flag would otherwise be indistinguishable from a probe verdict.
+EXIT_OK = 0
+EXIT_ERROR = 1  # generic failure: unpublishable metadata, bad credentials, API error
+EXIT_DENIED = 3  # --check-permissions: Play refused the listings.patch (401/403)
+EXIT_INCONCLUSIVE = 4  # --check-permissions: the probe never reached a verdict
+
 # Listing field <-> fastlane filename.
 FIELD_FILES = {
     "title": "title.txt",
@@ -312,11 +323,20 @@ def run_check(s, package, edit_id, local):
     The probe writes back the text Play already has wherever possible, so even a
     committed edit (which cannot happen here) would be a no-op.
 
-    Returns 0 if the account may edit listings, 1 if Play refused (401/403), and
-    2 if the call failed for some other reason — a timeout or a 5xx proves
-    nothing either way and must not be reported as a missing grant.
+    Returns EXIT_OK if the account may edit listings, EXIT_DENIED if Play
+    refused (401/403), and EXIT_INCONCLUSIVE if anything else went wrong — a
+    timeout or a 5xx proves nothing either way and must not be reported as a
+    missing grant.
     """
-    remote = fetch_listings(s, package, edit_id)
+    try:
+        remote = fetch_listings(s, package, edit_id)
+    except Exception as e:
+        print(
+            "INCONCLUSIVE: could not read the current listings (%s).\n\nThe probe "
+            "never got as far as testing the grant. Try again." % e,
+            file=sys.stderr,
+        )
+        return EXIT_INCONCLUSIVE
     if remote:
         locale = "en-US" if "en-US" in remote else sorted(remote)[0]
         probe = {f: remote[locale].get(f) or "" for f in FIELD_FILES}
@@ -338,7 +358,7 @@ def run_check(s, package, edit_id, local):
                 '-> "Edit store listing, pricing & distribution".' % (status, e),
                 file=sys.stderr,
             )
-            return 1
+            return EXIT_DENIED
         # A timeout, a rate limit, or a Play 5xx says nothing about the grant.
         # Calling those "permission denied" would send someone editing Console
         # permissions that were fine all along.
@@ -348,9 +368,9 @@ def run_check(s, package, edit_id, local):
             % ("" if status is None else " (HTTP %s)" % status, e),
             file=sys.stderr,
         )
-        return 2
+        return EXIT_INCONCLUSIVE
     print("OK — the service account can edit listings. The edit is discarded, not committed.")
-    return 0
+    return EXIT_OK
 
 
 def run_push(s, package, edit_id, local, dry_run):
@@ -432,18 +452,30 @@ def main(argv=None):
             local = load_metadata(args.root)
         except MetadataError as e:
             print("Metadata is not publishable:\n%s" % e, file=sys.stderr)
-            return 1
+            return EXIT_ERROR
         print("Loaded %d locale(s) from %s\n" % (len(local), args.root))
 
     try:
         s = play_session()
     except CredentialsError as e:
         print("%s" % e, file=sys.stderr)
-        return 1
+        return EXIT_ERROR
 
-    edit = s.post("%s/applications/%s/edits" % (API, args.package), timeout=30)
-    edit.raise_for_status()
-    edit_id = edit.json()["id"]
+    try:
+        edit = s.post("%s/applications/%s/edits" % (API, args.package), timeout=30)
+        edit.raise_for_status()
+        edit_id = edit.json()["id"]
+    except Exception as e:
+        # In probe mode this must not surface as a traceback: Python would exit
+        # 1, which the workflow would read as a denied verdict.
+        if not args.check_permissions:
+            raise
+        print(
+            "INCONCLUSIVE: could not open an edit (%s).\n\nThe probe never got as "
+            "far as testing the grant. Try again." % e,
+            file=sys.stderr,
+        )
+        return EXIT_INCONCLUSIVE
 
     try:
         if args.pull:
@@ -458,7 +490,7 @@ def main(argv=None):
             c.raise_for_status()
             print("\nCommitted edit %s — %d locale(s) sent to Play." % (edit_id, pushed))
             edit_id = None  # committed; do not delete
-        return 0
+        return EXIT_OK
     finally:
         # A --dry-run / --pull / no-op edit is abandoned so it does not linger as
         # the app's one open edit and block the release publish in android.yml.

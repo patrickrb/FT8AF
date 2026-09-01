@@ -123,11 +123,19 @@ edit it then abandons rather than commits, so nothing reaches the store. It
 writes back the text Play already has, so the probe is a no-op even in
 principle.
 
-It exits `0` when the account may edit listings, `1` when Play refused
-(401/403 — the missing grant, named), and `2` when the call failed for another
-reason. A timeout or a Play 5xx proves nothing either way, so it is reported as
-inconclusive rather than sending you to edit Console permissions that were fine
-all along.
+Its exit code is a verdict, so the codes are chosen not to collide with
+anything else the script (or argparse) can produce:
+
+| exit | meaning |
+| ---- | ------- |
+| `0`  | the account may edit listings |
+| `1`  | the probe did not run — bad credentials, unpublishable metadata. **Not** a verdict |
+| `3`  | Play refused the patch (401/403). This is the missing grant |
+| `4`  | inconclusive — timeout, rate limit, Play 5xx. Proves nothing either way; run it again |
+
+`2` is skipped on purpose: argparse exits 2 on a usage error, and a mistyped
+flag must not read as an answer about the grant. Anything other than `3` is not
+evidence that a permission is wrong.
 
 Play's one-open-edit-per-app rule means a listing publish and an AAB upload must
 not overlap, or the second fails with *"This edit has expired"*. The publish job
