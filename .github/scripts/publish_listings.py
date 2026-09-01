@@ -17,8 +17,8 @@ Modes:
   --pull                Overwrite the local tree with what is live on Play
                         (bootstrap / resync after someone edits in the Console).
   --check-permissions   Patch one listing inside an edit that is then abandoned,
-                        to prove the service account holds "Edit store listing,
-                        pricing & distribution". Nothing is committed.
+                        to prove the service account holds the "Manage store
+                        presence" permission. Nothing is committed.
   (default)             Push every locale whose text differs from live, then
                         commit the edit so it goes to Play for review.
 
@@ -315,7 +315,7 @@ def run_check(s, package, edit_id, local):
     """Prove the service account may actually edit listings, without publishing.
 
     A dry run cannot answer this: it only reads. An account with release
-    permission but not "Edit store listing, pricing & distribution" passes a dry
+    permission but not "Manage store presence" passes a dry
     run and then fails on the first real publish. So do the one thing that
     exercises the grant — a single listings.patch — inside an edit the caller
     abandons instead of committing. Nothing reaches the store.
@@ -355,7 +355,7 @@ def run_check(s, package, edit_id, local):
             print(
                 "DENIED (HTTP %s): %s\n\nThe service account cannot edit listings. "
                 'Grant it Play Console -> Users and permissions -> App permissions '
-                '-> "Edit store listing, pricing & distribution".' % (status, e),
+                '-> Store presence -> "Manage store presence".' % (status, e),
                 file=sys.stderr,
             )
             return EXIT_DENIED

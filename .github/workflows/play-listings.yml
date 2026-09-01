@@ -44,8 +44,8 @@ on:
           # Read-only. Prints a unified diff of the repo against the live
           # listings and sends nothing.
           - dry-run
-          # Proves the service account holds "Edit store listing, pricing &
-          # distribution" by patching one listing inside an edit it abandons.
+          # Proves the service account holds "Manage store presence" by
+          # patching one listing inside an edit it abandons.
           # Nothing is committed. A dry run cannot answer this — it only reads.
           - check-permissions
           # The real thing: push every changed locale and commit the edit.
@@ -142,7 +142,7 @@ jobs:
             # never wrong. See the EXIT_* constants in publish_listings.py.
             case "$rc" in
               0) echo "::notice::The service account can edit listings." ;;
-              3) echo "::error::The service account cannot edit listings. Grant it Play Console -> Users and permissions -> App permissions -> 'Edit store listing, pricing & distribution'." ;;
+              3) echo "::error::The service account cannot edit listings. Grant it Play Console -> Users and permissions -> App permissions -> Store presence -> 'Manage store presence'." ;;
               4) echo "::warning::The probe reached no verdict — the API call failed for an unrelated reason (timeout, rate limit, Play 5xx). This says nothing about the grant; run it again." ;;
               *) echo "::error::The probe did not run (exit $rc) — see the log above. This is not a verdict about the grant." ;;
             esac

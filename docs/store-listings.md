@@ -105,7 +105,7 @@ changes nothing commits nothing.
 
 `PLAY_SERVICE_ACCOUNT_JSON` was set up for *releases*. Editing listings needs a
 separate grant — **Play Console → Users and permissions → the service account →
-App permissions → "Edit store listing, pricing & distribution"**. Without it the
+App permissions → Store presence → "Manage store presence"**. Without it the
 `listings.patch` call fails with a 403 that names the missing permission, and
 nothing is committed.
 

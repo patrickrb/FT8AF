@@ -507,7 +507,7 @@ class RunCheckTest(unittest.TestCase):
             self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_DENIED)
         self.assertIn("DENIED", err.getvalue())
         self.assertIn("cannot edit listings", err.getvalue())
-        self.assertIn("Edit store listing", err.getvalue())
+        self.assertIn("Manage store presence", err.getvalue())
 
     def test_unauthenticated_is_also_a_denial(self):
         s = FakeSession(listings={"en-US": listing()}, patch_status=401)
@@ -522,7 +522,7 @@ class RunCheckTest(unittest.TestCase):
         with captured() as (_, err):
             self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_INCONCLUSIVE)
         self.assertIn("INCONCLUSIVE", err.getvalue())
-        self.assertNotIn("Edit store listing", err.getvalue())
+        self.assertNotIn("Manage store presence", err.getvalue())
 
     def test_rate_limit_is_inconclusive(self):
         s = FakeSession(listings={"en-US": listing()}, patch_status=429)
@@ -536,7 +536,7 @@ class RunCheckTest(unittest.TestCase):
             self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_INCONCLUSIVE)
         self.assertIn("INCONCLUSIVE", err.getvalue())
         self.assertIn("timed out", err.getvalue())
-        self.assertNotIn("Edit store listing", err.getvalue())
+        self.assertNotIn("Manage store presence", err.getvalue())
 
 
 class ExitCodeTest(unittest.TestCase):
@@ -744,7 +744,7 @@ class MainLifecycleTest(TempTreeTest):
         code, _, err = self.run_main(s, ["--check-permissions"])
         self.assertEqual(code, pl.EXIT_INCONCLUSIVE)
         self.assertIn("never got as far", err)
-        self.assertNotIn("Edit store listing", err)
+        self.assertNotIn("Manage store presence", err)
         self.assertEqual(len(s.deletes), 1, "the probe edit must still be abandoned")
 
     def test_unopenable_edit_is_inconclusive_not_denied(self):
@@ -755,7 +755,7 @@ class MainLifecycleTest(TempTreeTest):
         code, _, err = self.run_main(s, ["--check-permissions"])
         self.assertEqual(code, pl.EXIT_INCONCLUSIVE)
         self.assertIn("could not open an edit", err)
-        self.assertNotIn("Edit store listing", err)
+        self.assertNotIn("Manage store presence", err)
 
     def test_a_failed_edit_open_still_raises_outside_probe_mode(self):
         # Only the probe swallows this; a real publish must still fail loudly.
@@ -770,7 +770,7 @@ class MainLifecycleTest(TempTreeTest):
         s = FakeSession(listings={"en-US": listing()}, patch_status=403)
         code, _, err = self.run_main(s, ["--check-permissions"])
         self.assertEqual(code, pl.EXIT_DENIED)
-        self.assertIn("Edit store listing", err)
+        self.assertIn("Manage store presence", err)
         self.assertEqual(len(s.deletes), 1)
 
     def test_pull_writes_the_tree_and_abandons_the_edit(self):
