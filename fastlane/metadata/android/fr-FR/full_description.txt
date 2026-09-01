@@ -23,7 +23,7 @@ DÉCODAGE ET ÉMISSION
 
 CHASSEZ CE QUI VOUS MANQUE
 • Hunt répond aux CQ à votre place : vous passez l'ouverture à faire des contacts
-• Choisissez qui vous répondez : le plus récent, le plus fort, le plus faible, le plus lointain, POTA/SOTA, nouveau DXCC ou nouveau locator
+• Choisissez à qui vous répondez : le plus récent, le plus fort, le plus faible, le plus lointain, POTA/SOTA, nouveau DXCC ou nouveau locator
 • Repères NOUVEAU DXCC, NOUVEAU LOCATOR et NOUVELLE ZONE dans la liste des décodages
 • Une file d'appelants vous garde sur la station en cours plutôt que sur la plus forte
 

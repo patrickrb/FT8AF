@@ -82,12 +82,14 @@ class FakeSession:
         commit_status=200,
         delete_status=200,
         delete_exc=None,
+        patch_status=200,
     ):
         self.listings = dict(listings or {})
         self.edit_id = edit_id
         self.commit_status = commit_status
         self.delete_status = delete_status
         self.delete_exc = delete_exc
+        self.patch_status = patch_status
         self.patched = {}
         self.commits = []
         self.deletes = []
@@ -106,7 +108,9 @@ class FakeSession:
     def patch(self, url, json=None, timeout=None):
         locale = url.rsplit("/", 1)[-1]
         self.patched[locale] = json
-        return FakeResponse(dict(json or {}, language=locale))
+        r = FakeResponse(dict(json or {}, language=locale), self.patch_status)
+        r.raise_for_status()
+        return r
 
     def delete(self, url, timeout=None):
         self.deletes.append(url)
@@ -307,12 +311,64 @@ class ServiceAccountInfoTest(unittest.TestCase):
             pl.service_account_info({"PLAY_SERVICE_ACCOUNT_JSON": '["not", "an", "object"]'})
 
 
+class BuildCredentialsTest(unittest.TestCase):
+    INFO = {"type": "service_account", "client_email": "ci@ft8af.iam.gserviceaccount.com"}
+
+    def test_returns_what_the_factory_builds(self):
+        sentinel = object()
+        got = pl.build_credentials(self.INFO, lambda info, scopes: sentinel)
+        self.assertIs(got, sentinel)
+
+    def test_androidpublisher_scope_is_requested(self):
+        seen = {}
+
+        def factory(info, scopes):
+            seen["scopes"] = scopes
+            return object()
+
+        pl.build_credentials(self.INFO, factory)
+        self.assertEqual(seen["scopes"], ["https://www.googleapis.com/auth/androidpublisher"])
+
+    def test_unusable_key_becomes_a_credentials_error(self):
+        # google-auth raises ValueError (MalformedError subclasses it) for a key
+        # that parses as JSON but has no private_key / token_uri. Without the
+        # conversion this escapes main()'s handler as a traceback.
+        def factory(info, scopes):
+            raise ValueError("No key could be detected.")
+
+        with self.assertRaises(pl.CredentialsError) as cm:
+            pl.build_credentials(self.INFO, factory)
+        self.assertIn("not a usable service account key", str(cm.exception))
+        self.assertIn("No key could be detected.", str(cm.exception))
+
+
 class MainArgsTest(unittest.TestCase):
     def test_pull_and_dry_run_are_mutually_exclusive(self):
         # argparse .error() exits 2; this must fail before any Play call.
         with self.assertRaises(SystemExit) as cm:
             pl.main(["--pull", "--dry-run"])
         self.assertEqual(cm.exception.code, 2)
+
+    def test_check_permissions_conflicts_with_the_other_modes(self):
+        for other in ("--pull", "--dry-run"):
+            with self.assertRaises(SystemExit) as cm:
+                pl.main(["--check-permissions", other])
+            self.assertEqual(cm.exception.code, 2)
+
+    def test_an_unusable_key_is_reported_in_one_line_not_a_traceback(self):
+        err = pl.CredentialsError(
+            "PLAY_SERVICE_ACCOUNT_JSON parsed but is not a usable service account key "
+            "(No key could be detected.). Re-download the key from the Google Cloud console."
+        )
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        write_locale(tmp, "en-US")
+        with mock.patch.object(pl, "play_session", side_effect=err):
+            with captured() as (_, stderr):
+                code = pl.main(["--root", tmp])
+        self.assertEqual(code, 1)
+        self.assertIn("not a usable service account key", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_unloadable_metadata_returns_1_without_touching_play(self):
         # An empty root fails in load_metadata(), which runs before play_session();
@@ -358,6 +414,24 @@ class RunPushTest(unittest.TestCase):
         self.assertIn("DRY RUN", out.getvalue())
         self.assertIn("fr-FR", out.getvalue())
 
+    def test_dry_run_prints_a_diff_of_the_changed_text(self):
+        remote = {"en-US": listing(), "fr-FR": listing(short="ancien")}
+        s = FakeSession(listings=remote)
+        with captured() as (out, _):
+            pl.run_push(s, "pkg", "e1", self.LOCAL, dry_run=True)
+        body = out.getvalue()
+        self.assertIn("-ancien", body)
+        self.assertIn("+court", body)
+
+    def test_real_push_does_not_print_diffs(self):
+        # The diff is a review aid for dry runs; a real push just reports what
+        # it sent, so CI logs stay readable.
+        remote = {"en-US": listing(), "fr-FR": listing(short="ancien")}
+        s = FakeSession(listings=remote)
+        with captured() as (out, _):
+            pl.run_push(s, "pkg", "e1", self.LOCAL, dry_run=False)
+        self.assertNotIn("-ancien", out.getvalue())
+
     def test_locales_only_on_play_are_reported_and_left_alone(self):
         s = FakeSession(listings=dict(self.LOCAL, **{"de-DE": listing()}))
         with captured() as (out, _):
@@ -365,6 +439,65 @@ class RunPushTest(unittest.TestCase):
         self.assertEqual(pushed, 0)
         self.assertNotIn("de-DE", s.patched)
         self.assertIn("de-DE", out.getvalue())
+
+
+class DiffTextTest(unittest.TestCase):
+    def test_same_length_change_is_visible(self):
+        # The failure that motivated this: counts alone render a swapped word as
+        # "9 chars -> 9 chars", so a dry run showed nothing at all.
+        old, new = "hamvention", "Hamvention"
+        self.assertEqual(pl.summarize("fullDescription", old, new), "fullDescription: 10 chars -> 10 chars")
+        body = pl.diff_text("en-US", "fullDescription", old, new)
+        self.assertIn("-hamvention", body)
+        self.assertIn("+Hamvention", body)
+
+    def test_headers_name_both_sides(self):
+        body = pl.diff_text("fr-FR", "title", "old", "new")
+        self.assertIn("play:fr-FR/title.txt", body)
+        self.assertIn("repo:fr-FR/title.txt", body)
+
+    def test_new_locale_shows_every_line_as_added(self):
+        body = pl.diff_text("ja-JP", "fullDescription", "", "one\ntwo")
+        self.assertIn("+one", body)
+        self.assertIn("+two", body)
+        self.assertNotIn("-one", body)
+
+    def test_identical_text_produces_no_diff(self):
+        self.assertEqual(pl.diff_text("en-US", "title", "FT8AF", "FT8AF"), "")
+
+
+class RunCheckTest(unittest.TestCase):
+    LOCAL = {"en-US": listing()}
+
+    def test_patches_one_listing_and_never_commits(self):
+        s = FakeSession(listings={"en-US": listing(short="live")})
+        with captured() as (out, _):
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 0)
+        self.assertEqual(list(s.patched), ["en-US"])
+        self.assertEqual(s.commits, [], "the probe must never commit")
+        self.assertIn("OK", out.getvalue())
+
+    def test_probe_writes_back_plays_own_text(self):
+        # So that even a committed edit — which cannot happen here — is a no-op.
+        live = listing(short="live text", full="live full")
+        s = FakeSession(listings={"en-US": live})
+        with captured():
+            pl.run_check(s, "pkg", "e1", self.LOCAL)
+        self.assertEqual(s.patched["en-US"]["shortDescription"], "live text")
+
+    def test_falls_back_to_repo_text_when_nothing_is_published(self):
+        s = FakeSession(listings={})
+        with captured() as (out, _):
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 0)
+        self.assertEqual(s.patched["en-US"], self.LOCAL["en-US"])
+        self.assertIn("no listings live yet", out.getvalue())
+
+    def test_denied_patch_reports_the_missing_grant(self):
+        s = FakeSession(listings={"en-US": listing()}, patch_status=403)
+        with captured() as (_, err):
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 1)
+        self.assertIn("cannot edit listings", err.getvalue())
+        self.assertIn("Edit store listing", err.getvalue())
 
 
 class RunPullTest(TempTreeTest):
@@ -525,6 +658,21 @@ class MainLifecycleTest(TempTreeTest):
                     pl.main(["--root", self.tmp])
         self.assertIn("500", str(cm.exception))
         self.assertIn("connection reset", err.getvalue())
+
+    def test_check_permissions_abandons_the_edit_and_never_commits(self):
+        s = FakeSession(listings={"en-US": listing(short="live")})
+        code, out, _ = self.run_main(s, ["--check-permissions"])
+        self.assertEqual(code, 0)
+        self.assertEqual(list(s.patched), ["en-US"])
+        self.assertEqual(s.commits, [], "the probe must never commit")
+        self.assertEqual(len(s.deletes), 1, "the probe edit must be abandoned")
+
+    def test_check_permissions_returns_1_when_the_grant_is_missing(self):
+        s = FakeSession(listings={"en-US": listing()}, patch_status=403)
+        code, _, err = self.run_main(s, ["--check-permissions"])
+        self.assertEqual(code, 1)
+        self.assertIn("Edit store listing", err)
+        self.assertEqual(len(s.deletes), 1)
 
     def test_pull_writes_the_tree_and_abandons_the_edit(self):
         s = FakeSession(listings={"fr-FR": listing(short="pulled")})

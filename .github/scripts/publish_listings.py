@@ -11,17 +11,23 @@ Release notes are deliberately out of scope: android.yml already writes
 distribution/whatsnew/whatsnew-en-US and hands it to the upload action.
 
 Modes:
-  --dry-run   Show what would change against the live listings; touch nothing.
-  --pull      Overwrite the local tree with what is live on Play (bootstrap /
-              resync after someone edits in the Console).
-  (default)   Push every locale whose text differs from live, then commit the
-              edit so it goes to Play for review.
+  --dry-run             Print a unified diff of what would change against the
+                        live listings; send nothing. Reads only, so it does NOT
+                        prove the account may edit listings — see below.
+  --pull                Overwrite the local tree with what is live on Play
+                        (bootstrap / resync after someone edits in the Console).
+  --check-permissions   Patch one listing inside an edit that is then abandoned,
+                        to prove the service account holds "Edit store listing,
+                        pricing & distribution". Nothing is committed.
+  (default)             Push every locale whose text differs from live, then
+                        commit the edit so it goes to Play for review.
 
 Env:
   PLAY_SERVICE_ACCOUNT_JSON  service account JSON (contents, not a path)
   PACKAGE_NAME               defaults to radio.ks3ckc.ft8af
 """
 import argparse
+import difflib
 import json
 import os
 import sys
@@ -129,6 +135,24 @@ def summarize(field, old, new):
     return "%s: %d chars -> %d chars" % (field, len(old), len(new))
 
 
+def diff_text(locale, field, old, new, context=1):
+    """Unified diff of one field, Play's copy against the repo's.
+
+    Character counts alone hide a same-length edit — a fixed typo or a swapped
+    word reads as "3303 chars -> 3303 chars" — so a dry run, whose whole job is
+    to show what a real run would send, prints this instead.
+    """
+    lines = difflib.unified_diff(
+        old.splitlines(),
+        new.splitlines(),
+        fromfile="play:%s/%s" % (locale, FIELD_FILES[field]),
+        tofile="repo:%s/%s" % (locale, FIELD_FILES[field]),
+        lineterm="",
+        n=context,
+    )
+    return "\n".join(lines)
+
+
 # --- Play API ---------------------------------------------------------------
 
 
@@ -161,14 +185,33 @@ def service_account_info(env=None):
     return info
 
 
+def build_credentials(info, factory):
+    """Build Play credentials from `info`, turning a bad key into a CredentialsError.
+
+    service_account_info() only proves the JSON parses and names a service
+    account. google-auth is what discovers the rest — a missing private_key or
+    token_uri, a corrupted PEM — and it signals that with ValueError
+    (MalformedError subclasses it). main() handles CredentialsError, so without
+    this conversion a bad key file escapes as a traceback.
+
+    `factory` is passed in so this is testable without google-auth installed.
+    """
+    try:
+        return factory(info, scopes=["https://www.googleapis.com/auth/androidpublisher"])
+    except ValueError as e:
+        raise CredentialsError(
+            "PLAY_SERVICE_ACCOUNT_JSON parsed but is not a usable service account "
+            "key (%s). Re-download the key from the Google Cloud console." % e
+        )
+
+
 def play_session():
     import requests
     from google.auth.transport.requests import Request as GAuthRequest
     from google.oauth2 import service_account
 
-    creds = service_account.Credentials.from_service_account_info(
-        service_account_info(),
-        scopes=["https://www.googleapis.com/auth/androidpublisher"],
+    creds = build_credentials(
+        service_account_info(), service_account.Credentials.from_service_account_info
     )
     creds.refresh(GAuthRequest())
     s = requests.Session()
@@ -257,6 +300,44 @@ def run_pull(s, package, edit_id, root):
     return 0
 
 
+def run_check(s, package, edit_id, local):
+    """Prove the service account may actually edit listings, without publishing.
+
+    A dry run cannot answer this: it only reads. An account with release
+    permission but not "Edit store listing, pricing & distribution" passes a dry
+    run and then fails on the first real publish. So do the one thing that
+    exercises the grant — a single listings.patch — inside an edit the caller
+    abandons instead of committing. Nothing reaches the store.
+
+    The probe writes back the text Play already has wherever possible, so even a
+    committed edit (which cannot happen here) would be a no-op.
+    """
+    remote = fetch_listings(s, package, edit_id)
+    if remote:
+        locale = "en-US" if "en-US" in remote else sorted(remote)[0]
+        probe = {f: remote[locale].get(f) or "" for f in FIELD_FILES}
+        note = "writing back its current text"
+    else:
+        locale = "en-US" if "en-US" in local else sorted(local)[0]
+        probe = local[locale]
+        note = "no listings live yet, so using the repo's text"
+
+    print("Probing listings.patch on %s (%s)..." % (locale, note))
+    try:
+        patch_listing(s, package, edit_id, locale, probe)
+    except Exception as e:
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        print(
+            "FAILED%s: %s\n\nThe service account cannot edit listings. Grant it "
+            'Play Console -> Users and permissions -> App permissions -> "Edit '
+            'store listing, pricing & distribution".' % ("" if status is None else " (HTTP %s)" % status, e),
+            file=sys.stderr,
+        )
+        return 1
+    print("OK — the service account can edit listings. The edit is discarded, not committed.")
+    return 0
+
+
 def run_push(s, package, edit_id, local, dry_run):
     remote = fetch_listings(s, package, edit_id)
     pending = {}
@@ -268,6 +349,10 @@ def run_push(s, package, edit_id, local, dry_run):
         pending[locale] = local[locale]
         for field, (old, new) in sorted(changed.items()):
             print("%-8s %s" % (locale, summarize(field, old, new)))
+            if dry_run:
+                body = diff_text(locale, field, old, new)
+                if body:
+                    print("\n".join("    " + ln for ln in body.splitlines()))
 
     extra = sorted(set(remote) - set(local))
     if extra:
@@ -293,12 +378,26 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dry-run", action="store_true", help="show the diff, change nothing")
     ap.add_argument("--pull", action="store_true", help="overwrite the local tree from Play")
+    ap.add_argument(
+        "--check-permissions",
+        action="store_true",
+        help="verify the service account may edit listings, without publishing",
+    )
     ap.add_argument("--root", default=str(DEFAULT_ROOT), help="metadata root directory")
     ap.add_argument("--package", default=os.environ.get("PACKAGE_NAME", DEFAULT_PACKAGE))
     args = ap.parse_args(argv)
 
-    if args.pull and args.dry_run:
-        ap.error("--pull and --dry-run are mutually exclusive")
+    chosen = [
+        name
+        for name, on in (
+            ("--dry-run", args.dry_run),
+            ("--pull", args.pull),
+            ("--check-permissions", args.check_permissions),
+        )
+        if on
+    ]
+    if len(chosen) > 1:
+        ap.error("%s are mutually exclusive" % " and ".join(chosen))
 
     local = None
     if not args.pull:
@@ -322,6 +421,8 @@ def main(argv=None):
     try:
         if args.pull:
             return run_pull(s, args.package, edit_id, args.root)
+        if args.check_permissions:
+            return run_check(s, args.package, edit_id, local)
         pushed = run_push(s, args.package, edit_id, local, args.dry_run)
         if pushed and not args.dry_run:
             c = s.post(

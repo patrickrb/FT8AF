@@ -68,9 +68,11 @@ the offending file instead of letting the API return a bare 400:
 Limits are **characters, not bytes** — CJK copy that is well within 80
 characters is far over 80 bytes, and that is fine.
 
-The English short description sits at exactly 80 characters, so translations
-cannot be literal; most languages expand 20–30% over English. Write to the idea,
-not to the words.
+Translations cannot be literal: most languages run 5–15% longer than English,
+and the short description has only 80 characters to work with. Write to the
+idea, not to the words. The English full description is deliberately kept a few
+hundred characters below the cap for the same reason — French, the longest
+translation, lands within about 500 characters of the limit.
 
 `title.txt` is `FT8AF` in every locale — it is a brand name, not a phrase to
 translate. A test asserts this, so changing the store name is a deliberate edit
@@ -101,10 +103,19 @@ App permissions → "Edit store listing, pricing & distribution"**. Without it t
 `listings.patch` call fails with a 403 that names the missing permission, and
 nothing is committed.
 
-Do a manual dry run (Actions → "Play store listings" → Run workflow, leave "Dry
-run" ticked) before the first merge to `main`. It exercises exactly the same
-API calls up to the commit, so a missing grant shows up there rather than on a
-release.
+**A dry run does not prove you have this grant.** It only reads listings, and
+reading them needs no edit permission — so an account that can read but not
+write passes the dry run and fails on the first real publish. Use the probe
+instead:
+
+```bash
+python .github/scripts/publish_listings.py --check-permissions
+```
+
+That does the one thing a dry run skips: a single `listings.patch` inside an
+edit it then abandons rather than commits, so nothing reaches the store. It
+writes back the text Play already has, so the probe is a no-op even in
+principle. A 403 here is the missing grant, named.
 
 Play's one-open-edit-per-app rule means a listing publish and an AAB upload must
 not overlap, or the second fails with *"This edit has expired"*. The publish job
@@ -115,10 +126,15 @@ them. A dry run or a no-op run abandons its edit rather than leaving it open.
 
 ```bash
 export PLAY_SERVICE_ACCOUNT_JSON="$(cat service-account.json)"
-python .github/scripts/publish_listings.py --dry-run   # show the diff
-python .github/scripts/publish_listings.py             # publish + commit
-python .github/scripts/publish_listings.py --pull      # overwrite the tree from Play
+python .github/scripts/publish_listings.py --dry-run            # show the diff
+python .github/scripts/publish_listings.py                      # publish + commit
+python .github/scripts/publish_listings.py --pull               # overwrite the tree from Play
+python .github/scripts/publish_listings.py --check-permissions  # can this account edit listings?
 ```
+
+`--dry-run` prints a unified diff per changed field, Play's text against the
+repo's, so a same-length edit is visible rather than showing as an unchanged
+character count.
 
 `--pull` is the resync path: if someone edits a listing in the Play Console, pull
 it back down so the repo stops disagreeing with production, then commit the

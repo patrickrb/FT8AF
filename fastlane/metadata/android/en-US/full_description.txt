@@ -64,7 +64,7 @@ HANDS-FREE
 • Android Auto status display for operating from the vehicle
 
 BUILT FOR OPERATORS
-FT8AF is a modernized fork of FT8CN by BG7YOZ, rebuilt with a modern Compose UI, translated into 17 languages, and carrying hundreds of new features and fixes. Developed by K1AF and N0rC on a road trip to Hamvention on I-70 at 70mph.
+FT8AF is a modernized fork of FT8CN by BG7YOZ, rebuilt with a modern Compose UI, translated into 17 languages, and carrying hundreds of new features and fixes. Developed by K1AF and N0rC on a road trip to Hamvention on I-70 at 70 mph.
 
 Open source under the MIT License.
 https://github.com/patrickrb/FT8AF
