@@ -28,6 +28,11 @@ on:
       - '.github/scripts/publish_listings.py'
       - '.github/scripts/test_publish_listings.py'
       - '.github/workflows/play-listings.yml'
+      # The app's own translations. test_every_app_language_has_a_listing reads
+      # these to check that every shipping language has a store listing, so a PR
+      # adding only values-xx/strings_compose.xml has to run this gate — that PR
+      # is precisely the regression the test exists to catch.
+      - 'ft8af/app/src/main/res/values*/strings_compose.xml'
   workflow_dispatch:
     inputs:
       dry_run:

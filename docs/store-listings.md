@@ -115,7 +115,13 @@ python .github/scripts/publish_listings.py --check-permissions
 That does the one thing a dry run skips: a single `listings.patch` inside an
 edit it then abandons rather than commits, so nothing reaches the store. It
 writes back the text Play already has, so the probe is a no-op even in
-principle. A 403 here is the missing grant, named.
+principle.
+
+It exits `0` when the account may edit listings, `1` when Play refused
+(401/403 — the missing grant, named), and `2` when the call failed for another
+reason. A timeout or a Play 5xx proves nothing either way, so it is reported as
+inconclusive rather than sending you to edit Console permissions that were fine
+all along.
 
 Play's one-open-edit-per-app rule means a listing publish and an AAB upload must
 not overlap, or the second fails with *"This edit has expired"*. The publish job
@@ -124,7 +130,12 @@ them. A dry run or a no-op run abandons its edit rather than leaving it open.
 
 ### Running it locally
 
+The script needs `google-auth` and `requests` — the same two the workflow
+installs. There is no requirements file; a clean checkout otherwise fails at the
+lazy imports in `play_session()`.
+
 ```bash
+pip install google-auth requests
 export PLAY_SERVICE_ACCOUNT_JSON="$(cat service-account.json)"
 python .github/scripts/publish_listings.py --dry-run            # show the diff
 python .github/scripts/publish_listings.py                      # publish + commit

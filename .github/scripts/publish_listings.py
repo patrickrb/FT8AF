@@ -311,6 +311,10 @@ def run_check(s, package, edit_id, local):
 
     The probe writes back the text Play already has wherever possible, so even a
     committed edit (which cannot happen here) would be a no-op.
+
+    Returns 0 if the account may edit listings, 1 if Play refused (401/403), and
+    2 if the call failed for some other reason — a timeout or a 5xx proves
+    nothing either way and must not be reported as a missing grant.
     """
     remote = fetch_listings(s, package, edit_id)
     if remote:
@@ -327,13 +331,24 @@ def run_check(s, package, edit_id, local):
         patch_listing(s, package, edit_id, locale, probe)
     except Exception as e:
         status = getattr(getattr(e, "response", None), "status_code", None)
+        if status in (401, 403):
+            print(
+                "DENIED (HTTP %s): %s\n\nThe service account cannot edit listings. "
+                'Grant it Play Console -> Users and permissions -> App permissions '
+                '-> "Edit store listing, pricing & distribution".' % (status, e),
+                file=sys.stderr,
+            )
+            return 1
+        # A timeout, a rate limit, or a Play 5xx says nothing about the grant.
+        # Calling those "permission denied" would send someone editing Console
+        # permissions that were fine all along.
         print(
-            "FAILED%s: %s\n\nThe service account cannot edit listings. Grant it "
-            'Play Console -> Users and permissions -> App permissions -> "Edit '
-            'store listing, pricing & distribution".' % ("" if status is None else " (HTTP %s)" % status, e),
+            "INCONCLUSIVE%s: %s\n\nThe probe did not reach a verdict — this is an "
+            "API failure, not evidence about the grant. Try again."
+            % ("" if status is None else " (HTTP %s)" % status, e),
             file=sys.stderr,
         )
-        return 1
+        return 2
     print("OK — the service account can edit listings. The edit is discarded, not committed.")
     return 0
 

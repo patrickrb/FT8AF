@@ -52,7 +52,11 @@ EXPECTED_LOCALES = set(RES_TO_PLAY.values()) | PLAY_ONLY
 
 
 class FakeHTTPError(Exception):
-    pass
+    """Mirrors requests.HTTPError, which carries the response that raised it."""
+
+    def __init__(self, message, response=None):
+        super().__init__(message)
+        self.response = response
 
 
 class FakeResponse:
@@ -66,7 +70,7 @@ class FakeResponse:
 
     def raise_for_status(self):
         if not self.ok:
-            raise FakeHTTPError("HTTP %d" % self.status_code)
+            raise FakeHTTPError("HTTP %d" % self.status_code, response=self)
 
     def json(self):
         return self._payload
@@ -83,6 +87,7 @@ class FakeSession:
         delete_status=200,
         delete_exc=None,
         patch_status=200,
+        patch_exc=None,
     ):
         self.listings = dict(listings or {})
         self.edit_id = edit_id
@@ -90,6 +95,7 @@ class FakeSession:
         self.delete_status = delete_status
         self.delete_exc = delete_exc
         self.patch_status = patch_status
+        self.patch_exc = patch_exc
         self.patched = {}
         self.commits = []
         self.deletes = []
@@ -108,6 +114,8 @@ class FakeSession:
     def patch(self, url, json=None, timeout=None):
         locale = url.rsplit("/", 1)[-1]
         self.patched[locale] = json
+        if self.patch_exc is not None:
+            raise self.patch_exc
         r = FakeResponse(dict(json or {}, language=locale), self.patch_status)
         r.raise_for_status()
         return r
@@ -496,8 +504,38 @@ class RunCheckTest(unittest.TestCase):
         s = FakeSession(listings={"en-US": listing()}, patch_status=403)
         with captured() as (_, err):
             self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 1)
+        self.assertIn("DENIED", err.getvalue())
         self.assertIn("cannot edit listings", err.getvalue())
         self.assertIn("Edit store listing", err.getvalue())
+
+    def test_unauthenticated_is_also_a_denial(self):
+        s = FakeSession(listings={"en-US": listing()}, patch_status=401)
+        with captured() as (_, err):
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 1)
+        self.assertIn("DENIED", err.getvalue())
+
+    def test_server_error_is_inconclusive_not_a_grant_diagnosis(self):
+        # Calling a 500 "permission denied" would send someone editing Console
+        # permissions that were fine all along.
+        s = FakeSession(listings={"en-US": listing()}, patch_status=500)
+        with captured() as (_, err):
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 2)
+        self.assertIn("INCONCLUSIVE", err.getvalue())
+        self.assertNotIn("Edit store listing", err.getvalue())
+
+    def test_rate_limit_is_inconclusive(self):
+        s = FakeSession(listings={"en-US": listing()}, patch_status=429)
+        with captured() as (_, err):
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 2)
+        self.assertIn("INCONCLUSIVE", err.getvalue())
+
+    def test_transport_error_with_no_response_is_inconclusive(self):
+        s = FakeSession(listings={"en-US": listing()}, patch_exc=OSError("timed out"))
+        with captured() as (_, err):
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 2)
+        self.assertIn("INCONCLUSIVE", err.getvalue())
+        self.assertIn("timed out", err.getvalue())
+        self.assertNotIn("Edit store listing", err.getvalue())
 
 
 class RunPullTest(TempTreeTest):
