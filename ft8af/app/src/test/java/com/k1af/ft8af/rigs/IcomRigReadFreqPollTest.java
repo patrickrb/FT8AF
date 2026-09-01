@@ -42,6 +42,16 @@ public class IcomRigReadFreqPollTest {
     /** IC-705's factory address, matching the rest of the ICOM tests. */
     private static final int IC705_CIV = 0xA4;
 
+    /** Arbitrary fixed "now" so the connect-settle gate needs no wall clock. */
+    private static final long T0 = 1_700_000_000_000L;
+
+    /**
+     * A tick far enough past {@link #T0} that the connect-settle window has
+     * elapsed, for tests whose subject is the PTT/connected decision rather
+     * than the gate itself.
+     */
+    private static final long T_SETTLED = T0 + IcomRig.READ_FREQ_CONNECT_SETTLE_MS;
+
     /** CI-V read-frequency frame the app must send: FE FE A4 E0 03 FD. */
     private static final byte[] READ_FREQ_FRAME = {
             (byte) 0xFE, (byte) 0xFE, (byte) 0xA4, (byte) 0xE0,
@@ -75,7 +85,10 @@ public class IcomRigReadFreqPollTest {
         connector.connected = true;
         // PTT off: rig.isPttOn() is false out of the constructor.
 
-        rig.runReadFreqTick();
+        // First tick observes the link coming up and starts the settle window;
+        // the second is past it, so the read goes out.
+        rig.runReadFreqTick(T0, 0L);
+        rig.runReadFreqTick(T_SETTLED, 0L);
 
         assertThat(connector.sent).hasSize(1);
         assertThat(connector.sent.get(0)).isEqualTo(READ_FREQ_FRAME);
@@ -87,9 +100,102 @@ public class IcomRigReadFreqPollTest {
         // absent connector with reads it can't deliver anyway.
         connector.connected = false;
 
-        rig.runReadFreqTick();
+        rig.runReadFreqTick(T0, 0L);
+        rig.runReadFreqTick(T_SETTLED, 0L);
 
         assertThat(connector.sent).isEmpty();
+    }
+
+    @Test
+    public void firstTickAfterConnect_doesNotPollBeforeTheConnectHandshake() {
+        // The regression this gate exists for: the Timer's start delay runs
+        // from IcomRig construction, but the rig is built before the connector
+        // logs in, so the first tick always lands before setOperationBand's
+        // FA write (onConnected + 1500 ms + 800 ms). Reading there returns the
+        // rig's power-on dial, which onFreqChanged adopts as commandedBandHz.
+        connector.connected = true;
+
+        rig.runReadFreqTick(T0, 0L);
+        rig.runReadFreqTick(T0 + IcomRig.READ_FREQ_CONNECT_SETTLE_MS - 1, 0L);
+
+        assertThat(connector.sent).isEmpty();
+    }
+
+    @Test
+    public void connectPushDelivered_pollsWithoutWaitingOutTheSettleWindow() {
+        // setOperationBand's FA write landed on this connection, so the rig is
+        // already on the dial we asked for and there is nothing left to wait
+        // for — no reason to sit out the rest of the window.
+        connector.connected = true;
+
+        rig.runReadFreqTick(T0, 0L);
+        rig.runReadFreqTick(T0 + 100, T0 + 50);
+
+        assertThat(countMatching(connector.sent, READ_FREQ_FRAME)).isEqualTo(1);
+    }
+
+    @Test
+    public void reconnect_earnsAFreshSettleWindow() {
+        // A drop resets connectedSinceMs, so the link coming back does not
+        // inherit the previous session's elapsed window and poll immediately
+        // into the new connect handshake.
+        connector.connected = true;
+        rig.runReadFreqTick(T0, 0L);
+        connector.connected = false;
+        rig.runReadFreqTick(T0 + 10_000, 0L);
+
+        connector.connected = true;
+        rig.runReadFreqTick(T0 + 20_000, 0L);
+
+        assertThat(connector.sent).isEmpty();
+    }
+
+    @Test
+    public void tickSurvivesAnUncheckedExceptionFromTheTransport() {
+        // An unchecked exception out of a TimerTask kills the Timer thread, so
+        // one bad tick would end dial polling for the whole session. The tick
+        // has to swallow and log it instead.
+        connector.connected = true;
+        connector.throwOnSend = true;
+
+        rig.runReadFreqTick(T0, 0L);
+        rig.runReadFreqTick(T_SETTLED, 0L);
+
+        // Still ticking afterwards: the next poll is attempted, not skipped.
+        connector.throwOnSend = false;
+        rig.runReadFreqTick(T_SETTLED + 2000, 0L);
+        assertThat(countMatching(connector.sent, READ_FREQ_FRAME)).isEqualTo(1);
+    }
+
+    // -- mayPollDial (pure gate) ---------------------------------------------
+
+    @Test
+    public void mayPollDial_linkDown_isFalse() {
+        assertThat(IcomRig.mayPollDial(T0, 0L, T0)).isFalse();
+    }
+
+    @Test
+    public void mayPollDial_staleDeliveredStampFromAPreviousSession_doesNotCount() {
+        // A stamp older than this connection belongs to the last one; it must
+        // not short-circuit the window for the link that just came up.
+        assertThat(IcomRig.mayPollDial(T0 + 100, T0, T0 - 5_000)).isFalse();
+    }
+
+    @Test
+    public void mayPollDial_settleWindowBoundaryIsInclusive() {
+        assertThat(IcomRig.mayPollDial(
+                T0 + IcomRig.READ_FREQ_CONNECT_SETTLE_MS - 1, T0, 0L)).isFalse();
+        assertThat(IcomRig.mayPollDial(
+                T0 + IcomRig.READ_FREQ_CONNECT_SETTLE_MS, T0, 0L)).isTrue();
+    }
+
+    @Test
+    public void mayPollDial_settleWindowCoversTheWholeConnectHandshake() {
+        // onConnected posts setOperationBand at +1500 ms and its FA write lands
+        // 800 ms after that. The window must outlast the pair, otherwise this
+        // gate is no better than the construction-relative start delay it
+        // replaced.
+        assertThat(IcomRig.READ_FREQ_CONNECT_SETTLE_MS).isAtLeast(1500L + 800L);
     }
 
     @Test
@@ -101,7 +207,8 @@ public class IcomRigReadFreqPollTest {
         connector.connected = true;
         rig.setPTT(true);
 
-        rig.runReadFreqTick();
+        rig.runReadFreqTick(T0, 0L);
+        rig.runReadFreqTick(T_SETTLED, 0L);
 
         // setPTT(true) itself writes a data-mode command on the connector, so
         // filter to just the read-frequency frame we're guarding against.
@@ -157,6 +264,8 @@ public class IcomRigReadFreqPollTest {
     private static final class CapturingConnector extends BaseRigConnector {
         final List<byte[]> sent = new ArrayList<>();
         boolean connected = false;
+        /** Simulates a transport that throws an unchecked exception mid-write. */
+        boolean throwOnSend = false;
 
         CapturingConnector() {
             super(0 /* controlMode — unused by this test */);
@@ -164,6 +273,9 @@ public class IcomRigReadFreqPollTest {
 
         @Override
         public synchronized void sendData(byte[] data) {
+            if (throwOnSend) {
+                throw new IllegalStateException("transport exploded");
+            }
             // Copy so a caller reusing its buffer can't retroactively change
             // what we recorded.
             byte[] copy = new byte[data.length];

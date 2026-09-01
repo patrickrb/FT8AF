@@ -31,13 +31,33 @@ public class IcomRig extends BaseRig {
      */
     static final long READ_FREQ_PERIOD_MS = 2000;
     /**
-     * Small delay before the first frequency poll so a fresh connect can finish
-     * its USB-mode + set-frequency handshake ({@code setOperationBand}, ~800 ms
-     * from onConnected) before we start reading — otherwise the very first
-     * observed frequency could be the rig's power-on value, not the one we just
-     * asserted. See {@link #startReadFreqTimer}.
+     * Delay before the timer's first tick. This is only a cheap way to keep the
+     * poll off the connect path — it is measured from {@code IcomRig}
+     * construction, which happens before the connector logs in, so it cannot on
+     * its own guarantee the connect-time handshake is done. The gate that
+     * actually does that is {@link #READ_FREQ_CONNECT_SETTLE_MS}, applied per
+     * tick in {@link #mayPollDial}. See {@link #startReadFreqTimer}.
      */
     static final long READ_FREQ_START_DELAY_MS = 2000;
+    /**
+     * How long after the link comes up the dial poll stays quiet, when the
+     * connect-time frequency push can't be observed landing.
+     *
+     * <p>{@link #READ_FREQ_START_DELAY_MS} alone is not enough, because a
+     * {@code Timer} start delay runs from {@code IcomRig} construction and the
+     * rig is constructed in {@code MainViewModel.connectRig} <em>before</em> the
+     * connector logs in. The handshake we need to clear finishes at
+     * {@code onConnected + 1500 ms} (the posted {@code setOperationBand})
+     * {@code + 800 ms} (its delayed FA write) — i.e. always later than 2000 ms
+     * after construction, no matter how fast the login is. Polling into that
+     * window reads the rig's power-on dial, which {@code onFreqChanged} then
+     * adopts as {@code commandedBandHz}, and the connect-time retune "preserves"
+     * the wrong frequency.
+     *
+     * <p>2500 ms covers that 2300 ms handshake with margin, measured from when
+     * this timer first observes the link up.
+     */
+    static final long READ_FREQ_CONNECT_SETTLE_MS = 2500;
 
     private final int ctrAddress = 0xE0;//receive address, default 0xE0; rig reply can also be 0x00
     private byte[] dataBuffer = new byte[0];//data buffer
@@ -47,6 +67,10 @@ public class IcomRig extends BaseRig {
     private boolean swrAlert = false;
     private Timer meterTimer;//Timer for querying meter
     private Timer readFreqTimer;//Timer for polling frequency (rig->app dial follow)
+    //When this timer first saw the link up, or 0 while it is down. The poll gate is
+    //relative to THIS, not to construction — see READ_FREQ_CONNECT_SETTLE_MS. Volatile:
+    //written on the Timer thread, cleared on the disconnect thread (onDisconnecting).
+    private volatile long connectedSinceMs = 0L;
 
     private boolean oldVersion = false;//for older rigs that may not support SWR query
     //private boolean isPttOn = false;
@@ -298,17 +322,86 @@ public class IcomRig extends BaseRig {
      * private for the same reason.
      */
     void runReadFreqTick() {
-        switch (ReadTaskAction.decide(isConnected(), isPttOn())) {
-            case SKIP:
+        runReadFreqTick(System.currentTimeMillis(), GeneralVariables.operatorDialDeliveredAtMs);
+    }
+
+    /**
+     * The tick body, with the two time-dependent inputs passed in so tests can
+     * drive the connect-settle gate without sleeping.
+     *
+     * <p>Everything is wrapped in a catch-all: an unchecked exception thrown out
+     * of a {@link TimerTask} kills its {@link Timer} thread outright, which would
+     * silently end dial polling for the rest of the session. The sibling rig
+     * polls ({@link Yaesu38Rig}, {@link KenwoodTS590Rig}) guard theirs the same
+     * way; this one logs the throwable rather than just its message so the stack
+     * trace survives.
+     *
+     * @param nowMs             current wall clock
+     * @param dialDeliveredAtMs {@code GeneralVariables.operatorDialDeliveredAtMs}
+     */
+    void runReadFreqTick(long nowMs, long dialDeliveredAtMs) {
+        try {
+            boolean connected = isConnected();
+            if (!connected) {
+                //Link down: forget the settle window so a reconnect earns a fresh one.
+                connectedSinceMs = 0L;
                 return;
-            case READ_METERS:
-                //Meter reads are handled by the dedicated meter timer (500 ms
-                //cadence); don't duplicate them here.
-                return;
-            case READ_FREQ:
-                readFreqFromRig();
-                break;
+            }
+            if (connectedSinceMs == 0L) {
+                connectedSinceMs = nowMs;
+            }
+            switch (ReadTaskAction.decide(true, isPttOn())) {
+                case SKIP:
+                    return;
+                case READ_METERS:
+                    //Meter reads are handled by the dedicated meter timer (500 ms
+                    //cadence); don't duplicate them here.
+                    return;
+                case READ_FREQ:
+                    if (!mayPollDial(nowMs, connectedSinceMs, dialDeliveredAtMs)) {
+                        return;
+                    }
+                    readFreqFromRig();
+                    break;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "readFreq tick failed", e);
         }
+    }
+
+    /**
+     * Whether the connect-time frequency handshake is far enough along that a
+     * dial reading can be trusted as the operator's dial rather than the rig's
+     * power-on value.
+     *
+     * <p>Two ways to clear it, because neither alone is sufficient:
+     * <ul>
+     *   <li>{@code dialDeliveredAtMs >= connectedSinceMs} — {@code setOperationBand}'s
+     *       delayed FA write actually reached the wire on <em>this</em> connection,
+     *       so the rig is on the frequency we asked for and there is nothing left
+     *       to wait for. A stamp older than the connection is a previous session's
+     *       and doesn't count.</li>
+     *   <li>{@link #READ_FREQ_CONNECT_SETTLE_MS} elapsed since the link came up —
+     *       the fallback for when that push never lands at all, e.g. RetunePolicy
+     *       suppressed it as redundant on a flapping reconnect. Without this the
+     *       poll could stay off for the whole session and the dial-follow feature
+     *       this timer exists for would silently never run.</li>
+     * </ul>
+     *
+     * <p>Pure and static so the gate is unit-testable without a Timer or a clock.
+     *
+     * @param nowMs             current wall clock
+     * @param connectedSinceMs  when this timer first saw the link up, or 0 if down
+     * @param dialDeliveredAtMs {@code GeneralVariables.operatorDialDeliveredAtMs}
+     */
+    static boolean mayPollDial(long nowMs, long connectedSinceMs, long dialDeliveredAtMs) {
+        if (connectedSinceMs <= 0L) {
+            return false;
+        }
+        if (dialDeliveredAtMs >= connectedSinceMs) {
+            return true;
+        }
+        return nowMs - connectedSinceMs >= READ_FREQ_CONNECT_SETTLE_MS;
     }
 
     @Override
@@ -321,6 +414,8 @@ public class IcomRig extends BaseRig {
             readFreqTimer.purge();
             readFreqTimer = null;
         }
+        //A reconnect must serve a fresh settle window, not inherit this one's.
+        connectedSinceMs = 0L;
         if (meterTimer != null) {
             meterTimer.cancel();
             meterTimer.purge();
