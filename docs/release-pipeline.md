@@ -11,7 +11,7 @@ others (except a change to the shared native C core under
 ```
 feature/* ──PR──▶ dev ──PR──▶ staging ──PR──▶ main
                   │            │               │
-                  │            │               └─ PRODUCTION build → Releases + Play production
+                  │            │               └─ PRODUCTION build → Releases only (NO Play publish)
                   │            └───────────────── DEV (prerelease) build → Releases + Play internal
                   └────────────────────────────── CI only, NO release
 ```
@@ -22,8 +22,13 @@ feature/* ──PR──▶ dev ──PR──▶ staging ──PR──▶ main
   this PR (a push to `staging`) cuts a **dev / prerelease** build of every
   platform: prerelease GitHub Releases + Play **internal** track for Android.
 - **staging → main** — promote the validated staging build. Merging this PR (a
-  push to `main`) cuts the **production** build: full GitHub Releases + Play
-  **production** track for Android.
+  push to `main`) cuts the **production** build: full GitHub Releases with the
+  auto-bumped `android-v<x.y.z>` / `desktop-v<x.y.z>` tags. It publishes
+  **nothing to Google Play**.
+- **shipping to Play production is manual.** Push the `android-v<x.y.z>` tag the
+  `main` merge created (`git fetch --tags && git push origin android-v1.2.3`);
+  that tag push re-runs the Android release lane and uploads the AAB to the Play
+  **production** track. A merge to `main` on its own never reaches users.
 
 Source gates (enforced as required status checks):
 
@@ -73,8 +78,8 @@ Ported from Sorrel's `play-beta.yml`. On a push to `staging` the Android
 On the later push to `main` the job looks for the newest `android-dev.*` tag
 that is an ancestor of `HEAD` and not already shipped, reads the version and
 notes back out of those markers, and releases `android-v<x.y.z>` with the same
-notes on the production track — production ships exactly what the internal
-testers ran. If no such candidate exists (or it pre-dates the markers) Claude
+notes — so when that tag is later pushed to Play, production ships exactly what
+the internal testers ran. If no such candidate exists (or it pre-dates the markers) Claude
 decides on `main` instead. An `android-v<x.y.z>` that already exists is stepped
 by a patch until free.
 
@@ -102,4 +107,5 @@ These cannot be done from a workflow file — do them in the repo settings:
    now lives on `staging`.
 4. **Play Console** → confirm the `PLAY_SERVICE_ACCOUNT_JSON` service account has
    release permission on the **production** track (it previously only needed
-   internal). `main` merges now publish there.
+   internal). Only a manually pushed `android-v*` tag publishes there — `main`
+   merges do not.

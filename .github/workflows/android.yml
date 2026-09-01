@@ -3,7 +3,7 @@ name: Android CI & Release
 # Android pipeline for the ft8af/ app: unit tests + coverage, instrumented
 # emulator tests, static analysis (lint/detekt/ktlint), and the signed
 # APK/AAB build + GitHub Release + Play publish (internal track on staging,
-# production track on main / android-v* tags — see the Release lifecycle below).
+# production track on android-v* tags only — see the Release lifecycle below).
 #
 # Release lifecycle (see docs/release-pipeline.md):
 #   PR to dev/staging/main -> build-only (unsigned), tests
@@ -13,11 +13,14 @@ name: Android CI & Release
 #                             versionName <x.y.z>-dev.<run#> where x.y.z is the
 #                             semver Claude picks from the changes since the
 #                             last production tag (see "Versioning" below)
-#   push to main           -> android-v<x.y.z> release + Play production, reusing
+#   push to main           -> android-v<x.y.z> release, NO Play publish, reusing
 #                             the semver + notes of the staging build it promotes
 #   android-v* tag push    -> release + Play production
 # Feature work lands on dev; the dev build is cut only when dev -> staging
-# merges, and production only when staging -> main merges.
+# merges. A staging -> main merge cuts the versioned GitHub Release but ships
+# NOTHING to Play — shipping to Play production is a deliberate, separate act:
+# push the android-v<x.y.z> tag that the main merge created and the tag lane
+# uploads it.
 #
 # Versioning + release notes (ported from Sorrel's play-beta.yml): on a staging
 # push the build job collects the PRs, commits and diff size since the latest
@@ -674,7 +677,11 @@ jobs:
                   done
                   release_tag="android-v$version"
                   version_name="$version"
-                  play_track=production
+                  # No Play publish on a staging -> main merge: the merge cuts
+                  # the android-v* tag + GitHub Release only. Pushing that tag
+                  # by hand re-runs this job in the `tag` lane, which is what
+                  # uploads to the Play production track.
+                  play_track=""
                 else
                   # staging: a run-numbered PRERELEASE on the Play internal track.
                   # Distinct tag prefix so it sorts separately from android-v*;
@@ -905,7 +912,7 @@ jobs:
       # broken build fails earlier, in "Build APK & AAB".
       - name: Publish AAB to Play
         id: play_publish
-        if: steps.tag.outputs.should_release == 'true'
+        if: steps.tag.outputs.should_release == 'true' && steps.tag.outputs.play_track != ''
         continue-on-error: true
         uses: r0adkll/upload-google-play@v1
         with:
@@ -915,7 +922,8 @@ jobs:
           # R8 deobfuscation mapping — clears the Play Console "no deobfuscation
           # file" warning and makes crash/ANR stack traces readable.
           mappingFile: ft8af/app/build/outputs/mapping/release/mapping.txt
-          # staging -> internal track; main / android-v* tag -> production track.
+          # staging -> internal track; android-v* tag -> production track. A
+          # push to main leaves the track empty, which skips this step entirely.
           track: ${{ steps.tag.outputs.play_track }}
           status: completed
           releaseName: ${{ steps.tag.outputs.release_tag }}
@@ -935,7 +943,7 @@ jobs:
       # Make a swallowed publish failure visible (annotation on the run) without
       # failing the job — the artifact + GitHub Release already succeeded.
       - name: Warn if Play publish failed
-        if: steps.tag.outputs.should_release == 'true' && steps.play_publish.outcome == 'failure'
+        if: steps.tag.outputs.play_track != '' && steps.play_publish.outcome == 'failure'
         run: |
           echo "::warning::Play publish (track=${{ steps.tag.outputs.play_track }}) failed for ${{ steps.tag.outputs.release_tag }} (non-blocking). The signed AAB built and the GitHub Release was created; only the Play upload did not complete. Check the 'Publish AAB to Play' step log — common causes are an upgrade-path rejection or an expired Play edit."
 
@@ -953,7 +961,11 @@ jobs:
             echo ""
             echo "- **versionName:** \`$VERSION_NAME\` ($VERSION_SOURCE)"
             echo "- **versionCode:** $((GITHUB_RUN_NUMBER + 1000))"
-            echo "- **Play track:** \`$PLAY_TRACK\` (publish: $PLAY_OUTCOME)"
+            if [[ -n "$PLAY_TRACK" ]]; then
+              echo "- **Play track:** \`$PLAY_TRACK\` (publish: $PLAY_OUTCOME)"
+            else
+              echo "- **Play track:** _none — not published._ Push \`$RELEASE_TAG\` to ship it to the production track."
+            fi
             echo ""
             echo "### Release notes"
             echo ""
