@@ -112,6 +112,8 @@ jobs:
             android:
               - 'ft8af/**'
               - '.github/workflows/android.yml'
+              - '.github/scripts/release_notes.py'
+              - '.github/scripts/test_release_notes.py'
 
       - name: Decide whether to run
         id: decide
@@ -181,6 +183,11 @@ jobs:
           done
           echo "::error::Failed to install NDK $NDK_VERSION after 3 attempts"
           exit 1
+
+      # The tag lane's release-notes restoration is a Python script so its
+      # branches can be tested here instead of only on a real ship run.
+      - name: Release-script unit tests
+        run: python3 -m unittest discover -s .github/scripts -p 'test_release_notes.py' -v
 
       - name: Run unit tests
         working-directory: ft8af
@@ -447,53 +454,27 @@ jobs:
         # the body's hidden markers for Play, and keep the whole body so the
         # release itself is left exactly as the promotion wrote it. A plain
         # tag push with no release yet finds nothing and behaves as before;
-        # any other lookup failure fails closed rather than risk the overwrite.
+        # any other lookup failure, and a manual ship whose release has no
+        # notes between the markers, fails closed rather than risk the overwrite.
         if: steps.lane.outputs.lane == 'tag'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          # pipefail makes the assignment fail when gh does; the error text is
-          # kept so a lookup failure can be told from a missing release.
-          if ! BODY=$(gh release view "$TAG" --json body -q .body 2>gh-release-err.txt | tr -d '\r'); then
-            err=$(cat gh-release-err.txt)
-            if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-              # The manual ship targets a tag whose release the main-merge run
-              # created. Not finding it — or not being able to ask (auth, rate
-              # limit, a transient API error) — must stop the run: carrying on
-              # would let the release step overwrite that release's body with a
-              # placeholder and send a bare version string to Play. Fail closed.
-              echo "::error::Could not read the GitHub Release for $TAG ($err). A manual production ship needs the release the main merge created — check the tag and rerun."
-              exit 1
-            fi
-            if ! grep -qi 'not found' gh-release-err.txt; then
-              # A tag push with a release we merely failed to read is the same
-              # overwrite risk; only a genuine "no release" may fall through.
-              echo "::error::Could not read the GitHub Release for $TAG ($err); refusing to continue and risk overwriting it."
-              exit 1
-            fi
-            echo "No existing release for $TAG (plain tag push) — Play's what's-new falls back to the version string."
-            echo "found=false" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          printf '%s\n' "$BODY" > existing-release-body.md
-          awk '/<!-- ft8af-notes-start -->/{f=1; next} /<!-- ft8af-notes-end -->/{f=0} f' <<< "$BODY" > notes.txt
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            # A release existing is not the same as the promoted notes existing:
-            # a release cut by a plain tag push, or one whose body was edited,
-            # has no markers, and awk happily produces an empty notes.txt. The
-            # manual ship is documented to send those notes to Play, so treat
-            # their absence as an error rather than quietly shipping the bare
-            # version string as the what's-new.
-            if ! grep -q '<!-- ft8af-notes-start -->' <<< "$BODY" \
-               || ! grep -q '<!-- ft8af-notes-end -->' <<< "$BODY" \
-               || ! grep -q '[^[:space:]]' notes.txt; then
-              echo "::error::The GitHub Release for $TAG has no release notes between the ft8af-notes markers, so there is nothing to send to Play as the what's-new. Add the notes to the release body between <!-- ft8af-notes-start --> and <!-- ft8af-notes-end --> and rerun."
-              exit 1
-            fi
-          fi
-          echo "found=true" >> "$GITHUB_OUTPUT"
-          echo "Release $TAG already exists; keeping its body. Notes:"; cat notes.txt
+          # This step only runs gh and hands the result over. The decision —
+          # existing / missing release, lookup failure, dispatch versus tag
+          # push, and the marker parsing — is release_notes.py, unit-tested by
+          # test_release_notes.py in the test job above.
+          set +e
+          gh release view "$TAG" --json body -q .body > release-body.raw.md 2> gh-release-err.txt
+          rc=$?
+          set -e
+          python3 .github/scripts/release_notes.py \
+            --event "$GITHUB_EVENT_NAME" --tag "$TAG" \
+            --gh-status "$rc" --gh-stderr gh-release-err.txt --body release-body.raw.md \
+            --notes-out notes.txt --body-out existing-release-body.md \
+            --github-output "$GITHUB_OUTPUT"
 
       - name: Collect changes since the last production release
         id: changes
