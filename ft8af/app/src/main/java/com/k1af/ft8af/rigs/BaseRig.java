@@ -17,7 +17,10 @@ public abstract class BaseRig {
     private OnRigStateChanged onRigStateChanged;//callback when rig state changes
     private int civAddress;//CIV address
     private int baudRate;//baud rate
-    private boolean isPttOn=false;//whether PTT is on
+    //Whether PTT is on. Volatile: setPTT() writes it on the TX path, and the
+    //rigs' poll timers read it on their Timer threads to stay quiet during TX
+    //(ReadTaskAction.decide) — a stale false there means a CAT read mid-over.
+    private volatile boolean isPttOn=false;
     private BaseRigConnector connector = null;//rig connector object
 
     public abstract boolean isConnected();//check if rig is connected

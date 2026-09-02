@@ -12,7 +12,12 @@ import com.k1af.ft8af.rigs.OnRigStateChanged;
 
 
 public class BaseRigConnector {
-    private boolean connected;//Whether currently connected
+    //Whether currently connected. Volatile: written by the connector's I/O
+    //callbacks (onConnected/onDisconnected/onRunError), read by rig poll timers
+    //on their own threads (IcomRig.runReadFreqTick gates every tick on it) —
+    //without it a Timer thread may legally keep seeing a stale value and either
+    //never start polling or keep sending after a drop.
+    private volatile boolean connected;
     /**
      * Bumped every time the link comes up. Lets a poller that only samples
      * {@link #isConnected()} periodically tell a link that stayed up from one

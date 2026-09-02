@@ -69,6 +69,11 @@ public class IcomRigReadFreqPollTest {
         // modern IC-705 / IC-7300 / IC-9700.
         rig = new IcomRig(IC705_CIV, true);
         rig.setConnector(connector);
+        // The constructor starts the real 2 s poll and 500 ms meter Timers.
+        // Cancel them right away so a slow or paused test worker can't get a
+        // background tick appended to `sent` between a manual runReadFreqTick
+        // and its assertion; the manual ticks below need no Timer.
+        rig.onDisconnecting();
     }
 
     @After
@@ -158,6 +163,17 @@ public class IcomRigReadFreqPollTest {
         // ...and polls again once the fresh window has elapsed.
         rig.runReadFreqTick(T_SETTLED + 2_000 + IcomRig.READ_FREQ_CONNECT_SETTLE_MS, 0L);
         assertThat(connector.sent).hasSize(1);
+    }
+
+    @Test
+    public void connectionFlagsAreVolatile() throws Exception {
+        // The tick reads both fields on the Timer thread; the writers are the
+        // connector I/O thread (connected) and the TX path (isPttOn). Without
+        // volatile there is no happens-before edge and a stale read is legal.
+        assertThat(java.lang.reflect.Modifier.isVolatile(
+                BaseRigConnector.class.getDeclaredField("connected").getModifiers())).isTrue();
+        assertThat(java.lang.reflect.Modifier.isVolatile(
+                BaseRig.class.getDeclaredField("isPttOn").getModifiers())).isTrue();
     }
 
     @Test
