@@ -1260,7 +1260,12 @@ internal fun formatQsoTimeUtc(timeOn: String): String {
     val padded = normalizeAdifTimeOn(timeOn) ?: return timeOn
     val hh = padded.substring(0, 2)
     val mm = padded.substring(2, 4)
-    if (hh.toInt() > 23 || mm.toInt() > 59) return timeOn
+    val ss = padded.substring(4, 6)
+    // Seconds are never shown, but they still decide whether the row has a real
+    // clock reading: parseQsoUtcMs rejects "144560" (60 s), so rendering it as
+    // a plausible "14:45z" here would have the two paths disagree about the
+    // same row.
+    if (hh.toInt() > 23 || mm.toInt() > 59 || ss.toInt() > 59) return timeOn
     return "$hh:${mm}z"
 }
 

@@ -200,6 +200,12 @@ class PotaQsoTimeFormattingTest {
         // parseQsoUtcMs rejects it too, so both paths agree on the raw value.
         assertThat(formatQsoTimeUtc("256000")).isEqualTo("256000")
         assertThat(formatQsoTimeUtc("14:45")).isEqualTo("14:45")
+        // Out-of-range seconds too: parseQsoUtcMs rejects 60 s, so the tooltip
+        // must not dress the same row up as a plausible "14:45z".
+        assertThat(formatQsoTimeUtc("144560")).isEqualTo("144560")
+        assertThat(parseQsoUtcMs("20260831", "144560")).isNull()
+        // ...while 59 s is still a real clock reading.
+        assertThat(formatQsoTimeUtc("144559")).isEqualTo("14:45z")
     }
 
     @Test
