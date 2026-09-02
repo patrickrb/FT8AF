@@ -345,17 +345,10 @@ private fun ColumnarStrip(
                 setTxActive(txActive)
 
                 setOnTouchListener { _, event ->
-                    when (event.action) {
-                        MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                            setTouch_x(event.x.toInt())
-                            val freq = getFreq_hz()
-                            if (freq > 0) onTouch(freq, event.x.toInt())
-                        }
-                        MotionEvent.ACTION_UP -> {
-                            val freq = getFreq_hz()
-                            if (freq > 0) onTouchUp(freq)
-                        }
+                    if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE) {
+                        setTouch_x(event.x.toInt())
                     }
+                    dispatchSpectrumTouch(event.action, getFreq_hz(), event.x.toInt(), onTouch, onTouchUp)
                     true
                 }
 
@@ -403,17 +396,10 @@ private fun WaterfallCanvas(
                 setTxActive(txActive)
 
                 setOnTouchListener { _, event ->
-                    when (event.action) {
-                        MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                            setTouch_x(event.x.toInt())
-                            val freq = getFreq_hz()
-                            if (freq > 0) onTouch(freq, event.x.toInt())
-                        }
-                        MotionEvent.ACTION_UP -> {
-                            val freq = getFreq_hz()
-                            if (freq > 0) onTouchUp(freq)
-                        }
+                    if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE) {
+                        setTouch_x(event.x.toInt())
                     }
+                    dispatchSpectrumTouch(event.action, getFreq_hz(), event.x.toInt(), onTouch, onTouchUp)
                     true
                 }
 
@@ -449,6 +435,32 @@ private fun WaterfallCanvas(
  */
 internal fun displayTxFrequencyHz(touchedFreqHz: Int, baseFreqHz: Float): Float =
     if (touchedFreqHz > 0) touchedFreqHz.toFloat() else baseFreqHz
+
+/**
+ * Route one spectrum touch event to the screen's callbacks, given the
+ * frequency the view resolved for it (`setTouch_x` -> `SpectrumTouchMath.touchToFreqHz`).
+ *
+ * On DOWN/MOVE the frequency is always forwarded — including the -1 an
+ * off-view drag resolves to. The view has already hidden its blue cursor for
+ * that event, so the screen's `touchedFreqHz` has to follow it to -1 as well;
+ * forwarding only positive values left the red TX markers parked at the last
+ * on-view column until `frequencyLineTimeout` expired (Copilot review on
+ * #788). Only a valid frequency is committed on UP, so an off-view release
+ * never writes -1 as the base frequency. Shared by both AndroidView listeners
+ * and unit-tested without Compose.
+ */
+internal fun dispatchSpectrumTouch(
+    action: Int,
+    freqHz: Int,
+    x: Int,
+    onTouch: (freqHz: Int, x: Int) -> Unit,
+    onTouchUp: (freqHz: Int) -> Unit,
+) {
+    when (action) {
+        MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> onTouch(freqHz, x)
+        MotionEvent.ACTION_UP -> if (freqHz > 0) onTouchUp(freqHz)
+    }
+}
 
 /** Hz step between adjacent ruler labels. */
 private const val RulerStepHz = 500
