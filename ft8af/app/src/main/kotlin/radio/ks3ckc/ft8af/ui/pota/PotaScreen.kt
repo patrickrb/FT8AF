@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -230,7 +231,7 @@ private fun ActivateTab(onOpenActivation: (PotaActivation) -> Unit) {
         }
     }
 
-    // Tick once a minute so the per-row "5m ago" labels don't stay stuck at
+    // Tick every 30 s so the per-row "5m ago" labels don't stay stuck at
     // whatever they said when the list was first rendered.
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
@@ -587,14 +588,24 @@ private fun PotaContactRow(qso: PotaQso, nowMs: Long) {
             }
         }
         Spacer(Modifier.width(6.dp))
+        val showUtc = { Toast.makeText(context, utcLabel, Toast.LENGTH_SHORT).show() }
+        val showUtcLabel = stringResource(R.string.pota_qso_time_show_utc)
         Column(
             horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.Center,
             modifier = Modifier
+                // Long-press shows the UTC time (the ask in #783). A long-press-
+                // only control is a trap for accessibility services, though: they
+                // announce a plain "activate" action that did nothing. So a tap
+                // does the same thing, both actions carry a localized label, and
+                // the target meets the 48 dp minimum — the two 11 sp labels alone
+                // are well under it (Copilot review on #787).
+                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                 .combinedClickable(
-                    onClick = {},
-                    onLongClick = {
-                        Toast.makeText(context, utcLabel, Toast.LENGTH_SHORT).show()
-                    },
+                    onClickLabel = showUtcLabel,
+                    onLongClickLabel = showUtcLabel,
+                    onClick = showUtc,
+                    onLongClick = showUtc,
                 ),
         ) {
             Text(
@@ -940,7 +951,7 @@ private fun ActivationDetailScreen(
         contacts = withContext(Dispatchers.IO) { PotaSessionManager.getQsosForActivation(activation) }
     }
 
-    // Tick once a minute so the per-row "5m ago" labels stay fresh for a
+    // Tick every 30 s so the per-row "5m ago" labels stay fresh for a
     // currently-open historical activation (same reason as ActivateTab).
     var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {

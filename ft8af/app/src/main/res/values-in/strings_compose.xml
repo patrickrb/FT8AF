@@ -248,6 +248,21 @@
     <string name="pota_tab_activate">Aktivasi</string>
     <string name="pota_tab_hunt">Hunt</string>
     <string name="pota_tab_history">Riwayat</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">baru saja</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="other">%d dtk lalu</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="other">%d mnt lalu</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="other">%d jam lalu</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="other">%d hari lalu</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">Tampilkan waktu UTC</string>
     <string name="pota_start_activation">Mulai aktivasi</string>
     <string name="pota_park_reference_label">Referensi taman (mis. K-1234)</string>
     <string name="pota_notes_optional_label">Catatan (opsional)</string>

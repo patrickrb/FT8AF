@@ -248,6 +248,41 @@
     <string name="pota_tab_activate">تفعيل</string>
     <string name="pota_tab_hunt">صيد</string>
     <string name="pota_tab_history">السجل</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">الآن</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="zero">قبل %d ث</item>
+        <item quantity="one">قبل %d ث</item>
+        <item quantity="two">قبل %d ث</item>
+        <item quantity="few">قبل %d ث</item>
+        <item quantity="many">قبل %d ث</item>
+        <item quantity="other">قبل %d ث</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="zero">قبل %d د</item>
+        <item quantity="one">قبل %d د</item>
+        <item quantity="two">قبل %d د</item>
+        <item quantity="few">قبل %d د</item>
+        <item quantity="many">قبل %d د</item>
+        <item quantity="other">قبل %d د</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="zero">قبل %d س</item>
+        <item quantity="one">قبل %d س</item>
+        <item quantity="two">قبل %d س</item>
+        <item quantity="few">قبل %d س</item>
+        <item quantity="many">قبل %d س</item>
+        <item quantity="other">قبل %d س</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="zero">قبل %d ي</item>
+        <item quantity="one">قبل %d ي</item>
+        <item quantity="two">قبل %d ي</item>
+        <item quantity="few">قبل %d ي</item>
+        <item quantity="many">قبل %d ي</item>
+        <item quantity="other">قبل %d ي</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">عرض التوقيت العالمي (UTC)</string>
     <string name="pota_start_activation">بدء التفعيل</string>
     <string name="pota_park_reference_label">مرجع الحديقة (مثل K-1234)</string>
     <string name="pota_notes_optional_label">ملاحظات (اختياري)</string>

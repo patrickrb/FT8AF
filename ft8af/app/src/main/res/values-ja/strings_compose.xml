@@ -205,6 +205,21 @@
     <string name="pota_tab_activate">アクティベート</string>
     <string name="pota_tab_hunt">ハント</string>
     <string name="pota_tab_history">履歴</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">たった今</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="other">%d秒前</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="other">%d分前</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="other">%d時間前</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="other">%d日前</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">UTC時刻を表示</string>
     <string name="pota_start_activation">アクティベーション開始</string>
     <string name="pota_park_reference_label">公園リファレンス (例: K-1234)</string>
     <string name="pota_notes_optional_label">メモ (任意)</string>

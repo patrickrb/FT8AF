@@ -275,6 +275,8 @@
         <item quantity="one">%dd ago</item>
         <item quantity="other">%dd ago</item>
     </plurals>
+    <!-- Accessibility label for the tap / long-press on the contact row's time. -->
+    <string name="pota_qso_time_show_utc">Show UTC time</string>
     <string name="pota_start_activation">Start activation</string>
     <string name="pota_park_reference_label">Park reference (e.g. K-1234)</string>
     <string name="pota_notes_optional_label">Notes (optional)</string>

@@ -7,6 +7,7 @@ import com.google.common.truth.Truth.assertThat
 import com.k1af.ft8af.R
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
 
 /**
  * The resource side of the POTA row's "ago" readout: [qsoAgeLabel] must
@@ -42,6 +43,28 @@ class PotaQsoAgeLabelTest {
         assertThat(qsoAgeLabel(res, QsoAge(QsoAgeUnit.MINUTES, 1)))
             .isEqualTo(res.getQuantityString(R.plurals.pota_qso_age_minutes, 1, 1))
         assertThat(qsoAgeLabel(res, QsoAge(QsoAgeUnit.DAYS, 1))).isEqualTo("1d ago")
+    }
+
+    @Test
+    @Config(qualifiers = "es")
+    fun translatedLocale_resolvesFromItsOwnResources() {
+        // The point of routing through resources: a localized build must not
+        // fall back to English for this row while the rest of the screen is
+        // translated. Spanish is one of the 15 values-* files that carry the
+        // string and the four plurals.
+        assertThat(qsoAgeLabel(res, QsoAge(QsoAgeUnit.JUST_NOW, 0))).isEqualTo("ahora mismo")
+        assertThat(qsoAgeLabel(res, QsoAge(QsoAgeUnit.MINUTES, 5))).isEqualTo("hace 5 min")
+        assertThat(qsoAgeLabel(res, QsoAge(QsoAgeUnit.DAYS, 3))).isEqualTo("hace 3 d")
+    }
+
+    @Test
+    @Config(qualifiers = "ru")
+    fun pluralFormLocale_resolvesEveryQuantity() {
+        // Russian has one/few/many forms; every count must resolve without a
+        // MissingQuantity fallback to the default file.
+        for (n in listOf(1, 2, 5, 21)) {
+            assertThat(qsoAgeLabel(res, QsoAge(QsoAgeUnit.MINUTES, n))).isEqualTo("$n мин назад")
+        }
     }
 
     @Test

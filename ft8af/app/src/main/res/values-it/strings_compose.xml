@@ -237,6 +237,29 @@
     <string name="pota_tab_activate">Attiva</string>
     <string name="pota_tab_hunt">Hunt</string>
     <string name="pota_tab_history">Cronologia</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">adesso</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="one">%d s fa</item>
+        <item quantity="many">%d s fa</item>
+        <item quantity="other">%d s fa</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="one">%d min fa</item>
+        <item quantity="many">%d min fa</item>
+        <item quantity="other">%d min fa</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="one">%d h fa</item>
+        <item quantity="many">%d h fa</item>
+        <item quantity="other">%d h fa</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="one">%d g fa</item>
+        <item quantity="many">%d g fa</item>
+        <item quantity="other">%d g fa</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">Mostra l’ora UTC</string>
     <string name="pota_start_activation">Avvia attivazione</string>
     <string name="pota_park_reference_label">Riferimento parco (es. K-1234)</string>
     <string name="pota_notes_optional_label">Note (opzionale)</string>

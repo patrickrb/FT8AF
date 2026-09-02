@@ -237,6 +237,33 @@
     <string name="pota_tab_activate">Aktywuj</string>
     <string name="pota_tab_hunt">Polowanie</string>
     <string name="pota_tab_history">Historia</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">przed chwilą</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="one">%d s temu</item>
+        <item quantity="few">%d s temu</item>
+        <item quantity="many">%d s temu</item>
+        <item quantity="other">%d s temu</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="one">%d min temu</item>
+        <item quantity="few">%d min temu</item>
+        <item quantity="many">%d min temu</item>
+        <item quantity="other">%d min temu</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="one">%d godz. temu</item>
+        <item quantity="few">%d godz. temu</item>
+        <item quantity="many">%d godz. temu</item>
+        <item quantity="other">%d godz. temu</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="one">%d dn. temu</item>
+        <item quantity="few">%d dn. temu</item>
+        <item quantity="many">%d dn. temu</item>
+        <item quantity="other">%d dn. temu</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">Pokaż czas UTC</string>
     <string name="pota_start_activation">Rozpocznij aktywację</string>
     <string name="pota_park_reference_label">Identyfikator parku (np. K-1234)</string>
     <string name="pota_notes_optional_label">Notatki (opcjonalnie)</string>

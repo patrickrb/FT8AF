@@ -205,6 +205,29 @@
     <string name="pota_tab_activate">Activar</string>
     <string name="pota_tab_hunt">Cazar</string>
     <string name="pota_tab_history">Historial</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">ahora mismo</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="one">hace %d s</item>
+        <item quantity="many">hace %d s</item>
+        <item quantity="other">hace %d s</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="one">hace %d min</item>
+        <item quantity="many">hace %d min</item>
+        <item quantity="other">hace %d min</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="one">hace %d h</item>
+        <item quantity="many">hace %d h</item>
+        <item quantity="other">hace %d h</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="one">hace %d d</item>
+        <item quantity="many">hace %d d</item>
+        <item quantity="other">hace %d d</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">Mostrar hora UTC</string>
     <string name="pota_start_activation">Iniciar activación</string>
     <string name="pota_park_reference_label">Referencia del parque (p. ej. K-1234)</string>
     <string name="pota_notes_optional_label">Notas (opcional)</string>
