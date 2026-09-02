@@ -921,22 +921,30 @@ public class MainViewModel extends ViewModel {
              * (VOX), this is a no-op and the audio itself keys the rig.
              */
             private void beginKeying() {
-                // Snapshot BEFORE stopSco() below: the TX worker reads this after
-                // the PTT settle delay, when the tracker has already been told
-                // to drop the link and would answer "no SCO" (TxScoLatch).
-                txScoLatch.onKeying(isScoLinkUpOrPending());
-                if (GeneralVariables.controlMode == ControlMode.CAT
+                boolean keysViaControlPath = GeneralVariables.controlMode == ControlMode.CAT
                         || GeneralVariables.controlMode == ControlMode.RTS
-                        || GeneralVariables.controlMode == ControlMode.DTR) {
-                    if (baseRig != null) {
-                        //if (GeneralVariables.connectMode != ConnectMode.NETWORK) stopSco();
-                        if (needControlSco()) stopSco();
-                        // Arm before the write, not after: if setPTT throws or the
-                        // process dies mid-key, we still recorded that the rig may
-                        // be keyed and the next reconnect settles it.
-                        pttSafetyLatch.onKeyed();
-                        baseRig.setPTT(true);
-                    }
+                        || GeneralVariables.controlMode == ControlMode.DTR;
+                // SCO is paused around PTT only for a Bluetooth rig keyed through a
+                // control path — the pre-existing condition, unchanged. The same
+                // flag decides whether the TX path may later steer Default output
+                // to that rig's A2DP: a USB/network rig with a Bluetooth headset
+                // picked as its mic also holds a SCO link of ours, but its TX
+                // audio belongs on the rig, not the headset (Copilot review on
+                // #790). keyDown() takes the snapshot BEFORE it stops SCO — the
+                // TX worker reads it after the PTT settle delay, when the tracker
+                // has already been told to drop the link — and that order lives
+                // in TxScoLatch so it is the tested one.
+                txScoLatch.keyDown(
+                        keysViaControlPath && baseRig != null && needControlSco(),
+                        MainViewModel.this::isScoLinkUpOrPending,
+                        MainViewModel.this::routedScoInputAddress,
+                        MainViewModel.this::stopSco);
+                if (keysViaControlPath && baseRig != null) {
+                    // Arm before the write, not after: if setPTT throws or the
+                    // process dies mid-key, we still recorded that the rig may
+                    // be keyed and the next reconnect settles it.
+                    pttSafetyLatch.onKeyed();
+                    baseRig.setPTT(true);
                 }
             }
 
@@ -958,7 +966,7 @@ public class MainViewModel extends ViewModel {
                 }
                 // The post-TX restart has been requested; the next over takes a
                 // fresh snapshot in beginKeying().
-                txScoLatch.onUnkeyed();
+                txScoLatch.keyUp();
             }
 
             @Override
@@ -2528,6 +2536,26 @@ public class MainViewModel extends ViewModel {
      */
     public boolean isScoHeldForTx() {
         return txScoLatch.heldForTx();
+    }
+
+    /**
+     * Address of the device our SCO link was on when the current over was
+     * keyed, or null when unknown (see {@link TxScoLatch#scoAddress()}).
+     */
+    public String scoAddressForTx() {
+        return txScoLatch.scoAddress();
+    }
+
+    /**
+     * Address of the SCO device the mic is being captured from right now, or
+     * null when the capture is not on SCO / the platform withholds it. Read at
+     * keying time, before SCO is stopped, so the TX path knows which of several
+     * hands-free devices actually carries our link.
+     */
+    private String routedScoInputAddress() {
+        if (hamRecorder == null) return null;
+        MicRecorder mic = hamRecorder.getMicRecorder();
+        return mic == null ? null : mic.routedScoInputAddress();
     }
 
     private final Handler scoHandler = new Handler(Looper.getMainLooper());

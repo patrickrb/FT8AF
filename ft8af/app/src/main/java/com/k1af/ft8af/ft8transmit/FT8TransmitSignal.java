@@ -3342,7 +3342,7 @@ public class FT8TransmitSignal {
             addresses[i] = outputs[i].getAddress();
         }
         int idx = AudioOutputRoutingPolicy.pickDefaultOutputIndex(
-                types, addresses, scoHeldForThisTx());
+                types, addresses, scoHeldForThisTx(), scoAddressForThisTx());
         if (idx == AudioOutputRoutingPolicy.LEAVE_TO_OS) return;
         // setPreferredDevice returns false when the framework refuses the route.
         // Log what actually happened: an unconditional "steered" line is worse
@@ -3373,6 +3373,16 @@ public class FT8TransmitSignal {
     private static boolean scoHeldForThisTx() {
         MainViewModel viewModel = MainViewModel.peekInstance();
         return viewModel != null && viewModel.isScoHeldForTx();
+    }
+
+    /**
+     * Address of the device that SCO link was on at keying time, or null when
+     * the platform withheld it; lets the policy pick <em>that</em> device's A2DP
+     * endpoint when more than one hands-free device is connected.
+     */
+    private static String scoAddressForThisTx() {
+        MainViewModel viewModel = MainViewModel.peekInstance();
+        return viewModel == null ? null : viewModel.scoAddressForTx();
     }
 
     private static class DoTransmitRunnable implements Runnable {

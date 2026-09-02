@@ -303,6 +303,30 @@ public class MicRecorder {
     }
 
     /**
+     * Bluetooth address of the SCO device the running AudioRecord is capturing
+     * from right now, or {@code null} when the capture is not on a SCO endpoint
+     * or there is nothing to ask (USB-direct capture, not started, API &lt; 24,
+     * address withheld by the platform). This is what identifies <em>which</em>
+     * hands-free device carries our SCO link, so the TX path can steer Default
+     * output to that device's A2DP profile and not to another dual-profile
+     * device that merely enumerates a SCO endpoint (Copilot review on #790).
+     */
+    public synchronized String routedScoInputAddress() {
+        if (useUsbAudio || audioRecord == null) return null;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return null;
+        try {
+            AudioDeviceInfo routed = audioRecord.getRoutedDevice();
+            if (routed == null || routed.getType() != AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
+                return null;
+            }
+            String address = routed.getAddress();
+            return address == null || address.trim().isEmpty() ? null : address;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
      * {@code AudioDeviceInfo.TYPE_*} of the input the user pinned in Settings,
      * or {@code -1} for "system default" / USB-direct / a pinned device that is
      * no longer present.

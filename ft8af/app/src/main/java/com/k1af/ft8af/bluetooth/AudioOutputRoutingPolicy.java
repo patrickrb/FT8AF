@@ -76,43 +76,77 @@ public final class AudioOutputRoutingPolicy {
      *                           blank for everything else. May be {@code null},
      *                           and individual entries may be null or blank on
      *                           platforms that withhold them.
-     * @param appScoSessionActive whether <em>this app</em> currently holds a SCO
-     *                           session, per its own {@code ScoLinkTracker}. False
-     *                           short-circuits: with no SCO of ours stealing the
-     *                           media route there is nothing to steer around.
+     * @param appScoSessionActive whether <em>this app</em> held a SCO session for
+     *                           the rig when this over was keyed, per its own
+     *                           {@code ScoLinkTracker} (see {@code TxScoLatch}).
+     *                           False short-circuits: with no SCO of ours
+     *                           stealing the media route there is nothing to
+     *                           steer around.
+     * @param activeScoAddress   the Bluetooth address of the device that SCO link
+     *                           is on (the mic's routed capture device at keying
+     *                           time), or null when the platform withheld it.
+     *                           With it, only that device's A2DP endpoint is
+     *                           ever chosen. Without it, the SCO endpoints must
+     *                           all agree on one device: an idle car kit can
+     *                           enumerate a SCO endpoint next to the rig's, and
+     *                           guessing the first matching pair could send TX
+     *                           to the car (Copilot review on #790).
      * @return the index of the A2DP device to prefer, or {@link #LEAVE_TO_OS}
      *         when the OS's own default routing is fine
      */
     public static int pickDefaultOutputIndex(int[] deviceTypes,
                                              String[] deviceAddresses,
-                                             boolean appScoSessionActive) {
+                                             boolean appScoSessionActive,
+                                             String activeScoAddress) {
         if (!appScoSessionActive || deviceTypes == null) return LEAVE_TO_OS;
 
         int a2dpCount = 0;
         int scoCount = 0;
         int firstA2dpIdx = LEAVE_TO_OS;
         boolean anyScoAddressKnown = false;
+        String soleScoAddress = null;
+        boolean scoDevicesDiffer = false;
         for (int i = 0; i < deviceTypes.length; i++) {
             if (deviceTypes[i] == TYPE_BLUETOOTH_A2DP) {
                 a2dpCount++;
                 if (firstA2dpIdx == LEAVE_TO_OS) firstA2dpIdx = i;
             } else if (deviceTypes[i] == TYPE_BLUETOOTH_SCO) {
                 scoCount++;
-                if (isKnownAddress(addressAt(deviceAddresses, i))) anyScoAddressKnown = true;
+                String scoAddr = addressAt(deviceAddresses, i);
+                if (isKnownAddress(scoAddr)) {
+                    anyScoAddressKnown = true;
+                    if (soleScoAddress == null) {
+                        soleScoAddress = scoAddr;
+                    } else if (!soleScoAddress.equalsIgnoreCase(scoAddr)) {
+                        scoDevicesDiffer = true;
+                    }
+                }
             }
         }
         if (a2dpCount == 0 || scoCount == 0) return LEAVE_TO_OS;
 
-        // Preferred path: an A2DP endpoint on the same Bluetooth device as one of
-        // the SCO endpoints. That is the headset whose hands-free link is holding
-        // the media route hostage, and the only sink the rig is listening on.
-        for (int i = 0; i < deviceTypes.length; i++) {
-            if (deviceTypes[i] != TYPE_BLUETOOTH_A2DP) continue;
-            String a2dpAddr = addressAt(deviceAddresses, i);
-            if (!isKnownAddress(a2dpAddr)) continue;
-            for (int j = 0; j < deviceTypes.length; j++) {
-                if (deviceTypes[j] != TYPE_BLUETOOTH_SCO) continue;
-                if (a2dpAddr.equalsIgnoreCase(addressAt(deviceAddresses, j))) {
+        // Which SCO endpoint is ours. The routed capture device is authoritative;
+        // without it, the identity is only trustworthy when every SCO endpoint
+        // reports the same address, i.e. a single hands-free device is connected.
+        String ourSco;
+        if (isKnownAddress(activeScoAddress)) {
+            ourSco = activeScoAddress;
+        } else if (scoDevicesDiffer) {
+            // Two or more hands-free devices and no word on which carries our
+            // link. Steering to whichever pair enumerates first could put the
+            // FT8 tone into a car kit; leave the routing to the OS instead.
+            return LEAVE_TO_OS;
+        } else {
+            ourSco = soleScoAddress;
+        }
+
+        // Preferred path: the A2DP endpoint on the same Bluetooth device as our
+        // SCO link. That is the device whose hands-free link is holding the media
+        // route hostage, and the only sink the rig is listening on.
+        if (ourSco != null) {
+            for (int i = 0; i < deviceTypes.length; i++) {
+                if (deviceTypes[i] != TYPE_BLUETOOTH_A2DP) continue;
+                if (ourSco.equalsIgnoreCase(addressAt(deviceAddresses, i))) {
                     return i;
                 }
             }

@@ -6,15 +6,20 @@ import android.media.AudioManager;
 
 import org.junit.Test;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
- * Ordering regression for the A2DP TX steering (#790): the keying path stops
+ * Ordering regression for the A2DP TX steering (#790). The keying path stops
  * SCO before the TX worker decides where Default output should go, so the
- * decision must be made from what the link looked like at keying time, not
- * from a live tracker query after the stop. Drives the real
- * {@link ScoLinkTracker} through the same sequence {@code MainViewModel}
- * uses so the test fails if that ordering ever changes underneath the latch.
+ * decision must come from what the link looked like at keying time. That
+ * order is {@link TxScoLatch#keyDown}'s own — these tests hand it the real
+ * {@link ScoLinkTracker} as both the thing to snapshot and the thing to stop,
+ * so if the snapshot ever moved after the stop the latch would read the
+ * already-dropped link and the first test would fail.
  */
 public class TxScoLatchTest {
+
+    private static final String RIG = "AA:BB:CC:DD:EE:FF";
 
     /** {@code ScoLinkCoordinator.isLinkUpOrPending()} without the handler. */
     private static boolean upOrPending(ScoLinkTracker t) {
@@ -32,32 +37,51 @@ public class TxScoLatchTest {
     }
 
     @Test
-    public void stopBeforePlayback_latchStillSaysScoWasHeld() {
+    public void keyDown_snapshotsBeforeItStopsTheLink() {
         ScoLinkTracker tracker = connectedTracker();
         TxScoLatch latch = new TxScoLatch();
 
-        // beginKeying(): snapshot first, then stopSco() -> tracker.requestOff().
-        latch.onKeying(upOrPending(tracker));
-        tracker.requestOff();
+        // beginKeying() for a Bluetooth rig keyed via CAT/RTS/DTR.
+        latch.keyDown(true, () -> upOrPending(tracker), () -> RIG, tracker::requestOff);
 
-        // PTT settle delay elapses; playFT8Signal() now asks the question. The
-        // live query is what the first version of #790 used — and it is already
-        // false, so the override never ran. The latch is the answer to use.
+        // The stop really ran (this is what playFT8Signal sees after the PTT
+        // settle delay, and what the first version of #790 queried)...
         assertThat(upOrPending(tracker)).isFalse();
+        // ...but the latch answers for keying time.
         assertThat(latch.heldForTx()).isTrue();
+        assertThat(latch.scoAddress()).isEqualTo(RIG);
     }
 
     @Test
-    public void noScoAtKeying_latchStaysFalse() {
-        // USB/network rig with no SCO of ours: nothing to steer around, and the
-        // latch must not invent a session.
-        ScoLinkTracker tracker = new ScoLinkTracker();
+    public void keyDown_withoutScoControl_latchesNothingAndDoesNotStop() {
+        // USB/network rig with a Bluetooth headset selected as the mic: our SCO
+        // link is up, but this keying does not pause it and TX audio belongs on
+        // the rig, not the headset's A2DP.
+        ScoLinkTracker tracker = connectedTracker();
         TxScoLatch latch = new TxScoLatch();
+        AtomicInteger stops = new AtomicInteger();
 
-        latch.onKeying(upOrPending(tracker));
-        tracker.requestOff();
+        latch.keyDown(false, () -> upOrPending(tracker), () -> RIG, stops::incrementAndGet);
 
         assertThat(latch.heldForTx()).isFalse();
+        assertThat(latch.scoAddress()).isNull();
+        assertThat(stops.get()).isEqualTo(0);
+        assertThat(upOrPending(tracker)).isTrue();
+    }
+
+    @Test
+    public void keyDown_withNoLink_stillStopsButLatchesFalse() {
+        // Bluetooth rig, link never came up: stopSco() is still requested (the
+        // tracker answers NONE), and nothing is latched.
+        ScoLinkTracker tracker = new ScoLinkTracker();
+        TxScoLatch latch = new TxScoLatch();
+        AtomicInteger stops = new AtomicInteger();
+
+        latch.keyDown(true, () -> upOrPending(tracker), () -> RIG, stops::incrementAndGet);
+
+        assertThat(latch.heldForTx()).isFalse();
+        assertThat(latch.scoAddress()).isNull();
+        assertThat(stops.get()).isEqualTo(1);
     }
 
     @Test
@@ -69,35 +93,35 @@ public class TxScoLatchTest {
         assertThat(tracker.linkState()).isEqualTo(AudioManager.SCO_AUDIO_STATE_CONNECTING);
         TxScoLatch latch = new TxScoLatch();
 
-        latch.onKeying(upOrPending(tracker));
-        tracker.requestOff();
+        latch.keyDown(true, () -> upOrPending(tracker), () -> null, tracker::requestOff);
 
         assertThat(latch.heldForTx()).isTrue();
+        assertThat(latch.scoAddress()).isNull();
     }
 
     @Test
-    public void unkeyClearsTheLatch_andTheNextOverReTakesIt() {
+    public void keyUpClearsTheLatch_andTheNextOverReTakesIt() {
         ScoLinkTracker tracker = connectedTracker();
         TxScoLatch latch = new TxScoLatch();
 
-        latch.onKeying(upOrPending(tracker));
-        tracker.requestOff();
+        latch.keyDown(true, () -> upOrPending(tracker), () -> RIG, tracker::requestOff);
         // endKeying(): startSco() requested, then the latch is released.
         tracker.requestOn();
-        latch.onUnkeyed();
+        latch.keyUp();
         assertThat(latch.heldForTx()).isFalse();
+        assertThat(latch.scoAddress()).isNull();
 
         // Next over: the headset went away in between, so this time the answer
         // is genuinely no and must not be carried over from the last over.
         tracker.requestOff();
-        latch.onKeying(upOrPending(tracker));
+        latch.keyDown(true, () -> upOrPending(tracker), () -> RIG, tracker::requestOff);
         assertThat(latch.heldForTx()).isFalse();
 
         // ...and comes back once the link is up again.
         tracker.requestOn();
         tracker.onStateUpdate(AudioManager.SCO_AUDIO_STATE_CONNECTED, 2_000L);
-        latch.onKeying(upOrPending(tracker));
-        tracker.requestOff();
+        latch.keyDown(true, () -> upOrPending(tracker), () -> RIG, tracker::requestOff);
         assertThat(latch.heldForTx()).isTrue();
+        assertThat(latch.scoAddress()).isEqualTo(RIG);
     }
 }

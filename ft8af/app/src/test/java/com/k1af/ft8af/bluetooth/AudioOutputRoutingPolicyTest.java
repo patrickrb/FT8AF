@@ -40,8 +40,70 @@ public class AudioOutputRoutingPolicyTest {
     /** What AudioManager reports for a non-Bluetooth endpoint. */
     private static final String NONE = "";
 
+    /** The platform withheld which device our SCO link is on. */
     private static int pick(int[] types, String[] addresses, boolean scoActive) {
-        return AudioOutputRoutingPolicy.pickDefaultOutputIndex(types, addresses, scoActive);
+        return AudioOutputRoutingPolicy.pickDefaultOutputIndex(types, addresses, scoActive, null);
+    }
+
+    /** The mic's routed capture device told us which device our SCO link is on. */
+    private static int pickOn(int[] types, String[] addresses, String activeSco) {
+        return AudioOutputRoutingPolicy.pickDefaultOutputIndex(types, addresses, true, activeSco);
+    }
+
+    // -- two hands-free devices: only the one carrying our link may win -------
+
+    @Test
+    public void twoDualProfileDevices_withOurLinkIdentified_picksThatDevicesA2dp() {
+        // A car kit enumerated first and the rig second, both exposing SCO and
+        // A2DP. The first matching pair is the car's; only the routed capture
+        // device tells us the rig is the one holding our link.
+        int[] types = {TYPE_BLUETOOTH_A2DP, TYPE_BLUETOOTH_SCO, TYPE_BLUETOOTH_A2DP, TYPE_BLUETOOTH_SCO};
+        String[] addrs = {OTHER, OTHER, HEADSET, HEADSET};
+        assertThat(pickOn(types, addrs, HEADSET)).isEqualTo(2);
+        assertThat(pickOn(types, addrs, OTHER)).isEqualTo(0);
+    }
+
+    @Test
+    public void twoDualProfileDevices_withOurLinkUnknown_leavesToOs() {
+        // Same phone, but the platform could not say which device the mic is
+        // captured from. Guessing the first pair could send TX into the car.
+        int[] types = {TYPE_BLUETOOTH_A2DP, TYPE_BLUETOOTH_SCO, TYPE_BLUETOOTH_A2DP, TYPE_BLUETOOTH_SCO};
+        String[] addrs = {OTHER, OTHER, HEADSET, HEADSET};
+        assertThat(pick(types, addrs, true)).isEqualTo(AudioOutputRoutingPolicy.LEAVE_TO_OS);
+    }
+
+    @Test
+    public void ourLinkOnADeviceWithoutA2dp_leavesToOs_evenIfAnotherPairExists() {
+        // Our SCO link is on a headset that has no A2DP endpoint; the car kit
+        // next to it pairs perfectly well but is not where the rig listens.
+        int[] types = {TYPE_BLUETOOTH_A2DP, TYPE_BLUETOOTH_SCO, TYPE_BLUETOOTH_SCO};
+        String[] addrs = {OTHER, OTHER, HEADSET};
+        assertThat(pickOn(types, addrs, HEADSET)).isEqualTo(AudioOutputRoutingPolicy.LEAVE_TO_OS);
+    }
+
+    @Test
+    public void identifiedLinkMatchesCaseInsensitively() {
+        int[] types = {TYPE_BLUETOOTH_A2DP, TYPE_BLUETOOTH_SCO};
+        String[] addrs = {HEADSET, HEADSET};
+        assertThat(pickOn(types, addrs, "aa:bb:cc:dd:ee:ff")).isEqualTo(0);
+    }
+
+    @Test
+    public void identifiedLink_withAddressesWithheld_stillUsesTheSinglePairFallback() {
+        // The capture side knew the address but the output enumeration blanked
+        // them all: one A2DP + one SCO is still an unambiguous pairing.
+        int[] types = {TYPE_BUILTIN_SPEAKER, TYPE_BLUETOOTH_A2DP, TYPE_BLUETOOTH_SCO};
+        String[] addrs = {NONE, NONE, NONE};
+        assertThat(pickOn(types, addrs, HEADSET)).isEqualTo(1);
+    }
+
+    @Test
+    public void sameDeviceEnumeratedTwiceOnSco_isNotAmbiguous() {
+        // Some builds list a hands-free device's SCO endpoint more than once;
+        // identical addresses are one device, not two.
+        int[] types = {TYPE_BLUETOOTH_SCO, TYPE_BLUETOOTH_A2DP, TYPE_BLUETOOTH_SCO};
+        String[] addrs = {HEADSET, HEADSET, "aa:bb:cc:dd:ee:ff"};
+        assertThat(pick(types, addrs, true)).isEqualTo(1);
     }
 
     // -- the case the override exists for -------------------------------------
