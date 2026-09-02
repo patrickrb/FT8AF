@@ -71,6 +71,33 @@ public class BaseRigConnector {
      */
     public void setPttOn(byte[] command){};
 
+    /**
+     * Whether the most recent {@link #setPttOn} write actually reached the rig.
+     *
+     * <p>Lets the transmit path tell "PTT-off sent" from "PTT-off attempted at a
+     * port that had already gone away" — the difference between a rig that is
+     * receiving and one left keyed. Connectors that cannot fail this way (network
+     * rigs, which surface their own errors) keep the optimistic default; the USB
+     * cable path overrides it.
+     *
+     * @return true if the last PTT write is believed delivered
+     */
+    public boolean isLastPttWriteOk(){ return true; }
+
+    /**
+     * Whether the most recent {@link #sendData} write actually reached the rig.
+     *
+     * <p>Same posture as {@link #isLastPttWriteOk()}: lets the band-change path tell
+     * "frequency command sent" from "command attempted at a port that had already gone
+     * away" — the difference between an operator selection that has been DELIVERED
+     * (and may be superseded by what the rig reports back) and one that is still
+     * pending. Connectors that cannot fail silently keep the optimistic default; the
+     * USB cable path overrides it.
+     *
+     * @return true if the last CAT data write is believed delivered
+     */
+    public boolean isLastCatWriteOk(){ return true; }
+
     public void setControlMode(int mode){
         controlMode=mode;
     }

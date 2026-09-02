@@ -252,4 +252,57 @@ public class OwnTxEchoFilterTest {
         assertThat(result.decodeLogLine(0))
                 .isEqualTo("DECODE: kept=1 ownEcho=0 junk=1 replyToMe=false slot=0");
     }
+
+    /** Stamp a decode with a WSJT-style DT (seconds). */
+    private static Ft8Message withDt(Ft8Message m, float dtSec) {
+        m.time_sec = dtSec;
+        return m;
+    }
+
+    /**
+     * The clock-sync pill's value: the mean DT of the kept decodes. A TX-slot
+     * loopback echo carries the TX chain latency as its DT (here +1.4 s), which
+     * used to drag the raw slot mean to red; it must not contribute.
+     */
+    @Test
+    public void meanTimeOffsetSec_excludesOwnTxEcho() {
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(withDt(ownEcho("RA3XYZ"), 1.4f));
+        decoded.add(withDt(thirdParty("CQ", "DL1ABC"), 0.1f));
+        decoded.add(withDt(replyToMe("W1AW"), -0.1f));
+
+        assertThat(OwnTxEchoFilter.meanTimeOffsetSec(decoded)).isWithin(1e-6f).of(0f);
+        assertThat(OwnTxEchoFilter.filter(decoded).meanTimeOffsetSec()).isWithin(1e-6f).of(0f);
+    }
+
+    /** Junk decodes carry a random DT and are excluded from the mean as well. */
+    @Test
+    public void meanTimeOffsetSec_excludesJunk() {
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(withDt(structuredJunk(), 2.3f));
+        decoded.add(withDt(thirdParty("CQ", "DL1ABC"), 0.2f));
+        decoded.add(withDt(thirdParty("CQ", "JA1XYZ"), 0.4f));
+
+        assertThat(OwnTxEchoFilter.meanTimeOffsetSec(decoded)).isWithin(1e-6f).of(0.3f);
+    }
+
+    /** Plain mean over everything kept when nothing was filtered. */
+    @Test
+    public void meanTimeOffsetSec_isPlainMeanOfKept() {
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(withDt(thirdParty("CQ", "DL1ABC"), -0.5f));
+        decoded.add(withDt(thirdParty("CQ", "JA1XYZ"), 0.1f));
+
+        assertThat(OwnTxEchoFilter.meanTimeOffsetSec(decoded)).isWithin(1e-6f).of(-0.2f);
+    }
+
+    /** Echo-only slot (or empty list): no evidence, so NaN rather than a fake 0.0. */
+    @Test
+    public void meanTimeOffsetSec_isNaNWhenNothingKept() {
+        List<Ft8Message> echoOnly = new ArrayList<>();
+        echoOnly.add(withDt(ownEcho("RA3XYZ"), 1.4f));
+
+        assertThat(OwnTxEchoFilter.meanTimeOffsetSec(echoOnly)).isNaN();
+        assertThat(OwnTxEchoFilter.meanTimeOffsetSec(Collections.emptyList())).isNaN();
+    }
 }

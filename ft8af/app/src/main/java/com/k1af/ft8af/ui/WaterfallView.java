@@ -73,8 +73,9 @@ public class WaterfallView extends View {
     private boolean txActive = false;
     private final Paint txMarkerPaint = new Paint();
 
-    // FT8 period timestamp tracking
-    private long lastTimestampPeriod = -1;
+    // Draws the UTC timestamp line once per slot boundary of the current mode (15s FT8,
+    // 7.5s FT4, 3.75s FT2), not a fixed 15s that would skip the faster modes' boundaries.
+    private final WaterfallTimestampGate timestampGate = new WaterfallTimestampGate();
     // Gates the decoded-label stamp to once per decode slot (the current mode's slot
     // length, not a fixed 15s), so a slot's labels are painted exactly once even though the
     // decode-done flag re-arms on every decode pass.
@@ -106,6 +107,19 @@ public class WaterfallView extends View {
                 , getResources().getDisplayMetrics());
     }
 
+    /**
+     * Height (px) of the existing waterfall region copied and scrolled down by one block on
+     * each new spectrum row. Clamped to be non-negative: when the view is only one block
+     * tall or shorter (e.g. measured at {@code h == 1}, where {@code blockHeight} clamps to
+     * 1 and equals {@code drawHeight}), there is nothing above the new row to scroll, so the
+     * caller must skip the {@code Bitmap.createBitmap} blit — that call throws
+     * {@code IllegalArgumentException} on a non-positive height. Extracted as a pure static
+     * helper so the geometry is unit-testable without a Canvas.
+     */
+    static int scrolledRegionHeight(int drawHeight, int blockHeight) {
+        return Math.max(0, drawHeight - blockHeight);
+    }
+
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         if (w <= 0 || h <= 0) return;
@@ -127,8 +141,10 @@ public class WaterfallView extends View {
         Log.d(TAG, String.format("Bitmap created: %dx%d, blockHeight=%d, freq_width=%.2f, spectrumWidth=%d",
                 w, h, blockHeight, freq_width, spectrumWidth));
         lastBitMap = Bitmap.createBitmap(w, h, ARGB_8888);
-        // Fresh bitmap wiped the stamped labels, so allow the current cycle to re-stamp.
+        // Fresh bitmap wiped the stamped labels and the UTC gridline, so allow the current
+        // slot to re-stamp both instead of waiting for the next slot boundary.
         messageGate.reset();
+        timestampGate.reset();
         _canvas = new Canvas(lastBitMap);
         Paint blackPaint = new Paint();
         blackPaint.setColor(0xFF000000);
@@ -291,23 +307,35 @@ public class WaterfallView extends View {
             }
         }
         // Scale gradient so the visible portion (0..drawWidth) maps to 0..spectrumWidth Hz.
-        // The FFT data covers 0 to Nyquist (sampleRate/2). We want spectrumWidth Hz
-        // to fill the view, so the full gradient length = drawWidth * (Nyquist / spectrumWidth).
-        float nyquist = GeneralVariables.audioSampleRate / 2f;
-        float gradientScale = nyquist / spectrumWidth;
+        // The FFT data covers 0 to the RX Nyquist (FT8Common.SAMPLE_RATE/2 = 6 kHz): RX
+        // audio is always captured/decoded at 12 kHz, independent of the user-selectable
+        // transmit audio rate (see SpectrumScale). We want spectrumWidth Hz to fill the
+        // view, so the full gradient length = drawWidth * (Nyquist / spectrumWidth).
+        float gradientScale = SpectrumScale.gradientScale(spectrumWidth);
         LinearGradient linearGradient = new LinearGradient(0, 0, drawWidth * gradientScale, 0, colors
                 , null, Shader.TileMode.CLAMP);
         linearPaint.setShader(linearGradient);
-        Bitmap bitmap = Bitmap.createBitmap(lastBitMap, 0, 0, drawWidth, drawHeight - blockHeight);
-        _canvas.drawBitmap(bitmap, 0, blockHeight, null);
-        bitmap.recycle();
+        // Scroll the previously-drawn waterfall down by one block, then paint the new
+        // spectrum row into the freed top strip. When the view is only a block tall (or
+        // shorter) there is nothing above the new row to scroll: scrolledRegionHeight() is
+        // 0 and we skip the blit — Bitmap.createBitmap rejects a non-positive height and
+        // would otherwise throw IllegalArgumentException (seen when the view is measured at
+        // h==1, where blockHeight clamps to 1 == drawHeight). The new-row paint still runs.
+        int scrolledHeight = scrolledRegionHeight(drawHeight, blockHeight);
+        if (scrolledHeight > 0) {
+            Bitmap bitmap = Bitmap.createBitmap(lastBitMap, 0, 0, drawWidth, scrolledHeight);
+            _canvas.drawBitmap(bitmap, 0, blockHeight, null);
+            bitmap.recycle();
+        }
         _canvas.drawRect(0, 0, drawWidth, blockHeight, linearPaint);
 
-        // Draw FT8 period timestamp at 15-second boundaries
+        // Draw the UTC timestamp line at each slot boundary of the CURRENT mode (15s FT8,
+        // 7.5s FT4, 3.75s FT2). Using the mode's slotMillis instead of a hard-coded 15s keeps
+        // FT8 byte-identical (floor(utcMs/15000) == the old (utcMs/1000)/15) while marking the
+        // intermediate boundaries the faster modes would otherwise skip.
         long utcMs = UtcTimer.getSystemTime();
-        long period = (utcMs / 1000) / 15;
-        if (period != lastTimestampPeriod) {
-            lastTimestampPeriod = period;
+        long slotMillis = GeneralVariables.currentMode().slotMillis;
+        if (timestampGate.shouldDraw(utcMs, slotMillis)) {
             // Draw horizontal line at the boundary between new row and scrolled content
             _canvas.drawLine(0, blockHeight, drawWidth, blockHeight, timestampLinePaint);
             // Format UTC time label
@@ -322,8 +350,9 @@ public class WaterfallView extends View {
             // Draw outline then fill for readability over any spectrum color
             _canvas.drawText(timeLabel, textX, textY, utcPainBack);
             _canvas.drawText(timeLabel, textX, textY, utcPaint);
-            Log.d(TAG, String.format("Timestamp drawn: %s (period=%d, utcMs=%d, blockHeight=%d, textY=%.1f, drawWidth=%d)",
-                    timeLabel, period, utcMs, blockHeight, textY, drawWidth));
+            long period = WaterfallTimestampGate.slotPeriod(utcMs, slotMillis);
+            Log.d(TAG, String.format("Timestamp drawn: %s (period=%d, utcMs=%d, slotMillis=%d, blockHeight=%d, textY=%.1f, drawWidth=%d)",
+                    timeLabel, period, utcMs, slotMillis, blockHeight, textY, drawWidth));
         }
 
         //Messages have 3 types: normal, CQ, and involving me
@@ -340,8 +369,8 @@ public class WaterfallView extends View {
             // in a fresh slot index and restamp every label a few scrolled rows lower,
             // doubling/garbling all of them. slotMillis stays part of the key so a mode
             // change (FT8/FT4/FT2 divide utc differently) can't collide with a slot already
-            // stamped under the previous mode.
-            long slotMillis = GeneralVariables.currentMode().slotMillis;
+            // stamped under the previous mode. (slotMillis is read once at the top of this
+            // method for the timestamp gridline and reused here.)
             if (messageGate.shouldStamp(slotMillis, messages)) {
                 Log.d(TAG, String.format("Drawing %d messages on waterfall", messages.size()));
                 for (Ft8Message msg : messages) {

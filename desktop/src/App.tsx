@@ -5,6 +5,7 @@ import {
   type AudioDevice,
   type BandInfo,
   type ClockSyncEvent,
+  type CustomBand,
   type CycleTick,
   type EngineEvent,
   type HamlibRig,
@@ -14,10 +15,21 @@ import {
   type SerialPortInfo,
   type TxStage,
   type TxStateEvent,
+  type UdpConfig,
   type UiMessage,
   type WaterfallConfig,
   type WfWindow,
 } from "./ipc";
+import {
+  buildExportArgs,
+  buildQsoRecord,
+  formFromQso,
+  isLogFiltered,
+  qsoCountLabel,
+  type ConfirmFilter,
+  type QsoEditForm,
+} from "./logbook";
+import { applySelection, configToSelection, rigName, rigOptions } from "./rig";
 
 type Tab = "decode" | "log" | "settings";
 type Filter = "all" | "cq" | "tome";
@@ -234,6 +246,7 @@ export default function App() {
               setRigLabel(v);
               api.setConfig("rig_label", v);
             }}
+            onBandsChanged={setBands}
           />
         )}
       </div>
@@ -294,8 +307,8 @@ function TopBar(props: {
       </span>
       <select value={dialHz} onChange={(e) => onBand(parseInt(e.target.value, 10))}>
         {bands.map((b) => (
-          <option key={b.name} value={b.dial_hz}>
-            {b.name} · {(b.dial_hz / 1e6).toFixed(3)}
+          <option key={b.dial_hz} value={b.dial_hz}>
+            {b.custom ? "★ " : ""}{b.name} · {(b.dial_hz / 1e6).toFixed(3)}
           </option>
         ))}
       </select>
@@ -526,15 +539,24 @@ function DecodeScreen(props: {
 function LogScreen() {
   const [rows, setRows] = useState<QsoRecord[]>([]);
   const [count, setCount] = useState(0);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<ConfirmFilter>("all");
+  // ADIF-export date-range pickers (empty = open bound).
+  const [rangeStart, setRangeStart] = useState("");
+  const [rangeEnd, setRangeEnd] = useState("");
+  // Edit-QSO dialog target: undefined = closed, null = new QSO, record = edit.
+  const [editing, setEditing] = useState<QsoRecord | null | undefined>(undefined);
 
   function refresh() {
-    api.listLog(500, 0).then(setRows);
+    api.searchLog(search, filter, 500, 0).then(setRows);
     api.logCount().then(setCount);
   }
-  useEffect(refresh, []);
+  // Re-query whenever the live search box or the confirmation filter changes.
+  useEffect(refresh, [search, filter]);
 
   async function exportAdif() {
-    const adif = await api.exportAdif();
+    const { start, end } = buildExportArgs(rangeStart, rangeEnd);
+    const adif = await api.exportAdif(start, end);
     const blob = new Blob([adif], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -550,12 +572,49 @@ function LogScreen() {
     refresh();
   }
 
+  async function saveEdit(record: QsoRecord) {
+    await api.saveQso(record);
+    setEditing(undefined);
+    refresh();
+  }
+
   return (
     <>
-      <div className="row" style={{ marginBottom: 10 }}>
-        <strong>{count}</strong> <span className="muted">QSOs</span>
+      <div className="logbar">
+        <strong>{qsoCountLabel(count, rows.length, isLogFiltered(search, filter))}</strong>{" "}
+        <span className="muted">QSOs</span>
+        <input
+          className="search"
+          placeholder="Search callsign…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select value={filter} onChange={(e) => setFilter(e.target.value as ConfirmFilter)}>
+          <option value="all">All</option>
+          <option value="confirmed">Confirmed (QSL)</option>
+          <option value="unconfirmed">Unconfirmed</option>
+        </select>
         <div className="spacer" style={{ flex: 1 }} />
+        <button onClick={() => setEditing(null)}>+ Add QSO</button>
         <button onClick={refresh}>Refresh</button>
+      </div>
+      <div className="logbar">
+        <span className="muted">Export range:</span>
+        <input
+          className="date"
+          type="date"
+          value={rangeStart}
+          onChange={(e) => setRangeStart(e.target.value)}
+          aria-label="Export start date"
+        />
+        <span className="muted">→</span>
+        <input
+          className="date"
+          type="date"
+          value={rangeEnd}
+          onChange={(e) => setRangeEnd(e.target.value)}
+          aria-label="Export end date"
+        />
         <button className="primary" onClick={exportAdif}>Export ADIF</button>
       </div>
       <table>
@@ -568,19 +627,23 @@ function LogScreen() {
             <th>Band</th>
             <th>Sent</th>
             <th>Rcvd</th>
+            <th>QSL</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.qso_date}</td>
-              <td>{r.time_on}</td>
-              <td>{r.call}</td>
-              <td>{r.gridsquare}</td>
-              <td>{r.band}</td>
-              <td>{r.rst_sent}</td>
-              <td>{r.rst_rcvd}</td>
+            <tr key={r.id} className={r.confirmed ? "confirmed clickable" : "clickable"}>
+              <td onClick={() => setEditing(r)}>{r.qso_date}</td>
+              <td onClick={() => setEditing(r)}>{r.time_on}</td>
+              <td onClick={() => setEditing(r)}>{r.call}</td>
+              <td onClick={() => setEditing(r)}>{r.gridsquare}</td>
+              <td onClick={() => setEditing(r)}>{r.band}</td>
+              <td onClick={() => setEditing(r)}>{r.rst_sent}</td>
+              <td onClick={() => setEditing(r)}>{r.rst_rcvd}</td>
+              <td onClick={() => setEditing(r)}>
+                {r.confirmed ? <span className="confirm-dot">✓</span> : ""}
+              </td>
               <td>
                 <button onClick={() => remove(r.id)}>✕</button>
               </td>
@@ -588,12 +651,94 @@ function LogScreen() {
           ))}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={8} className="muted">No QSOs logged yet.</td>
+              <td colSpan={9} className="muted">No QSOs logged yet.</td>
             </tr>
           )}
         </tbody>
       </table>
+      {editing !== undefined && (
+        <EditQsoDialog
+          record={editing}
+          onCancel={() => setEditing(undefined)}
+          onSave={saveEdit}
+        />
+      )}
     </>
+  );
+}
+
+// ADIF fields shown in the edit dialog, in two-column layout order.
+const EDIT_FIELDS: { key: keyof QsoEditForm; label: string }[] = [
+  { key: "call", label: "Call" },
+  { key: "gridsquare", label: "Grid" },
+  { key: "mode", label: "Mode" },
+  { key: "band", label: "Band" },
+  { key: "freq", label: "Freq (MHz)" },
+  { key: "rst_sent", label: "RST sent" },
+  { key: "rst_rcvd", label: "RST rcvd" },
+  { key: "qso_date", label: "Date on (YYYYMMDD)" },
+  { key: "time_on", label: "Time on (HHMMSS)" },
+  { key: "qso_date_off", label: "Date off" },
+  { key: "time_off", label: "Time off" },
+  { key: "station_callsign", label: "My call" },
+  { key: "my_gridsquare", label: "My grid" },
+  { key: "comment", label: "Comment" },
+];
+
+function EditQsoDialog(props: {
+  record: QsoRecord | null;
+  onCancel: () => void;
+  onSave: (r: QsoRecord) => void | Promise<void>;
+}) {
+  const { record, onCancel, onSave } = props;
+  const [form, setForm] = useState<QsoEditForm>(() => formFromQso(record));
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  function set<K extends keyof QsoEditForm>(key: K, value: QsoEditForm[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  async function save() {
+    // onSave may be async (it calls the save_qso IPC); await it so a failed save
+    // surfaces here instead of becoming an unhandled promise rejection.
+    try {
+      setSaveError(null);
+      await onSave(buildQsoRecord(form, record?.id));
+    } catch (e) {
+      setSaveError(String(e));
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>{record?.id ? "Edit QSO" : "Add QSO"}</h3>
+        <div className="grid2">
+          {EDIT_FIELDS.map((f) => (
+            <div className="field" key={f.key}>
+              <label>{f.label}</label>
+              <input
+                value={form[f.key] as string}
+                onChange={(e) => set(f.key, e.target.value as never)}
+              />
+            </div>
+          ))}
+        </div>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={form.confirmed}
+            onChange={(e) => set("confirmed", e.target.checked)}
+          />
+          Confirmed (QSL received)
+        </label>
+        {saveError && <div className="error" role="alert">Save failed: {saveError}</div>}
+        <div className="actions">
+          <button onClick={onCancel}>Cancel</button>
+          <button className="primary" onClick={save}>Save</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -612,15 +757,134 @@ const WF_WINDOW_LABELS: Record<WfWindow, string> = {
 const WF_FFT_SIZES = [512, 1024, 2048, 4096, 8192];
 const WF_AVG_OPTIONS = [1, 2, 3, 4, 6, 8, 12, 16];
 
+// Add/edit/delete operator-defined dial frequencies (issue #470). Custom dials
+// persist in the config store and are merged into the band picker (shown with a
+// ★). Editing is re-adding at the same dial frequency; the backend upserts.
+function CustomBandsPanel(props: {
+  onStatus: (s: string) => void;
+  onBandsChanged: (bands: BandInfo[]) => void;
+}) {
+  const { onStatus, onBandsChanged } = props;
+  const [custom, setCustom] = useState<CustomBand[]>([]);
+  const [name, setName] = useState("");
+  const [freq, setFreq] = useState("");
+  const [error, setError] = useState("");
+
+  function refresh() {
+    api.listCustomBands().then(setCustom);
+  }
+  useEffect(refresh, []);
+
+  async function add() {
+    setError("");
+    try {
+      const merged = await api.addCustomBand(freq, name);
+      onBandsChanged(merged);
+      refresh();
+      onStatus(`Custom band saved: ${name || "(band)"} ${freq} Hz`);
+      setName("");
+      setFreq("");
+    } catch (e) {
+      // The Rust command rejects bad input (non-numeric / out of range) with a
+      // human-readable message; show it inline rather than as a toast.
+      setError(String(e));
+    }
+  }
+
+  async function edit(b: CustomBand) {
+    setName(b.name);
+    setFreq(String(b.dial_hz));
+    setError("");
+  }
+
+  async function remove(dialHz: number) {
+    const merged = await api.deleteCustomBand(dialHz);
+    onBandsChanged(merged);
+    refresh();
+  }
+
+  return (
+    <div className="panel">
+      <h3>Custom dial frequencies</h3>
+      <div className="col">
+        <div className="muted">
+          Add off-plan dials (e.g. DXpedition frequencies) in whole Hz. They
+          appear in the band picker marked with a ★ and persist across restarts.
+        </div>
+        <div className="row">
+          <div className="field">
+            <label>Label (optional)</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. 3B9 DX"
+              style={{ width: 120 }}
+            />
+          </div>
+          <div className="field">
+            <label>Dial frequency (Hz)</label>
+            <input
+              value={freq}
+              onChange={(e) => setFreq(e.target.value)}
+              placeholder="e.g. 14090000"
+              style={{ width: 130 }}
+            />
+          </div>
+          <button className="primary" onClick={add}>Add / update</button>
+        </div>
+        {error && <span style={{ color: "var(--tx)" }}>⚠ {error}</span>}
+        {custom.length === 0 ? (
+          <span className="muted">No custom dials yet.</span>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Label</th>
+                <th>Dial (MHz)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {custom.map((b) => (
+                <tr key={b.dial_hz}>
+                  <td>{b.name}</td>
+                  <td style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {(b.dial_hz / 1e6).toFixed(6)}
+                  </td>
+                  <td>
+                    <button onClick={() => edit(b)} title="Load into the form to edit">
+                      ✎
+                    </button>
+                    <button onClick={() => remove(b.dial_hz)} title="Delete">
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SettingsScreen(props: {
   onStatus: (s: string) => void;
   clock: ClockSyncEvent | null;
   onRigLabel: (v: string) => void;
+  onBandsChanged: (bands: BandInfo[]) => void;
 }) {
-  const { onStatus, clock, onRigLabel } = props;
+  const { onStatus, clock, onRigLabel, onBandsChanged } = props;
   const [call, setCall] = useState("");
   const [rigLabel, setRigLabel] = useState("");
   const [grid, setGrid] = useState("");
+  // OS location service (opt-in, issue #471). Disabled by default: the button
+  // only appears once locEnabled is on, and nothing requests location until the
+  // user presses it.
+  const [locEnabled, setLocEnabled] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
   const [inputs, setInputs] = useState<AudioDevice[]>([]);
   const [outputs, setOutputs] = useState<AudioDevice[]>([]);
   const [ports, setPorts] = useState<SerialPortInfo[]>([]);
@@ -635,13 +899,18 @@ function SettingsScreen(props: {
     fft_size: 2048,
     avg: 6,
   });
+  // WSJT-X UDP interface (outbound broadcast + inbound requests). Defaults match
+  // WSJT-X: disabled, 127.0.0.1:2237. Rust persists the udp_* keys.
+  const [udp, setUdp] = useState<UdpConfig>({
+    enabled: false,
+    host: "127.0.0.1",
+    port: 2237,
+    accept_requests: false,
+  });
   const [rigCfg, setRigCfg] = useState<RigConfig>({
-    backend: "hamlib",
-    model: "none",
+    backend: "none",
     port: "",
     baud: 38400,
-    ptt: "cat",
-    civ_address: 0x94,
     flrig_host: "127.0.0.1",
     flrig_port: 12345,
     hamlib_model: 1,
@@ -656,13 +925,21 @@ function SettingsScreen(props: {
     api.listHamlibRigs().then(setHamlibRigs);
     api.getConfig("my_call").then((v) => v && setCall(v));
     api.getConfig("my_grid").then((v) => v && setGrid(v));
+    // Restore the opt-in flag; only the exact string "true" enables it, so a
+    // missing/garbage value keeps the feature off.
+    api.getConfig("location_service_enabled").then((v) => setLocEnabled(v === "true"));
     api.getConfig("input_device").then((v) => v && setInput(v));
     api.getConfig("output_device").then((v) => v && setOutput(v));
     api.getConfig("base_freq").then((v) => v && setBaseFreq(parseInt(v, 10)));
     api.getConfig("rig_config").then((v) => {
       if (v) {
         try {
-          setRigCfg(JSON.parse(v));
+          // Normalize the persisted config through the selector mapping so a
+          // legacy/removed backend (e.g. "serial") falls back to "none" while
+          // keeping the connection fields — otherwise it would reach the Rust
+          // side (serde error) and render "Connecting undefined".
+          const parsed = JSON.parse(v) as RigConfig;
+          setRigCfg(applySelection(parsed, configToSelection(parsed)));
         } catch {
           /* ignore malformed saved config */
         }
@@ -693,17 +970,52 @@ function SettingsScreen(props: {
     api.setWaterfallConfig(next);
   }
 
+  // Load the persisted WSJT-X UDP settings on mount (only the exact string
+  // "true" enables a flag, so a missing/garbage value stays off).
+  useEffect(() => {
+    Promise.all([
+      api.getConfig("udp_enabled"),
+      api.getConfig("udp_host"),
+      api.getConfig("udp_port"),
+      api.getConfig("udp_accept_requests"),
+    ]).then(([en, host, port, accept]) => {
+      const p = parseInt(port ?? "", 10);
+      setUdp((prev) => ({
+        enabled: en === "true",
+        host: host && host.length > 0 ? host : prev.host,
+        port: Number.isFinite(p) && p > 0 && p <= 65535 ? p : prev.port,
+        accept_requests: accept === "true",
+      }));
+    });
+  }, []);
+
+  // Push UDP settings to the backend (which persists + rebinds live).
+  function applyUdp(next: UdpConfig) {
+    // Normalize before persisting. The port input uses parseInt(...) || 0, so clearing the
+    // field yields 0 (NaN/out-of-range are possible too); fall back to the default 2237 so
+    // we never persist a port the backend rejects or that can't deliver. Default an empty
+    // host to loopback. Write the corrected config back to state so the field reflects it.
+    const port =
+      Number.isFinite(next.port) && next.port > 0 && next.port <= 65535 ? next.port : 2237;
+    const host = next.host.trim().length > 0 ? next.host.trim() : "127.0.0.1";
+    const cfg: UdpConfig = { ...next, host, port };
+    setUdp(cfg);
+    api.setUdpConfig(cfg);
+    onStatus(
+      cfg.enabled
+        ? `WSJT-X UDP → ${cfg.host}:${cfg.port}${cfg.accept_requests ? " (accepting requests)" : ""}`
+        : "WSJT-X UDP off",
+    );
+  }
+
   const refreshPorts = () => api.listSerialPorts().then(setPorts);
 
-  // Re-enumerate serial ports whenever a port-list backend becomes visible.
-  // Ports were previously read only once at mount, so a rig attached after
-  // launch — or Hamlib selected first, before its serial port was chosen —
-  // showed an empty/stale list. Switching to Hamlib (serial) or Direct serial
-  // now re-scans, so /dev/ttyACM0 (a QMX/QDX) appears without the
-  // select-Direct-then-Hamlib workaround.
-  const showsPortList =
-    rigCfg.backend === "serial" ||
-    (rigCfg.backend === "hamlib" && !rigCfg.hamlib_network);
+  // Re-enumerate serial ports whenever the serial-connection fields become
+  // visible. Ports were previously read only once at mount, so a rig attached
+  // after launch — or a Hamlib radio picked before its serial port was chosen —
+  // showed an empty/stale list. Selecting a serial-connected Hamlib radio now
+  // re-scans, so /dev/ttyACM0 (a QMX/QDX) appears without a workaround.
+  const showsPortList = rigCfg.backend === "hamlib" && !rigCfg.hamlib_network;
   useEffect(() => {
     if (showsPortList) refreshPorts();
   }, [showsPortList]);
@@ -711,6 +1023,37 @@ function SettingsScreen(props: {
   function saveStation() {
     api.setStation(call, grid);
     onStatus(`Station set: ${call} ${grid}`);
+  }
+
+  // Persist the opt-in flag. Turning it off never runs location code again; it
+  // does not itself request location (only the button does), so no permission
+  // prompt appears here.
+  function toggleLocEnabled(on: boolean) {
+    setLocEnabled(on);
+    setLocError(null);
+    api.setConfig("location_service_enabled", on ? "true" : "false");
+  }
+
+  // One-shot on demand: query the OS location service and fill the (still
+  // editable) Grid field. This press is what triggers the OS permission prompt.
+  async function useMyLocation() {
+    setLocating(true);
+    setLocError(null);
+    try {
+      // The checkbox persists this flag asynchronously; the button only appears
+      // once locEnabled is true, so re-assert and AWAIT the write here before
+      // querying. Otherwise "enable then immediately click" can reach the backend
+      // gate before the flag is committed, and get_os_location would reject.
+      await api.setConfig("location_service_enabled", "true");
+      const loc = await api.getOsLocation();
+      setGrid(loc.grid);
+      onStatus(`Location set grid to ${loc.grid}`);
+    } catch (e) {
+      // The manual field is left untouched on failure.
+      setLocError(typeof e === "string" ? e : String(e));
+    } finally {
+      setLocating(false);
+    }
   }
 
   return (
@@ -724,7 +1067,42 @@ function SettingsScreen(props: {
           </div>
           <div className="field">
             <label>Grid (Maidenhead)</label>
-            <input value={grid} onChange={(e) => setGrid(e.target.value.toUpperCase())} placeholder="EN37" />
+            <div className="row">
+              <input value={grid} onChange={(e) => setGrid(e.target.value.toUpperCase())} placeholder="EN37" />
+              {locEnabled && (
+                <button
+                  type="button"
+                  onClick={useMyLocation}
+                  disabled={locating}
+                  title="Fill the grid from your computer's location service"
+                >
+                  {locating ? "Locating…" : "📍 Use my location"}
+                </button>
+              )}
+            </div>
+            {locError && (
+              <span className="muted" style={{ display: "block", marginTop: 4, color: "var(--tx)" }}>
+                ⚠ {locError}
+              </span>
+            )}
+          </div>
+          <div className="field">
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={locEnabled}
+                onChange={(e) => toggleLocEnabled(e.target.checked)}
+                style={{ width: "auto" }}
+              />
+              Use OS location service
+            </label>
+            <span className="muted" style={{ display: "block", marginTop: 4 }}>
+              Off by default. When on, a “Use my location” button appears above to
+              fill your grid from the operating system’s location service (asks for
+              permission the first time). Coarse, city-level accuracy — a 6-char
+              subsquare, ~2.5 × 5 km. Linux uses GeoClue; Windows uses the system
+              geolocator; on macOS enter your grid manually for now.
+            </span>
           </div>
           <button className="primary" onClick={saveStation}>Save station</button>
         </div>
@@ -841,46 +1219,29 @@ function SettingsScreen(props: {
             </span>
           </div>
           <div className="field">
-            <label>Backend</label>
+            <label>Rig {hamlibRigs.length > 0 ? `(${hamlibRigs.length} radios)` : ""}</label>
             <select
-              value={rigCfg.backend}
-              onChange={(e) => setRigCfg({ ...rigCfg, backend: e.target.value as RigConfig["backend"] })}
+              value={configToSelection(rigCfg)}
+              onChange={(e) => setRigCfg(applySelection(rigCfg, e.target.value))}
             >
-              <option value="hamlib">Hamlib (embedded library)</option>
-              <option value="flrig">FLrig (XML-RPC)</option>
-              <option value="serial">Direct serial CAT</option>
-              <option value="none">None (manual tuning)</option>
+              {rigOptions(hamlibRigs).map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </select>
+            {hamlibRigs.length === 0 && (
+              <span className="muted" style={{ display: "block", marginTop: 4 }}>
+                Only None and FLrig are listed — the Hamlib library didn't load, so
+                no radios could be enumerated. Install Hamlib and put{" "}
+                <code>hamlib-4.dll</code> / <code>libhamlib</code> next to the app or
+                on PATH, then reopen.
+              </span>
+            )}
           </div>
 
           {rigCfg.backend === "hamlib" && (
             <>
-              <div className="field">
-                <label>Radio {hamlibRigs.length > 0 ? `(${hamlibRigs.length} supported)` : ""}</label>
-                {hamlibRigs.length > 0 ? (
-                  <select
-                    value={rigCfg.hamlib_model}
-                    onChange={(e) =>
-                      setRigCfg({ ...rigCfg, hamlib_model: parseInt(e.target.value, 10) })
-                    }
-                  >
-                    {hamlibRigs.map((r) => (
-                      <option key={r.model} value={r.model}>
-                        {r.name} — #{r.model}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    value={rigCfg.hamlib_model}
-                    onChange={(e) =>
-                      setRigCfg({ ...rigCfg, hamlib_model: parseInt(e.target.value, 10) || 1 })
-                    }
-                    placeholder="model # (rigctl -l)"
-                    style={{ width: 120 }}
-                  />
-                )}
-              </div>
               <div className="field">
                 <label>Connection</label>
                 <select
@@ -939,12 +1300,6 @@ function SettingsScreen(props: {
                   </div>
                 </div>
               )}
-              {hamlibRigs.length === 0 && (
-                <span className="muted">
-                  Hamlib library not found — install Hamlib and put <code>hamlib-4.dll</code> next
-                  to the app or on PATH, then reopen. (1 = Dummy, no hardware.)
-                </span>
-              )}
             </>
           )}
 
@@ -971,91 +1326,17 @@ function SettingsScreen(props: {
             </div>
           )}
 
-          {rigCfg.backend === "serial" && (
-            <>
-              <div className="field">
-                <label>Model</label>
-                <select
-                  value={rigCfg.model}
-                  onChange={(e) => setRigCfg({ ...rigCfg, model: e.target.value as RigConfig["model"] })}
-                >
-                  <option value="none">— select —</option>
-                  <option value="yaesu">Yaesu (CAT)</option>
-                  <option value="kenwood">Kenwood</option>
-                  <option value="icom">Icom (CI-V)</option>
-                </select>
-              </div>
-              <div className="field">
-                <label>Serial port</label>
-                <div className="row">
-                  <select value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
-                    <option value="">— select —</option>
-                    {ports.map((p) => (
-                      <option key={p.name} value={p.name}>
-                        {p.name} ({p.kind})
-                      </option>
-                    ))}
-                  </select>
-                  <button type="button" title="Re-scan serial ports" onClick={refreshPorts}>
-                    ↻
-                  </button>
-                </div>
-              </div>
-              <div className="row">
-                <div className="field">
-                  <label>Baud</label>
-                  <select
-                    value={rigCfg.baud}
-                    onChange={(e) => setRigCfg({ ...rigCfg, baud: parseInt(e.target.value, 10) })}
-                  >
-                    {[4800, 9600, 19200, 38400, 57600, 115200].map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label>PTT</label>
-                  <select
-                    value={rigCfg.ptt}
-                    onChange={(e) => setRigCfg({ ...rigCfg, ptt: e.target.value as RigConfig["ptt"] })}
-                  >
-                    <option value="cat">CAT</option>
-                    <option value="rts">RTS</option>
-                    <option value="dtr">DTR</option>
-                    <option value="none">None / VOX</option>
-                  </select>
-                </div>
-                {rigCfg.model === "icom" && (
-                  <div className="field">
-                    <label>CI-V addr (hex)</label>
-                    <input
-                      value={rigCfg.civ_address.toString(16)}
-                      onChange={(e) =>
-                        setRigCfg({ ...rigCfg, civ_address: parseInt(e.target.value, 16) || 0x94 })
-                      }
-                      style={{ width: 60 }}
-                    />
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
           <button
             className="primary"
             onClick={() => {
               api.selectRig(rigCfg);
-              const where =
+              const detail =
                 rigCfg.backend === "flrig"
-                  ? `${rigCfg.flrig_host}:${rigCfg.flrig_port}`
-                  : rigCfg.backend === "serial"
-                  ? `${rigCfg.model} on ${rigCfg.port || "(no port)"}`
+                  ? ` (${rigCfg.flrig_host}:${rigCfg.flrig_port})`
                   : rigCfg.backend === "hamlib"
-                  ? `model ${rigCfg.hamlib_model} on ${
-                      rigCfg.hamlib_network ? rigCfg.hamlib_address : rigCfg.port || "(no port)"
-                    }`
-                  : "manual";
-              onStatus(`Connecting rig (${rigCfg.backend}): ${where}`);
+                  ? ` (${rigCfg.hamlib_network ? rigCfg.hamlib_address : rigCfg.port || "no port"})`
+                  : "";
+              onStatus(`Connecting ${rigName(rigCfg, hamlibRigs)}${detail}`);
             }}
           >
             Connect rig
@@ -1070,6 +1351,8 @@ function SettingsScreen(props: {
           </button>
         </div>
       </div>
+
+      <CustomBandsPanel onStatus={onStatus} onBandsChanged={onBandsChanged} />
 
       <div className="panel">
         <h3>Developer — waterfall FFT</h3>
@@ -1116,6 +1399,64 @@ function SettingsScreen(props: {
                 </option>
               ))}
             </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="panel">
+        <h3>WSJT-X UDP</h3>
+        <div className="col">
+          <div className="muted">
+            Broadcast decodes, status and logged QSOs over UDP in the WSJT-X
+            protocol so companion apps (GridTracker, JTAlert, N1MM+, Log4OM) can
+            plot and log them. Default target 127.0.0.1:2237.
+          </div>
+          <div className="field">
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={udp.enabled}
+                onChange={(e) => applyUdp({ ...udp, enabled: e.target.checked })}
+                style={{ width: "auto" }}
+              />
+              Enable UDP broadcast
+            </label>
+          </div>
+          <div className="field">
+            <label>Server address (host)</label>
+            <input
+              type="text"
+              value={udp.host}
+              disabled={!udp.enabled}
+              onChange={(e) => setUdp({ ...udp, host: e.target.value })}
+              onBlur={() => applyUdp(udp)}
+              placeholder="127.0.0.1"
+            />
+          </div>
+          <div className="field">
+            <label>Server port</label>
+            <input
+              type="number"
+              min={1}
+              max={65535}
+              value={udp.port}
+              disabled={!udp.enabled}
+              onChange={(e) => setUdp({ ...udp, port: parseInt(e.target.value, 10) || 0 })}
+              onBlur={() => applyUdp(udp)}
+              placeholder="2237"
+            />
+          </div>
+          <div className="field">
+            <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={udp.accept_requests}
+                disabled={!udp.enabled}
+                onChange={(e) => applyUdp({ ...udp, accept_requests: e.target.checked })}
+                style={{ width: "auto" }}
+              />
+              Accept UDP requests (let companion apps reply/halt/free-text)
+            </label>
           </div>
         </div>
       </div>

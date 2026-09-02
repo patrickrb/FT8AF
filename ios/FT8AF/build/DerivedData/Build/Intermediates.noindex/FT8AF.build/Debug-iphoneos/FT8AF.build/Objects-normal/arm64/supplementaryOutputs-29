@@ -1,0 +1,30 @@
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/TransmitGlow.swift":
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TransmitGlow.d"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TransmitGlow.dia"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TransmitGlow.swiftdeps"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TransmitGlow.o"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TransmitGlow.swiftconstvalues"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Engine/TxPlayerService.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TxPlayerService.swiftconstvalues"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TxPlayerService.o"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TxPlayerService.swiftdeps"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TxPlayerService.d"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TxPlayerService.dia"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/TxStrip.swift":
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TxStrip.swiftdeps"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TxStrip.o"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TxStrip.dia"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TxStrip.d"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TxStrip.swiftconstvalues"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Settings/TransmissionSettings.swift":
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TransmissionSettings.d"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TransmissionSettings.dia"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TransmissionSettings.o"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TransmissionSettings.swiftdeps"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/TransmissionSettings.swiftconstvalues"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/ToastOverlay.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/ToastOverlay.swiftconstvalues"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/ToastOverlay.dia"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/ToastOverlay.o"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/ToastOverlay.d"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/ToastOverlay.swiftdeps"

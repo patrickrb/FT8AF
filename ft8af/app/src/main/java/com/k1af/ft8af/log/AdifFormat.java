@@ -1,6 +1,10 @@
 package com.k1af.ft8af.log;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * Small helpers for writing ADIF fields safely.
@@ -57,6 +61,35 @@ public final class AdifFormat {
         return null;
     }
 
+    /**
+     * The effective stored mode for an imported ADIF record, resolving ADIF's
+     * MODE/SUBMODE split back to the single mode string FT8AF stores. This is the
+     * reader-side inverse of {@link #mfskSubmode}.
+     *
+     * <p>ADIF models FT4 and FT2 as SUBMODEs of the generic {@code MFSK} MODE, not as
+     * standalone modes. FT8AF — and WSJT-X, JTDX and pota.app — therefore export those
+     * QSOs as {@code MODE=MFSK} with {@code SUBMODE=FT4} (or {@code FT2}). Reading only
+     * MODE on import stored {@code "MFSK"}, silently losing the FT4/FT2 distinction:
+     * that corrupts mode-keyed dedup and band/mode filtering and breaks FT8AF's own
+     * export→import round-trip. When MODE is the generic {@code MFSK} and a non-empty
+     * SUBMODE is present, the SUBMODE is the more specific mode and is used (trimmed and
+     * upper-cased, mirroring {@link #mfskSubmode}); otherwise MODE is returned verbatim,
+     * so every other value (FT8, SSB, CW, a bare {@code <mode>FT4}, …) is unaffected.
+     *
+     * @param mode    the ADIF MODE field value (may be null)
+     * @param submode the ADIF SUBMODE field value, or {@code null} when absent
+     * @return the mode string to store
+     */
+    public static String resolveImportMode(String mode, String submode) {
+        if (mode != null && "MFSK".equalsIgnoreCase(mode.trim()) && submode != null) {
+            String s = submode.trim();
+            if (!s.isEmpty()) {
+                return s.toUpperCase(Locale.US);
+            }
+        }
+        return mode;
+    }
+
     /** "No report" sentinels stored in the SNR int fields; left unformatted so the logbook's
      * empty-report check still recognises them. */
     private static final int NO_REPORT = -100;
@@ -74,5 +107,171 @@ public final class AdifFormat {
             return String.valueOf(report);
         }
         return String.format(Locale.US, "%+03d", report);
+    }
+
+    /**
+     * Modes whose reports are SNR in dB and carry the WSJT-X sign convention. Everything
+     * else — SSB, CW, AM, FM, and anything imported that we don't recognise — uses a plain
+     * RS(T) number: a 59 sent on SSB must read {@code "59"}, not {@code "+59"}.
+     */
+    private static final Set<String> SNR_REPORT_MODES = new HashSet<>(Arrays.asList(
+            "FT8", "FT4", "FT2", "MFSK", "JT4", "JT9", "JT65", "JS8", "FST4", "MSK144", "Q65"));
+
+    /**
+     * Format a signal report the way {@code mode} reports it: signed SNR for the digital
+     * modes in {@link #SNR_REPORT_MODES}, plain RS(T) digits for everything else. The
+     * "no report" sentinels pass through unchanged, as in {@link #formatReport(int)}.
+     */
+    public static String formatReport(String mode, int report) {
+        if (report == NO_REPORT || report == NO_REPORT_ALT) {
+            return String.valueOf(report);
+        }
+        if (mode != null && SNR_REPORT_MODES.contains(mode.trim().toUpperCase(Locale.US))) {
+            return String.format(Locale.US, "%+03d", report);
+        }
+        return String.valueOf(report);
+    }
+
+    /**
+     * The number of UTF-8 <em>bytes</em> in {@code value} — the length an ADIF
+     * {@code <field:len>value } declaration must carry, not the UTF-16
+     * {@link String#length()} (char count). The two differ for any non-ASCII content
+     * (an accented comment, a POTA park name): declaring the shorter char count makes
+     * the receiving parser read fewer bytes than were written, truncating the field
+     * and mis-aligning everything after it, so LoTW/QRZ/Cloudlog reject or mangle the
+     * record. Shared source of truth for every ADIF writer ({@link AdifRecord} and the
+     * {@link ThirdPartyService} upload paths). Null counts as 0.
+     */
+    public static int utf8Length(String value) {
+        if (value == null) {
+            return 0;
+        }
+        // Fast path: pure-ASCII values (callsigns, grids, most English comments — the
+        // overwhelmingly common case, especially in the syncAllQSOs batch loop) have exactly
+        // one UTF-8 byte per char, so the byte count equals String.length() with no
+        // allocation. Only non-ASCII content falls through to encode the array.
+        final int len = value.length();
+        for (int i = 0; i < len; i++) {
+            if (value.charAt(i) >= 0x80) {
+                return value.getBytes(StandardCharsets.UTF_8).length;
+            }
+        }
+        return len;
+    }
+
+    /**
+     * The longest prefix of {@code raw} whose UTF-8 encoding fits in {@code byteLen}
+     * bytes — the reader-side counterpart of {@link #utf8Length}. ADIF's
+     * {@code <field:len>} declares a UTF-8 <em>byte</em> count, so an importer that
+     * slices {@code len} UTF-16 chars over-reads past any non-ASCII value into the
+     * whitespace/text that follows it (e.g. LEN=9 for "Café QSO" keeps a trailing
+     * space). Never splits a code point: a LEN that ends mid-character keeps only the
+     * complete characters that fit. A LEN larger than the whole string returns the
+     * whole string (a truncated record keeps what is there).
+     */
+    public static String sliceByUtf8Length(String raw, int byteLen) {
+        if (raw == null || byteLen <= 0) {
+            return "";
+        }
+        int bytes = 0;
+        int i = 0;
+        while (i < raw.length()) {
+            int cp = raw.codePointAt(i);
+            int cpBytes = cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+            if (bytes + cpBytes > byteLen) {
+                break;
+            }
+            bytes += cpBytes;
+            i += Character.charCount(cp);
+        }
+        return raw.substring(0, i);
+    }
+
+    /**
+     * Format a coordinate in ADIF's Location datatype: {@code XDDD MM.MMM}, i.e. a
+     * hemisphere letter, three zero-padded degrees, a space, then decimal minutes —
+     * {@code N039 44.352}, {@code W104 59.418}.
+     *
+     * <p>Degrees are always three digits even for a latitude that can never exceed 90,
+     * because the spec fixes the width and importers parse by position. The awkward
+     * carry case is real and handled below: 59.9996 minutes rounds to 60.000, which is
+     * not a valid minute value, so the degree is incremented and the minutes wrap to
+     * zero rather than emitting {@code N039 60.000}.
+     *
+     * @param value    degrees, positive north/east
+     * @param latitude true for a latitude (N/S), false for a longitude (E/W)
+     * @return the formatted value, or null when {@code value} is absent or not finite
+     */
+    public static String location(Double value, boolean latitude) {
+        if (value == null || Double.isNaN(value) || Double.isInfinite(value)) {
+            return null;
+        }
+        double limit = latitude ? 90.0 : 180.0;
+        if (Math.abs(value) > limit) {
+            return null;
+        }
+        char hemisphere = value < 0 ? (latitude ? 'S' : 'W') : (latitude ? 'N' : 'E');
+        double magnitude = Math.abs(value);
+        int degrees = (int) magnitude;
+        double minutes = (magnitude - degrees) * 60.0;
+        // Round to the emitted precision *before* formatting so the carry is visible.
+        double rounded = Math.round(minutes * 1000.0) / 1000.0;
+        if (rounded >= 60.0) {
+            rounded -= 60.0;
+            degrees += 1;
+        }
+        return String.format(Locale.US, "%c%03d %06.3f", hemisphere, degrees, rounded);
+    }
+
+    /**
+     * Parse ADIF's Location datatype ({@code N039 44.352}) back to decimal degrees.
+     *
+     * <p>Lenient about the separator and about a missing leading zero, because exporters
+     * vary; strict about the hemisphere letter, which is the only thing carrying the
+     * sign. Returns null rather than guessing when the shape doesn't match — a
+     * mis-parsed coordinate puts a QSO in the wrong hemisphere, which is worse than
+     * having none.
+     */
+    public static Double parseLocation(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String s = raw.trim().toUpperCase(Locale.US);
+        if (s.length() < 2) {
+            return null;
+        }
+        char hemisphere = s.charAt(0);
+        if (hemisphere != 'N' && hemisphere != 'S' && hemisphere != 'E' && hemisphere != 'W') {
+            return null;
+        }
+        String[] parts = s.substring(1).trim().split("\\s+");
+        if (parts.length != 2) {
+            return null;
+        }
+        try {
+            int degrees = Integer.parseInt(parts[0]);
+            double minutes = Double.parseDouble(parts[1]);
+            if (degrees < 0 || minutes < 0 || minutes >= 60.0) {
+                return null;
+            }
+            double value = degrees + minutes / 60.0;
+            return (hemisphere == 'S' || hemisphere == 'W') ? -value : value;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Format a coordinate as plain decimal degrees for an {@code APP_}-prefixed field.
+     *
+     * <p>Six decimal places is about 11 cm — far beyond any consumer GPS, and enough
+     * that the value round-trips without the loss the degrees-and-minutes form imposes.
+     * Trailing zeros are kept so the field width is stable across records.
+     */
+    public static String decimalDegrees(Double value) {
+        if (value == null || Double.isNaN(value) || Double.isInfinite(value)) {
+            return null;
+        }
+        return String.format(Locale.US, "%.6f", value);
     }
 }

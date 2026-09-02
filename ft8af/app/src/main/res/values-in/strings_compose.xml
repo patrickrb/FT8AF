@@ -406,6 +406,9 @@
     <string name="settings_tx_watchdog_desc">Hentikan transmisi otomatis setelah waktu habis</string>
     <string name="settings_stop_after">Hentikan Setelah</string>
     <string name="settings_stop_after_desc">Berhenti memanggil setelah N percobaan tak terjawab</string>
+    <string name="settings_max_73">Maks kirim 73</string>
+    <string name="settings_max_73_desc">Jumlah maksimum transmisi RR73/73 per kontak sebelum melanjutkan</string>
+    <string name="settings_max_73_auto">Otomatis</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Hunt (jawab CQ otomatis)</string>

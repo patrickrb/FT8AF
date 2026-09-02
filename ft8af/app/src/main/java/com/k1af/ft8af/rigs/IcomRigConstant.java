@@ -288,7 +288,7 @@ public class IcomRigConstant {
     }
 
     public static int twoByteBcdToInt(byte[] data) {
-        if (data.length < 2) return 0;
+        if (data == null || data.length < 2) return 0;
         return (int) (data[1] & 0x0f)//ones digit
                 + ((int) (data[1] >> 4) & 0xf) * 10//tens digit
                 + (int) (data[0] & 0x0f) * 100//hundreds
@@ -296,7 +296,7 @@ public class IcomRigConstant {
 
     }
     public static int twoByteBcdToIntBigEnd(byte[] data) {
-        if (data.length < 2) return 0;
+        if (data == null || data.length < 2) return 0;
         return (int) (data[0] & 0x0f)//ones digit
                 + ((int) (data[0] >> 4) & 0xf) * 10//tens digit
                 + (int) (data[1] & 0x0f) * 100//hundreds

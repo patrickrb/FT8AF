@@ -142,8 +142,10 @@ public class QSLRecord {
         }
 
         if (map.containsKey("FREQ")) {//Carrier frequency
-            try {//Convert float to Long
-                float freq = Float.parseFloat(Objects.requireNonNull(map.get("FREQ")));
+            try {//Convert MHz to Hz. Parse as double: a 32-bit float only holds
+                //~7 significant digits, so UHF/microwave dials (e.g. 432.174 or
+                //1296.174 MHz) would drift by tens of Hz once scaled to Hz.
+                double freq = Double.parseDouble(Objects.requireNonNull(map.get("FREQ")));
                 bandFreq = Math.round(freq * 1000000);
             } catch (NumberFormatException e) {
                 isInvalid=true;
@@ -153,7 +155,10 @@ public class QSLRecord {
             }
         }
         if (map.containsKey("MODE")) {//Mode
-            mode = map.get("MODE");
+            // FT4/FT2 are ADIF SUBMODEs of the generic MFSK MODE (see AdifFormat.mfskSubmode),
+            // so they arrive as MODE=MFSK + SUBMODE=FT4. Resolve that back to the specific
+            // mode; reading MODE alone would store "MFSK" and lose the FT4/FT2 distinction.
+            mode = AdifFormat.resolveImportMode(map.get("MODE"), map.get("SUBMODE"));
         } else {
             mode = "";
         }
@@ -183,8 +188,17 @@ public class QSLRecord {
         if (map.containsKey("LOTW_QSL_RCVD")) {//QSO confirmation; present in Log32.
             isLotW_QSL = Objects.requireNonNull(map.get("LOTW_QSL_RCVD")).equalsIgnoreCase("Y");
         }
-        if (map.containsKey("QSL_MANUAL")) {//Manual QSO confirmation; present in LoTW.
-            isQSL = Objects.requireNonNull(map.get("QSL_MANUAL")).equalsIgnoreCase("Y");
+        // Manual QSO confirmation. We now export this as APP_FT8AF_QSL_MANUAL (ADIF has
+        // no QSL_MANUAL field), but files written by older FT8AF builds — and by other
+        // loggers that copied the bare name — must keep importing, so accept both. The
+        // conformant name wins when a file somehow carries both.
+        if (map.containsKey(AdifRecord.LEGACY_QSL_MANUAL)) {
+            isQSL = Objects.requireNonNull(
+                    map.get(AdifRecord.LEGACY_QSL_MANUAL)).equalsIgnoreCase("Y");
+        }
+        if (map.containsKey(AdifRecord.APP_QSL_MANUAL)) {
+            isQSL = Objects.requireNonNull(
+                    map.get(AdifRecord.APP_QSL_MANUAL)).equalsIgnoreCase("Y");
         }
 
         if (map.containsKey("MY_GRIDSQUARE")) {//My grid (present in LoTW/Log32, may be absent depending on LoTW settings); N1MM has no grid
@@ -237,7 +251,6 @@ public class QSLRecord {
         if (map.containsKey("MY_SIG_INFO")) mySigInfo = map.get("MY_SIG_INFO");
         if (map.containsKey("SIG")) sig = map.get("SIG");
         if (map.containsKey("SIG_INFO")) sigInfo = map.get("SIG_INFO");
-
     }
 
     /**

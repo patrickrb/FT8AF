@@ -31,6 +31,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,7 +40,9 @@ import com.k1af.ft8af.Ft8Message
 import com.k1af.ft8af.R
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
+import com.k1af.ft8af.ModeProfile
 import com.k1af.ft8af.timer.UtcTimer
+import com.k1af.ft8af.ui.WaterfallTimestampGate
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.EmptyStateWaves
 import radio.ks3ckc.ft8af.ui.components.FilterChips
@@ -63,7 +67,7 @@ fun DecodeScreen(
     // Filter state. Backed by the ViewModel so the chosen filter survives
     // navigation away from Decode and back (the screen is recreated by the
     // tab switch, which would otherwise reset a local rememberSaveable).
-    val filterOptions = listOf("All", "CQ Calls", "CQ POTA", "New DXCC", "Needed", "For Me")
+    val filterOptions = listOf("All", "CQ Calls", "CQ POTA", "New DXCC", "New Zone", "New State", "New Grid", "New Prefix", "Needed", "For Me")
     val selectedFilter by mainViewModel.decodeFilter.observeAsState("All")
 
     // Couple the "CQ POTA" display filter to Hunt: while it's selected, the auto-call
@@ -151,31 +155,56 @@ fun DecodeScreen(
         ArrayList(messageList ?: arrayListOf())
     }
 
-    // Apply filter
+    // Sort mode for the collapsed list — persisted via GeneralVariables.decodeSortMode
+    // / DB key "decodeSortMode" (same pattern as msgMode / clearDecodesEveryCycle).
+    var sortMode by rememberSaveable { mutableStateOf(DecodeSortMode.fromConfig(GeneralVariables.decodeSortMode)) }
+
+    // Apply filter, THEN collapse to one row per station. Filtering first keeps
+    // the visible-station count consistent with the active chip (a station whose
+    // latest decode is directed but earlier one was a CQ still shows under
+    // "CQ Calls"). See collapseByStation / filterMessages.
     val filteredMessages = remember(messages, selectedFilter) {
         filterMessages(messages, selectedFilter)
     }
+    val collapsedMessages = remember(filteredMessages, sortMode) {
+        collapseByStation(filteredMessages, sortMode)
+    }
 
-    // Track which keys are new since the previous render (animated on entry only once).
+    // Precompute, once per list change, where the mode-aware time-group dividers
+    // fall (FT8 15s, FT4 7.5s, FT2 3.75s) so each row looks its flag up by index
+    // instead of recomputing a slot boundary inline. Computed over the collapsed
+    // list this LazyColumn iterates, so index is always in bounds. The dividers
+    // only render in last-heard order (see showTimeGroupDividers) — that gate is
+    // applied at draw time below.
+    val timeGroupDividers = remember(collapsedMessages) {
+        computeTimeGroupDividers(collapsedMessages)
+    }
+
+    // Track which station rows are new-or-just-updated since the previous render
+    // (animated once). Keyed by normalized station + utcTime so a station
+    // re-decoded in a later cycle (new utcTime, same station) re-triggers the
+    // highlight — that's the "row just updated in place" cue. Only the visible
+    // keys are retained: accumulating them would grow one entry per station per
+    // cycle for as long as the screen is open. See advanceRowAnimation.
     var seenKeys by remember { mutableStateOf(emptySet<String>()) }
-    val currentKeys = remember(filteredMessages) {
-        filteredMessages.mapIndexed { i, m ->
-            "${m.utcTime}_${m.callsignFrom}_${m.freq_hz}_$i"
-        }.toSet()
+    val currentKeys = remember(collapsedMessages) {
+        collapsedMessages.map { rowAnimationKey(it) }.toSet()
     }
-    val newKeys = remember(currentKeys) { currentKeys - seenKeys }
+    val newKeys = remember(currentKeys) { advanceRowAnimation(seenKeys, currentKeys).new }
     LaunchedEffect(currentKeys) {
-        seenKeys = seenKeys + currentKeys
+        seenKeys = advanceRowAnimation(seenKeys, currentKeys).seen
     }
 
-    // Auto-scroll state
+    // Auto-scroll state. Only "last heard" ordering auto-scrolls (to the top,
+    // where the newest station sits); the other sorts would yank the viewport.
     val listState = rememberLazyListState()
     var previousCount by remember { mutableIntStateOf(0) }
-    LaunchedEffect(filteredMessages.size) {
-        if (filteredMessages.size > previousCount && filteredMessages.isNotEmpty()) {
-            listState.animateScrollToItem(filteredMessages.size - 1)
+    LaunchedEffect(collapsedMessages.size, sortMode) {
+        val target = autoScrollTargetIndex(sortMode, collapsedMessages.size, previousCount)
+        if (target != null) {
+            listState.animateScrollToItem(target)
         }
-        previousCount = filteredMessages.size
+        previousCount = collapsedMessages.size
     }
 
     // A tapped Needed-DX notification asks us to pre-select that station: reset to the
@@ -224,6 +253,17 @@ fun DecodeScreen(
                     )
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            sortMode = nextSortMode(sortMode)
+                            GeneralVariables.decodeSortMode = sortMode.configValue
+                            mainViewModel.databaseOpr.writeConfig(
+                                "decodeSortMode", sortMode.configValue.toString(), null,
+                            )
+                        },
+                    ) {
+                        SortModeLabel(sortMode)
+                    }
                     IconButton(
                         onClick = {
                             clearEachCycle = !clearEachCycle
@@ -278,7 +318,7 @@ fun DecodeScreen(
             )
 
             // Message list or empty state
-            if (filteredMessages.isEmpty()) {
+            if (collapsedMessages.isEmpty()) {
                 EmptyState(
                     selectedFilter = selectedFilter,
                     modifier = Modifier
@@ -294,16 +334,24 @@ fun DecodeScreen(
                     verticalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
                     itemsIndexed(
-                        items = filteredMessages,
-                        key = { index, msg -> "${msg.utcTime}_${msg.callsignFrom}_${msg.freq_hz}_$index" },
+                        items = collapsedMessages,
+                        // Key on the station callsign (stable across cycles) so
+                        // Compose reuses the same row and updates it in place when
+                        // a station is re-decoded, rather than adding a new row.
+                        // Normalized via stationKey so a station whose callsign
+                        // arrives with different case/padding across cycles keeps
+                        // the same key (and so the same row) — see stationKey.
+                        key = { index, msg -> stationKey(msg) ?: "row_$index" },
                     ) { index, message ->
-                        val rowKey = "${message.utcTime}_${message.callsignFrom}_${message.freq_hz}_$index"
+                        val rowKey = rowAnimationKey(message)
 
-                        // Group messages by FT8 cycle (15s slots). Draw a labeled
-                        // divider whenever we cross into a new slot.
-                        val prevSlot = if (index > 0) filteredMessages[index - 1].utcTime / 15000L else null
-                        val thisSlot = message.utcTime / 15000L
-                        if (prevSlot == null || prevSlot != thisSlot) {
+                        // Group rows by receive slot (mode-aware: 15s FT8, 7.5s
+                        // FT4, 3.75s FT2), but only in "last heard" ordering where
+                        // rows stay time-ordered — the other sorts would scatter
+                        // the dividers. Boundaries were precomputed in
+                        // timeGroupDividers above over this same collapsed list, so
+                        // index is always in bounds.
+                        if (showTimeGroupDividers(sortMode) && timeGroupDividers[index]) {
                             TimeGroupDivider(utcTime = message.utcTime, compact = compactMode)
                         }
 
@@ -360,6 +408,35 @@ fun DecodeScreen(
 // Time Group Divider
 // ---------------------------------------------------------------------------
 
+/**
+ * For each message in [messages], whether a time-group divider should be drawn
+ * above it. A divider marks the start of a new receive slot (cycle): the first
+ * message always gets one, and every later message gets one when it falls in a
+ * different slot than its predecessor.
+ *
+ * The slot length is per-message and mode-aware — FT8 15s, FT4 7.5s, FT2 3.75s
+ * (see [ModeProfile.slotMillis]) — so a fast-mode list gets its finer grid
+ * instead of collapsing 2-4 real cycles under a single hard-coded 15s divider.
+ * The boundary math is shared with the waterfall gridline via
+ * [WaterfallTimestampGate.slotPeriod] so the two views stay on the same grid;
+ * for FT8's 15000ms slot it reproduces the previous `utcTime / 15000` exactly.
+ * Two messages of different modes never share a group even if their slot indices
+ * happen to coincide, because the (slot length, index) pair differs.
+ */
+internal fun computeTimeGroupDividers(messages: List<Ft8Message>): BooleanArray {
+    val dividers = BooleanArray(messages.size)
+    var prevSlotMillis = -1L
+    var prevSlotIndex = 0L
+    for (i in messages.indices) {
+        val slotMillis = ModeProfile.fromId(messages[i].signalFormat).slotMillis.toLong()
+        val slotIndex = WaterfallTimestampGate.slotPeriod(messages[i].utcTime, slotMillis)
+        dividers[i] = i == 0 || slotMillis != prevSlotMillis || slotIndex != prevSlotIndex
+        prevSlotMillis = slotMillis
+        prevSlotIndex = slotIndex
+    }
+    return dividers
+}
+
 @Composable
 private fun TimeGroupDivider(utcTime: Long, compact: Boolean = false) {
     val timeStr = remember(utcTime) { UtcTimer.getTimeHHMMSS(utcTime) }
@@ -394,6 +471,44 @@ private fun TimeGroupDivider(utcTime: Long, compact: Boolean = false) {
 }
 
 // ---------------------------------------------------------------------------
+// Sort control
+// ---------------------------------------------------------------------------
+
+/**
+ * Compact label rendered inside the top-bar sort button, showing the active
+ * [DecodeSortMode] (TIME / CALL / SNR / DX). The button cycles modes on tap; the
+ * accessibility content description announces the current mode.
+ */
+@Composable
+internal fun SortModeLabel(sortMode: DecodeSortMode) {
+    val label = stringResource(
+        when (sortMode) {
+            DecodeSortMode.LAST_HEARD -> R.string.decode_sort_label_last_heard
+            DecodeSortMode.CALLSIGN -> R.string.decode_sort_label_callsign
+            DecodeSortMode.SNR -> R.string.decode_sort_label_snr
+            DecodeSortMode.DISTANCE -> R.string.decode_sort_label_distance
+        },
+    )
+    val cd = stringResource(
+        when (sortMode) {
+            DecodeSortMode.LAST_HEARD -> R.string.decode_sort_cd_last_heard
+            DecodeSortMode.CALLSIGN -> R.string.decode_sort_cd_callsign
+            DecodeSortMode.SNR -> R.string.decode_sort_cd_snr
+            DecodeSortMode.DISTANCE -> R.string.decode_sort_cd_distance
+        },
+    )
+    Text(
+        text = label,
+        modifier = Modifier.semantics { contentDescription = cd },
+        color = Accent,
+        fontFamily = GeistMonoFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 11.sp,
+        letterSpacing = 0.04.sp,
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Filter Labels
 // ---------------------------------------------------------------------------
 
@@ -407,6 +522,10 @@ private fun filterLabel(key: String): String = when (key) {
     "CQ Calls" -> stringResource(R.string.decode_filter_cq_calls)
     "CQ POTA" -> stringResource(R.string.decode_filter_cq_pota)
     "New DXCC" -> stringResource(R.string.decode_filter_new_dxcc)
+    "New Zone" -> stringResource(R.string.decode_filter_new_zone)
+    "New State" -> stringResource(R.string.decode_filter_new_state)
+    "New Grid" -> stringResource(R.string.decode_filter_new_grid)
+    "New Prefix" -> stringResource(R.string.decode_filter_new_prefix)
     "Needed" -> stringResource(R.string.decode_filter_needed)
     "For Me" -> stringResource(R.string.decode_filter_for_me)
     else -> stringResource(R.string.decode_filter_all)
@@ -423,6 +542,9 @@ private fun filterLabel(key: String): String = when (key) {
  *  - All: no filtering
  *  - CQ Calls: only CQ messages
  *  - New DXCC: CQ from a DXCC entity not yet in the operator's worked list
+ *  - New Zone: CQ from a CQ zone not yet in the operator's worked list (WAZ)
+ *  - New State: CQ from a US state not yet in the operator's worked list (WAS)
+ *  - New Grid: CQ from a Maidenhead grid field not yet in the operator's worked list
  *  - Needed: need QSL confirmation (not in QSL callsign list)
  *  - For Me: callsignTo matches operator's callsign
  */
@@ -457,6 +579,13 @@ internal fun filterMessages(
     if (GeneralVariables.filterDirectionalCQ) {
         base = base.filter { GeneralVariables.directionalCQIsForMe(it.callsignTo) }
     }
+    // WSJT-X-style "hide worked stations": when the worked-station mode is HIDE,
+    // drop stations that count as worked under the configured scope. Stations
+    // calling us are kept (see isHiddenAsWorked). Only walk the list at all in
+    // HIDE mode so the default/legacy path skips this pass entirely.
+    if (effectiveWorkedMode() == WorkedStationMode.HIDE) {
+        base = base.filterNot { isHiddenAsWorked(it) }
+    }
 
     return when (filter) {
         "CQ Calls" -> base.filter { it.checkIsCQ() }
@@ -464,6 +593,22 @@ internal fun filterMessages(
         // this filter and hunting agree on who counts as a POTA station — see issue #333.
         "CQ POTA" -> base.filter { radio.ks3ckc.ft8af.pota.PotaCqClassifier.isPotaCq(it) }
         "New DXCC" -> base.filter { it.checkIsCQ() && it.fromDxcc }
+        // Mirror of "New DXCC" for zone chasers (Worked All Zones): only CQ
+        // stations from a CQ zone the operator hasn't logged yet. fromCq is the
+        // decode-time unworked-zone flag, computed alongside fromDxcc.
+        "New Zone" -> base.filter { it.checkIsCQ() && it.fromCq }
+        // Mirror of "New DXCC" for state chasers (Worked All States): only CQ
+        // stations from a US state the operator hasn't logged yet. fromNewState is
+        // the decode-time unworked-state flag (US-grid → state, US-only table).
+        "New State" -> base.filter { it.checkIsCQ() && it.fromNewState }
+        // Mirror of "New DXCC" for grid chasers (VUCC / grid hunting): only CQ
+        // stations whose grid field the operator hasn't logged yet, so the list
+        // becomes a one-tap "who's calling from a grid I still need" view.
+        "New Grid" -> base.filter { it.checkIsCQ() && isNewGridStation(it) }
+        // Mirror of "New DXCC" for prefix chasers (Worked All Prefixes / WPX):
+        // only CQ stations whose callsign prefix the operator hasn't logged yet,
+        // so the list becomes a one-tap "who's a new prefix" view.
+        "New Prefix" -> base.filter { it.checkIsCQ() && isNewPrefixStation(it) }
         "Needed" -> base.filter {
             !it.isQSL_Callsign &&
                 !GeneralVariables.checkQSLCallsign(it.callsignFrom ?: "")
@@ -488,6 +633,10 @@ internal fun EmptyState(
         "CQ Calls" -> stringResource(R.string.decode_empty_cq_title) to stringResource(R.string.decode_empty_cq_body)
         "CQ POTA" -> stringResource(R.string.decode_empty_pota_title) to stringResource(R.string.decode_empty_pota_body)
         "New DXCC" -> stringResource(R.string.decode_empty_dxcc_title) to stringResource(R.string.decode_empty_dxcc_body)
+        "New Zone" -> stringResource(R.string.decode_empty_zone_title) to stringResource(R.string.decode_empty_zone_body)
+        "New State" -> stringResource(R.string.decode_empty_state_title) to stringResource(R.string.decode_empty_state_body)
+        "New Grid" -> stringResource(R.string.decode_empty_grid_title) to stringResource(R.string.decode_empty_grid_body)
+        "New Prefix" -> stringResource(R.string.decode_empty_prefix_title) to stringResource(R.string.decode_empty_prefix_body)
         "Needed" -> stringResource(R.string.decode_empty_needed_title) to stringResource(R.string.decode_empty_needed_body)
         "For Me" -> stringResource(R.string.decode_empty_forme_title) to stringResource(R.string.decode_empty_forme_body)
         else -> stringResource(R.string.decode_empty_default_title) to stringResource(R.string.decode_empty_default_body, GeneralVariables.currentMode().displayName)

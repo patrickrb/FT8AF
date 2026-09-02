@@ -30,12 +30,20 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
-    <!-- Android Auto: NAVIGATION-category car app that draws its QSO map on the
-         car Surface (see QsoStatusScreen/CarMapSurfaceRenderer). -->
-    <uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
-    <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
+    <!-- Voice assistant: package-visibility (API 30+) for the on-device speech
+         recognizer and the system TTS engine. Without these, SpeechRecognizer
+         .isRecognitionAvailable() and TextToSpeech init can fail on Android 11+. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
 
     <application
+        android:name="radio.ks3ckc.ft8af.FT8AFApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:networkSecurityConfig="@xml/network_security_config"
@@ -45,6 +53,13 @@
         android:supportsRtl="true"
         android:localeConfig="@xml/locales_config"
         android:theme="@style/Theme.Ft8AF">
+        <!-- Sentry ships a ContentProvider that auto-inits at process start and
+             requires a manifest DSN. We init manually and only after the user
+             opts in (see CrashReporting), so disable that auto-init here — with
+             it on, the SDK crashes on launch with "DSN is required". -->
+        <meta-data
+            android:name="io.sentry.auto-init"
+            android:value="false" />
         <!-- New Compose-based main activity -->
         <activity
             android:name="radio.ks3ckc.ft8af.ComposeMainActivity"
@@ -113,12 +128,16 @@
 
         <!-- Android Auto (phone projection): read-only QSO status screens rendered
              with car-app-library templates. Exported so the Android Auto host can
-             bind; access is gated by FT8AFCarAppService's HostValidator. -->
+             bind; access is gated by FT8AFCarAppService's HostValidator.
+             IOT category on purpose — this exact wiring shipped in the approved
+             production release (versionCode 1327 / 2.0). NAVIGATION category +
+             map surface rendering was rejected by Play review (PR #600); do not
+             re-add it. -->
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
-        <!-- Level 1 = backward-compat floor. The surface map (NavigationTemplate)
-             needs API level 5+; older hosts fall back to a text PaneTemplate. -->
+        <!-- Level 1 = every templates-capable Android Auto host; we use no newer
+             template features. -->
         <meta-data
             android:name="androidx.car.app.minCarApiLevel"
             android:value="1" />
@@ -128,10 +147,7 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
-                <!-- NAVIGATION (not IOT/POI) so the full-bleed QSO map surface stays
-                     visible while the vehicle is moving — the point of mobile FT8.
-                     POI/IOT map surfaces are blanked or disallowed while driving. -->
-                <category android:name="androidx.car.app.category.NAVIGATION" />
+                <category android:name="androidx.car.app.category.IOT" />
             </intent-filter>
         </service>
 

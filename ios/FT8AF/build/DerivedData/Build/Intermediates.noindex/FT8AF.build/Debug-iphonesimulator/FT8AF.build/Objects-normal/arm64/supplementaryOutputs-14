@@ -1,0 +1,30 @@
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/DerivedSources/GeneratedAssetSymbols.swift":
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/GeneratedAssetSymbols.dia"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/GeneratedAssetSymbols.d"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/GeneratedAssetSymbols.o"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Theme/Typography.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/Typography.swiftconstvalues"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/Typography.swiftdeps"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/Typography.d"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/Typography.dia"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/Typography.o"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Map/WorldMapCanvas.swift":
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/WorldMapCanvas.swiftdeps"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/WorldMapCanvas.swiftconstvalues"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/WorldMapCanvas.dia"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/WorldMapCanvas.o"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/WorldMapCanvas.d"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Waterfall/WaterfallScreen.swift":
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/WaterfallScreen.d"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/WaterfallScreen.swiftconstvalues"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/WaterfallScreen.o"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/WaterfallScreen.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/WaterfallScreen.dia"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Waterfall/WaterfallCanvas.swift":
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/WaterfallCanvas.d"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/WaterfallCanvas.swiftconstvalues"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/WaterfallCanvas.o"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/WaterfallCanvas.dia"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/WaterfallCanvas.swiftdeps"

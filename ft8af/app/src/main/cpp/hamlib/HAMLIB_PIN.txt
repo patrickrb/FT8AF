@@ -1,0 +1,42 @@
+hamlib 4.7.2  (released 2026-06-21)
+
+vendor/hamlib-4.7.2.tar.gz
+  sha256 ae1fcf2dbc80ea0786ea8f047b09399c3f7737d1930442f61a031708ed33e88f
+  (upstream: https://github.com/Hamlib/Hamlib/releases/download/4.7.2/hamlib-4.7.2.tar.gz)
+
+WHAT THIS IS
+  Hamlib provides the per-radio CAT protocol logic. We compile it to a static
+  libhamlib.a per ABI and link it into libft8af.so. hamlib does the framing; the
+  app's existing USB-serial transport (CableSerialPort) moves the bytes. See
+  ft8af_glue/hamlib_jni.cpp.
+
+  The per-ABI archives (prebuilt/<abi>/libhamlib.a) are NOT checked into git —
+  they are large and fully rebuildable. They are produced on demand:
+    * Linux/macOS (incl. CI): CMake runs build_android.sh automatically for the
+      ABI being built (see cpp/CMakeLists.txt), the first time each is needed.
+    * Windows: the autotools build can't run against the Windows NDK, so run the
+      build once under WSL (below); CMake then reuses prebuilt/<abi>/.
+  Only the vendored source tarball + public headers are tracked.
+
+  NO hamlib source is patched. We present each rig to hamlib as a loopback-TCP
+  "network" port (pathname "127.0.0.1:<port>"); hamlib auto-detects the IP:port
+  and uses RIG_PORT_NETWORK, so its serial/termios code is never touched. The
+  JNI bridge accepts that connection and shuttles bytes to/from Java.
+
+BUILDING (produces prebuilt/<abi>/libhamlib.a)
+  Requires an Android NDK (r25+) with a host toolchain matching this machine
+  (Linux or macOS) and GNU make. On Windows, run under WSL with a *Linux* NDK.
+      export ANDROID_NDK_HOME=/path/to/android-ndk        # r25+
+      ./build_android.sh                # all four ABIs (+ refresh headers)
+      ./build_android.sh arm64-v8a      # a single ABI (what CMake invokes)
+  The script verifies the tarball sha256, extracts it, and cross-compiles at
+  API 23 (matches app minSdk). CMake calls it automatically on Linux/macOS/CI.
+
+API-GAP SHIMS (why the build uses -Wno-implicit-function-declaration)
+  At API 23, hamlib references four libc functions Bionic only added later:
+      glob, globfree        (API 28, microHam device discovery)
+      getifaddrs, freeifaddrs(API 24, network interface enumeration)
+  None run on our loopback-TCP client path. Building at API 23 keeps libft8af.so
+  loadable on API 23-27 devices; the four symbols are satisfied by no-op stubs in
+  ft8af_glue/hamlib_compat.c (NOT by raising the API level, which would make the
+  whole .so fail to load below 28).

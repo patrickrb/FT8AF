@@ -406,6 +406,9 @@
     <string name="settings_tx_watchdog_desc">Automaticky zastavit vysílání po vypršení limitu</string>
     <string name="settings_stop_after">Zastavit po</string>
     <string name="settings_stop_after_desc">Zastavit volání po N neúspěšných pokusech</string>
+    <string name="settings_max_73">Max. odeslání 73</string>
+    <string name="settings_max_73_desc">Nejvyšší počet vysílání RR73/73 na spojení, než se pokračuje dál</string>
+    <string name="settings_max_73_auto">Automaticky</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Lov (auto-odpověď na CQ)</string>

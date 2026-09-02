@@ -45,8 +45,7 @@ object QrzXmlClient {
     private val sessionMutex = Mutex()
     @Volatile private var sessionKey: String? = null
 
-    private val cacheMutex = Mutex()
-    private val cache = LinkedHashMap<String, QrzLookup>(16, 0.75f, true)
+    private val cache = LruCache<String, QrzLookup>(CACHE_MAX)
 
     @Volatile var lastError: String? = null
         private set
@@ -73,9 +72,9 @@ object QrzXmlClient {
      * failed lookups can be retried with the new auth.
      */
     fun clearCache() {
-        // mutex-free read/clear is safe here: only changes the map identity from the
-        // perspective of callers; concurrent puts will just produce a slightly old
-        // view that the next call resolves.
+        // cache.clear() is synchronized inside LruCache, so this is safe to call
+        // from the main thread (Settings save) while avatar lookups read the cache
+        // on Dispatchers.IO.
         cache.clear()
         lastError = null
     }
@@ -84,7 +83,7 @@ object QrzXmlClient {
         val key = callsign.trim().uppercase()
         if (key.isEmpty()) return@withContext null
 
-        cacheMutex.withLock { cache[key] }?.let { return@withContext it }
+        cache.get(key)?.let { return@withContext it }
 
         val user = GeneralVariables.qrzXmlUsername.orEmpty()
         val pass = GeneralVariables.qrzXmlPassword.orEmpty()
@@ -126,13 +125,7 @@ object QrzXmlClient {
 
         log("lookup($key) -> $image")
         val result = QrzLookup(imageUrl = image)
-        cacheMutex.withLock {
-            cache[key] = result
-            while (cache.size > CACHE_MAX) {
-                val oldest = cache.entries.iterator().next()
-                cache.remove(oldest.key)
-            }
-        }
+        cache.put(key, result)
         result
     }
 

@@ -179,50 +179,58 @@ public class Yaesu39Rig extends BaseRig {
             fileLog("rig.recv[" + data.length + "]: " + preview);
         }
 
-        if (!s.contains(";")) {
-            buffer.append(s);
-            if (buffer.length() > 1000) clearBufferData();
-            // return;//data reception not yet complete.
-        } else {
-            if (s.indexOf(";") > 0) {//received end-of-data, and delimiter is not the first character
-                buffer.append(s.substring(0, s.indexOf(";")));
-            }
+        // Drain every complete ';'-terminated command in this read (the rig
+        // answers back-to-back polls -- the meter poll sends the ALC and SWR
+        // requests one after the other -- so two replies routinely coalesce into
+        // one read). The old code parsed only the first command and re-buffered
+        // the rest with its terminator retained, dropping the second reply and
+        // poisoning the next parse. Only the trailing, unterminated fragment is
+        // carried into the next call.
+        CatLineSplitter.Result result = CatLineSplitter.split(buffer.toString(), s, ';');
+        clearBufferData();
+        buffer.append(result.remainder);
+        // A runaway unterminated buffer must not grow without bound.
+        if (buffer.length() > 1000) clearBufferData();
 
-            //begin parsing data
-            String bufStr = buffer.toString();
-            Yaesu3Command yaesu3Command = Yaesu3Command.getCommand(bufStr);
-            clearBufferData();//clear buffer
-            //put remaining data into buffer
-            buffer.append(s.substring(s.indexOf(";") + 1));
-
-            if (yaesu3Command == null) {
-                if (bufStr.length() > 0) {
-                    fileLog("rig.parse: unknown command: " + bufStr);
-                }
-                return;
-            }
-            if (yaesu3Command.getCommandID().equalsIgnoreCase("FA")
-                    || yaesu3Command.getCommandID().equalsIgnoreCase("FB")) {
-                long tempFreq = Yaesu3Command.getFrequency(yaesu3Command);
-                if (tempFreq != 0) {//if tempFreq==0, frequency is invalid
-                    setFreq(Yaesu3Command.getFrequency(yaesu3Command));
-                }
-            } else if (yaesu3Command.getCommandID().equalsIgnoreCase("RM")) {//METER
-                if (Yaesu3Command.isSWRMeter39(yaesu3Command)) {
-                    swr = Yaesu3Command.getSWROrALC39(yaesu3Command);
-                }
-                if (Yaesu3Command.isALCMeter39(yaesu3Command)) {
-                    alc = Yaesu3Command.getSWROrALC39(yaesu3Command);
-                }
-                showAlert();
-                notifyMeterData(alc, swr);
-            } else {
-                fileLog("rig.parsed: cmd=" + yaesu3Command.getCommandID()
-                        + " data=" + yaesu3Command.getData());
-            }
-
+        for (String frame : result.frames) {
+            processCommand(frame);
         }
+    }
 
+    /**
+     * Parse and act on one complete CAT command (terminator already stripped).
+     */
+    private void processCommand(String bufStr) {
+        Yaesu3Command yaesu3Command = Yaesu3Command.getCommand(bufStr);
+        if (yaesu3Command == null) {
+            if (bufStr.length() > 0) {
+                fileLog("rig.parse: unknown command: " + bufStr);
+                // The CAT stream is desynchronised (a "?;" rejection, or a frame we could
+                // not parse). Frequencies reported while this holds are not trustworthy
+                // enough to adopt as the dial we command back — see RigDialTarget.
+                GeneralVariables.rigRejectedAtMs = System.currentTimeMillis();
+            }
+            return;
+        }
+        if (yaesu3Command.getCommandID().equalsIgnoreCase("FA")
+                || yaesu3Command.getCommandID().equalsIgnoreCase("FB")) {
+            long tempFreq = Yaesu3Command.getFrequency(yaesu3Command);
+            if (tempFreq != 0) {//if tempFreq==0, frequency is invalid
+                setFreq(tempFreq);
+            }
+        } else if (yaesu3Command.getCommandID().equalsIgnoreCase("RM")) {//METER
+            if (Yaesu3Command.isSWRMeter39(yaesu3Command)) {
+                swr = Yaesu3Command.getSWROrALC39(yaesu3Command);
+            }
+            if (Yaesu3Command.isALCMeter39(yaesu3Command)) {
+                alc = Yaesu3Command.getSWROrALC39(yaesu3Command);
+            }
+            showAlert();
+            notifyMeterData(alc, swr);
+        } else {
+            fileLog("rig.parsed: cmd=" + yaesu3Command.getCommandID()
+                    + " data=" + yaesu3Command.getData());
+        }
     }
 
     @Override

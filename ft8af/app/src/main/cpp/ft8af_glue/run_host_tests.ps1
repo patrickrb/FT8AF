@@ -139,6 +139,22 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_call_hash)." }
 $callHashExit = $LASTEXITCODE
 
 # ---------------------------------------------------------------------------
+# Callsign hash-store tests: the per-decoder open-addressing table shared by
+# ft8_decode_jni.cpp and ft2_decode_jni.cpp (ftx_hash_store.h). Guards the
+# save/lookup semantics and, crucially, that a saturated table drops the insert
+# instead of probing forever (the unbounded loop that used to hang the decode
+# thread). Header-only under test; needs only the ft8_lib include path.
+# ---------------------------------------------------------------------------
+$srcHashStore = Join-Path $here "test_hash_store.c"
+$outHashStore = Join-Path $env:TEMP "ft8_hash_store_test.exe"
+
+& $Clang @common $srcHashStore -o $outHashStore
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_hash_store)." }
+
+& $outHashStore
+$hashStoreExit = $LASTEXITCODE
+
+# ---------------------------------------------------------------------------
 # EU_VHF / CONTESTING decoder tests (issue #403): the hand-rolled bit
 # extraction + direct formatting for i3=0 n3=2 and i3=0 n3=6 frames. Payloads
 # are assembled by an independent bit writer; callsign bits come from the
@@ -302,10 +318,60 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_xslot)." }
 & $outXslot
 $xslotExit = $LASTEXITCODE
 
+# ---------------------------------------------------------------------------
+# GFSK output-length tests: the synth_gfsk_output_len helper (gfsk.c) that the
+# TX buffer sizing on both the Java side (GenerateFT8.waveformSampleCount) and
+# the native synth_gfsk JNI guard must agree on, plus a canary check that
+# synth_gfsk_offset writes exactly that many samples. Guards the heap OOB write a
+# non-integral audioRate (e.g. 44100) in FT4/FT2 used to trigger. No ft8_lib deps.
+# ---------------------------------------------------------------------------
+$gfskLenSrcs = @()
+$gfskLenSrcs += (Join-Path $here "gfsk.c")
+
+$srcGfskLen = Join-Path $here "test_gfsk_len.c"
+$outGfskLen = Join-Path $env:TEMP "ft8_gfsk_len_test.exe"
+
+& $Clang @common $srcGfskLen @gfskLenSrcs -o $outGfskLen
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_gfsk_len)." }
+
+& $outGfskLen
+$gfskLenExit = $LASTEXITCODE
+
+# ---------------------------------------------------------------------------
+# Audio-feed tests: the per-slot monitor feed shared by ft8_decode_jni.cpp and
+# ft2_decode_jni.cpp (ftx_feed.h). Guards the bounded copy into the retained
+# samples buffer and, crucially, that a NULL `data` pointer (a failed JNI array
+# pin) is a no-op instead of the native SIGSEGV the two float feed paths used to
+# take. Links the monitor + FFT + decode path monitor_process exercises.
+# ---------------------------------------------------------------------------
+$feedSrcs = @(
+    "common\monitor.c","ft8\decode.c","ft8\constants.c","ft8\crc.c",
+    "ft8\text.c","ft8\message.c","ft8\pack.c","ft8\encode.c",
+    "ft8\ldpc.c","ft8\osd.c","ft8\unpack.c","fft\kiss_fft.c","fft\kiss_fftr.c"
+) | ForEach-Object { Join-Path $ft8 $_ }
+
+$srcFeed = Join-Path $here "test_feed.c"
+$outFeed = Join-Path $env:TEMP "ft8_feed_test.exe"
+
+& $Clang @common $srcFeed @feedSrcs -o $outFeed
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_feed)." }
+
+& $outFeed
+$feedExit = $LASTEXITCODE
+
+# ---------------------------------------------------------------------------
+# NOTE: test_hamlib_feed.c (hamlib_feed.h — the nativeFeedFromRig write loop) is
+# intentionally NOT built here. Both it and the code it covers are POSIX-only:
+# hamlib_jni.cpp uses BSD sockets + pthreads and only compiles for Android
+# (bionic), and the test drives a real pipe fd via unistd/pthread. It is built
+# and run by run_host_tests.sh (Linux/macOS — the CI host).
+# ---------------------------------------------------------------------------
+
 if ($goldenExit -ne 0) { exit $goldenExit }
 if ($dev625Exit -ne 0) { exit $dev625Exit }
 if ($fftWinExit -ne 0) { exit $fftWinExit }
 if ($callHashExit -ne 0) { exit $callHashExit }
+if ($hashStoreExit -ne 0) { exit $hashStoreExit }
 if ($contestExit -ne 0) { exit $contestExit }
 if ($firExit -ne 0) { exit $firExit }
 if ($ratExit -ne 0) { exit $ratExit }
@@ -314,4 +380,6 @@ if ($benchExit -ne 0) { exit $benchExit }
 if ($subExit -ne 0) { exit $subExit }
 if ($osdExit -ne 0) { exit $osdExit }
 if ($fineExit -ne 0) { exit $fineExit }
-exit $xslotExit
+if ($xslotExit -ne 0) { exit $xslotExit }
+if ($gfskLenExit -ne 0) { exit $gfskLenExit }
+exit $feedExit

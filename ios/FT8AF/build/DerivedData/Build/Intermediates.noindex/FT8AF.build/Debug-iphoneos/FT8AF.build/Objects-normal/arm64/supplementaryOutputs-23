@@ -1,0 +1,36 @@
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Logbook/ExportLogSheet.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/ExportLogSheet.swiftconstvalues"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/ExportLogSheet.swiftdeps"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/ExportLogSheet.o"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/ExportLogSheet.d"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/ExportLogSheet.dia"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Decode/DecodeScreen.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeScreen.swiftconstvalues"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeScreen.dia"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeScreen.o"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeScreen.d"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeScreen.swiftdeps"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/FT8AFApp.swift":
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AFApp.swiftdeps"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AFApp.o"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AFApp.swiftconstvalues"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AFApp.dia"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/FT8AFApp.d"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Decode/DecodeRow.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeRow.swiftconstvalues"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeRow.d"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeRow.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeRow.dia"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeRow.o"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Engine/FFTProcessor.swift":
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/FFTProcessor.o"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/FFTProcessor.d"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/FFTProcessor.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/FFTProcessor.dia"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/FFTProcessor.swiftconstvalues"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Settings/DecodeFilterSettings.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeFilterSettings.swiftconstvalues"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeFilterSettings.d"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeFilterSettings.swiftdeps"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeFilterSettings.o"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphoneos/FT8AF.build/Objects-normal/arm64/DecodeFilterSettings.dia"

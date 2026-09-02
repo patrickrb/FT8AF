@@ -450,29 +450,59 @@ private fun WaterfallCanvas(
 internal fun displayTxFrequencyHz(touchedFreqHz: Int, baseFreqHz: Float): Float =
     if (touchedFreqHz > 0) touchedFreqHz.toFloat() else baseFreqHz
 
+/** Hz step between adjacent ruler labels. */
+private const val RulerStepHz = 500
+
+/** A single ruler label: its frequency and where it sits across the strip. */
+internal data class RulerTick(val hz: Int, val fraction: Float)
+
+/**
+ * Ruler labels at [RulerStepHz] intervals from 0 up to [spectrumWidth], each
+ * paired with the horizontal fraction it must sit at.
+ *
+ * The waterfall/columnar views map a signal at `hz` to `hz / spectrumWidth` of
+ * the width ([WaterfallView].freq_width = width / spectrumWidth), so a label's
+ * fraction is `hz / spectrumWidth` too. When [spectrumWidth] is a multiple of
+ * [RulerStepHz] the top tick equals it (fraction 1.0) and the gaps are uniform,
+ * so this reduces to the old even layout; otherwise the top tick sits below the
+ * far edge instead of being stretched to it.
+ */
+internal fun rulerTicks(spectrumWidth: Int): List<RulerTick> {
+    if (spectrumWidth <= 0) return listOf(RulerTick(0, 0f))
+    return buildList {
+        var hz = 0
+        while (hz <= spectrumWidth) {
+            add(RulerTick(hz, hz.toFloat() / spectrumWidth))
+            hz += RulerStepHz
+        }
+    }
+}
+
 @Composable
 internal fun FrequencyRuler(spectrumWidth: Int, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier.background(BgSurface),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val labels = buildList {
-            var freq = 0
-            while (freq <= spectrumWidth) {
-                add(freq.toString())
-                freq += 500
+        val ticks = rulerTicks(spectrumWidth)
+        ticks.forEachIndexed { index, tick ->
+            // Weight each spacer by the fraction gap to the previous tick so the
+            // labels track their true Hz positions instead of stretching evenly.
+            if (index > 0) {
+                Spacer(modifier = Modifier.weight(tick.fraction - ticks[index - 1].fraction))
             }
-        }
-        labels.forEachIndexed { index, label ->
-            if (index > 0) Spacer(modifier = Modifier.weight(1f))
             Text(
-                text = label,
+                text = tick.hz.toString(),
                 color = TextDim,
                 fontFamily = GeistMonoFamily,
                 fontSize = 8.sp,
                 letterSpacing = 0.02.sp,
             )
         }
+        // Fill the remainder past the top tick so it isn't pushed to the far
+        // edge when spectrumWidth isn't a multiple of the step (no-op otherwise).
+        val trailing = 1f - ticks.last().fraction
+        if (trailing > 0f) Spacer(modifier = Modifier.weight(trailing))
     }
 }
 

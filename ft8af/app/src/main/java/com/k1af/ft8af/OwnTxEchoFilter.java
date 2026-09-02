@@ -79,6 +79,31 @@ public final class OwnTxEchoFilter {
     }
 
     /**
+     * Mean per-decode time offset (WSJT-style DT, seconds) of the kept messages —
+     * the value the clock-sync pill on the slot bar shows. Own-TX echoes must not
+     * contribute: an echo's DT is the TX chain latency (keyed ~0.5-0.8 s into the
+     * cycle, plus PTT delay, transmit delay and audio buffering), not clock error,
+     * so one echo in a TX slot dragged the raw mean past the "POOR" threshold and
+     * turned the pill red on every over. Junk decodes carry a random DT and are
+     * excluded for the same reason.
+     *
+     * @return the mean DT of {@link #kept}, or {@link Float#NaN} when nothing survived
+     */
+    public float meanTimeOffsetSec() {
+        if (kept.isEmpty()) return Float.NaN;
+        float sum = 0f;
+        for (Ft8Message m : kept) {
+            sum += m.time_sec;
+        }
+        return sum / kept.size();
+    }
+
+    /** {@link #filter} then {@link #meanTimeOffsetSec()} in one call. */
+    public static float meanTimeOffsetSec(List<Ft8Message> decoded) {
+        return filter(decoded).meanTimeOffsetSec();
+    }
+
+    /**
      * Format the per-cycle diagnostic line written to debug.log. Recording the
      * kept count, dropped-echo count, dropped-junk count, whether a reply
      * addressed to us survived, and the slot lets us tell "decoded but

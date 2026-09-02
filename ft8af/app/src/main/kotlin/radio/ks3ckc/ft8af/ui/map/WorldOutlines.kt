@@ -45,6 +45,39 @@ private fun ringToFlat(ring: JSONArray): FloatArray {
 }
 
 /**
+ * Invokes [plot] once per complete `(lon, lat)` vertex of a flattened polygon
+ * [ring] (`[lon0, lat0, lon1, lat1, ...]`), passing `first == true` on the
+ * opening vertex so callers can `moveTo` it and `lineTo` the rest. Returns
+ * `true` when at least one vertex was plotted (i.e. the caller should
+ * `close()` the path), or `false` when the ring has fewer than [minVertices]
+ * complete vertices and was skipped entirely.
+ *
+ * The vertex count is bounded to `ring.size / 2`, so a trailing unpaired
+ * coordinate in a malformed odd-length ring is ignored rather than read out of
+ * bounds. This centralizes the safe bound already used by [pointInRing],
+ * replacing the `while (i < ring.size)` walks (which read `ring[i + 1]` one
+ * past the end of an odd-length ring) in the equirectangular / azimuthal /
+ * POTA / QSO-path land renderers.
+ *
+ * `inline` keeps the per-vertex [plot] call allocation-free on the draw hot
+ * path (this runs for every land ring, every frame).
+ */
+internal inline fun forEachRingVertex(
+    ring: FloatArray,
+    minVertices: Int = 3,
+    plot: (lon: Float, lat: Float, first: Boolean) -> Unit,
+): Boolean {
+    val vertices = ring.size / 2
+    // Explicit empty guard so the contract holds even for minVertices <= 0: an
+    // empty ring must return false (nothing plotted, caller must not close()).
+    if (vertices == 0 || vertices < minVertices) return false
+    for (v in 0 until vertices) {
+        plot(ring[v * 2], ring[v * 2 + 1], v == 0)
+    }
+    return true
+}
+
+/**
  * Lazily loads Natural Earth 110m land outlines from res/raw/world_land.json,
  * caching the parsed rings for the process lifetime.
  */

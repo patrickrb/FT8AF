@@ -41,6 +41,18 @@ public class RigNameListTest {
     }
 
     @Test
+    public void rigNameStringConstructor_hamlibEntry_carriesModelIdInHexAddress() {
+        // Hamlib rigs (instructionSet 26) stash the hamlib model number in the
+        // address column, which is parsed base-16. FT-891 = 1036 = 0x40C; the
+        // HamlibRig is later constructed with GeneralVariables.civAddress = 1036.
+        RigNameList.RigName r = new RigNameList.RigName("Yaesu FT-891 (Hamlib),40C,38400,26");
+        assertThat(r.modelName).isEqualTo("Yaesu FT-891 (Hamlib)");
+        assertThat(r.address).isEqualTo(1036);   // 0x40C → hamlib RIG_MODEL_FT891
+        assertThat(r.bauRate).isEqualTo(38400);
+        assertThat(r.instructionSet).isEqualTo(26); // InstructionSet.HAMLIB
+    }
+
+    @Test
     public void rigNameStringConstructor_tooFewFields_fallsBackToDefaults() {
         // Fewer than 4 comma-separated fields → default rig (addr 0xA4, 19200).
         RigNameList.RigName r = new RigNameList.RigName("ICOM IC-705,A4");
