@@ -248,6 +248,33 @@
     <string name="pota_tab_activate">Aktivovat</string>
     <string name="pota_tab_hunt">Lov</string>
     <string name="pota_tab_history">Historie</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">právě teď</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="one">před %d s</item>
+        <item quantity="few">před %d s</item>
+        <item quantity="many">před %d s</item>
+        <item quantity="other">před %d s</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="one">před %d min</item>
+        <item quantity="few">před %d min</item>
+        <item quantity="many">před %d min</item>
+        <item quantity="other">před %d min</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="one">před %d h</item>
+        <item quantity="few">před %d h</item>
+        <item quantity="many">před %d h</item>
+        <item quantity="other">před %d h</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="one">před %d d</item>
+        <item quantity="few">před %d d</item>
+        <item quantity="many">před %d d</item>
+        <item quantity="other">před %d d</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">Zobrazit čas UTC</string>
     <string name="pota_start_activation">Zahájit aktivaci</string>
     <string name="pota_park_reference_label">Reference parku (např. K-1234)</string>
     <string name="pota_notes_optional_label">Poznámky (volitelné)</string>

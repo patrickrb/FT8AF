@@ -248,6 +248,21 @@
     <string name="pota_tab_activate">운용</string>
     <string name="pota_tab_hunt">Hunt</string>
     <string name="pota_tab_history">기록</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">방금</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="other">%d초 전</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="other">%d분 전</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="other">%d시간 전</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="other">%d일 전</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">UTC 시간 표시</string>
     <string name="pota_start_activation">운용 시작</string>
     <string name="pota_park_reference_label">공원 참조 (예: K-1234)</string>
     <string name="pota_notes_optional_label">메모 (선택)</string>

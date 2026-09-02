@@ -381,6 +381,26 @@
     <string name="pota_tab_activate">Activate</string>
     <string name="pota_tab_hunt">Hunt</string>
     <string name="pota_tab_history">History</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">just now</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="one">%ds ago</item>
+        <item quantity="other">%ds ago</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="one">%dm ago</item>
+        <item quantity="other">%dm ago</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="one">%dh ago</item>
+        <item quantity="other">%dh ago</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="one">%dd ago</item>
+        <item quantity="other">%dd ago</item>
+    </plurals>
+    <!-- Accessibility label for the tap / long-press on the contact row's time. -->
+    <string name="pota_qso_time_show_utc">Show UTC time</string>
     <string name="pota_start_activation">Start activation</string>
     <string name="pota_park_reference_label">Park reference (e.g. K-1234)</string>
     <string name="pota_notes_optional_label">Notes (optional)</string>
