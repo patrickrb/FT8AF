@@ -625,6 +625,63 @@ class RunCheckTest(unittest.TestCase):
         self.assertNotIn("Manage store presence", err.getvalue())
 
 
+class ProbeAnnotationTest(unittest.TestCase):
+    """The exit-code -> annotation mapping the workflow shows the operator.
+
+    This is the probe's main operator-facing behaviour, so it is pinned per
+    code: the level, the message, and — just as important — what a message
+    must NOT say (a non-verdict must never name the grant).
+    """
+
+    def test_ok_is_a_notice(self):
+        level, msg = pl.probe_annotation(pl.EXIT_OK)
+        self.assertEqual(level, "notice")
+        self.assertIn("can edit listings", msg)
+
+    def test_denied_is_an_error_naming_the_grant(self):
+        level, msg = pl.probe_annotation(pl.EXIT_DENIED)
+        self.assertEqual(level, "error")
+        self.assertIn("cannot edit listings", msg)
+        self.assertIn("Manage store presence", msg)
+
+    def test_inconclusive_is_a_warning_that_does_not_name_the_grant(self):
+        level, msg = pl.probe_annotation(pl.EXIT_INCONCLUSIVE)
+        self.assertEqual(level, "warning")
+        self.assertIn("no verdict", msg)
+        self.assertIn("401", msg)
+        self.assertNotIn("Manage store presence", msg)
+
+    def test_generic_failure_is_an_error_but_not_a_verdict(self):
+        # A 1 (bad key, unreadable metadata) and argparse's 2 both mean the
+        # probe never ran. Reporting either as a missing grant is the false
+        # diagnosis the exit-code split exists to prevent.
+        for rc in (pl.EXIT_ERROR, 2, 42):
+            level, msg = pl.probe_annotation(rc)
+            self.assertEqual(level, "error", rc)
+            self.assertIn("did not run", msg)
+            self.assertIn("exit %d" % rc, msg)
+            self.assertIn("not a verdict", msg)
+            self.assertNotIn("Manage store presence", msg)
+
+    def test_the_four_outcomes_are_told_apart(self):
+        seen = {pl.probe_annotation(rc) for rc in (0, 1, 3, 4)}
+        self.assertEqual(len(seen), 4)
+
+    def test_format_is_a_workflow_command(self):
+        self.assertEqual(pl.format_annotation("warning", "hi"), "::warning::hi")
+
+    def test_cli_prints_the_annotation_and_touches_nothing_else(self):
+        # The workflow relays the probe's code through this; it must not need
+        # metadata or credentials, and must exit 0 so the workflow can go on to
+        # exit with the probe's own code.
+        with mock.patch.object(pl, "play_session", side_effect=AssertionError("no Play")):
+            with mock.patch.object(pl, "load_metadata", side_effect=AssertionError("no tree")):
+                with captured() as (out, _):
+                    self.assertEqual(pl.main(["--annotate-verdict", "3"]), pl.EXIT_OK)
+        self.assertEqual(out.getvalue().strip(), pl.format_annotation(*pl.probe_annotation(3)))
+        self.assertTrue(out.getvalue().startswith("::error::"))
+
+
 class ExitCodeTest(unittest.TestCase):
     """The probe's verdict codes must not collide with anything else."""
 
@@ -960,6 +1017,31 @@ class WorkflowModesTest(unittest.TestCase):
         for flag in filter(None, self.MODE_FLAGS.values()):
             args = pl.build_arg_parser().parse_args([flag])
             self.assertTrue(getattr(args, flag[2:].replace("-", "_")))
+
+    def run_step(self):
+        """The `run:` block of the Run step, from the MODE case to its exit."""
+        text = self.workflow_text()
+        start = text.index('case "$MODE" in')
+        return text[start : text.index("exit $rc", start) + len("exit $rc")]
+
+    def test_verdict_annotation_is_delegated_to_the_script(self):
+        # The exit-code -> annotation mapping is ProbeAnnotationTest's job; the
+        # workflow must relay the probe's code through --annotate-verdict and
+        # not keep a bash copy that could drift from the EXIT_* constants.
+        step = self.run_step()
+        self.assertIn('--annotate-verdict "$rc"', step)
+        self.assertNotIn('case "$rc"', step)
+        self.assertIn(
+            "--annotate-verdict",
+            {o for a in pl.build_arg_parser()._actions for o in a.option_strings},
+        )
+
+    def test_step_exits_with_the_probes_own_code(self):
+        # The annotation helper exits 0 by design; the step must still end with
+        # the probe's code so a denied verdict fails the run.
+        step = self.run_step()
+        self.assertIn("rc=$?", step)
+        self.assertTrue(step.rstrip().endswith("exit $rc"))
 
 
 class RepoMetadataTest(unittest.TestCase):

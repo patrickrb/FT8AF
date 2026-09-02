@@ -16,9 +16,14 @@ Modes:
                         prove the account may edit listings — see below.
   --pull                Overwrite the local tree with what is live on Play
                         (bootstrap / resync after someone edits in the Console).
-  --check-permissions   Patch one listing inside an edit that is then abandoned,
-                        to prove the service account holds the "Manage store
-                        presence" permission. Nothing is committed.
+  --check-permissions   Write one listing (PATCH of one Play already has, or
+                        PUT when Play has none yet) inside an edit that is then
+                        abandoned, to prove the service account holds the
+                        "Manage store presence" permission. Nothing is committed.
+  --annotate-verdict N  Print the GitHub Actions annotation for probe exit code
+                        N (see probe_annotation) and exit 0. The workflow relays
+                        the probe's verdict through this so the mapping is
+                        unit-tested here instead of living in bash.
   (default)             Push every locale whose text differs from live, then
                         commit the edit so it goes to Play for review.
 
@@ -52,6 +57,46 @@ EXIT_OK = 0
 EXIT_ERROR = 1  # generic failure: unpublishable metadata, bad credentials, API error
 EXIT_DENIED = 3  # --check-permissions: Play refused the listing write with 403
 EXIT_INCONCLUSIVE = 4  # --check-permissions: the probe never reached a verdict
+
+# Where the missing grant is set, quoted in every message that names it.
+GRANT_ADVICE = (
+    "Play Console -> Users and permissions -> App permissions -> Store presence "
+    '-> "Manage store presence"'
+)
+
+
+def probe_annotation(rc):
+    """(level, message) the workflow annotates a --check-permissions run with.
+
+    Lives here rather than in the workflow's bash so the mapping is tested
+    against the EXIT_* constants it depends on: swapping the 3/4 arms, or
+    reporting a generic 1 as a missing grant, would send an operator to change
+    a Console permission that was never wrong, and a bash `case` cannot be
+    unit-tested. Only 3 and 4 are verdicts; everything else means the probe
+    never ran, which is deliberately NOT annotated as anything about the grant.
+    """
+    if rc == EXIT_OK:
+        return "notice", "The service account can edit listings."
+    if rc == EXIT_DENIED:
+        return "error", "The service account cannot edit listings. Grant it %s." % GRANT_ADVICE
+    if rc == EXIT_INCONCLUSIVE:
+        return (
+            "warning",
+            "The probe reached no verdict — the API call failed for a reason that says "
+            "nothing about the grant (401: the token was not accepted, a credentials "
+            "problem; or a timeout, rate limit, Play 5xx). Fix the cause and run it again.",
+        )
+    return (
+        "error",
+        "The probe did not run (exit %d) — see the log above. This is not a verdict "
+        "about the grant." % rc,
+    )
+
+
+def format_annotation(level, message):
+    """A GitHub Actions workflow command: `::level::message` on its own line."""
+    return "::%s::%s" % (level, message)
+
 
 # Listing field <-> fastlane filename.
 FIELD_FILES = {
@@ -475,12 +520,24 @@ def build_arg_parser():
     )
     ap.add_argument("--root", default=str(DEFAULT_ROOT), help="metadata root directory")
     ap.add_argument("--package", default=os.environ.get("PACKAGE_NAME", DEFAULT_PACKAGE))
+    ap.add_argument(
+        "--annotate-verdict",
+        type=int,
+        metavar="RC",
+        help="print the GitHub Actions annotation for probe exit code RC and exit 0",
+    )
     return ap
 
 
 def main(argv=None):
     ap = build_arg_parser()
     args = ap.parse_args(argv)
+
+    if args.annotate_verdict is not None:
+        # Pure formatting for the workflow: no metadata, no credentials, no
+        # Play. The workflow exits with the probe's own code afterwards.
+        print(format_annotation(*probe_annotation(args.annotate_verdict)))
+        return EXIT_OK
 
     chosen = [
         name
