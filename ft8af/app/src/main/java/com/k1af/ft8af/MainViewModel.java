@@ -2784,6 +2784,12 @@ public class MainViewModel extends ViewModel {
         // ViewModel is cleared while still "connected" the Timer thread would keep probing
         // the rig indefinitely. Tear it down here too.
         stopCatLivenessWatchdog();
+        // The rig's own poll Timers (IcomRig's dial follow and meter polls) are
+        // cancelled only by onDisconnecting(), which connectRig() and the
+        // disconnect path run — a cleared ViewModel did not. Without this a
+        // non-daemon Timer and the rig it holds stay alive, polling a connector
+        // nobody owns any more (Copilot review on #789).
+        releaseRigOnClear(baseRig);
         // Drop the SCO retry/timeout timers and balance an outstanding start,
         // else a retained ViewModel keeps restarting SCO after the activity is
         // gone and AudioService is left holding our request.
@@ -2792,6 +2798,21 @@ public class MainViewModel extends ViewModel {
         WsjtxUdpService.INSTANCE.stop();
         getQTHThreadPool.shutdown();
         sendWaveDataThreadPool.shutdown();
+    }
+
+    /**
+     * The rig half of {@link #onCleared()}: run the rig's teardown hook so its
+     * poll timers stop with the ViewModel. A static seam because this class
+     * cannot be constructed in a unit test (the constructor starts the audio
+     * recorder, the FT8 listener and its thread pools), so
+     * {@code MainViewModelRigCleanupTest} exercises the hook wiring through
+     * this method with a recording rig. Null-safe: nothing to release before a
+     * rig was ever connected.
+     */
+    static void releaseRigOnClear(BaseRig rig) {
+        if (rig != null) {
+            rig.onDisconnecting();
+        }
     }
 
     private static final String ACTION_USB_AUDIO_PERMISSION =
