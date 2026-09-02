@@ -107,6 +107,7 @@ public final class AudioOutputRoutingPolicy {
         boolean anyScoAddressKnown = false;
         String soleScoAddress = null;
         boolean scoDevicesDiffer = false;
+        boolean activeSeenOnSco = false;
         for (int i = 0; i < deviceTypes.length; i++) {
             if (deviceTypes[i] == TYPE_BLUETOOTH_A2DP) {
                 a2dpCount++;
@@ -116,6 +117,9 @@ public final class AudioOutputRoutingPolicy {
                 String scoAddr = addressAt(deviceAddresses, i);
                 if (isKnownAddress(scoAddr)) {
                     anyScoAddressKnown = true;
+                    if (isKnownAddress(activeScoAddress) && activeScoAddress.equalsIgnoreCase(scoAddr)) {
+                        activeSeenOnSco = true;
+                    }
                     if (soleScoAddress == null) {
                         soleScoAddress = scoAddr;
                     } else if (!soleScoAddress.equalsIgnoreCase(scoAddr)) {
@@ -157,6 +161,14 @@ public final class AudioOutputRoutingPolicy {
                     return i;
                 }
             }
+        }
+
+        // The capture side named our device but the output side names only
+        // OTHER devices on SCO: the enumeration contradicts the routed capture,
+        // and the withheld-address fallback below would hand TX to a blank A2DP
+        // endpoint that belongs to one of those other devices. Not ours to guess.
+        if (isKnownAddress(activeScoAddress) && anyScoAddressKnown && !activeSeenOnSco) {
+            return LEAVE_TO_OS;
         }
 
         // Fallback for platforms that withhold endpoint addresses: with exactly

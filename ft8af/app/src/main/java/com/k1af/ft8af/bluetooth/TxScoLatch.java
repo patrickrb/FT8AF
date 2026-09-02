@@ -1,8 +1,5 @@
 package com.k1af.ft8af.bluetooth;
 
-import java.util.function.BooleanSupplier;
-import java.util.function.Supplier;
-
 /**
  * Remembers whether <em>this app</em> held a Bluetooth SCO session for the rig
  * at the moment an over (or the tune carrier) was keyed — and on which device —
@@ -49,6 +46,22 @@ import java.util.function.Supplier;
  */
 public final class TxScoLatch {
 
+    /**
+     * {@code ScoLinkCoordinator.isLinkUpOrPending()} as a callable. App-local
+     * rather than {@code java.util.function.BooleanSupplier}: that package does
+     * not exist before API 24 and the module does not desugar the core library,
+     * so a lambda implementing it fails to load on Android 6 (minSdk 23) — at
+     * keying time, in this case (Copilot review on #790).
+     */
+    public interface LinkState {
+        boolean isUpOrPending();
+    }
+
+    /** The mic's routed SCO device address as a callable; same reason as {@link LinkState}. */
+    public interface DeviceAddress {
+        String get();
+    }
+
     private volatile boolean heldForTx;
     private volatile String scoAddress;
 
@@ -71,10 +84,10 @@ public final class TxScoLatch {
      */
     public void keyDown(boolean bluetoothRigTx,
                         boolean stopsSco,
-                        BooleanSupplier scoUpOrPending,
-                        Supplier<String> scoDeviceAddress,
+                        LinkState scoUpOrPending,
+                        DeviceAddress scoDeviceAddress,
                         Runnable stopSco) {
-        boolean held = bluetoothRigTx && scoUpOrPending.getAsBoolean();
+        boolean held = bluetoothRigTx && scoUpOrPending.isUpOrPending();
         heldForTx = held;
         scoAddress = held ? scoDeviceAddress.get() : null;
         if (stopsSco) {

@@ -117,6 +117,25 @@ public class AudioOutputRoutingPolicyTest {
     }
 
     @Test
+    public void identifiedLink_contradictedByTheOnlyNamedSco_leavesToOs() {
+        // Partial redaction: the A2DP endpoint's address is withheld but the one
+        // SCO endpoint names a DIFFERENT device than the one the mic is captured
+        // from. The single-pair fallback must not hand TX to that blank A2DP.
+        int[] types = {TYPE_BLUETOOTH_A2DP, TYPE_BLUETOOTH_SCO};
+        String[] addrs = {NONE, OTHER};
+        assertThat(pickOn(types, addrs, HEADSET)).isEqualTo(AudioOutputRoutingPolicy.LEAVE_TO_OS);
+    }
+
+    @Test
+    public void identifiedLink_confirmedByTheNamedSco_stillUsesTheSinglePairFallback() {
+        // Same shape, but the SCO endpoint agrees with the capture side: the
+        // blank A2DP is the only candidate and the pairing is unambiguous.
+        int[] types = {TYPE_BLUETOOTH_A2DP, TYPE_BLUETOOTH_SCO};
+        String[] addrs = {NONE, HEADSET};
+        assertThat(pickOn(types, addrs, HEADSET)).isEqualTo(0);
+    }
+
+    @Test
     public void sameDeviceEnumeratedTwiceOnSco_isNotAmbiguous() {
         // Some builds list a hands-free device's SCO endpoint more than once;
         // identical addresses are one device, not two.

@@ -27,6 +27,7 @@ import com.k1af.ft8af.FT8Common;
 import com.k1af.ft8af.MainViewModel;
 import com.k1af.ft8af.ModeProfile;
 import com.k1af.ft8af.bluetooth.AudioOutputRoutingPolicy;
+import com.k1af.ft8af.bluetooth.DefaultOutputRouting;
 import com.k1af.ft8af.ft8listener.FastDecodeGate;
 import com.k1af.ft8af.Ft8Message;
 import com.k1af.ft8af.ft8signal.FT8Package;
@@ -3330,43 +3331,28 @@ public class FT8TransmitSignal {
      * conditions aren't met; see {@link AudioOutputRoutingPolicy} for why the
      * enumerated device types alone are not enough to decide.
      */
-    private static void applyDefaultOutputRoutingOverride(AudioTrack track) {
+    private static void applyDefaultOutputRoutingOverride(final AudioTrack track) {
         Context context = GeneralVariables.getMainContext();
         if (context == null) return;
         AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         if (audioManager == null) return;
         AudioDeviceInfo[] outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
-        int[] types = new int[outputs.length];
-        String[] addresses = new String[outputs.length];
-        for (int i = 0; i < outputs.length; i++) {
-            types[i] = outputs[i].getType();
-            addresses[i] = deviceAddressOrNull(outputs[i]);
-        }
-        int idx = AudioOutputRoutingPolicy.pickDefaultOutputIndex(
-                types, addresses, scoHeldForThisTx(), scoAddressForThisTx());
-        if (idx == AudioOutputRoutingPolicy.LEAVE_TO_OS) return;
-        // setPreferredDevice returns false when the framework refuses the route.
-        // Log what actually happened: an unconditional "steered" line is worse
-        // than no line at all, because the next person debugging a dead TX would
-        // rule this out on the strength of it.
-        boolean applied = track.setPreferredDevice(outputs[idx]);
-        GeneralVariables.fileLog(applied
-                ? "playFT8Signal: default output steered to A2DP (app SCO session up)"
-                : "playFT8Signal: A2DP steering REJECTED by setPreferredDevice;"
-                        + " TX audio stays on the OS route");
-    }
+        // The enumeration-to-policy-to-track wiring (and the address gating for
+        // API < 28 / a denied BLUETOOTH_CONNECT) lives in DefaultOutputRouting so
+        // it is covered by DefaultOutputRoutingTest; only the real track and the
+        // debug log are supplied from here.
+        DefaultOutputRouting.apply(outputs, scoHeldForThisTx(), scoAddressForThisTx(),
+                new DefaultOutputRouting.Sink() {
+                    @Override
+                    public boolean setPreferredDevice(AudioDeviceInfo device) {
+                        return track.setPreferredDevice(device);
+                    }
 
-    /**
-     * {@code AudioDeviceInfo.getAddress()} exists only from API 28. Calling it
-     * on the Android 8.1 device this steering exists for (issue #759 follow-up)
-     * throws {@link NoSuchMethodError} — a linkage error, which the
-     * {@code catch (Exception)} blocks around TX do not catch — before any
-     * audio plays. Below Pie the addresses are simply unknown, and the policy's
-     * single-pair fallback still performs the fix there.
-     */
-    private static String deviceAddressOrNull(AudioDeviceInfo device) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null;
-        return device.getAddress();
+                    @Override
+                    public void log(String line) {
+                        GeneralVariables.fileLog(line);
+                    }
+                });
     }
 
     /**
