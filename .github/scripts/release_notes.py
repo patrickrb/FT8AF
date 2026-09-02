@@ -94,7 +94,7 @@ def cap_notes(notes):
     data = notes.encode("utf-8")
     if len(data) <= PLAY_NOTES_LIMIT:
         return notes
-    cut = data.rfind(b"\n", 0, PLAY_NOTES_LIMIT + 1)
+    cut = data.rfind(b"\n", 0, PLAY_NOTES_LIMIT)
     if cut > 0:
         return data[:cut].decode("utf-8") + "\n"
     return data[:PLAY_NOTES_LIMIT].decode("utf-8", errors="ignore")
