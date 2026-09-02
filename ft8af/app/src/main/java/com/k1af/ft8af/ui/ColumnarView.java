@@ -195,19 +195,26 @@ public class ColumnarView extends View {
             }
         }
         canvas.drawBitmap(lastBitMap,0,0,null);
-        if (touch_x>0) {
-            // Calculate frequency
-            freq_hz = Math.round((float) spectrumWidth * (float) touch_x / (float) getWidth());
-            canvas.drawLine(touch_x, 0, touch_x, getHeight(), touchPaint);
+        // freq_hz is computed in setTouch_x so a tap handler reading
+        // getFreq_hz() right after the setter sees the fresh position rather
+        // than the value onDraw last wrote (issue #782). Draw the blue cursor
+        // at the pixel that maps back from freq_hz so it always sits at the
+        // center of the red TX-bandwidth markers below.
+        if (SpectrumTouchMath.hasTapCursor(freq_hz)) {
+            float cursorX = SpectrumTouchMath.freqHzToPixelX(
+                    freq_hz, getWidth(), spectrumWidth);
+            if (cursorX < 0) cursorX = touch_x;
+            canvas.drawLine(cursorX, 0, cursorX, getHeight(), touchPaint);
         }
 
         // Draw TX frequency marker lines
         if (txFrequency > 0 && getWidth() > 0) {
             txMarkerPaint.setColor(0xFFEF4444);
-            float freqWidth = (float) getWidth() / spectrumWidth;
             float halfBw = FT8_SIGNAL_BANDWIDTH_HZ / 2f;
-            float x1 = (txFrequency - halfBw) * freqWidth;
-            float x2 = (txFrequency + halfBw) * freqWidth;
+            float x1 = SpectrumTouchMath.freqHzToPixelX(
+                    txFrequency - halfBw, getWidth(), spectrumWidth);
+            float x2 = SpectrumTouchMath.freqHzToPixelX(
+                    txFrequency + halfBw, getWidth(), spectrumWidth);
             canvas.drawLine(x1, 0, x1, getHeight(), txMarkerPaint);
             canvas.drawLine(x2, 0, x2, getHeight(), txMarkerPaint);
         }
@@ -218,6 +225,9 @@ public class ColumnarView extends View {
     }
     public void setTouch_x(int touch_x) {
         this.touch_x = touch_x;
+        // Compute freq_hz eagerly so getFreq_hz() returns the fresh position
+        // instead of whatever the last onDraw() left behind (issue #782).
+        this.freq_hz = SpectrumTouchMath.touchToFreqHz(touch_x, getWidth(), spectrumWidth);
     }
 
     public int getFreq_hz() {

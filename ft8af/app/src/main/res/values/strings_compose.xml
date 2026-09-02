@@ -118,6 +118,7 @@
     <string name="tx_volume_decrease">Decrease TX volume</string>
     <string name="tx_volume_increase">Increase TX volume</string>
     <string name="tx_cq_options">CQ message options (modifier, free text, Field Day)</string>
+    <string name="sheet_close">Close</string>
     <string name="tx_hunt_options">Hunt options (priority, smart filters)</string>
     <!-- Redesigned TX strip (option 3a) -->
     <string name="tx_status_listening">Listening</string>
