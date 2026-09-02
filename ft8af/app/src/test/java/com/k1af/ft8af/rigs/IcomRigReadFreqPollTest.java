@@ -243,33 +243,55 @@ public class IcomRigReadFreqPollTest {
 
     // -- mayPollDial (pure gate) ---------------------------------------------
 
+    private static final long SETTLE = IcomRig.READ_FREQ_CONNECT_SETTLE_MS;
+
     @Test
     public void mayPollDial_linkDown_isFalse() {
-        assertThat(IcomRig.mayPollDial(T0, 0L, T0)).isFalse();
+        assertThat(IcomRig.mayPollDial(T0, 0L, 0L, T0)).isFalse();
     }
 
     @Test
-    public void mayPollDial_staleDeliveredStampFromAPreviousSession_doesNotCount() {
-        // A stamp older than this connection belongs to the last one; it must
-        // not short-circuit the window for the link that just came up.
-        assertThat(IcomRig.mayPollDial(T0 + 100, T0, T0 - 5_000)).isFalse();
+    public void mayPollDial_deliveryIsSessionState_notAClockComparison() {
+        // The stamp as it stood when the window was taken belongs to the last
+        // session (or to nothing); only a stamp that CHANGED since means the
+        // connect-time push landed on this connection.
+        long stale = T0 - 5_000;
+        assertThat(IcomRig.mayPollDial(T0 + 100, T0, stale, stale)).isFalse();
+        assertThat(IcomRig.mayPollDial(T0 + 100, T0, stale, T0 + 50)).isTrue();
+        // A wall-clock step backwards between connect and delivery makes the
+        // new stamp read EARLIER than the old one; it still changed, so it
+        // still counts — the old ">= connect time" test would have missed it.
+        assertThat(IcomRig.mayPollDial(T0 + 100, T0, stale, stale - 60_000)).isTrue();
     }
 
     @Test
     public void mayPollDial_settleWindowBoundaryIsInclusive() {
-        assertThat(IcomRig.mayPollDial(
-                T0 + IcomRig.READ_FREQ_CONNECT_SETTLE_MS - 1, T0, 0L)).isFalse();
-        assertThat(IcomRig.mayPollDial(
-                T0 + IcomRig.READ_FREQ_CONNECT_SETTLE_MS, T0, 0L)).isTrue();
+        assertThat(IcomRig.mayPollDial(T0 + SETTLE - 1, T0, 0L, 0L)).isFalse();
+        assertThat(IcomRig.mayPollDial(T0 + SETTLE, T0, 0L, 0L)).isTrue();
     }
 
     @Test
     public void mayPollDial_settleWindowCoversTheWholeConnectHandshake() {
-        // onConnected posts setOperationBand at +1500 ms and its FA write lands
-        // 800 ms after that. The window must outlast the pair, otherwise this
-        // gate is no better than the construction-relative start delay it
-        // replaced.
-        assertThat(IcomRig.READ_FREQ_CONNECT_SETTLE_MS).isAtLeast(1500L + 800L);
+        // onConnected + 1500 ms (the posted setOperationBand) + 800 ms (its
+        // delayed FA write): the window must outlast that even when the push
+        // is never observed landing.
+        assertThat(SETTLE).isAtLeast(2_300L);
+        assertThat(IcomRig.mayPollDial(T0 + 2_300, T0, 0L, 0L)).isFalse();
+    }
+
+    @Test
+    public void tickUsesTheSnapshotItTookWhenTheLinkCameUp() {
+        // The gate sees the stamp as of the first "up" sample, so a stamp from
+        // the previous session that is numerically later than this window's
+        // start (clock corrected forwards in between) cannot short-circuit it.
+        connector.connected = true;
+        long previousSession = T0 + 999_999;
+        rig.runReadFreqTick(T0, previousSession);
+        rig.runReadFreqTick(T0 + 100, previousSession);
+        assertThat(connector.sent).isEmpty();
+        // ...until the stamp actually changes.
+        rig.runReadFreqTick(T0 + 200, previousSession + 1);
+        assertThat(countMatching(connector.sent, READ_FREQ_FRAME)).isEqualTo(1);
     }
 
     @Test

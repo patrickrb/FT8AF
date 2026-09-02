@@ -9,6 +9,7 @@ import android.util.Log;
 
 import com.k1af.ft8af.Ft8Message;
 import com.k1af.ft8af.GeneralVariables;
+import android.os.SystemClock;
 import com.k1af.ft8af.R;
 import com.k1af.ft8af.connector.ConnectMode;
 import com.k1af.ft8af.database.ControlMode;
@@ -114,10 +115,17 @@ public class IcomRig extends BaseRig {
     private final PollScheduler scheduler;
     private Cancellable meterPoll;//querying meters while keyed
     private Cancellable readFreqPoll;//polling frequency (rig->app dial follow)
-    //When this timer first saw the link up, or 0 while it is down. The poll gate is
-    //relative to THIS, not to construction — see READ_FREQ_CONNECT_SETTLE_MS. Volatile:
-    //written on the Timer thread, cleared on the disconnect thread (onDisconnecting).
+    //When this timer first saw the link up (SystemClock.elapsedRealtime(), so a
+    //wall-clock correction cannot stretch or shrink the window), or 0 while it is
+    //down. The poll gate is relative to THIS, not to construction — see
+    //READ_FREQ_CONNECT_SETTLE_MS. Volatile: written on the Timer thread, cleared on
+    //the disconnect thread (onDisconnecting).
     private volatile long connectedSinceMs = 0L;
+    //GeneralVariables.operatorDialDeliveredAtMs as it stood when the window was
+    //taken. "The connect-time push landed on THIS connection" is then "the stamp
+    //changed since", which no clock step in either direction can fake or hide —
+    //comparing the wall-clock stamp against a connect time could.
+    private volatile long deliveredStampAtConnect = 0L;
     //The connector's connection generation connectedSinceMs was taken in. A link
     //that dropped and reopened entirely between two ticks (CableConnector retries
     //within 500 ms; ticks are 2 s apart) never shows this timer a "down" sample,
@@ -130,10 +138,28 @@ public class IcomRig extends BaseRig {
 
     @Override
     public void setPTT(boolean on) {
-        super.setPTT(on);
-        //isPttOn = on;
+        // isPttOn() is what the poll timers read to stay quiet during TX, so
+        // publish it BEFORE the key-down goes out and only AFTER the unkey is on
+        // the wire. With the flag flipped to false first, a tick landing between
+        // the flip and the PTT-off command saw "not transmitting" and could send
+        // a frequency read ahead of the unkey — the mid-transmit CI-V read the
+        // gate exists to prevent (Copilot review on #789).
+        if (on) {
+            super.setPTT(true);
+        }
         alcMaxAlert = false;
         swrAlert = false;
+        try {
+            dispatchPtt(on);
+        } finally {
+            if (!on) {
+                super.setPTT(false);
+            }
+        }
+    }
+
+    /** The data-mode fix-up and the PTT command itself; see {@link #setPTT}. */
+    private void dispatchPtt(boolean on) {
         if (on) {
             //fix connection mode: 0x03=WLAN, 0x01=USB, 0x02=USB+MIC, ensuring audio can be sent to rig
             if (GeneralVariables.connectMode == ConnectMode.NETWORK) {
@@ -376,7 +402,7 @@ public class IcomRig extends BaseRig {
      * private for the same reason.
      */
     void runReadFreqTick() {
-        runReadFreqTick(System.currentTimeMillis(), GeneralVariables.operatorDialDeliveredAtMs);
+        runReadFreqTick(SystemClock.elapsedRealtime(), GeneralVariables.operatorDialDeliveredAtMs);
     }
 
     /**
@@ -390,7 +416,7 @@ public class IcomRig extends BaseRig {
      * way; this one logs the throwable rather than just its message so the stack
      * trace survives.
      *
-     * @param nowMs             current wall clock
+     * @param nowMs             a monotonic clock ({@code SystemClock.elapsedRealtime()})
      * @param dialDeliveredAtMs {@code GeneralVariables.operatorDialDeliveredAtMs}
      */
     void runReadFreqTick(long nowMs, long dialDeliveredAtMs) {
@@ -410,6 +436,7 @@ public class IcomRig extends BaseRig {
             if (connectedSinceMs == 0L || generation != settleGeneration) {
                 connectedSinceMs = nowMs;
                 settleGeneration = generation;
+                deliveredStampAtConnect = dialDeliveredAtMs;
             }
             switch (ReadTaskAction.decide(true, isPttOn())) {
                 case SKIP:
@@ -419,7 +446,8 @@ public class IcomRig extends BaseRig {
                     //cadence); don't duplicate them here.
                     return;
                 case READ_FREQ:
-                    if (!mayPollDial(nowMs, connectedSinceMs, dialDeliveredAtMs)) {
+                    if (!mayPollDial(nowMs, connectedSinceMs, deliveredStampAtConnect,
+                            dialDeliveredAtMs)) {
                         return;
                     }
                     readFreqFromRig();
@@ -437,11 +465,13 @@ public class IcomRig extends BaseRig {
      *
      * <p>Two ways to clear it, because neither alone is sufficient:
      * <ul>
-     *   <li>{@code dialDeliveredAtMs >= connectedSinceMs} — {@code setOperationBand}'s
+     *   <li>{@code dialDeliveredAtMs != deliveredStampAtConnect} — the delivered
+     *       stamp changed since this window was taken, i.e. {@code setOperationBand}'s
      *       delayed FA write actually reached the wire on <em>this</em> connection,
      *       so the rig is on the frequency we asked for and there is nothing left
-     *       to wait for. A stamp older than the connection is a previous session's
-     *       and doesn't count.</li>
+     *       to wait for. Session state, not a clock comparison: the stamp is wall
+     *       clock and a correction could otherwise make a previous session's stamp
+     *       look newer than the connection (or this session's look older).</li>
      *   <li>{@link #READ_FREQ_CONNECT_SETTLE_MS} elapsed since the link came up —
      *       the fallback for when that push never lands at all, e.g. RetunePolicy
      *       suppressed it as redundant on a flapping reconnect. Without this the
@@ -451,15 +481,18 @@ public class IcomRig extends BaseRig {
      *
      * <p>Pure and static so the gate is unit-testable without a Timer or a clock.
      *
-     * @param nowMs             current wall clock
-     * @param connectedSinceMs  when this timer first saw the link up, or 0 if down
-     * @param dialDeliveredAtMs {@code GeneralVariables.operatorDialDeliveredAtMs}
+     * @param nowMs                   a monotonic clock, same base as {@code connectedSinceMs}
+     * @param connectedSinceMs        when this timer first saw the link up, or 0 if down
+     * @param deliveredStampAtConnect {@code GeneralVariables.operatorDialDeliveredAtMs}
+     *                                as it stood when the window was taken
+     * @param dialDeliveredAtMs       {@code GeneralVariables.operatorDialDeliveredAtMs} now
      */
-    static boolean mayPollDial(long nowMs, long connectedSinceMs, long dialDeliveredAtMs) {
+    static boolean mayPollDial(long nowMs, long connectedSinceMs,
+                               long deliveredStampAtConnect, long dialDeliveredAtMs) {
         if (connectedSinceMs <= 0L) {
             return false;
         }
-        if (dialDeliveredAtMs >= connectedSinceMs) {
+        if (dialDeliveredAtMs != deliveredStampAtConnect) {
             return true;
         }
         return nowMs - connectedSinceMs >= READ_FREQ_CONNECT_SETTLE_MS;
