@@ -74,8 +74,10 @@ def probe_annotation(rc):
     against the EXIT_* constants it depends on: swapping the 3/4 arms, or
     reporting a generic 1 as a missing grant, would send an operator to change
     a Console permission that was never wrong, and a bash `case` cannot be
-    unit-tested. Only 3 and 4 are verdicts; everything else means the probe
-    never ran, which is deliberately NOT annotated as anything about the grant.
+    unit-tested. Three outcomes: 0 and 3 are verdicts (the account may / may
+    not edit listings), 4 means the probe ran but reached no verdict, and
+    anything else (1, argparse's 2, ...) means the probe never ran — which is
+    deliberately NOT annotated as anything about the grant.
     """
     if rc == EXIT_OK:
         return "notice", "The service account can edit listings."
