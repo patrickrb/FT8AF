@@ -4,7 +4,6 @@ import android.media.AudioManager;
 import android.os.Handler;
 import android.os.Looper;
 
-import java.util.function.LongSupplier;
 
 /**
  * Drives a {@link ScoLinkTracker} against the real world: every request,
@@ -26,6 +25,19 @@ import java.util.function.LongSupplier;
  * without a rig or a headset.
  */
 public final class ScoLinkCoordinator {
+
+    /**
+     * Monotonic-ish clock in ms. App-local rather than
+     * {@code java.util.function.LongSupplier}: {@code java.util.function} does
+     * not exist before API 24 and the core library is not desugared, so the
+     * {@code System::currentTimeMillis} lambda handed to
+     * {@link #onMainThread} failed to load on Android 6 (minSdk 23) — while
+     * constructing {@code MainViewModel}, i.e. at app start (Copilot review on
+     * #790, same defect as {@code TxScoLatch} had).
+     */
+    public interface Clock {
+        long nowMs();
+    }
 
     /** Side effects the coordinator asks the host to perform. */
     public interface Sink {
@@ -50,14 +62,14 @@ public final class ScoLinkCoordinator {
     private final ScoLinkTracker tracker;
     private final Handler handler;
     private final Sink sink;
-    private final LongSupplier clock;
+    private final Clock clock;
 
     private final Runnable retryRunnable;
     private final Runnable connectTimeoutRunnable;
     private final Runnable micCheckRunnable;
 
     public ScoLinkCoordinator(ScoLinkTracker tracker, Handler handler, Sink sink,
-                              LongSupplier clock) {
+                              Clock clock) {
         this.tracker = tracker;
         this.handler = handler;
         this.sink = sink;
@@ -136,7 +148,7 @@ public final class ScoLinkCoordinator {
                     + " -> " + ScoLinkTracker.stateName(state)
                     + " wanted=" + tracker.isWanted()
                     + " attempt=" + tracker.attempts());
-            ScoLinkTracker.Update u = tracker.onStateUpdate(state, clock.getAsLong());
+            ScoLinkTracker.Update u = tracker.onStateUpdate(state, clock.nowMs());
             if (state == AudioManager.SCO_AUDIO_STATE_CONNECTED) {
                 handler.removeCallbacks(connectTimeoutRunnable);
                 handler.removeCallbacks(retryRunnable);

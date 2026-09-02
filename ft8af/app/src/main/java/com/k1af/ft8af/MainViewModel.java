@@ -56,6 +56,7 @@ import com.k1af.ft8af.callsign.CallsignDatabase;
 import com.k1af.ft8af.callsign.CallsignInfo;
 import com.k1af.ft8af.callsign.OnAfterQueryCallsignLocation;
 import com.k1af.ft8af.bluetooth.ScoLinkCoordinator;
+import com.k1af.ft8af.bluetooth.TxScoLatch;
 import com.k1af.ft8af.bluetooth.ScoLinkTracker;
 import com.k1af.ft8af.bluetooth.ScoPolicy;
 import com.k1af.ft8af.connector.BaseRigConnector;
@@ -252,6 +253,13 @@ public class MainViewModel extends ViewModel {
     // "We keyed the rig and haven't confirmed it back off" — settled by
     // retryPendingUnkey() on reconnect and at slot boundaries.
     private final PttSafetyLatch pttSafetyLatch = new PttSafetyLatch();
+    /**
+     * Whether our SCO link was up when the current over was keyed — snapshotted
+     * in {@code beginKeying()} before {@code stopSco()} tears it down, because
+     * the TX path asks after the PTT settle delay, by which time the tracker
+     * already says "down" (see {@link TxScoLatch}).
+     */
+    private final TxScoLatch txScoLatch = new TxScoLatch();
     public MeterProtectionController meterProtectionController;//ALC auto-volume + SWR halt
     public SpectrumListener spectrumListener;//object for drawing the spectrum
     public boolean markMessage = true;//whether to mark messages toggle
@@ -913,18 +921,36 @@ public class MainViewModel extends ViewModel {
              * (VOX), this is a no-op and the audio itself keys the rig.
              */
             private void beginKeying() {
-                if (GeneralVariables.controlMode == ControlMode.CAT
+                boolean keysViaControlPath = GeneralVariables.controlMode == ControlMode.CAT
                         || GeneralVariables.controlMode == ControlMode.RTS
-                        || GeneralVariables.controlMode == ControlMode.DTR) {
-                    if (baseRig != null) {
-                        //if (GeneralVariables.connectMode != ConnectMode.NETWORK) stopSco();
-                        if (needControlSco()) stopSco();
-                        // Arm before the write, not after: if setPTT throws or the
-                        // process dies mid-key, we still recorded that the rig may
-                        // be keyed and the next reconnect settles it.
-                        pttSafetyLatch.onKeyed();
-                        baseRig.setPTT(true);
-                    }
+                        || GeneralVariables.controlMode == ControlMode.DTR;
+                // Two different questions (Copilot review on #790):
+                //  - needControlSco(): is this a Bluetooth RIG whose TX audio must
+                //    not ride SCO? That decides whether the TX path may steer
+                //    Default output to the rig's A2DP. It is true for Bluetooth +
+                //    VOX too — VOX leaves SCO up, so its media stream is on the
+                //    SCO route and needs the steering just as much. A USB/network
+                //    rig with a Bluetooth headset picked as its mic also holds a
+                //    SCO link of ours, but its audio belongs on the rig: false.
+                //  - control-path keying with a rig: the only case that pauses
+                //    SCO around PTT (the pre-existing condition, unchanged).
+                // keyDown() takes the snapshot BEFORE it stops SCO — the TX worker
+                // reads it after the PTT settle delay, when the tracker has already
+                // been told to drop the link — and that order lives in TxScoLatch
+                // so it is the tested one.
+                boolean bluetoothRigTx = needControlSco();
+                txScoLatch.keyDown(
+                        bluetoothRigTx,
+                        keysViaControlPath && baseRig != null && bluetoothRigTx,
+                        MainViewModel.this::isScoLinkUpOrPending,
+                        MainViewModel.this::routedScoInputAddress,
+                        MainViewModel.this::stopSco);
+                if (keysViaControlPath && baseRig != null) {
+                    // Arm before the write, not after: if setPTT throws or the
+                    // process dies mid-key, we still recorded that the rig may
+                    // be keyed and the next reconnect settles it.
+                    pttSafetyLatch.onKeyed();
+                    baseRig.setPTT(true);
                 }
             }
 
@@ -944,6 +970,9 @@ public class MainViewModel extends ViewModel {
                         if (needControlSco()) startSco();
                     }
                 }
+                // The post-TX restart has been requested; the next over takes a
+                // fresh snapshot in beginKeying().
+                txScoLatch.keyUp();
             }
 
             @Override
@@ -2491,6 +2520,49 @@ public class MainViewModel extends ViewModel {
     // AudioRecord is verified to be capturing from it, and (d) requests from
     // the TX executor and the main-thread broadcasts/timers are applied in
     // order, never interleaved. Issue #759 (Android 8.x: Bluetooth RX dead).
+
+    /**
+     * Whether this app currently holds a SCO session (CONNECTING or CONNECTED),
+     * per the tracker rather than {@code AudioManager.isBluetoothScoOn()} — see
+     * {@link ScoLinkCoordinator#isLinkUpOrPending()}. Snapshotted by the keying
+     * path into {@link #isScoHeldForTx()}; the TX path must read that snapshot,
+     * not this live value, because keying stops SCO before the audio starts.
+     */
+    public boolean isScoLinkUpOrPending() {
+        return scoLink.isLinkUpOrPending();
+    }
+
+    /**
+     * Whether our own SCO link was up (or coming up) when the current over or
+     * tune carrier was keyed. Read by the TX path, which must not steer Default
+     * output onto a Bluetooth sink unless our own SCO link is the thing
+     * displacing the media route (see {@code AudioOutputRoutingPolicy}). Stable
+     * for the whole over even though {@code beginKeying()} has already asked
+     * the tracker to drop the link (Copilot review on #790, {@link TxScoLatch}).
+     */
+    public boolean isScoHeldForTx() {
+        return txScoLatch.heldForTx();
+    }
+
+    /**
+     * Address of the device our SCO link was on when the current over was
+     * keyed, or null when unknown (see {@link TxScoLatch#scoAddress()}).
+     */
+    public String scoAddressForTx() {
+        return txScoLatch.scoAddress();
+    }
+
+    /**
+     * Address of the SCO device the mic is being captured from right now, or
+     * null when the capture is not on SCO / the platform withholds it. Read at
+     * keying time, before SCO is stopped, so the TX path knows which of several
+     * hands-free devices actually carries our link.
+     */
+    private String routedScoInputAddress() {
+        if (hamRecorder == null) return null;
+        MicRecorder mic = hamRecorder.getMicRecorder();
+        return mic == null ? null : mic.routedScoInputAddress();
+    }
 
     private final Handler scoHandler = new Handler(Looper.getMainLooper());
     private final ScoLinkCoordinator scoLink = ScoLinkCoordinator.onMainThread(
