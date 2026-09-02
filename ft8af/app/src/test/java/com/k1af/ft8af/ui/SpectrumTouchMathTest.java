@@ -20,6 +20,24 @@ public class SpectrumTouchMathTest {
     }
 
     @Test
+    public void hasTapCursor_leftEdgeTouchStillDrawsTheCursor() {
+        // x == 0 is a valid touch: it clamps to MIN_TX_AUDIO_HZ and the handler
+        // commits it, so the cursor must be drawn there too — the old
+        // "touch_x > 0" gate left the red markers at 100 Hz with no blue line.
+        int hz = SpectrumTouchMath.touchToFreqHz(0, 1000, 3500);
+        assertThat(hz).isEqualTo(SpectrumTouchMath.MIN_TX_AUDIO_HZ);
+        assertThat(SpectrumTouchMath.hasTapCursor(hz)).isTrue();
+    }
+
+    @Test
+    public void hasTapCursor_clearedAndUnlaidStatesHideTheCursor() {
+        // setTouch_x(-1) is how the views clear the cursor after the timeout.
+        assertThat(SpectrumTouchMath.hasTapCursor(SpectrumTouchMath.touchToFreqHz(-1, 1000, 3500))).isFalse();
+        // A view with no width yet cannot place a cursor either.
+        assertThat(SpectrumTouchMath.hasTapCursor(SpectrumTouchMath.touchToFreqHz(10, 0, 3500))).isFalse();
+    }
+
+    @Test
     public void touchToFreqHz_rightEdgeClampsBelowSpectrumWidth() {
         // Unclamped this committed 3500 Hz as the base frequency, a value the
         // audio-frequency editor caps at spectrumWidth - 100.

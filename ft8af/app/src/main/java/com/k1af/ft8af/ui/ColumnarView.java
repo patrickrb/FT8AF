@@ -200,7 +200,7 @@ public class ColumnarView extends View {
         // than the value onDraw last wrote (issue #782). Draw the blue cursor
         // at the pixel that maps back from freq_hz so it always sits at the
         // center of the red TX-bandwidth markers below.
-        if (touch_x > 0 && freq_hz > 0) {
+        if (SpectrumTouchMath.hasTapCursor(freq_hz)) {
             float cursorX = SpectrumTouchMath.freqHzToPixelX(
                     freq_hz, getWidth(), spectrumWidth);
             if (cursorX < 0) cursorX = touch_x;

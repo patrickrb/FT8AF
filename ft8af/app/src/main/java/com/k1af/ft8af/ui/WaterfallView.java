@@ -243,7 +243,7 @@ public class WaterfallView extends View {
         //stale on the ACTION_UP event that commits the base frequency. The blue
         //cursor is drawn at the pixel that maps back from freq_hz so it always
         //lines up with the red TX-bandwidth markers.
-        if (touch_x > 0 && freq_hz > 0) {
+        if (SpectrumTouchMath.hasTapCursor(freq_hz)) {
             float cursorX = SpectrumTouchMath.freqHzToPixelX(
                     freq_hz, getWidth(), spectrumWidth);
             if (cursorX < 0) cursorX = touch_x;

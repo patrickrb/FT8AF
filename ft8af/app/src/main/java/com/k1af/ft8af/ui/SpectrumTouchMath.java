@@ -67,6 +67,19 @@ public final class SpectrumTouchMath {
     }
 
     /**
+     * Whether the blue tap cursor should be drawn for the frequency the last
+     * touch selected. Only the frequency decides: the cleared state is
+     * {@code setTouch_x(-1)}, which {@link #touchToFreqHz} turns into -1. The
+     * views used to also require {@code touch_x > 0}, which hid the cursor for
+     * a touch at exactly x == 0 even though the clamp above accepts it as
+     * {@link #MIN_TX_AUDIO_HZ} and the touch handlers commit it — the red
+     * markers moved to 100 Hz with no blue line between them.
+     */
+    public static boolean hasTapCursor(int freqHz) {
+        return freqHz > 0;
+    }
+
+    /**
      * Inverse of {@link #touchToFreqHz}: place a frequency at its horizontal
      * pixel position in the spectrum view. Used to anchor the TX bandwidth
      * markers so they bracket the same column the tap frequency lives in.
