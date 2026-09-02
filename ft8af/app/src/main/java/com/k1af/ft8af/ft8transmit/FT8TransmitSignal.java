@@ -3342,7 +3342,7 @@ public class FT8TransmitSignal {
             addresses[i] = outputs[i].getAddress();
         }
         int idx = AudioOutputRoutingPolicy.pickDefaultOutputIndex(
-                types, addresses, appHoldsScoSession());
+                types, addresses, scoHeldForThisTx());
         if (idx == AudioOutputRoutingPolicy.LEAVE_TO_OS) return;
         // setPreferredDevice returns false when the framework refuses the route.
         // Log what actually happened: an unconditional "steered" line is worse
@@ -3356,16 +3356,23 @@ public class FT8TransmitSignal {
     }
 
     /**
-     * Whether the app's own SCO link tracker says we currently hold a SCO
-     * session. Deliberately not {@code AudioManager.isBluetoothScoOn()}, which
-     * only mirrors the legacy force-use flag and is not trusted anywhere else in
-     * this codebase — see {@code ScoPolicy} / {@code ScoLinkCoordinator}.
-     * Returns false when the view model isn't up yet, which correctly means "no
-     * SCO session of ours".
+     * Whether the app's own SCO link was up when this over was keyed, per the
+     * snapshot {@code MainViewModel.beginKeying()} takes before it calls
+     * {@code stopSco()} ({@code TxScoLatch}). Not the tracker's live answer:
+     * by the time this runs — after {@code onBeforeTransmit()} /
+     * {@code onTuneKeyDown()} and the PTT settle sleep — the posted
+     * {@code requestOff()} has normally already flipped the tracker to
+     * DISCONNECTED, so a live query said "no" in exactly the case the steering
+     * exists for, and became a race against the main looper otherwise (Copilot
+     * review on #790). Deliberately not {@code AudioManager.isBluetoothScoOn()}
+     * either, which only mirrors the legacy force-use flag and is not trusted
+     * anywhere else in this codebase — see {@code ScoPolicy} /
+     * {@code ScoLinkCoordinator}. Returns false when the view model isn't up
+     * yet, which correctly means "no SCO session of ours".
      */
-    private static boolean appHoldsScoSession() {
+    private static boolean scoHeldForThisTx() {
         MainViewModel viewModel = MainViewModel.peekInstance();
-        return viewModel != null && viewModel.isScoLinkUpOrPending();
+        return viewModel != null && viewModel.isScoHeldForTx();
     }
 
     private static class DoTransmitRunnable implements Runnable {
