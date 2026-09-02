@@ -248,6 +248,25 @@
     <string name="pota_tab_activate">Activeren</string>
     <string name="pota_tab_hunt">Hunt</string>
     <string name="pota_tab_history">Geschiedenis</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">zojuist</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="one">%d s geleden</item>
+        <item quantity="other">%d s geleden</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="one">%d min geleden</item>
+        <item quantity="other">%d min geleden</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="one">%d u geleden</item>
+        <item quantity="other">%d u geleden</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="one">%d d geleden</item>
+        <item quantity="other">%d d geleden</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">UTC-tijd tonen</string>
     <string name="pota_start_activation">Activatie starten</string>
     <string name="pota_park_reference_label">Parkreferentie (bijv. K-1234)</string>
     <string name="pota_notes_optional_label">Notities (optioneel)</string>

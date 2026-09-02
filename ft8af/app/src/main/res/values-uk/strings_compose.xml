@@ -237,6 +237,33 @@
     <string name="pota_tab_activate">Активація</string>
     <string name="pota_tab_hunt">Полювання</string>
     <string name="pota_tab_history">Історія</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">щойно</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="one">%d с тому</item>
+        <item quantity="few">%d с тому</item>
+        <item quantity="many">%d с тому</item>
+        <item quantity="other">%d с тому</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="one">%d хв тому</item>
+        <item quantity="few">%d хв тому</item>
+        <item quantity="many">%d хв тому</item>
+        <item quantity="other">%d хв тому</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="one">%d год тому</item>
+        <item quantity="few">%d год тому</item>
+        <item quantity="many">%d год тому</item>
+        <item quantity="other">%d год тому</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="one">%d д тому</item>
+        <item quantity="few">%d д тому</item>
+        <item quantity="many">%d д тому</item>
+        <item quantity="other">%d д тому</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">Показати час UTC</string>
     <string name="pota_start_activation">Почати активацію</string>
     <string name="pota_park_reference_label">Посилання на парк (напр. K-1234)</string>
     <string name="pota_notes_optional_label">Нотатки (необов’язково)</string>

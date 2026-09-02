@@ -38,9 +38,12 @@ public class BluetoothSerialSocket implements Runnable {
     // on the CAT/TX thread (write()). Readers MUST snapshot it into a local before
     // check-and-use — see write()/writeIfConnected.
     private volatile BluetoothSocket socket;
-    // volatile for the same reason as socket: set on the connect thread, cleared on
-    // the disconnect thread, read on the CAT/TX thread (write()) — without it those
-    // reads can see a stale value under the Java memory model.
+    // volatile for the same reason as socket: set on the connect thread and read on
+    // the CAT/TX thread (write()) — without it those reads can see a stale value
+    // under the Java memory model. Note it is cleared on the *read* thread, not the
+    // disconnect thread: disconnect() deliberately leaves this flag alone (see the
+    // comment there) and closing the socket is what makes the blocked read() throw,
+    // so the run() error path is the single writer that clears it.
     private volatile boolean connected;
 
     public BluetoothSerialSocket(Context context, BluetoothDevice device) {
@@ -82,7 +85,11 @@ public class BluetoothSerialSocket implements Runnable {
 
     void disconnect() {
         listener = null; // ignore remaining data and errors
-        // connected = false; // run loop will reset connected
+        // `connected` is intentionally NOT cleared here: closing the socket below
+        // unblocks read() in run(), whose error path clears it on the read thread.
+        // Callers are not left exposed in the meantime — write() snapshots the
+        // socket, so a null snapshot already yields the "not connected" IOException
+        // even while this flag is still true (see writeIfConnected).
         if(socket != null) {
             try {
                 socket.close();
@@ -125,7 +132,8 @@ public class BluetoothSerialSocket implements Runnable {
      * single snapshot of the (volatile) socket's writer, so a concurrent
      * {@link #disconnect()} that nulls the field afterwards cannot affect this
      * call. When the link is down ({@code !connected}) or the snapshot was
-     * already null (disconnect() ran first, before {@code connected} was cleared),
+     * already null (disconnect() nulled the socket and the read loop has not yet
+     * cleared {@code connected}),
      * throw the {@code "not connected"} {@link IOException} the CAT connector
      * already handles ({@code BluetoothRigConnector.sendCommand}) rather than
      * NPEing on a nulled socket and crashing the CAT/TX worker thread. Mirrors

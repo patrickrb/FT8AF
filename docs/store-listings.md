@@ -88,40 +88,63 @@ The workflow is `.github/workflows/play-listings.yml`:
 - **Push to `main`** touching the metadata → publishes the changed locales. Since
   all PRs target `dev`, listing changes reach Play on the normal
   dev → staging → main promotion, alongside the release they belong to.
-- **Manual run** (Actions → "Play store listings" → Run workflow) → dry run by
-  default; it prints the diff against what is live and sends nothing. Untick
-  "Dry run" to publish without waiting for a merge to `main`.
+- **Manual run** (Actions → "Play store listings" → Run workflow) → pick a mode:
+  `dry-run` (the default; prints the diff, sends nothing), `check-permissions`
+  (the grant probe below), or `publish` (the real thing, without waiting for a
+  merge to `main`).
+
+Note that `workflow_dispatch` only appears once this workflow file exists on the
+repository's **default branch**, `main`. Until the first promotion carries it
+there, the manual run is not available and the PR-time validation is all that
+runs.
 
 Only locales whose text actually differs from Play are sent, so a rerun that
 changes nothing commits nothing.
 
 ### Prerequisite: service account permission
 
-`PLAY_SERVICE_ACCOUNT_JSON` was set up for *releases*. Editing listings needs a
-separate grant — **Play Console → Users and permissions → the service account →
-App permissions → "Edit store listing, pricing & distribution"**. Without it the
-`listings.patch` call fails with a 403 that names the missing permission, and
-nothing is committed.
+Editing listings is a different grant from releasing: the two Releases
+permissions cover uploading artifacts, so an account can push an AAB all day and
+still get a 403 on `listings.patch`. What it needs is **Play Console → Users and
+permissions → the service account → App permissions → Store presence → "Manage
+store presence"**.
+
+**For FT8AF this is already granted** (confirmed 2026-09-01), so the first
+publish should go straight through. It is written down because it is not implied
+by the release permission the account was set up with, and because revoking it
+would break listing publishes while leaving releases working — a failure that
+would otherwise be puzzling.
 
 **A dry run does not prove you have this grant.** It only reads listings, and
 reading them needs no edit permission — so an account that can read but not
-write passes the dry run and fails on the first real publish. Use the probe
-instead:
+write passes the dry run and fails on the first real publish. If you ever need
+to check (after a permissions change, or when a publish 403s), use the probe —
+as a manual run in the `check-permissions` mode, or locally:
 
 ```bash
 python .github/scripts/publish_listings.py --check-permissions
 ```
 
-That does the one thing a dry run skips: a single `listings.patch` inside an
+That does the one thing a dry run skips: a single listing write inside an
 edit it then abandons rather than commits, so nothing reaches the store. It
-writes back the text Play already has, so the probe is a no-op even in
-principle.
+writes back the text Play already has (`listings.patch`), so the probe is a
+no-op even in principle; only on an app with no listings at all does it have
+to create one from the repo's text instead (`listings.put`). The log names
+whichever call it made.
 
-It exits `0` when the account may edit listings, `1` when Play refused
-(401/403 — the missing grant, named), and `2` when the call failed for another
-reason. A timeout or a Play 5xx proves nothing either way, so it is reported as
-inconclusive rather than sending you to edit Console permissions that were fine
-all along.
+Its exit code is a verdict, so the codes are chosen not to collide with
+anything else the script (or argparse) can produce:
+
+| exit | meaning |
+| ---- | ------- |
+| `0`  | the account may edit listings |
+| `1`  | the probe did not run — bad credentials, unpublishable metadata. **Not** a verdict |
+| `3`  | Play refused the write with **403**. This is the missing grant |
+| `4`  | inconclusive — a 401 (the token was not accepted: a credentials problem, not a grant verdict), timeout, rate limit, Play 5xx. Proves nothing either way; fix the cause and run it again |
+
+`2` is skipped on purpose: argparse exits 2 on a usage error, and a mistyped
+flag must not read as an answer about the grant. Anything other than `3` is not
+evidence that a permission is wrong.
 
 Play's one-open-edit-per-app rule means a listing publish and an AAB upload must
 not overlap, or the second fails with *"This edit has expired"*. The publish job

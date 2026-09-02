@@ -6,6 +6,7 @@ import static org.junit.Assert.assertThrows;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -13,17 +14,17 @@ import java.util.concurrent.atomic.AtomicReference;
  * disconnect-race guard behind CAT-over-Bluetooth writes.
  *
  * <p>The bug this covers: a background {@code INTENT_ACTION_DISCONNECT} (rig
- * powered off / RFCOMM link dropped mid-QSO) runs {@code disconnect()} on another
- * thread, which nulls the socket. A CAT/TX worker already past the
+ * powered off / RFCOMM link dropped mid-QSO) runs {@code disconnect()} on
+ * another thread, which nulls the socket. A CAT/TX worker already past the
  * {@code connected} check then dereferenced the now-null socket
- * ({@code socket.getOutputStream()} / {@code socket.write()}) → a
+ * ({@code socket.getOutputStream()} / {@code socket.write()}) — a
  * {@link NullPointerException}. That NPE escaped
- * {@code BluetoothRigConnector.sendCommand}'s {@code IOException}-only catch and
- * crashed the app on a background thread. Both {@code write()} layers now
- * snapshot the socket once and route it through {@code writeIfConnected}, which
- * reports the torn-down link as the {@code "not connected"} {@link IOException}
- * the connector already handles instead of NPEing — mirroring the USB-serial
- * {@code CableSerialPort.writeIfOpen} fix.
+ * {@code BluetoothRigConnector.sendCommand}'s {@code IOException}-only catch
+ * and crashed the app on a background thread. Both {@code write()} layers now
+ * snapshot the socket once and route it through {@code writeIfConnected},
+ * which reports the torn-down link as the {@code "not connected"}
+ * {@link IOException} the connector already handles instead of NPEing —
+ * mirroring the USB-serial {@code CableSerialPort.writeIfOpen} fix.
  */
 public class BluetoothSerialWriteTest {
 
@@ -51,7 +52,7 @@ public class BluetoothSerialWriteTest {
     @Test
     public void connectedOpenSink_writesExactBytes() throws IOException {
         AtomicReference<byte[]> got = new AtomicReference<>();
-        byte[] src = "FA021074000;".getBytes();
+        byte[] src = "FA021074000;".getBytes(StandardCharsets.US_ASCII);
 
         BluetoothSerialSocket.writeIfConnected(true, got::set, src);
 
@@ -60,8 +61,9 @@ public class BluetoothSerialWriteTest {
 
     @Test
     public void connectedSink_propagatesIoException() {
-        // A real write failure (socket died mid-write) must surface as IOException
-        // for sendCommand's catch to report — not be swallowed or masked.
+        // A real write failure (socket died mid-write) must surface as
+        // IOException for sendCommand's catch to report — not be swallowed or
+        // masked.
         assertThrows(IOException.class,
                 () -> BluetoothSerialSocket.writeIfConnected(true,
                         d -> { throw new IOException("socket died"); }, new byte[]{0}));

@@ -16,9 +16,16 @@ Modes:
                         prove the account may edit listings — see below.
   --pull                Overwrite the local tree with what is live on Play
                         (bootstrap / resync after someone edits in the Console).
-  --check-permissions   Patch one listing inside an edit that is then abandoned,
-                        to prove the service account holds "Edit store listing,
-                        pricing & distribution". Nothing is committed.
+  --check-permissions   Write one listing (PATCH of one Play already has, or
+                        PUT when Play has none yet) inside an edit that is then
+                        abandoned, to prove the service account holds the
+                        "Manage store presence" permission. Nothing is committed.
+  --annotate-verdict N  Print the GitHub Actions annotation for probe exit code
+                        N (see probe_annotation) and exit 0. The workflow relays
+                        the probe's verdict through this so the mapping is
+                        unit-tested here instead of living in bash. Cannot be
+                        combined with a mode: it formats a verdict, it never
+                        produces one.
   (default)             Push every locale whose text differs from live, then
                         commit the edit so it goes to Play for review.
 
@@ -41,6 +48,59 @@ DEFAULT_ROOT = Path(__file__).resolve().parents[2] / "fastlane" / "metadata" / "
 # Play Console limits. Exceeding any of these is rejected by the API, so we
 # check locally first and name the offending file rather than surfacing a 400.
 LIMITS = {"title": 30, "shortDescription": 80, "fullDescription": 4000}
+
+# Exit codes. The probe's result is a verdict, not pass/fail, so it needs codes
+# that nothing else can produce: annotating an unrelated failure as "you are
+# missing the grant" sends someone to fix a permission that was never wrong.
+#
+# 2 is deliberately skipped — argparse exits 2 on a usage error, so a mistyped
+# flag would otherwise be indistinguishable from a probe verdict.
+EXIT_OK = 0
+EXIT_ERROR = 1  # generic failure: unpublishable metadata, bad credentials, API error
+EXIT_DENIED = 3  # --check-permissions: Play refused the listing write with 403
+EXIT_INCONCLUSIVE = 4  # --check-permissions: the probe never reached a verdict
+
+# Where the missing grant is set, quoted in every message that names it.
+GRANT_ADVICE = (
+    "Play Console -> Users and permissions -> App permissions -> Store presence "
+    '-> "Manage store presence"'
+)
+
+
+def probe_annotation(rc):
+    """(level, message) the workflow annotates a --check-permissions run with.
+
+    Lives here rather than in the workflow's bash so the mapping is tested
+    against the EXIT_* constants it depends on: swapping the 3/4 arms, or
+    reporting a generic 1 as a missing grant, would send an operator to change
+    a Console permission that was never wrong, and a bash `case` cannot be
+    unit-tested. Three outcomes: 0 and 3 are verdicts (the account may / may
+    not edit listings), 4 means the probe ran but reached no verdict, and
+    anything else (1, argparse's 2, ...) means the probe never ran — which is
+    deliberately NOT annotated as anything about the grant.
+    """
+    if rc == EXIT_OK:
+        return "notice", "The service account can edit listings."
+    if rc == EXIT_DENIED:
+        return "error", "The service account cannot edit listings. Grant it %s." % GRANT_ADVICE
+    if rc == EXIT_INCONCLUSIVE:
+        return (
+            "warning",
+            "The probe reached no verdict — the API call failed for a reason that says "
+            "nothing about the grant (401: the token was not accepted, a credentials "
+            "problem; or a timeout, rate limit, Play 5xx). Fix the cause and run it again.",
+        )
+    return (
+        "error",
+        "The probe did not run (exit %d) — see the log above. This is not a verdict "
+        "about the grant." % rc,
+    )
+
+
+def format_annotation(level, message):
+    """A GitHub Actions workflow command: `::level::message` on its own line."""
+    return "::%s::%s" % (level, message)
+
 
 # Listing field <-> fastlane filename.
 FIELD_FILES = {
@@ -259,7 +319,11 @@ def abandon_edit(s, package, edit_id):
 
 
 def patch_listing(s, package, edit_id, locale, listing):
-    """PATCH one listing. PATCH (not PUT) so an existing promo video is left alone."""
+    """PATCH an EXISTING listing, so a promo video already on it is left alone.
+
+    Only valid for a language Play already has: PATCH is an update, and the API
+    answers 404 for a language with no listing yet. Use put_listing to create.
+    """
     r = s.patch(
         "%s/applications/%s/edits/%s/listings/%s" % (API, package, edit_id, locale),
         json=listing,
@@ -267,6 +331,30 @@ def patch_listing(s, package, edit_id, locale, listing):
     )
     r.raise_for_status()
     return r.json()
+
+
+def put_listing(s, package, edit_id, locale, listing):
+    """PUT one listing, creating it if the language has none yet.
+
+    The body carries `language` because PUT replaces the whole resource. Nothing
+    is lost by replacing here: this is only used for languages Play has never
+    had a listing for, so there is no video or other field to preserve.
+    """
+    body = dict(listing, language=locale)
+    r = s.put(
+        "%s/applications/%s/edits/%s/listings/%s" % (API, package, edit_id, locale),
+        json=body,
+        timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def upsert_listing(s, package, edit_id, locale, listing, exists):
+    """Create or update one listing, whichever the language needs."""
+    if exists:
+        return patch_listing(s, package, edit_id, locale, listing)
+    return put_listing(s, package, edit_id, locale, listing)
 
 
 # --- Modes ------------------------------------------------------------------
@@ -304,19 +392,31 @@ def run_check(s, package, edit_id, local):
     """Prove the service account may actually edit listings, without publishing.
 
     A dry run cannot answer this: it only reads. An account with release
-    permission but not "Edit store listing, pricing & distribution" passes a dry
+    permission but not "Manage store presence" passes a dry
     run and then fails on the first real publish. So do the one thing that
-    exercises the grant — a single listings.patch — inside an edit the caller
-    abandons instead of committing. Nothing reaches the store.
+    exercises the grant — writing a single listing (listings.patch on a language
+    Play already has, listings.put when it has none yet) — inside an edit the
+    caller abandons instead of committing. Nothing reaches the store.
 
     The probe writes back the text Play already has wherever possible, so even a
     committed edit (which cannot happen here) would be a no-op.
 
-    Returns 0 if the account may edit listings, 1 if Play refused (401/403), and
-    2 if the call failed for some other reason — a timeout or a 5xx proves
+    Returns EXIT_OK if the account may edit listings, EXIT_DENIED if Play
+    refused with 403 (an authenticated account that lacks the grant), and
+    EXIT_INCONCLUSIVE if anything else went wrong. A 401 is inconclusive too:
+    it means the access token was not accepted at all, which is a credentials
+    problem and says nothing about the grant. Likewise a timeout or a 5xx proves
     nothing either way and must not be reported as a missing grant.
     """
-    remote = fetch_listings(s, package, edit_id)
+    try:
+        remote = fetch_listings(s, package, edit_id)
+    except Exception as e:
+        print(
+            "INCONCLUSIVE: could not read the current listings (%s).\n\nThe probe "
+            "never got as far as testing the grant. Try again." % e,
+            file=sys.stderr,
+        )
+        return EXIT_INCONCLUSIVE
     if remote:
         locale = "en-US" if "en-US" in remote else sorted(remote)[0]
         probe = {f: remote[locale].get(f) or "" for f in FIELD_FILES}
@@ -326,19 +426,35 @@ def run_check(s, package, edit_id, local):
         probe = local[locale]
         note = "no listings live yet, so using the repo's text"
 
-    print("Probing listings.patch on %s (%s)..." % (locale, note))
+    verb = "listings.patch" if locale in remote else "listings.put"
+    print("Probing %s on %s (%s)..." % (verb, locale, note))
     try:
-        patch_listing(s, package, edit_id, locale, probe)
+        upsert_listing(s, package, edit_id, locale, probe, locale in remote)
     except Exception as e:
         status = getattr(getattr(e, "response", None), "status_code", None)
-        if status in (401, 403):
+        if status == 403:
             print(
-                "DENIED (HTTP %s): %s\n\nThe service account cannot edit listings. "
+                "DENIED (HTTP 403): %s\n\nThe service account cannot edit listings. "
                 'Grant it Play Console -> Users and permissions -> App permissions '
-                '-> "Edit store listing, pricing & distribution".' % (status, e),
+                '-> Store presence -> "Manage store presence".' % e,
                 file=sys.stderr,
             )
-            return 1
+            return EXIT_DENIED
+        if status == 401:
+            # Only a 403 is a verdict about the grant: it means Play knew who was
+            # asking and said no. A 401 means the token itself was not accepted
+            # (revoked key, wrong project, clock skew) — the probe never got as
+            # far as the permission check, so sending someone to Console to fix
+            # a grant would be the same false diagnosis this split exists to
+            # prevent.
+            print(
+                "INCONCLUSIVE (HTTP 401): %s\n\nPlay did not accept the access "
+                "token, so the probe never reached the permission check. This is "
+                "a credentials problem, not evidence about the grant: check the "
+                "service-account key and run it again." % e,
+                file=sys.stderr,
+            )
+            return EXIT_INCONCLUSIVE
         # A timeout, a rate limit, or a Play 5xx says nothing about the grant.
         # Calling those "permission denied" would send someone editing Console
         # permissions that were fine all along.
@@ -348,9 +464,9 @@ def run_check(s, package, edit_id, local):
             % ("" if status is None else " (HTTP %s)" % status, e),
             file=sys.stderr,
         )
-        return 2
+        return EXIT_INCONCLUSIVE
     print("OK — the service account can edit listings. The edit is discarded, not committed.")
-    return 0
+    return EXIT_OK
 
 
 def run_push(s, package, edit_id, local, dry_run):
@@ -384,12 +500,20 @@ def run_push(s, package, edit_id, local, dry_run):
         return 0
 
     for locale, listing in sorted(pending.items()):
-        patch_listing(s, package, edit_id, locale, listing)
-        print("pushed %s" % locale)
+        existed = locale in remote
+        upsert_listing(s, package, edit_id, locale, listing, existed)
+        print("pushed %s%s" % (locale, "" if existed else " (created)"))
     return len(pending)
 
 
-def main(argv=None):
+def build_arg_parser():
+    """Build the CLI parser.
+
+    Separate from main() so the tests can introspect the real option strings and
+    check them against the modes play-listings.yml offers — renaming a flag here
+    without updating the workflow would otherwise only surface as a failed
+    manual run.
+    """
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dry-run", action="store_true", help="show the diff, change nothing")
     ap.add_argument("--pull", action="store_true", help="overwrite the local tree from Play")
@@ -400,6 +524,17 @@ def main(argv=None):
     )
     ap.add_argument("--root", default=str(DEFAULT_ROOT), help="metadata root directory")
     ap.add_argument("--package", default=os.environ.get("PACKAGE_NAME", DEFAULT_PACKAGE))
+    ap.add_argument(
+        "--annotate-verdict",
+        type=int,
+        metavar="RC",
+        help="print the GitHub Actions annotation for probe exit code RC and exit 0",
+    )
+    return ap
+
+
+def main(argv=None):
+    ap = build_arg_parser()
     args = ap.parse_args(argv)
 
     chosen = [
@@ -408,11 +543,22 @@ def main(argv=None):
             ("--dry-run", args.dry_run),
             ("--pull", args.pull),
             ("--check-permissions", args.check_permissions),
+            # Listed with the modes so `--check-permissions --annotate-verdict 3`
+            # is rejected: the helper only formats a verdict, and letting it
+            # ride along with a mode would print a caller-supplied verdict for
+            # a probe that never ran.
+            ("--annotate-verdict", args.annotate_verdict is not None),
         )
         if on
     ]
     if len(chosen) > 1:
         ap.error("%s are mutually exclusive" % " and ".join(chosen))
+
+    if args.annotate_verdict is not None:
+        # Pure formatting for the workflow: no metadata, no credentials, no
+        # Play. The workflow exits with the probe's own code afterwards.
+        print(format_annotation(*probe_annotation(args.annotate_verdict)))
+        return EXIT_OK
 
     local = None
     if not args.pull:
@@ -420,18 +566,30 @@ def main(argv=None):
             local = load_metadata(args.root)
         except MetadataError as e:
             print("Metadata is not publishable:\n%s" % e, file=sys.stderr)
-            return 1
+            return EXIT_ERROR
         print("Loaded %d locale(s) from %s\n" % (len(local), args.root))
 
     try:
         s = play_session()
     except CredentialsError as e:
         print("%s" % e, file=sys.stderr)
-        return 1
+        return EXIT_ERROR
 
-    edit = s.post("%s/applications/%s/edits" % (API, args.package), timeout=30)
-    edit.raise_for_status()
-    edit_id = edit.json()["id"]
+    try:
+        edit = s.post("%s/applications/%s/edits" % (API, args.package), timeout=30)
+        edit.raise_for_status()
+        edit_id = edit.json()["id"]
+    except Exception as e:
+        # In probe mode this must not surface as a traceback: Python would exit
+        # 1, which the workflow would read as a denied verdict.
+        if not args.check_permissions:
+            raise
+        print(
+            "INCONCLUSIVE: could not open an edit (%s).\n\nThe probe never got as "
+            "far as testing the grant. Try again." % e,
+            file=sys.stderr,
+        )
+        return EXIT_INCONCLUSIVE
 
     try:
         if args.pull:
@@ -446,7 +604,7 @@ def main(argv=None):
             c.raise_for_status()
             print("\nCommitted edit %s — %d locale(s) sent to Play." % (edit_id, pushed))
             edit_id = None  # committed; do not delete
-        return 0
+        return EXIT_OK
     finally:
         # A --dry-run / --pull / no-op edit is abandoned so it does not linger as
         # the app's one open edit and block the release publish in android.yml.

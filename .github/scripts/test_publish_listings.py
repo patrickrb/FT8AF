@@ -8,6 +8,7 @@ Run from the repo root:  python -m unittest discover -s .github/scripts -p 'test
 """
 import contextlib
 import io
+import re
 import shutil
 import tempfile
 import unittest
@@ -97,6 +98,7 @@ class FakeSession:
         self.patch_status = patch_status
         self.patch_exc = patch_exc
         self.patched = {}
+        self.puts = {}
         self.commits = []
         self.deletes = []
 
@@ -117,6 +119,15 @@ class FakeSession:
         if self.patch_exc is not None:
             raise self.patch_exc
         r = FakeResponse(dict(json or {}, language=locale), self.patch_status)
+        r.raise_for_status()
+        return r
+
+    def put(self, url, json=None, timeout=None):
+        locale = url.rsplit("/", 1)[-1]
+        self.puts[locale] = json
+        if self.patch_exc is not None:
+            raise self.patch_exc
+        r = FakeResponse(dict(json or {}), self.patch_status)
         r.raise_for_status()
         return r
 
@@ -363,6 +374,18 @@ class MainArgsTest(unittest.TestCase):
                 pl.main(["--check-permissions", other])
             self.assertEqual(cm.exception.code, 2)
 
+    def test_annotate_verdict_cannot_ride_along_with_a_mode(self):
+        # `--check-permissions --annotate-verdict 3` must not skip the probe and
+        # print a caller-supplied denial with exit 0; the helper formats a
+        # verdict, it never produces one.
+        for mode in ("--check-permissions", "--dry-run", "--pull"):
+            with mock.patch.object(pl, "play_session", side_effect=AssertionError("no Play")):
+                with captured() as (out, _):
+                    with self.assertRaises(SystemExit) as cm:
+                        pl.main([mode, "--annotate-verdict", "3"])
+            self.assertEqual(cm.exception.code, 2, mode)
+            self.assertNotIn("::error::", out.getvalue())
+
     def test_an_unusable_key_is_reported_in_one_line_not_a_traceback(self):
         err = pl.CredentialsError(
             "PLAY_SERVICE_ACCOUNT_JSON parsed but is not a usable service account key "
@@ -386,8 +409,52 @@ class MainArgsTest(unittest.TestCase):
         self.assertEqual(pl.main(["--root", tmp, "--dry-run"]), 1)
 
 
+class UpsertListingTest(unittest.TestCase):
+    """Creating a listing needs PUT; PATCH 404s on a language Play has never had.
+
+    This is the bug that broke the first real publish: 17 of 18 locales did not
+    exist on Play yet, and PATCH answered 404 Not Found on the first one.
+    """
+
+    def test_existing_locale_is_patched(self):
+        s = FakeSession()
+        pl.upsert_listing(s, "pkg", "e1", "en-US", listing(), exists=True)
+        self.assertIn("en-US", s.patched)
+        self.assertEqual(s.puts, {})
+
+    def test_new_locale_is_put(self):
+        s = FakeSession()
+        pl.upsert_listing(s, "pkg", "e1", "ar", listing(), exists=False)
+        self.assertIn("ar", s.puts)
+        self.assertEqual(s.patched, {})
+
+    def test_put_body_carries_the_language(self):
+        # PUT replaces the whole resource, and the API wants the language in it.
+        s = FakeSession()
+        pl.upsert_listing(s, "pkg", "e1", "ja-JP", listing(), exists=False)
+        self.assertEqual(s.puts["ja-JP"]["language"], "ja-JP")
+
+    def test_patch_body_does_not_add_a_language_field(self):
+        # PATCH is a partial update of an existing resource; sending extra
+        # fields risks clobbering what we deliberately preserve.
+        s = FakeSession()
+        pl.upsert_listing(s, "pkg", "e1", "en-US", listing(), exists=True)
+        self.assertNotIn("language", s.patched["en-US"])
+
+
 class RunPushTest(unittest.TestCase):
     LOCAL = {"en-US": listing(), "fr-FR": listing(short="court")}
+
+    def test_first_publish_creates_every_missing_locale(self):
+        # The real store state that broke: only en-US exists.
+        local = {"en-US": listing(short="new"), "ar": listing(), "ja-JP": listing()}
+        s = FakeSession(listings={"en-US": listing(short="old")})
+        with captured() as (out, _):
+            pushed = pl.run_push(s, "pkg", "e1", local, dry_run=False)
+        self.assertEqual(pushed, 3)
+        self.assertEqual(sorted(s.puts), ["ar", "ja-JP"])
+        self.assertEqual(sorted(s.patched), ["en-US"])
+        self.assertIn("(created)", out.getvalue())
 
     def test_identical_text_sends_nothing(self):
         s = FakeSession(listings=dict(self.LOCAL))
@@ -406,12 +473,15 @@ class RunPushTest(unittest.TestCase):
         self.assertEqual(list(s.patched), ["fr-FR"])
         self.assertEqual(s.patched["fr-FR"]["shortDescription"], "court")
 
-    def test_locale_absent_from_play_is_patched(self):
+    def test_locale_absent_from_play_is_created(self):
+        # Created with PUT, not PATCH: PATCH 404s on a language Play has never
+        # had a listing for.
         s = FakeSession(listings={"en-US": listing()})
         with captured():
             pushed = pl.run_push(s, "pkg", "e1", self.LOCAL, dry_run=False)
         self.assertEqual(pushed, 1)
-        self.assertEqual(list(s.patched), ["fr-FR"])
+        self.assertEqual(list(s.puts), ["fr-FR"])
+        self.assertEqual(s.patched, {})
 
     def test_dry_run_reports_but_sends_nothing(self):
         s = FakeSession(listings={"en-US": listing()})
@@ -419,6 +489,9 @@ class RunPushTest(unittest.TestCase):
             pushed = pl.run_push(s, "pkg", "e1", self.LOCAL, dry_run=True)
         self.assertEqual(pushed, 0)
         self.assertEqual(s.patched, {})
+        # fr-FR is missing on Play, so a real run would PUT it; a dry run must
+        # not create it either.
+        self.assertEqual(s.puts, {})
         self.assertIn("DRY RUN", out.getvalue())
         self.assertIn("fr-FR", out.getvalue())
 
@@ -480,10 +553,14 @@ class RunCheckTest(unittest.TestCase):
     def test_patches_one_listing_and_never_commits(self):
         s = FakeSession(listings={"en-US": listing(short="live")})
         with captured() as (out, _):
-            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 0)
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_OK)
         self.assertEqual(list(s.patched), ["en-US"])
+        self.assertEqual(s.puts, {})
         self.assertEqual(s.commits, [], "the probe must never commit")
         self.assertIn("OK", out.getvalue())
+        # The log names the call it actually made, so an operator reading it
+        # is not told "patch" when the store was empty and it had to put.
+        self.assertIn("listings.patch", out.getvalue())
 
     def test_probe_writes_back_plays_own_text(self):
         # So that even a committed edit — which cannot happen here — is a no-op.
@@ -496,46 +573,156 @@ class RunCheckTest(unittest.TestCase):
     def test_falls_back_to_repo_text_when_nothing_is_published(self):
         s = FakeSession(listings={})
         with captured() as (out, _):
-            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 0)
-        self.assertEqual(s.patched["en-US"], self.LOCAL["en-US"])
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_OK)
+        # Nothing is live, so the probe has to create rather than patch.
+        self.assertEqual(
+            {k: v for k, v in s.puts["en-US"].items() if k != "language"},
+            self.LOCAL["en-US"],
+        )
         self.assertIn("no listings live yet", out.getvalue())
+        self.assertEqual(s.patched, {})
+        self.assertIn("listings.put", out.getvalue())
+        self.assertNotIn("listings.patch", out.getvalue())
 
     def test_denied_patch_reports_the_missing_grant(self):
         s = FakeSession(listings={"en-US": listing()}, patch_status=403)
         with captured() as (_, err):
-            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 1)
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_DENIED)
         self.assertIn("DENIED", err.getvalue())
         self.assertIn("cannot edit listings", err.getvalue())
-        self.assertIn("Edit store listing", err.getvalue())
+        self.assertIn("Manage store presence", err.getvalue())
 
-    def test_unauthenticated_is_also_a_denial(self):
+    def test_unauthenticated_is_inconclusive_not_a_denial(self):
+        # 401 means the token was not accepted, so the probe never reached the
+        # permission check. Calling that "denied" would send someone to fix a
+        # grant that was never tested — the false diagnosis the exit-code split
+        # exists to prevent.
         s = FakeSession(listings={"en-US": listing()}, patch_status=401)
         with captured() as (_, err):
-            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 1)
-        self.assertIn("DENIED", err.getvalue())
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_INCONCLUSIVE)
+        self.assertIn("INCONCLUSIVE", err.getvalue())
+        self.assertIn("401", err.getvalue())
+        self.assertIn("credentials", err.getvalue())
+        self.assertNotIn("DENIED", err.getvalue())
+        self.assertNotIn("Manage store presence", err.getvalue())
+
+    def test_denied_put_on_an_empty_store_is_still_the_missing_grant(self):
+        # The verdict must not depend on which verb the probe had to use.
+        s = FakeSession(listings={}, patch_status=403)
+        with captured() as (_, err):
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_DENIED)
+        self.assertIn("Manage store presence", err.getvalue())
 
     def test_server_error_is_inconclusive_not_a_grant_diagnosis(self):
         # Calling a 500 "permission denied" would send someone editing Console
         # permissions that were fine all along.
         s = FakeSession(listings={"en-US": listing()}, patch_status=500)
         with captured() as (_, err):
-            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 2)
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_INCONCLUSIVE)
         self.assertIn("INCONCLUSIVE", err.getvalue())
-        self.assertNotIn("Edit store listing", err.getvalue())
+        self.assertNotIn("Manage store presence", err.getvalue())
 
     def test_rate_limit_is_inconclusive(self):
         s = FakeSession(listings={"en-US": listing()}, patch_status=429)
         with captured() as (_, err):
-            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 2)
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_INCONCLUSIVE)
         self.assertIn("INCONCLUSIVE", err.getvalue())
 
     def test_transport_error_with_no_response_is_inconclusive(self):
         s = FakeSession(listings={"en-US": listing()}, patch_exc=OSError("timed out"))
         with captured() as (_, err):
-            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), 2)
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_INCONCLUSIVE)
         self.assertIn("INCONCLUSIVE", err.getvalue())
         self.assertIn("timed out", err.getvalue())
-        self.assertNotIn("Edit store listing", err.getvalue())
+        self.assertNotIn("Manage store presence", err.getvalue())
+
+
+class ProbeAnnotationTest(unittest.TestCase):
+    """The exit-code -> annotation mapping the workflow shows the operator.
+
+    This is the probe's main operator-facing behaviour, so it is pinned per
+    code: the level, the message, and — just as important — what a message
+    must NOT say (a non-verdict must never name the grant).
+    """
+
+    def test_ok_is_a_notice(self):
+        level, msg = pl.probe_annotation(pl.EXIT_OK)
+        self.assertEqual(level, "notice")
+        self.assertIn("can edit listings", msg)
+
+    def test_denied_is_an_error_naming_the_grant(self):
+        level, msg = pl.probe_annotation(pl.EXIT_DENIED)
+        self.assertEqual(level, "error")
+        self.assertIn("cannot edit listings", msg)
+        self.assertIn("Manage store presence", msg)
+
+    def test_inconclusive_is_a_warning_that_does_not_name_the_grant(self):
+        level, msg = pl.probe_annotation(pl.EXIT_INCONCLUSIVE)
+        self.assertEqual(level, "warning")
+        self.assertIn("no verdict", msg)
+        self.assertIn("401", msg)
+        self.assertNotIn("Manage store presence", msg)
+
+    def test_generic_failure_is_an_error_but_not_a_verdict(self):
+        # A 1 (bad key, unreadable metadata) and argparse's 2 both mean the
+        # probe never ran. Reporting either as a missing grant is the false
+        # diagnosis the exit-code split exists to prevent.
+        for rc in (pl.EXIT_ERROR, 2, 42):
+            level, msg = pl.probe_annotation(rc)
+            self.assertEqual(level, "error", rc)
+            self.assertIn("did not run", msg)
+            self.assertIn("exit %d" % rc, msg)
+            self.assertIn("not a verdict", msg)
+            self.assertNotIn("Manage store presence", msg)
+
+    def test_the_four_outcomes_are_told_apart(self):
+        seen = {pl.probe_annotation(rc) for rc in (0, 1, 3, 4)}
+        self.assertEqual(len(seen), 4)
+
+    def test_format_is_a_workflow_command(self):
+        self.assertEqual(pl.format_annotation("warning", "hi"), "::warning::hi")
+
+    def test_cli_prints_the_annotation_and_touches_nothing_else(self):
+        # The workflow relays the probe's code through this; it must not need
+        # metadata or credentials, and must exit 0 so the workflow can go on to
+        # exit with the probe's own code.
+        with mock.patch.object(pl, "play_session", side_effect=AssertionError("no Play")):
+            with mock.patch.object(pl, "load_metadata", side_effect=AssertionError("no tree")):
+                with captured() as (out, _):
+                    self.assertEqual(pl.main(["--annotate-verdict", "3"]), pl.EXIT_OK)
+        self.assertEqual(out.getvalue().strip(), pl.format_annotation(*pl.probe_annotation(3)))
+        self.assertTrue(out.getvalue().startswith("::error::"))
+
+
+class ExitCodeTest(unittest.TestCase):
+    """The probe's verdict codes must not collide with anything else."""
+
+    def test_verdict_codes_are_distinct_from_generic_failure(self):
+        codes = [pl.EXIT_OK, pl.EXIT_ERROR, pl.EXIT_DENIED, pl.EXIT_INCONCLUSIVE]
+        self.assertEqual(len(set(codes)), len(codes))
+
+    def test_no_verdict_code_collides_with_argparse_usage_error(self):
+        # argparse exits 2 on a bad flag. If a verdict used 2, a typo in the
+        # workflow would read as a real answer about the grant.
+        self.assertNotIn(2, (pl.EXIT_DENIED, pl.EXIT_INCONCLUSIVE))
+
+    def test_generic_failures_do_not_use_a_verdict_code(self):
+        # A missing key and unpublishable metadata both exit EXIT_ERROR, so the
+        # workflow can tell "the probe did not run" from "Play said no".
+        verdicts = (pl.EXIT_DENIED, pl.EXIT_INCONCLUSIVE)
+        self.assertNotIn(pl.EXIT_ERROR, verdicts)
+
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        with captured():
+            self.assertEqual(pl.main(["--root", tmp, "--check-permissions"]), pl.EXIT_ERROR)
+
+        write_locale(tmp, "en-US")
+        with mock.patch.object(pl, "play_session", side_effect=pl.CredentialsError("no key")):
+            with captured():
+                self.assertEqual(
+                    pl.main(["--root", tmp, "--check-permissions"]), pl.EXIT_ERROR
+                )
 
 
 class RunPullTest(TempTreeTest):
@@ -650,6 +837,7 @@ class MainLifecycleTest(TempTreeTest):
         code, out, _ = self.run_main(s, ["--dry-run"])
         self.assertEqual(code, 0)
         self.assertEqual(s.patched, {})
+        self.assertEqual(s.puts, {})
         self.assertEqual(s.commits, [])
         self.assertEqual(len(s.deletes), 1, "a dry-run edit must not be left open")
 
@@ -705,11 +893,40 @@ class MainLifecycleTest(TempTreeTest):
         self.assertEqual(s.commits, [], "the probe must never commit")
         self.assertEqual(len(s.deletes), 1, "the probe edit must be abandoned")
 
-    def test_check_permissions_returns_1_when_the_grant_is_missing(self):
+    def test_unreadable_listings_are_inconclusive_not_denied(self):
+        # fetch_listings failing means the probe never tested the grant.
+        s = FakeSession(listings={"en-US": listing()})
+        s.get = lambda url, timeout=None: (_ for _ in ()).throw(OSError("timed out"))
+        code, _, err = self.run_main(s, ["--check-permissions"])
+        self.assertEqual(code, pl.EXIT_INCONCLUSIVE)
+        self.assertIn("never got as far", err)
+        self.assertNotIn("Manage store presence", err)
+        self.assertEqual(len(s.deletes), 1, "the probe edit must still be abandoned")
+
+    def test_unopenable_edit_is_inconclusive_not_denied(self):
+        # A 5xx creating the edit used to escape as a traceback, which Python
+        # exits 1 for — indistinguishable from a denial at the workflow layer.
+        s = FakeSession()
+        s.post = lambda url, timeout=None: (_ for _ in ()).throw(OSError("play is down"))
+        code, _, err = self.run_main(s, ["--check-permissions"])
+        self.assertEqual(code, pl.EXIT_INCONCLUSIVE)
+        self.assertIn("could not open an edit", err)
+        self.assertNotIn("Manage store presence", err)
+
+    def test_a_failed_edit_open_still_raises_outside_probe_mode(self):
+        # Only the probe swallows this; a real publish must still fail loudly.
+        s = FakeSession(listings={"en-US": listing(short="old")})
+        s.post = lambda url, timeout=None: (_ for _ in ()).throw(OSError("play is down"))
+        with mock.patch.object(pl, "play_session", return_value=s):
+            with captured():
+                with self.assertRaises(OSError):
+                    pl.main(["--root", self.tmp])
+
+    def test_check_permissions_returns_denied_when_the_grant_is_missing(self):
         s = FakeSession(listings={"en-US": listing()}, patch_status=403)
         code, _, err = self.run_main(s, ["--check-permissions"])
-        self.assertEqual(code, 1)
-        self.assertIn("Edit store listing", err)
+        self.assertEqual(code, pl.EXIT_DENIED)
+        self.assertIn("Manage store presence", err)
         self.assertEqual(len(s.deletes), 1)
 
     def test_pull_writes_the_tree_and_abandons_the_edit(self):
@@ -729,6 +946,114 @@ class MainLifecycleTest(TempTreeTest):
         self.assertEqual(code, 1)
         self.assertIn("nope", err.getvalue())
         self.assertEqual(s.deletes, [])
+
+
+class WorkflowModesTest(unittest.TestCase):
+    """The workflow's dispatch modes must match the CLI they invoke.
+
+    Parsed by hand rather than with PyYAML: the validate job installs nothing,
+    and keeping this suite stdlib-only is what lets it stay that way.
+    """
+
+    WORKFLOW = REPO_ROOT / ".github" / "workflows" / "play-listings.yml"
+
+    # mode -> the flag the workflow passes for it. "publish" passes none.
+    MODE_FLAGS = {"dry-run": "--dry-run", "check-permissions": "--check-permissions", "publish": None}
+
+    def workflow_text(self):
+        return self.WORKFLOW.read_text(encoding="utf-8")
+
+    def declared_modes(self):
+        """The `options:` list under the mode input, in file order."""
+        text = self.workflow_text()
+        start = text.index("      mode:")
+        block = text[start : text.index("permissions:", start)]
+        opts = block[block.index("options:") :]
+        return [
+            ln.strip()[2:].strip()
+            for ln in opts.splitlines()
+            if ln.strip().startswith("- ")
+        ]
+
+    def test_workflow_offers_exactly_the_modes_we_support(self):
+        self.assertEqual(sorted(self.declared_modes()), sorted(self.MODE_FLAGS))
+
+    def case_arm_flags(self):
+        """{mode: flag-or-None} read out of the run step's case arms.
+
+        The flag has to come from the workflow itself, not from MODE_FLAGS: a
+        typo like `args+=(--check-permissons)` is exactly the drift this guard
+        exists to catch, and comparing the table against itself would miss it.
+        """
+        text = self.workflow_text()
+        run = text[text.index('case "$MODE" in') :]
+        run = run[: run.index("esac")]
+        arms = {}
+        for arm in re.finditer(
+            r"^\s{10,}([a-z][a-z-]*)\)\s*\n(.*?)^\s+;;", run, re.S | re.M
+        ):
+            mode, body = arm.group(1), arm.group(2)
+            flags = re.findall(r"args\+=\(([^)]*)\)", body)
+            self.assertLessEqual(len(flags), 1, "mode %r appends args more than once" % mode)
+            arms[mode] = flags[0].strip() if flags else None
+        return arms
+
+    def test_every_mode_has_a_case_arm(self):
+        self.assertEqual(sorted(self.case_arm_flags()), sorted(self.declared_modes()))
+
+    def test_case_arms_pass_the_flags_we_expect(self):
+        self.assertEqual(self.case_arm_flags(), self.MODE_FLAGS)
+
+    def test_every_flag_the_workflow_passes_is_a_real_cli_flag(self):
+        # Catches both directions of drift: renaming a flag in
+        # build_arg_parser(), and mistyping one in the workflow. Either used to
+        # surface only as a failed manual run against Play.
+        known = set()
+        for action in pl.build_arg_parser()._actions:
+            known.update(action.option_strings)
+        for mode, flag in self.case_arm_flags().items():
+            if flag is not None:
+                self.assertIn(flag, known, "mode %r passes unknown flag %s" % (mode, flag))
+
+    def test_publish_arm_passes_no_flag(self):
+        # Publishing is the script's default; passing a flag for it would mean
+        # the workflow and the CLI disagree about what "no mode" means.
+        self.assertIsNone(self.case_arm_flags()["publish"])
+
+    def test_default_mode_is_the_read_only_one(self):
+        text = self.workflow_text()
+        block = text[text.index("      mode:") : text.index("options:")]
+        self.assertIn("default: dry-run", block)
+
+    def test_parser_accepts_each_mode_flag(self):
+        for flag in filter(None, self.MODE_FLAGS.values()):
+            args = pl.build_arg_parser().parse_args([flag])
+            self.assertTrue(getattr(args, flag[2:].replace("-", "_")))
+
+    def run_step(self):
+        """The `run:` block of the Run step, from the MODE case to its exit."""
+        text = self.workflow_text()
+        start = text.index('case "$MODE" in')
+        return text[start : text.index("exit $rc", start) + len("exit $rc")]
+
+    def test_verdict_annotation_is_delegated_to_the_script(self):
+        # The exit-code -> annotation mapping is ProbeAnnotationTest's job; the
+        # workflow must relay the probe's code through --annotate-verdict and
+        # not keep a bash copy that could drift from the EXIT_* constants.
+        step = self.run_step()
+        self.assertIn('--annotate-verdict "$rc"', step)
+        self.assertNotIn('case "$rc"', step)
+        self.assertIn(
+            "--annotate-verdict",
+            {o for a in pl.build_arg_parser()._actions for o in a.option_strings},
+        )
+
+    def test_step_exits_with_the_probes_own_code(self):
+        # The annotation helper exits 0 by design; the step must still end with
+        # the probe's code so a denied verdict fails the run.
+        step = self.run_step()
+        self.assertIn("rc=$?", step)
+        self.assertTrue(step.rstrip().endswith("exit $rc"))
 
 
 class RepoMetadataTest(unittest.TestCase):

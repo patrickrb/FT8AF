@@ -205,6 +205,21 @@
     <string name="pota_tab_activate">啟動</string>
     <string name="pota_tab_hunt">獵取</string>
     <string name="pota_tab_history">歷史紀錄</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">剛剛</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="other">%d秒前</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="other">%d分鐘前</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="other">%d小時前</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="other">%d天前</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">顯示UTC時間</string>
     <string name="pota_start_activation">開始啟動</string>
     <string name="pota_park_reference_label">公園代碼（例如 K-1234）</string>
     <string name="pota_notes_optional_label">備註（選填）</string>

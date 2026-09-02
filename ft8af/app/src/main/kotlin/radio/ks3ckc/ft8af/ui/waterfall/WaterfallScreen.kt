@@ -112,7 +112,13 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             val fft = IntArray(data.size / 2)
             nativeFFT(data, fft, mainViewModel.deNoise)
 
-            val currentTxFreq = GeneralVariables.getBaseFrequency()
+            // While a tap cursor is active, keep the TX bandwidth markers on
+            // the touched frequency instead of snapping back to the base
+            // frequency on every audio tick (issue #782). The touched value
+            // clears when frequencyLineTimeout reaches 0 below, at which
+            // point currentTxFreq falls back to the committed base freq.
+            val currentTxFreq =
+                displayTxFrequencyHz(touchedFreqHz, GeneralVariables.getBaseFrequency())
             val currentTxActive = mainViewModel.ft8TransmitSignal.mutableIsTransmitting.value ?: false
 
             viewHolder.columnar?.let { cView ->
@@ -187,10 +193,16 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             )
         }
 
+        // While the user is touching the spectrum, drive the TX bandwidth
+        // markers from the touched frequency so the red brackets follow the
+        // blue tap cursor live instead of snapping to the previous base
+        // frequency until ACTION_UP commits (issue #782).
+        val displayTxFreq = displayTxFrequencyHz(touchedFreqHz, txFreq)
+
         // Spectrum strip (columnar view)
         ColumnarStrip(
             spectrumWidth = spectrumWidth,
-            txFrequency = txFreq,
+            txFrequency = displayTxFreq,
             txActive = isTransmitting,
             onViewCreated = { viewHolder.columnar = it },
             onTouch = { freqHz, _ ->
@@ -219,7 +231,7 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
         // Main waterfall display
         WaterfallCanvas(
             spectrumWidth = spectrumWidth,
-            txFrequency = txFreq,
+            txFrequency = displayTxFreq,
             txActive = isTransmitting,
             onViewCreated = { viewHolder.waterfall = it },
             onTouch = { freqHz, _ ->
@@ -333,17 +345,10 @@ private fun ColumnarStrip(
                 setTxActive(txActive)
 
                 setOnTouchListener { _, event ->
-                    when (event.action) {
-                        MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                            setTouch_x(event.x.toInt())
-                            val freq = getFreq_hz()
-                            if (freq > 0) onTouch(freq, event.x.toInt())
-                        }
-                        MotionEvent.ACTION_UP -> {
-                            val freq = getFreq_hz()
-                            if (freq > 0) onTouchUp(freq)
-                        }
+                    if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE) {
+                        setTouch_x(event.x.toInt())
                     }
+                    dispatchSpectrumTouch(event.action, getFreq_hz(), event.x.toInt(), onTouch, onTouchUp)
                     true
                 }
 
@@ -391,17 +396,10 @@ private fun WaterfallCanvas(
                 setTxActive(txActive)
 
                 setOnTouchListener { _, event ->
-                    when (event.action) {
-                        MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                            setTouch_x(event.x.toInt())
-                            val freq = getFreq_hz()
-                            if (freq > 0) onTouch(freq, event.x.toInt())
-                        }
-                        MotionEvent.ACTION_UP -> {
-                            val freq = getFreq_hz()
-                            if (freq > 0) onTouchUp(freq)
-                        }
+                    if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE) {
+                        setTouch_x(event.x.toInt())
                     }
+                    dispatchSpectrumTouch(event.action, getFreq_hz(), event.x.toInt(), onTouch, onTouchUp)
                     true
                 }
 
@@ -420,6 +418,49 @@ private fun WaterfallCanvas(
 // ---------------------------------------------------------------------------
 // Frequency ruler (pure Compose)
 // ---------------------------------------------------------------------------
+
+/**
+ * Which frequency the red TX-bandwidth markers should bracket right now.
+ *
+ * While a tap cursor is active ([touchedFreqHz] > 0) the markers follow the
+ * touched column, so the reds track the blue cursor live during a drag instead
+ * of snapping back to the committed base frequency on every audio tick or
+ * recomposition (issue #782). When the cursor is cleared — the caller sets
+ * [touchedFreqHz] back to -1 once `frequencyLineTimeout` expires, or
+ * `SpectrumTouchMath.touchToFreqHz` returned -1 for an off-view drag — the
+ * markers fall back to [baseFreqHz].
+ *
+ * Extracted from the two call sites (the audio-tick observer and the strip /
+ * canvas composables) so the selection is exercised without Compose.
+ */
+internal fun displayTxFrequencyHz(touchedFreqHz: Int, baseFreqHz: Float): Float =
+    if (touchedFreqHz > 0) touchedFreqHz.toFloat() else baseFreqHz
+
+/**
+ * Route one spectrum touch event to the screen's callbacks, given the
+ * frequency the view resolved for it (`setTouch_x` -> `SpectrumTouchMath.touchToFreqHz`).
+ *
+ * On DOWN/MOVE the frequency is always forwarded — including the -1 an
+ * off-view drag resolves to. The view has already hidden its blue cursor for
+ * that event, so the screen's `touchedFreqHz` has to follow it to -1 as well;
+ * forwarding only positive values left the red TX markers parked at the last
+ * on-view column until `frequencyLineTimeout` expired (Copilot review on
+ * #788). Only a valid frequency is committed on UP, so an off-view release
+ * never writes -1 as the base frequency. Shared by both AndroidView listeners
+ * and unit-tested without Compose.
+ */
+internal fun dispatchSpectrumTouch(
+    action: Int,
+    freqHz: Int,
+    x: Int,
+    onTouch: (freqHz: Int, x: Int) -> Unit,
+    onTouchUp: (freqHz: Int) -> Unit,
+) {
+    when (action) {
+        MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> onTouch(freqHz, x)
+        MotionEvent.ACTION_UP -> if (freqHz > 0) onTouchUp(freqHz)
+    }
+}
 
 /** Hz step between adjacent ruler labels. */
 private const val RulerStepHz = 500

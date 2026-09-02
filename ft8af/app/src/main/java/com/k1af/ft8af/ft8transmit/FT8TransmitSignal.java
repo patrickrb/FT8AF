@@ -12,6 +12,7 @@ import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.media.AudioAttributes;
 import android.media.AudioDeviceInfo;
+import android.os.Build;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
@@ -23,7 +24,10 @@ import com.k1af.ft8af.wave.UsbAudioNative;
 import androidx.lifecycle.MutableLiveData;
 
 import com.k1af.ft8af.FT8Common;
+import com.k1af.ft8af.MainViewModel;
 import com.k1af.ft8af.ModeProfile;
+import com.k1af.ft8af.bluetooth.AudioOutputRoutingPolicy;
+import com.k1af.ft8af.bluetooth.DefaultOutputRouting;
 import com.k1af.ft8af.ft8listener.FastDecodeGate;
 import com.k1af.ft8af.Ft8Message;
 import com.k1af.ft8af.ft8signal.FT8Package;
@@ -1066,6 +1070,8 @@ public class FT8TransmitSignal {
             AudioDeviceInfo deviceInfo = findAudioDeviceById(
                     GeneralVariables.audioOutputDeviceId, AudioManager.GET_DEVICES_OUTPUTS);
             audioTrack.setPreferredDevice(deviceInfo); // null resets to default
+        } else {
+            applyDefaultOutputRoutingOverride(audioTrack);
         }
 
         // Skip leading samples if we started transmitting late, so audio still ends on the cycle boundary.
@@ -3222,6 +3228,8 @@ public class FT8TransmitSignal {
                 AudioDeviceInfo deviceInfo = findAudioDeviceById(
                         GeneralVariables.audioOutputDeviceId, AudioManager.GET_DEVICES_OUTPUTS);
                 track.setPreferredDevice(deviceInfo);
+            } else {
+                applyDefaultOutputRoutingOverride(track);
             }
             track.play();
             track.setVolume(1.0f);
@@ -3310,6 +3318,71 @@ public class FT8TransmitSignal {
             }
         }
         return null;
+    }
+
+    /**
+     * When the user picked "Default" output and <em>this app</em> is holding a
+     * Bluetooth SCO link, pin the AudioTrack to the A2DP endpoint of the same
+     * Bluetooth device. On Android 8.1 (issue #759 follow-up) the OS routes the
+     * USAGE_MEDIA stream through SCO while the hands-free link is active,
+     * leaving TX inaudible on a rig that only listens for the A2DP music
+     * channel — the tester's exact "audio received, not transmitted" report,
+     * cured by manually picking A2DP. Leaves routing to the OS whenever the
+     * conditions aren't met; see {@link AudioOutputRoutingPolicy} for why the
+     * enumerated device types alone are not enough to decide.
+     */
+    private static void applyDefaultOutputRoutingOverride(final AudioTrack track) {
+        Context context = GeneralVariables.getMainContext();
+        if (context == null) return;
+        AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        if (audioManager == null) return;
+        AudioDeviceInfo[] outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+        // The enumeration-to-policy-to-track wiring (and the address gating for
+        // API < 28 / a denied BLUETOOTH_CONNECT) lives in DefaultOutputRouting so
+        // it is covered by DefaultOutputRoutingTest; only the real track and the
+        // debug log are supplied from here.
+        DefaultOutputRouting.apply(outputs, scoHeldForThisTx(), scoAddressForThisTx(),
+                new DefaultOutputRouting.Sink() {
+                    @Override
+                    public boolean setPreferredDevice(AudioDeviceInfo device) {
+                        return track.setPreferredDevice(device);
+                    }
+
+                    @Override
+                    public void log(String line) {
+                        GeneralVariables.fileLog(line);
+                    }
+                });
+    }
+
+    /**
+     * Whether the app's own SCO link was up when this over was keyed, per the
+     * snapshot {@code MainViewModel.beginKeying()} takes before it calls
+     * {@code stopSco()} ({@code TxScoLatch}). Not the tracker's live answer:
+     * by the time this runs — after {@code onBeforeTransmit()} /
+     * {@code onTuneKeyDown()} and the PTT settle sleep — the posted
+     * {@code requestOff()} has normally already flipped the tracker to
+     * DISCONNECTED, so a live query said "no" in exactly the case the steering
+     * exists for, and became a race against the main looper otherwise (Copilot
+     * review on #790). Deliberately not {@code AudioManager.isBluetoothScoOn()}
+     * either, which only mirrors the legacy force-use flag and is not trusted
+     * anywhere else in this codebase — see {@code ScoPolicy} /
+     * {@code ScoLinkCoordinator}. Returns false when the view model isn't up
+     * yet, which correctly means "no SCO session of ours".
+     */
+    private static boolean scoHeldForThisTx() {
+        MainViewModel viewModel = MainViewModel.peekInstance();
+        return viewModel != null && viewModel.isScoHeldForTx();
+    }
+
+    /**
+     * Address of the device that SCO link was on at keying time, or null when
+     * the platform withheld it; lets the policy pick <em>that</em> device's A2DP
+     * endpoint when more than one hands-free device is connected.
+     */
+    private static String scoAddressForThisTx() {
+        MainViewModel viewModel = MainViewModel.peekInstance();
+        return viewModel == null ? null : viewModel.scoAddressForTx();
     }
 
     private static class DoTransmitRunnable implements Runnable {
