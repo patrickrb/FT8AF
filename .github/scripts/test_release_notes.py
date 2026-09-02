@@ -129,6 +129,7 @@ class MainTest(unittest.TestCase):
 
     def run_main(self, event, status, stderr, body):
         argv = [
+            "restore",
             "--event", event, "--tag", "android-v0.151.0",
             "--gh-status", str(status),
             "--gh-stderr", self.path("err.txt", stderr),
@@ -167,6 +168,98 @@ class MainTest(unittest.TestCase):
         self.assertTrue(out.startswith("::error::"))
         self.assertFalse(os.path.exists(os.path.join(self.tmp, "notes.txt")))
         self.assertEqual(self.read("out.txt"), "")
+
+
+class EnsureNotesTest(unittest.TestCase):
+    PR_LIST = (
+        "- #801 rigs: Follow IC-705 dial changes\n"
+        "- #802 Fix Bluetooth CAT write race\n"
+        "- #803 ci: stop publishing to Play production on main merges\n"
+    )
+
+    def test_nonblank_notes_are_left_alone(self):
+        notes, fell_back = rn.ensure_notes("Real notes.\n", self.PR_LIST)
+        self.assertEqual(notes, "Real notes.\n")
+        self.assertFalse(fell_back)
+
+    def test_blank_notes_become_the_pr_titles(self):
+        # Claude's schema allows an empty string and `jq -r` writes it as a
+        # bare newline: exactly what used to produce blank markers.
+        for blank in ("", "\n", "   \n\n", None):
+            notes, fell_back = rn.ensure_notes(blank, self.PR_LIST)
+            self.assertTrue(fell_back, repr(blank))
+            self.assertEqual(
+                notes,
+                "Follow IC-705 dial changes\n"
+                "Fix Bluetooth CAT write race\n"
+                "stop publishing to Play production on main merges\n",
+            )
+
+    def test_blank_notes_and_no_prs_use_the_default_text(self):
+        notes, fell_back = rn.ensure_notes("\n", "")
+        self.assertTrue(fell_back)
+        self.assertEqual(notes, rn.DEFAULT_NOTES + "\n")
+
+    def test_fallback_keeps_whole_lines_under_plays_limit(self):
+        long_list = "".join("- #%d %s\n" % (i, "x" * 120) for i in range(10))
+        notes = rn.fallback_notes(long_list)
+        self.assertLessEqual(len(notes), rn.PLAY_NOTES_LIMIT)
+        self.assertEqual(notes.count("\n"), 4)  # 4 x 121 = 484 fits, 5 would not
+        self.assertTrue(all(len(l) == 120 for l in notes.splitlines()))
+
+    def test_round_trip_producer_to_manual_ship(self):
+        # The producer/consumer case: notes that went through ensure_notes
+        # land between the markers "Write release notes" emits, and the manual
+        # ship's restore accepts that body — while a blank producer output that
+        # skipped ensure_notes would have been refused.
+        def body_for(notes):
+            return ("## Release notes\n\n%s\n%s\n%s\n\n<!-- ft8af-version: 0.151.0 -->\n"
+                    % (rn.START, notes, rn.END))
+        blank, _ = "\n", None
+        refused = rn.decide("workflow_dispatch", "android-v0.151.0", 0, "", body_for(blank))
+        self.assertIsNotNone(refused.error)
+        ensured, _ = rn.ensure_notes(blank, self.PR_LIST)
+        accepted = rn.decide("workflow_dispatch", "android-v0.151.0", 0, "", body_for(ensured))
+        self.assertTrue(accepted.found)
+        self.assertIn("Follow IC-705 dial changes", accepted.notes)
+
+
+class EnsureNotesMainTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.notes = os.path.join(self.tmp, "notes.txt")
+
+    def run_ensure(self, content, pr_list):
+        if content is not None:
+            with open(self.notes, "w", encoding="utf-8", newline="") as f:
+                f.write(content)
+        os.environ["PR_LIST_TEST"] = pr_list
+        try:
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                code = rn.main(["ensure-notes", "--notes", self.notes, "--pr-list-env", "PR_LIST_TEST"])
+        finally:
+            del os.environ["PR_LIST_TEST"]
+        with open(self.notes, encoding="utf-8", newline="") as f:
+            return code, stdout.getvalue(), f.read()
+
+    def test_blank_file_is_rewritten_with_a_warning(self):
+        code, out, notes = self.run_ensure("\n", "- #1 A title\n")
+        self.assertEqual(code, 0)
+        self.assertEqual(notes, "A title\n")
+        self.assertIn("::warning", out)
+
+    def test_missing_file_is_created(self):
+        code, out, notes = self.run_ensure(None, "")
+        self.assertEqual(code, 0)
+        self.assertEqual(notes, rn.DEFAULT_NOTES + "\n")
+
+    def test_real_notes_are_untouched_and_silent(self):
+        code, out, notes = self.run_ensure("Real notes.\n", "- #1 A title\n")
+        self.assertEqual(code, 0)
+        self.assertEqual(notes, "Real notes.\n")
+        self.assertEqual(out, "")
 
 
 if __name__ == "__main__":

@@ -470,7 +470,7 @@ jobs:
           gh release view "$TAG" --json body -q .body > release-body.raw.md 2> gh-release-err.txt
           rc=$?
           set -e
-          python3 .github/scripts/release_notes.py \
+          python3 .github/scripts/release_notes.py restore \
             --event "$GITHUB_EVENT_NAME" --tag "$TAG" \
             --gh-status "$rc" --gh-stderr gh-release-err.txt --body release-body.raw.md \
             --notes-out notes.txt --body-out existing-release-body.md \
@@ -626,10 +626,10 @@ jobs:
             echo "::warning title=AI versioning fell back::$1 — using a patch bump and the PR titles as release notes. Set the ANTHROPIC_API_KEY secret / check the step log."
             echo "bump=patch" >> "$GITHUB_OUTPUT"
             echo "source=fallback" >> "$GITHUB_OUTPUT"
-            # PR titles, whole lines only, up to Play's 500-char limit.
-            printf '%s\n' "$PR_LIST" | sed -E 's/^- #[0-9]+ [^:]*: ?//; s/^- #[0-9]+ //' \
-              | awk '{ if (n + length($0) + 1 > 500) exit; print; n += length($0) + 1 }' > notes.txt
-            [[ -s notes.txt ]] || echo "Bug fixes and improvements." > notes.txt
+            # The PR-title notes are produced by `release_notes.py ensure-notes`
+            # in "Write release notes", which runs for every producer (including
+            # a Claude answer whose notes came back blank), so leave nothing here.
+            : > notes.txt
             exit 0
           }
           [[ -n "$ANTHROPIC_API_KEY" ]] || fallback "ANTHROPIC_API_KEY is not set"
@@ -786,11 +786,21 @@ jobs:
           VERSION: ${{ steps.tag.outputs.version }}
           VERSION_NAME: ${{ steps.tag.outputs.version_name }}
           VERSION_SOURCE: ${{ steps.tag.outputs.version_source }}
+          LANE: ${{ steps.lane.outputs.lane }}
+          PR_LIST: ${{ steps.changes.outputs.prs }}
         run: |
           set -euo pipefail
           # notes.txt comes from Claude, the fallback, the promoted staging
           # candidate, or (manual ship) the tag's existing release; a plain
           # tag push with no release yet has none.
+          if [[ "$LANE" != "tag" ]]; then
+            # The producers can leave it blank (Claude's schema allows an empty
+            # notes string; jq -r writes that as a newline), and a release whose
+            # markers enclose nothing would later be refused by the manual
+            # production ship. Guarantee nonblank notes before they go into the
+            # markers: the PR titles, else "Bug fixes and improvements."
+            python3 .github/scripts/release_notes.py ensure-notes --notes notes.txt --pr-list-env PR_LIST
+          fi
           mkdir -p distribution/whatsnew
           if [[ -s notes.txt ]]; then
             head -c 500 notes.txt > distribution/whatsnew/whatsnew-en-US

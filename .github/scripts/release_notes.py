@@ -1,7 +1,18 @@
 #!/usr/bin/env python3
-"""Restore the release notes of the GitHub Release an android-v* tag already has.
+"""Release-notes helpers for android.yml: `restore` and `ensure-notes`.
 
-Used by the `tag` lane of android.yml. The manual production ship re-runs the
+`ensure-notes` runs in "Write release notes" for the lanes that produce notes
+(staging and main). The producers can yield a blank file — Claude's structured
+output permits an empty `notes` string, and `jq -r` writes that as a bare
+newline — and a release whose body carries blank markers would later be
+refused by the manual production ship (`restore`, below). So before the notes
+go into the markers, a blank file is replaced with the PR titles (whole lines,
+up to Play's 500-character limit) or, failing that, "Bug fixes and
+improvements." — the same fallback the AI step used when the API was
+unreachable, now applied in one place for every producer.
+
+`restore` restores the release notes of the GitHub Release an android-v* tag
+already has. Used by the `tag` lane. The manual production ship re-runs the
 workflow on an android-v<x.y.z> tag whose GitHub Release the main-merge run
 already created, carrying the promoted staging notes in its body between the
 hidden markers written by "Write release notes":
@@ -29,10 +40,44 @@ Outcomes (`found=...` is appended to --github-output):
                genuine "release not found".
 """
 import argparse
+import os
+import re
 import sys
 
 START = "<!-- ft8af-notes-start -->"
 END = "<!-- ft8af-notes-end -->"
+
+# Play's what's-new limit; the fallback keeps whole lines under it.
+PLAY_NOTES_LIMIT = 500
+DEFAULT_NOTES = "Bug fixes and improvements."
+
+
+def fallback_notes(pr_list):
+    """Release notes from the PR list the AI step collects ("- #123 scope: title").
+
+    Whole lines only, stopping before the total would exceed PLAY_NOTES_LIMIT
+    (each line counts its newline), mirroring the sed/awk the workflow's
+    fallback used. Empty input yields DEFAULT_NOTES.
+    """
+    out = []
+    n = 0
+    for line in (pr_list or "").splitlines():
+        line = re.sub(r"^- #[0-9]+ [^:]*: ?", "", line)
+        line = re.sub(r"^- #[0-9]+ ", "", line)
+        if not line.strip():
+            continue
+        if n + len(line) + 1 > PLAY_NOTES_LIMIT:
+            break
+        out.append(line)
+        n += len(line) + 1
+    return "\n".join(out) + "\n" if out else DEFAULT_NOTES + "\n"
+
+
+def ensure_notes(notes, pr_list):
+    """(notes, used_fallback): nonblank notes come back unchanged."""
+    if notes is not None and notes.strip():
+        return notes, False
+    return fallback_notes(pr_list), True
 
 
 class MalformedMarkers(Exception):
@@ -116,17 +161,47 @@ def decide(event, tag, gh_status, gh_stderr, body):
         "Release %s already exists; keeping its body." % tag))
 
 
-def main(argv=None):
+def build_arg_parser():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--event", required=True, help="$GITHUB_EVENT_NAME")
-    ap.add_argument("--tag", required=True)
-    ap.add_argument("--gh-status", type=int, required=True, help="exit code of gh release view")
-    ap.add_argument("--gh-stderr", required=True, help="file holding gh's stderr")
-    ap.add_argument("--body", required=True, help="file holding gh's stdout (the body)")
-    ap.add_argument("--notes-out", required=True)
-    ap.add_argument("--body-out", required=True)
-    ap.add_argument("--github-output", help="$GITHUB_OUTPUT; found=true|false is appended")
-    args = ap.parse_args(argv)
+    sub = ap.add_subparsers(dest="command", required=True)
+
+    r = sub.add_parser("restore", help="restore the notes of the release a tag already has")
+    r.add_argument("--event", required=True, help="$GITHUB_EVENT_NAME")
+    r.add_argument("--tag", required=True)
+    r.add_argument("--gh-status", type=int, required=True, help="exit code of gh release view")
+    r.add_argument("--gh-stderr", required=True, help="file holding gh's stderr")
+    r.add_argument("--body", required=True, help="file holding gh's stdout (the body)")
+    r.add_argument("--notes-out", required=True)
+    r.add_argument("--body-out", required=True)
+    r.add_argument("--github-output", help="$GITHUB_OUTPUT; found=true|false is appended")
+
+    e = sub.add_parser("ensure-notes", help="replace a blank notes file with the fallback text")
+    e.add_argument("--notes", required=True, help="notes file; created or rewritten when blank")
+    e.add_argument("--pr-list-env", default="PR_LIST",
+                   help="env var holding the AI step's PR list (default PR_LIST)")
+    return ap
+
+
+def run_ensure_notes(args):
+    notes = None
+    if os.path.exists(args.notes):
+        with open(args.notes, encoding="utf-8", errors="replace") as f:
+            notes = f.read()
+    ensured, used_fallback = ensure_notes(notes, os.environ.get(args.pr_list_env, ""))
+    if used_fallback:
+        with open(args.notes, "w", encoding="utf-8", newline="\n") as f:
+            f.write(ensured)
+        print("::warning title=Release notes fell back::The notes producer left notes.txt "
+              "blank — using the PR titles instead, so the release stays shippable.")
+        print("Notes:")
+        print(ensured)
+    return 0
+
+
+def main(argv=None):
+    args = build_arg_parser().parse_args(argv)
+    if args.command == "ensure-notes":
+        return run_ensure_notes(args)
 
     with open(args.gh_stderr, encoding="utf-8", errors="replace") as f:
         gh_stderr = f.read()
