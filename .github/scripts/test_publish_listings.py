@@ -374,6 +374,18 @@ class MainArgsTest(unittest.TestCase):
                 pl.main(["--check-permissions", other])
             self.assertEqual(cm.exception.code, 2)
 
+    def test_annotate_verdict_cannot_ride_along_with_a_mode(self):
+        # `--check-permissions --annotate-verdict 3` must not skip the probe and
+        # print a caller-supplied denial with exit 0; the helper formats a
+        # verdict, it never produces one.
+        for mode in ("--check-permissions", "--dry-run", "--pull"):
+            with mock.patch.object(pl, "play_session", side_effect=AssertionError("no Play")):
+                with captured() as (out, _):
+                    with self.assertRaises(SystemExit) as cm:
+                        pl.main([mode, "--annotate-verdict", "3"])
+            self.assertEqual(cm.exception.code, 2, mode)
+            self.assertNotIn("::error::", out.getvalue())
+
     def test_an_unusable_key_is_reported_in_one_line_not_a_traceback(self):
         err = pl.CredentialsError(
             "PLAY_SERVICE_ACCOUNT_JSON parsed but is not a usable service account key "

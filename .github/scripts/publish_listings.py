@@ -23,7 +23,9 @@ Modes:
   --annotate-verdict N  Print the GitHub Actions annotation for probe exit code
                         N (see probe_annotation) and exit 0. The workflow relays
                         the probe's verdict through this so the mapping is
-                        unit-tested here instead of living in bash.
+                        unit-tested here instead of living in bash. Cannot be
+                        combined with a mode: it formats a verdict, it never
+                        produces one.
   (default)             Push every locale whose text differs from live, then
                         commit the edit so it goes to Play for review.
 
@@ -533,23 +535,28 @@ def main(argv=None):
     ap = build_arg_parser()
     args = ap.parse_args(argv)
 
-    if args.annotate_verdict is not None:
-        # Pure formatting for the workflow: no metadata, no credentials, no
-        # Play. The workflow exits with the probe's own code afterwards.
-        print(format_annotation(*probe_annotation(args.annotate_verdict)))
-        return EXIT_OK
-
     chosen = [
         name
         for name, on in (
             ("--dry-run", args.dry_run),
             ("--pull", args.pull),
             ("--check-permissions", args.check_permissions),
+            # Listed with the modes so `--check-permissions --annotate-verdict 3`
+            # is rejected: the helper only formats a verdict, and letting it
+            # ride along with a mode would print a caller-supplied verdict for
+            # a probe that never ran.
+            ("--annotate-verdict", args.annotate_verdict is not None),
         )
         if on
     ]
     if len(chosen) > 1:
         ap.error("%s are mutually exclusive" % " and ".join(chosen))
+
+    if args.annotate_verdict is not None:
+        # Pure formatting for the workflow: no metadata, no credentials, no
+        # Play. The workflow exits with the probe's own code afterwards.
+        print(format_annotation(*probe_annotation(args.annotate_verdict)))
+        return EXIT_OK
 
     local = None
     if not args.pull:
