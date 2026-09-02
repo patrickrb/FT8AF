@@ -196,9 +196,21 @@ class EnsureNotesTest(unittest.TestCase):
             )
 
     def test_blank_notes_and_no_prs_use_the_default_text(self):
-        notes, fell_back = rn.ensure_notes("\n", "")
-        self.assertTrue(fell_back)
-        self.assertEqual(notes, rn.DEFAULT_NOTES + "\n")
+        # The workflow never hands over an empty list: with no PR merges in the
+        # range it writes the "(no pull-request merges in range)" placeholder,
+        # which is a log line, not a release note.
+        for no_prs in ("", rn.NO_PRS_SENTINEL, rn.NO_PRS_SENTINEL + "\n"):
+            notes, fell_back = rn.ensure_notes("\n", no_prs)
+            self.assertTrue(fell_back, repr(no_prs))
+            self.assertEqual(notes, rn.DEFAULT_NOTES + "\n", repr(no_prs))
+            self.assertNotIn("pull-request", notes)
+
+    def test_sentinel_matches_what_the_workflow_writes(self):
+        # Drift guard: the placeholder is spelled in android.yml; if it changes
+        # there, this must change too or Play gets the placeholder as notes.
+        wf = os.path.join(os.path.dirname(__file__), "..", "workflows", "android.yml")
+        with open(wf, encoding="utf-8") as f:
+            self.assertIn(":-" + rn.NO_PRS_SENTINEL + "}", f.read())
 
     def test_fallback_keeps_whole_lines_under_plays_limit(self):
         long_list = "".join("- #%d %s\n" % (i, "x" * 120) for i in range(10))
@@ -251,9 +263,12 @@ class EnsureNotesMainTest(unittest.TestCase):
         self.assertIn("::warning", out)
 
     def test_missing_file_is_created(self):
-        code, out, notes = self.run_ensure(None, "")
+        code, out, notes = self.run_ensure(None, rn.NO_PRS_SENTINEL)
         self.assertEqual(code, 0)
         self.assertEqual(notes, rn.DEFAULT_NOTES + "\n")
+        # The warning must not claim PR titles were used when there were none.
+        self.assertIn("::warning", out)
+        self.assertNotIn("using the PR titles instead", out)
 
     def test_real_notes_are_untouched_and_silent(self):
         code, out, notes = self.run_ensure("Real notes.\n", "- #1 A title\n")

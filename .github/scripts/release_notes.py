@@ -50,6 +50,10 @@ END = "<!-- ft8af-notes-end -->"
 # Play's what's-new limit; the fallback keeps whole lines under it.
 PLAY_NOTES_LIMIT = 500
 DEFAULT_NOTES = "Bug fixes and improvements."
+# What the AI step's "Collect changes" writes to its prs output when the range
+# had no PR merges (android.yml: `${PRS:-(no pull-request merges in range)}`).
+# A placeholder for the log, not a release note; must never reach Play.
+NO_PRS_SENTINEL = "(no pull-request merges in range)"
 
 
 def fallback_notes(pr_list):
@@ -64,7 +68,7 @@ def fallback_notes(pr_list):
     for line in (pr_list or "").splitlines():
         line = re.sub(r"^- #[0-9]+ [^:]*: ?", "", line)
         line = re.sub(r"^- #[0-9]+ ", "", line)
-        if not line.strip():
+        if not line.strip() or line.strip() == NO_PRS_SENTINEL:
             continue
         if n + len(line) + 1 > PLAY_NOTES_LIMIT:
             break
@@ -192,7 +196,8 @@ def run_ensure_notes(args):
         with open(args.notes, "w", encoding="utf-8", newline="\n") as f:
             f.write(ensured)
         print("::warning title=Release notes fell back::The notes producer left notes.txt "
-              "blank — using the PR titles instead, so the release stays shippable.")
+              "blank — using the fallback text (the PR titles, or the default line when "
+              "there were none) so the release stays shippable.")
         print("Notes:")
         print(ensured)
     return 0
