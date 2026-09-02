@@ -42,7 +42,7 @@ public class TxScoLatchTest {
         TxScoLatch latch = new TxScoLatch();
 
         // beginKeying() for a Bluetooth rig keyed via CAT/RTS/DTR.
-        latch.keyDown(true, () -> upOrPending(tracker), () -> RIG, tracker::requestOff);
+        latch.keyDown(true, true, () -> upOrPending(tracker), () -> RIG, tracker::requestOff);
 
         // The stop really ran (this is what playFT8Signal sees after the PTT
         // settle delay, and what the first version of #790 queried)...
@@ -53,15 +53,33 @@ public class TxScoLatchTest {
     }
 
     @Test
-    public void keyDown_withoutScoControl_latchesNothingAndDoesNotStop() {
-        // USB/network rig with a Bluetooth headset selected as the mic: our SCO
-        // link is up, but this keying does not pause it and TX audio belongs on
-        // the rig, not the headset's A2DP.
+    public void bluetoothRigOnVox_latchesWithoutStopping() {
+        // Bluetooth rig keyed by VOX: needControlSco() is true (the audio must
+        // not ride SCO) but no control path pauses SCO around PTT. The steering
+        // is still needed — the media stream is on the SCO route — so the latch
+        // must engage while stopSco() stays untouched (Copilot review on #790).
         ScoLinkTracker tracker = connectedTracker();
         TxScoLatch latch = new TxScoLatch();
         AtomicInteger stops = new AtomicInteger();
 
-        latch.keyDown(false, () -> upOrPending(tracker), () -> RIG, stops::incrementAndGet);
+        latch.keyDown(true, false, () -> upOrPending(tracker), () -> RIG, stops::incrementAndGet);
+
+        assertThat(latch.heldForTx()).isTrue();
+        assertThat(latch.scoAddress()).isEqualTo(RIG);
+        assertThat(stops.get()).isEqualTo(0);
+        assertThat(upOrPending(tracker)).isTrue();
+    }
+
+    @Test
+    public void nonBluetoothRig_latchesNothingAndDoesNotStop() {
+        // USB/network rig with a Bluetooth headset selected as the mic: our SCO
+        // link is up, but this TX is not to a Bluetooth rig and its audio
+        // belongs on the rig, not the headset's A2DP.
+        ScoLinkTracker tracker = connectedTracker();
+        TxScoLatch latch = new TxScoLatch();
+        AtomicInteger stops = new AtomicInteger();
+
+        latch.keyDown(false, false, () -> upOrPending(tracker), () -> RIG, stops::incrementAndGet);
 
         assertThat(latch.heldForTx()).isFalse();
         assertThat(latch.scoAddress()).isNull();
@@ -77,7 +95,7 @@ public class TxScoLatchTest {
         TxScoLatch latch = new TxScoLatch();
         AtomicInteger stops = new AtomicInteger();
 
-        latch.keyDown(true, () -> upOrPending(tracker), () -> RIG, stops::incrementAndGet);
+        latch.keyDown(true, true, () -> upOrPending(tracker), () -> RIG, stops::incrementAndGet);
 
         assertThat(latch.heldForTx()).isFalse();
         assertThat(latch.scoAddress()).isNull();
@@ -93,7 +111,7 @@ public class TxScoLatchTest {
         assertThat(tracker.linkState()).isEqualTo(AudioManager.SCO_AUDIO_STATE_CONNECTING);
         TxScoLatch latch = new TxScoLatch();
 
-        latch.keyDown(true, () -> upOrPending(tracker), () -> null, tracker::requestOff);
+        latch.keyDown(true, true, () -> upOrPending(tracker), () -> null, tracker::requestOff);
 
         assertThat(latch.heldForTx()).isTrue();
         assertThat(latch.scoAddress()).isNull();
@@ -104,7 +122,7 @@ public class TxScoLatchTest {
         ScoLinkTracker tracker = connectedTracker();
         TxScoLatch latch = new TxScoLatch();
 
-        latch.keyDown(true, () -> upOrPending(tracker), () -> RIG, tracker::requestOff);
+        latch.keyDown(true, true, () -> upOrPending(tracker), () -> RIG, tracker::requestOff);
         // endKeying(): startSco() requested, then the latch is released.
         tracker.requestOn();
         latch.keyUp();
@@ -114,13 +132,13 @@ public class TxScoLatchTest {
         // Next over: the headset went away in between, so this time the answer
         // is genuinely no and must not be carried over from the last over.
         tracker.requestOff();
-        latch.keyDown(true, () -> upOrPending(tracker), () -> RIG, tracker::requestOff);
+        latch.keyDown(true, true, () -> upOrPending(tracker), () -> RIG, tracker::requestOff);
         assertThat(latch.heldForTx()).isFalse();
 
         // ...and comes back once the link is up again.
         tracker.requestOn();
         tracker.onStateUpdate(AudioManager.SCO_AUDIO_STATE_CONNECTED, 2_000L);
-        latch.keyDown(true, () -> upOrPending(tracker), () -> RIG, tracker::requestOff);
+        latch.keyDown(true, true, () -> upOrPending(tracker), () -> RIG, tracker::requestOff);
         assertThat(latch.heldForTx()).isTrue();
         assertThat(latch.scoAddress()).isEqualTo(RIG);
     }

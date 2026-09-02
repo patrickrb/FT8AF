@@ -98,6 +98,25 @@ public class AudioOutputRoutingPolicyTest {
     }
 
     @Test
+    public void knownScoNextToABlankSco_isAmbiguous_leavesToOs() {
+        // The car kit reports its address, the rig's SCO endpoint comes back
+        // blank (some builds withhold it). Only one address is known, but that
+        // is one device out of two — the rig may be the blank one, and steering
+        // to the car's A2DP is exactly the failure being fixed.
+        int[] types = {TYPE_BLUETOOTH_A2DP, TYPE_BLUETOOTH_SCO, TYPE_BLUETOOTH_SCO};
+        String[] addrs = {OTHER, OTHER, NONE};
+        assertThat(pick(types, addrs, true)).isEqualTo(AudioOutputRoutingPolicy.LEAVE_TO_OS);
+    }
+
+    @Test
+    public void knownScoNextToABlankSco_withOurLinkIdentified_stillPicksIt() {
+        // Same enumeration, but the capture side named the car as our link.
+        int[] types = {TYPE_BLUETOOTH_A2DP, TYPE_BLUETOOTH_SCO, TYPE_BLUETOOTH_SCO};
+        String[] addrs = {OTHER, OTHER, NONE};
+        assertThat(pickOn(types, addrs, OTHER)).isEqualTo(0);
+    }
+
+    @Test
     public void sameDeviceEnumeratedTwiceOnSco_isNotAmbiguous() {
         // Some builds list a hands-free device's SCO endpoint more than once;
         // identical addresses are one device, not two.

@@ -12,6 +12,7 @@ import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.media.AudioAttributes;
 import android.media.AudioDeviceInfo;
+import android.os.Build;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
@@ -3339,7 +3340,7 @@ public class FT8TransmitSignal {
         String[] addresses = new String[outputs.length];
         for (int i = 0; i < outputs.length; i++) {
             types[i] = outputs[i].getType();
-            addresses[i] = outputs[i].getAddress();
+            addresses[i] = deviceAddressOrNull(outputs[i]);
         }
         int idx = AudioOutputRoutingPolicy.pickDefaultOutputIndex(
                 types, addresses, scoHeldForThisTx(), scoAddressForThisTx());
@@ -3353,6 +3354,19 @@ public class FT8TransmitSignal {
                 ? "playFT8Signal: default output steered to A2DP (app SCO session up)"
                 : "playFT8Signal: A2DP steering REJECTED by setPreferredDevice;"
                         + " TX audio stays on the OS route");
+    }
+
+    /**
+     * {@code AudioDeviceInfo.getAddress()} exists only from API 28. Calling it
+     * on the Android 8.1 device this steering exists for (issue #759 follow-up)
+     * throws {@link NoSuchMethodError} — a linkage error, which the
+     * {@code catch (Exception)} blocks around TX do not catch — before any
+     * audio plays. Below Pie the addresses are simply unknown, and the policy's
+     * single-pair fallback still performs the fix there.
+     */
+    private static String deviceAddressOrNull(AudioDeviceInfo device) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null;
+        return device.getAddress();
     }
 
     /**

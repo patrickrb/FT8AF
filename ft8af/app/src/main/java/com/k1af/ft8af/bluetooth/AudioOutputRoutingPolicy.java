@@ -102,6 +102,7 @@ public final class AudioOutputRoutingPolicy {
 
         int a2dpCount = 0;
         int scoCount = 0;
+        int scoUnknownCount = 0;
         int firstA2dpIdx = LEAVE_TO_OS;
         boolean anyScoAddressKnown = false;
         String soleScoAddress = null;
@@ -120,6 +121,8 @@ public final class AudioOutputRoutingPolicy {
                     } else if (!soleScoAddress.equalsIgnoreCase(scoAddr)) {
                         scoDevicesDiffer = true;
                     }
+                } else {
+                    scoUnknownCount++;
                 }
             }
         }
@@ -127,14 +130,18 @@ public final class AudioOutputRoutingPolicy {
 
         // Which SCO endpoint is ours. The routed capture device is authoritative;
         // without it, the identity is only trustworthy when every SCO endpoint
-        // reports the same address, i.e. a single hands-free device is connected.
+        // can be identified as the same device. Two known addresses that differ
+        // are two devices — and so is one known address next to a blank one: the
+        // blank endpoint may well be the rig, and treating the named one as "the"
+        // device would route TX to a car kit (Copilot review on #790).
         String ourSco;
         if (isKnownAddress(activeScoAddress)) {
             ourSco = activeScoAddress;
-        } else if (scoDevicesDiffer) {
-            // Two or more hands-free devices and no word on which carries our
-            // link. Steering to whichever pair enumerates first could put the
-            // FT8 tone into a car kit; leave the routing to the OS instead.
+        } else if (scoDevicesDiffer || (anyScoAddressKnown && scoUnknownCount > 0)) {
+            // Two or more hands-free devices (or endpoints we cannot tell apart)
+            // and no word on which carries our link. Steering to whichever pair
+            // enumerates first could put the FT8 tone into a car kit; leave the
+            // routing to the OS instead.
             return LEAVE_TO_OS;
         } else {
             ourSco = soleScoAddress;

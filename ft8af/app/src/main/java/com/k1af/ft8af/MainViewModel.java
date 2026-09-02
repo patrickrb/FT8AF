@@ -924,18 +924,24 @@ public class MainViewModel extends ViewModel {
                 boolean keysViaControlPath = GeneralVariables.controlMode == ControlMode.CAT
                         || GeneralVariables.controlMode == ControlMode.RTS
                         || GeneralVariables.controlMode == ControlMode.DTR;
-                // SCO is paused around PTT only for a Bluetooth rig keyed through a
-                // control path — the pre-existing condition, unchanged. The same
-                // flag decides whether the TX path may later steer Default output
-                // to that rig's A2DP: a USB/network rig with a Bluetooth headset
-                // picked as its mic also holds a SCO link of ours, but its TX
-                // audio belongs on the rig, not the headset (Copilot review on
-                // #790). keyDown() takes the snapshot BEFORE it stops SCO — the
-                // TX worker reads it after the PTT settle delay, when the tracker
-                // has already been told to drop the link — and that order lives
-                // in TxScoLatch so it is the tested one.
+                // Two different questions (Copilot review on #790):
+                //  - needControlSco(): is this a Bluetooth RIG whose TX audio must
+                //    not ride SCO? That decides whether the TX path may steer
+                //    Default output to the rig's A2DP. It is true for Bluetooth +
+                //    VOX too — VOX leaves SCO up, so its media stream is on the
+                //    SCO route and needs the steering just as much. A USB/network
+                //    rig with a Bluetooth headset picked as its mic also holds a
+                //    SCO link of ours, but its audio belongs on the rig: false.
+                //  - control-path keying with a rig: the only case that pauses
+                //    SCO around PTT (the pre-existing condition, unchanged).
+                // keyDown() takes the snapshot BEFORE it stops SCO — the TX worker
+                // reads it after the PTT settle delay, when the tracker has already
+                // been told to drop the link — and that order lives in TxScoLatch
+                // so it is the tested one.
+                boolean bluetoothRigTx = needControlSco();
                 txScoLatch.keyDown(
-                        keysViaControlPath && baseRig != null && needControlSco(),
+                        bluetoothRigTx,
+                        keysViaControlPath && baseRig != null && bluetoothRigTx,
                         MainViewModel.this::isScoLinkUpOrPending,
                         MainViewModel.this::routedScoInputAddress,
                         MainViewModel.this::stopSco);

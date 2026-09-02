@@ -313,7 +313,11 @@ public class MicRecorder {
      */
     public synchronized String routedScoInputAddress() {
         if (useUsbAudio || audioRecord == null) return null;
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return null;
+        // getRoutedDevice() is API 24, but getAddress() is API 28: on Android
+        // 8.x (the platform this exists for) the call is a NoSuchMethodError,
+        // which no catch (Exception) below would stop, and it would abort the
+        // keying that snapshots SCO. Below Pie the address is simply unknown.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null;
         try {
             AudioDeviceInfo routed = audioRecord.getRoutedDevice();
             if (routed == null || routed.getType() != AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {

@@ -28,11 +28,20 @@ import java.util.function.Supplier;
  * {@code MainViewModel.beginKeying()} that could be reordered without any test
  * noticing.
  *
- * <p>Why {@code controlsSco}: a USB or network rig with a Bluetooth headset
- * picked as its mic also holds a SCO link of ours
- * ({@code ScoPolicy.shouldEnterHeadsetMode}), but that TX path neither stops
- * SCO nor wants its audio moved off the rig onto the headset's A2DP. Only the
- * path that actually pauses SCO around PTT for a Bluetooth rig may latch.
+ * <p>Two separate questions go in, because they have different answers:
+ * <ul>
+ *   <li>{@code bluetoothRigTx} — is this a Bluetooth <em>rig</em> whose TX
+ *       audio must not go over SCO ({@code ScoPolicy.needControlSco()})? That
+ *       is what decides whether Default output gets steered to A2DP. A USB or
+ *       network rig with a Bluetooth headset picked as its mic also holds a SCO
+ *       link of ours ({@code ScoPolicy.shouldEnterHeadsetMode}), but its TX
+ *       audio belongs on the rig, so it answers no.</li>
+ *   <li>{@code stopsSco} — does this keying path actually pause SCO around
+ *       PTT? Only a control-path keying (CAT/RTS/DTR) with a rig does; a
+ *       Bluetooth rig on VOX leaves SCO up and lets the audio key the rig. It
+ *       still needs the steering — its media stream is on the SCO route too —
+ *       so it must latch even though it stops nothing.</li>
+ * </ul>
  *
  * <p>A mid-slot message swap (#704) re-keys nothing, so the latch carries
  * across it. Pure Java, no Android types; the ordering is unit-tested against
@@ -46,26 +55,29 @@ public final class TxScoLatch {
     /**
      * The production keying order: snapshot the link, then stop it.
      *
-     * @param controlsSco        whether this keying pauses SCO around PTT for a
-     *                           Bluetooth rig ({@code needControlSco()} on a
+     * @param bluetoothRigTx     whether this TX goes to a Bluetooth rig whose
+     *                           audio must not ride SCO ({@code needControlSco()}).
+     *                           When false nothing is latched.
+     * @param stopsSco           whether this keying pauses SCO around PTT (a
      *                           control-path keying with a rig). When false
-     *                           nothing is latched and {@code stopSco} is not run.
+     *                           {@code stopSco} is not run; VOX keeps SCO up.
      * @param scoUpOrPending     {@code ScoLinkCoordinator.isLinkUpOrPending()},
      *                           read here <em>before</em> {@code stopSco}
      * @param scoDeviceAddress   Bluetooth address of the device the mic is
      *                           currently captured from over SCO, or null when
      *                           unknown; read only when the link is held
      * @param stopSco            the {@code stopSco()} request, run after the
-     *                           snapshot when {@code controlsSco}
+     *                           snapshot when {@code stopsSco}
      */
-    public void keyDown(boolean controlsSco,
+    public void keyDown(boolean bluetoothRigTx,
+                        boolean stopsSco,
                         BooleanSupplier scoUpOrPending,
                         Supplier<String> scoDeviceAddress,
                         Runnable stopSco) {
-        boolean held = controlsSco && scoUpOrPending.getAsBoolean();
+        boolean held = bluetoothRigTx && scoUpOrPending.getAsBoolean();
         heldForTx = held;
         scoAddress = held ? scoDeviceAddress.get() : null;
-        if (controlsSco) {
+        if (stopsSco) {
             stopSco.run();
         }
     }
