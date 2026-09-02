@@ -265,6 +265,35 @@ public class IcomRigReadFreqPollTest {
     }
 
     @Test
+    public void mayPollDial_stampResetByANewSelection_isNotADelivery() {
+        // GeneralVariables.operatorChoseDial() zeroes the delivered stamp when
+        // the operator picks a new dial: the stamp changed, but a new FA write
+        // is now PENDING, and polling would read the rig's pre-command dial.
+        long previous = T0 - 5_000;
+        assertThat(IcomRig.mayPollDial(T0 + 100, T0, previous, 0L)).isFalse();
+        // The window still expires on its own...
+        assertThat(IcomRig.mayPollDial(T0 + SETTLE, T0, previous, 0L)).isTrue();
+        // ...and the new selection's own delivery still clears it early.
+        assertThat(IcomRig.mayPollDial(T0 + 100, T0, previous, T0 + 90)).isTrue();
+        // A window taken while the stamp was already 0 behaves the same.
+        assertThat(IcomRig.mayPollDial(T0 + 100, T0, 0L, 0L)).isFalse();
+        assertThat(IcomRig.mayPollDial(T0 + 100, T0, 0L, T0 + 90)).isTrue();
+    }
+
+    @Test
+    public void newSelectionDuringTheSettleWindow_doesNotOpenTheGate() {
+        // Through the tick: connect, then the operator chooses a dial before
+        // the connect handshake has settled. The reset must not poll.
+        connector.connected = true;
+        long previousSession = T0 - 5_000;
+        rig.runReadFreqTick(T0, previousSession);
+        rig.runReadFreqTick(T0 + 100, 0L); // operatorChoseDial() zeroed it
+        assertThat(connector.sent).isEmpty();
+        rig.runReadFreqTick(T0 + 200, T0 + 150); // that selection's write landed
+        assertThat(countMatching(connector.sent, READ_FREQ_FRAME)).isEqualTo(1);
+    }
+
+    @Test
     public void mayPollDial_settleWindowBoundaryIsInclusive() {
         assertThat(IcomRig.mayPollDial(T0 + SETTLE - 1, T0, 0L, 0L)).isFalse();
         assertThat(IcomRig.mayPollDial(T0 + SETTLE, T0, 0L, 0L)).isTrue();

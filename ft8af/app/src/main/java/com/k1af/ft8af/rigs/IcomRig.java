@@ -465,13 +465,17 @@ public class IcomRig extends BaseRig {
      *
      * <p>Two ways to clear it, because neither alone is sufficient:
      * <ul>
-     *   <li>{@code dialDeliveredAtMs != deliveredStampAtConnect} — the delivered
-     *       stamp changed since this window was taken, i.e. {@code setOperationBand}'s
-     *       delayed FA write actually reached the wire on <em>this</em> connection,
-     *       so the rig is on the frequency we asked for and there is nothing left
-     *       to wait for. Session state, not a clock comparison: the stamp is wall
-     *       clock and a correction could otherwise make a previous session's stamp
-     *       look newer than the connection (or this session's look older).</li>
+     *   <li>{@code dialDeliveredAtMs} changed since this window was taken <em>and</em>
+     *       is nonzero — {@code setOperationBand}'s delayed FA write actually reached
+     *       the wire on <em>this</em> connection, so the rig is on the frequency we
+     *       asked for and there is nothing left to wait for. Session state, not a
+     *       clock comparison: the stamp is wall clock and a correction could
+     *       otherwise make a previous session's stamp look newer than the
+     *       connection (or this session's look older). Nonzero, because
+     *       {@code GeneralVariables.operatorChoseDial} resets the stamp to 0 when
+     *       the operator picks a new dial: that is a change, but it means a NEW
+     *       write is pending, not that one landed — polling then would read the
+     *       rig's pre-command dial.</li>
      *   <li>{@link #READ_FREQ_CONNECT_SETTLE_MS} elapsed since the link came up —
      *       the fallback for when that push never lands at all, e.g. RetunePolicy
      *       suppressed it as redundant on a flapping reconnect. Without this the
@@ -492,7 +496,7 @@ public class IcomRig extends BaseRig {
         if (connectedSinceMs <= 0L) {
             return false;
         }
-        if (dialDeliveredAtMs != deliveredStampAtConnect) {
+        if (dialDeliveredAtMs != 0L && dialDeliveredAtMs != deliveredStampAtConnect) {
             return true;
         }
         return nowMs - connectedSinceMs >= READ_FREQ_CONNECT_SETTLE_MS;
