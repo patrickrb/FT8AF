@@ -221,10 +221,30 @@ fun DecodeRow(
                 MetaText(if (message.hasSnr()) "${message.snr} dB" else "-- dB")
                 MetaText("${message.getFreq_hz()} Hz")
 
+                // DT, as WSJT-X shows it: how far into our RX window this signal
+                // started. Per-decode rather than only the averaged pill on the slot
+                // bar, because the two answer different questions — every station
+                // sitting at the same offset is our clock, one station out on its own
+                // is that station's.
+                MetaText(
+                    text = "DT ${formatDecodeDt(message.time_sec)}",
+                    color = if (isDecodeDtNotable(message.time_sec)) StatusWarn else TextFaint,
+                )
+
                 // Distance (computed from grid)
                 val distanceText = computeDistanceText(message)
                 if (distanceText.isNotEmpty()) {
                     MetaText(distanceText)
+                }
+
+                // Beam heading (short-path bearing) — opt-in, for beam operators
+                // who want to know which way to turn the antenna without opening
+                // the QSO sheet first.
+                if (GeneralVariables.showBeamHeading) {
+                    val headingText = computeBeamHeadingText(message)
+                    if (headingText.isNotEmpty()) {
+                        MetaText(headingText)
+                    }
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
@@ -328,14 +348,45 @@ private fun MessageLabel(
  * Small metadata text used in the bottom info row.
  */
 @Composable
-private fun MetaText(text: String) {
+private fun MetaText(
+    text: String,
+    color: androidx.compose.ui.graphics.Color = TextFaint,
+) {
     Text(
         text = text,
-        color = TextFaint,
+        color = color,
         fontFamily = GeistMonoFamily,
         fontSize = 10.5.sp,
         letterSpacing = 0.02.sp,
     )
+}
+
+/**
+ * Whether [message] carries a Maidenhead grid field the operator hasn't logged
+ * yet — i.e. a "new grid" for grid-chasing (VUCC). Requires a full 4-character
+ * field (the two-letter field + two-digit square that `checkQSLGrid` keys on);
+ * bare-callsign or sub-square-only frames don't count. Shared by the row's
+ * NEW_GRID highlight and the Decode screen's "New Grid" filter so the pill and
+ * the chip always agree on what counts as new.
+ */
+internal fun isNewGridStation(message: Ft8Message): Boolean {
+    val grid = message.maidenGrid
+    return !grid.isNullOrEmpty() &&
+        grid.length >= 4 &&
+        !GeneralVariables.checkQSLGrid(grid)
+}
+
+/**
+ * Whether [message]'s sender carries a CQ WPX prefix (e.g. "W1", "DL0") the
+ * operator hasn't logged yet — a "new prefix" for Worked-All-Prefixes chasing.
+ * The prefix is derived from the callsign via [com.k1af.ft8af.callsign.WpxPrefix]
+ * (the same helper that builds the worked-prefix set in the log loader), so the
+ * NEW_PREFIX pill and the "New Prefix" filter always agree. Callsigns that don't
+ * yield a prefix (grids, reports, hashed calls) are never counted as new.
+ */
+internal fun isNewPrefixStation(message: Ft8Message): Boolean {
+    val prefix = com.k1af.ft8af.callsign.WpxPrefix.of(message.callsignFrom) ?: return false
+    return !GeneralVariables.checkQSLPrefix(prefix)
 }
 
 /**
@@ -346,7 +397,7 @@ private fun MetaText(text: String) {
  * should skip rendering the pill in that case.
  *
  * Priority (highest first): calling me, POTA/SOTA activation, new DXCC,
- * new grid, new band, plain CQ, already worked.
+ * new zone, new state, new grid, new prefix, new band, plain CQ, already worked.
  */
 internal fun resolveQsoStatus(message: Ft8Message): QsoStatus? {
     val isCQ = message.checkIsCQ()
@@ -357,11 +408,9 @@ internal fun resolveQsoStatus(message: Ft8Message): QsoStatus? {
         GeneralVariables.checkQSLCallsign(message.getCallsignFrom())
     val isToMe = GeneralVariables.checkIsMyCallsign(message.callsignTo ?: "")
     val modifier = message.modifier
-    val grid = message.maidenGrid
 
-    val newGrid = !grid.isNullOrEmpty() &&
-        grid.length >= 4 &&
-        !GeneralVariables.checkQSLGrid(grid)
+    val newGrid = isNewGridStation(message)
+    val newPrefix = isNewPrefixStation(message)
     val newBand = !isWorked &&
         GeneralVariables.checkQSLCallsign_OtherBand(message.callsignFrom ?: "")
 
@@ -375,15 +424,37 @@ internal fun resolveQsoStatus(message: Ft8Message): QsoStatus? {
 
     // Each worked-before category is gated by a user toggle (Settings → Decode
     // Highlights). A disabled category falls through to the next in priority.
+    //
+    // The WORKED pill is only shown when worked handling is enabled AND its mode
+    // is HIGHLIGHT (IGNORE leaves the station visible but unmarked; HIDE removes it
+    // upstream in filterMessages). "Worked" is resolved under the configured scope
+    // — see isWorkedStation / WorkedStations.kt. `isWorked` above keeps its narrow
+    // current-band meaning purely so NEW_BAND (worked only on other bands) stays
+    // independent of the (broader) worked-station scope.
     return when {
         isToMe -> QsoStatus.PENDING
         GeneralVariables.highlightPota && isPota ->
             if (newPota) QsoStatus.NEW_POTA else QsoStatus.POTA
         isCQ && modifier == "SOTA" -> QsoStatus.SOTA
         GeneralVariables.highlightNewDxcc && message.fromDxcc -> QsoStatus.NEW
+        // A new CQ zone (Worked All Zones) outranks a new grid: only 40 zones
+        // exist, so an unworked one is a rarer, more prized catch. message.fromCq
+        // is set at decode time in CallsignDatabase (unworked-zone lookup) and
+        // only ever true once the zone map is ready — same gating as fromDxcc.
+        GeneralVariables.highlightNewZone && message.fromCq -> QsoStatus.NEW_ZONE
+        // A new US state (Worked All States) outranks a new grid: WAS is one of
+        // the most-chased US awards, so an unworked state is more prized than a
+        // bare new grid field. message.fromNewState is set at decode time in
+        // CallsignDatabase (US-grid → unworked-state lookup); null/non-US grids
+        // leave it false.
+        GeneralVariables.highlightNewState && message.fromNewState -> QsoStatus.NEW_STATE
         GeneralVariables.highlightNewGrid && newGrid -> QsoStatus.NEW_GRID
+        // A new WPX prefix (Worked All Prefixes) ranks just below a new grid: both
+        // are common early on, so they sit under the rarer DXCC/zone/state catches.
+        GeneralVariables.highlightNewPrefix && newPrefix -> QsoStatus.NEW_PREFIX
         GeneralVariables.highlightNewBand && newBand -> QsoStatus.NEW_BAND
-        GeneralVariables.highlightWorked && isWorked -> QsoStatus.WORKED
+        effectiveWorkedMode() == WorkedStationMode.HIGHLIGHT &&
+            isWorkedStation(message) -> QsoStatus.WORKED
         isCQ -> QsoStatus.CQ
         else -> null
     }
@@ -403,4 +474,15 @@ private fun computeDistanceText(message: Ft8Message): String {
     } catch (_: Exception) {
         ""
     }
+}
+
+/**
+ * Short-path beam heading (e.g. "47°") from the operator's grid to the message
+ * sender's grid, or "" when either grid is unknown. Shared with the QSO sheet
+ * via [computeBeamHeadings] so the row and the sheet never disagree.
+ */
+internal fun computeBeamHeadingText(message: Ft8Message): String {
+    val headings = computeBeamHeadings(GeneralVariables.getMyMaidenheadGrid(), message.maidenGrid)
+        ?: return ""
+    return formatHeading(headings.shortPathDeg)
 }

@@ -1,8 +1,14 @@
 package com.k1af.ft8af.timer;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 
 import org.junit.Test;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * Static time-formatting helpers on UtcTimer. Inputs are epoch milliseconds and
@@ -241,5 +247,146 @@ public class UtcTimerTest {
         } finally {
             UtcTimer.delay = saved;
         }
+    }
+
+    // ------------------------------------------------------------------
+    // ntpClockOffsetMs: the clock correction written to UtcTimer.delay by
+    // an NTP "Sync now" / startup auto-sync. Must be the FULL offset, not
+    // just its remainder within one FT8 cycle.
+    // ------------------------------------------------------------------
+
+    @Test
+    public void ntpClockOffsetMs_zeroWhenClockMatchesReference() {
+        assertThat(UtcTimer.ntpClockOffsetMs(1_700_000_000_000L, 1_700_000_000_000L))
+                .isEqualTo(0);
+    }
+
+    @Test
+    public void ntpClockOffsetMs_subCycleErrorReturnedVerbatim() {
+        // Device 5s behind the reference -> shift forward 5000ms.
+        assertThat(UtcTimer.ntpClockOffsetMs(1_700_000_005_000L, 1_700_000_000_000L))
+                .isEqualTo(5000);
+        // Device 3s ahead -> shift back 3000ms.
+        assertThat(UtcTimer.ntpClockOffsetMs(1_700_000_000_000L, 1_700_000_003_000L))
+                .isEqualTo(-3000);
+    }
+
+    @Test
+    public void ntpClockOffsetMs_multiCycleErrorKeepsWholeCyclePart() {
+        // Device 20s slow: the correction is the FULL 20000ms. The previous
+        // implementation stored (offset % 15000) = 5000, leaving the app clock a
+        // whole cycle (15s) behind true UTC and every logged/reported/displayed
+        // timestamp wrong by that much. Guard against that regression.
+        long device = 1_700_000_000_000L;
+        long reference = device + 20_000L;
+        int offset = UtcTimer.ntpClockOffsetMs(reference, device);
+        assertThat(offset).isEqualTo(20_000);
+        assertThat(offset).isNotEqualTo(20_000 % 15_000); // != the old truncated 5000
+
+        // Device 4 minutes fast -> full -240000ms correction (the old code, with
+        // 240000 an exact multiple of 15000, produced 0 -> "sync did nothing").
+        int fast = UtcTimer.ntpClockOffsetMs(device, device + 240_000L);
+        assertThat(fast).isEqualTo(-240_000);
+    }
+
+    @Test
+    public void ntpClockOffsetMs_preservesCycleAlignmentLikeTheOldTruncation() {
+        // Applying the full offset must keep decode/TX cycle timing identical: for
+        // every FT8/FT4/FT2 slot length, (fullOffset mod slot) == (truncatedOffset
+        // mod slot), because each slot length divides 15000. Only the whole-cycle
+        // part — the timestamp error — differs.
+        long device = 1_700_000_000_000L;
+        long reference = device + 47_321L; // arbitrary >1-cycle skew
+        int full = UtcTimer.ntpClockOffsetMs(reference, device);
+        int truncated = full % 15_000;
+        for (int slot : new int[]{15_000, 7_500, 3_750, 1_000}) {
+            assertThat(Math.floorMod(full, slot)).isEqualTo(Math.floorMod(truncated, slot));
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Teardown race: delete() shuts down the heartbeat/cycle thread pools,
+    // but Timer.cancel() does not wait for a TimerTask already running, so a
+    // tick can submit to the pool the instant it is shut down. The default
+    // AbortPolicy turns that into an uncaught RejectedExecutionException on
+    // the Timer thread -> process crash. newDiscardingCachedThreadPool()
+    // discards the late submit instead. (Every app exit and every FT8/FT4/FT2
+    // mode switch calls delete() while the 1s heartbeat is live.)
+    // ------------------------------------------------------------------
+
+    @Test
+    public void discardingPool_doesNotThrowWhenSubmittingAfterShutdown() {
+        ThreadPoolExecutor pool = UtcTimer.newDiscardingCachedThreadPool();
+        pool.shutdownNow();
+        // This is exactly what secTask()/heartBeatTask() do (pool.execute(runnable))
+        // when they lose the race with delete(): it must NOT throw.
+        pool.execute(() -> { });
+    }
+
+    @Test
+    public void defaultCachedPool_throwsWhenSubmittingAfterShutdown_documentingTheBug() {
+        // The pre-fix pool (Executors.newCachedThreadPool()) uses AbortPolicy, so the
+        // same submit-after-shutdown that the fix tolerates would throw here — the
+        // exception that escaped the TimerTask and crashed the app.
+        ExecutorService legacy = Executors.newCachedThreadPool();
+        legacy.shutdownNow();
+        assertThrows(RejectedExecutionException.class, () -> legacy.execute(() -> { }));
+    }
+
+    @Test
+    public void discardingPool_stillRunsSubmittedWorkBeforeShutdown() throws Exception {
+        // In normal operation the discarding pool behaves like a cached pool: work
+        // submitted before shutdown runs. Only post-shutdown submits are dropped.
+        ThreadPoolExecutor pool = UtcTimer.newDiscardingCachedThreadPool();
+        try {
+            final java.util.concurrent.CountDownLatch ran = new java.util.concurrent.CountDownLatch(1);
+            pool.execute(ran::countDown);
+            assertThat(ran.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    public void discardOnShutdownPolicy_stillAbortsWhenRejectionIsNotShutdown() throws Exception {
+        // Only the teardown race is safe to swallow. A rejection while the pool is still
+        // running (here: a saturated bounded pool standing in for a thread-creation
+        // failure) must surface as RejectedExecutionException rather than silently
+        // dropping the cycle/heartbeat callback with nothing in the log.
+        ThreadPoolExecutor bounded = new ThreadPoolExecutor(
+                1, 1, 0L, java.util.concurrent.TimeUnit.SECONDS,
+                new java.util.concurrent.SynchronousQueue<Runnable>());
+        bounded.setRejectedExecutionHandler(new UtcTimer.DiscardOnShutdownPolicy());
+        final java.util.concurrent.CountDownLatch occupied = new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        try {
+            bounded.execute(() -> {
+                occupied.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            assertThat(occupied.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            // The single worker is busy and the SynchronousQueue has no capacity, so this
+            // submit is rejected while the pool is very much still running.
+            assertThat(bounded.isShutdown()).isFalse();
+            assertThrows(RejectedExecutionException.class, () -> bounded.execute(() -> { }));
+        } finally {
+            release.countDown();
+            bounded.shutdownNow();
+        }
+    }
+
+    @Test
+    public void ntpClockOffsetMs_clampsAbsurdErrorsToIntRange() {
+        // A wildly wrong device clock (> ~24.8 days off) must not overflow the int
+        // field. Clamp instead of wrapping to a bogus small value.
+        long device = 1_700_000_000_000L;
+        assertThat(UtcTimer.ntpClockOffsetMs(device + 5_000_000_000L, device))
+                .isEqualTo(Integer.MAX_VALUE);
+        assertThat(UtcTimer.ntpClockOffsetMs(device, device + 5_000_000_000L))
+                .isEqualTo(Integer.MIN_VALUE);
     }
 }

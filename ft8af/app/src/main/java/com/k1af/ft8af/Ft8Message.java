@@ -454,11 +454,16 @@ t71     Telemetry data, up to 18 hex digits
         if (callsignTo == null) {
             return "";
         }
-        if (callsignTo.length() < 2) {
-            return "";
-        }
-        if (callsignTo.substring(0, 2).equals("CQ") || callsignTo.substring(0, 2).equals("DE")
-                || callsignTo.substring(0, 3).equals("QRZ")) {
+        // A calling token (CQ / CQ DX / DE / QRZ) is not an addressable "to"
+        // callsign. Use startsWith rather than substring(0, n): the previous
+        // length<2 guard did not cover the substring(0, 3) "QRZ" comparison, so a
+        // callsignTo of exactly length 2 that was neither "CQ" nor "DE" threw
+        // StringIndexOutOfBoundsException. The decoder can render a short junk
+        // token into callsignTo on a CRC-collision false decode, and this method
+        // runs on essentially every decoded message, so that crashed the
+        // decode-handling path. startsWith is safe for any length.
+        if (callsignTo.startsWith("CQ") || callsignTo.startsWith("DE")
+                || callsignTo.startsWith("QRZ")) {
             return "";
         }
         return callsignTo.replace("<", "").replace(">", "");
@@ -497,12 +502,18 @@ t71     Telemetry data, up to 18 hex digits
      * @return boolean Returns true if CQ.
      */
     public boolean checkIsCQ() {
-        String s = callsignTo.trim().split(" ")[0];
-        if (s == null) {
+        // callsignTo defaults to null and stays null for free-text/telemetry
+        // frames and unresolved-hash decodes that still reach the decode list.
+        // The Compose decode screen calls this unconditionally on the main
+        // thread (DecodeRow / resolveQsoStatus / filterMessages), so a missing
+        // destination must be treated as "not a CQ" rather than NPE on trim().
+        // (The previous `s == null` check was dead: String.split()[0] is never
+        // null; the deref that actually throws is callsignTo above.)
+        if (callsignTo == null) {
             return false;
-        } else {
-            return (s.equals("CQ") || s.equals("DE") || s.equals("QRZ"));
         }
+        String s = callsignTo.trim().split(" ")[0];
+        return (s.equals("CQ") || s.equals("DE") || s.equals("QRZ"));
     }
 
     /**

@@ -27,7 +27,14 @@ public class FlexMeterInfos extends HashMap<Integer, FlexMeterInfos.FlexMeterInf
     public synchronized void setMeterInfos(String content) {
         String[] temp;
         if (content.length() == 0) return;
-        temp = content.substring(content.indexOf("meter ") + "meter ".length()).split("#");
+        int meterIndex = content.indexOf("meter ");
+        // A corrupt or truncated frame may not carry the "meter " keyword. Without
+        // this guard indexOf() returns -1, the offset below is 5, and substring(5)
+        // throws StringIndexOutOfBoundsException on a short frame — an uncaught
+        // crash on the FlexRadio TCP read thread. No keyword means no meter
+        // definitions to parse, so bail out.
+        if (meterIndex < 0) return;
+        temp = content.substring(meterIndex + "meter ".length()).split("#");
         for (int i = 0; i < temp.length; i++) {
             String[] val = temp[i].split("=");
             if (val.length == 2) {

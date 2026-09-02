@@ -96,6 +96,107 @@ public class QSLRecordTest {
     }
 
     @Test
+    public void mapConstructor_mfskSubmodeResolvesToFt4() {
+        // The bug: FT4/FT2 are exported as MODE=MFSK + SUBMODE=FT4 (both by FT8AF and
+        // by WSJT-X/JTDX/pota.app). Reading only MODE stored "MFSK", losing the FT4
+        // distinction and breaking mode-keyed dedup, band/mode filtering and re-export.
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("MODE", "MFSK");
+        map.put("SUBMODE", "FT4");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.getMode()).isEqualTo("FT4");
+    }
+
+    @Test
+    public void mapConstructor_readsManualQslUnderTheAppPrefixedName() {
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put(AdifRecord.APP_QSL_MANUAL, "Y");
+
+        assertThat(new QSLRecord(map).isQSL).isTrue();
+    }
+
+    @Test
+    public void mapConstructor_stillReadsTheLegacyBareQslManualName() {
+        // ADIF files written by FT8AF before the APP_ prefix — and by other loggers that
+        // copied the bare name — must keep importing with their confirmation flag intact.
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put(AdifRecord.LEGACY_QSL_MANUAL, "Y");
+
+        assertThat(new QSLRecord(map).isQSL).isTrue();
+    }
+
+    @Test
+    public void mapConstructor_manualQslDefaultsToFalseAndHonoursN() {
+        HashMap<String, String> plain = new HashMap<>();
+        plain.put("CALL", "W1AW");
+        plain.put("COMMENT", "imported");
+        assertThat(new QSLRecord(plain).isQSL).isFalse();
+
+        HashMap<String, String> explicitN = new HashMap<>();
+        explicitN.put("CALL", "W1AW");
+        explicitN.put("COMMENT", "imported");
+        explicitN.put(AdifRecord.APP_QSL_MANUAL, "N");
+        assertThat(new QSLRecord(explicitN).isQSL).isFalse();
+    }
+
+    @Test
+    public void mapConstructor_conformantNameWinsWhenBothArePresent() {
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put(AdifRecord.LEGACY_QSL_MANUAL, "Y");
+        map.put(AdifRecord.APP_QSL_MANUAL, "N");
+
+        assertThat(new QSLRecord(map).isQSL).isFalse();
+    }
+
+    @Test
+    public void mapConstructor_mfskSubmodeResolvesToFt2() {
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("MODE", "MFSK");
+        map.put("SUBMODE", "FT2");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.getMode()).isEqualTo("FT2");
+    }
+
+    @Test
+    public void mapConstructor_plainMfskWithoutSubmodeStaysMfsk() {
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("MODE", "MFSK");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.getMode()).isEqualTo("MFSK");
+    }
+
+    @Test
+    public void mapConstructor_ft8ModeUnaffectedBySubmodeResolution() {
+        // Regression guard: a first-class MODE (FT8) is stored verbatim.
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("MODE", "FT8");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.getMode()).isEqualTo("FT8");
+    }
+
+    @Test
     public void mapConstructor_qslAndPotaFields() {
         HashMap<String, String> map = new HashMap<>();
         map.put("CALL", "W1AW");
@@ -138,6 +239,51 @@ public class QSLRecordTest {
 
         assertThat(r.isInvalid).isTrue();
         assertThat(r.errorMSG).contains("freq");
+    }
+
+    @Test
+    public void mapConstructor_uhfFreq_preservesExactHz() {
+        // 432.174 MHz (70cm). A 24-bit float mantissa cannot hold this many
+        // significant Hz exactly, so the old float-based parse stored 432174016
+        // (+16 Hz). Import must round-trip the exact dial frequency.
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("FREQ", "432.174000");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.isInvalid).isFalse();
+        assertThat(r.getBandFreq()).isEqualTo(432_174_000L);
+    }
+
+    @Test
+    public void mapConstructor_microwaveFreq_preservesExactHz() {
+        // 1296.174 MHz (23cm). Float precision drifts even further here
+        // (old value 1296173952, -48 Hz).
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("FREQ", "1296.174000");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.isInvalid).isFalse();
+        assertThat(r.getBandFreq()).isEqualTo(1_296_174_000L);
+    }
+
+    @Test
+    public void mapConstructor_hfFreq_unchanged() {
+        // HF stays within float's exact-integer range; behaviour is preserved.
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("FREQ", "14.074000");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.isInvalid).isFalse();
+        assertThat(r.getBandFreq()).isEqualTo(14_074_000L);
     }
 
     @Test

@@ -30,17 +30,49 @@ public struct DecodedMessage: Equatable, Hashable {
 public final class FT8Decoder {
     private static let maxCandidates = 140
     private static let minScore: Int32 = 10
-    private static let ldpcItersNormal: Int32 = 20
-    private static let ldpcItersDeep: Int32 = 30
+    /// LDPC belief-propagation iteration caps (mirror ft8af_glue decode_params.h
+    /// `FT8AF_LDPC_ITERS_FAST` / `_DEEP`). Deep decode's only effect in this
+    /// Swift wrapper is raising the iteration cap; see `setDeep`.
+    public static let ldpcItersNormal: Int32 = 20
+    public static let ldpcItersDeep: Int32 = 30
 
     private var mon = monitor_t()
     private var candidates = [candidate_t](repeating: candidate_t(), count: FT8Decoder.maxCandidates)
     private var numCandidates = 0
-    private var ldpcIters = FT8Decoder.ldpcItersNormal
-    private let hashtable = HashTable()
+
+    /// The codec sample rate (needed by the time-domain subtraction, which works
+    /// in the raw sample domain rather than the waterfall).
+    let sampleRate: Int32
+    /// Whether this decoder is running the FT8 protocol (vs. FT4). The subtract-
+    /// and-redecode deep loop re-synthesizes FT8 tones, so it is only valid for
+    /// FT8; FT4 uses the single decode pass. Exposed read-only for that gate/tests.
+    public let isFT8: Bool
+    /// Retained copy of the samples last fed through the monitor. The subtract-
+    /// and-redecode loop edits this in place (removing each decoded signal) and
+    /// re-runs the STFT over it — mirroring ft8_decoder_state.samples/num_fed in
+    /// the Android JNI glue, which keeps the slot's audio for exactly this. Only
+    /// the block-aligned prefix [0, numFed) was actually processed by the monitor.
+    private(set) var fedSamples: [Float] = []
+    private(set) var numFed = 0
+    /// Current LDPC iteration cap fed to `ft8_decode`. Exposed read-only so
+    /// callers/tests can confirm `setDeep` took effect.
+    public private(set) var ldpcIterations = FT8Decoder.ldpcItersNormal
+    private let hashtable: HashTable
+
+    /// Whether deep decode is currently active (iteration cap raised).
+    public var isDeep: Bool { ldpcIterations == FT8Decoder.ldpcItersDeep }
 
     /// Create a decoder for the given sample rate. `isFT8 = false` selects FT4.
-    public init(sampleRate: Int32 = FT8.sampleRate, isFT8: Bool = true) {
+    ///
+    /// `hashTable` is the callsign-hash store used to resolve hashed compound
+    /// calls (`<...>`). Pass a shared, long-lived table (as LiveEngine does) so
+    /// hashes resolve across slots even though a fresh decoder is built each
+    /// slot; the default is a private per-decoder table (same-slot resolution
+    /// only), which keeps standalone/one-shot decodes isolated.
+    public init(sampleRate: Int32 = FT8.sampleRate, isFT8: Bool = true, hashTable: HashTable = HashTable()) {
+        self.hashtable = hashTable
+        self.sampleRate = sampleRate
+        self.isFT8 = isFT8
         var cfg = monitor_config_t()
         cfg.f_min = 100
         cfg.f_max = 3500
@@ -55,7 +87,7 @@ public final class FT8Decoder {
 
     /// Set deep-decode mode (more LDPC iterations). Mirrors `setDecodeMode`.
     public func setDeep(_ deep: Bool) {
-        ldpcIters = deep ? FT8Decoder.ldpcItersDeep : FT8Decoder.ldpcItersNormal
+        ldpcIterations = deep ? FT8Decoder.ldpcItersDeep : FT8Decoder.ldpcItersNormal
     }
 
     /// Feed a full slot of mono Float samples (12 kHz) through the monitor:
@@ -64,16 +96,53 @@ public final class FT8Decoder {
         let block = Int(mon.block_size)
         if block == 0 { return }
         monitor_reset(&mon)
-        // Reset the callsign cache per slot: hashes resolve only against calls
-        // seen "earlier in the same slot", and a never-cleared table would grow
-        // unbounded across slots on a long-lived decoder.
-        hashtable.clear()
+        // The callsign hash table is intentionally NOT cleared here: it persists
+        // across slots so a `<...>` hash resolves against a full compound call
+        // decoded in an earlier slot (matching Android's static hashList). The
+        // table bounds its own growth (see HashTable.capacity).
+        // Retain the samples so the deep-decode subtract loop can edit them in
+        // place and re-run the STFT (see runSubtractLoop / rerunMonitor).
+        fedSamples = samples
+        numFed = (samples.count / block) * block
         samples.withUnsafeBufferPointer { buf in
             guard let base = buf.baseAddress else { return }
             var pos = 0
             while pos + block <= buf.count {
                 monitor_process(&mon, base + pos)
                 pos += block
+            }
+        }
+    }
+
+    /// Recompute the waterfall from the (possibly subtraction-edited) retained
+    /// samples, so the next `findSync` sees the residual. Mirrors the
+    /// wf_dirty branch of Android's DecoderFt8FindSync.
+    internal func rerunMonitor() {
+        let block = Int(mon.block_size)
+        if block == 0 || numFed <= 0 { return }
+        monitor_reset(&mon)
+        fedSamples.withUnsafeBufferPointer { buf in
+            guard let base = buf.baseAddress else { return }
+            var pos = 0
+            while pos + block <= numFed {
+                monitor_process(&mon, base + pos)
+                pos += block
+            }
+        }
+    }
+
+    /// Coherently subtract one decoded signal's GFSK waveform from the retained
+    /// samples, in place (the native WSJT-X-style time-domain subtraction). The
+    /// caller must `rerunMonitor` before decoding again. Returns false (samples
+    /// unchanged) on degenerate input, matching `ft8_subtract_signal_time`.
+    @discardableResult
+    internal func subtractSignalTime(a91: [UInt8], freqHz: Float, timeSec: Float) -> Bool {
+        guard numFed > 0, a91.count >= 10 else { return false }
+        return fedSamples.withUnsafeMutableBufferPointer { sp -> Bool in
+            guard let sbase = sp.baseAddress else { return false }
+            return a91.withUnsafeBufferPointer { ap in
+                ft8_subtract_signal_time(&mon, sbase, Int32(numFed), sampleRate,
+                                         ap.baseAddress, freqHz, timeSec)
             }
         }
     }
@@ -106,7 +175,7 @@ public final class FT8Decoder {
             var cand = candidates[idx]
             var message = ftx_message_t()
             var status = decode_status_t()
-            let ok = ft8_decode(&mon.wf, &cand, ldpcIters, &message, &status)
+            let ok = ft8_decode(&mon.wf, &cand, ldpcIterations, &message, &status)
             if !ok { continue }
             if let msg = buildMessage(cand: &cand, message: &message, iface: &iface) {
                 // Keep the first (highest-score) decode of each unique message.
@@ -206,6 +275,9 @@ public final class FT8Decoder {
             // Free text + contest sub-types: full text already in rawText.
             m.extra = m.rawText
         }
+        // Drop CRC-collision garbage before it reaches the UI/log (mirrors
+        // Android Ft8Message.isJunkDecode). Free text / telemetry are exempt.
+        if isJunkDecode(i3: m.i3, n3: m.n3, callFrom: m.callFrom) { return nil }
         return m
     }
 }

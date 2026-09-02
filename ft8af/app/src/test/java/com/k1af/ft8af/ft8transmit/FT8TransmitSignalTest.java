@@ -2,6 +2,10 @@ package com.k1af.ft8af.ft8transmit;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.k1af.ft8af.ModeProfile;
+import com.k1af.ft8af.timer.OnUtcTimer;
+import com.k1af.ft8af.timer.UtcTimer;
+
 import org.junit.Test;
 
 /**
@@ -533,5 +537,214 @@ public class FT8TransmitSignalTest {
                 false, 2, 3, 0, 3, false)).isFalse();
         assertThat(FT8TransmitSignal.shouldCompleteQso(
                 true, 2, 3, 0, 3, false)).isFalse();
+    }
+
+    // ---- decideManualTx (issue #467) ----------------------------------------
+    // The manual transmitNow() gate. FT8: 15000 ms slot, 12640 ms audio, so the
+    // free slack (last moment a full waveform still fits) is 2360 ms. The tolerance
+    // bounds how much *extra* leading audio we'll clip past that slack. The old
+    // gate compared raw msInCycle < tolerance, so the default 2000 ms rejected
+    // 360 ms *before* the slack was even used up — the setting appeared dead.
+
+    private static final int FT8_SLACK = 2360;   // ModeProfile.FT8.audioSlackMillis
+    private static final int FT8_SLOT = 15000;   // ModeProfile.FT8.slotMillis
+
+    @Test
+    public void manualTx_withinSlack_transmitsWithNoClip_evenAtZeroTolerance() {
+        // Anywhere inside the free slack the whole waveform fits, so TX must go out
+        // this cycle with zero clipping regardless of the tolerance setting — the
+        // exact case the old raw gate wrongly rejected once msInCycle passed 2000.
+        FT8TransmitSignal.ManualTxGate g =
+                FT8TransmitSignal.decideManualTx(2100, FT8_SLACK, FT8_SLOT, /*tolerance*/ 0);
+        assertThat(g.transmit).isTrue();
+        assertThat(g.clipMs).isEqualTo(0);
+    }
+
+    @Test
+    public void manualTx_onTimeStart_transmitsFullWaveform() {
+        // A normal on-time tap ~600 ms into the slot: full waveform, no clip.
+        FT8TransmitSignal.ManualTxGate g =
+                FT8TransmitSignal.decideManualTx(600, FT8_SLACK, FT8_SLOT, 2000);
+        assertThat(g.transmit).isTrue();
+        assertThat(g.clipMs).isEqualTo(0);
+    }
+
+    @Test
+    public void manualTx_defaultTolerance_transmitsIntoClipRegion() {
+        // The reported scenario: the decode surfaces ~2.5 s into the slot and the
+        // operator taps promptly. Under the default 2000 ms tolerance the effective
+        // budget is slack + tolerance = 4360 ms, so this now keys up (clipping the
+        // excess past the slack) instead of silently waiting ~30 s.
+        FT8TransmitSignal.ManualTxGate g =
+                FT8TransmitSignal.decideManualTx(2500, FT8_SLACK, FT8_SLOT, 2000);
+        assertThat(g.transmit).isTrue();
+        assertThat(g.clipMs).isEqualTo(2500 - FT8_SLACK); // 140 ms clipped
+    }
+
+    @Test
+    public void manualTx_atToleranceBoundary_transmits() {
+        // clip == tolerance is the last accepted point: msInCycle = slack + tolerance.
+        int msInCycle = FT8_SLACK + 2000; // clip would be exactly 2000
+        FT8TransmitSignal.ManualTxGate g =
+                FT8TransmitSignal.decideManualTx(msInCycle, FT8_SLACK, FT8_SLOT, 2000);
+        assertThat(g.transmit).isTrue();
+        assertThat(g.clipMs).isEqualTo(2000);
+    }
+
+    @Test
+    public void manualTx_pastToleranceBoundary_defers() {
+        // One ms past the boundary the clip exceeds the tolerance -> defer this cycle.
+        int msInCycle = FT8_SLACK + 2000 + 1; // clip 2001 > tolerance 2000
+        FT8TransmitSignal.ManualTxGate g =
+                FT8TransmitSignal.decideManualTx(msInCycle, FT8_SLACK, FT8_SLOT, 2000);
+        assertThat(g.transmit).isFalse();
+        assertThat(g.clipMs).isEqualTo(2001);
+    }
+
+    @Test
+    public void manualTx_gateNeverStricterThanClipPath() {
+        // Regression for the root cause: for every start offset the gate accepts,
+        // the clip it reports is within the tolerance, and it accepts at least the
+        // whole free-slack region (which the clip path always sends un-clipped).
+        int tolerance = 2000;
+        int lastAccepted = -1;
+        for (int ms = 0; ms < FT8_SLOT; ms++) {
+            FT8TransmitSignal.ManualTxGate g =
+                    FT8TransmitSignal.decideManualTx(ms, FT8_SLACK, FT8_SLOT, tolerance);
+            if (g.transmit) {
+                assertThat(g.clipMs).isAtMost(tolerance);
+                lastAccepted = ms;
+            }
+        }
+        // Accepts through slack + tolerance, i.e. strictly later than the old raw
+        // `msInCycle < tolerance` gate (which stopped at 1999 ms).
+        assertThat(lastAccepted).isEqualTo(FT8_SLACK + tolerance);
+    }
+
+    @Test
+    public void manualTx_toleranceClampedToRange() {
+        // Negative tolerance clamps to 0: only the free slack sends, nothing clipped.
+        FT8TransmitSignal.ManualTxGate low =
+                FT8TransmitSignal.decideManualTx(FT8_SLACK + 1, FT8_SLACK, FT8_SLOT, -500);
+        assertThat(low.transmit).isFalse();
+
+        // Above-max tolerance clamps to MAX (4000): start budget slack + 4000.
+        int justInside = FT8_SLACK + FT8TransmitSignal.MAX_LATE_START_TOLERANCE_MS;
+        FT8TransmitSignal.ManualTxGate hi =
+                FT8TransmitSignal.decideManualTx(justInside, FT8_SLACK, FT8_SLOT, 99999);
+        assertThat(hi.transmit).isTrue();
+        FT8TransmitSignal.ManualTxGate tooLate =
+                FT8TransmitSignal.decideManualTx(justInside + 1, FT8_SLACK, FT8_SLOT, 99999);
+        assertThat(tooLate.transmit).isFalse();
+    }
+
+    @Test
+    public void manualTx_clipClampedBelowSlot() {
+        // Defensive: an absurdly late offset never reports a clip >= the slot length
+        // (the transmit runnable clamps identically before trimming the buffer).
+        FT8TransmitSignal.ManualTxGate g =
+                FT8TransmitSignal.decideManualTx(FT8_SLOT + 5000, FT8_SLACK, FT8_SLOT, 4000);
+        assertThat(g.transmit).isFalse();
+        assertThat(g.clipMs).isEqualTo(FT8_SLOT - 1);
+    }
+
+    // ---- rebuildTimerPreservingOffset ---------------------------------------
+    // A mode change (or the applyLoadedOperatingMode() call at startup) rebuilds
+    // the cycle timer. A fresh UtcTimer starts with time_sec = 0, so before this
+    // fix the saved TX Delay loaded into the running signal was silently wiped
+    // and the offset fell back to 0 ms until the operator re-edited the value —
+    // the reported "TX Delay is not applied until I change its value" bug. The
+    // rebuild must carry the outgoing timer's offset onto the new one.
+    //
+    // UtcTimer construction only schedules java.util.Timer tasks (no JNI / no
+    // Android framework), so this runs on the bare JVM; delete() the timers to
+    // avoid leaking their heartbeat threads between tests.
+
+    private static final OnUtcTimer NOOP_CALLBACK = new OnUtcTimer() {
+        @Override public void doHeartBeatTimer(long utc) { }
+        @Override public void doOnSecTimer(long utc) { }
+    };
+
+    @Test
+    public void rebuildTimer_carriesOffsetOntoNewTimer() {
+        UtcTimer old = new UtcTimer(ModeProfile.FT8.slotMillis, false, NOOP_CALLBACK);
+        try {
+            old.setTime_sec(1800); // saved TX Delay, in ms
+            UtcTimer rebuilt = FT8TransmitSignal.rebuildTimerPreservingOffset(
+                    old, ModeProfile.FT4, NOOP_CALLBACK);
+            try {
+                // The core fix: the offset survives the rebuild instead of resetting to 0.
+                assertThat(rebuilt.getTime_sec()).isEqualTo(1800);
+            } finally {
+                rebuilt.delete();
+            }
+        } finally {
+            old.delete();
+        }
+    }
+
+    @Test
+    public void rebuildTimer_zeroOffsetStaysZero() {
+        // No TX Delay set: the rebuild must not invent one.
+        UtcTimer old = new UtcTimer(ModeProfile.FT8.slotMillis, false, NOOP_CALLBACK);
+        try {
+            UtcTimer rebuilt = FT8TransmitSignal.rebuildTimerPreservingOffset(
+                    old, ModeProfile.FT8, NOOP_CALLBACK);
+            try {
+                assertThat(rebuilt.getTime_sec()).isEqualTo(0);
+            } finally {
+                rebuilt.delete();
+            }
+        } finally {
+            old.delete();
+        }
+    }
+
+    // ---- isStaleEvidence -----------------------------------------------------
+    // Deep/late/stashed passes re-deliver decodes out of order: a pass finishing
+    // during our transmission is replayed after key-up, by which time the fast
+    // pass may already have advanced the QSO on newer evidence. Such a pass may
+    // move the sequence forward but never back — a partner's opening grid
+    // replayed after we reached RR73 must not rewind us to sending a report.
+    // Field case (POTA 2026-07-23, K0OBX/N8GK/K0OTC): "advance order 4->2".
+
+    @Test
+    public void stale_fastPassIsNeverStale() {
+        // The fast pass observes the current cycle; its verdict stands even when
+        // it lowers the order (the partner really did fall back a step).
+        assertThat(FT8TransmitSignal.isStaleEvidence(
+                /*evidenceOnly*/ false, /*order*/ 4, /*newOrder*/ 1)).isFalse();
+        assertThat(FT8TransmitSignal.isStaleEvidence(false, 5, 1)).isFalse();
+    }
+
+    @Test
+    public void stale_deepGridAfterRR73_isStale() {
+        // The exact field failure: at RR73 (4), a replayed opening grid (1)
+        // would set order back to 2 and re-send the signal report.
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 4, 1)).isTrue();
+    }
+
+    @Test
+    public void stale_deepEvidenceThatAdvances_isNotStale() {
+        // At order 2 the partner's R-report (3) advances to RR73 (4).
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 2, 3)).isFalse();
+        // At RR73 (4) their 73 (5) completes.
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 4, 5)).isFalse();
+    }
+
+    @Test
+    public void stale_deepEvidenceHoldingSameOrder_isNotStale() {
+        // Partner repeats the message we already acted on: newOrder+1 == order.
+        // Not a rewind, and re-affirming resets the no-reply count, so allow it.
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 4, 3)).isFalse();
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 2, 1)).isFalse();
+    }
+
+    @Test
+    public void stale_cqBaselineIsNeverStale() {
+        // Order 6 is the CQ baseline, not the top of the ladder: a reply
+        // arriving there legitimately starts a QSO at a lower order.
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 6, 1)).isFalse();
+        assertThat(FT8TransmitSignal.isStaleEvidence(true, 6, 2)).isFalse();
     }
 }

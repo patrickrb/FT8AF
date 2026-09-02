@@ -19,35 +19,47 @@ import radio.ks3ckc.ft8af.theme.TextMuted
 class CatStatusChipLogicTest {
 
     @Test
-    fun `disconnected is muted, not pulsing`() {
+    fun `disconnected is muted, not pulsing, not linked`() {
         val v = catChipVisuals(CatConnectionState.DISCONNECTED)
         assertThat(v.dotColor).isEqualTo(TextMuted)
         assertThat(v.pulsing).isFalse()
         assertThat(v.contentDescriptionRes).isEqualTo(R.string.cat_status_disconnected)
+        assertThat(v.labelRes).isEqualTo(R.string.cat_status_not_linked)
     }
 
     @Test
-    fun `connecting is amber and pulsing`() {
+    fun `connecting is amber and pulsing, not linked yet`() {
         val v = catChipVisuals(CatConnectionState.CONNECTING)
         assertThat(v.dotColor).isEqualTo(Accent)
         assertThat(v.pulsing).isTrue()
         assertThat(v.contentDescriptionRes).isEqualTo(R.string.cat_status_connecting)
+        assertThat(v.labelRes).isEqualTo(R.string.cat_status_not_linked)
     }
 
     @Test
-    fun `connected is green, not pulsing`() {
+    fun `connected is green, not pulsing, linked`() {
         val v = catChipVisuals(CatConnectionState.CONNECTED)
         assertThat(v.dotColor).isEqualTo(StatusConfirmed)
         assertThat(v.pulsing).isFalse()
         assertThat(v.contentDescriptionRes).isEqualTo(R.string.cat_status_connected)
+        assertThat(v.labelRes).isEqualTo(R.string.cat_status_linked)
     }
 
     @Test
-    fun `error is red, not pulsing`() {
+    fun `error is red, not pulsing, not linked`() {
         val v = catChipVisuals(CatConnectionState.ERROR)
         assertThat(v.dotColor).isEqualTo(StatusBad)
         assertThat(v.pulsing).isFalse()
         assertThat(v.contentDescriptionRes).isEqualTo(R.string.cat_status_error)
+        assertThat(v.labelRes).isEqualTo(R.string.cat_status_not_linked)
+    }
+
+    @Test
+    fun `only the connected state reads as linked`() {
+        val linked = CatConnectionState.values().filter {
+            catChipVisuals(it).labelRes == R.string.cat_status_linked
+        }
+        assertThat(linked).containsExactly(CatConnectionState.CONNECTED)
     }
 
     @Test

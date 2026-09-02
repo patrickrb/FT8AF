@@ -1,3 +1,4 @@
+import FT8Engine
 import SwiftUI
 
 struct DecodeScreen: View {
@@ -11,8 +12,12 @@ struct DecodeScreen: View {
             // Top bar
             HStack {
                 Text("Decode")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.ft8afUI(size: 18, weight: .bold))
                     .foregroundStyle(textPrimary)
+
+                // Clock-sync health from the mean decode DT.
+                ClockSyncIndicator(offsetSec: appState.clock.dtOffsetSec)
+                    .padding(.leading, 8)
 
                 Spacer()
 
@@ -21,7 +26,7 @@ struct DecodeScreen: View {
                     appState.decode.compactMode.toggle()
                 } label: {
                     Image(systemName: decode.compactMode ? "list.bullet" : "list.bullet.indent")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.ft8afUI(size: 14, weight: .medium))
                         .foregroundStyle(decode.compactMode ? accent : textMuted)
                 }
                 .buttonStyle(.plain)
@@ -32,7 +37,7 @@ struct DecodeScreen: View {
                     appState.decode.autoClear.toggle()
                 } label: {
                     Image(systemName: decode.autoClear ? "arrow.clockwise.circle.fill" : "arrow.clockwise.circle")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.ft8afUI(size: 14, weight: .medium))
                         .foregroundStyle(decode.autoClear ? accent : textMuted)
                 }
                 .buttonStyle(.plain)
@@ -43,14 +48,14 @@ struct DecodeScreen: View {
                     appState.decode.messages.removeAll()
                 } label: {
                     Image(systemName: "trash")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.ft8afUI(size: 13, weight: .medium))
                         .foregroundStyle(textMuted)
                 }
                 .buttonStyle(.plain)
                 .padding(.trailing, 8)
 
                 Text("\(decode.messages.count) msgs")
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .font(.ft8afMono(size: 12, weight: .medium))
                     .foregroundStyle(textMuted)
             }
             .padding(.horizontal, 16)
@@ -77,40 +82,7 @@ struct DecodeScreen: View {
             if filteredMessages.isEmpty {
                 emptyState
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(Array(groupedBySlot.enumerated()), id: \.offset) { groupIdx, group in
-                                // Time divider between slot groups
-                                if groupIdx > 0 {
-                                    SlotDivider(time: group.first?.utcTime ?? "")
-                                }
-
-                                ForEach(group) { message in
-                                    DecodeRow(
-                                        message: message,
-                                        myCall: appState.settings.myCall,
-                                        workedCalls: workedCallSet,
-                                        compact: decode.compactMode
-                                    )
-                                    .id(message.id)
-                                    .onTapGesture {
-                                        appState.decode.selectedMessage = message
-                                        showQsoSheet = true
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.bottom, 160)
-                    }
-                    .onChange(of: decode.messages.first?.id) { _, newId in
-                        if let id = newId {
-                            withAnimation(.easeOut(duration: 0.3)) {
-                                proxy.scrollTo(id, anchor: .top)
-                            }
-                        }
-                    }
-                }
+                messageList
             }
 
             Spacer(minLength: 0)
@@ -143,39 +115,183 @@ struct DecodeScreen: View {
         }
     }
 
-    private var filteredMessages: [DecodeMessage] {
-        let blocked = Set(appState.settings.blockedCallsigns)
-        let msgs = blocked.isEmpty ? appState.decode.messages :
-            appState.decode.messages.filter { !blocked.contains($0.callFrom.uppercased()) }
+    // MARK: - List
 
-        switch appState.decode.activeFilter {
-        case .all:     return msgs
-        case .cq:      return msgs.filter { $0.callTo == "CQ" || $0.callTo.hasPrefix("CQ ") }
-        case .cqPota:  return msgs.filter {
-            $0.extra.contains("K-") || $0.extra.contains("VE-") || $0.extra.contains("DL-") ||
-            $0.callTo == "CQ POTA" || $0.callTo.hasPrefix("CQ POTA")
-        }
-        case .newDxcc:
-            // Show only callsign prefixes not yet in logbook
-            let workedPrefixes = Set(appState.logbook.records.map { dxccPrefix($0.call) })
-            return msgs.filter { !workedPrefixes.contains(dxccPrefix($0.callFrom)) }
-        case .needed:
-            // Show CQ stations not yet worked
-            return msgs.filter {
-                ($0.callTo == "CQ" || $0.callTo.hasPrefix("CQ ")) &&
-                !workedCallSet.contains($0.callFrom.uppercased())
+    private var messageList: some View {
+        let decode = appState.decode
+        let settings = appState.settings
+        let index = logbookIndex
+        let toggles = HighlightToggles(
+            newPota: settings.highlightNewPota,
+            newDxcc: settings.highlightNewDxcc,
+            newZone: settings.highlightNewZone,
+            newState: settings.highlightNewState,
+            newGrid: settings.highlightNewGrid,
+            newPrefix: settings.highlightNewPrefix,
+            newBand: settings.highlightNewBand,
+            worked: settings.highlightWorked
+        )
+        let targetCall = appState.tx.targetCall.uppercased()
+
+        return ScrollViewReader { proxy in
+            ScrollView {
+                // The 1 s timeline drives the relative-age labels
+                // ("now" → "32s" → "5m") without any per-row timers.
+                TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(groupedBySlot.enumerated()), id: \.offset) { groupIdx, group in
+                            // Time divider between slot groups
+                            if groupIdx > 0 {
+                                SlotDivider(time: group.first?.utcTime ?? "")
+                            }
+
+                            ForEach(group) { message in
+                                DecodeRow(
+                                    message: message,
+                                    myCall: settings.myCall,
+                                    myGrid: settings.myGrid,
+                                    highlight: classifyDecode(
+                                        callFrom: message.callFrom,
+                                        callTo: message.callTo,
+                                        grid: message.grid,
+                                        extra: message.extra,
+                                        myCall: settings.myCall,
+                                        band: settings.band,
+                                        index: index,
+                                        toggles: toggles
+                                    ),
+                                    isTarget: !targetCall.isEmpty &&
+                                        message.callFrom.uppercased() == targetCall,
+                                    compact: decode.compactMode,
+                                    now: timeline.date,
+                                    distanceInMiles: settings.distanceInMiles,
+                                    showBeamHeading: settings.showBeamHeading
+                                )
+                                .id(message.id)
+                                .onTapGesture {
+                                    appState.decode.selectedMessage = message
+                                    showQsoSheet = true
+                                }
+                            }
+                        }
+                    }
+                    .padding(.bottom, 160)
+                }
             }
-        case .forMe:   return msgs.filter { $0.callTo.uppercased() == appState.settings.myCall.uppercased() }
+            .onChange(of: decode.messages.first?.id) { _, newId in
+                if let id = newId {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        proxy.scrollTo(id, anchor: .top)
+                    }
+                }
+            }
         }
     }
 
-    private func dxccPrefix(_ call: String) -> String {
-        var prefix = ""
-        for ch in call.uppercased() {
-            if ch.isNumber { prefix.append(ch); break }
-            prefix.append(ch)
+    // MARK: - Filtering
+
+    /// Pre-computed logbook lookups shared by highlight classification and the
+    /// New DXCC / Needed chips.
+    private var logbookIndex: LogbookIndex {
+        LogbookIndex(qsos: appState.logbook.records.map {
+            LoggedQso(call: $0.call, grid: $0.gridsquare, band: $0.band, park: $0.sigInfo)
+        })
+    }
+
+    /// Base stage (always-on): blocklist + the persisted settings filters
+    /// (Show Only CQ, DX Only, continent). These AND with whatever chip is
+    /// selected, mirroring Android `filterMessages`.
+    private var baseMessages: [DecodeMessage] {
+        let settings = appState.settings
+        let blocked = Set(settings.blockedCallsigns.map { $0.uppercased() })
+        var msgs = blocked.isEmpty ? appState.decode.messages :
+            appState.decode.messages.filter { !blocked.contains($0.callFrom.uppercased()) }
+
+        if settings.showOnlyCQ {
+            msgs = msgs.filter { isCQMessage(callTo: $0.callTo) }
         }
-        return prefix
+        if settings.dxOnly {
+            // DX = station's continent known and different from mine (derived
+            // from my call prefix). Unknown continents are conservatively kept
+            // out, matching the Android predicate.
+            let myContinent = DxccPrefix.continent(for: settings.myCall)
+            msgs = msgs.filter {
+                guard let mine = myContinent,
+                      let theirs = DxccPrefix.continent(for: $0.callFrom) else { return false }
+                return theirs != mine
+            }
+        }
+        if settings.continentFilter != "All" {
+            msgs = msgs.filter {
+                DxccPrefix.continent(for: $0.callFrom) == settings.continentFilter
+            }
+        }
+        return msgs
+    }
+
+    private var filteredMessages: [DecodeMessage] {
+        let msgs = baseMessages
+
+        switch appState.decode.activeFilter {
+        case .all:     return msgs
+        case .cq:      return msgs.filter { isCQMessage(callTo: $0.callTo) }
+        case .cqPota:  return msgs.filter { isPotaCq(callTo: $0.callTo, extra: $0.extra) }
+        case .newDxcc:
+            // Stations whose DXCC entity isn't in the logbook yet.
+            let worked = logbookIndex.workedEntities
+            return msgs.filter {
+                guard let entity = DxccPrefix.entity(for: $0.callFrom) else { return true }
+                return !worked.contains(entity.name)
+            }
+        case .newZone:
+            // CQ stations from a CQ zone (WAZ) the operator hasn't worked yet
+            // (mirrors Android's "New Zone" filter: checkIsCQ() && fromCq).
+            let workedZones = logbookIndex.workedZones
+            return msgs.filter {
+                guard isCQMessage(callTo: $0.callTo),
+                      let zone = DxccPrefix.cqZone(for: $0.callFrom), zone > 0 else { return false }
+                return !workedZones.contains(zone)
+            }
+        case .newGrid:
+            // CQ stations whose Maidenhead grid field the operator hasn't logged
+            // yet (mirrors Android's "New Grid" filter: checkIsCQ() && isNewGrid).
+            let workedGrids = logbookIndex.workedGrids
+            return msgs.filter {
+                guard isCQMessage(callTo: $0.callTo) else { return false }
+                let square = String($0.grid.uppercased().prefix(4))
+                return square.count >= 4 && gridToLatLon(square) != nil &&
+                    !workedGrids.contains(square)
+            }
+        case .newPrefix:
+            // CQ stations whose WPX prefix the operator hasn't logged yet
+            // (mirrors Android's "New Prefix" filter: checkIsCQ() && isNewPrefix).
+            let workedPrefixes = logbookIndex.workedPrefixes
+            return msgs.filter {
+                guard isCQMessage(callTo: $0.callTo),
+                      let prefix = wpxPrefix($0.callFrom) else { return false }
+                return !workedPrefixes.contains(prefix)
+            }
+        case .newState:
+            // CQ stations from a US state the operator hasn't worked yet
+            // (mirrors Android's "New State" filter: checkIsCQ() && fromNewState).
+            let workedStates = logbookIndex.workedStates
+            return msgs.filter {
+                guard isCQMessage(callTo: $0.callTo),
+                      let state = UsStateLookup.state(forGrid: $0.grid) else { return false }
+                return !workedStates.contains(state.uppercased())
+            }
+        case .needed:
+            // CQ stations not yet worked.
+            let workedCalls = logbookIndex.workedCalls
+            return msgs.filter {
+                isCQMessage(callTo: $0.callTo) &&
+                !workedCalls.contains($0.callFrom.uppercased())
+            }
+        case .forMe:
+            return msgs.filter {
+                isDirectedToMe(callTo: $0.callTo, myCall: appState.settings.myCall)
+            }
+        }
     }
 
     /// Group filtered messages by slotIndex for time dividers.
@@ -193,21 +309,17 @@ struct DecodeScreen: View {
         return groups
     }
 
-    private var workedCallSet: Set<String> {
-        Set(appState.logbook.records.map { $0.call.uppercased() })
-    }
-
     private var emptyState: some View {
         VStack(spacing: 12) {
             Spacer()
             Image(systemName: "waveform.slash")
-                .font(.system(size: 40))
+                .font(.ft8afUI(size: 40))
                 .foregroundStyle(textFaint)
             Text("No messages")
-                .font(.system(size: 16, weight: .medium))
+                .font(.ft8afUI(size: 16, weight: .medium))
                 .foregroundStyle(textMuted)
             Text("Decoded FT8 messages will appear here")
-                .font(.system(size: 13))
+                .font(.ft8afUI(size: 13))
                 .foregroundStyle(textFaint)
             Spacer()
         }
@@ -224,7 +336,7 @@ private struct SlotDivider: View {
                 .fill(textDim.opacity(0.4))
                 .frame(height: 1)
             Text(String(time.prefix(5)))
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .font(.ft8afMono(size: 9, weight: .medium))
                 .foregroundStyle(textFaint)
             Rectangle()
                 .fill(textDim.opacity(0.4))

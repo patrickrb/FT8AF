@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -57,7 +58,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -80,6 +84,8 @@ import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.count.CountDbOpr
 import com.k1af.ft8af.log.QSLCallsignRecord
 import com.k1af.ft8af.log.ThirdPartyService
+import com.k1af.ft8af.maidenhead.MaidenheadGrid
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -132,7 +138,16 @@ private data class LogbookStats(
     val dxccEntities: Int = 0,
     val cqZones: Int = 0,
     val ituZones: Int = 0,
+    val gridSquares: Int = 0,
     val bandCounts: List<Pair<String, Int>> = emptyList(),
+    // Raw continent codes worked (e.g. "NA", "EU"), for the WAC award. Reduced
+    // to award progress by [workedAllContinents]; empty when nothing resolves.
+    val continentCodes: List<String> = emptyList(),
+    // Worked All States (WAS): distinct US states worked (0..50) and the
+    // canonically-ordered list of states still needed. Derived from each QSO's
+    // grid via UsStateLookup — see WorkedAllStates.kt.
+    val statesWorked: Int = 0,
+    val neededStates: List<String> = emptyList(),
 )
 
 private data class AwardProgress(
@@ -141,6 +156,10 @@ private data class AwardProgress(
     val current: Int,
     val total: Int,
     val color: Color,
+    // When non-empty and the award is incomplete, the remaining targets are
+    // surfaced as chips under the progress bar (used by WAS to show the states
+    // still needed). Empty for awards without an enumerable "needed" list.
+    val remaining: List<String> = emptyList(),
 )
 
 // ---------------------------------------------------------------------------
@@ -168,6 +187,9 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
     var syncDialogState by remember { mutableStateOf<SyncDialogState?>(null) }
 
     val scope = rememberCoroutineScope()
+    // Captured for off-thread grid->state resolution (WAS). UsStateLookup caches
+    // the asset table, so calling it from the IO loader below is cheap.
+    val appContext = LocalContext.current.applicationContext
 
     // Load records and stats from the database. Re-runs when refreshKey changes
     // (e.g. after the user edits or deletes a QSO).
@@ -240,12 +262,37 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
                 val bandCounts = bandInfo?.values?.map { (it.name ?: "") to it.value }
                     ?: emptyList()
 
+                // Worked continents for the WAC award (single-fire callback).
+                val continentInfo = suspendCancellableCoroutine { cont ->
+                    val resumed = AtomicBoolean(false)
+                    CountDbOpr.getContinentCount(db) { info ->
+                        if (resumed.compareAndSet(false, true)) cont.resume(info)
+                    }
+                }
+                val continentCodes = continentInfo?.values
+                    ?.mapNotNull { it.name }
+                    ?: emptyList()
+
+                // Worked All States: resolve each QSO's grid to a US state and
+                // collapse to the distinct set (see WorkedAllStates.kt).
+                val worked = workedStates(loaded.map { it.grid }) {
+                    UsStateLookup.stateFromGrid(appContext, it)
+                }
+
+                // VUCC grid squares — unique 4-char Maidenhead squares across all
+                // logged QSOs (computed from the already-loaded records).
+                val gridSquareCount = gridSquaresWorked(loaded.map { it.grid })
+
                 stats = LogbookStats(
                     totalQsos = totalQsos,
                     dxccEntities = dxccCount,
                     cqZones = cqCount,
                     ituZones = ituCount,
+                    gridSquares = gridSquareCount,
                     bandCounts = bandCounts,
+                    continentCodes = continentCodes,
+                    statesWorked = worked.size,
+                    neededStates = neededStates(worked),
                 )
             } catch (_: Exception) {
                 // Leave records/stats at defaults on error
@@ -630,6 +677,31 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
             )
         }
 
+        // Best DX highlight — the furthest station worked, great-circle from the
+        // operator's grid. Only shown once there's a measurable contact (operator
+        // grid configured and at least one logged grid that parses).
+        val myGrid = GeneralVariables.getMyMaidenheadGrid()
+        val bestDx = remember(records, myGrid) {
+            computeBestDx(records) { grid ->
+                if (myGrid.isNullOrEmpty()) {
+                    null
+                } else {
+                    MaidenheadGrid.getDist(myGrid, grid)
+                }
+            }
+        }
+        if (bestDx != null) {
+            SectionHeader(stringResource(R.string.log_section_best_dx))
+            BestDxCard(bestDx = bestDx, modifier = Modifier.fillMaxWidth())
+        }
+
+        // Worked All Continents — the six-continent award, one chip per continent.
+        SectionHeader(stringResource(R.string.log_section_wac))
+        WorkedAllContinentsCard(
+            wac = remember(stats.continentCodes) { workedAllContinents(stats.continentCodes) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
         // Band donut chart
         if (stats.bandCounts.isNotEmpty()) {
             SectionHeader(stringResource(R.string.log_section_band_distribution))
@@ -650,8 +722,15 @@ private fun StatsTab(stats: LogbookStats, records: List<QSLCallsignRecord>) {
             progress = chartProgress,
         )
         AwardProgressBar(
+            label = stringResource(R.string.log_award_was_states),
+            current = stats.statesWorked,
+            total = 50,
+            gradientColors = listOf(Accent, StatusConfirmed),
+            progress = chartProgress,
+        )
+        AwardProgressBar(
             label = stringResource(R.string.log_award_vucc_grid_squares),
-            current = gridSquaresWorked(records),
+            current = stats.gridSquares,
             total = 100,
             gradientColors = listOf(StatusNew, Band12m),
             progress = chartProgress,
@@ -715,6 +794,140 @@ private fun BigStatCard(
                 letterSpacing = 0.04.sp,
             )
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Best DX card
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun BestDxCard(bestDx: BestDx, modifier: Modifier = Modifier) {
+    // MaidenheadGrid.formatDist already renders in the operator's preferred unit
+    // (mi/km) with its abbreviated label, so this stays unit-agnostic here.
+    val distanceText = MaidenheadGrid.formatDist(bestDx.distanceKm)
+    GlassCard(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = bestDx.callsign,
+                    color = Signal,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = GeistMonoFamily,
+                )
+                if (bestDx.grid.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = bestDx.grid,
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 0.04.sp,
+                    )
+                }
+            }
+            Text(
+                text = distanceText,
+                color = Accent,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GeistMonoFamily,
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Worked All Continents (WAC) card
+// ---------------------------------------------------------------------------
+
+/** Localized full name for a continent code, for chip accessibility labels. */
+@Composable
+private fun continentName(code: String): String = when (code) {
+    "NA" -> stringResource(R.string.continent_na)
+    "SA" -> stringResource(R.string.continent_sa)
+    "EU" -> stringResource(R.string.continent_eu)
+    "AF" -> stringResource(R.string.continent_af)
+    "AS" -> stringResource(R.string.continent_as)
+    "OC" -> stringResource(R.string.continent_oc)
+    else -> code
+}
+
+@Composable
+private fun WorkedAllContinentsCard(wac: WacProgress, modifier: Modifier = Modifier) {
+    GlassCard(modifier = modifier) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = if (wac.isComplete) {
+                        stringResource(R.string.log_wac_complete)
+                    } else {
+                        stringResource(R.string.log_wac_progress, wac.workedCount, wac.total)
+                    },
+                    color = if (wac.isComplete) StatusConfirmed else TextPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = "${wac.workedCount} / ${wac.total}",
+                    color = TextMuted,
+                    fontSize = 11.sp,
+                    fontFamily = GeistMonoFamily,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                for (chip in wac.chips) {
+                    ContinentChipView(chip = chip, modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContinentChipView(chip: ContinentChip, modifier: Modifier = Modifier) {
+    val name = continentName(chip.code)
+    val label = if (chip.worked) {
+        stringResource(R.string.log_wac_continent_worked, name)
+    } else {
+        stringResource(R.string.log_wac_continent_needed, name)
+    }
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (chip.worked) StatusNew.copy(alpha = 0.16f) else BgSurface3)
+            .border(
+                1.dp,
+                if (chip.worked) StatusNew.copy(alpha = 0.5f) else Border,
+                RoundedCornerShape(8.dp),
+            )
+            .padding(vertical = 8.dp)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = chip.code,
+            color = if (chip.worked) StatusNew else TextDim,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = GeistMonoFamily,
+        )
     }
 }
 
@@ -882,8 +1095,46 @@ private fun AwardProgressBar(
 }
 
 // ---------------------------------------------------------------------------
-// Grid square coverage heatmap (18x10 field grid: AA..RR x 00..99 at field level)
+// Grid square coverage heatmap (18x18 field grid: AA..RR at Maidenhead field level)
 // ---------------------------------------------------------------------------
+
+// A Maidenhead field designator is two letters: the longitude field (A..R, 18
+// divisions of 360° = 20° each) followed by the latitude field (A..R, 18
+// divisions of 180° = 10° each). BOTH axes span the full A..R range — the
+// latitude field is a letter, not a digit — so the coverage grid is 18x18 (324
+// cells). Iterating fewer latitude rows silently drops every field north of +10°
+// (latitude field K onward: essentially all of North America, Europe, and Japan),
+// so those worked grids could never highlight.
+internal const val GRID_HEATMAP_COLS = 18
+internal const val GRID_HEATMAP_ROWS = 18
+
+/** One coverage-grid cell: its Maidenhead field (e.g. "FN") and whether it was worked. */
+internal data class GridHeatmapCell(val field: String, val isWorked: Boolean)
+
+/**
+ * The two-letter field designators actually worked, derived from each record's
+ * grid (first two chars, upper-cased). Grids shorter than two chars are skipped.
+ */
+internal fun workedGridFields(grids: List<String?>): Set<String> =
+    grids.mapNotNull { grid ->
+        // Locale.ROOT: the generated field designators are ASCII A..R, so the
+        // upper-casing here must be locale-insensitive. A default-locale
+        // uppercase() would map "i" to "İ" under a Turkish locale and the field
+        // would never match its generated "IO" cell.
+        if (grid != null && grid.length >= 2) grid.substring(0, 2).uppercase(Locale.ROOT) else null
+    }.toSet()
+
+/**
+ * The full 18x18 coverage grid, row-major (row = latitude field A..R, col =
+ * longitude field A..R), each cell flagged worked against [workedFields].
+ */
+internal fun buildGridHeatmapCells(workedFields: Set<String>): List<List<GridHeatmapCell>> =
+    (0 until GRID_HEATMAP_ROWS).map { row ->
+        (0 until GRID_HEATMAP_COLS).map { col ->
+            val field = "${'A' + col}${'A' + row}"
+            GridHeatmapCell(field, field in workedFields)
+        }
+    }
 
 @Composable
 private fun GridSquareHeatmap(
@@ -891,19 +1142,9 @@ private fun GridSquareHeatmap(
     modifier: Modifier = Modifier,
     progress: Float = 1f,
 ) {
-    // Build set of worked 2-char field designators (e.g., "FN", "JO")
-    val workedFields = remember(records) {
-        records.mapNotNull { record ->
-            val grid = record.grid
-            if (grid != null && grid.length >= 2) {
-                grid.substring(0, 2).uppercase()
-            } else null
-        }.toSet()
+    val cells = remember(records) {
+        buildGridHeatmapCells(workedGridFields(records.map { it.grid }))
     }
-
-    val cols = 18  // A..R
-    val rows = 10  // 0..9 (latitude bands, typically A-R letters mapped, but for the field
-                   // grid we show longitude letters across, latitude digits down)
 
     GlassCard(modifier = modifier) {
         Column(
@@ -912,16 +1153,11 @@ private fun GridSquareHeatmap(
                 .horizontalScroll(rememberScrollState())
                 .padding(12.dp),
         ) {
-            for (row in 0 until rows) {
+            cells.forEachIndexed { row, rowCells ->
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    for (col in 0 until cols) {
-                        val fieldLon = ('A' + col)
-                        val fieldLat = ('A' + row)
-                        val field = "$fieldLon$fieldLat"
-                        val isWorked = field in workedFields
-
+                    for (cell in rowCells) {
                         val cellColor = when {
-                            isWorked -> Signal.copy(alpha = 0.7f * progress.coerceIn(0f, 1f))
+                            cell.isWorked -> Signal.copy(alpha = 0.7f * progress.coerceIn(0f, 1f))
                             else -> BgSurface3.copy(alpha = 0.4f)
                         }
 
@@ -933,7 +1169,7 @@ private fun GridSquareHeatmap(
                         )
                     }
                 }
-                if (row < rows - 1) Spacer(modifier = Modifier.height(2.dp))
+                if (row < cells.size - 1) Spacer(modifier = Modifier.height(2.dp))
             }
         }
     }
@@ -1033,14 +1269,61 @@ private fun DrawScope.drawSparkline(
 }
 
 // ---------------------------------------------------------------------------
-// Helper: count unique grid squares worked
+// Helper: count unique grid squares worked (VUCC)
 // ---------------------------------------------------------------------------
 
-private fun gridSquaresWorked(records: List<QSLCallsignRecord>): Int =
-    records.mapNotNull { record ->
-        val grid = record.grid
-        if (!grid.isNullOrBlank() && grid.length >= 4) grid.substring(0, 4).uppercase() else null
+/**
+ * The number of distinct Maidenhead grid squares worked — the VUCC metric shown
+ * on both the Stats-tab progress bar and the Awards-tab card. A square is the
+ * first four grid characters (e.g. "FN31"); longer grids are truncated to their
+ * square and blank/partial grids are ignored.
+ *
+ * Locale.ROOT: grid letters are ASCII A..R, so upper-casing must be
+ * locale-insensitive — a default-locale uppercase() would map "i" to "İ" under a
+ * Turkish locale, counting "io91" and "IO91" as two squares instead of one.
+ */
+internal fun gridSquaresWorked(grids: List<String?>): Int =
+    grids.mapNotNull { grid ->
+        if (!grid.isNullOrBlank() && grid.length >= 4) {
+            grid.substring(0, 4).uppercase(Locale.ROOT)
+        } else {
+            null
+        }
     }.distinct().size
+
+// ---------------------------------------------------------------------------
+// Helper: furthest station worked ("Best DX")
+// ---------------------------------------------------------------------------
+
+/** The furthest logged station and its great-circle distance from the operator. */
+internal data class BestDx(val callsign: String, val grid: String, val distanceKm: Double)
+
+/**
+ * The furthest-worked station across [records], measured great-circle from the
+ * operator's grid. [distanceKm] maps a remote grid to its distance in km, or
+ * null when it can't be measured (unparseable grid, or the operator's own grid
+ * isn't configured). Records with a blank callsign/grid, an un-measurable grid,
+ * or a non-positive / NaN distance are skipped — the last mirrors
+ * MaidenheadGrid's 0-km result for two stations sharing a grid, which is a
+ * distance floor, never a "best DX". Returns null when nothing is measurable.
+ *
+ * The distance function is injected so this reducer stays a pure, JVM-only unit
+ * (the real card passes a MaidenheadGrid-backed lambda).
+ */
+internal fun computeBestDx(
+    records: List<QSLCallsignRecord>,
+    distanceKm: (String) -> Double?,
+): BestDx? =
+    records.asSequence()
+        .mapNotNull { record ->
+            val callsign = record.callsign?.trim().orEmpty()
+            val grid = record.grid?.trim().orEmpty()
+            if (callsign.isEmpty() || grid.isEmpty()) return@mapNotNull null
+            val dist = distanceKm(grid) ?: return@mapNotNull null
+            if (dist.isNaN() || dist <= 0.0) return@mapNotNull null
+            BestDx(callsign, grid, dist)
+        }
+        .maxByOrNull { it.distanceKm }
 
 // ===========================================================================
 // RECENT TAB
@@ -1061,6 +1344,35 @@ private fun gridSquaresWorked(records: List<QSLCallsignRecord>): Int =
 internal fun sortQsosByDateTimeDesc(
     records: List<QSLCallsignRecord>,
 ): List<QSLCallsignRecord> = records.sortedByDescending { qsoSortKey(it) }
+
+/**
+ * Filter the recent-QSO list by a free-text [query] typed into the logbook search
+ * box. A blank/whitespace query returns the list unchanged (no filtering).
+ *
+ * Otherwise the trimmed query is matched case-insensitively as a *substring*
+ * against the fields an operator actually searches a log by — callsign (the
+ * primary target), grid, band, DXCC entity, and the stored "where" location — so
+ * typing a partial call ("K1A"), a grid ("FN42"), a band ("40M"), or a country
+ * narrows the log to the matching contacts. Matching a substring (rather than a
+ * prefix) means "PA" finds both "PA3XYZ" and "W1PA". Extracted as a pure function
+ * so the search behavior is unit-tested without Compose.
+ */
+internal fun filterQsoRecords(
+    records: List<QSLCallsignRecord>,
+    query: String,
+): List<QSLCallsignRecord> {
+    val q = query.trim().uppercase()
+    if (q.isEmpty()) return records
+    return records.filter { record ->
+        sequenceOf(
+            record.callsign,
+            record.grid,
+            record.band,
+            record.dxccStr,
+            record.where,
+        ).any { it != null && it.uppercase().contains(q) }
+    }
+}
 
 internal fun qsoSortKey(record: QSLCallsignRecord): String {
     val date = (record.lastTime ?: "").padEnd(8, '0')
@@ -1112,28 +1424,126 @@ private fun RecentTab(
         return
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        items(
-            items = sortQsosByDateTimeDesc(records),
-            // Include id so an edit that changes other fields still maps to a stable key,
-            // and so two grouped rows with otherwise identical display fields don't collide.
-            key = { "${it.id}_${it.callsign}_${it.lastTime}_${it.band}" },
-        ) { record ->
-            QsoRow(
-                record = record,
-                onEdit = { onEdit(record) },
-                onDelete = { onDelete(record) },
-            )
-        }
+    // Free-text search over the log (callsign / grid / band / DXCC). Kept in a
+    // rememberSaveable so the query survives recomposition and rotation; it resets
+    // when the operator leaves the Logbook, which matches the expectation that
+    // search is a transient "find this contact" action, not a persisted filter.
+    var query by rememberSaveable { mutableStateOf("") }
+    val filtered = remember(records, query) { filterQsoRecords(records, query) }
 
-        // Bottom spacer for safe area
-        item { Spacer(modifier = Modifier.height(16.dp)) }
+    Column(modifier = Modifier.fillMaxSize()) {
+        LogSearchBar(
+            query = query,
+            onQueryChange = { query = it },
+            modifier = Modifier
+                .padding(horizontal = 18.dp)
+                .padding(bottom = 6.dp),
+        )
+
+        if (filtered.isEmpty()) {
+            // Records exist but none match — keep the search bar above so the
+            // operator can refine or clear the query.
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 32.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                EmptyStateWaves(size = 140.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.log_search_no_results_title),
+                    color = TextMuted,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.log_search_no_results_body, query.trim()),
+                    color = TextFaint,
+                    fontSize = 12.sp,
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(
+                    items = sortQsosByDateTimeDesc(filtered),
+                    // Include id so an edit that changes other fields still maps to a stable key,
+                    // and so two grouped rows with otherwise identical display fields don't collide.
+                    key = { "${it.id}_${it.callsign}_${it.lastTime}_${it.band}" },
+                ) { record ->
+                    QsoRow(
+                        record = record,
+                        onEdit = { onEdit(record) },
+                        onDelete = { onDelete(record) },
+                    )
+                }
+
+                // Bottom spacer for safe area
+                item { Spacer(modifier = Modifier.height(16.dp)) }
+            }
+        }
     }
+}
+
+/**
+ * Search field for the Logbook Recent tab. A thin Compose wrapper around an
+ * [OutlinedTextField]; all match logic lives in the pure [filterQsoRecords].
+ */
+@Composable
+private fun LogSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = modifier.fillMaxWidth(),
+        singleLine = true,
+        placeholder = {
+            Text(
+                text = stringResource(R.string.log_search_hint),
+                color = TextFaint,
+                fontSize = 13.sp,
+                fontFamily = GeistMonoFamily,
+            )
+        },
+        leadingIcon = {
+            radio.ks3ckc.ft8af.ui.components.FT8AFIcons.Search(color = TextMuted, size = 18.dp)
+        },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                val clearLabel = stringResource(R.string.log_search_clear)
+                IconButton(onClick = { onQueryChange("") }) {
+                    radio.ks3ckc.ft8af.ui.components.FT8AFIcons.Close(
+                        modifier = Modifier.semantics { contentDescription = clearLabel },
+                        color = TextMuted,
+                        size = 18.dp,
+                    )
+                }
+            }
+        },
+        textStyle = TextStyle(
+            color = TextPrimary,
+            fontSize = 14.sp,
+            fontFamily = GeistMonoFamily,
+        ),
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = TextPrimary,
+            unfocusedTextColor = TextPrimary,
+            cursorColor = Accent,
+            focusedBorderColor = Accent,
+            unfocusedBorderColor = Border,
+        ),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1443,9 +1853,12 @@ private fun AwardsTab(stats: LogbookStats) {
     val wazDesc = stringResource(R.string.log_award_waz_desc)
     val vuccName = stringResource(R.string.log_award_vucc)
     val vuccDesc = stringResource(R.string.log_award_vucc_desc)
+    val wacName = stringResource(R.string.log_award_wac)
+    val wacDesc = stringResource(R.string.log_award_wac_desc)
     val iotaName = stringResource(R.string.log_award_iota)
     val iotaDesc = stringResource(R.string.log_award_iota_desc)
     val awards = remember(stats) {
+        val wac = workedAllContinents(stats.continentCodes)
         listOf(
             AwardProgress(
                 name = dxccMixedName,
@@ -1457,9 +1870,10 @@ private fun AwardsTab(stats: LogbookStats) {
             AwardProgress(
                 name = wasName,
                 description = wasDesc,
-                current = (stats.dxccEntities * 50 / 340.coerceAtLeast(1)).coerceAtMost(50),
+                current = stats.statesWorked,
                 total = 50,
                 color = Accent,
+                remaining = stats.neededStates,
             ),
             AwardProgress(
                 name = wazName,
@@ -1469,9 +1883,16 @@ private fun AwardsTab(stats: LogbookStats) {
                 color = StatusNew,
             ),
             AwardProgress(
+                name = wacName,
+                description = wacDesc,
+                current = wac.workedCount,
+                total = wac.total,
+                color = Band10m,
+            ),
+            AwardProgress(
                 name = vuccName,
                 description = vuccDesc,
-                current = 0, // Would need per-band grid counting
+                current = stats.gridSquares,
                 total = 100,
                 color = Band12m,
             ),
@@ -1590,10 +2011,73 @@ private fun AwardCard(award: AwardProgress) {
                             ),
                     )
                 }
+
+                // States still needed (WAS): a capped preview of remaining
+                // targets so a chaser can see at a glance what's left to work.
+                if (award.remaining.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    NeededStatesRow(remaining = award.remaining, accent = award.color)
+                }
             }
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Needed-states chip row (WAS award card)
+// ---------------------------------------------------------------------------
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun NeededStatesRow(remaining: List<String>, accent: Color) {
+    // Cap the visible chips so a fresh log (up to 50 remaining) never floods the
+    // card; the rest collapse into a trailing "+N" chip.
+    val (shown, overflow) = neededStatesPreview(remaining, NEEDED_STATES_PREVIEW_MAX)
+    Text(
+        text = stringResource(R.string.log_award_states_needed),
+        color = TextFaint,
+        fontSize = 9.5.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.06.sp,
+    )
+    Spacer(modifier = Modifier.height(5.dp))
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        for (state in shown) {
+            StateChip(text = state, accent = accent)
+        }
+        if (overflow > 0) {
+            StateChip(text = "+$overflow", accent = accent)
+        }
+    }
+}
+
+@Composable
+private fun StateChip(text: String, accent: Color) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(accent.copy(alpha = 0.12f))
+            .border(1.dp, accent.copy(alpha = 0.26f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 5.dp, vertical = 2.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            color = accent,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = GeistMonoFamily,
+            maxLines = 1,
+        )
+    }
+}
+
+/** Max needed-state chips shown before collapsing the rest into a "+N" chip. */
+private const val NEEDED_STATES_PREVIEW_MAX = 16
 
 // ===========================================================================
 // Per-row QSO edit / delete dialogs (Recent tab)

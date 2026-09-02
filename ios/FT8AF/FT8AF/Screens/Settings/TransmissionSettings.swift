@@ -1,3 +1,4 @@
+import FT8DSP
 import SwiftUI
 
 struct TransmissionSettings: View {
@@ -14,7 +15,7 @@ struct TransmissionSettings: View {
                         .foregroundStyle(textPrimary)
                     Spacer()
                     TextField("Watts", value: $settings.txPowerWatts, format: .number)
-                        .font(.system(.body, design: .monospaced))
+                        .font(.ft8afMono(size: 17))
                         .multilineTextAlignment(.trailing)
                         .foregroundStyle(textPrimary)
                         .keyboardType(.numberPad)
@@ -28,10 +29,16 @@ struct TransmissionSettings: View {
             }
             .listRowBackground(bgSurface)
 
-            // PTT Mode
+            // PTT Mode — only VOX works on iOS (see footer). A non-VOX value
+            // from an older build is migrated to VOX when settings load
+            // (`SettingsPersistence.load`); the coercion here is only a belt
+            // and braces so the picker never shows a tag it doesn't offer.
             Section {
-                Picker("PTT Mode", selection: $settings.pttMode) {
-                    ForEach(PttMode.allCases) { mode in
+                Picker("PTT Mode", selection: Binding(
+                    get: { settings.pttMode.coercedForIOS },
+                    set: { settings.pttMode = $0 }
+                )) {
+                    ForEach(PttMode.selectableOnIOS) { mode in
                         Text(mode.rawValue).tag(mode)
                     }
                 }
@@ -40,7 +47,7 @@ struct TransmissionSettings: View {
                 Text("PTT Control")
                     .foregroundStyle(textMuted)
             } footer: {
-                Text("VOX: use audio-triggered PTT. CAT/RTS/DTR: hardware control via rig connection")
+                Text("VOX keys the radio from the transmit audio. CAT/RTS/DTR PTT need a wired CAT connection, which iOS/iPadOS doesn't allow over USB. (A future Wi-Fi/rigctld bridge could add CAT PTT.)")
                     .foregroundStyle(textFaint)
             }
             .listRowBackground(bgSurface)
@@ -53,7 +60,7 @@ struct TransmissionSettings: View {
                             .foregroundStyle(textPrimary)
                         Spacer()
                         Text("\(settings.txVolume)%")
-                            .font(.system(size: 14, design: .monospaced))
+                            .font(.ft8afMono(size: 14))
                             .foregroundStyle(textMuted)
                     }
                     Slider(
@@ -69,6 +76,24 @@ struct TransmissionSettings: View {
             } header: {
                 Text("Audio")
                     .foregroundStyle(textMuted)
+            }
+            .listRowBackground(bgSurface)
+
+            // Mode selection
+            Section {
+                Picker("Mode", selection: $settings.mode) {
+                    ForEach(Mode.allCases) { m in
+                        Text(m.rawValue).tag(m)
+                    }
+                }
+                .foregroundStyle(textPrimary)
+            } header: {
+                Text("Mode")
+                    .foregroundStyle(textMuted)
+            } footer: {
+                Text("FT4 receives and shows timing; FT4 transmit is not yet enabled. FT8 transmits normally.")
+                    .font(.ft8afUI(size: 11))
+                    .foregroundStyle(textFaint)
             }
             .listRowBackground(bgSurface)
 
@@ -93,7 +118,7 @@ struct TransmissionSettings: View {
                         Text("Hunt: Call CQ")
                             .foregroundStyle(textPrimary)
                         Text("Automatically call CQ when hunting")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                 }
@@ -104,7 +129,7 @@ struct TransmissionSettings: View {
                         Text("Auto-Call Follow")
                             .foregroundStyle(textPrimary)
                         Text("Automatically respond to stations calling you")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                 }
@@ -115,7 +140,7 @@ struct TransmissionSettings: View {
                         Text("Early Decode")
                             .foregroundStyle(textPrimary)
                         Text("Start decoding before end of RX cycle")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                 }
@@ -126,7 +151,7 @@ struct TransmissionSettings: View {
                         Text("Auto-CQ After QSO")
                             .foregroundStyle(textPrimary)
                         Text("Resume calling CQ after completing a QSO")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                 }
@@ -147,7 +172,7 @@ struct TransmissionSettings: View {
                         Text("TX Watchdog")
                             .foregroundStyle(textPrimary)
                         Text("Auto-stop TX after timeout")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                     Spacer()
@@ -167,7 +192,7 @@ struct TransmissionSettings: View {
                         Text("Stop After")
                             .foregroundStyle(textPrimary)
                         Text("Max CQ attempts before stopping")
-                            .font(.system(size: 11))
+                            .font(.ft8afUI(size: 11))
                             .foregroundStyle(textFaint)
                     }
                     Spacer()
@@ -181,11 +206,30 @@ struct TransmissionSettings: View {
                     .tint(accent)
                     .frame(width: 100)
                 }
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Tune Timeout")
+                            .foregroundStyle(textPrimary)
+                        Text("Max carrier time for the TUNE button")
+                            .font(.ft8afUI(size: 11))
+                            .foregroundStyle(textFaint)
+                    }
+                    Spacer()
+                    Picker("", selection: $settings.tuneTimeoutSec) {
+                        ForEach([10, 15, 30, 60, 120], id: \.self) { sec in
+                            Text("\(sec) s").tag(sec)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(accent)
+                    .frame(width: 100)
+                }
             } header: {
                 Text("TX Safety")
                     .foregroundStyle(textMuted)
             } footer: {
-                Text("Watchdog prevents runaway TX. Stop-after limits consecutive unanswered CQ calls.")
+                Text("Watchdog prevents runaway TX. Stop-after limits consecutive unanswered CQ calls. TUNE always stops itself at the timeout.")
                     .foregroundStyle(textFaint)
             }
             .listRowBackground(bgSurface)
@@ -199,11 +243,18 @@ struct TransmissionSettings: View {
         .onChange(of: settings.pttMode) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.txVolume) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.band) { _, _ in SettingsPersistence.save(appState.settings) }
+        .onChange(of: settings.mode) { _, newMode in
+            // Same RX-only disarm as the TxStrip mode picker: selecting FT4 here must
+            // also stop an armed CQ/QSO + Hunt (shared engine method), not just persist.
+            appState.engine?.handleModeChange(to: newMode)
+            SettingsPersistence.save(appState.settings)
+        }
         .onChange(of: settings.huntCallsCQ) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.autoCallFollow) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.earlyDecode) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.autoCQAfterQSO) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.txWatchdogMin) { _, _ in SettingsPersistence.save(appState.settings) }
         .onChange(of: settings.stopAfterAttempts) { _, _ in SettingsPersistence.save(appState.settings) }
+        .onChange(of: settings.tuneTimeoutSec) { _, _ in SettingsPersistence.save(appState.settings) }
     }
 }

@@ -32,6 +32,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -50,6 +51,169 @@ public class LogHttpServer extends NanoHTTPD {
         super(port);
         this.mainViewModel = viewModel;
 
+    }
+
+    /**
+     * Number of pages needed to show {@code recordCount} rows at {@code pageSize} rows per page.
+     *
+     * <p>This is a ceiling division: {@code n} pages hold up to {@code n * pageSize} rows. The
+     * old {@code Math.round(rc / pageSize + 0.5f)} form actually evaluated to
+     * {@code floor(rc / pageSize) + 1} (because {@link Math#round(float)} is itself
+     * {@code floor(x + 0.5)}, so the {@code + 0.5f} added a whole extra page), so an exact
+     * multiple — e.g. 100 rows at the default 100 rows/page — reported one page too many and
+     * the web logbook rendered a trailing empty page whose "last page" link led nowhere.
+     *
+     * <p>Always returns at least 1 so the page controls still render over an empty log (matching
+     * the old behaviour for 0 rows), and a non-positive {@code pageSize} (a malformed
+     * {@code ?pageSize=} query value) collapses to a single page instead of dividing by zero.
+     */
+    static int pageCount(int recordCount, int pageSize) {
+        if (pageSize <= 0 || recordCount <= 0) {
+            return 1;
+        }
+        return (recordCount + pageSize - 1) / pageSize;
+    }
+
+    /**
+     * Parse an integer query-parameter value, falling back to {@code fallback} when the
+     * value is {@code null} or not a valid integer.
+     *
+     * <p>The web-logbook handlers read {@code ?page=}, {@code ?pageSize=} and
+     * {@code ?session=} straight off the request. NanoHTTPD's {@code ClientHandler}
+     * swallows any exception thrown out of {@link #serve} — it logs it and closes the
+     * socket — so a raw {@code Integer.parseInt} of a malformed value (a hand-edited URL,
+     * a stale bookmark, or a truncated link) surfaced to the browser as an aborted/empty
+     * response instead of the requested view. Routing every parse through here keeps a bad
+     * value from throwing: the handler just uses its default (page 1, the default page
+     * size, or an id that matches no import task).
+     */
+    static int parseQueryInt(String value, int fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    /**
+     * Clamp a 1-based page index to {@code [1, pageCount]}.
+     *
+     * <p>The three list handlers clamped only the high side
+     * ({@code if (pageIndex > pageCount) pageIndex = pageCount}), so {@code ?page=0} or a
+     * negative page left {@code pageIndex < 1} and the paged query's
+     * {@code LIMIT (pageIndex - 1) * pageSize, pageSize} offset went negative — a wrong or
+     * empty result set numbered from a negative "No." column. {@link #pageCount(int, int)}
+     * always returns at least 1, so the clamped index is always a page that exists.
+     */
+    static int clampPageIndex(int pageIndex, int pageCount) {
+        if (pageIndex < 1) {
+            return 1;
+        }
+        return Math.min(pageIndex, pageCount);
+    }
+
+    /**
+     * Clamp a page size parsed from a {@code ?pageSize=} query value to a safe positive size.
+     *
+     * <p>{@link #pageCount(int, int)} tolerates a non-positive size, but the raw value also
+     * drives the paged {@code LIMIT (offset),(pageSize)} query and every navigation link. A
+     * {@code pageSize} of 0 forces {@code LIMIT ...,0} (an always-empty table) and a negative
+     * value hands SQLite an undefined/unbounded limit — and either leaks into the links. Fall
+     * back to the default so the count, the query, and the links all agree on one sane size.
+     */
+    static int normalizePageSize(int pageSize) {
+        return pageSize > 0 ? pageSize : 100;
+    }
+
+    /**
+     * Render the "successfully contacted callsigns" cell block for the debug page, ten
+     * callsigns per table row.
+     *
+     * <p>Extracted so the caller reads the shared
+     * {@link GeneralVariables#QSL_Callsign_list} exactly once — passing the reference in as
+     * {@code callsigns} — and iterates that single snapshot. The old inline loop re-read the
+     * static field on every {@code size()} and {@code get(i)}, so a background DB reload
+     * ({@link com.k1af.ft8af.database.DatabaseOpr.GetAllQSLCallsign}) that swaps the list
+     * wholesale between the two reads could hand {@code get(i)} an index past the end of a
+     * now-shorter list and throw {@link IndexOutOfBoundsException} mid-render (the page
+     * auto-refreshes every 5 s, so the window is hit often). With the list published as a
+     * CopyOnWriteArrayList a concurrent in-place add() can't tear this iteration either.
+     */
+    static String successfulCallsignBlock(List<String> callsigns) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<tr><td class=\"default\" >");
+        // for-each, not size()/get(i): this uses CopyOnWriteArrayList's snapshot
+        // iterator, so a concurrent clear()/remove() (or a different List impl
+        // passed in) can't reintroduce a size/get TOCTOU IndexOutOfBoundsException.
+        int i = 0;
+        for (String callsign : callsigns) {
+            sb.append(callsign);
+            sb.append(",&nbsp;");
+            if (((i + 1) % 10) == 0) {
+                sb.append("</td></tr><tr><td class=\"default\" >\n");
+            }
+            i++;
+        }
+        sb.append("</td></tr>\n");
+        return sb.toString();
+    }
+
+    /**
+     * The request path segment at {@code index} (from {@code getUri().split("/")}),
+     * or {@code null} when the request has no such segment.
+     *
+     * <p>Every {@code uriList[2]} read in {@link #serve} routes through this so a
+     * request that omits the trailing segment falls back to the default page instead
+     * of throwing {@link ArrayIndexOutOfBoundsException}. {@code GET /SHOWQSL} split to
+     * {@code ["", "SHOWQSL"]} (length 2), so the old bare {@code uriList[2]} threw — and
+     * for SHOWQSL that read sat <em>outside</em> the try/catch, so it escaped
+     * {@code serve} uncaught; for the DOWNQSL / DOWNQSLNOQSL {@code Content-Disposition}
+     * header it threw inside the try and returned an opaque HTTP 500 even though the
+     * body branch had already fallen back correctly. Mirrors the {@code uriList.length
+     * >= 3} guard the DELFOLLOW / DELQSL / DELQSLCALLSIGN branches already use.
+     */
+    static String uriSegment(String[] uriList, int index) {
+        if (uriList == null || index < 0 || index >= uriList.length) {
+            return null;
+        }
+        String segment = uriList[index];
+        // Treat a present-but-empty segment (e.g. the "" that a double slash like
+        // "/SHOWQSL//" splits to) as absent, so it falls back to the default page
+        // rather than flowing an empty month into showQSLByMonth/downQSLByMonth
+        // (where month.length() == 0 could match unintended rows).
+        return segment == null || segment.isEmpty() ? null : segment;
+    }
+
+    /**
+     * {@code Content-Disposition} filename for a per-month QSL download. Falls back to
+     * {@code log.adi} when the month segment is absent (see {@link #uriSegment}), rather
+     * than reading a missing path segment.
+     */
+    static String downloadFileName(String month) {
+        return String.format("log%s.adi", month != null ? month : "");
+    }
+
+    /**
+     * The temp-file path NanoHTTPD stored for the {@code file1} upload part of a POST/PUT
+     * to {@code /IMPORTLOGDATA}, or {@code null} when the request carried no such part.
+     *
+     * <p>{@link IHTTPSession#parseBody} fills the supplied map with one entry per uploaded
+     * file, keyed by the form field name. A malformed or non-form request — or a bare LAN
+     * probe of the always-on logbook port — leaves the map without {@code file1}. The
+     * handler used to dereference the missing value directly
+     * ({@code files.get("file1").hashCode()}), so a request without the part threw a
+     * {@link NullPointerException}. That throw escaped {@link #serve} <em>before</em> its
+     * try/catch (the {@code IMPORTLOGDATA} branch runs in the leading dispatch chain), so
+     * NanoHTTPD's worker aborted the request with no useful response. Callers must treat
+     * {@code null} as "no upload" and reject the request the way a non-POST method already
+     * does. Mirrors the {@link #uriSegment} / {@link #parseQueryInt} guards that already
+     * harden the sibling handlers in this file.
+     */
+    static String uploadedFilePath(Map<String, String> files) {
+        return files == null ? null : files.get("file1");
     }
 
     @Override
@@ -112,7 +276,8 @@ public class LogHttpServer extends NanoHTTPD {
         } else if (uri.equalsIgnoreCase("SHOWALLQSL")) {
             msg = HTML_STRING(showAllQSL());
         } else if (uri.equalsIgnoreCase("SHOWQSL")) {
-            msg = HTML_STRING(showQSLByMonth(uriList[2]));
+            String month = uriSegment(uriList, 2);
+            msg = month != null ? HTML_STRING(showQSLByMonth(month)) : HtmlContext.DEFAULT_HTML();
         } else if (uri.equalsIgnoreCase("DELQSLCALLSIGN")) {//Delete a QSO callsign
             if (uriList.length >= 3) {
                 deleteQSLCallSign(uriList[2].replace("_", "/"));
@@ -130,22 +295,26 @@ public class LogHttpServer extends NanoHTTPD {
                 response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain", msg);
                 response.addHeader("Content-Disposition", "attachment;filename=All_log.adi");
             } else if (uri.equalsIgnoreCase("DOWNQSL")) {
-                if (uriList.length >= 3) {
-                    msg = downQSLByMonth(uriList[2], true);
+                String month = uriSegment(uriList, 2);
+                if (month != null) {
+                    msg = downQSLByMonth(month, true);
+                    response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain", msg);
+                    response.addHeader("Content-Disposition", "attachment;filename=" + downloadFileName(month));
                 } else {
-                    msg = HtmlContext.DEFAULT_HTML();
+                    // No month segment: serve the normal HTML page instead of a
+                    // text/plain .adi attachment whose body is actually HTML.
+                    response = newFixedLengthResponse(HtmlContext.DEFAULT_HTML());
                 }
-                response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain", msg);
-                response.addHeader("Content-Disposition", String.format("attachment;filename=log%s.adi", uriList[2]));
 
             } else if (uri.equalsIgnoreCase("DOWNQSLNOQSL")) {
-                if (uriList.length >= 3) {
-                    msg = downQSLByMonth(uriList[2], false);
+                String month = uriSegment(uriList, 2);
+                if (month != null) {
+                    msg = downQSLByMonth(month, false);
+                    response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain", msg);
+                    response.addHeader("Content-Disposition", "attachment;filename=" + downloadFileName(month));
                 } else {
-                    msg = HtmlContext.DEFAULT_HTML();
+                    response = newFixedLengthResponse(HtmlContext.DEFAULT_HTML());
                 }
-                response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "text/plain", msg);
-                response.addHeader("Content-Disposition", String.format("attachment;filename=log%s.adi", uriList[2]));
 
             } else {
                 response = newFixedLengthResponse(msg);
@@ -168,7 +337,12 @@ public class LogHttpServer extends NanoHTTPD {
                 session.parseBody(files);
 
                 Log.e(TAG, "doImportLogFile: information:" + files.toString());
-                String param = files.get("file1");//this is the key for the POST or PUT file
+                String param = uploadedFilePath(files);//temp-file path of the file1 upload part (null if absent)
+                if (param == null) {
+                    // No file1 part: reject like an illegal command instead of NPE-ing on
+                    // the missing upload (see uploadedFilePath).
+                    return GeneralVariables.getStringFromResource(R.string.html_illegal_command);
+                }
 
                 ImportTaskList.ImportTask task = importTaskList.addTask(param.hashCode());//create a new task
 
@@ -207,8 +381,7 @@ public class LogHttpServer extends NanoHTTPD {
                 " </script>\n";
         Map<String, String> pars = session.getParms();
         if (pars.get("session") != null) {
-            String s = Objects.requireNonNull(pars.get("session"));
-            int id = Integer.parseInt(s);
+            int id = parseQueryInt(pars.get("session"), -1);
             if (!importTaskList.checkTaskIsRunning(id)) {//If the task has stopped, no need to refresh
                 script = "";
             }
@@ -223,8 +396,7 @@ public class LogHttpServer extends NanoHTTPD {
         Map<String, String> pars = session.getParms();
         Log.e(TAG, "doCancelImport: " + pars.toString());
         if (pars.get("session") != null) {
-            String s = Objects.requireNonNull(pars.get("session"));
-            int id = Integer.parseInt(s);
+            int id = parseQueryInt(pars.get("session"), -1);
             importTaskList.cancelTask(id);
             return String.format("<head>\n<meta http-equiv=\"Refresh\" content=\"0; URL=getImportTask?session=%d\" /></head><body></body>"
                     , id);
@@ -311,7 +483,7 @@ public class LogHttpServer extends NanoHTTPD {
         String html = String.format("<form >%s<input type=text name=callsign value=\"%s\">" +
                         "<input type=submit value=\"%s\"></form><br>\n"
                 , GeneralVariables.getStringFromResource(R.string.html_callsign)
-                , callsign
+                , HtmlContext.htmlEscape(callsign)
                 , GeneralVariables.getStringFromResource(R.string.html_message_query));
 
         Cursor cursor = mainViewModel.databaseOpr.getDb()
@@ -361,9 +533,9 @@ public class LogHttpServer extends NanoHTTPD {
                         "%s<input type=text name=grid value=\"%s\">\n" +
                         "<input type=submit value=\"%s\"></form><br><br>\n"
                 , GeneralVariables.getStringFromResource(R.string.html_callsign)
-                , callsign
+                , HtmlContext.htmlEscape(callsign)
                 , GeneralVariables.getStringFromResource(R.string.html_qsl_grid)
-                , grid
+                , HtmlContext.htmlEscape(grid)
                 , GeneralVariables.getStringFromResource(R.string.html_message_query)));
         //Write column names
         HtmlContext.tableRowBegin(result).append("\n");
@@ -383,8 +555,8 @@ public class LogHttpServer extends NanoHTTPD {
             Date date = new Date(cursor.getLong(cursor.getColumnIndex("updateTime")));
 
             HtmlContext.tableCell(result
-                    , cursor.getString(cursor.getColumnIndex("callsign"))
-                    , cursor.getString(cursor.getColumnIndex("grid"))
+                    , HtmlContext.htmlEscape(cursor.getString(cursor.getColumnIndex("callsign")))
+                    , HtmlContext.htmlEscape(cursor.getString(cursor.getColumnIndex("grid")))
                     , MaidenheadGrid.getDistStr(GeneralVariables.getMyMaidenhead4Grid()
                             , cursor.getString(cursor.getColumnIndex("grid")))
                     , formatTime.format(date)
@@ -422,9 +594,11 @@ public class LogHttpServer extends NanoHTTPD {
             HtmlContext.tableRowBegin(result, true, order % 2 != 0).append("\n");
             for (int i = 0; i < cursor.getColumnCount(); i++) {
                 HtmlContext.tableCell(result
-                        , cursor.getString(i)
-                        , String.format("<a href=/delfollow/%s>%s</a>"
-                                , cursor.getString(i).replace("/", "_")
+                        , HtmlContext.htmlEscape(cursor.getString(i))
+                        , String.format("<a href=\"/delfollow/%s\">%s</a>"
+                                // Path segment: percent-encode, so a space/?/#/& in the
+                                // callsign can't break the link or change the route.
+                                , HtmlContext.urlPathSegment(cursor.getString(i).replace("/", "_"))
                                 , GeneralVariables.getStringFromResource(R.string.html_delete))
                 ).append("\n");
             }
@@ -484,10 +658,10 @@ public class LogHttpServer extends NanoHTTPD {
             HtmlContext.tableCell(result
                     , cursor.getString(cursor.getColumnIndex("startTime"))
                     , cursor.getString(cursor.getColumnIndex("finishTime"))
-                    , cursor.getString(cursor.getColumnIndex("callsign"))
-                    , cursor.getString(cursor.getColumnIndex("mode"))
-                    , cursor.getString(cursor.getColumnIndex("grid"))
-                    , cursor.getString(cursor.getColumnIndex("band"))
+                    , HtmlContext.htmlEscape(cursor.getString(cursor.getColumnIndex("callsign")))
+                    , HtmlContext.htmlEscape(cursor.getString(cursor.getColumnIndex("mode")))
+                    , HtmlContext.htmlEscape(cursor.getString(cursor.getColumnIndex("grid")))
+                    , HtmlContext.htmlEscape(cursor.getString(cursor.getColumnIndex("band")))
                     , cursor.getString(cursor.getColumnIndex("band_i")) + "Hz"
                     , (cursor.getInt(cursor.getColumnIndex("isQSL")) == 1)
                             ? "<font color=green>√</font>" : "<font color=red>×</font>"
@@ -767,15 +941,7 @@ public class LogHttpServer extends NanoHTTPD {
                 , String.format(GeneralVariables.getStringFromResource(R.string.html_successful_callsign)
                         , GeneralVariables.getBandString())));
 
-        result.append("<tr><td class=\"default\" >");
-        for (int i = 0; i < GeneralVariables.QSL_Callsign_list.size(); i++) {
-            result.append(GeneralVariables.QSL_Callsign_list.get(i));
-            result.append(",&nbsp;");
-            if (((i + 1) % 10) == 0) {
-                result.append("</td></tr><tr><td class=\"default\" >\n");
-            }
-        }
-        result.append("</td></tr>\n");
+        result.append(successfulCallsignBlock(GeneralVariables.QSL_Callsign_list));
         HtmlContext.tableEnd(result).append("<br>\n");
 
         HtmlContext.tableBegin(result, false, 0, true).append("\n");
@@ -783,13 +949,7 @@ public class LogHttpServer extends NanoHTTPD {
                 , GeneralVariables.getStringFromResource(R.string.html_tracking_callsign)));
 
         result.append("<tr><td class=\"default\" >");
-        for (int i = 0; i < GeneralVariables.followCallsign.size(); i++) {
-            result.append(GeneralVariables.followCallsign.get(i));
-            result.append(",&nbsp;");
-            if (((i + 1) % 10) == 0) {
-                result.append("</td></tr><tr><td class=\"default\" >\n");
-            }
-        }
+        result.append(followCallsignBlock(GeneralVariables.followCallsign));
         result.append("</td></tr>\n");
         HtmlContext.tableEnd(result).append("\n");
 
@@ -802,6 +962,33 @@ public class LogHttpServer extends NanoHTTPD {
         result.append("</td></tr>\n");
         HtmlContext.tableEnd(result).append("\n");
 
+        return result.toString();
+    }
+
+    /**
+     * Render the followed-callsign block as comma-separated cells, ten per row.
+     *
+     * <p>This runs on a NanoHTTPD worker thread while the decode/DB threads add
+     * to and the UI thread clears {@link GeneralVariables#followCallsign}. It
+     * iterates the list with a for-each so a {@link java.util.concurrent.CopyOnWriteArrayList}
+     * hands back a stable array snapshot — never a {@code size()}/{@code get(i)}
+     * scan, which can race a concurrent clear into an
+     * {@link IndexOutOfBoundsException}.
+     *
+     * @param callsigns the followed callsigns (never mutated here)
+     * @return the inner HTML for the tracking-callsign table cell
+     */
+    static String followCallsignBlock(java.util.List<String> callsigns) {
+        StringBuilder result = new StringBuilder();
+        int index = 0;
+        for (String callsign : callsigns) {
+            result.append(callsign);
+            result.append(",&nbsp;");
+            if (((index + 1) % 10) == 0) {
+                result.append("</td></tr><tr><td class=\"default\" >\n");
+            }
+            index++;
+        }
         return result.toString();
     }
 
@@ -828,7 +1015,12 @@ public class LogHttpServer extends NanoHTTPD {
 
 
         int order = 0;
-        for (Map.Entry<Long, String> entry : Ft8Message.hashList.entrySet()) {
+        // Iterate a snapshot taken under hashList's monitor: this page is served
+        // on a NanoHTTPD worker thread and auto-refreshes every 5 s, while the
+        // decode/DB/TX threads add hashes throughout a cycle. Iterating the live
+        // map here raced those synchronized writers (ConcurrentModificationException,
+        // or a resize corrupting the shared hash table).
+        for (Map.Entry<Long, String> entry : Ft8Message.hashList.snapshotEntries()) {
             HtmlContext.tableRowBegin(result, false, (order / 3) % 2 != 0);
 
             HtmlContext.tableCell(result, entry.getValue());
@@ -939,12 +1131,11 @@ public class LogHttpServer extends NanoHTTPD {
         //Read query parameters
         Map<String, String> pars = session.getParms();
         int pageIndex = 1;
-        if (pars.get("page") != null) {
-            pageIndex = Integer.parseInt(Objects.requireNonNull(pars.get("page")));
-        }
-        if (pars.get("pageSize") != null) {
-            pageSize = Integer.parseInt(Objects.requireNonNull(pars.get("pageSize")));
-        }
+        pageIndex = parseQueryInt(pars.get("page"), pageIndex);
+        pageSize = parseQueryInt(pars.get("pageSize"), pageSize);
+        // Normalize before it feeds pageCount(), the SQL LIMIT, and the nav links, so a
+        // malformed 0/negative ?pageSize= can't force an empty page or an undefined limit.
+        pageSize = normalizePageSize(pageSize);
         if (pars.get("callsign") != null) {
             callsign = Objects.requireNonNull(pars.get("callsign"));
         }
@@ -991,8 +1182,8 @@ public class LogHttpServer extends NanoHTTPD {
                         "where ((CALL_TO LIKE ?)OR(CALL_FROM LIKE ?))" + dateSql
                 , new String[]{whereStr, whereStr});
         cursor.moveToFirst();
-        int pageCount = Math.round(((float) cursor.getInt(cursor.getColumnIndex("rc")) / pageSize) + 0.5f);
-        if (pageIndex > pageCount) pageIndex = pageCount;
+        int pageCount = pageCount(cursor.getInt(cursor.getColumnIndex("rc")), pageSize);
+        pageIndex = clampPageIndex(pageIndex, pageCount);
         cursor.close();
 
         //Query and per-page message count settings
@@ -1074,14 +1265,13 @@ public class LogHttpServer extends NanoHTTPD {
             HtmlContext.tableCell(result, String.format("%dHz", freq));
             HtmlContext.tableCell(result, String.format("<b><a href=\"message?&pageSize=%d&callsign=%s\">" +
                             "%s</a>&nbsp;&nbsp;" +
-                            "<a href=\"message?&pageSize=%d&callsign=%s\">%s</a>&nbsp;&nbsp;%s</b>", pageSize, callTo.replace("<", "")
-                            .replace(">", "")
-                    , callTo.replace("<", "&lt;")
-                            .replace(">", "&gt;")
-                    , pageSize, callFrom.replace("<", "")
-                            .replace(">", "")
-                    , callFrom.replace("<", "&lt;")
-                            .replace(">", "&gt;"), extra));
+                            "<a href=\"message?&pageSize=%d&callsign=%s\">%s</a>&nbsp;&nbsp;%s</b>"
+                    // href query values are percent-encoded (entity resolution would turn an
+                    // escaped &amp; back into a parameter separator); link text is HTML-escaped.
+                    , pageSize, HtmlContext.urlQueryValue(callTo)
+                    , HtmlContext.htmlEscape(callTo)
+                    , pageSize, HtmlContext.urlQueryValue(callFrom)
+                    , HtmlContext.htmlEscape(callFrom), HtmlContext.htmlEscape(extra)));
             HtmlContext.tableCell(result, BaseRigOperation.getFrequencyStr(band)).append("\n");
             HtmlContext.tableRowEnd(result).append("\n");
 
@@ -1183,12 +1373,11 @@ public class LogHttpServer extends NanoHTTPD {
         //Read query parameters
         Map<String, String> pars = session.getParms();
         int pageIndex = 1;
-        if (pars.get("page") != null) {
-            pageIndex = Integer.parseInt(Objects.requireNonNull(pars.get("page")));
-        }
-        if (pars.get("pageSize") != null) {
-            pageSize = Integer.parseInt(Objects.requireNonNull(pars.get("pageSize")));
-        }
+        pageIndex = parseQueryInt(pars.get("page"), pageIndex);
+        pageSize = parseQueryInt(pars.get("pageSize"), pageSize);
+        // Normalize before it feeds pageCount(), the SQL LIMIT, and the nav links, so a
+        // malformed 0/negative ?pageSize= can't force an empty page or an undefined limit.
+        pageSize = normalizePageSize(pageSize);
         if (pars.get("callsign") != null) {
             callsign = Objects.requireNonNull(pars.get("callsign"));
         }
@@ -1232,8 +1421,8 @@ public class LogHttpServer extends NanoHTTPD {
                         "where (([call] LIKE ?)OR(station_callsign LIKE ?))" + dateSql
                 , new String[]{whereStr, whereStr});
         cursor.moveToFirst();
-        int pageCount = Math.round(((float) cursor.getInt(cursor.getColumnIndex("rc")) / pageSize) + 0.5f);
-        if (pageIndex > pageCount) pageIndex = pageCount;
+        int pageCount = pageCount(cursor.getInt(cursor.getColumnIndex("rc")), pageSize);
+        pageIndex = clampPageIndex(pageIndex, pageCount);
         cursor.close();
 
         //Query and per-page message count settings
@@ -1325,22 +1514,19 @@ public class LogHttpServer extends NanoHTTPD {
             //Generate one row of the data table
             HtmlContext.tableCell(result, String.format("%d", order + 1 + pageSize * (pageIndex - 1)));
             HtmlContext.tableCell(result, String.format("<a href=\"QSOSWLMSG?&pageSize=%d&callsign=%s\">%s</a>"
-                    , pageSize, call.replace("<", "")
-                            .replace(">", "")
-                    , call.replace("<", "&lt;")
-                            .replace(">", "&gt;")));
-            HtmlContext.tableCell(result, gridsquare == null ? "" : gridsquare);
-            HtmlContext.tableCell(result, mode, rst_sent, rst_rcvd, qso_date, time_on, qso_date_off, time_off);
-            HtmlContext.tableCell(result, band, freq);
+                    , pageSize, HtmlContext.urlQueryValue(call)
+                    , HtmlContext.htmlEscape(call)));
+            HtmlContext.tableCell(result, gridsquare == null ? "" : HtmlContext.htmlEscape(gridsquare));
+            // Straight DB columns: imported ADIF can put anything in these, so escape them too.
+            HtmlContext.tableCellEscaped(result, mode, rst_sent, rst_rcvd, qso_date, time_on, qso_date_off, time_off);
+            HtmlContext.tableCellEscaped(result, band, freq);
             HtmlContext.tableCell(result, String.format("<a href=\"QSOSWLMSG?&pageSize=%d&callsign=%s\">%s</a>"
                     , pageSize
-                    , station_callsign.replace("<", "")
-                            .replace(">", "")
-                    , station_callsign.replace("<", "&lt;")
-                            .replace(">", "&gt;")));
+                    , HtmlContext.urlQueryValue(station_callsign)
+                    , HtmlContext.htmlEscape(station_callsign)));
 
-            HtmlContext.tableCell(result, my_gridsquare == null ? "" : my_gridsquare);
-            HtmlContext.tableCell(result, operator == null ? "" : operator, comment).append("\n");
+            HtmlContext.tableCell(result, my_gridsquare == null ? "" : HtmlContext.htmlEscape(my_gridsquare));
+            HtmlContext.tableCell(result, operator == null ? "" : HtmlContext.htmlEscape(operator), HtmlContext.htmlEscape(comment)).append("\n");
             HtmlContext.tableRowEnd(result).append("\n");
             order++;
         }
@@ -1428,12 +1614,11 @@ public class LogHttpServer extends NanoHTTPD {
         //Read query parameters
         Map<String, String> pars = session.getParms();
         int pageIndex = 1;
-        if (pars.get("page") != null) {
-            pageIndex = Integer.parseInt(Objects.requireNonNull(pars.get("page")));
-        }
-        if (pars.get("pageSize") != null) {
-            pageSize = Integer.parseInt(Objects.requireNonNull(pars.get("pageSize")));
-        }
+        pageIndex = parseQueryInt(pars.get("page"), pageIndex);
+        pageSize = parseQueryInt(pars.get("pageSize"), pageSize);
+        // Normalize before it feeds pageCount(), the SQL LIMIT, and the nav links, so a
+        // malformed 0/negative ?pageSize= can't force an empty page or an undefined limit.
+        pageSize = normalizePageSize(pageSize);
         if (pars.get("callsign") != null) {
             callsign = Objects.requireNonNull(pars.get("callsign"));
         }
@@ -1492,8 +1677,8 @@ public class LogHttpServer extends NanoHTTPD {
                         "where (([call] LIKE ?)OR(station_callsign LIKE ?))" + dateSql
                 , new String[]{whereStr, whereStr});
         cursor.moveToFirst();
-        int pageCount = Math.round(((float) cursor.getInt(cursor.getColumnIndex("rc")) / pageSize) + 0.5f);
-        if (pageIndex > pageCount) pageIndex = pageCount;
+        int pageCount = pageCount(cursor.getInt(cursor.getColumnIndex("rc")), pageSize);
+        pageIndex = clampPageIndex(pageIndex, pageCount);
         cursor.close();
 
         //Query and per-page message count settings
@@ -1644,20 +1829,17 @@ public class LogHttpServer extends NanoHTTPD {
                     , GeneralVariables.getStringFromResource(R.string.html_qso_raw)));//Whether it was imported
             HtmlContext.tableCell(result, String.format("<a href=\"QSOLogs?&pageSize=%d&callsign=%s\">%s</a>"
                     , pageSize
-                    , call.replace("<", "")
-                            .replace(">", "")
-                    , call.replace("<", "&lt;")
-                            .replace(">", "&gt;")));
-            HtmlContext.tableCell(result, gridsquare == null ? "" : gridsquare, mode, rst_sent, rst_rcvd
+                    , HtmlContext.urlQueryValue(call)
+                    , HtmlContext.htmlEscape(call)));
+            // Straight DB columns: imported ADIF can put anything in these, so escape them too.
+            HtmlContext.tableCellEscaped(result, gridsquare == null ? "" : gridsquare, mode, rst_sent, rst_rcvd
                     , qso_date, time_on, qso_date_off, time_off, band, freq);
             HtmlContext.tableCell(result, String.format("<a href=\"QSOLogs?&pageSize=%d&callsign=%s\">%s</a>"
                     , pageSize
-                    , station_callsign.replace("<", "")
-                            .replace(">", "")
-                    , station_callsign.replace("<", "&lt;")
-                            .replace(">", "&gt;")));
-            HtmlContext.tableCell(result, my_gridsquare == null ? "" : my_gridsquare
-                    , comment).append("\n");
+                    , HtmlContext.urlQueryValue(station_callsign)
+                    , HtmlContext.htmlEscape(station_callsign)));
+            HtmlContext.tableCell(result, my_gridsquare == null ? "" : HtmlContext.htmlEscape(my_gridsquare)
+                    , HtmlContext.htmlEscape(comment)).append("\n");
 
             HtmlContext.tableRowEnd(result).append("\n");
 

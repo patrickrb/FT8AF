@@ -22,6 +22,10 @@ import com.k1af.ft8af.GeneralVariables;
 import com.k1af.ft8af.R;
 import com.k1af.ft8af.ui.ToastMessage;
 
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 public class MicRecorder {
     private static final String TAG = "MicRecorder";
     private int bufferSize = 0;//minimum buffer size
@@ -68,6 +72,50 @@ public class MicRecorder {
     private long lastReinitMs = 0;
     private int consecutiveUsbFailures = 0;
     private volatile boolean usbAudioSawData = false;
+
+    // Runs the backoff + reinitialize() that follows a USB capture-stopped event.
+    // onCaptureStopped() fires on the native libusb event thread; doing the sleep
+    // + reinit there keeps that thread parked inside the native event loop, so an
+    // in-flight nativeStop()'s join() blocks on it while the reinit drives the
+    // next nativeStart() — the new libusb_init() then overlaps the dying
+    // session's libusb_exit() and the process aborts on a destroyed libusb mutex
+    // ("pthread_mutex_lock called on a destroyed mutex", the USB-attach crash
+    // loop). Handing the work to this single dedicated thread lets the event
+    // thread return so nativeStop() completes first; single-threaded so stacked
+    // stops reinit one-at-a-time; daemon so it never holds up process exit.
+    // Built via newUsbReinitExecutor() so a unit test can exercise the exact
+    // same executor (off-caller-thread + serialized) that guards the crash.
+    private final ExecutorService usbReinitExecutor = newUsbReinitExecutor();
+
+    /**
+     * The executor that must run every post-capture-stop reinit. A single
+     * daemon worker named {@code USB-Audio-Reinit}: single-threaded so stacked
+     * stop events reinit one-at-a-time (never two overlapping libusb contexts),
+     * off the caller so the native event thread is never parked in reinit, and
+     * daemon so it never holds up process exit. Extracted so
+     * {@code MicRecorderUsbReinitDispatchTest} verifies these properties on the
+     * real construction.
+     */
+    static ExecutorService newUsbReinitExecutor() {
+        return Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "USB-Audio-Reinit");
+            t.setDaemon(true);
+            return t;
+        });
+    }
+
+    /**
+     * Dispatch the backoff + reinit for a stopped USB capture session. The one
+     * job of this seam: the work ALWAYS goes through {@code executor} and NEVER
+     * runs on the calling thread. onCaptureStopped() runs on the native libusb
+     * event thread; running the reinit inline there is exactly what raced
+     * libusb into the destroyed-mutex SIGABRT (nativeStop()'s join() blocks on
+     * the event thread while it drives the next nativeStart()). A unit test
+     * pins this by passing an executor that records where the work ran.
+     */
+    static void dispatchUsbReinit(Executor executor, Runnable backoffAndReinit) {
+        executor.execute(backoffAndReinit);
+    }
     // When the current USB capture session started, to measure how long it
     // stayed alive. SystemClock.elapsedRealtime() (monotonic) — not wall clock:
     // a duration must be immune to NTP/user time jumps, which would otherwise
@@ -140,6 +188,17 @@ public class MicRecorder {
             GeneralVariables.fileLog(
                     "MicRecorder: AudioRecord(" + srcName + ") using system default mic");
         }
+    }
+
+    /**
+     * True when capture runs over the direct-libusb USB path — no AudioRecord
+     * exists, so Android's audio capture stack (and the phone mic) is free for
+     * other clients (e.g. the voice-command SpeechRecognizer). False whenever
+     * an AudioRecord is in play, including the "preferred device" USB-UAC
+     * route (that still holds an Android capture session).
+     */
+    public boolean isUsingUsbDirect() {
+        return useUsbAudio;
     }
 
     /**
@@ -224,6 +283,37 @@ public class MicRecorder {
         return null;
     }
 
+    /**
+     * {@code AudioDeviceInfo.TYPE_*} the running AudioRecord is actually
+     * capturing from right now, {@code TYPE_UNKNOWN} if the OS reports none yet
+     * (not started / not routed), or {@code -1} when there is no AudioRecord to
+     * ask (USB-direct capture, init failure, API &lt; 24). Used after Bluetooth
+     * SCO connects to see whether the capture path followed the link
+     * (issue #759).
+     */
+    public synchronized int routedInputDeviceType() {
+        if (useUsbAudio || audioRecord == null) return -1;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return -1;
+        try {
+            AudioDeviceInfo routed = audioRecord.getRoutedDevice();
+            return routed == null ? AudioDeviceInfo.TYPE_UNKNOWN : routed.getType();
+        } catch (Exception e) {
+            return AudioDeviceInfo.TYPE_UNKNOWN;
+        }
+    }
+
+    /**
+     * {@code AudioDeviceInfo.TYPE_*} of the input the user pinned in Settings,
+     * or {@code -1} for "system default" / USB-direct / a pinned device that is
+     * no longer present.
+     */
+    public int chosenInputDeviceType() {
+        if (GeneralVariables.audioInputDeviceId <= 0) return -1;
+        AudioDeviceInfo chosen = findAudioDeviceById(
+                GeneralVariables.audioInputDeviceId, AudioManager.GET_DEVICES_INPUTS);
+        return chosen == null ? -1 : chosen.getType();
+    }
+
     public synchronized void start(){
         if (isRunning) return;
 
@@ -262,60 +352,97 @@ public class MicRecorder {
             }
 
             @Override
-            public void onCaptureStopped() {
-                // The libusb-direct capture session ended without an explicit
-                // stop. Decide whether it counts as a failure by how long it
-                // stayed alive: a session that dies before it can carry a
-                // fraction of an FT8 cycle is useless even if a few samples
-                // arrived first (the Pixel 8 + C-Media field mode: ~100ms of
-                // audio, then every iso transfer retires). The old rule only
-                // counted "no data at all", so that mode never tripped the tally
-                // and churned a fresh libusb_init/exit every 2s forever — the
-                // waterfall freeze, and the churn that raced libusb into a
-                // native SIGSEGV.
+            public void onCaptureStopped(int stopCode) {
                 long now = SystemClock.elapsedRealtime();
                 long aliveMs = now - usbCaptureStartMs;
-                boolean failure = UsbCaptureRetryPolicy.isFailure(usbAudioSawData, aliveMs);
-                if (failure) {
-                    consecutiveUsbFailures++;
-                } else {
-                    consecutiveUsbFailures = 0;
+
+                // A clean stop (code 0) is a nativeStop WE requested — a reinit,
+                // a band change, stopRecord(), or app teardown — not a capture
+                // failure. The initiator restarts capture itself where wanted
+                // (reinitialize() -> start()), so scheduling a retry here would
+                // tear down the capture it just brought back, and that self-kill
+                // then looks like another "failure" and schedules yet another
+                // reinit. That feedback loop pinned the C-Media adapter in a
+                // perpetual fail->backoff->reinit churn (in the field 429 of 434
+                // stops were clean stops misclassified this way), leaving the
+                // decoder deaf for ~87% of receive slots so stations' replies
+                // were never heard — the "QSO sequence broken" report. Only a
+                // genuine failure (non-zero code: transfers retired, NO_DEVICE,
+                // event-loop error) drives the retry below.
+                if (!UsbCaptureRetryPolicy.isRetryableFailure(stopCode)) {
+                    // A clean stop is never a failure, but if this session stayed
+                    // alive and delivering audio long enough to be useful the
+                    // device is healthy — clear any stale failure streak so the
+                    // next genuine failure doesn't inherit an inflated backoff.
+                    int resetTally = UsbCaptureRetryPolicy.tallyAfterCleanStop(
+                            consecutiveUsbFailures, usbAudioSawData, aliveMs);
+                    boolean streakCleared = resetTally != consecutiveUsbFailures;
+                    consecutiveUsbFailures = resetTally;
+                    GeneralVariables.fileLog(String.format(
+                            "startUsbCapture: clean stop (code=%d aliveMs=%d) — not a "
+                                    + "failure, no reinit scheduled%s", stopCode, aliveMs,
+                            streakCleared ? " (healthy session, failure streak reset)" : ""));
+                    return;
                 }
+
+                // Genuine failure. Decide whether it counts against the tally by
+                // how long it stayed alive: a session that dies before it can
+                // carry a fraction of an FT8 cycle is useless even if a few
+                // samples arrived first (the Pixel 8 + C-Media field mode: ~100ms
+                // of audio, then every iso transfer retires).
+                boolean failure = UsbCaptureRetryPolicy.isFailure(usbAudioSawData, aliveMs);
+                UsbCaptureRetryPolicy.ReinitPlan plan = UsbCaptureRetryPolicy.planReinit(
+                        usbAudioSawData, aliveMs, consecutiveUsbFailures);
+                consecutiveUsbFailures = plan.consecutiveFailures;
                 GeneralVariables.fileLog(String.format(
                         "startUsbCapture: capture STOPPED (sawData=%b aliveMs=%d "
                                 + "failure=%b consecFailures=%d)",
                         usbAudioSawData, aliveMs, failure, consecutiveUsbFailures));
 
+                // CRITICAL: this callback runs on the native libusb event thread.
+                // The backoff sleep + reinitialize() (which drives the next
+                // nativeStart()/libusb_init()) MUST NOT run here — an in-flight
+                // nativeStop() is blocked in eventThread.join() waiting on this
+                // very thread, so running the reinit inline overlaps the new
+                // libusb context with the dying one's libusb_exit() and the
+                // process aborts on a destroyed libusb mutex (the USB-attach
+                // crash loop). Hand the sleep + reinit to a dedicated worker so
+                // this thread returns, the event loop exits, and nativeStop()
+                // finishes tearing the old context down first.
+                //
                 // Exponential, capped backoff before the next attempt. We keep
                 // retrying USB and never silently switch to the phone's built-in
                 // mic — an operator wants radio audio or none. A persistently
                 // dead adapter is still retried at the cap in case it recovers,
                 // without spinning the bus or libusb global state.
-                long backoff = UsbCaptureRetryPolicy.backoffMs(consecutiveUsbFailures);
-                if (backoff > 0) {
-                    GeneralVariables.fileLog(
-                            "startUsbCapture: backing off " + backoff
-                                    + "ms before USB reinit (consecFailures="
-                                    + consecutiveUsbFailures + ")");
-                    try {
-                        Thread.sleep(backoff);
-                    } catch (InterruptedException ignored) {
-                        Thread.currentThread().interrupt();
+                final long backoff = plan.backoffMs;
+                final int failuresForLog = plan.consecutiveFailures;
+                dispatchUsbReinit(usbReinitExecutor, () -> {
+                    if (backoff > 0) {
+                        GeneralVariables.fileLog(
+                                "startUsbCapture: backing off " + backoff
+                                        + "ms before USB reinit (consecFailures="
+                                        + failuresForLog + ")");
+                        try {
+                            Thread.sleep(backoff);
+                        } catch (InterruptedException ignored) {
+                            Thread.currentThread().interrupt();
+                            return;
+                        }
+                    }
+
+                    // A stop may have landed during the backoff (app teardown, or
+                    // a real unplug already drove reinitialize elsewhere). Don't
+                    // re-arm capture when we are no longer supposed to be running.
+                    if (!isRunning) {
+                        GeneralVariables.fileLog(
+                                "startUsbCapture: not re-arming USB capture "
+                                        + "(isRunning=false)");
                         return;
                     }
-                }
-
-                // A stop may have landed during the backoff (app teardown, or a
-                // real unplug already drove reinitialize elsewhere). Don't
-                // re-arm capture when we are no longer supposed to be running.
-                if (!isRunning) {
-                    GeneralVariables.fileLog(
-                            "startUsbCapture: not re-arming USB capture "
-                                    + "(isRunning=false)");
-                    return;
-                }
-                lastReinitMs = System.currentTimeMillis();
-                self.reinitialize();
+                    lastReinitMs = System.currentTimeMillis();
+                    self.reinitialize();
+                });
             }
         });
     }

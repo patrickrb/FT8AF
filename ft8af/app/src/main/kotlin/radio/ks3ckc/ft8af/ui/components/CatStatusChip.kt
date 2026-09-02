@@ -41,32 +41,44 @@ internal data class CatChipVisuals(
     val dotColor: Color,
     val pulsing: Boolean,
     val contentDescriptionRes: Int,
+    /**
+     * Visible plain-language label for the redesigned strip: "Radio linked" once a link is
+     * up, "Radio not linked" otherwise. The dot color still varies per state (amber while
+     * connecting, red on error); only the two-word status text is collapsed so non-expert
+     * operators aren't shown "CAT connecting…".
+     */
+    val labelRes: Int,
 )
 
 /**
- * Map a CAT connection state to its dot color / pulse / accessibility label.
- * grey = disconnected, amber pulsing = connecting, green = connected, red = error.
+ * Map a CAT connection state to its dot color / pulse / accessibility label / visible label.
+ * grey = disconnected, amber pulsing = connecting, green = connected, red = error. The visible
+ * label reads "Radio linked" only when CONNECTED, "Radio not linked" in every other state.
  */
 internal fun catChipVisuals(state: CatConnectionState): CatChipVisuals = when (state) {
     CatConnectionState.DISCONNECTED -> CatChipVisuals(
         dotColor = TextMuted,
         pulsing = false,
         contentDescriptionRes = R.string.cat_status_disconnected,
+        labelRes = R.string.cat_status_not_linked,
     )
     CatConnectionState.CONNECTING -> CatChipVisuals(
         dotColor = Accent,
         pulsing = true,
         contentDescriptionRes = R.string.cat_status_connecting,
+        labelRes = R.string.cat_status_not_linked,
     )
     CatConnectionState.CONNECTED -> CatChipVisuals(
         dotColor = StatusConfirmed,
         pulsing = false,
         contentDescriptionRes = R.string.cat_status_connected,
+        labelRes = R.string.cat_status_linked,
     )
     CatConnectionState.ERROR -> CatChipVisuals(
         dotColor = StatusBad,
         pulsing = false,
         contentDescriptionRes = R.string.cat_status_error,
+        labelRes = R.string.cat_status_not_linked,
     )
 }
 
@@ -95,22 +107,21 @@ fun CatStatusChip(
 
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(BgSurface3)
             .clickable(onClickLabel = description) { onReconnect() }
             .semantics { contentDescription = description }
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         StatusDot(color = visuals.dotColor, pulsing = visuals.pulsing)
         Text(
-            text = stringResource(R.string.cat_status_chip_label),
+            text = stringResource(visuals.labelRes),
             color = TextMuted,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = GeistMonoFamily,
-            letterSpacing = 0.02.sp,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            fontFamily = InterFamily,
             maxLines = 1,
             softWrap = false,
         )

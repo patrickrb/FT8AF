@@ -128,6 +128,30 @@ public class HamRecorder {
     }
 
     /**
+     * Pure decision: is FT8 RX holding an Android audio-capture session (an
+     * AudioRecord) right now? True blocks the voice-command SpeechRecognizer —
+     * two capture clients fight under Android's concurrency rules and the
+     * loser (usually our decode chain) goes silent.
+     *
+     * @param running   the recorder is running at all
+     * @param micSource audio comes from MicRecorder (not a LAN connector)
+     * @param usbDirect MicRecorder captures via direct libusb (no AudioRecord)
+     */
+    static boolean phoneMicCaptureInUse(boolean running, boolean micSource, boolean usbDirect) {
+        return running && micSource && !usbDirect;
+    }
+
+    /**
+     * Runtime "phone mic in use by FT8 RX" signal for the voice-command UI:
+     * true whenever this recorder holds an AudioRecord session (system mic or
+     * Android-routed USB input); false for direct-libusb USB capture and for
+     * LAN audio sources (ICOM WiFi / Flex), where the capture stack is free.
+     */
+    public boolean isPhoneMicInUse() {
+        return phoneMicCaptureInUse(isRunning, isMicRecord, micRecorder.isUsingUsbDirect());
+    }
+
+    /**
      * Start recording. This method keeps the device in a continuous recording state.
      * Recording data is retrieved through the listener class GetVoiceData.
      * After the recording object reads data (audioRecord.read), it invokes the OnReceiveData callback for all listeners in the list.
@@ -184,6 +208,11 @@ public class HamRecorder {
     public void stopRecord() {
         micRecorder.stopRecord();
         isRunning = false;
+    }
+
+    /** The underlying mic capture, for routing introspection (issue #759). */
+    public MicRecorder getMicRecorder() {
+        return micRecorder;
     }
 
     /**

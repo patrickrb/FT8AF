@@ -324,6 +324,13 @@ public class ConfigFragment extends Fragment {
             if (s.matches("\\b0[xX][0-9a-fA-F]+\\b")) {// Match hexadecimal
                 String temp = editable.toString().substring(0, 2).toUpperCase();
                 writeConfig("civ", temp);
+                // Provenance marker: a hex-aware writer stored this, so the #753 repair
+                // must trust it verbatim (a deliberate override may be a decimal twin of
+                // the model address, e.g. 0x88 on an IC-706).
+                writeConfig(com.k1af.ft8af.rigs.CivAddressConfig.FORMAT_KEY,
+                        com.k1af.ft8af.rigs.CivAddressConfig.FORMAT_HEX);
+                GeneralVariables.civAddressStored = temp;
+                GeneralVariables.civAddressFormatKnown = true;
                 GeneralVariables.civAddress = Integer.parseInt(temp, 16);
                 mainViewModel.setCivAddress();
             }
@@ -750,6 +757,10 @@ public class ConfigFragment extends Fragment {
                     public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
                         GeneralVariables.bandListIndex = i;
                         GeneralVariables.band = OperationBand.getBandFreq(i);// Save the current band frequency
+                        // An explicit operator choice — this path used to leave
+                        // commandedBandHz stale, so setOperationBand re-commanded the OLD
+                        // dial. See RigDialTarget.
+                        GeneralVariables.operatorChoseDial(GeneralVariables.band);
 
                         mainViewModel.databaseOpr.getAllQSLCallsigns();// Load successfully contacted callsigns
                         writeConfig("bandFreq", String.valueOf(GeneralVariables.band));

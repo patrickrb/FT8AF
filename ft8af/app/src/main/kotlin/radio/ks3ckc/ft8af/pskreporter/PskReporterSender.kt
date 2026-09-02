@@ -184,22 +184,111 @@ object PskReporterSender {
         // Dedup: skip if same callsign+band reported within window
         val bandMhz = msg.band / 1_000_000
         val dedupKey = "$cleanCall|$bandMhz"
-        val lastSeen = dedup[dedupKey]
-        if (lastSeen != null && nowMs - lastSeen < DEDUP_WINDOW_MS) return null
-        dedup[dedupKey] = nowMs
+        if (!markIfFresh(dedupKey, nowMs)) return null
 
         return SpotRecord(
             senderCallsign = cleanCall,
             frequencyHz = freqHz,
             snr = if (msg.hasSnr()) msg.snr else 0,
             mode = mode,
-            senderLocator = msg.maidenGrid?.takeIf { it.length >= 4 },
+            senderLocator = reportableLocator(msg.maidenGrid),
             flowStartSeconds = msg.utcTime / 1000,
         )
     }
 
+    /**
+     * Decide whether a decoded message's grid slot is a genuine Maidenhead
+     * locator worth reporting to PSKReporter, or a value that must be dropped.
+     *
+     * A standard/non-standard FT8 message ends a QSO with the sign-off token
+     * "RR73", which the JNI decoder stores into [Ft8Message.maidenGrid] because
+     * it is a syntactic 4-char grid look-alike (R,R in field range A–R; 7,3 in
+     * square range 0–9). It is NOT a location: the FT8 encoder always packs
+     * "RR73" as the roger-73 report, never as a grid (see ft8_lib `packgrid`),
+     * so no compliant transmitter ever means grid RR73 (a phantom cell in the
+     * Arctic Ocean). Reporting it would inject bogus locators into the global
+     * PSKReporter spot database and break interoperability with WSJT-X, which
+     * never treats RR73 as a grid.
+     *
+     * This mirrors the RR73 exclusion the rest of the app already applies when
+     * classifying a grid — [GeneralVariables.checkFun1],
+     * `MaidenheadGrid.gridToLatLng`, and `CountDbOpr` — which the naive
+     * `length >= 4` check here previously missed. Pure function — testable
+     * without Android.
+     *
+     * @return the locator to report, or null when the grid is absent, too short
+     *         to be a locator, or the RR73 sign-off token.
+     */
+    @VisibleForTesting
+    internal fun reportableLocator(maidenGrid: String?): String? =
+        maidenGrid?.takeIf { it.length >= 4 && !it.equals("RR73", ignoreCase = true) }
+
+    /**
+     * Atomically test the per-band dedup window for [dedupKey] ("CALL|BAND") and,
+     * when it has not been reported within [DEDUP_WINDOW_MS], record [nowMs] as its
+     * last-seen time.
+     *
+     * enqueue() runs on the decode worker thread, and overlapping decode passes
+     * (slot N's late/deep pass vs slot N+1's early pass, #398) can invoke it
+     * concurrently — the same reason the surrounding afterDecode() state is
+     * synchronized in MainViewModel. Two threads mutating a plain HashMap corrupt
+     * its buckets (dropped spots, wrong size, or a CPU-pinned wedged decode
+     * thread), and the get-then-put must be atomic or the same spot slips through
+     * twice. spotQueue is already a ConcurrentLinkedQueue; this map was the one
+     * shared structure left unguarded.
+     *
+     * @return true if the spot should be reported (and was just marked), false if
+     *         it is a duplicate inside the window.
+     */
+    @VisibleForTesting
+    internal fun markIfFresh(dedupKey: String, nowMs: Long): Boolean {
+        synchronized(dedup) {
+            val lastSeen = dedup[dedupKey]
+            if (lastSeen != null && nowMs - lastSeen < DEDUP_WINDOW_MS) return false
+            dedup[dedupKey] = nowMs
+            return true
+        }
+    }
+
+    /**
+     * Evict dedup entries whose age has reached or passed [DEDUP_WINDOW_MS].
+     *
+     * The dedup map records a last-seen timestamp per "CALL|BAND" so a station is
+     * uploaded at most once per window. Entries are added on every fresh spot, but
+     * were never removed — so over a long monitoring session (the common
+     * PSKReporter use case: leave the app decoding a busy band for hours or days)
+     * the map grew without bound, one entry per distinct callsign/band ever heard.
+     * Because this is a process-lifetime singleton, that is a slow, unbounded leak.
+     *
+     * An entry at or past the window boundary carries no information: [markIfFresh]
+     * would report that key as fresh again regardless (it treats age
+     * `>= DEDUP_WINDOW_MS` as no longer a duplicate), so dropping it is
+     * behavior-neutral.
+     * Called from [flush] (once per send interval), which keeps the map bounded to
+     * roughly the distinct stations seen within the last window. Pure w.r.t.
+     * [nowMs] so it is deterministically testable.
+     */
+    @VisibleForTesting
+    internal fun pruneDedup(nowMs: Long) {
+        synchronized(dedup) {
+            val it = dedup.entries.iterator()
+            while (it.hasNext()) {
+                if (nowMs - it.next().value >= DEDUP_WINDOW_MS) it.remove()
+            }
+        }
+    }
+
+    /** For testing: current number of live dedup entries. */
+    @VisibleForTesting
+    internal fun dedupSize(): Int = synchronized(dedup) { dedup.size }
+
     @VisibleForTesting
     internal suspend fun flush() {
+        // Keep the dedup map bounded: drop keys that have aged out of the window
+        // (see pruneDedup). Runs every send interval, before draining the queue, so
+        // it fires even when the band is quiet and no spots are pending.
+        pruneDedup(System.currentTimeMillis())
+
         val spots = mutableListOf<SpotRecord>()
         while (true) {
             val s = spotQueue.poll() ?: break
@@ -536,7 +625,7 @@ object PskReporterSender {
     @VisibleForTesting
     internal fun resetForTests() {
         spotQueue.clear()
-        dedup.clear()
+        synchronized(dedup) { dedup.clear() }
         sendJob?.cancel()
         sendJob = null
         scope?.cancel()

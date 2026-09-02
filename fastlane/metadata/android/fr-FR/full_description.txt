@@ -1,0 +1,70 @@
+FT8AF transforme votre téléphone ou votre tablette Android en une station FT8 complète. Branchez la radio en USB, appuyez sur CQ et travaillez le monde entier — sans ordinateur.
+
+Entrez votre indicatif, réglez la vitesse du port, choisissez le périphérique audio : la plupart des opérateurs appellent CQ en quelques minutes. L'appli accorde le poste, vous suit quand vous changez de bande et logue le contact dès que le QSO est terminé.
+
+Décodez toute la bande en temps réel et émettez en FT8, FT4 et FT2 — en portable depuis un sommet, en activant un parc, en Field Day ou tout simplement à la maison.
+
+CE QU'IL VOUS FAUT
+• Un émetteur-récepteur HF avec un port data ou USB
+• Un câble USB OTG ou une interface audio USB, un DigiRig par exemple
+• Un téléphone ou une tablette sous Android 6.0 ou plus
+
+RADIOS PRISES EN CHARGE
+La plupart des transceivers HF via le contrôle CAT en USB (Yaesu, Icom, Kenwood, Elecraft et d'autres), ainsi que les radios en réseau comme FlexRadio, Icom IP et Xiegu X6100. Modes de commande : CAT, VOX, RTS et DTR.
+
+DÉCODAGE ET ÉMISSION
+• FT8, FT4 et FT2 décodés en temps réel, en mode rapide ou approfondi
+• Cascade et spectre en direct, accord tactile
+• Appels CQ, appels dirigés et messages en texte libre
+• Changez de bande dans l'appli, la radio suit
+• Choix de la période d'émission, watchdog TX et supervision automatique
+• Mode Hound pour travailler les DXpéditions
+• DT affiché sur chaque décodage, comme le fait WSJT-X
+
+CHASSEZ CE QUI VOUS MANQUE
+• Hunt répond aux CQ à votre place : vous passez l'ouverture à faire des contacts
+• Choisissez à qui vous répondez : le plus récent, le plus fort, le plus faible, le plus lointain, POTA/SOTA, nouveau DXCC ou nouveau locator
+• Repères NOUVEAU DXCC, NOUVEAU LOCATOR et NOUVELLE ZONE dans la liste des décodages
+• Une file d'appelants vous garde sur la station en cours plutôt que sur la plus forte
+
+PARKS ON THE AIR
+• Recherche de parcs et suivi d'activation intégrés
+• Auto-spot vers pota.app sans quitter l'appli
+• Contacts parc à parc, suivis et exportés
+• Envoyez le log de votre activation directement vers pota.app
+
+CARNET DE TRAFIC
+• Les contacts sont logués tout seuls dès que le QSO est terminé
+• Suivi du DXCC, des zones CQ et UIT et du Worked All States
+• Statistiques par bande et par distance
+• Import et export de fichiers ADIF
+• Modification et suppression des entrées du log
+
+SYNCHRONISATION DES LOGS
+• Envoyez vos QSO vers Cloudlog, Wavelog, QRZ.com ou Nextlog
+• État de synchronisation contact par contact, pour savoir ce qui est parti
+• Test de connexion depuis les Réglages pour vérifier vos identifiants
+
+CARTE ET PSK REPORTER
+• Carte interactive de vos contacts
+• Le calque PSK Reporter montre où votre signal est entendu dans le monde
+• Locator et distance pour chaque station décodée
+
+TOUJOURS À L'HEURE
+Le FT8 exige l'UTC à une seconde près. FT8AF se synchronise en NTP, discipline l'horloge sur le GPS ou se recale seul à partir du DT des signaux décodés : vous restez dans la période sans internet ni réseau mobile.
+
+AUDIO ET CONNECTIVITÉ
+• Périphériques audio USB, audio Bluetooth et oreillettes Bluetooth
+• Fréquence d'échantillonnage et profondeur de bits configurables
+• Connexion automatique à la radio dès le branchement USB
+
+MAINS LIBRES
+• Annonces vocales quand une station vous appelle ou qu'un QSO se termine
+• Commandes vocales en appuyer-pour-parler
+• Écran d'état Android Auto pour trafiquer depuis le véhicule
+
+CONÇU POUR LES OPÉRATEURS
+FT8AF est un fork modernisé de FT8CN de BG7YOZ, reconstruit avec une interface Compose actuelle, traduit en 17 langues et enrichi de centaines de nouveautés et de corrections. Développé par K1AF et N0rC lors d'un road trip vers la Hamvention, sur l'I-70 à 70 mph.
+
+Open source sous licence MIT.
+https://github.com/patrickrb/FT8AF

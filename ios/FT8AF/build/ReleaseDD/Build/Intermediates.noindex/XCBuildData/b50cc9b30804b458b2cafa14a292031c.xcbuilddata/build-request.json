@@ -1,0 +1,71 @@
+{
+  "buildCommand" : {
+    "command" : "build",
+    "skipDependencies" : false,
+    "style" : "buildOnly"
+  },
+  "configuredTargets" : [
+    {
+      "guid" : "bcbfa27ab70864c60e9ee57549ebb574222af97cb5ca3f864546baa574dcb771"
+    }
+  ],
+  "containerPath" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF.xcodeproj",
+  "continueBuildingAfterErrors" : false,
+  "dependencyScope" : "workspace",
+  "enableIndexBuildArena" : false,
+  "hideShellScriptEnvironment" : false,
+  "parameters" : {
+    "action" : "build",
+    "activeArchitecture" : "undefined_arch",
+    "activeRunDestination" : {
+      "disableOnlyActiveArch" : true,
+      "platform" : "iphoneos",
+      "sdk" : "iphoneos18.5",
+      "sdkVariant" : "iphoneos",
+      "supportedArchitectures" : [
+        "armv4t",
+        "armv5",
+        "armv6",
+        "armv7",
+        "armv7f",
+        "armv7s",
+        "armv7k",
+        "arm64",
+        "arm64e"
+      ],
+      "targetArchitecture" : "undefined_arch"
+    },
+    "arenaInfo" : {
+      "buildIntermediatesPath" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex",
+      "buildProductsPath" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Products",
+      "derivedDataPath" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD",
+      "indexDataStoreFolderPath" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Index.noindex/DataStore",
+      "indexEnableDataStore" : true,
+      "indexPCHPath" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Index.noindex/PrecompiledHeaders",
+      "pchPath" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/PrecompiledHeaders"
+    },
+    "configurationName" : "Release",
+    "overrides" : {
+      "commandLine" : {
+        "table" : {
+          "CODE_SIGNING_ALLOWED" : "NO",
+          "CODE_SIGNING_REQUIRED" : "NO"
+        }
+      },
+      "synthesized" : {
+        "table" : {
+          "ACTION" : "build",
+          "ENABLE_PREVIEWS" : "NO",
+          "ENABLE_XOJIT_PREVIEWS" : "YES",
+          "ONLY_ACTIVE_ARCH" : "YES"
+        }
+      }
+    }
+  },
+  "schemeCommand" : "launch",
+  "showNonLoggedProgress" : true,
+  "useDryRun" : false,
+  "useImplicitDependencies" : true,
+  "useLegacyBuildLocations" : false,
+  "useParallelTargets" : true
+}

@@ -8,6 +8,8 @@ package com.k1af.ft8af.callsign;
 import android.content.Context;
 import android.content.res.AssetManager;
 
+import com.k1af.ft8af.util.Streams;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -53,8 +55,7 @@ public class CallsignFileOperation {
      */
     public static String[] getLinesFromInputStream(InputStream inputStream, String deLimited) {
         try {
-            byte[] bytes = new byte[inputStream.available()];
-            inputStream.read(bytes);
+            byte[] bytes = Streams.readAllBytes(inputStream);
             return (new String(bytes)).split(deLimited);
         }catch (IOException e){
             return null;
@@ -66,7 +67,7 @@ public class CallsignFileOperation {
         String[] ls=s.replace("\n","").split(",");
         Set<String> callsigns=new HashSet<>();
         for (int i = 0; i < ls.length ; i++) {
-            if (ls[i].contains(")")) {
+            if (ls[i].contains("(")) {
                 //Log.d(TAG,ls[i]);
                 ls[i] = ls[i].substring(0, ls[i].indexOf("("));
                 //Log.d(TAG,ls[i]+"     (((");

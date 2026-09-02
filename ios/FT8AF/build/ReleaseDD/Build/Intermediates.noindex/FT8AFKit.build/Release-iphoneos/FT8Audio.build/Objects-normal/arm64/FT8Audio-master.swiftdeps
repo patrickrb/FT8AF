@@ -1,0 +1,13 @@
+version: "Apple Swift version 6.1.2 (swiftlang-6.1.2.1.2 clang-1700.0.13.5)"
+options: "4f1f689472b1f8652a48081324b2c5d92493e6e5ff386c0515babf66a2cd8758"
+build_start_time: [1786912750, 470514000]
+build_end_time: [1786912751, 9798000]
+inputs:
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/AudioInputLevel.swift": [1785687465, 259858043]
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/AudioPortLabel.swift": [1785687465, 260030749]
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/DtCalibrator.swift": [1783174095, 893747950]
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/SlotAccumulator.swift": [1783174095, 893789741]
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/SlotClock.swift": [1783970610, 10710967]
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/WaterfallAxis.swift": [1785687465, 260140248]
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/WaterfallRowBuilder.swift": [1785687465, 260346578]
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/WaterfallTimestampGate.swift": [1785687465, 260570617]
