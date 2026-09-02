@@ -147,6 +147,14 @@ class MainTest(unittest.TestCase):
         with open(os.path.join(self.tmp, name), encoding="utf-8", newline="") as f:
             return f.read()
 
+    def test_restored_notes_are_byte_capped_for_play(self):
+        body = "<!-- ft8af-notes-start -->\n" + "\u0416" * 300 + "\n<!-- ft8af-notes-end -->\n"
+        code, out = self.run_main("workflow_dispatch", 0, "", body)
+        self.assertEqual(code, 0)
+        self.assertLessEqual(len(self.read("notes.txt").encode("utf-8")), rn.PLAY_NOTES_LIMIT)
+        # The body itself is untouched: only Play's copy is capped.
+        self.assertIn("\u0416" * 300, self.read("existing-release-body.md"))
+
     def test_found_writes_notes_body_and_output(self):
         code, out = self.run_main("workflow_dispatch", 0, "", BODY)
         self.assertEqual(code, 0)
@@ -219,6 +227,36 @@ class EnsureNotesTest(unittest.TestCase):
         self.assertEqual(notes.count("\n"), 4)  # 4 x 121 = 484 fits, 5 would not
         self.assertTrue(all(len(l) == 120 for l in notes.splitlines()))
 
+    def test_fallback_budgets_bytes_not_characters(self):
+        # 120 emoji is 120 characters but 480 bytes: one line fits, a second
+        # would not. A character budget would have taken four such lines and
+        # left `head -c 500` to cut the second one mid-codepoint.
+        emoji_line = "\U0001F4E1" * 120
+        long_list = "".join("- #%d %s\n" % (i, emoji_line) for i in range(4))
+        notes = rn.fallback_notes(long_list)
+        self.assertEqual(notes, emoji_line + "\n")
+        self.assertLessEqual(len(notes.encode("utf-8")), rn.PLAY_NOTES_LIMIT)
+        # The byte-truncated file must still be valid UTF-8 (a no-op here).
+        notes.encode("utf-8")[: rn.PLAY_NOTES_LIMIT].decode("utf-8")
+
+    def test_cap_notes_cuts_multibyte_text_at_a_line_then_a_codepoint(self):
+        # Claude's notes are asked to stay under 400 characters, which Cyrillic
+        # (2 bytes each) pushes past 500 bytes.
+        line = "\u0416" * 100  # 200 bytes + newline
+        three_lines = (line + "\n") * 3  # 603 bytes
+        capped = rn.cap_notes(three_lines)
+        self.assertEqual(capped, (line + "\n") * 2)  # 402 bytes, cut at a line
+        one_long_line = "\u0416" * 300  # 600 bytes, no line break to cut at
+        capped = rn.cap_notes(one_long_line)
+        self.assertLessEqual(len(capped.encode("utf-8")), rn.PLAY_NOTES_LIMIT)
+        self.assertEqual(capped, "\u0416" * 250)  # whole codepoints only
+        self.assertEqual(rn.cap_notes("short\n"), "short\n")
+
+    def test_ensure_notes_caps_real_notes_too(self):
+        notes, fell_back = rn.ensure_notes("\u0416" * 300 + "\n", "")
+        self.assertFalse(fell_back)
+        self.assertLessEqual(len(notes.encode("utf-8")), rn.PLAY_NOTES_LIMIT)
+
     def test_round_trip_producer_to_manual_ship(self):
         # The producer/consumer case: notes that went through ensure_notes
         # land between the markers "Write release notes" emits, and the manual
@@ -275,6 +313,12 @@ class EnsureNotesMainTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(notes, "Real notes.\n")
         self.assertEqual(out, "")
+
+    def test_oversized_real_notes_are_trimmed_with_a_warning(self):
+        code, out, notes = self.run_ensure(("\u0416" * 100 + "\n") * 3, "")
+        self.assertEqual(code, 0)
+        self.assertLessEqual(len(notes.encode("utf-8")), rn.PLAY_NOTES_LIMIT)
+        self.assertIn("::warning title=Release notes trimmed", out)
 
 
 if __name__ == "__main__":

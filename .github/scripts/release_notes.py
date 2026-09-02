@@ -47,7 +47,10 @@ import sys
 START = "<!-- ft8af-notes-start -->"
 END = "<!-- ft8af-notes-end -->"
 
-# Play's what's-new limit; the fallback keeps whole lines under it.
+# Play's what's-new limit, in BYTES: the workflow truncates notes.txt with
+# `head -c 500` before upload, and the API limit is on the encoded text. A
+# character budget would let multibyte titles (Cyrillic, CJK, emoji) pass here
+# and be cut mid-codepoint downstream, sending Play invalid UTF-8.
 PLAY_NOTES_LIMIT = 500
 DEFAULT_NOTES = "Bug fixes and improvements."
 # What the AI step's "Collect changes" writes to its prs output when the range
@@ -56,12 +59,16 @@ DEFAULT_NOTES = "Bug fixes and improvements."
 NO_PRS_SENTINEL = "(no pull-request merges in range)"
 
 
+def utf8_len(text):
+    return len(text.encode("utf-8"))
+
+
 def fallback_notes(pr_list):
     """Release notes from the PR list the AI step collects ("- #123 scope: title").
 
     Whole lines only, stopping before the total would exceed PLAY_NOTES_LIMIT
-    (each line counts its newline), mirroring the sed/awk the workflow's
-    fallback used. Empty input yields DEFAULT_NOTES.
+    bytes of UTF-8 (each line counts its newline), so the downstream `head -c`
+    never lands inside a multibyte character. Empty input yields DEFAULT_NOTES.
     """
     out = []
     n = 0
@@ -70,17 +77,34 @@ def fallback_notes(pr_list):
         line = re.sub(r"^- #[0-9]+ ", "", line)
         if not line.strip() or line.strip() == NO_PRS_SENTINEL:
             continue
-        if n + len(line) + 1 > PLAY_NOTES_LIMIT:
+        if n + utf8_len(line) + 1 > PLAY_NOTES_LIMIT:
             break
         out.append(line)
-        n += len(line) + 1
+        n += utf8_len(line) + 1
     return "\n".join(out) + "\n" if out else DEFAULT_NOTES + "\n"
 
 
+def cap_notes(notes):
+    """Fit any producer's notes into PLAY_NOTES_LIMIT bytes without splitting a
+    character: cut at the last line break inside the budget, else at the last
+    whole codepoint. Claude is asked for <= 400 characters, which multibyte text
+    can push past 500 bytes; the workflow's `head -c 500` would then cut
+    mid-codepoint, so the cap is applied here first and that head is a no-op.
+    """
+    data = notes.encode("utf-8")
+    if len(data) <= PLAY_NOTES_LIMIT:
+        return notes
+    cut = data.rfind(b"\n", 0, PLAY_NOTES_LIMIT + 1)
+    if cut > 0:
+        return data[:cut].decode("utf-8") + "\n"
+    return data[:PLAY_NOTES_LIMIT].decode("utf-8", errors="ignore")
+
+
 def ensure_notes(notes, pr_list):
-    """(notes, used_fallback): nonblank notes come back unchanged."""
+    """(notes, used_fallback): nonblank notes come back unchanged apart from the
+    byte cap; blank ones become the fallback."""
     if notes is not None and notes.strip():
-        return notes, False
+        return cap_notes(notes), False
     return fallback_notes(pr_list), True
 
 
@@ -192,14 +216,18 @@ def run_ensure_notes(args):
         with open(args.notes, encoding="utf-8", errors="replace") as f:
             notes = f.read()
     ensured, used_fallback = ensure_notes(notes, os.environ.get(args.pr_list_env, ""))
-    if used_fallback:
+    if used_fallback or ensured != notes:
         with open(args.notes, "w", encoding="utf-8", newline="\n") as f:
             f.write(ensured)
+    if used_fallback:
         print("::warning title=Release notes fell back::The notes producer left notes.txt "
               "blank — using the fallback text (the PR titles, or the default line when "
               "there were none) so the release stays shippable.")
         print("Notes:")
         print(ensured)
+    elif ensured != notes:
+        print("::warning title=Release notes trimmed::notes.txt exceeded Play's %d-byte "
+              "what's-new limit and was cut at a line boundary." % PLAY_NOTES_LIMIT)
     return 0
 
 
@@ -221,7 +249,7 @@ def main(argv=None):
         with open(args.body_out, "w", encoding="utf-8", newline="\n") as f:
             f.write(out.body if out.body.endswith("\n") else out.body + "\n")
         with open(args.notes_out, "w", encoding="utf-8", newline="\n") as f:
-            f.write(out.notes)
+            f.write(cap_notes(out.notes))
     if args.github_output:
         with open(args.github_output, "a", encoding="utf-8", newline="\n") as f:
             f.write("found=%s\n" % ("true" if out.found else "false"))
