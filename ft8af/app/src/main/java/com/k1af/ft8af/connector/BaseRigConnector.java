@@ -13,6 +13,15 @@ import com.k1af.ft8af.rigs.OnRigStateChanged;
 
 public class BaseRigConnector {
     private boolean connected;//Whether currently connected
+    /**
+     * Bumped every time the link comes up. Lets a poller that only samples
+     * {@link #isConnected()} periodically tell a link that stayed up from one
+     * that dropped and reopened between two samples (the cable auto-reconnect
+     * retries within 500 ms, well inside a 2 s poll period) — see
+     * {@code IcomRig.runReadFreqTick}. Volatile: written on the connector's
+     * I/O thread, read on rig timer threads.
+     */
+    private volatile int connectionGeneration;
     private OnConnectReceiveData onConnectReceiveData;//Action to take when data is received
     private int controlMode;//Control mode
     private OnRigStateChanged onRigStateChanged;
@@ -27,6 +36,7 @@ public class BaseRigConnector {
 
         @Override
         public void onConnected() {
+            connectionGeneration++;
             if (onRigStateChanged!=null){
                 onRigStateChanged.onConnected();
             }
@@ -174,6 +184,11 @@ public class BaseRigConnector {
     }
     public boolean isConnected(){
         return connected;
+    }
+
+    /** How many times this connector's link has come up; see the field note. */
+    public int connectionGeneration() {
+        return connectionGeneration;
     }
 
     /**

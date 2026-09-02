@@ -71,6 +71,12 @@ public class IcomRig extends BaseRig {
     //relative to THIS, not to construction — see READ_FREQ_CONNECT_SETTLE_MS. Volatile:
     //written on the Timer thread, cleared on the disconnect thread (onDisconnecting).
     private volatile long connectedSinceMs = 0L;
+    //The connector's connection generation connectedSinceMs was taken in. A link
+    //that dropped and reopened entirely between two ticks (CableConnector retries
+    //within 500 ms; ticks are 2 s apart) never shows this timer a "down" sample,
+    //so without this the old settle window would be inherited and the first tick
+    //of the new session would poll straight into its connect handshake.
+    private volatile int settleGeneration = -1;
 
     private boolean oldVersion = false;//for older rigs that may not support SWR query
     //private boolean isPttOn = false;
@@ -308,7 +314,12 @@ public class IcomRig extends BaseRig {
      */
     public void startReadFreqTimer() {
         readFreqTimer = new Timer();
-        readFreqTimer.scheduleAtFixedRate(new TimerTask() {
+        // Fixed-delay schedule(), not scheduleAtFixedRate(): the latter catches
+        // up missed executions after a long tick, a GC pause or a device
+        // suspend, which would fire a burst of back-to-back CI-V reads. A
+        // polling backlog has no value and can coalesce CAT traffic; the
+        // sibling pollers (Yaesu38Rig, KenwoodTS590Rig) use fixed delay too.
+        readFreqTimer.schedule(new TimerTask() {
             @Override
             public void run() {
                 runReadFreqTick();
@@ -347,8 +358,15 @@ public class IcomRig extends BaseRig {
                 connectedSinceMs = 0L;
                 return;
             }
-            if (connectedSinceMs == 0L) {
+            //Also start a fresh window when the connector's link came up again since
+            //the window was taken, even though every tick saw it "up": the cable
+            //auto-reconnect reopens within 500 ms, so a drop and reopen can fall
+            //entirely between two 2 s ticks and the new session's connect handshake
+            //would otherwise be polled into. See settleGeneration.
+            int generation = connectionGeneration();
+            if (connectedSinceMs == 0L || generation != settleGeneration) {
                 connectedSinceMs = nowMs;
+                settleGeneration = generation;
             }
             switch (ReadTaskAction.decide(true, isPttOn())) {
                 case SKIP:
@@ -402,6 +420,11 @@ public class IcomRig extends BaseRig {
             return true;
         }
         return nowMs - connectedSinceMs >= READ_FREQ_CONNECT_SETTLE_MS;
+    }
+
+    /** The connector's connection generation, or -1 with no connector. */
+    private int connectionGeneration() {
+        return getConnector() == null ? -1 : getConnector().connectionGeneration();
     }
 
     @Override

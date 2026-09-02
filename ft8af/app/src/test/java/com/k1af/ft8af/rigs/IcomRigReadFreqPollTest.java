@@ -135,6 +135,41 @@ public class IcomRigReadFreqPollTest {
     }
 
     @Test
+    public void reconnectBetweenTicks_earnsAFreshSettleWindow() {
+        // CableConnector's auto-reconnect retries within 500 ms, so a drop and
+        // a reopen can both happen between two 2 s ticks: this timer never
+        // samples the link down. The connector's connection generation is what
+        // tells the tick a new session started (Copilot review on #789).
+        connector.connected = true;
+        connector.getOnConnectorStateChanged().onConnected(); // session 1 up
+        rig.runReadFreqTick(T0, 0L);
+        rig.runReadFreqTick(T_SETTLED, 0L);
+        assertThat(connector.sent).hasSize(1); // settled, polled once
+        connector.sent.clear();
+
+        // Drop and reopen with no tick in between: isConnected() reads true on
+        // every sample this timer takes.
+        connector.getOnConnectorStateChanged().onDisconnected();
+        connector.getOnConnectorStateChanged().onConnected(); // session 2 up
+
+        // First tick of session 2 lands inside its connect handshake: no poll.
+        rig.runReadFreqTick(T_SETTLED + 2_000, 0L);
+        assertThat(connector.sent).isEmpty();
+        // ...and polls again once the fresh window has elapsed.
+        rig.runReadFreqTick(T_SETTLED + 2_000 + IcomRig.READ_FREQ_CONNECT_SETTLE_MS, 0L);
+        assertThat(connector.sent).hasSize(1);
+    }
+
+    @Test
+    public void connectionGeneration_countsEveryLinkUp() {
+        assertThat(connector.connectionGeneration()).isEqualTo(0);
+        connector.getOnConnectorStateChanged().onConnected();
+        connector.getOnConnectorStateChanged().onDisconnected();
+        connector.getOnConnectorStateChanged().onConnected();
+        assertThat(connector.connectionGeneration()).isEqualTo(2);
+    }
+
+    @Test
     public void reconnect_earnsAFreshSettleWindow() {
         // A drop resets connectedSinceMs, so the link coming back does not
         // inherit the previous session's elapsed window and poll immediately
