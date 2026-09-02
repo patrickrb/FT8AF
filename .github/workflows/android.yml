@@ -3,7 +3,7 @@ name: Android CI & Release
 # Android pipeline for the ft8af/ app: unit tests + coverage, instrumented
 # emulator tests, static analysis (lint/detekt/ktlint), and the signed
 # APK/AAB build + GitHub Release + Play publish (internal track on staging,
-# production track on main / android-v* tags — see the Release lifecycle below).
+# production track on android-v* tags only — see the Release lifecycle below).
 #
 # Release lifecycle (see docs/release-pipeline.md):
 #   PR to dev/staging/main -> build-only (unsigned), tests
@@ -13,11 +13,23 @@ name: Android CI & Release
 #                             versionName <x.y.z>-dev.<run#> where x.y.z is the
 #                             semver Claude picks from the changes since the
 #                             last production tag (see "Versioning" below)
-#   push to main           -> android-v<x.y.z> release + Play production, reusing
+#   push to main           -> android-v<x.y.z> release, NO Play publish, reusing
 #                             the semver + notes of the staging build it promotes
 #   android-v* tag push    -> release + Play production
+#   manual run on an       -> release + Play production (the manual ship step;
+#     android-v* tag           see "Shipping to production" below)
 # Feature work lands on dev; the dev build is cut only when dev -> staging
-# merges, and production only when staging -> main merges.
+# merges. A staging -> main merge cuts the versioned GitHub Release but ships
+# no AAB to Play — shipping to Play production is a deliberate, separate act.
+#
+# Shipping to production: the main-merge run creates the android-v<x.y.z> tag
+# itself (softprops/action-gh-release creates the ref via the Releases API), so
+# there is no tag left to push by hand — `git push origin android-v<x.y.z>`
+# would be a no-op and would fire no push event. Ship it by running this
+# workflow manually (Actions -> "Android CI & Release" -> "Run workflow") with
+# the android-v<x.y.z> tag selected as the ref: that run takes the same `tag`
+# lane a tag push would and uploads to the Play production track. A manual run
+# on a BRANCH is build-only — the lane below requires a tag ref.
 #
 # Versioning + release notes (ported from Sorrel's play-beta.yml): on a staging
 # push the build job collects the PRs, commits and diff size since the latest
@@ -35,10 +47,10 @@ name: Android CI & Release
 # PATH-FILTERED: on pull requests and dev pushes this whole pipeline only runs
 # when Android-relevant files change (ft8af/** — which includes the shared
 # native C core at ft8af/app/src/main/cpp/ — or this workflow file). Pushes to
-# staging/main and android-v* tags always build (a full release snapshot,
-# regardless of what changed). The always-run `android-gate` job is the single
-# required status check so branch protection never gets stuck "pending" when the
-# build jobs are path-skipped.
+# staging/main, android-v* tags, and manual runs on such a tag always build (a
+# full release snapshot, regardless of what changed). The always-run
+# `android-gate` job is the single required status check so branch protection
+# never gets stuck "pending" when the build jobs are path-skipped.
 
 on:
   push:
@@ -47,24 +59,41 @@ on:
       - 'android-v*'
   pull_request:
     branches: [main, staging, dev]
+  # The manual production ship step. Run this workflow with an android-v<x.y.z>
+  # tag selected as the ref to build that tag and upload it to the Play
+  # production track. Needed because the main-merge run creates the tag itself
+  # through the Releases API, leaving nothing to push by hand. No inputs: the
+  # ref picker already names the release, and taking the version from anywhere
+  # else would let a run publish an AAB built from a different commit.
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 # Google Play allows only one active "edit" per app, so two release builds
 # publishing at once make the second fail with "This edit has expired, please
-# create a new Edit." Serialize the release-publishing runs (pushes to
-# staging/main and android-v* tags) into a single queue so they never overlap on
-# the Play API. cancel-in-progress is false so an in-flight publish finishes
-# rather than being killed mid-upload. Other runs (PRs, dev pushes) get a unique
+# create a new Edit." Serialize the release runs (pushes to staging/main,
+# android-v* tag pushes, and the manual ship run) into a single queue so they
+# never overlap on the Play API. A push to main no longer touches Play itself,
+# but it stays in the queue for a second reason: ordering. Its "candidate"
+# step promotes the android-dev.* tag the staging run creates, and if the
+# staging -> main merge lands while that staging run is still building, an
+# unserialized main run would fetch tags before the prerelease exists and
+# re-roll a fresh version and notes instead of promoting what internal
+# testers ran. The cost is that a main build holds the play-publish key
+# (shared with play-listings.yml) for its duration; that is the narrow safe
+# trade. cancel-in-progress is false so an in-flight publish finishes rather
+# than being killed mid-upload. Other runs (PRs, dev pushes) get a unique
 # group keyed to run id, so they never queue and CI stays fast.
 concurrency:
   group: >-
     ${{
-      (github.event_name == 'push'
+      ((github.event_name == 'push'
         && (github.ref == 'refs/heads/main'
           || github.ref == 'refs/heads/staging'
           || startsWith(github.ref, 'refs/tags/android-v')))
+      || (github.event_name == 'workflow_dispatch'
+        && startsWith(github.ref, 'refs/tags/android-v')))
       && 'play-publish'
       || format('build-{0}', github.run_id)
     }}
@@ -88,6 +117,8 @@ jobs:
             android:
               - 'ft8af/**'
               - '.github/workflows/android.yml'
+              - '.github/scripts/release_notes.py'
+              - '.github/scripts/test_release_notes.py'
 
       - name: Decide whether to run
         id: decide
@@ -95,10 +126,12 @@ jobs:
           CHANGED: ${{ steps.filter.outputs.android }}
         run: |
           set -euo pipefail
-          # staging/main pushes and android-v* tags always build the full
-          # release snapshot; otherwise (dev push, PRs) build only when
-          # Android-relevant files changed.
+          # staging/main pushes, android-v* tags, and the manual ship run on such
+          # a tag always build the full release snapshot; otherwise (dev push,
+          # PRs) build only when Android-relevant files changed.
           if [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/heads/staging" || "$GITHUB_REF" == refs/tags/android-v* ) ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$GITHUB_REF" == refs/tags/android-v* ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif [[ "$CHANGED" == "true" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -155,6 +188,11 @@ jobs:
           done
           echo "::error::Failed to install NDK $NDK_VERSION after 3 attempts"
           exit 1
+
+      # The tag lane's release-notes restoration is a Python script so its
+      # branches can be tested here instead of only on a real ship run.
+      - name: Release-script unit tests
+        run: python3 -m unittest discover -s .github/scripts -p 'test_release_notes.py' -v
 
       - name: Run unit tests
         working-directory: ft8af
@@ -386,8 +424,12 @@ jobs:
         run: |
           set -euo pipefail
           # Release lanes (everything else — dev push, PRs — is build-only):
-          #   android-v* tag push -> "tag":        production release, Play production
-          #   push to main        -> "production": android-v<x.y.z> tag, Play production
+          #   android-v* tag ref  -> "tag":        production release, Play production.
+          #                                        Reached by a tag push AND by the
+          #                                        manual ship run on that tag, which
+          #                                        is why this arm does not test the
+          #                                        event name.
+          #   push to main        -> "production": android-v<x.y.z> tag, NO Play publish
           #   push to staging     -> "dev":        android-dev.<run#> tag, PRERELEASE,
           #                                        Play internal
           # The dev build is cut on staging, NOT on dev: dev pushes never reach
@@ -404,6 +446,40 @@ jobs:
           fi
           echo "Release lane: $lane"
           echo "lane=$lane" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the notes of the release this tag already has
+        id: existing
+        # The manual production ship re-runs this workflow on an android-v* tag
+        # whose GitHub Release the main-merge run already created, carrying the
+        # promoted staging notes in its body. This lane has no candidate step
+        # and no Claude step, so without this "Write release notes" would send
+        # a bare "FT8AF <version>" to Play as the what's-new and
+        # softprops/action-gh-release, updating the existing release, would
+        # replace its body with that placeholder. Pull the notes back out of
+        # the body's hidden markers for Play, and keep the whole body so the
+        # release itself is left exactly as the promotion wrote it. A plain
+        # tag push with no release yet finds nothing and behaves as before;
+        # any other lookup failure, and a manual ship whose release has no
+        # notes between the markers, fails closed rather than risk the overwrite.
+        if: steps.lane.outputs.lane == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # This step only runs gh and hands the result over. The decision —
+          # existing / missing release, lookup failure, dispatch versus tag
+          # push, and the marker parsing — is release_notes.py, unit-tested by
+          # test_release_notes.py in the test job above.
+          set +e
+          gh release view "$TAG" --json body -q .body > release-body.raw.md 2> gh-release-err.txt
+          rc=$?
+          set -e
+          python3 .github/scripts/release_notes.py restore \
+            --event "$GITHUB_EVENT_NAME" --tag "$TAG" \
+            --gh-status "$rc" --gh-stderr gh-release-err.txt --body release-body.raw.md \
+            --notes-out notes.txt --body-out existing-release-body.md \
+            --github-output "$GITHUB_OUTPUT"
 
       - name: Collect changes since the last production release
         id: changes
@@ -555,10 +631,10 @@ jobs:
             echo "::warning title=AI versioning fell back::$1 — using a patch bump and the PR titles as release notes. Set the ANTHROPIC_API_KEY secret / check the step log."
             echo "bump=patch" >> "$GITHUB_OUTPUT"
             echo "source=fallback" >> "$GITHUB_OUTPUT"
-            # PR titles, whole lines only, up to Play's 500-char limit.
-            printf '%s\n' "$PR_LIST" | sed -E 's/^- #[0-9]+ [^:]*: ?//; s/^- #[0-9]+ //' \
-              | awk '{ if (n + length($0) + 1 > 500) exit; print; n += length($0) + 1 }' > notes.txt
-            [[ -s notes.txt ]] || echo "Bug fixes and improvements." > notes.txt
+            # The PR-title notes are produced by `release_notes.py ensure-notes`
+            # in "Write release notes", which runs for every producer (including
+            # a Claude answer whose notes came back blank), so leave nothing here.
+            : > notes.txt
             exit 0
           }
           [[ -n "$ANTHROPIC_API_KEY" ]] || fallback "ANTHROPIC_API_KEY is not set"
@@ -653,7 +729,7 @@ jobs:
             tag)
               release_tag="${GITHUB_REF_NAME}"
               version_name="${GITHUB_REF_NAME#android-v}"
-              should_release=true; play_track=production; version_source="pushed tag"
+              should_release=true; play_track=production; version_source="release tag ($GITHUB_EVENT_NAME)"
               ;;
             production|dev)
               if [[ "$ANDROID_CHANGED" != "true" ]]; then
@@ -674,7 +750,14 @@ jobs:
                   done
                   release_tag="android-v$version"
                   version_name="$version"
-                  play_track=production
+                  # No Play publish on a staging -> main merge: the merge cuts
+                  # the android-v* tag + GitHub Release only. Shipping it is a
+                  # separate manual act — run this workflow by hand with that
+                  # android-v* tag as the ref, which takes the `tag` lane above
+                  # and uploads to the Play production track. (Not "push the
+                  # tag": this run creates the tag itself through the Releases
+                  # API, so there is nothing left to push.)
+                  play_track=""
                 else
                   # staging: a run-numbered PRERELEASE on the Play internal track.
                   # Distinct tag prefix so it sorts separately from android-v*;
@@ -708,15 +791,34 @@ jobs:
           VERSION: ${{ steps.tag.outputs.version }}
           VERSION_NAME: ${{ steps.tag.outputs.version_name }}
           VERSION_SOURCE: ${{ steps.tag.outputs.version_source }}
+          LANE: ${{ steps.lane.outputs.lane }}
+          PR_LIST: ${{ steps.changes.outputs.prs }}
         run: |
           set -euo pipefail
-          # notes.txt comes from Claude, the fallback, or the promoted staging
-          # candidate; the android-v* tag-push lane has none.
+          # notes.txt comes from Claude, the fallback, the promoted staging
+          # candidate, or (manual ship) the tag's existing release; a plain
+          # tag push with no release yet has none.
+          if [[ "$LANE" != "tag" ]]; then
+            # The producers can leave it blank (Claude's schema allows an empty
+            # notes string; jq -r writes that as a newline), and a release whose
+            # markers enclose nothing would later be refused by the manual
+            # production ship. Guarantee nonblank notes before they go into the
+            # markers: the PR titles, else "Bug fixes and improvements."
+            python3 .github/scripts/release_notes.py ensure-notes --notes notes.txt --pr-list-env PR_LIST
+          fi
           mkdir -p distribution/whatsnew
           if [[ -s notes.txt ]]; then
             head -c 500 notes.txt > distribution/whatsnew/whatsnew-en-US
           else
             echo "FT8AF $VERSION_NAME" > distribution/whatsnew/whatsnew-en-US
+          fi
+          if [[ -f existing-release-body.md ]]; then
+            # Manual ship on a tag that already has a release: hand softprops
+            # the body it already has, byte for byte, so updating the release
+            # to attach this run's APK does not rewrite the promoted notes.
+            cp existing-release-body.md release-body.md
+            echo "::group::release-body.md (kept from the existing release)"; cat release-body.md; echo "::endgroup::"
+            exit 0
           fi
           {
             if [[ -s notes.txt ]]; then
@@ -885,7 +987,10 @@ jobs:
           # The body (Claude's notes + version markers + signature) is PREPENDED
           # to GitHub's auto-generated "What's Changed" PR list.
           body_path: release-body.md
-          generate_release_notes: true
+          # Off when the body was kept from an existing release (manual ship):
+          # that body already ends in the generated list, and asking for it
+          # again would append a second copy.
+          generate_release_notes: ${{ steps.existing.outputs.found != 'true' }}
           # android-dev.* releases are flagged as prerelease so they sort under
           # the latest android-v* and don't get picked up by downstream tooling
           # that looks for "latest release".
@@ -905,7 +1010,7 @@ jobs:
       # broken build fails earlier, in "Build APK & AAB".
       - name: Publish AAB to Play
         id: play_publish
-        if: steps.tag.outputs.should_release == 'true'
+        if: steps.tag.outputs.should_release == 'true' && steps.tag.outputs.play_track != ''
         continue-on-error: true
         uses: r0adkll/upload-google-play@v1
         with:
@@ -915,7 +1020,9 @@ jobs:
           # R8 deobfuscation mapping — clears the Play Console "no deobfuscation
           # file" warning and makes crash/ANR stack traces readable.
           mappingFile: ft8af/app/build/outputs/mapping/release/mapping.txt
-          # staging -> internal track; main / android-v* tag -> production track.
+          # staging -> internal track; android-v* tag ref (a tag push or the
+          # manual ship run) -> production track. A push to main leaves the
+          # track empty, which skips this step entirely.
           track: ${{ steps.tag.outputs.play_track }}
           status: completed
           releaseName: ${{ steps.tag.outputs.release_tag }}
@@ -935,7 +1042,7 @@ jobs:
       # Make a swallowed publish failure visible (annotation on the run) without
       # failing the job — the artifact + GitHub Release already succeeded.
       - name: Warn if Play publish failed
-        if: steps.tag.outputs.should_release == 'true' && steps.play_publish.outcome == 'failure'
+        if: steps.tag.outputs.play_track != '' && steps.play_publish.outcome == 'failure'
         run: |
           echo "::warning::Play publish (track=${{ steps.tag.outputs.play_track }}) failed for ${{ steps.tag.outputs.release_tag }} (non-blocking). The signed AAB built and the GitHub Release was created; only the Play upload did not complete. Check the 'Publish AAB to Play' step log — common causes are an upgrade-path rejection or an expired Play edit."
 
@@ -953,11 +1060,15 @@ jobs:
             echo ""
             echo "- **versionName:** \`$VERSION_NAME\` ($VERSION_SOURCE)"
             echo "- **versionCode:** $((GITHUB_RUN_NUMBER + 1000))"
-            echo "- **Play track:** \`$PLAY_TRACK\` (publish: $PLAY_OUTCOME)"
+            if [[ -n "$PLAY_TRACK" ]]; then
+              echo "- **Play track:** \`$PLAY_TRACK\` (publish: $PLAY_OUTCOME)"
+            else
+              echo "- **Play track:** _none — not published._ To ship it, run this workflow manually with the \`$RELEASE_TAG\` tag selected as the ref (Actions → Android CI & Release → Run workflow). The tag already exists, so there is nothing to push."
+            fi
             echo ""
             echo "### Release notes"
             echo ""
-            if [[ -s notes.txt ]]; then cat notes.txt; else echo "_(none — tag-push lane)_"; fi
+            if [[ -s notes.txt ]]; then cat notes.txt; else echo "_(none — tag push with no existing release)_"; fi
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
