@@ -6,7 +6,8 @@ name: Play store listings
 #
 #   pull request touching the metadata -> validate only (no secrets, works from forks)
 #   push to main touching the metadata -> publish the changed locales to Play
-#   workflow_dispatch                  -> dry run by default; untick to publish
+#   workflow_dispatch                  -> pick a mode: dry-run (default),
+#                                         check-permissions, or publish
 #
 # Graphics (icon, feature graphic, screenshots) are NOT managed here — Play falls
 # back to the default language's graphics for locales that have none of their
@@ -35,10 +36,21 @@ on:
       - 'ft8af/app/src/main/res/values*/strings_compose.xml'
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: 'Dry run (show the diff against Play, change nothing)'
-        type: boolean
-        default: true
+      mode:
+        description: 'What to run'
+        type: choice
+        default: dry-run
+        options:
+          # Read-only. Prints a unified diff of the repo against the live
+          # listings and sends nothing.
+          - dry-run
+          # Proves the service account holds "Manage store presence" by
+          # writing one listing (a patch of one Play already has, or a put if
+          # Play has none yet) inside an edit it abandons. Nothing is
+          # committed. A dry run cannot answer this — it only reads.
+          - check-permissions
+          # The real thing: push every changed locale and commit the edit.
+          - publish
 
 permissions:
   contents: read
@@ -61,7 +73,7 @@ jobs:
         run: python -m unittest discover -s .github/scripts -p 'test_*.py' -v
 
   publish:
-    name: Publish listings to Play
+    name: Run against Play
     needs: validate
     # Only from the canonical repo — a fork has no PLAY_SERVICE_ACCOUNT_JSON and
     # must never be able to push listing text to the production app.
@@ -85,21 +97,49 @@ jobs:
       - name: Install deps
         run: pip install --quiet google-auth requests
 
-      - name: Publish
+      - name: Run
         env:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           PACKAGE_NAME: radio.ks3ckc.ft8af
-          # workflow_dispatch honours the checkbox; a push to main always publishes.
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          # A push to main always publishes; a manual run does what was picked.
+          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'publish' }}
         run: |
           set -euo pipefail
           if [[ -z "${PLAY_SERVICE_ACCOUNT_JSON:-}" ]]; then
             echo "::error::PLAY_SERVICE_ACCOUNT_JSON is not set — cannot reach the Play API."
             exit 1
           fi
+
           args=()
-          if [[ "$DRY_RUN" == "true" ]]; then
-            args+=(--dry-run)
-            echo "::notice::Dry run — the diff below is what a real run would send."
-          fi
+          case "$MODE" in
+            dry-run)
+              args+=(--dry-run)
+              echo "::notice::Dry run — the diff below is what a real run would send."
+              ;;
+            check-permissions)
+              args+=(--check-permissions)
+              echo "::notice::Permission probe — writes one listing (patch, or put if Play has none yet) inside an edit that is then abandoned. Nothing is published."
+              ;;
+            publish)
+              ;;
+            *)
+              echo "::error::Unknown mode '$MODE'."
+              exit 1
+              ;;
+          esac
+
+          # The probe's exit code is a verdict, not just pass/fail, so read it
+          # rather than letting -e swallow the distinction.
+          set +e
           python .github/scripts/publish_listings.py "${args[@]}"
+          rc=$?
+          set -e
+
+          if [[ "$MODE" == "check-permissions" ]]; then
+            # The code is a verdict (3 = denied, 4 = inconclusive, anything
+            # else = the probe did not run). The code -> annotation mapping
+            # lives in the script (probe_annotation), where it is unit-tested
+            # against the EXIT_* constants; this only relays it.
+            python .github/scripts/publish_listings.py --annotate-verdict "$rc"
+          fi
+          exit $rc
