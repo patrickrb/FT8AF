@@ -433,6 +433,34 @@ jobs:
           echo "Release lane: $lane"
           echo "lane=$lane" >> "$GITHUB_OUTPUT"
 
+      - name: Restore the notes of the release this tag already has
+        id: existing
+        # The manual production ship re-runs this workflow on an android-v* tag
+        # whose GitHub Release the main-merge run already created, carrying the
+        # promoted staging notes in its body. This lane has no candidate step
+        # and no Claude step, so without this "Write release notes" would send
+        # a bare "FT8AF <version>" to Play as the what's-new and
+        # softprops/action-gh-release, updating the existing release, would
+        # replace its body with that placeholder. Pull the notes back out of
+        # the body's hidden markers for Play, and keep the whole body so the
+        # release itself is left exactly as the promotion wrote it. A plain
+        # tag push with no release yet finds nothing and behaves as before.
+        if: steps.lane.outputs.lane == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          BODY=$(gh release view "$TAG" --json body -q .body 2>/dev/null | tr -d '\r' || true)
+          if [[ -z "$BODY" ]]; then
+            echo "No existing release for $TAG — Play's what's-new falls back to the version string."
+            echo "found=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          printf '%s\n' "$BODY" > existing-release-body.md
+          awk '/<!-- ft8af-notes-start -->/{f=1; next} /<!-- ft8af-notes-end -->/{f=0} f' <<< "$BODY" > notes.txt
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "Release $TAG already exists; keeping its body. Notes:"; cat notes.txt
+
       - name: Collect changes since the last production release
         id: changes
         if: steps.lane.outputs.lane == 'production' || steps.lane.outputs.lane == 'dev'
@@ -745,13 +773,22 @@ jobs:
           VERSION_SOURCE: ${{ steps.tag.outputs.version_source }}
         run: |
           set -euo pipefail
-          # notes.txt comes from Claude, the fallback, or the promoted staging
-          # candidate; the android-v* tag-push lane has none.
+          # notes.txt comes from Claude, the fallback, the promoted staging
+          # candidate, or (manual ship) the tag's existing release; a plain
+          # tag push with no release yet has none.
           mkdir -p distribution/whatsnew
           if [[ -s notes.txt ]]; then
             head -c 500 notes.txt > distribution/whatsnew/whatsnew-en-US
           else
             echo "FT8AF $VERSION_NAME" > distribution/whatsnew/whatsnew-en-US
+          fi
+          if [[ -f existing-release-body.md ]]; then
+            # Manual ship on a tag that already has a release: hand softprops
+            # the body it already has, byte for byte, so updating the release
+            # to attach this run's APK does not rewrite the promoted notes.
+            cp existing-release-body.md release-body.md
+            echo "::group::release-body.md (kept from the existing release)"; cat release-body.md; echo "::endgroup::"
+            exit 0
           fi
           {
             if [[ -s notes.txt ]]; then
@@ -920,7 +957,10 @@ jobs:
           # The body (Claude's notes + version markers + signature) is PREPENDED
           # to GitHub's auto-generated "What's Changed" PR list.
           body_path: release-body.md
-          generate_release_notes: true
+          # Off when the body was kept from an existing release (manual ship):
+          # that body already ends in the generated list, and asking for it
+          # again would append a second copy.
+          generate_release_notes: ${{ steps.existing.outputs.found != 'true' }}
           # android-dev.* releases are flagged as prerelease so they sort under
           # the latest android-v* and don't get picked up by downstream tooling
           # that looks for "latest release".
@@ -998,7 +1038,7 @@ jobs:
             echo ""
             echo "### Release notes"
             echo ""
-            if [[ -s notes.txt ]]; then cat notes.txt; else echo "_(none — tag-push lane)_"; fi
+            if [[ -s notes.txt ]]; then cat notes.txt; else echo "_(none — tag push with no existing release)_"; fi
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 

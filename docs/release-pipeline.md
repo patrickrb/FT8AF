@@ -33,7 +33,10 @@ feature/* ──PR──▶ dev ──PR──▶ staging ──PR──▶ main
   Release → Run workflow**, pick the `android-v<x.y.z>` tag the `main` merge
   created as the ref and run it. That run takes the same release lane an
   `android-v*` tag push takes and uploads the AAB to the Play **production**
-  track. A merge to `main` on its own never puts a build in front of users.
+  track. It reuses the release notes already on that tag's GitHub Release
+  (read back through the hidden markers in its body) as Play's what's-new, and
+  leaves the release body as the promotion wrote it. A merge to `main` on its
+  own never puts a build in front of users.
 
   It has to be a manual run rather than a tag push: the `main` run creates the
   `android-v<x.y.z>` ref itself (the GitHub Releases API creates the tag), so
