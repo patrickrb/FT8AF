@@ -29,14 +29,17 @@ feature/* ──PR──▶ dev ──PR──▶ staging ──PR──▶ main
   separate pipeline: a `main` push touching `fastlane/metadata/android/**` still
   runs `play-listings.yml`, which does publish listing changes to Play. See
   [Store listings](#store-listings) below.)
-- **shipping the app to Play production is manual.** In **Actions → Android CI &
-  Release → Run workflow**, pick the `android-v<x.y.z>` tag the `main` merge
-  created as the ref and run it. That run takes the same release lane an
-  `android-v*` tag push takes and uploads the AAB to the Play **production**
-  track. It reuses the release notes already on that tag's GitHub Release
-  (read back through the hidden markers in its body) as Play's what's-new, and
-  leaves the release body as the promotion wrote it. A merge to `main` on its
-  own never puts a build in front of users.
+- **shipping a `main`-cut release to Play production is manual.** In
+  **Actions → Android CI & Release → Run workflow**, pick the `android-v<x.y.z>`
+  tag the `main` merge created as the ref and run it. That run takes the same
+  release lane an `android-v*` tag push takes and uploads the AAB to the Play
+  **production** track. It reuses the release notes already on that tag's
+  GitHub Release (read back through the hidden markers in its body) as Play's
+  what's-new — and refuses to run if they are missing — and leaves the release
+  body as the promotion wrote it. A merge to `main` on its own never puts a
+  build in front of users. (Pushing a brand-new `android-v*` tag by hand is
+  the other, older path: it also enters the tag lane and publishes to
+  production directly, with the version string as the what's-new.)
 
   It has to be a manual run rather than a tag push: the `main` run creates the
   `android-v<x.y.z>` ref itself (the GitHub Releases API creates the tag), so
@@ -131,5 +134,6 @@ These cannot be done from a workflow file — do them in the repo settings:
    now lives on `staging`.
 4. **Play Console** → confirm the `PLAY_SERVICE_ACCOUNT_JSON` service account has
    release permission on the **production** track (it previously only needed
-   internal). Only a manual workflow run on an `android-v*` tag publishes an AAB
-   there — `main` merges do not.
+   internal). Two paths publish an AAB there: the manual workflow run on an
+   `android-v*` tag (the normal path for a release cut by a `main` merge) and a
+   plain `android-v*` tag push. `main` merges do not.

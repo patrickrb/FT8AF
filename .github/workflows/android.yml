@@ -72,18 +72,20 @@ permissions:
 
 # Google Play allows only one active "edit" per app, so two release builds
 # publishing at once make the second fail with "This edit has expired, please
-# create a new Edit." Serialize the release-publishing runs (pushes to
-# staging/main, android-v* tags, and the manual ship run) into a single queue so
-# they never overlap on the Play API. cancel-in-progress is false so an
-# in-flight publish finishes rather than being killed mid-upload. Other runs
-# (PRs, dev pushes) get a unique group keyed to run id, so they never queue and
-# CI stays fast.
+# create a new Edit." Serialize the runs that actually publish to Play (pushes
+# to staging, android-v* tag pushes, and the manual ship run) into a single
+# queue so they never overlap on the Play API. A push to main is NOT in the
+# queue: it cuts the tag and the GitHub Release but no longer touches Play, and
+# holding the play-publish key (shared with play-listings.yml) for a full main
+# build would only stall staging uploads, manual ships and listing updates.
+# cancel-in-progress is false so an in-flight publish finishes rather than
+# being killed mid-upload. Other runs (PRs, dev/main pushes) get a unique group
+# keyed to run id, so they never queue and CI stays fast.
 concurrency:
   group: >-
     ${{
       ((github.event_name == 'push'
-        && (github.ref == 'refs/heads/main'
-          || github.ref == 'refs/heads/staging'
+        && (github.ref == 'refs/heads/staging'
           || startsWith(github.ref, 'refs/tags/android-v')))
       || (github.event_name == 'workflow_dispatch'
         && startsWith(github.ref, 'refs/tags/android-v')))
@@ -476,6 +478,20 @@ jobs:
           fi
           printf '%s\n' "$BODY" > existing-release-body.md
           awk '/<!-- ft8af-notes-start -->/{f=1; next} /<!-- ft8af-notes-end -->/{f=0} f' <<< "$BODY" > notes.txt
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            # A release existing is not the same as the promoted notes existing:
+            # a release cut by a plain tag push, or one whose body was edited,
+            # has no markers, and awk happily produces an empty notes.txt. The
+            # manual ship is documented to send those notes to Play, so treat
+            # their absence as an error rather than quietly shipping the bare
+            # version string as the what's-new.
+            if ! grep -q '<!-- ft8af-notes-start -->' <<< "$BODY" \
+               || ! grep -q '<!-- ft8af-notes-end -->' <<< "$BODY" \
+               || ! grep -q '[^[:space:]]' notes.txt; then
+              echo "::error::The GitHub Release for $TAG has no release notes between the ft8af-notes markers, so there is nothing to send to Play as the what's-new. Add the notes to the release body between <!-- ft8af-notes-start --> and <!-- ft8af-notes-end --> and rerun."
+              exit 1
+            fi
+          fi
           echo "found=true" >> "$GITHUB_OUTPUT"
           echo "Release $TAG already exists; keeping its body. Notes:"; cat notes.txt
 
