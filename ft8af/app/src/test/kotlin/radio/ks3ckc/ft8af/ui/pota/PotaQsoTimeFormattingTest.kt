@@ -229,6 +229,22 @@ class PotaQsoTimeFormattingTest {
         assertThat(normalizeAdifTimeOn("14:45")).isNull()
     }
 
+    @Test
+    fun overlongTimeOn_isRejectedNotTruncated_bothParities() {
+        // More than six digits is not an ADIF time. Padding-then-substr would
+        // quietly turn the even-width "14453099" into 14:45:30 and the
+        // odd-width "1445309" into 01:44:53 — plausible, wrong, and shown with
+        // full confidence as both the "ago" delta and the UTC tooltip. Every
+        // consumer must take its malformed-value fallback instead.
+        for (bad in listOf("14453099", "1445309")) {
+            assertThat(normalizeAdifTimeOn(bad)).isNull()
+            assertThat(formatQsoTimeUtc(bad)).isEqualTo(bad)
+            assertThat(parseQsoUtcMs("20260831", bad)).isNull()
+        }
+        // Exactly six digits is still the normal case.
+        assertThat(normalizeAdifTimeOn("144530")).isEqualTo("144530")
+    }
+
     // -- formatContactDetails -------------------------------------------------
 
     @Test

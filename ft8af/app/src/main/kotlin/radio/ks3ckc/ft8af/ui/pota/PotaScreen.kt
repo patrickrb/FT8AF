@@ -1236,10 +1236,16 @@ internal fun formatContactDetails(mode: String, band: String, grid: String): Str
  * [PotaQsoWindow.ROW_STAMP] and DatabaseOpr's dedupe ORDER BY: empty is
  * midnight, odd-width values recover a dropped leading zero (`"815"` is 08:15)
  * before padding, even-width values just pad. Returns `null` for a
- * non-numeric value, which no padding rule can rescue.
+ * non-numeric value, which no padding rule can rescue, and for a value longer
+ * than ADIF's six-digit maximum: padding would silently truncate `"14453099"`
+ * to a plausible 14:45:30 (and the odd-width `"1445309"` to 01:44:53), so the
+ * callers would show a confident but wrong time instead of their raw-value
+ * fallback. (The SQL rule keeps its substr because a WHERE clause has no
+ * "reject" branch; it only orders rows, it never displays them.)
  */
 internal fun normalizeAdifTimeOn(timeOn: String): String? = when {
     timeOn.isEmpty() -> "000000"
+    timeOn.length > 6 -> null
     timeOn.any { !it.isDigit() } -> null
     timeOn.length % 2 == 1 -> ("0$timeOn" + "000000").substring(0, 6)
     else -> (timeOn + "000000").substring(0, 6)
