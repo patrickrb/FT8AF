@@ -477,6 +477,9 @@ class RunPushTest(unittest.TestCase):
             pushed = pl.run_push(s, "pkg", "e1", self.LOCAL, dry_run=True)
         self.assertEqual(pushed, 0)
         self.assertEqual(s.patched, {})
+        # fr-FR is missing on Play, so a real run would PUT it; a dry run must
+        # not create it either.
+        self.assertEqual(s.puts, {})
         self.assertIn("DRY RUN", out.getvalue())
         self.assertIn("fr-FR", out.getvalue())
 
@@ -540,8 +543,12 @@ class RunCheckTest(unittest.TestCase):
         with captured() as (out, _):
             self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_OK)
         self.assertEqual(list(s.patched), ["en-US"])
+        self.assertEqual(s.puts, {})
         self.assertEqual(s.commits, [], "the probe must never commit")
         self.assertIn("OK", out.getvalue())
+        # The log names the call it actually made, so an operator reading it
+        # is not told "patch" when the store was empty and it had to put.
+        self.assertIn("listings.patch", out.getvalue())
 
     def test_probe_writes_back_plays_own_text(self):
         # So that even a committed edit — which cannot happen here — is a no-op.
@@ -561,6 +568,9 @@ class RunCheckTest(unittest.TestCase):
             self.LOCAL["en-US"],
         )
         self.assertIn("no listings live yet", out.getvalue())
+        self.assertEqual(s.patched, {})
+        self.assertIn("listings.put", out.getvalue())
+        self.assertNotIn("listings.patch", out.getvalue())
 
     def test_denied_patch_reports_the_missing_grant(self):
         s = FakeSession(listings={"en-US": listing()}, patch_status=403)
@@ -570,11 +580,26 @@ class RunCheckTest(unittest.TestCase):
         self.assertIn("cannot edit listings", err.getvalue())
         self.assertIn("Manage store presence", err.getvalue())
 
-    def test_unauthenticated_is_also_a_denial(self):
+    def test_unauthenticated_is_inconclusive_not_a_denial(self):
+        # 401 means the token was not accepted, so the probe never reached the
+        # permission check. Calling that "denied" would send someone to fix a
+        # grant that was never tested — the false diagnosis the exit-code split
+        # exists to prevent.
         s = FakeSession(listings={"en-US": listing()}, patch_status=401)
         with captured() as (_, err):
+            self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_INCONCLUSIVE)
+        self.assertIn("INCONCLUSIVE", err.getvalue())
+        self.assertIn("401", err.getvalue())
+        self.assertIn("credentials", err.getvalue())
+        self.assertNotIn("DENIED", err.getvalue())
+        self.assertNotIn("Manage store presence", err.getvalue())
+
+    def test_denied_put_on_an_empty_store_is_still_the_missing_grant(self):
+        # The verdict must not depend on which verb the probe had to use.
+        s = FakeSession(listings={}, patch_status=403)
+        with captured() as (_, err):
             self.assertEqual(pl.run_check(s, "pkg", "e1", self.LOCAL), pl.EXIT_DENIED)
-        self.assertIn("DENIED", err.getvalue())
+        self.assertIn("Manage store presence", err.getvalue())
 
     def test_server_error_is_inconclusive_not_a_grant_diagnosis(self):
         # Calling a 500 "permission denied" would send someone editing Console
@@ -743,6 +768,7 @@ class MainLifecycleTest(TempTreeTest):
         code, out, _ = self.run_main(s, ["--dry-run"])
         self.assertEqual(code, 0)
         self.assertEqual(s.patched, {})
+        self.assertEqual(s.puts, {})
         self.assertEqual(s.commits, [])
         self.assertEqual(len(s.deletes), 1, "a dry-run edit must not be left open")
 

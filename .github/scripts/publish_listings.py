@@ -50,7 +50,7 @@ LIMITS = {"title": 30, "shortDescription": 80, "fullDescription": 4000}
 # flag would otherwise be indistinguishable from a probe verdict.
 EXIT_OK = 0
 EXIT_ERROR = 1  # generic failure: unpublishable metadata, bad credentials, API error
-EXIT_DENIED = 3  # --check-permissions: Play refused the listings.patch (401/403)
+EXIT_DENIED = 3  # --check-permissions: Play refused the listing write with 403
 EXIT_INCONCLUSIVE = 4  # --check-permissions: the probe never reached a verdict
 
 # Listing field <-> fastlane filename.
@@ -345,16 +345,19 @@ def run_check(s, package, edit_id, local):
     A dry run cannot answer this: it only reads. An account with release
     permission but not "Manage store presence" passes a dry
     run and then fails on the first real publish. So do the one thing that
-    exercises the grant — a single listings.patch — inside an edit the caller
-    abandons instead of committing. Nothing reaches the store.
+    exercises the grant — writing a single listing (listings.patch on a language
+    Play already has, listings.put when it has none yet) — inside an edit the
+    caller abandons instead of committing. Nothing reaches the store.
 
     The probe writes back the text Play already has wherever possible, so even a
     committed edit (which cannot happen here) would be a no-op.
 
     Returns EXIT_OK if the account may edit listings, EXIT_DENIED if Play
-    refused (401/403), and EXIT_INCONCLUSIVE if anything else went wrong — a
-    timeout or a 5xx proves nothing either way and must not be reported as a
-    missing grant.
+    refused with 403 (an authenticated account that lacks the grant), and
+    EXIT_INCONCLUSIVE if anything else went wrong. A 401 is inconclusive too:
+    it means the access token was not accepted at all, which is a credentials
+    problem and says nothing about the grant. Likewise a timeout or a 5xx proves
+    nothing either way and must not be reported as a missing grant.
     """
     try:
         remote = fetch_listings(s, package, edit_id)
@@ -374,19 +377,35 @@ def run_check(s, package, edit_id, local):
         probe = local[locale]
         note = "no listings live yet, so using the repo's text"
 
-    print("Probing listings.patch on %s (%s)..." % (locale, note))
+    verb = "listings.patch" if locale in remote else "listings.put"
+    print("Probing %s on %s (%s)..." % (verb, locale, note))
     try:
         upsert_listing(s, package, edit_id, locale, probe, locale in remote)
     except Exception as e:
         status = getattr(getattr(e, "response", None), "status_code", None)
-        if status in (401, 403):
+        if status == 403:
             print(
-                "DENIED (HTTP %s): %s\n\nThe service account cannot edit listings. "
+                "DENIED (HTTP 403): %s\n\nThe service account cannot edit listings. "
                 'Grant it Play Console -> Users and permissions -> App permissions '
-                '-> Store presence -> "Manage store presence".' % (status, e),
+                '-> Store presence -> "Manage store presence".' % e,
                 file=sys.stderr,
             )
             return EXIT_DENIED
+        if status == 401:
+            # Only a 403 is a verdict about the grant: it means Play knew who was
+            # asking and said no. A 401 means the token itself was not accepted
+            # (revoked key, wrong project, clock skew) — the probe never got as
+            # far as the permission check, so sending someone to Console to fix
+            # a grant would be the same false diagnosis this split exists to
+            # prevent.
+            print(
+                "INCONCLUSIVE (HTTP 401): %s\n\nPlay did not accept the access "
+                "token, so the probe never reached the permission check. This is "
+                "a credentials problem, not evidence about the grant: check the "
+                "service-account key and run it again." % e,
+                file=sys.stderr,
+            )
+            return EXIT_INCONCLUSIVE
         # A timeout, a rate limit, or a Play 5xx says nothing about the grant.
         # Calling those "permission denied" would send someone editing Console
         # permissions that were fine all along.

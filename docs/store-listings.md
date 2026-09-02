@@ -125,10 +125,12 @@ as a manual run in the `check-permissions` mode, or locally:
 python .github/scripts/publish_listings.py --check-permissions
 ```
 
-That does the one thing a dry run skips: a single `listings.patch` inside an
+That does the one thing a dry run skips: a single listing write inside an
 edit it then abandons rather than commits, so nothing reaches the store. It
-writes back the text Play already has, so the probe is a no-op even in
-principle.
+writes back the text Play already has (`listings.patch`), so the probe is a
+no-op even in principle; only on an app with no listings at all does it have
+to create one from the repo's text instead (`listings.put`). The log names
+whichever call it made.
 
 Its exit code is a verdict, so the codes are chosen not to collide with
 anything else the script (or argparse) can produce:
@@ -137,8 +139,8 @@ anything else the script (or argparse) can produce:
 | ---- | ------- |
 | `0`  | the account may edit listings |
 | `1`  | the probe did not run — bad credentials, unpublishable metadata. **Not** a verdict |
-| `3`  | Play refused the patch (401/403). This is the missing grant |
-| `4`  | inconclusive — timeout, rate limit, Play 5xx. Proves nothing either way; run it again |
+| `3`  | Play refused the write with **403**. This is the missing grant |
+| `4`  | inconclusive — a 401 (the token was not accepted: a credentials problem, not a grant verdict), timeout, rate limit, Play 5xx. Proves nothing either way; fix the cause and run it again |
 
 `2` is skipped on purpose: argparse exits 2 on a usage error, and a mistyped
 flag must not read as an answer about the grant. Anything other than `3` is not
