@@ -67,21 +67,26 @@ public class IcomRigReadFreqPollTest {
         // "newRig=true" avoids the oldVersion meter-suppression path, which is
         // irrelevant to frequency polling but keeps this rig behaving like a
         // modern IC-705 / IC-7300 / IC-9700.
-        rig = new IcomRig(IC705_CIV, true);
+        // A scheduler that never runs anything: these tests drive the tick by
+        // hand, so no background thread can append to `sent` between a manual
+        // runReadFreqTick and its assertion. IcomRigPollSchedulingTest covers
+        // what the constructor schedules.
+        rig = new IcomRig(IC705_CIV, true, new IcomRig.PollScheduler() {
+            @Override
+            public IcomRig.Cancellable scheduleFixedDelay(Runnable task, long delayMs, long periodMs) {
+                return () -> { };
+            }
+
+            @Override
+            public IcomRig.Cancellable scheduleFixedRate(Runnable task, long delayMs, long periodMs) {
+                return () -> { };
+            }
+        });
         rig.setConnector(connector);
-        // The constructor starts the real 2 s poll and 500 ms meter Timers.
-        // Cancel them right away so a slow or paused test worker can't get a
-        // background tick appended to `sent` between a manual runReadFreqTick
-        // and its assertion; the manual ticks below need no Timer.
-        rig.onDisconnecting();
     }
 
     @After
     public void tearDown() {
-        // Cancel the two Timer threads the IcomRig constructor spins up so they
-        // don't outlive the test — otherwise the JVM keeps running them until
-        // Gradle's test worker shuts down, and their sendCivData spam pollutes
-        // any concurrent test's captured bytes.
         rig.onDisconnecting();
     }
 
@@ -174,6 +179,24 @@ public class IcomRigReadFreqPollTest {
                 BaseRigConnector.class.getDeclaredField("connected").getModifiers())).isTrue();
         assertThat(java.lang.reflect.Modifier.isVolatile(
                 BaseRig.class.getDeclaredField("isPttOn").getModifiers())).isTrue();
+        // The connector itself is set by MainViewModel after the constructor
+        // has already started the polls, from another thread.
+        assertThat(java.lang.reflect.Modifier.isVolatile(
+                BaseRig.class.getDeclaredField("connector").getModifiers())).isTrue();
+    }
+
+    @Test
+    public void wlanCivSendsAreSerialized() throws Exception {
+        // IcomCivUdp builds a packet from civSeq, sends it, then increments the
+        // sequence. sendTrackedPacket alone being synchronized let two senders
+        // (this poll, the CAT-liveness poll, a PTT command) stamp the same
+        // sequence number and have the rig drop one as a duplicate.
+        for (String name : new String[] {"sendCivData", "sendOpenClose"}) {
+            java.lang.reflect.Method m = name.equals("sendCivData")
+                    ? com.k1af.ft8af.icom.IcomCivUdp.class.getDeclaredMethod(name, byte[].class)
+                    : com.k1af.ft8af.icom.IcomCivUdp.class.getDeclaredMethod(name, boolean.class);
+            assertThat(java.lang.reflect.Modifier.isSynchronized(m.getModifiers())).isTrue();
+        }
     }
 
     @Test

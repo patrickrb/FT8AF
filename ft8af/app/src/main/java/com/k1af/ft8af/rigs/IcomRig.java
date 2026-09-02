@@ -65,8 +65,55 @@ public class IcomRig extends BaseRig {
     private int swr = 0;
     private boolean alcMaxAlert = false;
     private boolean swrAlert = false;
-    private Timer meterTimer;//Timer for querying meter
-    private Timer readFreqTimer;//Timer for polling frequency (rig->app dial follow)
+    /**
+     * How this rig schedules its repeating polls. A seam so a test can verify
+     * that the constructor schedules the dial poll (task, delay, period, fixed
+     * delay versus fixed rate) and that {@link #onDisconnecting()} cancels it,
+     * without a real {@link Timer} and without sleeping — the tick body alone
+     * being tested would stay green if the constructor stopped scheduling it.
+     */
+    interface PollScheduler {
+        /** Repeating task with a fixed delay between the end of one run and the next. */
+        Cancellable scheduleFixedDelay(Runnable task, long delayMs, long periodMs);
+
+        /** Repeating task at a fixed rate (catches up missed runs). */
+        Cancellable scheduleFixedRate(Runnable task, long delayMs, long periodMs);
+    }
+
+    /** A scheduled poll that can be stopped. */
+    interface Cancellable {
+        void cancel();
+    }
+
+    /** The production scheduler: one {@link Timer} thread per poll. */
+    static final class TimerScheduler implements PollScheduler {
+        @Override
+        public Cancellable scheduleFixedDelay(Runnable task, long delayMs, long periodMs) {
+            Timer timer = new Timer();
+            timer.schedule(wrap(task), delayMs, periodMs);
+            return () -> { timer.cancel(); timer.purge(); };
+        }
+
+        @Override
+        public Cancellable scheduleFixedRate(Runnable task, long delayMs, long periodMs) {
+            Timer timer = new Timer();
+            timer.scheduleAtFixedRate(wrap(task), delayMs, periodMs);
+            return () -> { timer.cancel(); timer.purge(); };
+        }
+
+        private static TimerTask wrap(Runnable task) {
+            return new TimerTask() {
+                @Override
+                public void run() {
+                    task.run();
+                }
+            };
+        }
+    }
+
+    private final PollScheduler scheduler;
+    private Cancellable meterPoll;//querying meters while keyed
+    private Cancellable readFreqPoll;//polling frequency (rig->app dial follow)
     //When this timer first saw the link up, or 0 while it is down. The poll gate is
     //relative to THIS, not to construction — see READ_FREQ_CONNECT_SETTLE_MS. Volatile:
     //written on the Timer thread, cleared on the disconnect thread (onDisconnecting).
@@ -285,14 +332,10 @@ public class IcomRig extends BaseRig {
     }
 
     public void startMeterTimer() {
-        meterTimer = new Timer();
-        meterTimer.scheduleAtFixedRate(new TimerTask() {
-            @Override
-            public void run() {
-                if (isPttOn() && !oldVersion) {//measure when PTT is pressed, and rig is not an old version
-                    sendCivData(IcomRigConstant.getSWRState(ctrAddress, getCivAddress()));
-                    sendCivData(IcomRigConstant.getALCState(ctrAddress, getCivAddress()));
-                }
+        meterPoll = scheduler.scheduleFixedRate(() -> {
+            if (isPttOn() && !oldVersion) {//measure when PTT is pressed, and rig is not an old version
+                sendCivData(IcomRigConstant.getSWRState(ctrAddress, getCivAddress()));
+                sendCivData(IcomRigConstant.getALCState(ctrAddress, getCivAddress()));
             }
         }, 0, IComPacketTypes.METER_TIMER_PERIOD_MS);
     }
@@ -313,18 +356,18 @@ public class IcomRig extends BaseRig {
      * {@link Yaesu38Rig} / {@link KenwoodTS590Rig} / {@link ElecraftRig}.
      */
     public void startReadFreqTimer() {
-        readFreqTimer = new Timer();
-        // Fixed-delay schedule(), not scheduleAtFixedRate(): the latter catches
-        // up missed executions after a long tick, a GC pause or a device
-        // suspend, which would fire a burst of back-to-back CI-V reads. A
-        // polling backlog has no value and can coalesce CAT traffic; the
-        // sibling pollers (Yaesu38Rig, KenwoodTS590Rig) use fixed delay too.
-        readFreqTimer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                runReadFreqTick();
-            }
-        }, READ_FREQ_START_DELAY_MS, READ_FREQ_PERIOD_MS);
+        // Fixed delay, not fixed rate: the latter catches up missed executions
+        // after a long tick, a GC pause or a device suspend, which would fire a
+        // burst of back-to-back CI-V reads. A polling backlog has no value and
+        // can coalesce CAT traffic; the sibling pollers (Yaesu38Rig,
+        // KenwoodTS590Rig) use fixed delay too.
+        readFreqPoll = scheduler.scheduleFixedDelay(
+                this::runReadFreqTick, READ_FREQ_START_DELAY_MS, READ_FREQ_PERIOD_MS);
+    }
+
+    /** When this timer first saw the link up (0 while down); for the scheduling test. */
+    long connectedSinceMs() {
+        return connectedSinceMs;
     }
 
     /**
@@ -432,17 +475,15 @@ public class IcomRig extends BaseRig {
         // Cancel our timers so a reconnect (which builds a fresh IcomRig via
         // MainViewModel.connectRig -> baseRig.onDisconnecting) doesn't leak the
         // previous instance's polling task or double-poll after re-connect.
-        if (readFreqTimer != null) {
-            readFreqTimer.cancel();
-            readFreqTimer.purge();
-            readFreqTimer = null;
+        if (readFreqPoll != null) {
+            readFreqPoll.cancel();
+            readFreqPoll = null;
         }
         //A reconnect must serve a fresh settle window, not inherit this one's.
         connectedSinceMs = 0L;
-        if (meterTimer != null) {
-            meterTimer.cancel();
-            meterTimer.purge();
-            meterTimer = null;
+        if (meterPoll != null) {
+            meterPoll.cancel();
+            meterPoll = null;
         }
     }
 
@@ -453,7 +494,13 @@ public class IcomRig extends BaseRig {
 
 
     public IcomRig(int civAddress, boolean newRig) {
+        this(civAddress, newRig, new TimerScheduler());
+    }
+
+    /** Test seam: the polls go through {@code scheduler} instead of real Timers. */
+    IcomRig(int civAddress, boolean newRig, PollScheduler scheduler) {
         Log.d(TAG, "IcomRig: Create.");
+        this.scheduler = scheduler;
         this.oldVersion = !newRig;//some older rigs do not support SWR query
         setCivAddress(civAddress);
         startMeterTimer();

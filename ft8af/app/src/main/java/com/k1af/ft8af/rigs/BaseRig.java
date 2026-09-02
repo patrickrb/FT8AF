@@ -21,7 +21,11 @@ public abstract class BaseRig {
     //rigs' poll timers read it on their Timer threads to stay quiet during TX
     //(ReadTaskAction.decide) — a stale false there means a CAT read mid-over.
     private volatile boolean isPttOn=false;
-    private BaseRigConnector connector = null;//rig connector object
+    //Rig connector object. Volatile: IcomRig starts its poll timers in its
+    //constructor and MainViewModel calls setConnector() afterwards from another
+    //thread, so without it the Timer thread could keep reading null and never
+    //poll (nor see a later reconnect's connector).
+    private volatile BaseRigConnector connector = null;
 
     public abstract boolean isConnected();//check if rig is connected
 
