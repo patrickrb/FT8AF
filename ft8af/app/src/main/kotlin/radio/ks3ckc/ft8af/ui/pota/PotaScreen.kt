@@ -551,7 +551,8 @@ private fun PotaContactRow(qso: PotaQso, nowMs: Long) {
     // fallback for imported/ADIF rows with no parsable qso_date so the column
     // never shows a blank cell.
     val qsoMs = remember(qso.qsoDate, qso.timeOn) { parseQsoUtcMs(qso.qsoDate, qso.timeOn) }
-    val agoLabel = qsoMs?.let { formatQsoTimeAgo(it, nowMs) } ?: formatQsoTimeUtc(qso.timeOn)
+    val agoLabel = qsoMs?.let { qsoAgeLabel(context.resources, qsoTimeAgo(it, nowMs)) }
+        ?: formatQsoTimeUtc(qso.timeOn)
     val utcLabel = formatQsoTimeUtc(qso.timeOn)
     Row(
         modifier = Modifier
@@ -1306,21 +1307,49 @@ internal fun parseQsoUtcMs(qsoDate: String, timeOn: String): Long? {
     }
 }
 
+/** Which relative-time bucket a contact's age falls in; see [qsoTimeAgo]. */
+internal enum class QsoAgeUnit { JUST_NOW, SECONDS, MINUTES, HOURS, DAYS }
+
+/** A contact's age: the bucket plus the count shown in it (0 for [QsoAgeUnit.JUST_NOW]). */
+internal data class QsoAge(val unit: QsoAgeUnit, val count: Int)
+
 /**
- * "just now" / "45s ago" / "5m ago" / "2h ago" / "3d ago". Clamps negative
- * deltas to "just now" so clock skew (device time behind rig time, or a bogus
- * imported timestamp) can't produce "-2m ago". Buckets flip on exact minute /
- * hour / day boundaries so the display is consistent between rows.
+ * Bucket a contact's age for the "ago" readout: under 30 s is "just now", then
+ * seconds, minutes, hours, days (no upper bucket — an old QSO keeps counting in
+ * days). Clamps negative deltas to "just now" so clock skew (device time behind
+ * rig time, or a bogus imported timestamp) can't produce "-2m ago". Buckets
+ * flip on exact minute / hour / day boundaries so the display is consistent
+ * between rows.
+ *
+ * Returns the bucket rather than text: the words come from string/plural
+ * resources via [qsoAgeLabel], so the row is translated like the rest of the
+ * screen instead of staying English in every `values-*` locale (Copilot
+ * review on #787).
  */
-internal fun formatQsoTimeAgo(qsoTimeMs: Long, nowMs: Long): String {
+internal fun qsoTimeAgo(qsoTimeMs: Long, nowMs: Long): QsoAge {
     val deltaSec = ((nowMs - qsoTimeMs) / 1000L).coerceAtLeast(0L)
     return when {
-        deltaSec < 30L -> "just now"
-        deltaSec < 60L -> "${deltaSec}s ago"
-        deltaSec < 3600L -> "${deltaSec / 60L}m ago"
-        deltaSec < 86_400L -> "${deltaSec / 3600L}h ago"
-        else -> "${deltaSec / 86_400L}d ago"
+        deltaSec < 30L -> QsoAge(QsoAgeUnit.JUST_NOW, 0)
+        deltaSec < 60L -> QsoAge(QsoAgeUnit.SECONDS, deltaSec.toInt())
+        deltaSec < 3600L -> QsoAge(QsoAgeUnit.MINUTES, (deltaSec / 60L).toInt())
+        deltaSec < 86_400L -> QsoAge(QsoAgeUnit.HOURS, (deltaSec / 3600L).toInt())
+        else -> QsoAge(QsoAgeUnit.DAYS, (deltaSec / 86_400L).toInt())
     }
+}
+
+/**
+ * Resolve a [QsoAge] in the operator's language: the "just now" string plus
+ * one plural per unit, so translators own both the wording and the
+ * singular/plural forms. A plain function over [android.content.res.Resources]
+ * rather than a Composable so the resource mapping is unit-testable under
+ * Robolectric; the row passes `LocalContext.current.resources`.
+ */
+internal fun qsoAgeLabel(res: android.content.res.Resources, age: QsoAge): String = when (age.unit) {
+    QsoAgeUnit.JUST_NOW -> res.getString(R.string.pota_qso_age_just_now)
+    QsoAgeUnit.SECONDS -> res.getQuantityString(R.plurals.pota_qso_age_seconds, age.count, age.count)
+    QsoAgeUnit.MINUTES -> res.getQuantityString(R.plurals.pota_qso_age_minutes, age.count, age.count)
+    QsoAgeUnit.HOURS -> res.getQuantityString(R.plurals.pota_qso_age_hours, age.count, age.count)
+    QsoAgeUnit.DAYS -> res.getQuantityString(R.plurals.pota_qso_age_days, age.count, age.count)
 }
 
 private fun formatDateRange(row: PotaActivation): String {

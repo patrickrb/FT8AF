@@ -14,8 +14,9 @@ import java.util.TimeZone
  *     odd-length with a dropped leading zero), matching PotaQsoWindow. Returns
  *     null for anything that is not a real calendar instant, which is the
  *     caller's cue to fall back to the raw UTC readout.
- *   - formatQsoTimeAgo — the primary display: "just now", "5m ago", "2h ago",
- *     "3d ago". There is no upper bucket; an old QSO keeps counting in days.
+ *   - qsoTimeAgo — the primary display's bucket + count ("just now", 5 min,
+ *     2 h, 3 d). There is no upper bucket; an old QSO keeps counting in days.
+ *     The words come from resources (PotaQsoAgeLabelTest covers that mapping).
  *   - formatQsoTimeUtc — the long-press readout: HH:MMz.
  *   - formatContactDetails — the row's mode · band · grid subtitle.
  */
@@ -94,71 +95,71 @@ class PotaQsoTimeFormattingTest {
             .isEqualTo(utcMs(2024, 2, 29, 14, 45, 0))
     }
 
-    // -- formatQsoTimeAgo -----------------------------------------------------
+    // -- qsoTimeAgo -----------------------------------------------------------
 
     @Test
-    fun formatQsoTimeAgo_under30s_showsJustNow() {
+    fun qsoTimeAgo_under30s_showsJustNow() {
         val now = utcMs(2026, 8, 31, 14, 45, 30)
         val qso = utcMs(2026, 8, 31, 14, 45, 15)
-        assertThat(formatQsoTimeAgo(qso, now)).isEqualTo("just now")
+        assertThat(qsoTimeAgo(qso, now)).isEqualTo(QsoAge(QsoAgeUnit.JUST_NOW, 0))
     }
 
     @Test
-    fun formatQsoTimeAgo_secondsBucket_showsSeconds() {
+    fun qsoTimeAgo_secondsBucket_showsSeconds() {
         val now = utcMs(2026, 8, 31, 14, 46, 15)
         val qso = utcMs(2026, 8, 31, 14, 45, 30)
-        assertThat(formatQsoTimeAgo(qso, now)).isEqualTo("45s ago")
+        assertThat(qsoTimeAgo(qso, now)).isEqualTo(QsoAge(QsoAgeUnit.SECONDS, 45))
     }
 
     @Test
-    fun formatQsoTimeAgo_minutesBucket_showsMinutes() {
+    fun qsoTimeAgo_minutesBucket_showsMinutes() {
         val now = utcMs(2026, 8, 31, 14, 50, 30)
         val qso = utcMs(2026, 8, 31, 14, 45, 0)
-        assertThat(formatQsoTimeAgo(qso, now)).isEqualTo("5m ago")
+        assertThat(qsoTimeAgo(qso, now)).isEqualTo(QsoAge(QsoAgeUnit.MINUTES, 5))
     }
 
     @Test
-    fun formatQsoTimeAgo_hoursBucket_showsHours() {
+    fun qsoTimeAgo_hoursBucket_showsHours() {
         val now = utcMs(2026, 8, 31, 17, 0, 0)
         val qso = utcMs(2026, 8, 31, 14, 45, 0)
-        assertThat(formatQsoTimeAgo(qso, now)).isEqualTo("2h ago")
+        assertThat(qsoTimeAgo(qso, now)).isEqualTo(QsoAge(QsoAgeUnit.HOURS, 2))
     }
 
     @Test
-    fun formatQsoTimeAgo_daysBucket_showsDays() {
+    fun qsoTimeAgo_daysBucket_showsDays() {
         val now = utcMs(2026, 9, 3, 15, 0, 0)
         val qso = utcMs(2026, 8, 31, 14, 45, 0)
-        assertThat(formatQsoTimeAgo(qso, now)).isEqualTo("3d ago")
+        assertThat(qsoTimeAgo(qso, now)).isEqualTo(QsoAge(QsoAgeUnit.DAYS, 3))
     }
 
     @Test
-    fun formatQsoTimeAgo_futureTimestamp_showsJustNow() {
+    fun qsoTimeAgo_futureTimestamp_showsJustNow() {
         // Guard against clock skew — a QSO logged "in the future" (clock
         // drift, timezone bug, etc.) should not render "-2m ago".
         val now = utcMs(2026, 8, 31, 14, 45, 0)
         val qso = utcMs(2026, 8, 31, 14, 47, 0)
-        assertThat(formatQsoTimeAgo(qso, now)).isEqualTo("just now")
+        assertThat(qsoTimeAgo(qso, now)).isEqualTo(QsoAge(QsoAgeUnit.JUST_NOW, 0))
     }
 
     @Test
-    fun formatQsoTimeAgo_boundaryAt60Seconds_switchesToMinutes() {
+    fun qsoTimeAgo_boundaryAt60Seconds_switchesToMinutes() {
         val now = utcMs(2026, 8, 31, 14, 46, 0)
         val qso = utcMs(2026, 8, 31, 14, 45, 0)
-        assertThat(formatQsoTimeAgo(qso, now)).isEqualTo("1m ago")
+        assertThat(qsoTimeAgo(qso, now)).isEqualTo(QsoAge(QsoAgeUnit.MINUTES, 1))
     }
 
     @Test
-    fun formatQsoTimeAgo_boundaryAt60Minutes_switchesToHours() {
+    fun qsoTimeAgo_boundaryAt60Minutes_switchesToHours() {
         val now = utcMs(2026, 8, 31, 15, 45, 0)
         val qso = utcMs(2026, 8, 31, 14, 45, 0)
-        assertThat(formatQsoTimeAgo(qso, now)).isEqualTo("1h ago")
+        assertThat(qsoTimeAgo(qso, now)).isEqualTo(QsoAge(QsoAgeUnit.HOURS, 1))
     }
 
     @Test
-    fun formatQsoTimeAgo_boundaryAt24Hours_switchesToDays() {
+    fun qsoTimeAgo_boundaryAt24Hours_switchesToDays() {
         val now = utcMs(2026, 9, 1, 14, 45, 0)
         val qso = utcMs(2026, 8, 31, 14, 45, 0)
-        assertThat(formatQsoTimeAgo(qso, now)).isEqualTo("1d ago")
+        assertThat(qsoTimeAgo(qso, now)).isEqualTo(QsoAge(QsoAgeUnit.DAYS, 1))
     }
 
     // -- formatQsoTimeUtc -----------------------------------------------------
