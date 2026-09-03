@@ -2,6 +2,7 @@ package radio.ks3ckc.ft8af.ui.settings
 
 import android.media.AudioManager
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,7 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +47,9 @@ import com.k1af.ft8af.rigs.BaseRigOperation
 import com.k1af.ft8af.rigs.CivAddressConfig
 import com.k1af.ft8af.rigs.InstructionSet
 import com.k1af.ft8af.ui.AudioDeviceSpinnerAdapter
+import com.k1af.ft8af.wave.RxAudioChannel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import radio.ks3ckc.ft8af.PER_BAND_OUTPUT_LEVEL_KEY
 import radio.ks3ckc.ft8af.outputLevelFromVolumePercent
 import radio.ks3ckc.ft8af.saveOutputLevelForCurrentBand
@@ -68,6 +73,7 @@ fun RadioAudioSettings(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // Observe reactive fields so band/frequency rows recompose on change.
     val bandIndexLive by GeneralVariables.mutableBandChange.observeAsState(
@@ -666,6 +672,33 @@ fun RadioAudioSettings(
                         onClick = { showInputVolume = true },
                     )
                     SectionDivider()
+                    run {
+                        var rxChannel by remember {
+                            mutableIntStateOf(RxAudioChannel.clamp(GeneralVariables.rxAudioChannel))
+                        }
+                        RxAudioChannelRow(
+                            selected = rxChannel,
+                            onSelect = { value ->
+                                rxChannel = value
+                                GeneralVariables.rxAudioChannel = value
+                                mainViewModel.databaseOpr.writeConfig(
+                                    RxAudioChannel.CONFIG_KEY, value.toString(), null,
+                                )
+                                // Mix uses a mono AudioRecord, L/R a stereo one,
+                                // and the native USB path takes the fold at
+                                // start — so the input has to be reopened for
+                                // the change to take effect. Off the main
+                                // thread: reinitialize() joins the capture
+                                // thread (up to a second) before reopening, and
+                                // the segmented control must repaint on the tap,
+                                // not after the audio device has come back.
+                                scope.launch(Dispatchers.IO) {
+                                    mainViewModel.reinitializeAudioInput()
+                                }
+                            },
+                        )
+                    }
+                    SectionDivider()
                     SettingsRow(
                         label = stringResource(R.string.settings_tx_volume),
                         description = stringResource(R.string.settings_tx_volume_desc),
@@ -999,6 +1032,74 @@ private fun AudioDevicePickerDialog(
         onDismiss = onDismiss,
         onSelect = onSelect,
     )
+}
+
+/**
+ * RX audio channel selector: which side of a stereo input feeds the decoder.
+ *
+ * A three-position segmented control rather than a picker dialog — the choice is
+ * a quick A/B while watching the waterfall (a splitter cable or a dual-receiver
+ * rig only carries the wanted audio on one side), so it stays on-screen instead
+ * of behind a dialog.
+ */
+@Composable
+private fun RxAudioChannelRow(
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val options = listOf(
+        RxAudioChannel.MIX to stringResource(R.string.settings_rx_channel_mix),
+        RxAudioChannel.LEFT to stringResource(R.string.settings_rx_channel_left),
+        RxAudioChannel.RIGHT to stringResource(R.string.settings_rx_channel_right),
+    )
+    val shape = RoundedCornerShape(999.dp)
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = stringResource(R.string.settings_rx_channel),
+                color = TextPrimary,
+                fontSize = 14.sp,
+            )
+            Text(
+                text = stringResource(R.string.settings_rx_channel_desc),
+                color = TextMuted,
+                fontSize = 12.sp,
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            for ((value, label) in options) {
+                val isSelected = value == selected
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(34.dp)
+                        .clip(shape)
+                        .background(if (isSelected) AccentSoft else BgSurface2, shape)
+                        .border(1.dp, if (isSelected) BorderAmber else Border, shape)
+                        .clickable { onSelect(value) },
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = label,
+                        color = if (isSelected) Accent else TextMuted,
+                        fontSize = 13.sp,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                    )
+                }
+            }
+        }
+    }
 }
 
 /**

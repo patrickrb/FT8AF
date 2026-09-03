@@ -121,6 +121,15 @@ public class GeneralVariables {
     // before resampling/decoding. 1.0 = 100% = unchanged behavior. Persisted
     // under the "inputVolume" config key as a percent (0..200).
     public static volatile float inputGainPercent = 1.0f;
+
+    // RX audio channel selection for stereo inputs: which side of a stereo
+    // source feeds the decoder. RxAudioChannel.MIX (the default) averages L+R,
+    // exactly as every build before this did; LEFT/RIGHT take one channel and
+    // discard the other, for splitter cables and dual-receiver rigs that carry
+    // the wanted audio on one side only. Persisted under
+    // RxAudioChannel.CONFIG_KEY; read live on the audio hot path, hence volatile.
+    public static volatile int rxAudioChannel = com.k1af.ft8af.wave.RxAudioChannel.MIX;
+
     // Live RX input level (peak + short-term RMS of post-gain samples),
     // published by HamRecorder once per metering window for the UI meter.
     public static final MutableLiveData<com.k1af.ft8af.wave.InputAudioLevel.Levels>

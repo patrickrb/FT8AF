@@ -703,15 +703,18 @@ public class UsbAudioDevice {
             com.k1af.ft8af.GeneralVariables.fileLog(String.format(
                     "UsbAudioDevice: trying libusb native capture "
                             + "fd=%d iface=%d alt=%d ep=0x%02x maxPkt=%d "
-                            + "inputRate=%d ch=%d targetRate=%d",
+                            + "inputRate=%d ch=%d targetRate=%d chanSel=%d",
                     fd, ifaceNum, altSet, epAddr, maxPkt,
-                    inputSampleRate, inputChannels, targetSampleRate));
+                    inputSampleRate, inputChannels, targetSampleRate,
+                    RxAudioChannel.clamp(com.k1af.ft8af.GeneralVariables.rxAudioChannel)));
 
             final AudioInputCallback javaCb = callback;
             long handle = UsbAudioNative.nativeStart(
                     fd, ifaceNum, altSet, epAddr, maxPkt,
                     inputSampleRate, inputChannels, /*bytesPerSample=*/2,
                     targetSampleRate,
+                    RxAudioChannel.clamp(
+                            com.k1af.ft8af.GeneralVariables.rxAudioChannel),
                     new UsbAudioNative.AudioInputCallback() {
                         @Override
                         public void onAudioData(float[] data, int length) {
@@ -843,18 +846,24 @@ public class UsbAudioDevice {
                 int bytesReceived = buf.remaining();
                 int totalSamples = bytesReceived / 2; // 16-bit = 2 bytes
 
-                // int16 -> float mono (average L+R when stereo, matching the
-                // native libusb path — the old code dropped the right channel).
+                // int16 -> float mono. When stereo, fold per the operator's RX
+                // channel selection (default: average L+R, matching the native
+                // libusb path — the old code always dropped the right channel).
                 int monoSamples = (inputChannels == 2) ? totalSamples / 2 : totalSamples;
                 if (monoBuffer.length < monoSamples) {
                     monoBuffer = new float[monoSamples];
                 }
                 int monoCount = 0;
                 if (inputChannels == 2) {
+                    // Snapshot once per packet so a mid-packet settings change
+                    // can't splice two different channels into one buffer.
+                    final int channelSelect =
+                            com.k1af.ft8af.GeneralVariables.rxAudioChannel;
                     while (buf.remaining() >= 4 && monoCount < monoSamples) {
                         short l = buf.getShort();
                         short r = buf.getShort();
-                        monoBuffer[monoCount++] = (l + r) * (0.5f / 32768.0f);
+                        monoBuffer[monoCount++] =
+                                RxAudioChannel.foldPcmFrame(l, r, channelSelect);
                     }
                 } else {
                     while (buf.remaining() >= 2 && monoCount < monoSamples) {

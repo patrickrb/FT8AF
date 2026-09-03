@@ -40,6 +40,7 @@ import com.k1af.ft8af.rigs.BaseRigOperation;
 import com.k1af.ft8af.timer.UtcTimer;
 import com.k1af.ft8af.util.Streams;
 import com.k1af.ft8af.wave.InputAudioLevel;
+import com.k1af.ft8af.wave.RxAudioChannel;
 
 import org.jetbrains.annotations.Nullable;
 import org.json.JSONArray;
@@ -2873,6 +2874,11 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     //out-of-range value through here at startup. Non-numeric
                     //falls back to unity; numeric clamps to 0..200%.
                     GeneralVariables.inputGainPercent = InputAudioLevel.parseGainPercent(result);
+                }
+                if (name.equalsIgnoreCase(RxAudioChannel.CONFIG_KEY)) {//RX stereo channel select
+                    //0=mix L+R (default), 1=left only, 2=right only. Parsed
+                    //defensively — an imported/corrupted value falls back to mix.
+                    GeneralVariables.rxAudioChannel = RxAudioChannel.parse(result);
                 }
                 if (name.equalsIgnoreCase("showTxVolumeSlider")) {//Inline TX volume slider visibility
                     GeneralVariables.showTxVolumeSlider = !result.equals("0");
