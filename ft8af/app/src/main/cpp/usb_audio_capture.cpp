@@ -60,7 +60,7 @@ struct CaptureSession {
     int                       inputBytesPerSample = 2;   // 16-bit PCM
     int                       targetRate      = 12000;
     int                       decimationRatio = 4;       // inputRate / targetRate
-    // RX channel fold for stereo inputs, mirroring RxAudioChannel on the Java
+    // RX channel fold for stereo inputs, mirroring AudioChannelSelect on the Java
     // side: 0 = mix L+R (default), 1 = left only, 2 = right only. Fixed for the
     // life of the session — MicRecorder is reinitialized when the operator
     // changes the setting, which restarts capture with the new value.

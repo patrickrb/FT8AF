@@ -140,7 +140,7 @@ public final class UsbAudioNative {
      *                            mono per {@code channelSelect}.
      * @param inputBytesPerSample 2 for 16-bit PCM (the only format we handle).
      * @param targetSampleRate    rate we emit to the callback (12000 for FT8).
-     * @param channelSelect       stereo fold, mirroring {@link RxAudioChannel}:
+     * @param channelSelect       stereo fold, mirroring {@link AudioChannelSelect}:
      *                            0 = mix L+R, 1 = left only, 2 = right only.
      *                            Fixed for the session; MicRecorder restarts
      *                            capture when the operator changes it.

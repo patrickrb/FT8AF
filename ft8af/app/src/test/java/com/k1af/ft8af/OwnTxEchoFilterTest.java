@@ -305,4 +305,49 @@ public class OwnTxEchoFilterTest {
         assertThat(OwnTxEchoFilter.meanTimeOffsetSec(echoOnly)).isNaN();
         assertThat(OwnTxEchoFilter.meanTimeOffsetSec(Collections.emptyList())).isNaN();
     }
+
+    /**
+     * The dropped echoes are retained, not just counted: full-duplex (satellite)
+     * operating shows them back to the operator as their own downlink.
+     */
+    @Test
+    public void filter_retainsTheDroppedEchoesInOrder() {
+        Ft8Message firstEcho = ownEcho("RA3XYZ");
+        Ft8Message secondEcho = ownEcho("DL1ABC");
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(firstEcho);
+        decoded.add(thirdParty("CQ", "DL1ABC"));
+        decoded.add(secondEcho);
+
+        OwnTxEchoFilter filtered = OwnTxEchoFilter.filter(decoded);
+
+        assertThat(filtered.echoes).containsExactly(firstEcho, secondEcho).inOrder();
+        assertThat(filtered.ownEchoCount).isEqualTo(2);
+    }
+
+    /** Nothing of ours on the air: the echo list is empty, not null. */
+    @Test
+    public void filter_echoesIsEmptyWhenNothingWasOurs() {
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(thirdParty("CQ", "DL1ABC"));
+
+        assertThat(OwnTxEchoFilter.filter(decoded).echoes).isEmpty();
+    }
+
+    /**
+     * Junk decodes are dropped without being collected. They are CRC-collision
+     * garbage with an implausible sender, so there is nothing to show even in
+     * full duplex.
+     */
+    @Test
+    public void filter_doesNotCollectJunkAsAnEcho() {
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(structuredJunk());
+
+        OwnTxEchoFilter filtered = OwnTxEchoFilter.filter(decoded);
+
+        assertThat(filtered.kept).isEmpty();
+        assertThat(filtered.echoes).isEmpty();
+        assertThat(filtered.junkCount).isEqualTo(1);
+    }
 }

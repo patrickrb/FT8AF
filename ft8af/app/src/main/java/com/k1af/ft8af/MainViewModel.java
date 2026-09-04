@@ -678,6 +678,17 @@ public class MainViewModel extends ViewModel {
                 // already ignore own-callsign messages.
                 OwnTxEchoFilter filtered = OwnTxEchoFilter.filter(decoded);
                 ArrayList<Ft8Message> messages = filtered.kept;
+                // Full duplex (satellite operating): our own downlink coming back
+                // IS the measurement, so put the echoes the filter just dropped
+                // back on screen. Strictly display — `display` feeds only the
+                // message list, the waterfall labels and the decode counter, while
+                // `messages` keeps feeding the auto-sequencer, the SWL/QSO
+                // databases, PSKReporter, the WSJT-X broadcast and the clock-sync
+                // DT samples, none of which may ever act on our own callsign. With
+                // the feature off this is the same list instance as `messages`.
+                // See FullDuplexMonitor.
+                final ArrayList<Ft8Message> display = FullDuplexMonitor.displayList(
+                        messages, filtered.echoes, GeneralVariables.fullDuplexMonitor);
                 // Diagnostic for the "missing other station responses" report: record how
                 // many decodes survived, how many own-echoes were dropped, and whether any
                 // message addressed to us was decoded this cycle. Lets us tell "decoded but
@@ -730,11 +741,28 @@ public class MainViewModel extends ViewModel {
                 }
                 if (messages.size() == 0) {
                     //nothing left after filtering own echoes
-                    // Same overlay refresh as the no-decode case: an all-filtered slot is
-                    // visually silent, so clear the previous slot's labels (normal pass)
-                    // rather than leaving them to be re-stamped.
-                    decodeCycleState.labelsAfterPass(new ArrayList<>(), isDeep);
-                    mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), 0));
+                    if (display.isEmpty()) {
+                        // Same overlay refresh as the no-decode case: an all-filtered slot is
+                        // visually silent, so clear the previous slot's labels (normal pass)
+                        // rather than leaving them to be re-stamped.
+                        decodeCycleState.labelsAfterPass(new ArrayList<>(), isDeep);
+                        mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), 0));
+                        return;
+                    }
+                    // Full duplex, and the only thing that decoded this slot was our
+                    // own signal — the normal case for a TX slot on a quiet
+                    // transponder. Not a silent slot: show the echo on the list and
+                    // the waterfall, then stop here. Everything below this point acts
+                    // on decodes (sequencer, databases, spotting) and must not see an
+                    // own-callsign message, and `messages` is empty anyway.
+                    appendToMessageList(display);
+                    publishFt8MessageList();
+                    decodeCycleState.labelsAfterPass(display, isDeep);
+                    int echoCountAfterPass =
+                            decodeCycleState.countAfterPass(display.size(), isDeep);
+                    mutableIsDecoding.postValue(
+                            decodingMarkerAfterPass(decoded.size(), display.size()));
+                    mutable_Decoded_Counter.postValue(echoCountAfterPass);
                     return;
                 }
 
@@ -751,16 +779,7 @@ public class MainViewModel extends ViewModel {
                     }
                 }
 
-                synchronized (ft8Messages) {
-                    // "Clear every cycle" mode does its wipe in beforeListen (start of the
-                    // cycle), so by here the list is already fresh — just append. The
-                    // excess-trim must hold the same lock: it removes from the list, and
-                    // an unguarded removal can race the snapshot copy in
-                    // publishFt8MessageList().
-                    ft8Messages.addAll(messages);//add messages to list
-                    GeneralVariables.trimToMessageCount(ft8Messages);//remove excess messages; FT8CN limits the total displayable messages
-                }
-
+                appendToMessageList(display);
                 publishFt8MessageList();//post an immutable snapshot so the UI recomposes immediately
                 // Slot-wide mean DT with own-TX echoes already excluded (see
                 // OwnTxEchoFilter.meanTimeOffsetSec). NaN can't happen here — messages
@@ -822,14 +841,18 @@ public class MainViewModel extends ViewModel {
                     ft8TransmitSignal.parseMessageToFunction(messages, true);
                 }
 
-                decodeCycleState.labelsAfterPass(messages, isDeep);
+                // Labels/counts follow what is on screen, so they use `display`:
+                // with full duplex on, our own signal has to be stamped on the
+                // waterfall too — reading its offset off the waterfall against the
+                // TX marker is how the operator measures transponder drift.
+                decodeCycleState.labelsAfterPass(display, isDeep);
 
                 // Take the count from the same atomic update we made, not a re-read of
                 // shared state a concurrently-delivering pass may have advanced since.
-                int decodeCountAfterPass = decodeCycleState.countAfterPass(messages.size(), isDeep);
+                int decodeCountAfterPass = decodeCycleState.countAfterPass(display.size(), isDeep);
 
                 //decode state, triggers marker action in spectrum display
-                mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), messages.size()));
+                mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), display.size()));
 
 
                 // A fresh task per dispatch, bound to *this* pass's messages. slot N's
@@ -867,7 +890,15 @@ public class MainViewModel extends ViewModel {
                     // already in this snapshot and QSO detection is unchanged.
                     final ArrayList<Ft8Message> allMessagesSnapshot;
                     synchronized (ft8Messages) {
-                        allMessagesSnapshot = new ArrayList<>(ft8Messages);
+                        // Own-TX echoes are in ft8Messages when full duplex is on
+                        // (display only). findSwlQso pairs a station's messages into
+                        // a logged QSO, so leaving ours in would let it "hear" us
+                        // working ourselves and write that to the SWL QSO table.
+                        // Off, withoutOwnCallsign has nothing to drop and this is
+                        // the same snapshot the scan always saw.
+                        allMessagesSnapshot = GeneralVariables.fullDuplexMonitor
+                                ? FullDuplexMonitor.withoutOwnCallsign(ft8Messages)
+                                : new ArrayList<>(ft8Messages);
                     }
                     swlQsoList.findSwlQso(messages, allMessagesSnapshot, new SWLQsoList.OnFoundSwlQso() {
                         @Override
@@ -1283,6 +1314,29 @@ public class MainViewModel extends ViewModel {
         clearFt8MessageList();
         if (ft8TransmitSignal != null && !ft8TransmitSignal.isTransmitting()) {
             ft8TransmitSignal.resetToCQ();
+        }
+    }
+
+    /**
+     * Append one decode pass's messages to the displayed list, trimming it back
+     * to the display cap under the same lock.
+     *
+     * <p>"Clear every cycle" mode does its wipe in {@code beforeListen} (start of
+     * the cycle), so by the time a pass gets here the list is already fresh —
+     * this only ever appends. The excess-trim must hold the same monitor: it
+     * removes from the list, and an unguarded removal can race the snapshot copy
+     * in {@link #publishFt8MessageList()}.
+     *
+     * @param messages the pass's display list — with full duplex on this includes
+     *                 our own transmission's echoes, which is why nothing else in
+     *                 the decode pipeline is fed from it (see
+     *                 {@link FullDuplexMonitor})
+     */
+    private void appendToMessageList(ArrayList<Ft8Message> messages) {
+        synchronized (ft8Messages) {
+            ft8Messages.addAll(messages);
+            //remove excess messages; FT8CN limits the total displayable messages
+            GeneralVariables.trimToMessageCount(ft8Messages);
         }
     }
 

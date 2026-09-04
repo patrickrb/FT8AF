@@ -913,11 +913,17 @@
     <string name="settings_input_volume">Input Volume</string>
     <string name="settings_input_volume_desc" formatted="false">RX audio gain applied before decoding (100% = unchanged)</string>
     <string name="settings_input_volume_advice">Applied to incoming audio before decoding. Watch the RX level meter on the waterfall and aim for the green zone; red means clipping.</string>
-    <string name="settings_rx_channel">RX Audio Channel</string>
+    <string name="settings_rx_channel">Receive Audio Channel</string>
     <string name="settings_rx_channel_desc">Which side of a stereo input to decode. Use Left or Right when the radio only feeds one channel.</string>
     <string name="settings_rx_channel_mix">Mix</string>
-    <string name="settings_rx_channel_left">Left</string>
-    <string name="settings_rx_channel_right">Right</string>
+    <string name="settings_tx_channel">Transmit Audio Channel</string>
+    <string name="settings_tx_channel_desc">Which side of a stereo output carries the transmitted audio. Use Left or Right to drive one radio on a splitter cable.</string>
+    <string name="settings_tx_channel_both">Both</string>
+    <string name="settings_channel_left">Left</string>
+    <string name="settings_channel_right">Right</string>
+    <string name="settings_channel_mono_device">This device has only one audio channel, so there is no side to choose.</string>
+    <string name="settings_full_duplex">Full Duplex</string>
+    <string name="settings_full_duplex_desc">Show decodes of your own transmission instead of hiding them. For satellite work: check your own signal strength and the frequency it comes back on.</string>
     <string name="input_level_rx_label" translatable="false">RX</string>
     <string name="input_level_too_low">Low</string>
     <string name="input_level_good">Good</string>

@@ -29,6 +29,15 @@ import java.util.List;
 public final class OwnTxEchoFilter {
     /** Messages to keep — own-TX loopback echoes and junk decodes removed. */
     public final ArrayList<Ft8Message> kept;
+    /**
+     * The own-callsign decodes that were removed from {@link #kept}, in decode
+     * order. Empty on a normal cycle. Full-duplex (satellite) operating shows
+     * these back to the operator as their own downlink — see
+     * {@link FullDuplexMonitor} — so they are retained here rather than simply
+     * counted. Junk decodes are not collected: those are CRC-collision garbage
+     * with nothing to show.
+     */
+    public final ArrayList<Ft8Message> echoes;
     /** Number of own-callsign loopback echoes that were dropped. */
     public final int ownEchoCount;
     /** Number of junk/false decodes (garbage sender callsign) that were dropped. */
@@ -36,9 +45,10 @@ public final class OwnTxEchoFilter {
     /** True if a kept message was addressed to our callsign (a reply to us). */
     public final boolean replyToMePresent;
 
-    private OwnTxEchoFilter(ArrayList<Ft8Message> kept, int ownEchoCount,
-                            int junkCount, boolean replyToMePresent) {
+    private OwnTxEchoFilter(ArrayList<Ft8Message> kept, ArrayList<Ft8Message> echoes,
+                            int ownEchoCount, int junkCount, boolean replyToMePresent) {
         this.kept = kept;
+        this.echoes = echoes;
         this.ownEchoCount = ownEchoCount;
         this.junkCount = junkCount;
         this.replyToMePresent = replyToMePresent;
@@ -54,10 +64,12 @@ public final class OwnTxEchoFilter {
      * "" rather than null, so this is null-safe.
      *
      * @param decoded the raw decode list for one cycle (not modified)
-     * @return the kept messages plus echo/junk/reply diagnostics
+     * @return the kept messages, the dropped own-TX echoes, and echo/junk/reply
+     *         diagnostics
      */
     public static OwnTxEchoFilter filter(List<Ft8Message> decoded) {
         ArrayList<Ft8Message> kept = new ArrayList<>(decoded.size());
+        ArrayList<Ft8Message> echoes = new ArrayList<>();
         int ownEcho = 0;
         int junk = 0;
         boolean replyToMe = false;
@@ -68,6 +80,7 @@ public final class OwnTxEchoFilter {
             }
             if (GeneralVariables.checkIsMyCallsign(m.getCallsignFrom())) {
                 ownEcho++;
+                echoes.add(m);
                 continue;
             }
             if (GeneralVariables.checkIsMyCallsign(m.getCallsignTo())) {
@@ -75,7 +88,7 @@ public final class OwnTxEchoFilter {
             }
             kept.add(m);
         }
-        return new OwnTxEchoFilter(kept, ownEcho, junk, replyToMe);
+        return new OwnTxEchoFilter(kept, echoes, ownEcho, junk, replyToMe);
     }
 
     /**

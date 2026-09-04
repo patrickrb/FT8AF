@@ -278,7 +278,7 @@ public class MicRecorder {
      */
     @SuppressLint("MissingPermission")
     private AudioRecord createAudioRecord(int audioSource) {
-        if (RxAudioChannel.needsStereoCapture(GeneralVariables.rxAudioChannel)) {
+        if (AudioChannelSelect.needsStereoCapture(GeneralVariables.rxAudioChannel)) {
             AudioRecord stereo = openAudioRecord(audioSource, channelConfigStereo);
             if (stereo != null && stereo.getState() == AudioRecord.STATE_INITIALIZED) {
                 captureChannelCount = 2;
@@ -614,7 +614,7 @@ public class MicRecorder {
                             // operator picked before anything downstream sees it,
                             // so the whole decode chain stays mono. Read live so
                             // flipping L<->R applies on the next buffer.
-                            int mono = RxAudioChannel.foldToMono(buffer, bufferReadResult,
+                            int mono = AudioChannelSelect.foldToMono(buffer, bufferReadResult,
                                     GeneralVariables.rxAudioChannel, monoScratch);
                             if (mono > 0) {
                                 onDataListener.onDataReceived(monoScratch, mono);
