@@ -128,6 +128,11 @@ public class UsbAudioDevice {
         for (UsbDevice device : usbManager.getDeviceList().values()) {
             boolean hasInput = false;
             boolean hasOutput = false;
+            // Widest iso endpoint per direction: the streaming interface's alt
+            // settings each expose one endpoint, and the largest packet is the
+            // richest format (stereo where the device can do it).
+            int inputMaxPacket = 0;
+            int outputMaxPacket = 0;
 
             for (int i = 0; i < device.getInterfaceCount(); i++) {
                 UsbInterface iface = device.getInterface(i);
@@ -138,15 +143,23 @@ public class UsbAudioDevice {
                     for (int j = 0; j < iface.getEndpointCount(); j++) {
                         UsbEndpoint ep = iface.getEndpoint(j);
                         if (ep.getType() == UsbConstants.USB_ENDPOINT_XFER_ISOC) {
-                            if (ep.getDirection() == UsbConstants.USB_DIR_IN) hasInput = true;
-                            if (ep.getDirection() == UsbConstants.USB_DIR_OUT) hasOutput = true;
+                            if (ep.getDirection() == UsbConstants.USB_DIR_IN) {
+                                hasInput = true;
+                                inputMaxPacket = Math.max(inputMaxPacket, ep.getMaxPacketSize());
+                            }
+                            if (ep.getDirection() == UsbConstants.USB_DIR_OUT) {
+                                hasOutput = true;
+                                outputMaxPacket = Math.max(outputMaxPacket, ep.getMaxPacketSize());
+                            }
                         }
                     }
                 }
             }
 
             if (hasInput || hasOutput) {
-                result.add(new UsbAudioDeviceInfo(device, hasInput, hasOutput));
+                result.add(new UsbAudioDeviceInfo(device, hasInput, hasOutput,
+                        enumeratedChannels(hasInput, inputMaxPacket),
+                        enumeratedChannels(hasOutput, outputMaxPacket)));
             }
         }
         return result;
@@ -403,6 +416,17 @@ public class UsbAudioDevice {
      *
      * <p>Package-visible for tests.
      */
+    /**
+     * Enumeration-time channel guess for a direction: the endpoint's widest
+     * {@code wMaxPacketSize} judged at the provisional 48 kHz, or
+     * {@link AudioChannelCapability#UNKNOWN} when the direction is absent or
+     * the descriptor gave no packet size to judge from.
+     */
+    static int enumeratedChannels(boolean present, int maxPacketSize) {
+        if (!present || maxPacketSize <= 0) return AudioChannelCapability.UNKNOWN;
+        return channelsForMaxPacketSize(maxPacketSize, 48000);
+    }
+
     static int channelsForMaxPacketSize(int maxPacketSize, int sampleRateHz) {
         if (!isPlausibleRate(sampleRateHz)) return 1;
         double bytesPerFramePerChannel = (sampleRateHz / 1000.0) * 2.0;
@@ -703,15 +727,18 @@ public class UsbAudioDevice {
             com.k1af.ft8af.GeneralVariables.fileLog(String.format(
                     "UsbAudioDevice: trying libusb native capture "
                             + "fd=%d iface=%d alt=%d ep=0x%02x maxPkt=%d "
-                            + "inputRate=%d ch=%d targetRate=%d",
+                            + "inputRate=%d ch=%d targetRate=%d chanSel=%d",
                     fd, ifaceNum, altSet, epAddr, maxPkt,
-                    inputSampleRate, inputChannels, targetSampleRate));
+                    inputSampleRate, inputChannels, targetSampleRate,
+                    AudioChannelSelect.clamp(com.k1af.ft8af.GeneralVariables.rxAudioChannel)));
 
             final AudioInputCallback javaCb = callback;
             long handle = UsbAudioNative.nativeStart(
                     fd, ifaceNum, altSet, epAddr, maxPkt,
                     inputSampleRate, inputChannels, /*bytesPerSample=*/2,
                     targetSampleRate,
+                    AudioChannelSelect.clamp(
+                            com.k1af.ft8af.GeneralVariables.rxAudioChannel),
                     new UsbAudioNative.AudioInputCallback() {
                         @Override
                         public void onAudioData(float[] data, int length) {
@@ -843,18 +870,24 @@ public class UsbAudioDevice {
                 int bytesReceived = buf.remaining();
                 int totalSamples = bytesReceived / 2; // 16-bit = 2 bytes
 
-                // int16 -> float mono (average L+R when stereo, matching the
-                // native libusb path — the old code dropped the right channel).
+                // int16 -> float mono. When stereo, fold per the operator's RX
+                // channel selection (default: average L+R, matching the native
+                // libusb path — the old code always dropped the right channel).
                 int monoSamples = (inputChannels == 2) ? totalSamples / 2 : totalSamples;
                 if (monoBuffer.length < monoSamples) {
                     monoBuffer = new float[monoSamples];
                 }
                 int monoCount = 0;
                 if (inputChannels == 2) {
+                    // Snapshot once per packet so a mid-packet settings change
+                    // can't splice two different channels into one buffer.
+                    final int channelSelect =
+                            com.k1af.ft8af.GeneralVariables.rxAudioChannel;
                     while (buf.remaining() >= 4 && monoCount < monoSamples) {
                         short l = buf.getShort();
                         short r = buf.getShort();
-                        monoBuffer[monoCount++] = (l + r) * (0.5f / 32768.0f);
+                        monoBuffer[monoCount++] =
+                                AudioChannelSelect.foldPcmFrame(l, r, channelSelect);
                     }
                 } else {
                     while (buf.remaining() >= 2 && monoCount < monoSamples) {
@@ -977,19 +1010,13 @@ public class UsbAudioDevice {
             resampled = audioData;
         }
 
-        // Convert mono float to 16-bit PCM (stereo if device is stereo)
+        // Convert mono float to 16-bit PCM (stereo if device is stereo). The TX
+        // channel selection is snapshotted once for the whole buffer: a settings
+        // change mid-over must not splice two channel layouts into one
+        // transmission.
         int samplesPerChannel = resampled.length;
-        byte[] pcmData = new byte[samplesPerChannel * outputChannels * 2];
-        ByteBuffer bb = ByteBuffer.wrap(pcmData);
-        bb.order(ByteOrder.LITTLE_ENDIAN);
-
-        for (int i = 0; i < samplesPerChannel; i++) {
-            short s = (short) Math.max(-32768, Math.min(32767, resampled[i] * 32768.0f));
-            bb.putShort(s); // left (or mono)
-            if (outputChannels == 2) {
-                bb.putShort(s); // right = same as left
-            }
-        }
+        byte[] pcmData = interleavePcm16(resampled, outputChannels,
+                com.k1af.ft8af.GeneralVariables.txAudioChannel);
 
         // Prefer the libusb-backed native path. Same reason as input: on hosts
         // where Android's UsbRequest can't drive iso (notably car-dash kernels)
@@ -1182,6 +1209,45 @@ public class UsbAudioDevice {
         return TxUpsampler.resample(input, fromRate, toRate);
     }
 
+    /**
+     * Lay a mono float waveform out as the little-endian int16 PCM stream the
+     * device's OUT endpoint expects, honouring the operator's TX channel
+     * selection on a stereo device.
+     *
+     * <p>On a mono device there is one channel and it always carries the audio —
+     * {@link AudioChannelCapability#effectiveSelection} pins the selection to
+     * BOTH and the layout is exactly what it always was. On a stereo device the
+     * excluded channel is written as explicit digital silence, not skipped: a UAC
+     * device plays precisely the bytes it is handed, so anything else would go
+     * out as noise on the side the operator asked to keep quiet.
+     *
+     * @param mono           full-scale samples in [-1, 1], already at the
+     *                       device's output rate
+     * @param outputChannels the endpoint's channel count, 1 or 2
+     * @param txChannel      the operator's {@link AudioChannelSelect} choice
+     * @return {@code mono.length * outputChannels * 2} bytes, interleaved L,R
+     */
+    static byte[] interleavePcm16(float[] mono, int outputChannels, int txChannel) {
+        byte[] pcmData = new byte[mono.length * outputChannels * 2];
+        ByteBuffer bb = ByteBuffer.wrap(pcmData);
+        bb.order(ByteOrder.LITTLE_ENDIAN);
+        final int selection = AudioChannelCapability.effectiveSelection(txChannel, outputChannels);
+        final boolean writeLeft = AudioChannelSelect.writesChannel(
+                selection, AudioChannelSelect.CHANNEL_LEFT);
+        final boolean writeRight = AudioChannelSelect.writesChannel(
+                selection, AudioChannelSelect.CHANNEL_RIGHT);
+        for (float sample : mono) {
+            short s = (short) Math.max(-32768, Math.min(32767, sample * 32768.0f));
+            if (outputChannels == 2) {
+                bb.putShort(writeLeft ? s : 0);  // left
+                bb.putShort(writeRight ? s : 0); // right
+            } else {
+                bb.putShort(s); // mono device: its one channel always carries the audio
+            }
+        }
+        return pcmData;
+    }
+
     public void close() {
         stopCapture();
         if (connection != null) {
@@ -1354,6 +1420,15 @@ public class UsbAudioDevice {
 
     public boolean hasInput() { return endpointIn != null; }
     public boolean hasOutput() { return endpointOut != null; }
+    /**
+     * Channels the capture endpoint streams (1 or 2), derived from its
+     * {@code wMaxPacketSize} at the negotiated rate. Read by the settings screen
+     * to tell whether an RX left/right selection can do anything on this device.
+     */
+    public int getInputChannels() { return inputChannels; }
+    /** Channels the playback endpoint streams (1 or 2); the TX mirror of
+     *  {@link #getInputChannels()}. */
+    public int getOutputChannels() { return outputChannels; }
     public UsbDevice getUsbDevice() { return usbDevice; }
     public int getInputSampleRate() { return inputSampleRate; }
     public int getOutputSampleRate() { return outputSampleRate; }
@@ -1397,11 +1472,31 @@ public class UsbAudioDevice {
         public final UsbDevice device;
         public final boolean hasInput;
         public final boolean hasOutput;
+        /**
+         * Channels the capture endpoint streams (1 or 2) as judged from its
+         * descriptor at enumeration, or {@link AudioChannelCapability#UNKNOWN}
+         * when the device has no input. Lets the settings screen decide whether
+         * an RX/TX left-right selection can apply to a USB-direct device that is
+         * not currently open — the TX side never holds one open between overs.
+         * Same 48 kHz provisional heuristic {@link #open} starts from; the
+         * negotiated rate can refine it once a stream is active.
+         */
+        public final int inputChannels;
+        /** TX mirror of {@link #inputChannels}. */
+        public final int outputChannels;
 
         public UsbAudioDeviceInfo(UsbDevice device, boolean hasInput, boolean hasOutput) {
+            this(device, hasInput, hasOutput,
+                    AudioChannelCapability.UNKNOWN, AudioChannelCapability.UNKNOWN);
+        }
+
+        public UsbAudioDeviceInfo(UsbDevice device, boolean hasInput, boolean hasOutput,
+                                  int inputChannels, int outputChannels) {
             this.device = device;
             this.hasInput = hasInput;
             this.hasOutput = hasOutput;
+            this.inputChannels = inputChannels;
+            this.outputChannels = outputChannels;
         }
 
         public String getDisplayName() {

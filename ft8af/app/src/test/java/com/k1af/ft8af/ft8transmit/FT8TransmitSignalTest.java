@@ -747,4 +747,13 @@ public class FT8TransmitSignalTest {
         assertThat(FT8TransmitSignal.isStaleEvidence(true, 6, 1)).isFalse();
         assertThat(FT8TransmitSignal.isStaleEvidence(true, 6, 2)).isFalse();
     }
+
+    @Test
+    public void outputMaxChannels_noExplicitDeviceIsUnknown() {
+        // Android's "Default" sink: there is no AudioDeviceInfo to ask, and
+        // UNKNOWN is what keeps the operator's TX left/right choice in force
+        // rather than silently ignoring it on a routed-USB setup.
+        assertThat(FT8TransmitSignal.outputMaxChannels(null))
+                .isEqualTo(com.k1af.ft8af.wave.AudioChannelCapability.UNKNOWN);
+    }
 }

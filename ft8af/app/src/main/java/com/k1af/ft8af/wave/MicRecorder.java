@@ -31,6 +31,12 @@ public class MicRecorder {
     private int bufferSize = 0;//minimum buffer size
     private static final int sampleRateInHz = 12000;//sampling rate
     private static final int channelConfig = AudioFormat.CHANNEL_IN_MONO; //mono
+    private static final int channelConfigStereo = AudioFormat.CHANNEL_IN_STEREO;
+    // How many channels the live AudioRecord is capturing (1 or 2). Stereo is
+    // only opened when the operator picked a specific RX channel; see
+    // createAudioRecord(). Volatile because reinitialize() writes it from
+    // another thread than the reader loop that snapshots it.
+    private volatile int captureChannelCount = 1;
     //private static final int audioFormat = AudioFormat.ENCODING_PCM_16BIT; //quantization bit depth
     private static final int audioFormat = AudioFormat.ENCODING_PCM_FLOAT; //quantization bit depth
 
@@ -159,20 +165,10 @@ public class MicRecorder {
                     "MicRecorder: USB audio open FAILED, falling back to AudioRecord");
         }
 
-        //calculate minimum buffer size
-        bufferSize = safeBufferSize(
-                AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat));
-
         int audioSource = chooseAudioSource(Build.VERSION.SDK_INT, isUnprocessedSupported());
         String srcName = audioSourceName(audioSource);
-        try {
-            audioRecord = new AudioRecord(audioSource, sampleRateInHz
-                    , channelConfig, audioFormat, bufferSize);//create AudioRecorder object
-        } catch (Exception e) {
-            GeneralVariables.fileLog(
-                    "MicRecorder: AudioRecord init CRASHED: " + e.getClass().getSimpleName()
-                            + ": " + e.getMessage());
-            Log.e(TAG, "AudioRecord init failed", e);
+        audioRecord = createAudioRecord(audioSource); // also sets bufferSize
+        if (audioRecord == null) {
             return; // audioRecord stays null — start() will be a no-op
         }
 
@@ -199,6 +195,35 @@ public class MicRecorder {
      */
     public boolean isUsingUsbDirect() {
         return useUsbAudio;
+    }
+
+    /**
+     * Whether changing the RX channel selection from {@code from} to {@code to}
+     * needs the capture torn down and reopened, or whether the running capture
+     * will simply pick the new value up.
+     *
+     * <p>A reopen is expensive — up to a second joining the capture thread, and
+     * on a USB-direct device a full interface release/re-claim plus a libusb
+     * session restart — so it is only worth paying where the open configuration
+     * actually changes:
+     *
+     * <ul>
+     *   <li>the {@code AudioRecord} path opens mono for Mix and stereo for
+     *       Left/Right, so crossing that line needs a reopen; Left ↔ Right does
+     *       not, because the reader loop folds from the live setting;
+     *   <li>the USB-direct paths: the {@code UsbRequest} loop also reads the
+     *       setting live, but the libusb session bakes its fold in at
+     *       {@code nativeStart} and the two are not told apart here, so any
+     *       change on USB-direct reopens.
+     * </ul>
+     *
+     * @param usbDirect {@link #isUsingUsbDirect()}
+     */
+    static boolean reopenRequiredForChannelChange(int from, int to, boolean usbDirect) {
+        if (AudioChannelSelect.clamp(from) == AudioChannelSelect.clamp(to)) return false;
+        if (usbDirect) return true;
+        return AudioChannelSelect.needsStereoCapture(from)
+                != AudioChannelSelect.needsStereoCapture(to);
     }
 
     /**
@@ -264,6 +289,68 @@ public class MicRecorder {
         GeneralVariables.fileLog("openUsbAudioInput: SUCCESS at "
                 + usbDev.getInputSampleRate() + " Hz");
         return usbDev;
+    }
+
+    /**
+     * Open the AudioRecord for the operator's current RX channel selection, and
+     * set {@link #bufferSize} / {@link #captureChannelCount} to match.
+     *
+     * <p>"Mix" (the default) keeps the historical mono open: the audio framework
+     * already downmixes a stereo source, so that path is byte-for-byte what it
+     * always was. Left/Right need both channels delivered to us, so we ask for
+     * stereo and pick the wanted side in the reader loop. A device that won't
+     * give us stereo at 12 kHz falls back to mono — both channels would be
+     * identical there anyway, so the selection is simply a no-op rather than a
+     * dead audio input.
+     *
+     * @return the opened AudioRecord, or null when even the mono open failed
+     */
+    @SuppressLint("MissingPermission")
+    private AudioRecord createAudioRecord(int audioSource) {
+        if (AudioChannelSelect.needsStereoCapture(GeneralVariables.rxAudioChannel)) {
+            AudioRecord stereo = openAudioRecord(audioSource, channelConfigStereo);
+            if (stereo != null && stereo.getState() == AudioRecord.STATE_INITIALIZED) {
+                captureChannelCount = 2;
+                GeneralVariables.fileLog("MicRecorder: stereo capture open, channel select="
+                        + GeneralVariables.rxAudioChannel);
+                return stereo;
+            }
+            if (stereo != null) {
+                try {
+                    stereo.release();
+                } catch (Exception e) {
+                    Log.d(TAG, "createAudioRecord: error releasing stereo probe: "
+                            + e.getMessage());
+                }
+            }
+            GeneralVariables.fileLog("MicRecorder: stereo capture unavailable, using mono "
+                    + "(L/R channel select has no effect)");
+        }
+        captureChannelCount = 1;
+        return openAudioRecord(audioSource, channelConfig);
+    }
+
+    /**
+     * Construct one AudioRecord, sizing {@link #bufferSize} for the given
+     * channel mask. Returns null if the constructor threw; the caller decides
+     * whether that is fatal or worth a fallback.
+     */
+    @SuppressLint("MissingPermission")
+    private AudioRecord openAudioRecord(int audioSource, int channelMask) {
+        int size = safeBufferSize(
+                AudioRecord.getMinBufferSize(sampleRateInHz, channelMask, audioFormat));
+        try {
+            AudioRecord rec = new AudioRecord(audioSource, sampleRateInHz,
+                    channelMask, audioFormat, size);
+            bufferSize = size;
+            return rec;
+        } catch (Exception e) {
+            GeneralVariables.fileLog(
+                    "MicRecorder: AudioRecord init CRASHED: " + e.getClass().getSimpleName()
+                            + ": " + e.getMessage());
+            Log.e(TAG, "AudioRecord init failed", e);
+            return null;
+        }
     }
 
     /**
@@ -483,6 +570,13 @@ public class MicRecorder {
         final AudioRecord rec = audioRecord;
         final int myGeneration = captureGeneration;
         float[] buffer = new float[bufferSize];
+        // Snapshotted with `rec`: the fold below must match the channel count of
+        // the AudioRecord this thread owns, not whatever a later reinit opened.
+        // The scratch buffer is allocated once here — reads never exceed
+        // buffer.length, so it never has to grow on the audio hot path.
+        final int myChannelCount = captureChannelCount;
+        final float[] monoScratch =
+                (myChannelCount == 2) ? new float[buffer.length / 2] : null;
         try {
             rec.startRecording();//start recording
         }catch (Exception e){
@@ -544,7 +638,19 @@ public class MicRecorder {
                     }
 
                     if (onDataListener!=null && bufferReadResult > 0){
-                        onDataListener.onDataReceived(buffer,bufferReadResult);
+                        if (monoScratch != null) {
+                            // Stereo open: fold L/R to the single channel the
+                            // operator picked before anything downstream sees it,
+                            // so the whole decode chain stays mono. Read live so
+                            // flipping L<->R applies on the next buffer.
+                            int mono = AudioChannelSelect.foldToMono(buffer, bufferReadResult,
+                                    GeneralVariables.rxAudioChannel, monoScratch);
+                            if (mono > 0) {
+                                onDataListener.onDataReceived(monoScratch, mono);
+                            }
+                        } else {
+                            onDataListener.onDataReceived(buffer,bufferReadResult);
+                        }
                     }
                 }
                 try {
@@ -652,21 +758,11 @@ public class MicRecorder {
 
         // Set up standard AudioRecord if not using USB audio
         if (!useUsbAudio) {
-            bufferSize = safeBufferSize(
-                    AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat));
             int audioSource = chooseAudioSource(Build.VERSION.SDK_INT, isUnprocessedSupported());
             GeneralVariables.fileLog(
                     "MicRecorder: reinit AudioRecord(" + audioSourceName(audioSource) + ")");
-            try {
-                audioRecord = new AudioRecord(audioSource, sampleRateInHz,
-                        channelConfig, audioFormat, bufferSize);
-            } catch (Exception e) {
-                GeneralVariables.fileLog(
-                        "MicRecorder: reinit AudioRecord CRASHED: " + e.getClass().getSimpleName()
-                                + ": " + e.getMessage());
-                Log.e(TAG, "reinitialize: AudioRecord init failed", e);
-                // audioRecord stays null — start() will be a no-op
-            }
+            // audioRecord stays null on failure — start() will be a no-op
+            audioRecord = createAudioRecord(audioSource); // also sets bufferSize
 
             if (audioRecord != null && GeneralVariables.audioInputDeviceId > 0) {
                 AudioDeviceInfo deviceInfo = findAudioDeviceById(

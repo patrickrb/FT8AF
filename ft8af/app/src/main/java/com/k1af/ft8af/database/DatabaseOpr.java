@@ -23,6 +23,7 @@ import android.util.Log;
 
 import com.k1af.ft8af.FT8Common;
 import com.k1af.ft8af.Ft8Message;
+import com.k1af.ft8af.FullDuplexMonitor;
 import com.k1af.ft8af.GeneralVariables;
 import com.k1af.ft8af.R;
 import com.k1af.ft8af.callsign.CallsignDatabase;
@@ -40,6 +41,7 @@ import com.k1af.ft8af.rigs.BaseRigOperation;
 import com.k1af.ft8af.timer.UtcTimer;
 import com.k1af.ft8af.util.Streams;
 import com.k1af.ft8af.wave.InputAudioLevel;
+import com.k1af.ft8af.wave.AudioChannelSelect;
 
 import org.jetbrains.annotations.Nullable;
 import org.json.JSONArray;
@@ -2873,6 +2875,21 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     //out-of-range value through here at startup. Non-numeric
                     //falls back to unity; numeric clamps to 0..200%.
                     GeneralVariables.inputGainPercent = InputAudioLevel.parseGainPercent(result);
+                }
+                if (name.equalsIgnoreCase(AudioChannelSelect.RX_CONFIG_KEY)) {//RX stereo channel select
+                    //0=mix L+R (default), 1=left only, 2=right only. Parsed
+                    //defensively — an imported/corrupted value falls back to mix.
+                    GeneralVariables.rxAudioChannel = AudioChannelSelect.parse(result);
+                }
+                if (name.equalsIgnoreCase(AudioChannelSelect.TX_CONFIG_KEY)) {//TX stereo channel select
+                    //0=both channels (default), 1=left only, 2=right only. Same
+                    //defensive parse as the RX key; anything else falls back to both.
+                    GeneralVariables.txAudioChannel = AudioChannelSelect.parse(result);
+                }
+                if (name.equalsIgnoreCase(FullDuplexMonitor.CONFIG_KEY)) {//Full duplex (satellite) monitoring
+                    //Off unless explicitly "1": show our own transmission's decodes
+                    //rather than filtering them out as loopback echoes.
+                    GeneralVariables.fullDuplexMonitor = result.equals("1");
                 }
                 if (name.equalsIgnoreCase("showTxVolumeSlider")) {//Inline TX volume slider visibility
                     GeneralVariables.showTxVolumeSlider = !result.equals("0");

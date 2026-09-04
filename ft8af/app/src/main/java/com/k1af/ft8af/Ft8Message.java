@@ -98,6 +98,17 @@ public class Ft8Message {
 
     public boolean isWeakSignal=false;
 
+    /**
+     * True when this decode is our own transmission heard back — set by
+     * {@link OwnTxEchoFilter} on the echoes it separates out, which reach the
+     * displayed list only under full-duplex monitoring ({@link FullDuplexMonitor}).
+     * Every consumer of the message list that acts on a decode (map markers, the
+     * chip filters, the SWL scan, tap-to-call) checks this one flag rather than
+     * re-deriving "is this us?" from the callsign, so the display-only promise
+     * holds in one place.
+     */
+    public boolean isOwnEcho = false;
+
     /** @return true when the decoder actually set an SNR value for this message. */
     public boolean hasSnr() {
         return snr != SNR_UNKNOWN;

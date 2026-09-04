@@ -93,9 +93,10 @@ internal fun buildQsoLog(
         // hashed callsigns (e.g. "<CALL>" → "CALL") so they match displayCallsign. (#255)
         val from = msg.getCallsignFrom()
         // Only the target station's traffic appears in this panel. Own-callsign
-        // loopback (from == us) is filtered upstream (OwnTxEchoFilter) and there
-        // is deliberately no decoded-list TX branch, so anything not from the
-        // target is skipped here — TX rows come solely from synthTx below.
+        // decodes are normally filtered upstream (OwnTxEchoFilter), and full
+        // duplex deliberately puts them back in the list; either way they are not
+        // from the target, so this guard skips them and there is no TX row
+        // duplicated against synthTx. TX rows come solely from synthTx below.
         if (!from.equals(displayCallsign, ignoreCase = true)) return@forEach
 
         // Skip CQ/DE/QRZ messages — the target is calling for contacts, not
