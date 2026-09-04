@@ -239,6 +239,37 @@ fn main() {
         return;
     }
 
+    // Debug helper: `ft8af --list-audio` prints cpal's enumerated input/output
+    // devices and exits -- same idea as --list-rigs, verifies device
+    // enumeration without needing to click through the GUI (native <select>
+    // popups render as a separate top-level X window on Linux, so they don't
+    // show up in a window-scoped screenshot either).
+    if std::env::args().any(|a| a == "--list-audio") {
+        let inputs = audio::list_input_devices();
+        println!("Input devices ({}):", inputs.len());
+        for d in inputs.iter() {
+            println!(
+                "  {}{} -- {} Hz, {} ch",
+                if d.is_default { "* " } else { "  " },
+                d.name,
+                d.default_sample_rate,
+                d.channels
+            );
+        }
+        let outputs = audio::list_output_devices();
+        println!("Output devices ({}):", outputs.len());
+        for d in outputs.iter() {
+            println!(
+                "  {}{} -- {} Hz, {} ch",
+                if d.is_default { "* " } else { "  " },
+                d.name,
+                d.default_sample_rate,
+                d.channels
+            );
+        }
+        return;
+    }
+
     let data_dir = app_data_dir();
     let _ = std::fs::create_dir_all(&data_dir);
     let db = Arc::new(

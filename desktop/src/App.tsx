@@ -292,7 +292,7 @@ function TopBar(props: {
           {txGain}%
         </span>
       </span>
-      <select value={dialHz} onChange={(e) => onBand(parseInt(e.target.value, 10))}>
+      <select id="band-select" value={dialHz} onChange={(e) => onBand(parseInt(e.target.value, 10))}>
         {bands.map((b) => (
           <option key={b.name} value={b.dial_hz}>
             {b.name} · {(b.dial_hz / 1e6).toFixed(3)}
@@ -772,6 +772,7 @@ function SettingsScreen(props: {
           <div className="field">
             <label>Input device (RX)</label>
             <select
+              id="audio-input-select"
               value={input}
               onChange={(e) => {
                 setInput(e.target.value);
@@ -789,6 +790,7 @@ function SettingsScreen(props: {
           <div className="field">
             <label>Output device (TX)</label>
             <select
+              id="audio-output-select"
               value={output}
               onChange={(e) => {
                 setOutput(e.target.value);
@@ -843,6 +845,7 @@ function SettingsScreen(props: {
           <div className="field">
             <label>Backend</label>
             <select
+              id="rig-backend-select"
               value={rigCfg.backend}
               onChange={(e) => setRigCfg({ ...rigCfg, backend: e.target.value as RigConfig["backend"] })}
             >
@@ -859,6 +862,7 @@ function SettingsScreen(props: {
                 <label>Radio {hamlibRigs.length > 0 ? `(${hamlibRigs.length} supported)` : ""}</label>
                 {hamlibRigs.length > 0 ? (
                   <select
+                    id="rig-radio-select"
                     value={rigCfg.hamlib_model}
                     onChange={(e) =>
                       setRigCfg({ ...rigCfg, hamlib_model: parseInt(e.target.value, 10) })
@@ -884,6 +888,7 @@ function SettingsScreen(props: {
               <div className="field">
                 <label>Connection</label>
                 <select
+                  id="rig-connection-select"
                   value={rigCfg.hamlib_network ? "network" : "serial"}
                   onChange={(e) => setRigCfg({ ...rigCfg, hamlib_network: e.target.value === "network" })}
                 >
@@ -913,7 +918,7 @@ function SettingsScreen(props: {
                   <div className="field">
                     <label>Serial port</label>
                     <div className="row">
-                      <select value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
+                      <select id="rig-serial-port-select" value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
                         <option value="">(none — e.g. Dummy)</option>
                         {ports.map((p) => (
                           <option key={p.name} value={p.name}>
@@ -929,6 +934,7 @@ function SettingsScreen(props: {
                   <div className="field">
                     <label>Baud</label>
                     <select
+                      id="rig-baud-select"
                       value={rigCfg.baud}
                       onChange={(e) => setRigCfg({ ...rigCfg, baud: parseInt(e.target.value, 10) })}
                     >
@@ -988,7 +994,7 @@ function SettingsScreen(props: {
               <div className="field">
                 <label>Serial port</label>
                 <div className="row">
-                  <select value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
+                  <select id="rig-serial-port-select" value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
                     <option value="">— select —</option>
                     {ports.map((p) => (
                       <option key={p.name} value={p.name}>
@@ -1005,6 +1011,7 @@ function SettingsScreen(props: {
                 <div className="field">
                   <label>Baud</label>
                   <select
+                    id="rig-baud-select"
                     value={rigCfg.baud}
                     onChange={(e) => setRigCfg({ ...rigCfg, baud: parseInt(e.target.value, 10) })}
                   >
@@ -1081,6 +1088,7 @@ function SettingsScreen(props: {
           <div className="field">
             <label>Window function</label>
             <select
+              id="wf-window-select"
               value={wfCfg.window}
               onChange={(e) => applyWfCfg({ ...wfCfg, window: e.target.value as WfWindow })}
             >
@@ -1094,6 +1102,7 @@ function SettingsScreen(props: {
           <div className="field">
             <label>FFT size</label>
             <select
+              id="wf-fft-size-select"
               value={wfCfg.fft_size}
               onChange={(e) => applyWfCfg({ ...wfCfg, fft_size: parseInt(e.target.value, 10) })}
             >
@@ -1107,6 +1116,7 @@ function SettingsScreen(props: {
           <div className="field">
             <label>Averaging (Welch segments per row)</label>
             <select
+              id="wf-avg-select"
               value={wfCfg.avg}
               onChange={(e) => applyWfCfg({ ...wfCfg, avg: parseInt(e.target.value, 10) })}
             >

@@ -48,14 +48,27 @@ select, input {
   font-size: 13px;
 }
 
-/* Scoped fix: only the Rig control "Display name" field, targeted by its
-   placeholder text -- NOT a change to the global select/input rule above.
-   Overriding color there broke real keyboard input entirely (confirmed via
-   repeated A/B testing with a real keyboard + xev, not just synthetic
-   input) -- see project memory. This narrower, single-field override was
-   verified safe: readable white text, typing still works normally. */
+/* Scoped test: only the Rig control "Display name" field, targeted by its
+   placeholder text (no JSX/rebuild needed) -- not touching the global
+   select/input rule, which broke real keyboard input when modified. */
 input[placeholder="e.g. Flex 6400"] {
   color: #fff;
+}
+
+/* Scoped: Radio/Backend/Connection/Serial port/Baud/Band selects, each
+   targeted by its own id -- not the shared select/input rule. */
+#band-select,
+#rig-backend-select,
+#rig-radio-select,
+#rig-connection-select,
+#rig-serial-port-select,
+#rig-baud-select,
+#audio-input-select,
+#audio-output-select,
+#wf-window-select,
+#wf-fft-size-select,
+#wf-avg-select {
+  color: #000;
 }
 
 .topbar {
