@@ -42,6 +42,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 select, input {
   background: var(--panel);
   color: #000;
+  caret-color: #000;
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 6px 8px;
