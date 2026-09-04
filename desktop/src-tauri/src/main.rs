@@ -2,6 +2,7 @@
 // exposes commands to the web UI, and forwards engine events to the webview.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -191,6 +192,41 @@ fn set_waterfall_config(state: State<AppState>, config: WfConfig) {
     state.engine.send(EngineCommand::SetWaterfallConfig(config));
 }
 
+fn app_data_dir() -> PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("FT8AF")
+}
+
+// The compiled-in baseline -- only this constant needs a rebuild to change;
+// everything a user actually edits lives at styles_path() on disk instead.
+const DEFAULT_STYLES_CSS: &str = include_str!("../../public/styles.css");
+
+fn styles_path() -> PathBuf {
+    app_data_dir().join("styles.css")
+}
+
+#[tauri::command]
+fn get_custom_css() -> String {
+    // Read from disk on every call, not from the Vite/Tauri-bundled frontend
+    // -- Tauri embeds frontendDist into the compiled binary at build time
+    // (confirmed directly: editing the bundled dist/styles.css after a build
+    // and relaunching the same binary had zero effect), so anything served
+    // from there needs a full rebuild for every change. This file lives
+    // outside that embed entirely, so editing it just needs an app relaunch
+    // -- the whole point, since this stylesheet is expected to change often.
+    let path = styles_path();
+    match std::fs::read_to_string(&path) {
+        Ok(css) => css,
+        Err(_) => {
+            // First run: seed the file so there's something to open and edit.
+            let _ = std::fs::create_dir_all(app_data_dir());
+            let _ = std::fs::write(&path, DEFAULT_STYLES_CSS);
+            DEFAULT_STYLES_CSS.to_string()
+        }
+    }
+}
+
 fn main() {
     // Debug helper: `ft8af --list-rigs` prints the Hamlib-enumerated rig count
     // and exits — verifies the bundled Hamlib library loads without the GUI.
@@ -203,9 +239,7 @@ fn main() {
         return;
     }
 
-    let data_dir = dirs::data_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("FT8AF");
+    let data_dir = app_data_dir();
     let _ = std::fs::create_dir_all(&data_dir);
     let db = Arc::new(
         Db::open(data_dir.join("ft8af.sqlite")).expect("failed to open database"),
@@ -268,6 +302,7 @@ fn main() {
             set_config,
             all_config,
             set_waterfall_config,
+            get_custom_css,
         ])
         .run(tauri::generate_context!())
         .expect("error running FT8AF");
