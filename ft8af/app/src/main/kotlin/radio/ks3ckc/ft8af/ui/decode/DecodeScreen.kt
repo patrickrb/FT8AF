@@ -552,6 +552,26 @@ internal fun filterMessages(
     messages: List<Ft8Message>,
     filter: String,
 ): List<Ft8Message> {
+    // Our own transmission's echoes (full-duplex monitoring) are a measurement,
+    // not a station to work: they belong on the unfiltered list, where the
+    // operator reads their own SNR and offset, and nowhere else. Every chip and
+    // every "show only" setting is a question about other stations — a CQ chip
+    // must not offer our own CQ, "Needed" must not list us, and "DX only" must
+    // not hide the very row the feature was turned on to see. So echoes bypass
+    // the whole pipeline under "All" and are dropped under any chip.
+    val others = messages.filterNot { it.isOwnEcho }
+    val filtered = filterOtherStations(others, filter)
+    if (filter != "All" || others.size == messages.size) return filtered
+    // Re-merge in list order so the echo sits where it decoded, not at the end.
+    val kept = filtered.toHashSet()
+    return messages.filter { it.isOwnEcho || it in kept }
+}
+
+/** [filterMessages] for the decodes that are other stations — see there. */
+private fun filterOtherStations(
+    messages: List<Ft8Message>,
+    filter: String,
+): List<Ft8Message> {
     // Base stage: always-on blocklist + settings-driven "show only" filters.
     // Applied before the chip switch so they AND with whatever chip is selected.
     var base = messages.filterNot { GeneralVariables.checkIsBlockedMessage(it) }

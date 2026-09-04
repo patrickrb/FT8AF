@@ -147,6 +147,27 @@ public class HamRecorder {
      * Android-routed USB input); false for direct-libusb USB capture and for
      * LAN audio sources (ICOM WiFi / Flex), where the capture stack is free.
      */
+    /**
+     * Whether RX audio comes from {@link MicRecorder} (the phone mic, an
+     * Android-routed device, or a USB-direct capture) rather than a network rig
+     * (Icom WLAN, Flex, X6100, tr-uSDX over CAT) that feeds
+     * {@link #doOnWaveDataReceived} directly. The RX channel selector only
+     * applies to the former — network rigs hand us mono already — so the
+     * settings screen greys it out when this is false.
+     */
+    public boolean isMicSource() {
+        return isMicRecord;
+    }
+
+    /**
+     * Whether a settings change from {@code from} to {@code to} on the RX
+     * channel selector needs the capture reopened. See
+     * {@link MicRecorder#reopenRequiredForChannelChange}.
+     */
+    public boolean rxChannelChangeNeedsReopen(int from, int to) {
+        return MicRecorder.reopenRequiredForChannelChange(from, to, micRecorder.isUsingUsbDirect());
+    }
+
     public boolean isPhoneMicInUse() {
         return phoneMicCaptureInUse(isRunning, isMicRecord, micRecorder.isUsingUsbDirect());
     }

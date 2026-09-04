@@ -121,6 +121,37 @@ public class GeneralVariables {
     // before resampling/decoding. 1.0 = 100% = unchanged behavior. Persisted
     // under the "inputVolume" config key as a percent (0..200).
     public static volatile float inputGainPercent = 1.0f;
+
+    // RX audio channel selection for stereo inputs: which side of a stereo
+    // source feeds the decoder. AudioChannelSelect.BOTH (the default) averages L+R,
+    // exactly as every build before this did; LEFT/RIGHT take one channel and
+    // discard the other, for splitter cables and dual-receiver rigs that carry
+    // the wanted audio on one side only. Persisted under
+    // AudioChannelSelect.RX_CONFIG_KEY; read live on the audio hot path, hence volatile.
+    public static volatile int rxAudioChannel = com.k1af.ft8af.wave.AudioChannelSelect.BOTH;
+
+    // TX audio channel selection, the transmit mirror of rxAudioChannel: which
+    // side of a stereo sink carries the generated waveform. BOTH (the default)
+    // sends the same audio to each channel, exactly as every build before this
+    // did — on the AudioTrack path that stays a mono open, which the framework
+    // duplicates. LEFT/RIGHT open stereo and silence the other side, so a
+    // splitter cable drives only the intended rig. Persisted under
+    // AudioChannelSelect.TX_CONFIG_KEY; read on the TX path, hence volatile.
+    public static volatile int txAudioChannel = com.k1af.ft8af.wave.AudioChannelSelect.BOTH;
+
+    // Full duplex (satellite operating): show decodes of our OWN transmission
+    // instead of discarding them as loopback echoes. On a linear-transponder
+    // satellite the operator hears their own downlink while transmitting, and
+    // that echo is the measurement they need — signal strength for power
+    // discipline (too much power on a continuous mode silences everyone else),
+    // and the audio frequency it lands on, which against the transmitted
+    // frequency gives the uplink/downlink drift the RIT has to compensate.
+    // Display only: own decodes never reach the auto-sequencer, the SWL
+    // database, PSKReporter, the WSJT-X broadcast, or the clock-sync DT
+    // statistics — see OwnTxEchoFilter and FullDuplexMonitor. Persisted under
+    // the "fullDuplex" config key.
+    public static volatile boolean fullDuplexMonitor = false;
+
     // Live RX input level (peak + short-term RMS of post-gain samples),
     // published by HamRecorder once per metering window for the UI meter.
     public static final MutableLiveData<com.k1af.ft8af.wave.InputAudioLevel.Levels>

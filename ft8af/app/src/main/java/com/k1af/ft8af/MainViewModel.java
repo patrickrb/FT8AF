@@ -678,6 +678,17 @@ public class MainViewModel extends ViewModel {
                 // already ignore own-callsign messages.
                 OwnTxEchoFilter filtered = OwnTxEchoFilter.filter(decoded);
                 ArrayList<Ft8Message> messages = filtered.kept;
+                // Full duplex (satellite operating): our own downlink coming back
+                // IS the measurement, so put the echoes the filter just dropped
+                // back on screen. Strictly display — `display` feeds only the
+                // message list, the waterfall labels and the decode counter, while
+                // `messages` keeps feeding the auto-sequencer, the SWL/QSO
+                // databases, PSKReporter, the WSJT-X broadcast and the clock-sync
+                // DT samples, none of which may ever act on our own callsign. With
+                // the feature off this is the same list instance as `messages`.
+                // See FullDuplexMonitor.
+                final ArrayList<Ft8Message> display = FullDuplexMonitor.displayList(
+                        messages, filtered.echoes, GeneralVariables.fullDuplexMonitor);
                 // Diagnostic for the "missing other station responses" report: record how
                 // many decodes survived, how many own-echoes were dropped, and whether any
                 // message addressed to us was decoded this cycle. Lets us tell "decoded but
@@ -730,11 +741,24 @@ public class MainViewModel extends ViewModel {
                 }
                 if (messages.size() == 0) {
                     //nothing left after filtering own echoes
-                    // Same overlay refresh as the no-decode case: an all-filtered slot is
-                    // visually silent, so clear the previous slot's labels (normal pass)
-                    // rather than leaving them to be re-stamped.
-                    decodeCycleState.labelsAfterPass(new ArrayList<>(), isDeep);
-                    mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), 0));
+                    if (display.isEmpty()) {
+                        // Same overlay refresh as the no-decode case: an all-filtered slot is
+                        // visually silent, so clear the previous slot's labels (normal pass)
+                        // rather than leaving them to be re-stamped.
+                        decodeCycleState.labelsAfterPass(new ArrayList<>(), isDeep);
+                        mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), 0));
+                        return;
+                    }
+                    // Full duplex, and the only thing that decoded this slot was our
+                    // own signal — the normal case for a TX slot on a quiet
+                    // transponder. Not a silent slot: show the echo on the list and
+                    // the waterfall, then stop here. Everything below this point acts
+                    // on decodes (sequencer, databases, spotting) and must not see an
+                    // own-callsign message, and `messages` is empty anyway.
+                    appendToMessageList(display);
+                    publishFt8MessageList();
+                    finishDisplayPass(display, decoded.size(), isDeep);
+                    resolveEchoLocations(display);
                     return;
                 }
 
@@ -751,16 +775,7 @@ public class MainViewModel extends ViewModel {
                     }
                 }
 
-                synchronized (ft8Messages) {
-                    // "Clear every cycle" mode does its wipe in beforeListen (start of the
-                    // cycle), so by here the list is already fresh — just append. The
-                    // excess-trim must hold the same lock: it removes from the list, and
-                    // an unguarded removal can race the snapshot copy in
-                    // publishFt8MessageList().
-                    ft8Messages.addAll(messages);//add messages to list
-                    GeneralVariables.trimToMessageCount(ft8Messages);//remove excess messages; FT8CN limits the total displayable messages
-                }
-
+                appendToMessageList(display);
                 publishFt8MessageList();//post an immutable snapshot so the UI recomposes immediately
                 // Slot-wide mean DT with own-TX echoes already excluded (see
                 // OwnTxEchoFilter.meanTimeOffsetSec). NaN can't happen here — messages
@@ -822,14 +837,11 @@ public class MainViewModel extends ViewModel {
                     ft8TransmitSignal.parseMessageToFunction(messages, true);
                 }
 
-                decodeCycleState.labelsAfterPass(messages, isDeep);
-
-                // Take the count from the same atomic update we made, not a re-read of
-                // shared state a concurrently-delivering pass may have advanced since.
-                int decodeCountAfterPass = decodeCycleState.countAfterPass(messages.size(), isDeep);
-
-                //decode state, triggers marker action in spectrum display
-                mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), messages.size()));
+                // Labels/counts follow what is on screen, so they use `display`:
+                // with full duplex on, our own signal has to be stamped on the
+                // waterfall too — reading its offset off the waterfall against the
+                // TX marker is how the operator measures transponder drift.
+                finishDisplayPass(display, decoded.size(), isDeep);
 
 
                 // A fresh task per dispatch, bound to *this* pass's messages. slot N's
@@ -845,10 +857,7 @@ public class MainViewModel extends ViewModel {
                 // RejectedExecutionException on this decode thread (crash).
                 SafeExecutor.tryExecute(getQTHThreadPool,
                         new GetQTHRunnable(MainViewModel.this, messages));//query location via thread pool
-
-                //this variable also notifies message list changes
-                mutable_Decoded_Counter.postValue(
-                        decodeCountAfterPass);//notify the UI of the total message count
+                resolveEchoLocations(display);
 
                 if (GeneralVariables.saveSWLMessage) {
                     databaseOpr.writeMessage(messages);//write SWL messages to database
@@ -867,7 +876,15 @@ public class MainViewModel extends ViewModel {
                     // already in this snapshot and QSO detection is unchanged.
                     final ArrayList<Ft8Message> allMessagesSnapshot;
                     synchronized (ft8Messages) {
-                        allMessagesSnapshot = new ArrayList<>(ft8Messages);
+                        // Own-TX echoes sit in ft8Messages once full duplex has been
+                        // on (display only) — and they stay there after it is turned
+                        // off, for as long as the list keeps them. findSwlQso pairs a
+                        // station's messages into a logged QSO, so leaving ours in
+                        // would let it "hear" us working ourselves and write that to
+                        // the SWL QSO table. Strip by what the list holds, never by
+                        // the live toggle. With no echoes present this is the same
+                        // snapshot the scan always saw.
+                        allMessagesSnapshot = FullDuplexMonitor.withoutOwnEchoes(ft8Messages);
                     }
                     swlQsoList.findSwlQso(messages, allMessagesSnapshot, new SWLQsoList.OnFoundSwlQso() {
                         @Override
@@ -1287,6 +1304,78 @@ public class MainViewModel extends ViewModel {
     }
 
     /**
+     * Append one decode pass's messages to the displayed list, trimming it back
+     * to the display cap under the same lock.
+     *
+     * <p>"Clear every cycle" mode does its wipe in {@code beforeListen} (start of
+     * the cycle), so by the time a pass gets here the list is already fresh —
+     * this only ever appends. The excess-trim must hold the same monitor: it
+     * removes from the list, and an unguarded removal can race the snapshot copy
+     * in {@link #publishFt8MessageList()}.
+     *
+     * @param messages the pass's display list — with full duplex on this includes
+     *                 our own transmission's echoes, which is why nothing else in
+     *                 the decode pipeline is fed from it (see
+     *                 {@link FullDuplexMonitor})
+     */
+    private void appendToMessageList(ArrayList<Ft8Message> messages) {
+        synchronized (ft8Messages) {
+            ft8Messages.addAll(messages);
+            //remove excess messages; FT8CN limits the total displayable messages
+            GeneralVariables.trimToMessageCount(ft8Messages);
+        }
+    }
+
+    /**
+     * The per-pass display bookkeeping that follows what is on screen: the
+     * waterfall labels, the running decode count, the spectrum decoding marker
+     * and the UI's total-count notification. Shared by the normal path and the
+     * full-duplex echo-only path so the two cannot drift.
+     *
+     * @param display        what this pass put on screen
+     * @param rawDecodeCount how many decodes the pass produced before filtering
+     */
+    private void finishDisplayPass(ArrayList<Ft8Message> display, int rawDecodeCount,
+                                   boolean isDeep) {
+        decodeCycleState.labelsAfterPass(display, isDeep);
+        // Take the count from the same atomic update we made, not a re-read of
+        // shared state a concurrently-delivering pass may have advanced since.
+        int countAfterPass = decodeCycleState.countAfterPass(display.size(), isDeep);
+        //decode state, triggers marker action in spectrum display
+        mutableIsDecoding.postValue(decodingMarkerAfterPass(rawDecodeCount, display.size()));
+        //this variable also notifies message list changes
+        mutable_Decoded_Counter.postValue(countAfterPass);
+    }
+
+    /**
+     * Resolve country/continent for the own-TX echoes in a full-duplex display
+     * list, so their rows render like every other decode. Deliberately separate
+     * from {@link GetQTHRunnable}: that task also fires Needed-DX alerts, and our
+     * own callsign must never raise one. No-op when the list carries no echoes.
+     */
+    private void resolveEchoLocations(ArrayList<Ft8Message> display) {
+        final ArrayList<Ft8Message> echoes = FullDuplexMonitor.onlyOwnEchoes(display);
+        if (echoes.isEmpty()) return;
+        SafeExecutor.tryExecute(getQTHThreadPool, () -> {
+            CallsignDatabase.getMessagesLocation(
+                    GeneralVariables.callsignDatabase.getDb(), echoes);
+            publishFt8MessageList();
+        });
+    }
+
+    /**
+     * Whether a tapped decode row is our own transmission. Checks the echo tag
+     * first — set by {@link OwnTxEchoFilter} on the one path that decides "this
+     * is us" — and falls back to the same callsign test that filter uses, so a
+     * compound or hashed call (K1AF/P echoing as {@code K1AF}) is caught the
+     * way a raw {@code equalsIgnoreCase(myCallsign)} would not.
+     */
+    static boolean isOurOwnRow(Ft8Message message) {
+        return message.isOwnEcho
+                || GeneralVariables.checkIsMyCallsign(message.getCallsignFrom());
+    }
+
+    /**
      * Publish the current decode list to the UI as a fresh snapshot.
      *
      * <p>The Compose decode screen observes {@link #mutableFt8MessageList} with
@@ -1352,8 +1441,7 @@ public class MainViewModel extends ViewModel {
             return;
         }
         String from = message.callsignFrom;
-        if (from == null || from.trim().isEmpty()
-                || from.equalsIgnoreCase(GeneralVariables.myCallsign)) {
+        if (from == null || from.trim().isEmpty() || isOurOwnRow(message)) {
             return;
         }
 
@@ -2344,6 +2432,50 @@ public class MainViewModel extends ViewModel {
         if (hamRecorder != null) {
             hamRecorder.reinitializeMicRecorder();
         }
+    }
+
+    /**
+     * Settling time before an RX channel change actually reopens the capture.
+     * The selector is an A/B control — the operator flips it while watching the
+     * waterfall — and each reopen costs up to a second of RX plus, on USB-direct,
+     * an interface re-claim and a libusb session restart. Rapid taps therefore
+     * collapse to one reopen at the final value.
+     */
+    static final long RX_CHANNEL_REOPEN_DEBOUNCE_MS = 400;
+
+    // Generation stamp for the debounce above: each reopen request bumps it, and
+    // a request only fires if nothing newer superseded it while it waited.
+    private final java.util.concurrent.atomic.AtomicInteger rxChannelReopenGeneration =
+            new java.util.concurrent.atomic.AtomicInteger();
+
+    /**
+     * The operator changed the RX channel selection from {@code from} to
+     * {@code to}. Reopens the audio input if — and only if — the running capture
+     * cannot pick the new value up live (see
+     * {@link com.k1af.ft8af.wave.MicRecorder#reopenRequiredForChannelChange}),
+     * debounced and on a plain daemon thread rather than a composition-scoped
+     * coroutine: the settings screen may be popped in the same gesture as the
+     * tap, and a reopen that dies with the screen leaves the stored setting and
+     * the open capture silently disagreeing until the next USB attach.
+     */
+    public void onRxAudioChannelChanged(int from, int to) {
+        if (hamRecorder == null || !hamRecorder.rxChannelChangeNeedsReopen(from, to)) {
+            return;
+        }
+        final int generation = rxChannelReopenGeneration.incrementAndGet();
+        Thread reopen = new Thread(() -> {
+            try {
+                Thread.sleep(RX_CHANNEL_REOPEN_DEBOUNCE_MS);
+            } catch (InterruptedException e) {
+                return;
+            }
+            if (rxChannelReopenGeneration.get() != generation) {
+                return; // a later tap took over; it will do the reopen
+            }
+            reinitializeAudioInput();
+        }, "RxChannelReopen");
+        reopen.setDaemon(true);
+        reopen.start();
     }
 
     // Tracks whether we've put the phone into Bluetooth headset (SCO) mode for audio, so

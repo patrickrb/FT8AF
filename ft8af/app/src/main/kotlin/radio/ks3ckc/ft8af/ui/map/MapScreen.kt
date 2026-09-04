@@ -201,6 +201,15 @@ internal val MAP_EDGE_KM = PI * 6371.0
 // Screen radius (px) for a range ring at great-circle distance [km], using the SAME
 // factor [azProject] applies to markers (normalized radius = distKm / MAP_EDGE_KM),
 // so rings align with the marks instead of ballooning past them.
+/**
+ * Whether a decode becomes a station marker. Our own transmission's echoes
+ * (full-duplex monitoring) are a measurement on the decode list, not a station
+ * heard: a marker for ourselves at our own grid, coloured as a CQ station and
+ * offered to the connection-line builder, is exactly the kind of "acting on an
+ * own decode" the display-only promise rules out.
+ */
+internal fun showsOnMap(msg: Ft8Message): Boolean = !msg.isOwnEcho
+
 internal fun rangeRingRadiusPx(km: Double, r: Float, scale: Float): Float =
     (km / MAP_EDGE_KM).toFloat() * r * scale
 
@@ -329,6 +338,7 @@ fun MapScreen(mainViewModel: MainViewModel) {
         val seen = mutableSetOf<String>()
         val result = mutableListOf<StationMarker>()
         for (msg in messages) {
+            if (!showsOnMap(msg)) continue
             val call = msg.callsignFrom ?: continue
             if (call in seen) continue
             seen.add(call)
