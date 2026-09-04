@@ -325,6 +325,24 @@ public class OwnTxEchoFilterTest {
         assertThat(filtered.ownEchoCount).isEqualTo(2);
     }
 
+    /**
+     * The filter is the one place that decides "this is us", so it tags what it
+     * separates out; every downstream consumer keys on the tag.
+     */
+    @Test
+    public void filter_tagsEchoesAndLeavesOthersUntagged() {
+        Ft8Message echo = ownEcho("RA3XYZ");
+        Ft8Message other = thirdParty("CQ", "DL1ABC");
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(echo);
+        decoded.add(other);
+
+        OwnTxEchoFilter.filter(decoded);
+
+        assertThat(echo.isOwnEcho).isTrue();
+        assertThat(other.isOwnEcho).isFalse();
+    }
+
     /** Nothing of ours on the air: the echo list is empty, not null. */
     @Test
     public void filter_echoesIsEmptyWhenNothingWasOurs() {

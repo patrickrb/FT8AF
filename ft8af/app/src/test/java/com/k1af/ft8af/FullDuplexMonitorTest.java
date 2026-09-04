@@ -91,20 +91,49 @@ public class FullDuplexMonitorTest {
         assertThat(display).containsExactly(mine);
     }
 
+    /** An echo as the filter hands it over: tagged. */
+    private Ft8Message taggedEcho(String toCall) {
+        Ft8Message m = ownEcho(toCall);
+        m.isOwnEcho = true;
+        return m;
+    }
+
     @Test
-    public void withoutOwnCallsign_dropsOnlyOurTransmissions() {
+    public void withoutOwnEchoes_dropsOnlyTaggedEchoes() {
         Ft8Message other = thirdParty("CQ", "DL1ABC");
         Ft8Message toUs = new Ft8Message(MY_CALL, "DL1ABC", "-12");
-        Ft8Message mine = ownEcho("RA3XYZ");
+        Ft8Message mine = taggedEcho("RA3XYZ");
 
-        assertThat(FullDuplexMonitor.withoutOwnCallsign(Arrays.asList(other, toUs, mine)))
+        assertThat(FullDuplexMonitor.withoutOwnEchoes(Arrays.asList(other, toUs, mine)))
                 .containsExactly(other, toUs).inOrder();
     }
 
     @Test
-    public void withoutOwnCallsign_toleratesEmptyAndNull() {
-        assertThat(FullDuplexMonitor.withoutOwnCallsign(null)).isEmpty();
-        assertThat(FullDuplexMonitor.withoutOwnCallsign(new ArrayList<>())).isEmpty();
-        assertThat(FullDuplexMonitor.withoutOwnCallsign(Collections.singletonList(null))).isEmpty();
+    public void withoutOwnEchoes_keysOnTheTagNotTheCallsign() {
+        // The tag is set at the one place that decides "this is us"; an untagged
+        // own-callsign row cannot exist on the list, so the strip does not
+        // second-guess it with a callsign compare of its own.
+        Ft8Message untagged = ownEcho("RA3XYZ");
+        assertThat(FullDuplexMonitor.withoutOwnEchoes(Collections.singletonList(untagged)))
+                .containsExactly(untagged);
+    }
+
+    @Test
+    public void withoutOwnEchoes_toleratesEmptyAndNull() {
+        assertThat(FullDuplexMonitor.withoutOwnEchoes(null)).isEmpty();
+        assertThat(FullDuplexMonitor.withoutOwnEchoes(new ArrayList<>())).isEmpty();
+        assertThat(FullDuplexMonitor.withoutOwnEchoes(Collections.singletonList(null))).isEmpty();
+    }
+
+    @Test
+    public void onlyOwnEchoes_isTheComplement() {
+        Ft8Message other = thirdParty("CQ", "DL1ABC");
+        Ft8Message first = taggedEcho("RA3XYZ");
+        Ft8Message second = taggedEcho("DL1ABC");
+
+        assertThat(FullDuplexMonitor.onlyOwnEchoes(Arrays.asList(first, other, second)))
+                .containsExactly(first, second).inOrder();
+        assertThat(FullDuplexMonitor.onlyOwnEchoes(Collections.singletonList(other))).isEmpty();
+        assertThat(FullDuplexMonitor.onlyOwnEchoes(null)).isEmpty();
     }
 }

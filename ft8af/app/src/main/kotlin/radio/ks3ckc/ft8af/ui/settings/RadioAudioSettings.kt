@@ -25,7 +25,6 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,8 +51,6 @@ import com.k1af.ft8af.ui.AudioDeviceSpinnerAdapter
 import com.k1af.ft8af.wave.AudioChannelCapability
 import com.k1af.ft8af.wave.AudioChannelSelect
 import com.k1af.ft8af.wave.UsbAudioDevice
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import radio.ks3ckc.ft8af.PER_BAND_OUTPUT_LEVEL_KEY
 import radio.ks3ckc.ft8af.outputLevelFromVolumePercent
 import radio.ks3ckc.ft8af.saveOutputLevelForCurrentBand
@@ -77,7 +74,6 @@ fun RadioAudioSettings(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     // Observe reactive fields so band/frequency rows recompose on change.
     val bandIndexLive by GeneralVariables.mutableBandChange.observeAsState(
@@ -700,6 +696,10 @@ fun RadioAudioSettings(
                         var rxChannel by remember {
                             mutableIntStateOf(AudioChannelSelect.clamp(GeneralVariables.rxAudioChannel))
                         }
+                        val rxGate = rxChannelRowGate(
+                            micSource = mainViewModel.hamRecorder?.isMicSource() ?: true,
+                            maxChannels = audioInputChannels,
+                        )
                         AudioChannelSelectRow(
                             label = stringResource(R.string.settings_rx_channel),
                             description = stringResource(R.string.settings_rx_channel_desc),
@@ -719,9 +719,10 @@ fun RadioAudioSettings(
                             selected = AudioChannelCapability.effectiveSelection(
                                 rxChannel, audioInputChannels,
                             ),
-                            enabled = AudioChannelCapability.stereoCapable(audioInputChannels),
-                            disabledNote = stringResource(R.string.settings_channel_mono_device),
+                            enabled = rxGate == AudioChannelRowGate.ENABLED,
+                            disabledNote = stringResource(rxGate.noteRes()),
                             onSelect = { value ->
+                                val previous = rxChannel
                                 rxChannel = value
                                 GeneralVariables.rxAudioChannel = value
                                 mainViewModel.databaseOpr.writeConfig(
@@ -729,15 +730,11 @@ fun RadioAudioSettings(
                                 )
                                 // Mix uses a mono AudioRecord, L/R a stereo one,
                                 // and the native USB path takes the fold at
-                                // start — so the input has to be reopened for
-                                // the change to take effect. Off the main
-                                // thread: reinitialize() joins the capture
-                                // thread (up to a second) before reopening, and
-                                // the segmented control must repaint on the tap,
-                                // not after the audio device has come back.
-                                scope.launch(Dispatchers.IO) {
-                                    mainViewModel.reinitializeAudioInput()
-                                }
+                                // start — so some changes need the input
+                                // reopened to take effect. The view model decides
+                                // which, debounces the A/B tapping, and runs it on
+                                // a thread that outlives this screen.
+                                mainViewModel.onRxAudioChannelChanged(previous, value)
                             },
                         )
                     }
@@ -746,6 +743,10 @@ fun RadioAudioSettings(
                         var txChannel by remember {
                             mutableIntStateOf(AudioChannelSelect.clamp(GeneralVariables.txAudioChannel))
                         }
+                        val txGate = txChannelRowGate(
+                            deviceId = GeneralVariables.audioOutputDeviceId,
+                            maxChannels = audioOutputChannels,
+                        )
                         AudioChannelSelectRow(
                             label = stringResource(R.string.settings_tx_channel),
                             description = stringResource(R.string.settings_tx_channel_desc),
@@ -757,11 +758,17 @@ fun RadioAudioSettings(
                                 AudioChannelSelect.RIGHT to
                                     stringResource(R.string.settings_channel_right),
                             ),
-                            selected = AudioChannelCapability.effectiveSelection(
-                                txChannel, audioOutputChannels,
-                            ),
-                            enabled = AudioChannelCapability.stereoCapable(audioOutputChannels),
-                            disabledNote = stringResource(R.string.settings_channel_mono_device),
+                            // Default sink shows Both: TxChannelLayout keeps the
+                            // mono open there regardless of the stored choice.
+                            selected = if (txGate == AudioChannelRowGate.DEFAULT_SINK) {
+                                AudioChannelSelect.BOTH
+                            } else {
+                                AudioChannelCapability.effectiveSelection(
+                                    txChannel, audioOutputChannels,
+                                )
+                            },
+                            enabled = txGate == AudioChannelRowGate.ENABLED,
+                            disabledNote = stringResource(txGate.noteRes()),
                             onSelect = { value ->
                                 txChannel = value
                                 GeneralVariables.txAudioChannel = value
@@ -1148,25 +1155,56 @@ private fun selectedDeviceMaxChannels(
     context: Context,
     deviceId: Int,
     direction: Int,
-): Int {
-    if (deviceId == -1) {
-        val usbChannels =
-            if (direction == AudioManager.GET_DEVICES_INPUTS) {
-                UsbAudioDevice.getActiveInputDevice()?.inputChannels
+): Int =
+    when (channelCountSource(deviceId)) {
+        ChannelCountSource.DEFAULT -> AudioChannelCapability.UNKNOWN
+        ChannelCountSource.USB_DIRECT -> usbDirectMaxChannels(context, direction)
+        ChannelCountSource.FRAMEWORK -> {
+            val audioManager =
+                context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            val info = audioManager?.getDevices(direction)?.firstOrNull { it.id == deviceId }
+            if (info == null) {
+                AudioChannelCapability.UNKNOWN
             } else {
-                UsbAudioDevice.getActiveOutputDevice()?.outputChannels
+                AudioChannelCapability.maxChannelCount(info.channelCounts)
             }
-        return usbChannels ?: AudioChannelCapability.UNKNOWN
+        }
     }
-    if (deviceId <= 0) return AudioChannelCapability.UNKNOWN
-    val audioManager =
-        context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-            ?: return AudioChannelCapability.UNKNOWN
-    val info =
-        audioManager.getDevices(direction).firstOrNull { it.id == deviceId }
-            ?: return AudioChannelCapability.UNKNOWN
-    return AudioChannelCapability.maxChannelCount(info.channelCounts)
+
+/**
+ * Channel count of the selected USB-direct device. The capture side can ask the
+ * device `MicRecorder` holds open, which has negotiated a real stream and knows
+ * its rate; the playback side never holds one open between overs
+ * (`playViaUsbAudio` opens and closes per transmission), so both fall back to
+ * the count judged from the endpoint descriptors at enumeration, matched by
+ * the persisted VID:PID.
+ */
+private fun usbDirectMaxChannels(context: Context, direction: Int): Int {
+    val isInput = direction == AudioManager.GET_DEVICES_INPUTS
+    if (isInput) {
+        UsbAudioDevice.getActiveInputDevice()?.let { return it.inputChannels }
+    }
+    val vid = if (isInput) GeneralVariables.usbAudioInputVendorId else GeneralVariables.usbAudioOutputVendorId
+    val pid = if (isInput) GeneralVariables.usbAudioInputProductId else GeneralVariables.usbAudioOutputProductId
+    val enumerated =
+        try {
+            UsbAudioDevice.findUsbAudioDevices(context)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    val match = enumerated.firstOrNull { it.device.vendorId == vid && it.device.productId == pid }
+        ?: enumerated.firstOrNull { if (isInput) it.hasInput else it.hasOutput }
+        ?: return AudioChannelCapability.UNKNOWN
+    return if (isInput) match.inputChannels else match.outputChannels
 }
+
+/** The note a greyed-out channel row shows for its gate. */
+private fun AudioChannelRowGate.noteRes(): Int =
+    when (this) {
+        AudioChannelRowGate.DEFAULT_SINK -> R.string.settings_tx_channel_default_sink
+        AudioChannelRowGate.NETWORK_SOURCE -> R.string.settings_rx_channel_network_source
+        else -> R.string.settings_channel_mono_device
+    }
 
 /**
  * Audio channel selector: which side of a stereo path the app uses. Used twice —

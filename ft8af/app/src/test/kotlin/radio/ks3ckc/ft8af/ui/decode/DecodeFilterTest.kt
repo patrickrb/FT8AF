@@ -47,6 +47,61 @@ class DecodeFilterTest {
         assertThat(result.map { it.callsignFrom }).containsExactly("K1ABC", "K2DEF")
     }
 
+    // ---- own-TX echoes (full-duplex monitoring) ----
+
+    private fun ownEcho(from: String = "K1AF") = cq(from).apply { isOwnEcho = true }
+
+    @Test
+    fun all_keepsOwnEchoInDecodeOrder() {
+        val before = cq("K1ABC")
+        val echo = ownEcho()
+        val after = directed("W1AW", "K2DEF")
+
+        val result = filterMessages(listOf(before, echo, after), "All")
+
+        // The echo sits where it decoded, not appended at the end.
+        assertThat(result).containsExactly(before, echo, after).inOrder()
+    }
+
+    @Test
+    fun all_ownEchoBypassesShowOnlySettings() {
+        // "DX only" keys on continent, which an echo may not carry; hiding the
+        // row the feature was turned on to see would defeat it.
+        GeneralVariables.filterDxOnly = true
+        GeneralVariables.myContinent = "NA"
+        try {
+            val echo = ownEcho()
+            val local = cq("K1ABC").apply { continent = "NA" }
+
+            val result = filterMessages(listOf(echo, local), "All")
+
+            assertThat(result).containsExactly(echo)
+        } finally {
+            GeneralVariables.filterDxOnly = false
+            GeneralVariables.myContinent = null
+        }
+    }
+
+    @Test
+    fun chips_neverOfferOwnEcho() {
+        // Every chip asks a question about other stations; our own CQ is not a
+        // station to work, and "Needed" must not list us.
+        val echo = ownEcho()
+        val messages = listOf(echo, cq("K1ABC"))
+
+        for (chip in listOf("CQ Calls", "Needed", "New Grid", "New Prefix", "For Me")) {
+            assertThat(filterMessages(messages, chip)).doesNotContain(echo)
+        }
+        assertThat(filterMessages(messages, "CQ Calls").map { it.callsignFrom })
+            .containsExactly("K1ABC")
+    }
+
+    @Test
+    fun all_withoutEchoesIsUnchanged() {
+        val messages = listOf(cq("K1ABC"), directed("W1AW", "K2DEF"))
+        assertThat(filterMessages(messages, "All")).containsExactlyElementsIn(messages).inOrder()
+    }
+
     @Test
     fun cqCalls_keepsOnlyCqMessages() {
         val cqMsg = cq("K1ABC")

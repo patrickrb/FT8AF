@@ -19,7 +19,6 @@ import android.media.AudioTrack;
 import android.util.Log;
 
 import com.k1af.ft8af.wave.AudioChannelCapability;
-import com.k1af.ft8af.wave.AudioChannelSelect;
 import com.k1af.ft8af.wave.UsbAudioDevice;
 import com.k1af.ft8af.wave.UsbAudioNative;
 
@@ -867,16 +866,28 @@ public class FT8TransmitSignal {
      */
     /**
      * Highest channel count the chosen output device reports, or
-     * {@link AudioChannelCapability#UNKNOWN} when there is no explicit device
-     * (Android's default sink) or it reports nothing usable. Feeding UNKNOWN to
-     * {@link AudioChannelCapability#effectiveSelection} leaves the operator's
-     * left/right choice in force, which is what we want on the default sink: we
-     * cannot see what it routes to, and refusing the selection there would
-     * silently ignore the setting on exactly the routed-USB setups that need it.
+     * {@link AudioChannelCapability#UNKNOWN} when it reports nothing usable (or
+     * there is no explicit device).
      */
     static int outputMaxChannels(AudioDeviceInfo device) {
         if (device == null) return AudioChannelCapability.UNKNOWN;
         return AudioChannelCapability.maxChannelCount(device.getChannelCounts());
+    }
+
+    /**
+     * The channel layout this transmission's {@code AudioTrack} opens with, for
+     * the operator's current TX selection and the sink they picked. Shared by
+     * the FT8 over and the tune carrier. See {@link TxChannelLayout#resolve} for
+     * why the Default sink always gets the mono layout.
+     *
+     * @param preferredOutputDevice the explicitly chosen sink, or null for
+     *                              Android's Default
+     */
+    static TxChannelLayout resolveTxLayout(AudioDeviceInfo preferredOutputDevice) {
+        return TxChannelLayout.resolve(
+                GeneralVariables.txAudioChannel,
+                GeneralVariables.audioOutputDeviceId > 0,
+                outputMaxChannels(preferredOutputDevice));
     }
 
     static float[] applyVolume(float[] source, int skipSamples, int playLength, float volume) {
@@ -1058,21 +1069,19 @@ public class FT8TransmitSignal {
                         AudioManager.GET_DEVICES_OUTPUTS)
                 : null;
         // Which side of a stereo sink carries the waveform. "Both" — the default
-        // and, on a mono device, the only possibility — keeps the historical MONO
-        // open: the framework duplicates it to every channel, so that path is
-        // byte-for-byte what it always was. This matters more than it looks; see
-        // the FT8 TX audio pipeline notes in CLAUDE.md for how little it takes to
-        // turn an audible transmission into an undecodable one.
-        final int txChannel = AudioChannelCapability.effectiveSelection(
-                GeneralVariables.txAudioChannel, outputMaxChannels(preferredOutputDevice));
-        final boolean stereoOut = AudioChannelSelect.needsStereoPlayback(txChannel);
-        final int outChannels = stereoOut ? 2 : 1;
+        // and, on a mono or unknown device, the only possibility — keeps the
+        // historical MONO open: the framework duplicates it to every channel, so
+        // that path is byte-for-byte what it always was. This matters more than
+        // it looks; see the FT8 TX audio pipeline notes in CLAUDE.md for how
+        // little it takes to turn an audible transmission into an undecodable one.
+        final TxChannelLayout layout = resolveTxLayout(preferredOutputDevice);
 
         Log.d(TAG, String.format("playFT8Signal: Preparing sound card playback... bit depth: %s, sample rate: %d, channels: %d"
                 , GeneralVariables.audioOutput32Bit ? "Float32" : "Int16"
-                , GeneralVariables.audioSampleRate, outChannels));
-        if (stereoOut) {
-            GeneralVariables.fileLog("playFT8Signal: stereo TX open, channel select=" + txChannel);
+                , GeneralVariables.audioSampleRate, layout.channels));
+        if (layout.isStereo()) {
+            GeneralVariables.fileLog(
+                    "playFT8Signal: stereo TX open, channel select=" + layout.selection);
         }
         attributes = new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_MEDIA)
@@ -1081,11 +1090,9 @@ public class FT8TransmitSignal {
 
         int encoding = GeneralVariables.audioOutput32Bit
                 ? AudioFormat.ENCODING_PCM_FLOAT : AudioFormat.ENCODING_PCM_16BIT;
-        int channelMask = stereoOut
-                ? AudioFormat.CHANNEL_OUT_STEREO : AudioFormat.CHANNEL_OUT_MONO;
         myFormat = new AudioFormat.Builder().setSampleRate(GeneralVariables.audioSampleRate)
                 .setEncoding(encoding)
-                .setChannelMask(channelMask).build();
+                .setChannelMask(layout.channelMask).build();
 
         // MODE_STREAM (was MODE_STATIC) with a deliberately SMALL buffer so we can
         // apply TX volume live: we feed the generated waveform out in ~50ms chunks,
@@ -1096,13 +1103,10 @@ public class FT8TransmitSignal {
         // down and protect the rig mid-over, which baking volume into a one-shot
         // MODE_STATIC write could not do (the slider only took effect next cycle).
         int bytesPerSample = GeneralVariables.audioOutput32Bit ? 4 : 2;
-        // ~200ms regardless of channel count: a stereo open carries twice the bytes
-        // per frame, so the byte target has to scale with it or the buffer would
-        // only hold ~100ms and the write loop would block on every chunk.
-        int targetBufBytes =
-                (GeneralVariables.audioSampleRate / 5) * bytesPerSample * outChannels;
+        // ~200ms at whatever channel count the layout opened with.
+        int targetBufBytes = layout.bufferBytes(GeneralVariables.audioSampleRate, bytesPerSample);
         int minBuf = AudioTrack.getMinBufferSize(GeneralVariables.audioSampleRate,
-                channelMask, encoding);
+                layout.channelMask, encoding);
         int bufBytes = Math.max(targetBufBytes, minBuf > 0 ? minBuf : targetBufBytes);
         int mySession = 0;
         audioTrack = new AudioTrack(attributes, myFormat, bufBytes,
@@ -1132,6 +1136,10 @@ public class FT8TransmitSignal {
         // Stream the waveform in chunks, re-reading volumePercent each chunk so a
         // slider move ramps the on-air level within ~1 chunk + buffer depth.
         final int chunkSamples = Math.max(1, GeneralVariables.audioSampleRate / 20); // ~50ms
+        // Stereo scratch, allocated once: the interleave runs every ~50ms and a
+        // fresh array per chunk is churn for nothing. Unused (null) on mono.
+        final float[] stereoScratch =
+                layout.isStereo() ? new float[layout.samplesForFrames(chunkSamples)] : null;
         int framesWritten = 0;
         boolean writeError = false;
         int offset = 0;
@@ -1143,22 +1151,17 @@ public class FT8TransmitSignal {
             float[] chunk = applyVolume(buffer, skipSamples + offset, chunkLen,
                     GeneralVariables.volumePercent);
 
-            // On a stereo open the framework wants interleaved frames, so widen the
-            // chunk here and silence the channel the operator excluded. Mono keeps
-            // the original single-buffer write with no copy in between.
-            int writeSamples = chunkLen * outChannels;
-            if (stereoOut) {
-                float[] interleaved = new float[writeSamples];
-                writeSamples = AudioChannelSelect.expandToStereo(
-                        chunk, chunkLen, txChannel, interleaved);
-                chunk = interleaved;
-            }
+            // On a stereo open the framework wants interleaved frames, with the
+            // channel the operator excluded silenced. Mono hands the chunk
+            // straight through — the original single-buffer write.
+            float[] toWrite = layout.layOut(chunk, chunkLen, stereoScratch);
+            int writeSamples = layout.samplesForFrames(chunkLen);
 
             int writeResult;
             if (GeneralVariables.audioOutput32Bit) {
-                writeResult = audioTrack.write(chunk, 0, writeSamples, AudioTrack.WRITE_BLOCKING);
+                writeResult = audioTrack.write(toWrite, 0, writeSamples, AudioTrack.WRITE_BLOCKING);
             } else {
-                short[] audio_data = floatToInt16NoPad(chunk, writeSamples);
+                short[] audio_data = floatToInt16NoPad(toWrite, writeSamples);
                 writeResult = audioTrack.write(audio_data, 0, writeSamples, AudioTrack.WRITE_BLOCKING);
             }
 
@@ -1169,7 +1172,7 @@ public class FT8TransmitSignal {
             }
             // write() counts samples, getPlaybackHeadPosition() counts frames — the
             // drain wait below compares the two, so convert here.
-            framesWritten += writeResult / outChannels;
+            framesWritten += layout.framesFromSamples(writeResult);
             offset += chunkLen;
         }
 
@@ -1178,9 +1181,9 @@ public class FT8TransmitSignal {
         // float2Short() behavior. Skipped if we errored or were cancelled.
         if (!writeError && !txAudioCancelled && isTransmitting
                 && !GeneralVariables.audioOutput32Bit) {
-            short[] pad = new short[8 * outChannels];// 8 frames, whatever the channel count
+            short[] pad = layout.zeroPad();// 8 frames, whatever the channel count
             int padResult = audioTrack.write(pad, 0, pad.length, AudioTrack.WRITE_BLOCKING);
-            if (padResult > 0) framesWritten += padResult / outChannels;
+            if (padResult > 0) framesWritten += layout.framesFromSamples(padResult);
         }
 
         // Blocking writes return once data is *buffered*, not played. Wait for the
@@ -3266,22 +3269,32 @@ public class FT8TransmitSignal {
                     .build();
             int encoding = GeneralVariables.audioOutput32Bit
                     ? AudioFormat.ENCODING_PCM_FLOAT : AudioFormat.ENCODING_PCM_16BIT;
+            // Same TX channel layout as the FT8 over: on a splitter cable the
+            // tune carrier must key only the rig the operator picked, exactly as
+            // the over does — a mono open here would have the framework
+            // duplicate the carrier onto the other rig's mic input.
+            final AudioDeviceInfo tuneOutputDevice = GeneralVariables.audioOutputDeviceId > 0
+                    ? findAudioDeviceById(GeneralVariables.audioOutputDeviceId,
+                            AudioManager.GET_DEVICES_OUTPUTS)
+                    : null;
+            final TxChannelLayout layout = resolveTxLayout(tuneOutputDevice);
+            if (layout.isStereo()) {
+                GeneralVariables.fileLog("TUNE: stereo open, channel select=" + layout.selection);
+            }
             AudioFormat tuneFormat = new AudioFormat.Builder().setSampleRate(sampleRate)
                     .setEncoding(encoding)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build();
+                    .setChannelMask(layout.channelMask).build();
             // Same small-buffer MODE_STREAM sizing as playFT8Signal: the buffer
             // depth bounds the latency from a level change (or stop) to the air.
             int bytesPerSample = GeneralVariables.audioOutput32Bit ? 4 : 2;
-            int targetBufBytes = (sampleRate / 5) * bytesPerSample;
+            int targetBufBytes = layout.bufferBytes(sampleRate, bytesPerSample);
             int minBuf = AudioTrack.getMinBufferSize(sampleRate,
-                    AudioFormat.CHANNEL_OUT_MONO, encoding);
+                    layout.channelMask, encoding);
             int bufBytes = Math.max(targetBufBytes, minBuf > 0 ? minBuf : targetBufBytes);
             track = new AudioTrack(tuneAttributes, tuneFormat, bufBytes,
                     AudioTrack.MODE_STREAM, 0);
             if (GeneralVariables.audioOutputDeviceId > 0) {
-                AudioDeviceInfo deviceInfo = findAudioDeviceById(
-                        GeneralVariables.audioOutputDeviceId, AudioManager.GET_DEVICES_OUTPUTS);
-                track.setPreferredDevice(deviceInfo);
+                track.setPreferredDevice(tuneOutputDevice);
             } else {
                 applyDefaultOutputRoutingOverride(track);
             }
@@ -3292,6 +3305,8 @@ public class FT8TransmitSignal {
                     Math.max(1, sampleRate / 200)); // ~5ms ramp
             final int chunkSamples = Math.max(1, sampleRate / 20); // ~50ms
             float[] chunk = new float[chunkSamples];
+            final float[] stereoScratch =
+                    layout.isStereo() ? new float[layout.samplesForFrames(chunkSamples)] : null;
             int lastPostedSec = -1;
             while (true) {
                 if (!tuneController.shouldContinue()) {
@@ -3303,12 +3318,14 @@ public class FT8TransmitSignal {
                 if (written <= 0) {
                     break;
                 }
+                float[] toWrite = layout.layOut(chunk, written, stereoScratch);
+                int writeSamples = layout.samplesForFrames(written);
                 int writeResult;
                 if (GeneralVariables.audioOutput32Bit) {
-                    writeResult = track.write(chunk, 0, written, AudioTrack.WRITE_BLOCKING);
+                    writeResult = track.write(toWrite, 0, writeSamples, AudioTrack.WRITE_BLOCKING);
                 } else {
-                    short[] pcm = floatToInt16NoPad(chunk, written);
-                    writeResult = track.write(pcm, 0, written, AudioTrack.WRITE_BLOCKING);
+                    short[] pcm = floatToInt16NoPad(toWrite, writeSamples);
+                    writeResult = track.write(pcm, 0, writeSamples, AudioTrack.WRITE_BLOCKING);
                 }
                 if (writeResult < 0) {
                     Log.e(TAG, "Tune playback error: " + writeResult);

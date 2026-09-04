@@ -922,6 +922,8 @@
     <string name="settings_channel_left">Left</string>
     <string name="settings_channel_right">Right</string>
     <string name="settings_channel_mono_device">This device has only one audio channel, so there is no side to choose.</string>
+    <string name="settings_tx_channel_default_sink">Choose a specific audio output device to pick a side. On the default output the app cannot tell where Android routes audio, so it sends to both channels.</string>
+    <string name="settings_rx_channel_network_source">Audio for this radio comes over its network link, not through an audio input, so there is no side to choose.</string>
     <string name="settings_full_duplex">Full Duplex</string>
     <string name="settings_full_duplex_desc">Show decodes of your own transmission instead of hiding them. For satellite work: check your own signal strength and the frequency it comes back on.</string>
     <string name="input_level_rx_label" translatable="false">RX</string>

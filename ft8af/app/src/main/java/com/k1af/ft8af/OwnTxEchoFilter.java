@@ -80,6 +80,10 @@ public final class OwnTxEchoFilter {
             }
             if (GeneralVariables.checkIsMyCallsign(m.getCallsignFrom())) {
                 ownEcho++;
+                // Tag it here, at the one place that decides "this is us": every
+                // consumer downstream keys on the flag, not on a callsign compare
+                // that may not match a compound/hashed call the way this one does.
+                m.isOwnEcho = true;
                 echoes.add(m);
                 continue;
             }

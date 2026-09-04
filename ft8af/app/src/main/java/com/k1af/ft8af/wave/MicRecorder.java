@@ -198,6 +198,35 @@ public class MicRecorder {
     }
 
     /**
+     * Whether changing the RX channel selection from {@code from} to {@code to}
+     * needs the capture torn down and reopened, or whether the running capture
+     * will simply pick the new value up.
+     *
+     * <p>A reopen is expensive — up to a second joining the capture thread, and
+     * on a USB-direct device a full interface release/re-claim plus a libusb
+     * session restart — so it is only worth paying where the open configuration
+     * actually changes:
+     *
+     * <ul>
+     *   <li>the {@code AudioRecord} path opens mono for Mix and stereo for
+     *       Left/Right, so crossing that line needs a reopen; Left ↔ Right does
+     *       not, because the reader loop folds from the live setting;
+     *   <li>the USB-direct paths: the {@code UsbRequest} loop also reads the
+     *       setting live, but the libusb session bakes its fold in at
+     *       {@code nativeStart} and the two are not told apart here, so any
+     *       change on USB-direct reopens.
+     * </ul>
+     *
+     * @param usbDirect {@link #isUsingUsbDirect()}
+     */
+    static boolean reopenRequiredForChannelChange(int from, int to, boolean usbDirect) {
+        if (AudioChannelSelect.clamp(from) == AudioChannelSelect.clamp(to)) return false;
+        if (usbDirect) return true;
+        return AudioChannelSelect.needsStereoCapture(from)
+                != AudioChannelSelect.needsStereoCapture(to);
+    }
+
+    /**
      * Open and configure a USB audio device for input.
      */
     private UsbAudioDevice openUsbAudioInput() {

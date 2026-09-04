@@ -28,7 +28,9 @@ import java.util.List;
  * (which would see us answering ourselves), the SWL database, PSKReporter, the
  * WSJT-X broadcast, or the clock-sync DT statistics — an echo's DT is the TX
  * chain latency, not clock error, which is exactly why
- * {@link OwnTxEchoFilter#meanTimeOffsetSec()} excludes it.
+ * {@link OwnTxEchoFilter#meanTimeOffsetSec()} excludes it. Every consumer of the
+ * displayed list that acts on a decode keys on {@link Ft8Message#isOwnEcho},
+ * which {@link OwnTxEchoFilter} sets at the one place that decides "this is us".
  *
  * <p>Note that decoding and the waterfall already run through a transmission;
  * nothing gates them on TX state. The own-callsign filter was the only thing
@@ -68,23 +70,34 @@ public final class FullDuplexMonitor {
     }
 
     /**
-     * Copy {@code messages} without any decode sent by our own callsign.
+     * Copy {@code messages} without our own transmission's echoes.
      *
-     * <p>Used to keep own-TX echoes out of the SWL QSO scan once full duplex
-     * puts them in the displayed message list. That scan walks the whole
-     * accumulated list looking for a station pair exchanging reports; an echo
-     * carrying our callsign in the "from" field would let it pair our own
-     * transmissions into a logged SWL QSO with ourselves. When full duplex is
-     * off there is nothing to remove and the scan sees exactly what it always
-     * did.
+     * <p>Used to keep echoes out of the SWL QSO scan once full duplex has put
+     * them in the displayed message list — and they stay in that list after the
+     * toggle is turned off, for as long as the list keeps them, which is why the
+     * caller filters by what the list holds rather than by the live setting.
+     * That scan walks the whole accumulated list looking for a station pair
+     * exchanging reports; an echo carrying our callsign in the "from" field
+     * would let it pair our own transmissions into a logged SWL QSO with
+     * ourselves. With no echoes present the copy is exactly what the scan
+     * always saw.
      */
-    public static ArrayList<Ft8Message> withoutOwnCallsign(List<Ft8Message> messages) {
+    public static ArrayList<Ft8Message> withoutOwnEchoes(List<Ft8Message> messages) {
         ArrayList<Ft8Message> out = new ArrayList<>(messages == null ? 0 : messages.size());
         if (messages == null) return out;
         for (Ft8Message m : messages) {
-            if (m == null) continue;
-            if (GeneralVariables.checkIsMyCallsign(m.getCallsignFrom())) continue;
+            if (m == null || m.isOwnEcho) continue;
             out.add(m);
+        }
+        return out;
+    }
+
+    /** The echoes in a display list, in order; empty when it carries none. */
+    public static ArrayList<Ft8Message> onlyOwnEchoes(List<Ft8Message> messages) {
+        ArrayList<Ft8Message> out = new ArrayList<>();
+        if (messages == null) return out;
+        for (Ft8Message m : messages) {
+            if (m != null && m.isOwnEcho) out.add(m);
         }
         return out;
     }
