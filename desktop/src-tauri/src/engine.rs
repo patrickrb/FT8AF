@@ -43,6 +43,19 @@ const DEFAULT_TX_GAIN: f32 = 0.9;
 fn clamp_tx_gain(g: f32) -> f32 {
     g.clamp(0.0, 1.0)
 }
+
+// Default RX input gain: unity (no change) -- a fresh install shouldn't
+// alter whatever level the operator's soundcard/interface already provides.
+const DEFAULT_RX_GAIN: f32 = 1.0;
+
+/// Clamp a requested RX gain into 0.0–1.0, same range as TX gain. Widened to
+/// 0.0-8.0 during testing to check the control had real effect (confirmed:
+/// a clip warning at 800%, silence at 0%) -- but adjustment past 100% wasn't
+/// doing anything practically useful, so finalized at 0-100% for finer
+/// control resolution across the range that actually matters.
+fn clamp_rx_gain(g: f32) -> f32 {
+    g.clamp(0.0, 1.0)
+}
 // Live-waterfall FFT parameters (window/size/averaging + display constants)
 // live in `crate::wf` and are runtime-configurable via SetWaterfallConfig.
 // Input RMS at/below this (dBFS) counts as silence — no audio reaching the app.
@@ -97,6 +110,9 @@ pub enum EngineCommand {
     SetBaseFreq(i32),
     /// TX output level, 0.0–1.0 (drive into the soundcard/USB audio path).
     SetTxGain(f32),
+    /// RX input gain, 0.0–2.0 (post-ADC software trim, applied live without
+    /// restarting capture -- some bands are noisier than others).
+    SetRxGain(f32),
     SetInputDevice(Option<String>),
     SetOutputDevice(Option<String>),
     SelectRig(RigConfig),
@@ -265,6 +281,8 @@ struct Engine {
     tx_audio_hz: i32,
     /// TX output level (0.0–1.0) applied to the waveform before playback.
     tx_gain: f32,
+    /// RX input gain (0.0–2.0), applied live inside the capture callback.
+    rx_gain: f32,
     /// Slot id (rx-corrected clock) most recently handed to the decode worker.
     /// Guards the once-per-slot early decode trigger in the run loop.
     last_decoded_slot: i64,
@@ -310,6 +328,11 @@ impl Engine {
             .and_then(|s| s.parse::<f32>().ok())
             .map(clamp_tx_gain)
             .unwrap_or(DEFAULT_TX_GAIN);
+        let rx_gain = db
+            .get_config("rx_gain")
+            .and_then(|s| s.parse::<f32>().ok())
+            .map(clamp_rx_gain)
+            .unwrap_or(DEFAULT_RX_GAIN);
         // Restore the last NTP offset so DT is roughly right immediately, before
         // the first fresh sync of this session lands. Treated as already-synced.
         let saved_offset: Option<i64> = db.get_config("clock_offset_ms").and_then(|s| s.parse().ok());
@@ -375,6 +398,7 @@ impl Engine {
             dial_hz,
             tx_audio_hz,
             tx_gain,
+            rx_gain,
             last_decoded_slot: -1,
             rx_offset_ms,
             last_tick_ms: 0,
@@ -753,6 +777,16 @@ impl Engine {
                 self.tx_gain = clamp_tx_gain(g);
                 let _ = self.db.set_config("tx_gain", &self.tx_gain.to_string());
             }
+            EngineCommand::SetRxGain(g) => {
+                self.rx_gain = clamp_rx_gain(g);
+                let _ = self.db.set_config("rx_gain", &self.rx_gain.to_string());
+                // Applied live -- no capture restart, unlike changing the
+                // device itself. Some bands are noisier than others, so this
+                // is expected to be adjusted often while decoding.
+                if let Some(input) = &self.input {
+                    input.set_gain(self.rx_gain);
+                }
+            }
             EngineCommand::SetWaterfallConfig(cfg) => {
                 let cfg = cfg.sanitize();
                 let _ = self.db.set_config("wf_window", cfg.window.as_str());
@@ -866,7 +900,7 @@ impl Engine {
     }
 
     fn start_decode(&mut self) {
-        match AudioInput::start(self.input_device.as_deref(), self.accum.clone()) {
+        match AudioInput::start(self.input_device.as_deref(), self.accum.clone(), self.rx_gain) {
             Ok(input) => {
                 self.emit(EngineEvent::Info(format!(
                     "capturing from '{}' @ {} Hz",

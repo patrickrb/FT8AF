@@ -76,6 +76,7 @@ export default function App() {
   const [filter, setFilter] = useState<Filter>("all");
   const [txFreq, setTxFreq] = useState(1500);
   const [txGain, setTxGain] = useState(90); // TX level as a percentage (0–100)
+  const [inputGain, setInputGain] = useState(100); // RX input gain as a percentage (0–100)
   const [rigLabel, setRigLabel] = useState(""); // optional display-name override
   const [bands, setBands] = useState<BandInfo[]>([]);
   const [dialHz, setDialHz] = useState<number>(14074000);
@@ -83,6 +84,30 @@ export default function App() {
   // keep latest decoding flag for the toggle without stale closure
   const decodingRef = useRef(decoding);
   decodingRef.current = decoding;
+
+  // Debounce IPC calls from the TX/RX gain sliders: a drag gesture can fire
+  // dozens of onChange events (confirmed live -- "the slider is really
+  // touchy"), each one a full round-trip to the Rust backend stacking on top
+  // of the waterfall's own already-frequent canvas redraws. That combined
+  // load correlates with a real WebKitGTK renderer crash seen live (the
+  // WebKitWebProcess disappeared entirely, leaving a blank window, while the
+  // Rust backend kept running fine) -- not proven as the sole cause, but a
+  // clear, safe mitigation regardless. The slider's own displayed value
+  // updates immediately (setTxGain/setInputGain, not debounced) for smooth
+  // visual feedback; only the backend call waits for a short pause in
+  // dragging. Safe to delay for both: TX gain is only read when the *next*
+  // transmission starts (never applied to audio already playing), and RX
+  // gain landing ~120ms late has no practical effect either.
+  const txGainTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rxGainTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function debouncedSetTxGain(pct: number) {
+    if (txGainTimer.current) clearTimeout(txGainTimer.current);
+    txGainTimer.current = setTimeout(() => api.setTxGain(pct / 100), 120);
+  }
+  function debouncedSetRxGain(pct: number) {
+    if (rxGainTimer.current) clearTimeout(rxGainTimer.current);
+    rxGainTimer.current = setTimeout(() => api.setRxGain(pct / 100), 120);
+  }
 
   useEffect(() => {
     // Register the event listener with cancellation-safe cleanup. Without this,
@@ -111,6 +136,11 @@ export default function App() {
       if (v == null || v === "") return;
       const pct = Math.round(parseFloat(v) * 100);
       if (!Number.isNaN(pct)) setTxGain(pct); // keep a persisted 0% (not just falsy-skip)
+    });
+    api.getConfig("rx_gain").then((v) => {
+      if (v == null || v === "") return;
+      const pct = Math.round(parseFloat(v) * 100);
+      if (!Number.isNaN(pct)) setInputGain(pct);
     });
     api.getConfig("rig_label").then((v) => {
       if (v) setRigLabel(v);
@@ -201,7 +231,7 @@ export default function App() {
         txGain={txGain}
         onTxGain={(v) => {
           setTxGain(v);
-          api.setTxGain(v / 100);
+          debouncedSetTxGain(v);
         }}
       />
       <div className="tabs">
@@ -223,6 +253,11 @@ export default function App() {
               api.setBaseFreq(hz);
             }}
             onAnswer={(m) => api.answer({ call_from: m.call_from, grid: m.grid, snr: m.snr })}
+            inputGain={inputGain}
+            onInputGain={(v) => {
+              setInputGain(v);
+              debouncedSetRxGain(v);
+            }}
           />
         )}
         {tab === "log" && <LogScreen />}
@@ -292,7 +327,7 @@ function TopBar(props: {
           {txGain}%
         </span>
       </span>
-      <select value={dialHz} onChange={(e) => onBand(parseInt(e.target.value, 10))}>
+      <select id="band-select" value={dialHz} onChange={(e) => onBand(parseInt(e.target.value, 10))}>
         {bands.map((b) => (
           <option key={b.name} value={b.dial_hz}>
             {b.name} · {(b.dial_hz / 1e6).toFixed(3)}
@@ -456,8 +491,10 @@ function DecodeScreen(props: {
   txFreq: number;
   onSelectFreq: (hz: number) => void;
   onAnswer: (m: UiMessage) => void;
+  inputGain: number;
+  onInputGain: (v: number) => void;
 }) {
-  const { messages, filter, setFilter, txFreq, onSelectFreq, onAnswer } = props;
+  const { messages, filter, setFilter, txFreq, onSelectFreq, onAnswer, inputGain, onInputGain } = props;
   return (
     <>
       <WaterfallView txFreq={txFreq} onSelectFreq={onSelectFreq} />
@@ -467,6 +504,26 @@ function DecodeScreen(props: {
             {f === "all" ? "All" : f === "cq" ? "CQ" : "To me"}
           </div>
         ))}
+        {/* Next to the filter chips, not buried in Settings -- RX gain is
+            expected to be nudged per-band (noise floor varies a lot band to
+            band), so it needs to be at hand while actually watching decodes,
+            not a few clicks away. */}
+        <span className="tx-level" title="RX input gain — some bands are noisier than others" style={{ marginLeft: "auto" }}>
+          <span className="muted">RX</span>
+          <input
+            type="range"
+            aria-label="RX input gain, percent"
+            min={0}
+            max={100}
+            step={1}
+            value={inputGain}
+            onChange={(e) => onInputGain(parseInt(e.target.value, 10))}
+            style={{ width: 90 }}
+          />
+          <span className="muted" style={{ fontVariantNumeric: "tabular-nums", minWidth: 34, textAlign: "right" }}>
+            {inputGain}%
+          </span>
+        </span>
       </div>
       <div className="decode-list">
       <table>
@@ -772,6 +829,7 @@ function SettingsScreen(props: {
           <div className="field">
             <label>Input device (RX)</label>
             <select
+              id="audio-input-select"
               value={input}
               onChange={(e) => {
                 setInput(e.target.value);
@@ -789,6 +847,7 @@ function SettingsScreen(props: {
           <div className="field">
             <label>Output device (TX)</label>
             <select
+              id="audio-output-select"
               value={output}
               onChange={(e) => {
                 setOutput(e.target.value);
@@ -843,6 +902,7 @@ function SettingsScreen(props: {
           <div className="field">
             <label>Backend</label>
             <select
+              id="rig-backend-select"
               value={rigCfg.backend}
               onChange={(e) => setRigCfg({ ...rigCfg, backend: e.target.value as RigConfig["backend"] })}
             >
@@ -859,6 +919,7 @@ function SettingsScreen(props: {
                 <label>Radio {hamlibRigs.length > 0 ? `(${hamlibRigs.length} supported)` : ""}</label>
                 {hamlibRigs.length > 0 ? (
                   <select
+                    id="rig-radio-select"
                     value={rigCfg.hamlib_model}
                     onChange={(e) =>
                       setRigCfg({ ...rigCfg, hamlib_model: parseInt(e.target.value, 10) })
@@ -884,6 +945,7 @@ function SettingsScreen(props: {
               <div className="field">
                 <label>Connection</label>
                 <select
+                  id="rig-connection-select"
                   value={rigCfg.hamlib_network ? "network" : "serial"}
                   onChange={(e) => setRigCfg({ ...rigCfg, hamlib_network: e.target.value === "network" })}
                 >
@@ -913,7 +975,7 @@ function SettingsScreen(props: {
                   <div className="field">
                     <label>Serial port</label>
                     <div className="row">
-                      <select value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
+                      <select id="rig-serial-port-select" value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
                         <option value="">(none — e.g. Dummy)</option>
                         {ports.map((p) => (
                           <option key={p.name} value={p.name}>
@@ -929,6 +991,7 @@ function SettingsScreen(props: {
                   <div className="field">
                     <label>Baud</label>
                     <select
+                      id="rig-baud-select"
                       value={rigCfg.baud}
                       onChange={(e) => setRigCfg({ ...rigCfg, baud: parseInt(e.target.value, 10) })}
                     >
@@ -988,7 +1051,7 @@ function SettingsScreen(props: {
               <div className="field">
                 <label>Serial port</label>
                 <div className="row">
-                  <select value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
+                  <select id="rig-serial-port-select" value={rigCfg.port} onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}>
                     <option value="">— select —</option>
                     {ports.map((p) => (
                       <option key={p.name} value={p.name}>
@@ -1005,6 +1068,7 @@ function SettingsScreen(props: {
                 <div className="field">
                   <label>Baud</label>
                   <select
+                    id="rig-baud-select"
                     value={rigCfg.baud}
                     onChange={(e) => setRigCfg({ ...rigCfg, baud: parseInt(e.target.value, 10) })}
                   >
@@ -1081,6 +1145,7 @@ function SettingsScreen(props: {
           <div className="field">
             <label>Window function</label>
             <select
+              id="wf-window-select"
               value={wfCfg.window}
               onChange={(e) => applyWfCfg({ ...wfCfg, window: e.target.value as WfWindow })}
             >
@@ -1094,6 +1159,7 @@ function SettingsScreen(props: {
           <div className="field">
             <label>FFT size</label>
             <select
+              id="wf-fft-size-select"
               value={wfCfg.fft_size}
               onChange={(e) => applyWfCfg({ ...wfCfg, fft_size: parseInt(e.target.value, 10) })}
             >
@@ -1107,6 +1173,7 @@ function SettingsScreen(props: {
           <div className="field">
             <label>Averaging (Welch segments per row)</label>
             <select
+              id="wf-avg-select"
               value={wfCfg.avg}
               onChange={(e) => applyWfCfg({ ...wfCfg, avg: parseInt(e.target.value, 10) })}
             >

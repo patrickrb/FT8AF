@@ -1,7 +1,7 @@
 //! Continuous audio capture: open an input device, downmix to mono, resample to
 //! 12 kHz on a worker thread, and feed a `SlotAccumulator`.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
@@ -22,12 +22,23 @@ pub struct AudioInput {
     worker: Option<JoinHandle<()>>,
     pub device_name: String,
     pub device_rate: u32,
+    gain: Arc<AtomicU32>, // f32 bits, read/written lock-free from the realtime callback
 }
 
 impl AudioInput {
+    /// Live-adjustable RX gain (a linear multiplier applied to each downmixed
+    /// sample, e.g. 1.0 = unity, 2.0 = +6 dB) -- some bands are noisier than
+    /// others, so this is expected to change often while decoding, not just
+    /// at startup. Lock-free: the realtime audio callback only ever loads
+    /// this, never blocks on it.
+    pub fn set_gain(&self, g: f32) {
+        self.gain.store(g.to_bits(), Ordering::Relaxed);
+    }
+
     pub fn start(
         device_name: Option<&str>,
         accum: Arc<SlotAccumulator>,
+        initial_gain: f32,
     ) -> anyhow::Result<AudioInput> {
         let device = find_input_device(device_name)
             .ok_or_else(|| anyhow::anyhow!("no input audio device available"))?;
@@ -42,29 +53,43 @@ impl AudioInput {
         let rb = HeapRb::<f32>::new(device_rate as usize * 2); // ~2 s headroom
         let (mut prod, mut cons) = rb.split();
 
+        let gain = Arc::new(AtomicU32::new(initial_gain.to_bits()));
+
         let err_fn = |e| log::error!("audio input stream error: {e}");
 
-        // Build a callback that downmixes interleaved frames to mono f32 and
-        // pushes into the ring. One arm per supported sample format.
+        // Build a callback that downmixes interleaved frames to mono f32,
+        // applies the live RX gain, and pushes into the ring. One arm per
+        // supported sample format. Each arm clones `gain` independently --
+        // disjoint match arms may each move their own capture of a variable
+        // without conflicting (only one arm's closure is ever actually built).
         let stream = match sample_format {
-            SampleFormat::F32 => device.build_input_stream(
-                &config,
-                move |data: &[f32], _| push_mono(data, channels, &mut prod),
-                err_fn,
-                None,
-            )?,
-            SampleFormat::I16 => device.build_input_stream(
-                &config,
-                move |data: &[i16], _| push_mono(data, channels, &mut prod),
-                err_fn,
-                None,
-            )?,
-            SampleFormat::U16 => device.build_input_stream(
-                &config,
-                move |data: &[u16], _| push_mono(data, channels, &mut prod),
-                err_fn,
-                None,
-            )?,
+            SampleFormat::F32 => {
+                let gain = gain.clone();
+                device.build_input_stream(
+                    &config,
+                    move |data: &[f32], _| push_mono(data, channels, &mut prod, &gain),
+                    err_fn,
+                    None,
+                )?
+            }
+            SampleFormat::I16 => {
+                let gain = gain.clone();
+                device.build_input_stream(
+                    &config,
+                    move |data: &[i16], _| push_mono(data, channels, &mut prod, &gain),
+                    err_fn,
+                    None,
+                )?
+            }
+            SampleFormat::U16 => {
+                let gain = gain.clone();
+                device.build_input_stream(
+                    &config,
+                    move |data: &[u16], _| push_mono(data, channels, &mut prod, &gain),
+                    err_fn,
+                    None,
+                )?
+            }
             other => anyhow::bail!("unsupported input sample format: {other:?}"),
         };
         stream.play()?;
@@ -96,6 +121,7 @@ impl AudioInput {
             worker: Some(worker),
             device_name: dev_name,
             device_rate,
+            gain,
         })
     }
 }
@@ -109,8 +135,12 @@ impl Drop for AudioInput {
     }
 }
 
-/// Downmix interleaved `T` frames to mono f32 and push into the ring producer.
-fn push_mono<T, P>(data: &[T], channels: usize, prod: &mut P)
+/// Downmix interleaved `T` frames to mono f32, apply the live RX gain, and
+/// push into the ring producer. `gain` is read fresh per sample (a relaxed
+/// atomic load is cheap, and this runs on the realtime audio thread, so no
+/// locking) -- lets the gain slider feel immediate rather than only taking
+/// effect on the next buffer.
+fn push_mono<T, P>(data: &[T], channels: usize, prod: &mut P, gain: &AtomicU32)
 where
     T: Sample,
     f32: FromSample<T>,
@@ -119,9 +149,14 @@ where
     if channels == 0 {
         return;
     }
+    let g = f32::from_bits(gain.load(Ordering::Relaxed));
+    // Clamp to full scale, same as the TX gain path (audio/output.rs) -- gain
+    // can go well past unity (see clamp_rx_gain), and hard-clipping here
+    // mirrors what a real ADC does when overdriven, rather than passing
+    // arbitrarily large sample values into the resampler/decoder.
     if channels == 1 {
         for &s in data {
-            let _ = prod.try_push(f32::from_sample(s));
+            let _ = prod.try_push((f32::from_sample(s) * g).clamp(-1.0, 1.0));
         }
         return;
     }
@@ -130,6 +165,6 @@ where
         for &s in frame {
             acc += f32::from_sample(s);
         }
-        let _ = prod.try_push(acc / channels as f32);
+        let _ = prod.try_push(((acc / channels as f32) * g).clamp(-1.0, 1.0));
     }
 }

@@ -2,6 +2,7 @@
 // exposes commands to the web UI, and forwards engine events to the webview.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -85,6 +86,11 @@ fn set_base_freq(state: State<AppState>, hz: i32) {
 #[tauri::command]
 fn set_tx_gain(state: State<AppState>, gain: f32) {
     state.engine.send(EngineCommand::SetTxGain(gain));
+}
+
+#[tauri::command]
+fn set_rx_gain(state: State<AppState>, gain: f32) {
+    state.engine.send(EngineCommand::SetRxGain(gain));
 }
 
 #[tauri::command]
@@ -191,6 +197,41 @@ fn set_waterfall_config(state: State<AppState>, config: WfConfig) {
     state.engine.send(EngineCommand::SetWaterfallConfig(config));
 }
 
+fn app_data_dir() -> PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("FT8AF")
+}
+
+// The compiled-in baseline -- only this constant needs a rebuild to change;
+// everything a user actually edits lives at styles_path() on disk instead.
+const DEFAULT_STYLES_CSS: &str = include_str!("../../public/styles.css");
+
+fn styles_path() -> PathBuf {
+    app_data_dir().join("styles.css")
+}
+
+#[tauri::command]
+fn get_custom_css() -> String {
+    // Read from disk on every call, not from the Vite/Tauri-bundled frontend
+    // -- Tauri embeds frontendDist into the compiled binary at build time
+    // (confirmed directly: editing the bundled dist/styles.css after a build
+    // and relaunching the same binary had zero effect), so anything served
+    // from there needs a full rebuild for every change. This file lives
+    // outside that embed entirely, so editing it just needs an app relaunch
+    // -- the whole point, since this stylesheet is expected to change often.
+    let path = styles_path();
+    match std::fs::read_to_string(&path) {
+        Ok(css) => css,
+        Err(_) => {
+            // First run: seed the file so there's something to open and edit.
+            let _ = std::fs::create_dir_all(app_data_dir());
+            let _ = std::fs::write(&path, DEFAULT_STYLES_CSS);
+            DEFAULT_STYLES_CSS.to_string()
+        }
+    }
+}
+
 fn main() {
     // Debug helper: `ft8af --list-rigs` prints the Hamlib-enumerated rig count
     // and exits — verifies the bundled Hamlib library loads without the GUI.
@@ -203,9 +244,38 @@ fn main() {
         return;
     }
 
-    let data_dir = dirs::data_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("FT8AF");
+    // Debug helper: `ft8af --list-audio` prints cpal's enumerated input/output
+    // devices and exits -- same idea as --list-rigs, verifies device
+    // enumeration without needing to click through the GUI (native <select>
+    // popups render as a separate top-level X window on Linux, so they don't
+    // show up in a window-scoped screenshot either).
+    if std::env::args().any(|a| a == "--list-audio") {
+        let inputs = audio::list_input_devices();
+        println!("Input devices ({}):", inputs.len());
+        for d in inputs.iter() {
+            println!(
+                "  {}{} -- {} Hz, {} ch",
+                if d.is_default { "* " } else { "  " },
+                d.name,
+                d.default_sample_rate,
+                d.channels
+            );
+        }
+        let outputs = audio::list_output_devices();
+        println!("Output devices ({}):", outputs.len());
+        for d in outputs.iter() {
+            println!(
+                "  {}{} -- {} Hz, {} ch",
+                if d.is_default { "* " } else { "  " },
+                d.name,
+                d.default_sample_rate,
+                d.channels
+            );
+        }
+        return;
+    }
+
+    let data_dir = app_data_dir();
     let _ = std::fs::create_dir_all(&data_dir);
     let db = Arc::new(
         Db::open(data_dir.join("ft8af.sqlite")).expect("failed to open database"),
@@ -248,6 +318,7 @@ fn main() {
             set_band,
             set_base_freq,
             set_tx_gain,
+            set_rx_gain,
             set_input_device,
             set_output_device,
             select_rig,
@@ -268,6 +339,7 @@ fn main() {
             set_config,
             all_config,
             set_waterfall_config,
+            get_custom_css,
         ])
         .run(tauri::generate_context!())
         .expect("error running FT8AF");
