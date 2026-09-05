@@ -159,6 +159,7 @@ export const api = {
   setBand: (dialHz: number) => invoke("set_band", { dialHz }),
   setBaseFreq: (hz: number) => invoke("set_base_freq", { hz }),
   setTxGain: (gain: number) => invoke("set_tx_gain", { gain }),
+  setRxGain: (gain: number) => invoke("set_rx_gain", { gain }),
   setInputDevice: (name: string | null) => invoke("set_input_device", { name }),
   setOutputDevice: (name: string | null) => invoke("set_output_device", { name }),
   selectRig: (config: RigConfig) => invoke("select_rig", { config }),

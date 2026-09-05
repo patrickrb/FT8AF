@@ -76,6 +76,7 @@ export default function App() {
   const [filter, setFilter] = useState<Filter>("all");
   const [txFreq, setTxFreq] = useState(1500);
   const [txGain, setTxGain] = useState(90); // TX level as a percentage (0–100)
+  const [inputGain, setInputGain] = useState(100); // RX input gain as a percentage (0–100)
   const [rigLabel, setRigLabel] = useState(""); // optional display-name override
   const [bands, setBands] = useState<BandInfo[]>([]);
   const [dialHz, setDialHz] = useState<number>(14074000);
@@ -83,6 +84,30 @@ export default function App() {
   // keep latest decoding flag for the toggle without stale closure
   const decodingRef = useRef(decoding);
   decodingRef.current = decoding;
+
+  // Debounce IPC calls from the TX/RX gain sliders: a drag gesture can fire
+  // dozens of onChange events (confirmed live -- "the slider is really
+  // touchy"), each one a full round-trip to the Rust backend stacking on top
+  // of the waterfall's own already-frequent canvas redraws. That combined
+  // load correlates with a real WebKitGTK renderer crash seen live (the
+  // WebKitWebProcess disappeared entirely, leaving a blank window, while the
+  // Rust backend kept running fine) -- not proven as the sole cause, but a
+  // clear, safe mitigation regardless. The slider's own displayed value
+  // updates immediately (setTxGain/setInputGain, not debounced) for smooth
+  // visual feedback; only the backend call waits for a short pause in
+  // dragging. Safe to delay for both: TX gain is only read when the *next*
+  // transmission starts (never applied to audio already playing), and RX
+  // gain landing ~120ms late has no practical effect either.
+  const txGainTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rxGainTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function debouncedSetTxGain(pct: number) {
+    if (txGainTimer.current) clearTimeout(txGainTimer.current);
+    txGainTimer.current = setTimeout(() => api.setTxGain(pct / 100), 120);
+  }
+  function debouncedSetRxGain(pct: number) {
+    if (rxGainTimer.current) clearTimeout(rxGainTimer.current);
+    rxGainTimer.current = setTimeout(() => api.setRxGain(pct / 100), 120);
+  }
 
   useEffect(() => {
     // Register the event listener with cancellation-safe cleanup. Without this,
@@ -111,6 +136,11 @@ export default function App() {
       if (v == null || v === "") return;
       const pct = Math.round(parseFloat(v) * 100);
       if (!Number.isNaN(pct)) setTxGain(pct); // keep a persisted 0% (not just falsy-skip)
+    });
+    api.getConfig("rx_gain").then((v) => {
+      if (v == null || v === "") return;
+      const pct = Math.round(parseFloat(v) * 100);
+      if (!Number.isNaN(pct)) setInputGain(pct);
     });
     api.getConfig("rig_label").then((v) => {
       if (v) setRigLabel(v);
@@ -201,7 +231,7 @@ export default function App() {
         txGain={txGain}
         onTxGain={(v) => {
           setTxGain(v);
-          api.setTxGain(v / 100);
+          debouncedSetTxGain(v);
         }}
       />
       <div className="tabs">
@@ -223,6 +253,11 @@ export default function App() {
               api.setBaseFreq(hz);
             }}
             onAnswer={(m) => api.answer({ call_from: m.call_from, grid: m.grid, snr: m.snr })}
+            inputGain={inputGain}
+            onInputGain={(v) => {
+              setInputGain(v);
+              debouncedSetRxGain(v);
+            }}
           />
         )}
         {tab === "log" && <LogScreen />}
@@ -456,8 +491,10 @@ function DecodeScreen(props: {
   txFreq: number;
   onSelectFreq: (hz: number) => void;
   onAnswer: (m: UiMessage) => void;
+  inputGain: number;
+  onInputGain: (v: number) => void;
 }) {
-  const { messages, filter, setFilter, txFreq, onSelectFreq, onAnswer } = props;
+  const { messages, filter, setFilter, txFreq, onSelectFreq, onAnswer, inputGain, onInputGain } = props;
   return (
     <>
       <WaterfallView txFreq={txFreq} onSelectFreq={onSelectFreq} />
@@ -467,6 +504,26 @@ function DecodeScreen(props: {
             {f === "all" ? "All" : f === "cq" ? "CQ" : "To me"}
           </div>
         ))}
+        {/* Next to the filter chips, not buried in Settings -- RX gain is
+            expected to be nudged per-band (noise floor varies a lot band to
+            band), so it needs to be at hand while actually watching decodes,
+            not a few clicks away. */}
+        <span className="tx-level" title="RX input gain — some bands are noisier than others" style={{ marginLeft: "auto" }}>
+          <span className="muted">RX</span>
+          <input
+            type="range"
+            aria-label="RX input gain, percent"
+            min={0}
+            max={100}
+            step={1}
+            value={inputGain}
+            onChange={(e) => onInputGain(parseInt(e.target.value, 10))}
+            style={{ width: 90 }}
+          />
+          <span className="muted" style={{ fontVariantNumeric: "tabular-nums", minWidth: 34, textAlign: "right" }}>
+            {inputGain}%
+          </span>
+        </span>
       </div>
       <div className="decode-list">
       <table>

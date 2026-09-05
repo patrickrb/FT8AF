@@ -89,6 +89,11 @@ fn set_tx_gain(state: State<AppState>, gain: f32) {
 }
 
 #[tauri::command]
+fn set_rx_gain(state: State<AppState>, gain: f32) {
+    state.engine.send(EngineCommand::SetRxGain(gain));
+}
+
+#[tauri::command]
 fn set_input_device(state: State<AppState>, name: Option<String>) {
     state.engine.send(EngineCommand::SetInputDevice(name));
 }
@@ -313,6 +318,7 @@ fn main() {
             set_band,
             set_base_freq,
             set_tx_gain,
+            set_rx_gain,
             set_input_device,
             set_output_device,
             select_rig,
