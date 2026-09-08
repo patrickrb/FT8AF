@@ -85,13 +85,18 @@ The workflow is `.github/workflows/play-listings.yml`:
 - **Pull request** touching the metadata → validation only. Runs the unit tests,
   which load the whole tree and check completeness and character limits. No
   secrets, so it works from forks.
-- **Push to `main`** touching the metadata → publishes the changed locales. Since
-  all PRs target `dev`, listing changes reach Play on the normal
-  dev → staging → main promotion, alongside the release they belong to.
 - **Manual run** (Actions → "Play store listings" → Run workflow) → pick a mode:
   `dry-run` (the default; prints the diff, sends nothing), `check-permissions`
-  (the grant probe below), or `publish` (the real thing, without waiting for a
-  merge to `main`).
+  (the grant probe below), or `publish` (the real thing).
+
+**No branch push publishes.** Not `dev`, not `staging`, and deliberately not
+`main` — a merge to `main` cuts the GitHub Release and sends nothing whatsoever
+to Google Play, listings included. Listing text is version-controlled the same
+way code is: it lands in the repo through the usual feature → dev → staging →
+main flow, is validated on the way in, and then waits until someone decides the
+store should say it. That decision is the manual run above, or the same script
+run locally (see [Running it locally](#running-it-locally)) — the store's copy
+changes when you choose, not when a promotion happens to carry it.
 
 Note that `workflow_dispatch` only appears once this workflow file exists on the
 repository's **default branch**, `main`. Until the first promotion carries it

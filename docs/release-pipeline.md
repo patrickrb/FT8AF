@@ -24,11 +24,10 @@ feature/* ──PR──▶ dev ──PR──▶ staging ──PR──▶ main
   platform: prerelease GitHub Releases + Play **internal** track for Android.
 - **staging → main** — promote the validated staging build. Merging this PR (a
   push to `main`) cuts the **production** build: full GitHub Releases with the
-  auto-bumped `android-v<x.y.z>` / `desktop-v<x.y.z>` tags. It uploads **no app
-  binary to Google Play** — no AAB reaches any track. (Store *listing* text is a
-  separate pipeline: a `main` push touching `fastlane/metadata/android/**` still
-  runs `play-listings.yml`, which does publish listing changes to Play. See
-  [Store listings](#store-listings) below.)
+  auto-bumped `android-v<x.y.z>` / `desktop-v<x.y.z>` tags. **A merge to `main`
+  reaches Google Play in no way at all** — no AAB to any track, and no store
+  listing text either. Everything Play-side is a deliberate, separate act. See
+  [Store listings](#store-listings) below.
 - **shipping a `main`-cut release to Play production is manual.** In
   **Actions → Android CI & Release → Run workflow**, pick the `android-v<x.y.z>`
   tag the `main` merge created as the ref and run it. That run takes the same
@@ -112,12 +111,17 @@ PR titles as the notes — a release is never blocked on the AI step.
 
 Play *store listing* text (title, descriptions, per-locale metadata) lives in
 `fastlane/metadata/android/` and ships through its own workflow,
-`play-listings.yml` — not through the Android release pipeline above. It
-publishes on a push to `main` that touches that directory, and can also be run
-manually (with a dry-run option). So a `main` merge that changes listing text
-does reach Google Play, even though it uploads no app binary; the two are
-deliberately independent, because listing copy and app builds ship on different
-cadences.
+`play-listings.yml` — not through the Android release pipeline above, and not
+on any branch push. A PR touching the metadata is **validated** (completeness
+and Play's character limits) and then the text just sits in the repo; it reaches
+the store only when someone runs the publish on purpose:
+
+- **Actions → "Play store listings" → Run workflow**, mode `publish` (the
+  default mode is the read-only `dry-run`), or
+- locally: `python .github/scripts/publish_listings.py`.
+
+Listing copy and app builds ship on different cadences, and neither is tied to a
+`main` merge.
 
 ## One-time setup on GitHub (manual)
 
