@@ -48,6 +48,43 @@ select, input {
   font-size: 13px;
 }
 
+/* Scoped test: only the Rig control "Display name" field, targeted by its
+   placeholder text (no JSX/rebuild needed) -- not touching the global
+   select/input rule, which broke real keyboard input when modified. */
+input[placeholder="e.g. Flex 6400"] {
+  color: #fff;
+}
+
+/* Select readability, fixed at the cause rather than per-id.
+   The original symptom is Linux-only: WebKitGTK draws <select> as a *native*
+   GTK widget, which ignores the author `background` from the shared
+   select/input rule above but still honors `color`, so the light --text sat
+   on a light GTK control and was unreadable. Forcing `color: #000` per id
+   papered over that, but WebView2 (Windows) and WKWebView (macOS) *do* honor
+   the dark --panel background, so the same rule turned every dropdown on
+   those platforms into black-on-#1a2129 -- and CI ships all three.
+   `appearance: none` opts the control out of native rendering everywhere, so
+   the panel background and --text color actually paint on every platform;
+   the arrow the native widget provided is redrawn as a background image. */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%238a99a8' d='M1 1.5 6 6.5l5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 10px 7px;
+  padding-right: 26px;
+}
+
+/* The open dropdown's popup is drawn by the platform, outside the page, so
+   `appearance` does not reach it. Pin both properties on the options so the
+   popup is self-consistent no matter which of the two an engine honors --
+   light ground, dark text, readable against every platform's default popup. */
+select option {
+  background: #fff;
+  color: #000;
+}
+
 .topbar {
   display: flex;
   align-items: center;

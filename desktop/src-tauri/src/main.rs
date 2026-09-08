@@ -2,6 +2,7 @@
 // exposes commands to the web UI, and forwards engine events to the webview.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tauri::{Emitter, State};
@@ -116,6 +117,11 @@ fn set_base_freq(state: State<AppState>, hz: i32) {
 #[tauri::command]
 fn set_tx_gain(state: State<AppState>, gain: f32) {
     state.engine.send(EngineCommand::SetTxGain(gain));
+}
+
+#[tauri::command]
+fn set_rx_gain(state: State<AppState>, gain: f32) {
+    state.engine.send(EngineCommand::SetRxGain(gain));
 }
 
 #[tauri::command]
@@ -274,6 +280,123 @@ fn set_waterfall_config(state: State<AppState>, config: WfConfig) {
     state.engine.send(EngineCommand::SetWaterfallConfig(config));
 }
 
+fn app_data_dir() -> PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("FT8AF")
+}
+
+// The compiled-in baseline -- only this constant needs a rebuild to change;
+// everything a user actually edits lives at styles_path() on disk instead.
+const DEFAULT_STYLES_CSS: &str = include_str!("../../public/styles.css");
+
+fn styles_path() -> PathBuf {
+    app_data_dir().join("styles.css")
+}
+
+/// Marker line prefixed to the seeded copy of `DEFAULT_STYLES_CSS`. The value
+/// is the hash of the body written underneath it, which does double duty: it
+/// identifies *which* build's stylesheet the copy came from, and comparing it
+/// against a re-hash of the body tells us whether the user has since edited
+/// the file. A CSS comment, so a stale reader just treats it as one.
+const STYLES_STAMP_PREFIX: &str = "/* ft8af-seeded: ";
+
+/// FNV-1a (64-bit). Inlined rather than pulled in as a dependency, and chosen
+/// over `DefaultHasher` because the value is written to disk and compared
+/// across builds -- `DefaultHasher`'s output is explicitly not stable between
+/// Rust releases, which would make every toolchain bump look like a new
+/// stylesheet version.
+fn fnv1a64(s: &str) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in s.as_bytes() {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
+}
+
+fn stamped_default_css(default_css: &str) -> String {
+    format!("{STYLES_STAMP_PREFIX}{:016x} */\n{default_css}", fnv1a64(default_css))
+}
+
+/// Split a stamped file into `(recorded hash, body)`, or `None` if it carries
+/// no stamp (a hand-written file, or one seeded before stamping existed).
+fn split_styles_stamp(content: &str) -> Option<(u64, &str)> {
+    let rest = content.strip_prefix(STYLES_STAMP_PREFIX)?;
+    let (hex, after) = rest.split_once(" */")?;
+    let hash = u64::from_str_radix(hex.trim(), 16).ok()?;
+    Some((hash, after.strip_prefix('\n').unwrap_or(after)))
+}
+
+/// What to do with whatever `styles_path()` currently holds. Pure so it can be
+/// unit-tested without touching the filesystem.
+#[derive(Debug, PartialEq, Eq)]
+enum StylesAction {
+    /// Serve this content as-is; leave the file alone.
+    Use(String),
+    /// (Re-)write the file from the compiled default and serve that.
+    Seed,
+}
+
+/// Decide between the on-disk stylesheet and the compiled-in default.
+///
+/// The point of the on-disk copy is that editing it only needs an app
+/// relaunch, not a rebuild -- so a file the user has actually edited always
+/// wins, and an unstamped file is left alone too (we did not verifiably write
+/// it, so we must not clobber it). The two cases we *do* take back are the
+/// ones where the file is worse than useless:
+///
+///  * missing, empty, or whitespace-only -- an interrupted or truncated first
+///    write leaves a 0-byte file that reads back `Ok("")`, which would inject
+///    an empty `<style>` and render the whole app unstyled forever, with no
+///    in-app way out;
+///  * an untouched seed from an older build -- its stamp still matches its own
+///    body, so we know the user never edited it, and serving it would freeze
+///    the UI at that build's CSS while newer releases add markup it has no
+///    rules for.
+fn resolve_styles(on_disk: Option<&str>, default_css: &str) -> StylesAction {
+    let Some(content) = on_disk else {
+        return StylesAction::Seed;
+    };
+    if content.trim().is_empty() {
+        return StylesAction::Seed;
+    }
+    match split_styles_stamp(content) {
+        // Stamp matches the body: an untouched seed. Take it back if it came
+        // from a different build than the one running now.
+        Some((stamp, body)) if stamp == fnv1a64(body) => {
+            if stamp == fnv1a64(default_css) {
+                StylesAction::Use(body.to_string())
+            } else {
+                StylesAction::Seed
+            }
+        }
+        // Stamped but edited, or not stamped at all -- the user's file.
+        _ => StylesAction::Use(content.to_string()),
+    }
+}
+
+#[tauri::command]
+fn get_custom_css() -> String {
+    // Read from disk on every call, not from the Vite/Tauri-bundled frontend
+    // -- Tauri embeds frontendDist into the compiled binary at build time
+    // (confirmed directly: editing the bundled dist/styles.css after a build
+    // and relaunching the same binary had zero effect), so anything served
+    // from there needs a full rebuild for every change. This file lives
+    // outside that embed entirely, so editing it just needs an app relaunch
+    // -- the whole point, since this stylesheet is expected to change often.
+    let path = styles_path();
+    let on_disk = std::fs::read_to_string(&path).ok();
+    match resolve_styles(on_disk.as_deref(), DEFAULT_STYLES_CSS) {
+        StylesAction::Use(css) => css,
+        StylesAction::Seed => {
+            let _ = std::fs::create_dir_all(app_data_dir());
+            let _ = std::fs::write(&path, stamped_default_css(DEFAULT_STYLES_CSS));
+            DEFAULT_STYLES_CSS.to_string()
+        }
+    }
+}
+
 /// Apply new WSJT-X UDP settings. The engine persists the `udp_*` config keys
 /// and rebinds the socket + inbound listener live; see
 /// `EngineCommand::SetUdpConfig`.
@@ -294,9 +417,38 @@ fn main() {
         return;
     }
 
-    let data_dir = dirs::data_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("FT8AF");
+    // Debug helper: `ft8af --list-audio` prints cpal's enumerated input/output
+    // devices and exits -- same idea as --list-rigs, verifies device
+    // enumeration without needing to click through the GUI (native <select>
+    // popups render as a separate top-level X window on Linux, so they don't
+    // show up in a window-scoped screenshot either).
+    if std::env::args().any(|a| a == "--list-audio") {
+        let inputs = audio::list_input_devices();
+        println!("Input devices ({}):", inputs.len());
+        for d in inputs.iter() {
+            println!(
+                "  {}{} -- {} Hz, {} ch",
+                if d.is_default { "* " } else { "  " },
+                d.name,
+                d.default_sample_rate,
+                d.channels
+            );
+        }
+        let outputs = audio::list_output_devices();
+        println!("Output devices ({}):", outputs.len());
+        for d in outputs.iter() {
+            println!(
+                "  {}{} -- {} Hz, {} ch",
+                if d.is_default { "* " } else { "  " },
+                d.name,
+                d.default_sample_rate,
+                d.channels
+            );
+        }
+        return;
+    }
+
+    let data_dir = app_data_dir();
     let _ = std::fs::create_dir_all(&data_dir);
     let db = Arc::new(
         Db::open(data_dir.join("ft8af.sqlite")).expect("failed to open database"),
@@ -342,6 +494,7 @@ fn main() {
             set_band,
             set_base_freq,
             set_tx_gain,
+            set_rx_gain,
             set_input_device,
             set_output_device,
             select_rig,
@@ -363,9 +516,99 @@ fn main() {
             set_config,
             all_config,
             set_waterfall_config,
+            get_custom_css,
             set_udp_config,
             get_os_location,
         ])
         .run(tauri::generate_context!())
         .expect("error running FT8AF");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        fnv1a64, resolve_styles, split_styles_stamp, stamped_default_css, StylesAction,
+        DEFAULT_STYLES_CSS,
+    };
+
+    const OLD: &str = "body { color: red; }\n";
+    const NEW: &str = "body { color: blue; }\n";
+
+    #[test]
+    fn stamp_round_trips() {
+        let seeded = stamped_default_css(OLD);
+        assert_eq!(split_styles_stamp(&seeded), Some((fnv1a64(OLD), OLD)));
+    }
+
+    #[test]
+    fn unstamped_content_has_no_stamp() {
+        assert_eq!(split_styles_stamp(OLD), None);
+        // A truncated or malformed marker must not be mistaken for a stamp.
+        assert_eq!(split_styles_stamp("/* ft8af-seeded: zzzz */\nx"), None);
+        assert_eq!(split_styles_stamp("/* ft8af-seeded: 00ff"), None);
+    }
+
+    #[test]
+    fn missing_or_blank_file_is_seeded() {
+        // No file at all: first run.
+        assert_eq!(resolve_styles(None, NEW), StylesAction::Seed);
+        // A 0-byte file from an interrupted first write reads back Ok("") --
+        // serving that would inject an empty <style> and render nothing.
+        assert_eq!(resolve_styles(Some(""), NEW), StylesAction::Seed);
+        assert_eq!(resolve_styles(Some("  \n\t "), NEW), StylesAction::Seed);
+    }
+
+    #[test]
+    fn untouched_seed_from_this_build_is_served_without_its_stamp() {
+        let seeded = stamped_default_css(NEW);
+        assert_eq!(
+            resolve_styles(Some(&seeded), NEW),
+            StylesAction::Use(NEW.to_string())
+        );
+    }
+
+    #[test]
+    fn untouched_seed_from_an_older_build_is_reseeded() {
+        // The staleness case: the app shipped new CSS, the on-disk copy is
+        // still the previous build's and the user never touched it.
+        let seeded = stamped_default_css(OLD);
+        assert_eq!(resolve_styles(Some(&seeded), NEW), StylesAction::Seed);
+    }
+
+    #[test]
+    fn user_edits_survive_a_default_change() {
+        let edited = format!("{}body {{ color: green; }}\n", stamped_default_css(OLD));
+        assert_eq!(
+            resolve_styles(Some(&edited), NEW),
+            StylesAction::Use(edited.clone())
+        );
+    }
+
+    #[test]
+    fn unstamped_file_is_never_clobbered() {
+        // Hand-written, or seeded by a build from before stamping existed.
+        assert_eq!(
+            resolve_styles(Some(OLD), NEW),
+            StylesAction::Use(OLD.to_string())
+        );
+    }
+
+    #[test]
+    fn shipped_default_seeds_and_round_trips() {
+        // Guards the real constant, not just fixtures: seeding then resolving
+        // must hand back the compiled stylesheet byte-for-byte.
+        let seeded = stamped_default_css(DEFAULT_STYLES_CSS);
+        assert_eq!(
+            resolve_styles(Some(&seeded), DEFAULT_STYLES_CSS),
+            StylesAction::Use(DEFAULT_STYLES_CSS.to_string())
+        );
+    }
+
+    #[test]
+    fn fnv1a64_matches_reference_vectors() {
+        // Pinned so a refactor can't silently change the on-disk stamp format.
+        assert_eq!(fnv1a64(""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(fnv1a64("a"), 0xaf63_dc4c_8601_ec8c);
+        assert_eq!(fnv1a64("foobar"), 0x8594_4171_f739_67e8);
+    }
 }
