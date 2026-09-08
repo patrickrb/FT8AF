@@ -5,9 +5,15 @@ name: Play store listings
 # and is published from there by .github/scripts/publish_listings.py.
 #
 #   pull request touching the metadata -> validate only (no secrets, works from forks)
-#   push to main touching the metadata -> publish the changed locales to Play
 #   workflow_dispatch                  -> pick a mode: dry-run (default),
 #                                         check-permissions, or publish
+#
+# Publishing is DELIBERATE, never automatic: no branch push runs it. Listing
+# text lands in the repo on the normal feature -> dev -> staging -> main flow
+# and sits there until someone decides the store should say it, then ships by a
+# manual run here (or by running .github/scripts/publish_listings.py locally --
+# see docs/store-listings.md). Merging to main touches Google Play in no way at
+# all: android.yml uploads no AAB there either.
 #
 # Graphics (icon, feature graphic, screenshots) are NOT managed here — Play falls
 # back to the default language's graphics for locales that have none of their
@@ -17,12 +23,6 @@ name: Play store listings
 # distribution/whatsnew/whatsnew-en-US and hands it to the upload action.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'fastlane/metadata/android/**'
-      - '.github/scripts/publish_listings.py'
-      - '.github/workflows/play-listings.yml'
   pull_request:
     paths:
       - 'fastlane/metadata/android/**'
@@ -79,7 +79,7 @@ jobs:
     # must never be able to push listing text to the production app.
     if: >-
       github.repository == 'patrickrb/FT8AF'
-      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     # Google Play allows only one open "edit" per app. android.yml serializes its
     # release publishes under this same group; sharing it keeps a listing update
@@ -101,8 +101,10 @@ jobs:
         env:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           PACKAGE_NAME: radio.ks3ckc.ft8af
-          # A push to main always publishes; a manual run does what was picked.
-          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'publish' }}
+          # Whatever the manual run picked. Falls back to the read-only dry
+          # run rather than to `publish`, so a mode that somehow arrives empty
+          # sends nothing to Play instead of shipping every changed locale.
+          MODE: ${{ inputs.mode || 'dry-run' }}
         run: |
           set -euo pipefail
           if [[ -z "${PLAY_SERVICE_ACCOUNT_JSON:-}" ]]; then
