@@ -1029,20 +1029,59 @@ jobs:
           # Claude's release notes (whatsnew-en-US), written by "Write release
           # notes" above — shows up as the track's "Release notes" in Console.
           whatsNewDirectory: distribution/whatsnew
-          # Let Google auto-send the release for review (the normal path). Do NOT
-          # set this true: that bypass is only accepted while the app has
-          # review-gated changes pending. Once it's a normal reviewed app, Google
-          # auto-sends changes for review and the edit-commit rejects the flag with
-          # "Changes are sent for review automatically. The query parameter
-          # changesNotSentForReview must not be set." — which failed the internal
-          # upload for the android-dev.1026 staging build. Flip back to true only if
-          # a future upload fails demanding it (a new review-gated change is pending).
+          # Let Google auto-send the release for review (the normal path). See
+          # the retry step below: whether Google accepts this flag depends on
+          # Play Console review state, which flips out from under CI, so the
+          # value here is a first guess, not a setting to hand-tune.
           changesNotSentForReview: false
+
+      # The changesNotSentForReview flag is not ours to choose — Google's edit
+      # commit demands one specific value and rejects the other, and which one
+      # it wants depends on Play Console review state that changes outside CI:
+      #
+      #   normal reviewed app   -> Google auto-sends changes for review, and the
+      #                            commit rejects the flag with "Changes are sent
+      #                            for review automatically. The query parameter
+      #                            changesNotSentForReview must not be set."
+      #   review-gated changes  -> the commit refuses to auto-send and demands
+      #     pending in Console      "Please set the query parameter
+      #                            changesNotSentForReview to true."
+      #
+      # We have been burned in BOTH directions (false broke the android-dev.1231
+      # internal upload after an app-level review gate appeared; true broke
+      # android-dev.1026 once the app went back to normal), so don't hand-flip
+      # the literal above — retry once with the opposite value instead. The
+      # first attempt uploaded the AAB into an edit that was never committed, so
+      # the versionCode is still unused and re-uploading it here is fine.
+      - name: Retry Play publish with the opposite review flag
+        id: play_publish_retry
+        if: steps.tag.outputs.should_release == 'true' && steps.tag.outputs.play_track != '' && steps.play_publish.outcome == 'failure'
+        continue-on-error: true
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: radio.ks3ckc.ft8af
+          releaseFiles: ft8af/app/build/outputs/bundle/release/app-release.aab
+          mappingFile: ft8af/app/build/outputs/mapping/release/mapping.txt
+          track: ${{ steps.tag.outputs.play_track }}
+          status: completed
+          releaseName: ${{ steps.tag.outputs.release_tag }}
+          whatsNewDirectory: distribution/whatsnew
+          changesNotSentForReview: true
+
+      # Committed but NOT sent for review: the release is on the track, and a
+      # human has to press "Send for review" (or submit the pending app-level
+      # change) in the Play Console before testers see it. Say so loudly rather
+      # than letting a green run imply the build shipped.
+      - name: Note the review-flag retry
+        if: steps.play_publish_retry.outcome == 'success'
+        run: |
+          echo "::warning::Play publish for ${{ steps.tag.outputs.release_tag }} needed changesNotSentForReview=true — the app has review-gated changes pending in the Play Console. The AAB is committed to the '${{ steps.tag.outputs.play_track }}' track but was NOT auto-sent for review: open the Play Console and send the pending changes for review, or testers will not get this build."
 
       # Make a swallowed publish failure visible (annotation on the run) without
       # failing the job — the artifact + GitHub Release already succeeded.
       - name: Warn if Play publish failed
-        if: steps.tag.outputs.play_track != '' && steps.play_publish.outcome == 'failure'
+        if: steps.tag.outputs.play_track != '' && steps.play_publish.outcome == 'failure' && steps.play_publish_retry.outcome != 'success'
         run: |
           echo "::warning::Play publish (track=${{ steps.tag.outputs.play_track }}) failed for ${{ steps.tag.outputs.release_tag }} (non-blocking). The signed AAB built and the GitHub Release was created; only the Play upload did not complete. Check the 'Publish AAB to Play' step log — common causes are an upgrade-path rejection or an expired Play edit."
 
@@ -1053,7 +1092,9 @@ jobs:
           VERSION_NAME: ${{ steps.tag.outputs.version_name }}
           VERSION_SOURCE: ${{ steps.tag.outputs.version_source }}
           PLAY_TRACK: ${{ steps.tag.outputs.play_track }}
-          PLAY_OUTCOME: ${{ steps.play_publish.outcome }}
+          # The retry step (opposite changesNotSentForReview) is what
+          # decides the real outcome whenever the first attempt failed.
+          PLAY_OUTCOME: ${{ steps.play_publish.outcome == 'success' && 'success' || steps.play_publish_retry.outcome }}
         run: |
           {
             echo "## Android release $RELEASE_TAG"
