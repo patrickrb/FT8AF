@@ -52,6 +52,20 @@ public class CallsignFileOperationTest {
     }
 
     @Test
+    public void getCallsigns_closingParenWithoutOpening_doesNotThrowAndKeepsSiblings() {
+        // A malformed cty.dat token that carries a ')' but no '(' used to crash:
+        // the guard tested for ')' yet the cut indexed '(', so indexOf("(") == -1
+        // and substring(0, -1) threw StringIndexOutOfBoundsException. Because
+        // getCallsigns runs inside CallsignDatabase's per-country try/catch, that
+        // exception silently dropped *every* callsign for the affected country.
+        // A stray ')' must not take the rest of the list down with it. Since the
+        // token has no '(' (nor '['), nothing is stripped: the malformed prefix is
+        // left intact and the sibling survives — and only those two are returned.
+        Set<String> calls = CallsignFileOperation.getCallsigns("BAD),VE7");
+        assertThat(calls).containsExactly("BAD)", "VE7");
+    }
+
+    @Test
     public void getCallsigns_removesNewlinesAndTrims() {
         // Leading newline is stripped globally; per-token whitespace is trimmed.
         Set<String> calls = CallsignFileOperation.getCallsigns("\n K , W ");
@@ -78,5 +92,64 @@ public class CallsignFileOperationTest {
         InputStream in = new ByteArrayInputStream("only".getBytes(StandardCharsets.UTF_8));
         String[] lines = CallsignFileOperation.getLinesFromInputStream(in, ";");
         assertThat(lines).asList().containsExactly("only");
+    }
+
+    @Test
+    public void getLinesFromInputStream_readsEveryRecordFromAChunkedStream() {
+        // Regression for the truncated-asset-read bug: cty.dat is a ~280 KB
+        // compressed asset, and Android's AssetInputStream delivers it in chunks.
+        // The old code did new byte[available()] + a single read(), so it kept only
+        // the first chunk and dropped the tail — losing whole countries from the
+        // callsign->DXCC/zone map. Feed a stream that yields one byte per read and
+        // assert every semicolon-separated record still comes back. Under the old
+        // single-read this returns just "rec0..." (one byte) and fails.
+        int records = 2000;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < records; i++) {
+            if (i > 0) {
+                sb.append(';');
+            }
+            sb.append("rec").append(i);
+        }
+        byte[] data = sb.toString().getBytes(StandardCharsets.UTF_8);
+        InputStream in = new OneBytePerReadStream(data);
+
+        String[] lines = CallsignFileOperation.getLinesFromInputStream(in, ";");
+
+        assertThat(lines).hasLength(records);
+        assertThat(lines[0]).isEqualTo("rec0");
+        assertThat(lines[records - 1]).isEqualTo("rec" + (records - 1));
+    }
+
+    /** Stream that returns at most one byte per bulk read, like a chunking asset stream. */
+    private static final class OneBytePerReadStream extends InputStream {
+        private final byte[] data;
+        private int pos;
+
+        OneBytePerReadStream(byte[] data) {
+            this.data = data;
+        }
+
+        @Override
+        public int read() {
+            return pos >= data.length ? -1 : (data[pos++] & 0xff);
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) {
+            if (pos >= data.length) {
+                return -1;
+            }
+            if (len <= 0) {
+                return 0;
+            }
+            b[off] = data[pos++];
+            return 1;
+        }
+
+        @Override
+        public int available() {
+            return data.length - pos;
+        }
     }
 }

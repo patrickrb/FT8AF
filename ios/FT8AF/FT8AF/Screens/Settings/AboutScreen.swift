@@ -10,15 +10,15 @@ struct AboutScreen: View {
             Section {
                 VStack(spacing: 12) {
                     Image(systemName: "antenna.radiowaves.left.and.right")
-                        .font(.system(size: 40))
+                        .font(.ft8afUI(size: 40))
                         .foregroundStyle(accent)
 
                     Text("FT8AF")
-                        .font(.system(size: 22, weight: .bold))
+                        .font(.ft8afUI(size: 22, weight: .bold))
                         .foregroundStyle(textPrimary)
 
                     Text("FT8 for Amateur Radio")
-                        .font(.system(size: 14))
+                        .font(.ft8afUI(size: 14))
                         .foregroundStyle(textMuted)
                 }
                 .frame(maxWidth: .infinity)
@@ -50,7 +50,7 @@ struct AboutScreen: View {
                             .foregroundStyle(textPrimary)
                         Spacer()
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 12))
+                            .font(.ft8afUI(size: 12))
                             .foregroundStyle(textFaint)
                     }
                 }
@@ -74,13 +74,13 @@ struct AboutScreen: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Based on FT8CN by bg7yoz")
-                        .font(.system(size: 13))
+                        .font(.ft8afUI(size: 13))
                         .foregroundStyle(textMuted)
                     Text("FT8 protocol by K9AN & K1JT")
-                        .font(.system(size: 13))
+                        .font(.ft8afUI(size: 13))
                         .foregroundStyle(textMuted)
                     Text("Open source under GPL-3.0")
-                        .font(.system(size: 13))
+                        .font(.ft8afUI(size: 13))
                         .foregroundStyle(textFaint)
                 }
                 .padding(.vertical, 4)
@@ -105,7 +105,7 @@ struct AboutScreen: View {
                 .foregroundStyle(textPrimary)
             Spacer()
             Text(value)
-                .font(.system(size: 14, design: .monospaced))
+                .font(.ft8afMono(size: 14))
                 .foregroundStyle(textMuted)
         }
     }
@@ -143,7 +143,7 @@ private struct DebugLogView: View {
         NavigationStack {
             ScrollView {
                 Text(content)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.ft8afMono(size: 11))
                     .foregroundStyle(textPrimary)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)

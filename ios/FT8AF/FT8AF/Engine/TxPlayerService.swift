@@ -60,17 +60,38 @@ final class TxPlayerService: @unchecked Sendable {
 
     /// Schedule and play `samples` (mono Float32 at 12 kHz). Interrupts any
     /// previously playing buffer so a new TX overrides the old one.
-    func play(_ samples: [Float], completion: (() -> Void)? = nil) {
+    ///
+    /// Returns `true` if playback was actually started, `false` if it bailed
+    /// before keying any audio (invalid hardware output format, buffer allocation,
+    /// or a conversion failure). On every bail path `completion` is still invoked,
+    /// so callers that only care about teardown can ignore the result — but the
+    /// caller must not treat a `false` return as "the audio went out".
+    @discardableResult
+    func play(_ samples: [Float], completion: (() -> Void)? = nil) -> Bool {
+        // The shared engine can be stopped at play time (route/config change,
+        // interruption, Simulator startup) — AVAudioPlayerNode.play() on a
+        // stopped engine logs "Cannot play yet!" and the TX is silent, and a
+        // stopped engine can also report an invalid mixer format, which would
+        // make the deferred attach below bail. Restart it first.
+        if let engine, !engine.isRunning {
+            do {
+                try engine.start()
+            } catch {
+                completion?()
+                return false
+            }
+        }
+
         guard ensureAttached(), let converter = outputConverter else {
             completion?()
-            return
+            return false
         }
 
         // Wrap input samples in a PCM buffer at 12 kHz.
         let frameCount = AVAudioFrameCount(samples.count)
         guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: ft8Format, frameCapacity: frameCount) else {
             completion?()
-            return
+            return false
         }
         inputBuffer.frameLength = frameCount
         samples.withUnsafeBufferPointer { src in
@@ -83,7 +104,7 @@ final class TxPlayerService: @unchecked Sendable {
         let outFrames = AVAudioFrameCount(Double(frameCount) * ratio) + 1
         guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: outFrames) else {
             completion?()
-            return
+            return false
         }
 
         var error: NSError?
@@ -99,7 +120,7 @@ final class TxPlayerService: @unchecked Sendable {
         }
         if error != nil {
             completion?()
-            return
+            return false
         }
 
         lock.lock()
@@ -114,6 +135,7 @@ final class TxPlayerService: @unchecked Sendable {
             completion?()
         }
         playerNode.play()
+        return true
     }
 
     /// Cancel any pending/active playback.

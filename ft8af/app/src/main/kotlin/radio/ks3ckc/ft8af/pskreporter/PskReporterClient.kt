@@ -66,6 +66,17 @@ object PskReporterClient {
     @JvmField
     internal var clock: () -> Long = { System.currentTimeMillis() }
 
+    /**
+     * When non-null, [fetchSpotsForMe] returns this list instead of querying
+     * pskreporter.info — no network, no cooldown bookkeeping. Set by the debug
+     * demo-data inject so the map's "who heard me" overlay can be populated on a
+     * device that has never transmitted; null (the default) in normal operation.
+     */
+    @VisibleForTesting
+    @JvmField
+    @Volatile
+    internal var spotsOverride: List<PskReporterSpot>? = null
+
     @Volatile
     var lastError: String? = null
         private set
@@ -95,6 +106,7 @@ object PskReporterClient {
         mode: String? = null,
         byReceiver: Boolean = false,
     ): List<PskReporterSpot>? = withContext(Dispatchers.IO) {
+        spotsOverride?.let { return@withContext it }
         val now = clock()
         if (now < rateLimitedUntilEpochMs) {
             log("skipped (rate-limit back-off ${(rateLimitedUntilEpochMs - now) / 1000}s remaining)")
@@ -239,6 +251,7 @@ object PskReporterClient {
         rateLimitedUntilEpochMs = 0L
         baseUrl = DEFAULT_BASE_URL
         clock = { System.currentTimeMillis() }
+        spotsOverride = null
     }
 
     private fun urlEncode(s: String): String =

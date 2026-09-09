@@ -6,3 +6,11 @@ ft8af/app/src/main/assets/.nightUSGS4Layer.sqlite.icloud
 
 # Per-contributor Claude Code notes (machine paths, device serials) - see CLAUDE.md
 CLAUDE.local.md
+
+# Accidental scratch/build-artifact trees (see PR #524)
+uiaar/
+hamlib-4.7.2/
+
+# Python bytecode (.github/scripts unit tests)
+__pycache__/
+*.pyc

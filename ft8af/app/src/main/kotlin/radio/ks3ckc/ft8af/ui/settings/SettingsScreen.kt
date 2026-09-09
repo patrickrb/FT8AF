@@ -68,8 +68,10 @@ private enum class SettingsCategory {
     TRANSMISSION,
     TIME_SYNC,
     DECODE_FILTERS,
+    VOICE,
     LOGGING,
     ADVANCED,
+    USB_DIAGNOSTICS,
     ABOUT,
 }
 
@@ -139,10 +141,14 @@ fun SettingsScreen(
                 TimeSyncSettings(mainViewModel, onBack = { currentCategory = null })
             SettingsCategory.DECODE_FILTERS ->
                 DecodeFilterSettings(mainViewModel, onBack = { currentCategory = null })
+            SettingsCategory.VOICE ->
+                VoiceSettings(mainViewModel, onBack = { currentCategory = null })
             SettingsCategory.LOGGING ->
                 LoggingSettings(mainViewModel, onBack = { currentCategory = null })
             SettingsCategory.ADVANCED ->
                 AdvancedSettings(mainViewModel, onBack = { currentCategory = null })
+            SettingsCategory.USB_DIAGNOSTICS ->
+                UsbDiagnosticsScreen(mainViewModel, onBack = { currentCategory = null })
             SettingsCategory.ABOUT ->
                 AboutSettings(mainViewModel, onBack = { currentCategory = null })
         }
@@ -315,6 +321,13 @@ private fun SettingsLanding(
                     )
                     SectionDivider()
                     SettingsRow(
+                        label = stringResource(R.string.settings_cat_voice),
+                        description = stringResource(R.string.settings_cat_voice_desc),
+                        showChevron = true,
+                        onClick = { onOpenCategory(SettingsCategory.VOICE) },
+                    )
+                    SectionDivider()
+                    SettingsRow(
                         label = stringResource(R.string.settings_cat_logging),
                         showChevron = true,
                         onClick = { onOpenCategory(SettingsCategory.LOGGING) },
@@ -324,6 +337,13 @@ private fun SettingsLanding(
                         label = stringResource(R.string.settings_cat_advanced),
                         showChevron = true,
                         onClick = { onOpenCategory(SettingsCategory.ADVANCED) },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_cat_usb_diagnostics),
+                        description = stringResource(R.string.settings_cat_usb_diagnostics_desc),
+                        showChevron = true,
+                        onClick = { onOpenCategory(SettingsCategory.USB_DIAGNOSTICS) },
                     )
                     SectionDivider()
                     SettingsRow(

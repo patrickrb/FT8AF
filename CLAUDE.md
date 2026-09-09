@@ -202,3 +202,22 @@ duration (12.14 s real time for 12.64 s of audio). Fixed in PR #94 in
 unaffected because the kernel UAC driver does this math automatically;
 the bug only bites the direct-libusb path used for car-dash kernels and
 similar.
+
+**4. The USB-direct path must force-claim the UAC AudioControl interface,
+not just the streaming ones.** Claiming only the AudioStreaming interfaces
+is a silent no-op for the kernel's `snd-usb-audio` driver (it binds the card
+at the AudioControl interface and treats the streaming interfaces as
+owned-but-unused), so the ALSA card survives and Android keeps the rig's
+sound card registered as a `usb_headset` sink+source. Every sound Android
+then routes there — the app's own QSO-complete alert ding, a Bluetooth
+car-kit connecting, a nav prompt — makes the kernel driver flip the playback
+interface's alt-setting under our in-flight iso URBs, which the kernel
+completes with `-ESHUTDOWN`. Tell from log: `libusb native write FAILED
+(rc=5 TRANSFER_NO_DEVICE) after ~280ms` with **no** `usbDetach` and the RX
+capture still running, typically 1.9 s after an `ALERT fire` line. The
+device is still on the bus; only the endpoint was torn down. Fixed by
+`UsbAudioDevice.detachKernelAudioDriver()`, which claims the AudioControl
+interface (that runs the real `usb_audio_disconnect`). A genuine bus drop
+looks different: `usbDetach` for the hub, serial and audio devices together
+and `serial.send: port not open!` — that one is electrical (RF resetting the
+hub), not software.

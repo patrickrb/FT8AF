@@ -1,0 +1,30 @@
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/QsoCelebration.swift":
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoCelebration.d"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoCelebration.o"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoCelebration.swiftconstvalues"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoCelebration.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoCelebration.dia"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Engine/PotaService.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/PotaService.swiftconstvalues"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/PotaService.d"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/PotaService.swiftdeps"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/PotaService.o"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/PotaService.dia"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Engine/QsoLogStore.swift":
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoLogStore.swiftconstvalues"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoLogStore.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoLogStore.dia"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoLogStore.d"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoLogStore.o"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Screens/Decode/QsoSheet.swift":
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoSheet.swiftdeps"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoSheet.o"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoSheet.swiftconstvalues"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoSheet.dia"
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoSheet.d"
+"/Users/patrickburns/Projects/FT8AF/ios/FT8AF/FT8AF/Components/QsoPathMap.swift":
+  dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoPathMap.d"
+  object: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoPathMap.o"
+  swift-dependencies: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoPathMap.swiftdeps"
+  diagnostics: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoPathMap.dia"
+  const-values: "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AF.build/Debug-iphonesimulator/FT8AF.build/Objects-normal/arm64/QsoPathMap.swiftconstvalues"

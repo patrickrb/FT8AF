@@ -1,0 +1,4 @@
+module FT8Rig {
+header "FT8Rig-Swift.h"
+export *
+}

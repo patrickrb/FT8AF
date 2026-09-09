@@ -12,6 +12,7 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.AsyncTask;
 
+import com.google.android.gms.maps.model.LatLng;
 import com.k1af.ft8af.GeneralVariables;
 import com.k1af.ft8af.R;
 import com.k1af.ft8af.callsign.CallsignInfo;
@@ -51,6 +52,117 @@ public class CountDbOpr {
         new DistanceCount(db,afterCount).execute();
     }
 
+    /**
+     * Count the continents worked, for the "Worked All Continents" (WAC) award.
+     * Fires the callback once with one {@link CountValue} per worked continent
+     * (its {@code name} is the continent code, e.g. "EU"); the presentation logic
+     * lives in the pure Kotlin {@code workedAllContinents} reducer.
+     */
+    public static void getContinentCount(SQLiteDatabase db,AfterCount afterCount){
+        new GetContinentCount(db,afterCount).execute();
+    }
+
+    /**
+     * The distinct continent codes worked, derived from each log gridsquare via
+     * the DXCC lookup tables ({@code dxcc_grid} grid -> DXCC entity, then
+     * {@code dxccList} DXCC -> continent) exactly like the DXCC / CQ-zone stats.
+     *
+     * <p>Extracted as a synchronous static method (separate from the AsyncTask)
+     * so the grid -> continent join is unit-testable against an in-memory
+     * database without touching the UI thread. Blank / null continents are
+     * filtered in SQL, so the returned list holds only usable codes (which may
+     * still include the non-WAC "AN"/"-" — the Kotlin reducer drops those).
+     *
+     * @return one continent code per group; empty when no logged grid resolves.
+     */
+    @SuppressLint("Range")
+    public static java.util.List<String> queryWorkedContinents(SQLiteDatabase db){
+        java.util.ArrayList<String> continents=new java.util.ArrayList<>();
+        String querySQL="SELECT DISTINCT dl.continent AS cont FROM dxcc_grid dg\n" +
+                "inner join QSLTable q on dg.grid = UPPER(SUBSTR(q.gridsquare,1,4))\n" +
+                "left join dxccList dl on dg.dxcc = dl.dxcc\n" +
+                "WHERE dl.continent IS NOT NULL AND TRIM(dl.continent) <> ''";
+        try (Cursor cursor=db.rawQuery(querySQL,null)){
+            while (cursor.moveToNext()){
+                continents.add(cursor.getString(cursor.getColumnIndex("cont")));
+            }
+        }
+        return continents;
+    }
+
+    /**
+     * Accumulated maximum/minimum great-circle distance (in km) from the
+     * operator's own grid to a set of log gridsquares. {@link #hasData()}
+     * distinguishes "no valid contacts were found" from a genuine 0 km
+     * (same-grid) contact.
+     */
+    static class DistanceStats {
+        /** Sentinel matching the legacy "unset minimum" value. */
+        static final double NO_MIN = 6553500d;
+
+        double maxKm = -1;
+        double minKm = NO_MIN;
+        String maxGrid = "";
+        String minGrid = "";
+
+        boolean hasData() {
+            return maxKm > -1 && minKm < NO_MIN;
+        }
+
+        /** Fold another band's extremes into this (global) accumulator. */
+        void merge(DistanceStats other) {
+            if (other.maxKm > maxKm) {
+                maxKm = other.maxKm;
+                maxGrid = other.maxGrid;
+            }
+            if (other.minKm < minKm) {
+                minKm = other.minKm;
+                minGrid = other.minGrid;
+            }
+        }
+    }
+
+    /**
+     * Compute the maximum and minimum great-circle distance from {@code myGrid}
+     * to each gridsquare in {@code grids}.
+     *
+     * <p>Gridsquares that do not parse as a Maidenhead locator are SKIPPED
+     * rather than being treated as 0 km. {@link MaidenheadGrid#getDist(String, String)}
+     * returns 0 when either grid fails to parse (wrong length, or an end-of-QSO
+     * token such as {@code "RR73"} that operators commonly leak into the
+     * GRIDSQUARE field), so counting those as 0 km would collapse the "Nearest
+     * distance" statistic to 0 with a junk grid whenever the log holds even one
+     * contaminated row. A genuine same-grid (0 km) contact still parses and is
+     * retained. If {@code myGrid} itself is not a valid locator no distance can
+     * be computed and empty stats are returned.
+     */
+    static DistanceStats computeDistanceStats(java.util.List<String> grids, String myGrid) {
+        DistanceStats stats = new DistanceStats();
+        if (grids == null) {
+            return stats;
+        }
+        LatLng myLatLng = MaidenheadGrid.gridToLatLng(myGrid);
+        if (myLatLng == null) {
+            return stats;
+        }
+        for (String grid : grids) {
+            LatLng gridLatLng = MaidenheadGrid.gridToLatLng(grid);
+            if (gridLatLng == null) {
+                continue;
+            }
+            double distance = MaidenheadGrid.getDist(gridLatLng, myLatLng);
+            if (distance > stats.maxKm) {
+                stats.maxKm = distance;
+                stats.maxGrid = grid;
+            }
+            if (distance < stats.minKm) {
+                stats.minKm = distance;
+                stats.minGrid = grid;
+            }
+        }
+        return stats;
+    }
+
 
     static class DistanceCount extends AsyncTask<Void,Void,Void>{
         private final SQLiteDatabase db;
@@ -66,10 +178,9 @@ public class CountDbOpr {
         protected Void doInBackground(Void... voids) {
             String querySQL;
             Cursor cursor;
-            double maxDistance=-1;
-            String maxDistanceGrid="";
-            double minDistance=6553500f;
-            String minDistanceGrid="";
+            String myGrid = GeneralVariables.getMyMaidenheadGrid();
+
+            DistanceStats global = new DistanceStats();
 
             ArrayList<CountValue> values=new ArrayList<>();
 
@@ -86,50 +197,30 @@ public class CountDbOpr {
 
                 querySQL = "SELECT DISTINCT SUBSTR(gridsquare,1,4) as g FROM QSLTable q where (gridsquare <>\"\")and(band=?)";
                 cursor = db.rawQuery(querySQL, new String[]{band});
-                double max=-1;
-                String maxGrid="";
-                double min=6553500f;
-                String minGrid="";
-
+                ArrayList<String> grids = new ArrayList<>();
                 while (cursor.moveToNext()) {
-                    String grid = cursor.getString(cursor.getColumnIndex("g"));
-                    double distance = MaidenheadGrid.getDist(grid, GeneralVariables.getMyMaidenheadGrid());
-                    if (distance > maxDistance) {
-                        maxDistance = distance;
-                        maxDistanceGrid = grid;
-                    }
-                    if (distance < minDistance) {
-                        minDistance = distance;
-                        minDistanceGrid = grid;
-                    }
-
-                    if (distance > max) {
-                        max = distance;
-                        maxGrid = grid;
-                    }
-                    if (distance < min) {
-                        min = distance;
-                        minGrid = grid;
-                    }
-
+                    grids.add(cursor.getString(cursor.getColumnIndex("g")));
                 }
                 cursor.close();
 
-                if ((max>-1)&&(min<6553500f)){
-                    values.add(new CountValue((int) Math.round(MaidenheadGrid.convertDist(max)),String.format(
+                DistanceStats bandStats = computeDistanceStats(grids, myGrid);
+                global.merge(bandStats);
+
+                if (bandStats.hasData()){
+                    values.add(new CountValue((int) Math.round(MaidenheadGrid.convertDist(bandStats.maxKm)),String.format(
                             GeneralVariables.getStringFromResource(R.string.maximum_distance)
-                            ,getQSLInfo(maxGrid))));
-                    values.add(new CountValue((int) Math.round(MaidenheadGrid.convertDist(min)),String.format(
+                            ,getQSLInfo(bandStats.maxGrid))));
+                    values.add(new CountValue((int) Math.round(MaidenheadGrid.convertDist(bandStats.minKm)),String.format(
                             GeneralVariables.getStringFromResource(R.string.minimum_distance)
-                            ,getQSLInfo(minGrid))));
+                            ,getQSLInfo(bandStats.minGrid))));
                 }
             }
 
            String info=String.format(GeneralVariables.getStringFromResource(R.string.count_distance_info)
-                   ,MaidenheadGrid.convertDist(maxDistance),MaidenheadGrid.getDistUnitLabel(),maxDistanceGrid
-                   ,MaidenheadGrid.convertDist(minDistance),MaidenheadGrid.getDistUnitLabel(),minDistanceGrid);
+                   ,MaidenheadGrid.convertDist(global.maxKm),MaidenheadGrid.getDistUnitLabel(),global.maxGrid
+                   ,MaidenheadGrid.convertDist(global.minKm),MaidenheadGrid.getDistUnitLabel(),global.minGrid);
 
-            if (afterCount!=null &&(maxDistance>0)&&(minDistance<6553500f)){
+            if (afterCount!=null &&(global.maxKm>0)&&global.hasData()){
                 afterCount.countInformation(new CountInfo(info
                         ,ChartType.None
                         ,GeneralVariables.getStringFromResource(R.string.distance_statistics)
@@ -511,6 +602,37 @@ public class CountDbOpr {
 
 
 
+
+    /**
+     * Gather the worked continents for the WAC award off the UI thread. The
+     * heavy lifting (the grid -> continent join) is in {@link #queryWorkedContinents}
+     * so this task is just the async wrapper + callback marshalling.
+     */
+    static class GetContinentCount extends AsyncTask<Void, Void, Void>{
+        private final SQLiteDatabase db;
+        private final AfterCount afterCount;
+
+        public GetContinentCount(SQLiteDatabase db, AfterCount afterCount) {
+            this.db = db;
+            this.afterCount = afterCount;
+        }
+
+        @Override
+        protected Void doInBackground(Void... voids) {
+            java.util.List<String> continents = queryWorkedContinents(db);
+            ArrayList<CountValue> values = new ArrayList<>();
+            for (String c : continents) {
+                values.add(new CountValue(1, c));
+            }
+            if (afterCount != null) {
+                afterCount.countInformation(new CountInfo(""
+                        , ChartType.Bar
+                        , GeneralVariables.getStringFromResource(R.string.continent_completion_statistics)
+                        , values));
+            }
+            return null;
+        }
+    }
 
     public interface  AfterCount{
         void countInformation(CountInfo countInfo);

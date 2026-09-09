@@ -77,7 +77,7 @@ public class Yaesu3Command {
      */
     public static int getALCOrSWR38(Yaesu3Command command) {
         if (command.data.length() < 7) return 0;
-        return Integer.parseInt(command.data.substring(1, 4));
+        return parseMeterValue(command.data.substring(1, 4));
     }
 
     public static boolean isSWRMeter38(Yaesu3Command command) {
@@ -99,7 +99,7 @@ public class Yaesu3Command {
      */
     public static int getSWROrALC39(Yaesu3Command command) {
         if (command.data.length() < 4) return 0;
-        return Integer.parseInt(command.data.substring(1, 4));
+        return parseMeterValue(command.data.substring(1, 4));
     }
 
     public static boolean isSWRMeter39(Yaesu3Command command) {
@@ -119,18 +119,71 @@ public class Yaesu3Command {
      * @return value
      */
     public static int get590ALCOrSWR(Yaesu3Command command) {
-        return Integer.parseInt(command.data.substring(1, 5));
+        if (command.data.length() < 5) return 0;
+        return parseMeterValue(command.data.substring(1, 5));
+    }
+
+    /**
+     * Parse a numeric CAT meter token, returning 0 ("no reading") for any
+     * non-numeric value. The rig's meter replies are read on the main thread
+     * with no surrounding try/catch on the Bluetooth SPP path, so a garbled or
+     * non-numeric byte sequence must not be allowed to throw
+     * {@link NumberFormatException} and crash the app.
+     */
+    private static int parseMeterValue(String token) {
+        try {
+            return Integer.parseInt(token);
+        } catch (NumberFormatException e) {
+            Log.e(TAG, "Non-numeric CAT meter value: " + token);
+            return 0;
+        }
     }
 
     public static boolean is590MeterALC(Yaesu3Command command){
         if (command.data.length() < 5) return false;
-        return command.data.charAt(2) == '3';
+        // Kenwood "RM" reply is "mvvvv": meter-type selector at index 0
+        // (3 = ALC), 4-digit value at indices 1..4. Reading the selector at
+        // index 2 (a value digit) mis-detected the meter type -- see get590ALCOrSWR.
+        return command.data.charAt(0) == '3';
     }
     public static boolean is590MeterSWR(Yaesu3Command command){
         if (command.data.length() < 5) return false;
-        return command.data.charAt(2) == '1';
+        // Meter-type selector is at index 0 (1 = SWR); see is590MeterALC.
+        return command.data.charAt(0) == '1';
     }
 
+    /**
+     * Lab599 Discovery TX-500 SWR meter reply. Unlike the TS-590 layout (meter
+     * selector at index 2), the TX-500 answers {@code RM;} with {@code RM1vvvv}
+     * where the leading digit is the meter selector ({@code '1'} = SWR) and the
+     * four following digits are the meter value (0000-0030). Issue #599.
+     *
+     * @param command RM command
+     * @return true when the reply carries the SWR meter
+     */
+    public static boolean isTX500MeterSWR(Yaesu3Command command) {
+        if (command.data.length() < 5) return false;
+        return command.data.charAt(0) == '1';
+    }
+
+    /**
+     * Value of the TX-500 SWR meter reply: the four digits after the selector
+     * ({@code substring(1,5)}), a raw 0000-0030 field. Callers map it to an SWR
+     * ratio; see {@link DiscoveryTX500Rig#tx500CatToSwrRatio(int)}.
+     *
+     * @param command RM command in {@code RM1vvvv} form
+     * @return the raw 0-30 meter value, or 0 when the reply is too short or the
+     *         value chars are non-numeric (garbled frame)
+     */
+    public static int getTX500MeterValue(Yaesu3Command command) {
+        if (command.data.length() < 5) return 0;
+        // Route through parseMeterValue like every other meter getter: a garbled
+        // or partial RM frame whose value chars aren't all digits (e.g. a ';'
+        // terminator or noise byte landing in substring(1,5)) must return 0
+        // rather than throw NumberFormatException — onReceiveData runs on the
+        // serial/Bluetooth read thread with no surrounding try/catch.
+        return parseMeterValue(command.data.substring(1, 5));
+    }
 
 
 }

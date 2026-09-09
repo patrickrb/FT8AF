@@ -24,6 +24,13 @@
 #include <ft8/decode.h>    // waterfall_t, candidate_t, decode_status_t, ft8_find_sync, ft8_decode
 #include <common/monitor.h> // monitor_t, monitor_config_t, monitor_init/reset/process/free
 
+// --- ft8af_glue deep-decode subtraction -------------------------------------
+// ft8_subtract_signal (waterfall-domain) + ft8_subtract_signal_time (coherent
+// time-domain). Resolves via the CFT8 target's -I .../ft8af_glue flag; the
+// implementations are compiled by shim_subtract.c. Swift's subtract-and-redecode
+// loop (FT8Decoder.swift) drives the time-domain variant.
+#include <ft8_subtract.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif

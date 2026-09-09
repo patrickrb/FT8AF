@@ -28,6 +28,7 @@ fun SettingsRow(
     onToggleChange: ((Boolean) -> Unit)? = null,
     showChevron: Boolean = false,
     onClick: (() -> Unit)? = null,
+    enabled: Boolean = true,
 ) {
     Row(
         modifier = modifier
@@ -70,6 +71,7 @@ fun SettingsRow(
                 Toggle(
                     checked = toggle,
                     onCheckedChange = onToggleChange,
+                    enabled = enabled,
                 )
             }
             if (showChevron) {

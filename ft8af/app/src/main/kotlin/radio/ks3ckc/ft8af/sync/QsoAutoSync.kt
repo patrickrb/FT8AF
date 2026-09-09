@@ -57,6 +57,24 @@ internal class QsoSyncGate(private val minIntervalMs: Long = 15_000L) {
 }
 
 /**
+ * Render a finished sync run as the one line that goes into `debug.log`.
+ *
+ * Always reports the counts; appends each service's failure reason when it had one. The
+ * counts alone are ambiguous in the worst case — `cloudlog=0 of 113` reads the same
+ * whether the network was down, the API key expired, or the server was rejecting every
+ * record — and that ambiguity once hid a broken logbook server for three days. Pure
+ * (no Android types) so it is unit-testable.
+ */
+internal fun summarize(result: ThirdPartyService.SyncResult): String {
+    val sb = StringBuilder(
+        "cloudlog=${result.cloudlogOk} qrz=${result.qrzOk} of ${result.total}"
+    )
+    result.cloudlogError?.takeIf { it.isNotEmpty() }?.let { sb.append(" cloudlogError=").append(it) }
+    result.qrzError?.takeIf { it.isNotEmpty() }?.let { sb.append(" qrzError=").append(it) }
+    return sb.toString()
+}
+
+/**
  * Auto-uploads QSOs that failed to upload while offline. When a QSO is logged with no
  * internet, the immediate post-QSO upload fails and the row's `synced_*` flags stay 0;
  * this re-runs the existing catch-up uploader ([ThirdPartyService.syncAllQSOs]) the
@@ -149,7 +167,7 @@ class QsoAutoSync(private val appContext: Context) {
                 }
                 log("start ($reason): $pending pending")
                 val result = ThirdPartyService.syncAllQSOs(db, null)
-                log("done ($reason): cloudlog=${result.cloudlogOk} qrz=${result.qrzOk} of ${result.total}")
+                log("done ($reason): " + summarize(result))
             } catch (e: Exception) {
                 log("error ($reason): ${e.javaClass.simpleName} ${e.message}")
             } finally {

@@ -32,6 +32,30 @@ final class SlotClockTests: XCTestCase {
         XCTAssertEqual(SlotClock.parity(slotID: 3), 1)
     }
 
+    func testShouldTransmitGatesOnTheSlotWeKeyUpIn() {
+        // We transmit in the slot itself (audio starts immediately), so eligibility
+        // is the parity of that very slot.
+        // Even slot (parity 0):
+        XCTAssertTrue(SlotClock.shouldTransmit(slotID: 4, desiredParity: 0))
+        XCTAssertFalse(SlotClock.shouldTransmit(slotID: 4, desiredParity: 1))
+        // Odd slot (parity 1):
+        XCTAssertTrue(SlotClock.shouldTransmit(slotID: 5, desiredParity: 1))
+        XCTAssertFalse(SlotClock.shouldTransmit(slotID: 5, desiredParity: 0))
+    }
+
+    func testShouldTransmitUsesCurrentSlotNotNextSlotRegression() {
+        // Regression for the off-by-one that gated on `parity(slotID + 1)`: that
+        // inverted the operator's TX1/TX2 selection, keying up on the opposite
+        // slot and colliding with the station being answered. For every slot the
+        // decision must match the slot's own parity, never the next slot's.
+        for slot in Int64(0)..<8 {
+            let ownParity = Int(SlotClock.parity(slotID: slot))
+            let nextParity = Int(SlotClock.parity(slotID: slot + 1))
+            XCTAssertTrue(SlotClock.shouldTransmit(slotID: slot, desiredParity: ownParity))
+            XCTAssertFalse(SlotClock.shouldTransmit(slotID: slot, desiredParity: nextParity))
+        }
+    }
+
     func testEuclideanWithNegativeTimes() {
         // A clock correction can push the effective time slightly negative; the
         // remainder must stay non-negative (Euclidean), not go to -something.

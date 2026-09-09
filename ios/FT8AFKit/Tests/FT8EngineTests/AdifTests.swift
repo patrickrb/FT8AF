@@ -36,7 +36,7 @@ final class AdifTests: XCTestCase {
         let expected =
             "FT8AF ADIF Export<eoh>\n"
             + "<call:5>K1ABC "
-            + "<QSL_RCVD:1>N <QSL_MANUAL:1>N "
+            + "<QSL_RCVD:1>N "
             + "<gridsquare:4>FN42 "
             + "<mode:3>FT8 "
             + "<rst_sent:3>-08 "
@@ -56,7 +56,7 @@ final class AdifTests: XCTestCase {
     func testExportOmitsEmptyOptionalsButKeepsCallFlagsAndComment() {
         let out = Adif.export([rec(call: "W1AW")]) // all optionals empty
         XCTAssertEqual(out,
-            "FT8AF ADIF Export<eoh>\n<call:4>W1AW <QSL_RCVD:1>N <QSL_MANUAL:1>N <comment:0> <eor>\n")
+            "FT8AF ADIF Export<eoh>\n<call:4>W1AW <QSL_RCVD:1>N <comment:0> <eor>\n")
     }
 
     func testExportUsesUtf8ByteLengthForComment() {
@@ -140,6 +140,20 @@ final class AdifTests: XCTestCase {
     func testParseSkipsMalformedOverLongField() {
         // Claims 99 bytes but only a few follow -> field skipped, record still parses call.
         let parsed = Adif.parse("<eoh>\n<call:5>K1ABC <comment:99>oops <eor>")
+        XCTAssertEqual(parsed.count, 1)
+        XCTAssertEqual(parsed[0].call, "K1ABC")
+        XCTAssertEqual(parsed[0].comment, "")
+    }
+
+    func testParseSkipsHugeFieldLengthWithoutOverflowTrap() {
+        // A field length near Int.max fits in Int (so it parses) but is far longer
+        // than the remaining bytes. The over-long guard must reject it WITHOUT
+        // evaluating `i + len` (which would trap on 64-bit signed overflow and
+        // crash the whole app on import of a corrupt/hostile .adi). The record's
+        // valid CALL is still parsed; the huge field is skipped like any other
+        // over-long field.
+        let huge = String(Int.max) // 9223372036854775807
+        let parsed = Adif.parse("<eoh>\n<call:5>K1ABC <comment:\(huge)>x <eor>")
         XCTAssertEqual(parsed.count, 1)
         XCTAssertEqual(parsed[0].call, "K1ABC")
         XCTAssertEqual(parsed[0].comment, "")

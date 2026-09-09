@@ -252,4 +252,120 @@ public class OwnTxEchoFilterTest {
         assertThat(result.decodeLogLine(0))
                 .isEqualTo("DECODE: kept=1 ownEcho=0 junk=1 replyToMe=false slot=0");
     }
+
+    /** Stamp a decode with a WSJT-style DT (seconds). */
+    private static Ft8Message withDt(Ft8Message m, float dtSec) {
+        m.time_sec = dtSec;
+        return m;
+    }
+
+    /**
+     * The clock-sync pill's value: the mean DT of the kept decodes. A TX-slot
+     * loopback echo carries the TX chain latency as its DT (here +1.4 s), which
+     * used to drag the raw slot mean to red; it must not contribute.
+     */
+    @Test
+    public void meanTimeOffsetSec_excludesOwnTxEcho() {
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(withDt(ownEcho("RA3XYZ"), 1.4f));
+        decoded.add(withDt(thirdParty("CQ", "DL1ABC"), 0.1f));
+        decoded.add(withDt(replyToMe("W1AW"), -0.1f));
+
+        assertThat(OwnTxEchoFilter.meanTimeOffsetSec(decoded)).isWithin(1e-6f).of(0f);
+        assertThat(OwnTxEchoFilter.filter(decoded).meanTimeOffsetSec()).isWithin(1e-6f).of(0f);
+    }
+
+    /** Junk decodes carry a random DT and are excluded from the mean as well. */
+    @Test
+    public void meanTimeOffsetSec_excludesJunk() {
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(withDt(structuredJunk(), 2.3f));
+        decoded.add(withDt(thirdParty("CQ", "DL1ABC"), 0.2f));
+        decoded.add(withDt(thirdParty("CQ", "JA1XYZ"), 0.4f));
+
+        assertThat(OwnTxEchoFilter.meanTimeOffsetSec(decoded)).isWithin(1e-6f).of(0.3f);
+    }
+
+    /** Plain mean over everything kept when nothing was filtered. */
+    @Test
+    public void meanTimeOffsetSec_isPlainMeanOfKept() {
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(withDt(thirdParty("CQ", "DL1ABC"), -0.5f));
+        decoded.add(withDt(thirdParty("CQ", "JA1XYZ"), 0.1f));
+
+        assertThat(OwnTxEchoFilter.meanTimeOffsetSec(decoded)).isWithin(1e-6f).of(-0.2f);
+    }
+
+    /** Echo-only slot (or empty list): no evidence, so NaN rather than a fake 0.0. */
+    @Test
+    public void meanTimeOffsetSec_isNaNWhenNothingKept() {
+        List<Ft8Message> echoOnly = new ArrayList<>();
+        echoOnly.add(withDt(ownEcho("RA3XYZ"), 1.4f));
+
+        assertThat(OwnTxEchoFilter.meanTimeOffsetSec(echoOnly)).isNaN();
+        assertThat(OwnTxEchoFilter.meanTimeOffsetSec(Collections.emptyList())).isNaN();
+    }
+
+    /**
+     * The dropped echoes are retained, not just counted: full-duplex (satellite)
+     * operating shows them back to the operator as their own downlink.
+     */
+    @Test
+    public void filter_retainsTheDroppedEchoesInOrder() {
+        Ft8Message firstEcho = ownEcho("RA3XYZ");
+        Ft8Message secondEcho = ownEcho("DL1ABC");
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(firstEcho);
+        decoded.add(thirdParty("CQ", "DL1ABC"));
+        decoded.add(secondEcho);
+
+        OwnTxEchoFilter filtered = OwnTxEchoFilter.filter(decoded);
+
+        assertThat(filtered.echoes).containsExactly(firstEcho, secondEcho).inOrder();
+        assertThat(filtered.ownEchoCount).isEqualTo(2);
+    }
+
+    /**
+     * The filter is the one place that decides "this is us", so it tags what it
+     * separates out; every downstream consumer keys on the tag.
+     */
+    @Test
+    public void filter_tagsEchoesAndLeavesOthersUntagged() {
+        Ft8Message echo = ownEcho("RA3XYZ");
+        Ft8Message other = thirdParty("CQ", "DL1ABC");
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(echo);
+        decoded.add(other);
+
+        OwnTxEchoFilter.filter(decoded);
+
+        assertThat(echo.isOwnEcho).isTrue();
+        assertThat(other.isOwnEcho).isFalse();
+    }
+
+    /** Nothing of ours on the air: the echo list is empty, not null. */
+    @Test
+    public void filter_echoesIsEmptyWhenNothingWasOurs() {
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(thirdParty("CQ", "DL1ABC"));
+
+        assertThat(OwnTxEchoFilter.filter(decoded).echoes).isEmpty();
+    }
+
+    /**
+     * Junk decodes are dropped without being collected. They are CRC-collision
+     * garbage with an implausible sender, so there is nothing to show even in
+     * full duplex.
+     */
+    @Test
+    public void filter_doesNotCollectJunkAsAnEcho() {
+        List<Ft8Message> decoded = new ArrayList<>();
+        decoded.add(structuredJunk());
+
+        OwnTxEchoFilter filtered = OwnTxEchoFilter.filter(decoded);
+
+        assertThat(filtered.kept).isEmpty();
+        assertThat(filtered.echoes).isEmpty();
+        assertThat(filtered.junkCount).isEqualTo(1);
+    }
 }

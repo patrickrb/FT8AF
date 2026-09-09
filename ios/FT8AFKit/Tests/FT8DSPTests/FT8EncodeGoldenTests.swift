@@ -56,6 +56,40 @@ final class FT8EncodeGoldenTests: XCTestCase {
         XCTAssertTrue(sig.allSatisfy { abs($0) <= 1.0001 }, "amplitude within [-1, 1]")
     }
 
+    /// Regression: the TX buffer must be sized by the SAME per-symbol rounding
+    /// synthGFSK writes, at EVERY sample rate — not the total-rounded
+    /// `round(nn * symbolPeriod * rate)`, which underruns the write count at a
+    /// non-integral rate (e.g. 12004 Hz) and tripped synthGFSK's length
+    /// precondition. iOS twin of the Android GenerateFT8 fix (#521) and desktop
+    /// `encode.rs::waveform_len` (#551).
+    func testGenerateFT8BufferMatchesSynthWriteCountAcrossRates() {
+        // Multiples of 25 (rate*0.16 integral) stay byte-identical; the rest
+        // diverge — 12004/12005 are the cases where the OLD total-rounded size was
+        // SMALLER than the write count (the trap), 12001 where it was larger.
+        for rate: Int32 in [12_000, 48_000, 44_100, 12_001, 12_004, 12_005, 16_003] {
+            let nSpsym = Int(0.5 + Double(rate) * Double(FT8.symbolPeriod))
+            let nWave = FT8.nn * nSpsym
+            XCTAssertEqual(FT8Encoder.waveformSampleCount(nTones: FT8.nn, sampleRate: rate), nWave,
+                           "rate \(rate): helper must equal per-symbol write count")
+            guard let sig = FT8Encoder.generateFT8("CQ K1ABC FN42", baseFreqHz: 1000, sampleRate: rate) else {
+                return XCTFail("generateFT8 nil at rate \(rate)")
+            }
+            // Buffer is exactly the write count → synthGFSK's precondition can't trap.
+            XCTAssertEqual(sig.count, nWave,
+                           "rate \(rate): buffer must equal synthGFSK write count")
+        }
+        // Default (12 kHz) path is unchanged from the historical total-rounded size.
+        let legacy12k = Int(0.5 + Float(FT8.nn) * FT8.symbolPeriod * Float(FT8.sampleRate))
+        XCTAssertEqual(FT8Encoder.waveformSampleCount(nTones: FT8.nn, sampleRate: FT8.sampleRate),
+                       legacy12k, "12 kHz size must match the legacy formula (byte-identical)")
+        // Document the defect the fix removes: at 12004 Hz the OLD total-rounded
+        // size was strictly smaller than what synthGFSK writes.
+        let oldTotalRounded12004 = Int(0.5 + Float(FT8.nn) * FT8.symbolPeriod * Float(12_004))
+        XCTAssertLessThan(oldTotalRounded12004,
+                          FT8Encoder.waveformSampleCount(nTones: FT8.nn, sampleRate: 12_004),
+                          "old total-rounded size underran the write count at 12004 Hz")
+    }
+
     /// synthGFSK honors a non-zero offset: it writes the waveform into
     /// signal[offset...] and leaves the leading region untouched (the offset
     /// code path the engine uses to place a frame later in a buffer).

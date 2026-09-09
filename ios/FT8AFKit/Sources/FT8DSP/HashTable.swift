@@ -1,52 +1,85 @@
 import CFT8
 import Foundation
 
-/// Per-decoder callsign hash table, ported from desktop dsp/hashtable.rs (itself
-/// from ft8af_glue/ft8_decoder.cpp). FT8 messages can carry 10/12/22-bit *hashes*
-/// of compound/nonstandard callsigns instead of the full call; ft8_lib resolves
-/// them through the `ftx_callsign_hash_interface_t` save/lookup callbacks, which
-/// need somewhere to stash calls seen earlier in the same slot.
-final class HashTable {
-    static let size = 256
+/// Callsign hash table for resolving hashed compound/nonstandard calls (the
+/// `<...>` placeholders FT8 carries as 10/12/22-bit *hashes* instead of the full
+/// call). ft8_lib resolves them through the `ftx_callsign_hash_interface_t`
+/// save/lookup callbacks, which need a store of calls seen earlier.
+///
+/// Unlike the original per-slot table (ported from desktop dsp/hashtable.rs /
+/// ft8af_glue/ft8_decoder.cpp, which cleared every slot), this table is meant to
+/// **persist across slots** so a `<...>` in one slot resolves against a full call
+/// decoded in an *earlier* slot — matching Android, which keeps the store in a
+/// process-wide `static MessageHashMap hashList` (Ft8Message.java) that is never
+/// cleared. LiveEngine owns one instance and injects it into every per-slot
+/// `FT8Decoder` (a fresh decoder is built each slot), so the store outlives the
+/// decoder.
+///
+/// Android's map is unbounded; on a phone we cap the store at `capacity` entries
+/// and evict oldest-first (insertion-order FIFO) on overflow. A session sees far
+/// fewer than `capacity` distinct compound calls inside the window where a
+/// `<...>` back-reference is still useful, and the oldest calls are the least
+/// likely to be referenced again — so the cap bounds memory without losing
+/// resolvable hashes in practice.
+///
+/// Every method takes an internal lock, so one table can be shared safely across
+/// concurrent or re-entrant decode passes: the thread-local active-table plumbing
+/// below may point several threads at the same instance at once.
+public final class HashTable: @unchecked Sendable {
+    // @unchecked Sendable: all mutable state is guarded by `lock`, so instances
+    // are safe to share across actors/threads (e.g. the engine passing one into
+    // each nonisolated per-slot decode).
+
+    /// Max stored callsigns before oldest-first eviction bounds a long-lived
+    /// (process-lifetime) table. See the type doc for the rationale.
+    static let capacity = 512
 
     private struct Entry {
-        var callsign = [UInt8](repeating: 0, count: 12)
-        var hash: UInt32 = 0   // 22-bit
-        var used = false
+        let callsign: String
+        let hash22: UInt32   // 22-bit hash, masked to 0x3FFFFF
     }
-    private var entries = [Entry](repeating: Entry(), count: HashTable.size)
+    // Insertion-ordered: newest appended at the end, oldest (index 0) evicted
+    // first once `capacity` is exceeded.
+    private var entries: [Entry] = []
+    // 22-bit hashes currently stored, for O(1) duplicate rejection.
+    private var stored = Set<UInt32>()
+    private let lock = NSLock()
 
+    public init() {}
+
+    /// Drop every stored callsign. No longer called per slot (the table now
+    /// persists), but kept for tests and explicit resets.
     func clear() {
-        entries = [Entry](repeating: Entry(), count: HashTable.size)
+        lock.lock(); defer { lock.unlock() }
+        entries.removeAll(keepingCapacity: true)
+        stored.removeAll(keepingCapacity: true)
     }
 
-    /// Mirror of `hash_save` in ft8_decoder.cpp.
+    /// Mirror of `hash_save` / `MessageHashMap.addHash`: store `callsign` under
+    /// its 22-bit hash. Skips empties and the `<...>`-wrapped placeholder form,
+    /// dedupes on the 22-bit hash, and evicts the oldest entry once full.
     func save(_ callsign: String, _ n22: UInt32) {
-        let bytes = Array(callsign.utf8)
-        if bytes.isEmpty || bytes[0] == UInt8(ascii: "<") { return }
-        let h10 = (n22 >> 12) & 0x3FF
-        var idx = (Int(h10) * 23) % HashTable.size
-        var probes = 0
-        while entries[idx].used {
-            if entries[idx].hash == n22 { return } // already stored
-            idx = (idx + 1) % HashTable.size
-            probes += 1
-            if probes >= HashTable.size { return } // table full: drop, never spin
+        if callsign.isEmpty || callsign.hasPrefix("<") { return }
+        let hash22 = n22 & 0x3F_FFFF
+        lock.lock(); defer { lock.unlock() }
+        if stored.contains(hash22) { return } // already stored
+        entries.append(Entry(callsign: callsign, hash22: hash22))
+        stored.insert(hash22)
+        if entries.count > HashTable.capacity {
+            let evicted = entries.removeFirst()
+            stored.remove(evicted.hash22)
         }
-        let n = min(bytes.count, 11)
-        var cs = [UInt8](repeating: 0, count: 12)
-        cs.replaceSubrange(0..<n, with: bytes[0..<n])
-        entries[idx].callsign = cs
-        entries[idx].hash = n22
-        entries[idx].used = true
     }
 
-    /// Mirror of `hash_lookup`. `shift` selects the hash width (0 / 10 / 12).
+    /// Mirror of `hash_lookup`: find a stored call whose 22-bit hash, shifted
+    /// right by `shift` (0 / 10 / 12 for the 22/12/10-bit lookups), equals
+    /// `hash`. Newest match wins, so a recently re-heard call supersedes a stale
+    /// collision on the narrower widths.
     func lookup(shift: UInt8, hash: UInt32) -> String? {
-        for e in entries where e.used {
-            if ((e.hash & 0x3F_FFFF) >> shift) == hash {
-                let len = e.callsign.firstIndex(of: 0) ?? 11
-                return String(decoding: e.callsign[0..<len], as: UTF8.self)
+        lock.lock(); defer { lock.unlock() }
+        for e in entries.reversed() {
+            if (e.hash22 >> shift) == hash {
+                return e.callsign
             }
         }
         return nil

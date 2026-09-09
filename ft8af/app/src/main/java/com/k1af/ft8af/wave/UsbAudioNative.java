@@ -136,9 +136,14 @@ public final class UsbAudioNative {
      * @param endpointAddress     bEndpointAddress of the iso IN endpoint.
      * @param maxPacketSize       wMaxPacketSize from the endpoint descriptor.
      * @param inputSampleRate     device sample rate (typically 48000).
-     * @param inputChannels       1 (mono) or 2 (stereo); stereo is averaged.
+     * @param inputChannels       1 (mono) or 2 (stereo); stereo is folded to
+     *                            mono per {@code channelSelect}.
      * @param inputBytesPerSample 2 for 16-bit PCM (the only format we handle).
      * @param targetSampleRate    rate we emit to the callback (12000 for FT8).
+     * @param channelSelect       stereo fold, mirroring {@link AudioChannelSelect}:
+     *                            0 = mix L+R, 1 = left only, 2 = right only.
+     *                            Fixed for the session; MicRecorder restarts
+     *                            capture when the operator changes it.
      * @param callback            invoked from native worker thread.
      * @return                    opaque session handle for {@link #nativeStop},
      *                            or 0 on failure.
@@ -153,6 +158,7 @@ public final class UsbAudioNative {
             int inputChannels,
             int inputBytesPerSample,
             int targetSampleRate,
+            int channelSelect,
             AudioInputCallback callback);
 
     /** Stop a session started by {@link #nativeStart}. Blocks until the

@@ -1,0 +1,35 @@
+{
+  "" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8DSP-master.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8DSP-master.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8DSP-master.dia",
+    "emit-module-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8DSP-master-emit-module.d",
+    "emit-module-diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8DSP-master-emit-module.dia",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8DSP-master.swiftdeps"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/Constants.swift" : {
+    "index-unit-output-path" : "/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/Constants.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/Constants.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/Constants.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/FT8Decoder.swift" : {
+    "index-unit-output-path" : "/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Decoder.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Decoder.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Decoder.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/FT8Encoder.swift" : {
+    "index-unit-output-path" : "/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Encoder.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Encoder.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Encoder.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/FT8Hash.swift" : {
+    "index-unit-output-path" : "/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Hash.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Hash.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/FT8Hash.o"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/HashTable.swift" : {
+    "index-unit-output-path" : "/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/HashTable.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/HashTable.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/ReleaseDD/Build/Intermediates.noindex/FT8AFKit.build/Release-iphoneos/FT8DSP.build/Objects-normal/arm64/HashTable.o"
+  }
+}

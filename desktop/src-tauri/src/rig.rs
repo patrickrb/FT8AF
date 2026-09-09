@@ -1,11 +1,11 @@
 //! Rig control with pluggable backends:
-//!   * **Serial CAT** — direct serial drivers ported from the Android `rigs/`
-//!     code (Yaesu CAT, Kenwood ASCII, Icom CI-V). Write-only (no reader loop),
-//!     which is also the safe FT-710 behavior.
 //!   * **FLrig** — XML-RPC to a running FLrig instance (default 127.0.0.1:12345).
 //!     FLrig owns the radio's CAT link and handles the rig-specific quirks +
 //!     PTT, so other apps (loggers, FLrig itself) can share the radio. CAT only;
 //!     audio still flows through cpal.
+//!   * **Hamlib** — embedded via the dynamically-loaded shared library, with a
+//!     per-model backend for every supported radio. This is the superset that
+//!     replaced the old built-in serial CAT drivers.
 //!
 //! Both expose the same `RigTransport` interface; the engine doesn't care which.
 //! Everything here is desktop-only and never touches the Android tree.
@@ -13,7 +13,6 @@
 use serde::{Deserialize, Serialize};
 use std::ffi::CString;
 use std::os::raw::{c_char, c_int, c_long, c_void};
-use std::io::Write;
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -21,30 +20,10 @@ use std::time::Duration;
 pub enum RigBackend {
     /// No CAT — operator tunes manually; app only tracks the frequency.
     None,
-    /// Direct serial CAT (built-in drivers).
-    Serial,
     /// FLrig XML-RPC.
     Flrig,
     /// Hamlib, embedded via the dynamically-loaded shared library.
     Hamlib,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum RigModel {
-    Yaesu,
-    Kenwood,
-    Icom,
-    None,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum PttMethod {
-    Cat,
-    Rts,
-    Dtr,
-    None,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,18 +31,11 @@ pub struct RigConfig {
     #[serde(default = "default_backend")]
     pub backend: RigBackend,
 
-    // --- serial backend ---
-    #[serde(default = "default_model")]
-    pub model: RigModel,
+    // --- shared serial connection (Hamlib serial-type backends) ---
     #[serde(default)]
     pub port: String,
     #[serde(default = "default_baud")]
     pub baud: u32,
-    #[serde(default = "default_ptt")]
-    pub ptt: PttMethod,
-    /// Icom CI-V radio address (default 0x94 = IC-7300).
-    #[serde(default = "default_civ_addr")]
-    pub civ_address: u8,
 
     // --- flrig backend ---
     #[serde(default = "default_flrig_host")]
@@ -85,19 +57,10 @@ pub struct RigConfig {
 }
 
 fn default_backend() -> RigBackend {
-    RigBackend::Hamlib
-}
-fn default_model() -> RigModel {
-    RigModel::None
+    RigBackend::None
 }
 fn default_baud() -> u32 {
     38400
-}
-fn default_ptt() -> PttMethod {
-    PttMethod::Cat
-}
-fn default_civ_addr() -> u8 {
-    0x94
 }
 fn default_flrig_host() -> String {
     "127.0.0.1".to_string()
@@ -159,7 +122,6 @@ impl RigConnection {
     pub fn connect(cfg: &RigConfig) -> anyhow::Result<RigConnection> {
         let inner: Box<dyn RigTransport> = match cfg.backend {
             RigBackend::None => Box::new(NullTransport),
-            RigBackend::Serial => Box::new(SerialCat::connect(cfg)?),
             RigBackend::Flrig => Box::new(Flrig::connect(cfg)),
             RigBackend::Hamlib => Box::new(Hamlib::connect(cfg)?),
         };
@@ -204,141 +166,6 @@ impl RigTransport for NullTransport {
     }
     fn connected(&self) -> bool {
         false
-    }
-}
-
-// ===========================================================================
-// Serial CAT backend
-// ===========================================================================
-
-trait Driver: Send {
-    fn freq_cmd(&self, hz: u64) -> Vec<u8>;
-    fn data_mode_cmd(&self) -> Vec<u8>;
-    fn ptt_cmd(&self, on: bool) -> Vec<u8>;
-}
-
-struct Yaesu;
-impl Driver for Yaesu {
-    fn freq_cmd(&self, hz: u64) -> Vec<u8> {
-        format!("FA{:09};", hz).into_bytes()
-    }
-    fn data_mode_cmd(&self) -> Vec<u8> {
-        b"MD0C;NA00;SH0117;".to_vec()
-    }
-    fn ptt_cmd(&self, on: bool) -> Vec<u8> {
-        if on { b"TX1;".to_vec() } else { b"TX0;".to_vec() }
-    }
-}
-
-struct Kenwood;
-impl Driver for Kenwood {
-    fn freq_cmd(&self, hz: u64) -> Vec<u8> {
-        format!("FA{:011};", hz).into_bytes()
-    }
-    fn data_mode_cmd(&self) -> Vec<u8> {
-        b"MD2;".to_vec()
-    }
-    fn ptt_cmd(&self, on: bool) -> Vec<u8> {
-        if on { b"TX;".to_vec() } else { b"RX;".to_vec() }
-    }
-}
-
-struct Icom {
-    addr: u8,
-}
-impl Icom {
-    fn frame(&self, body: &[u8]) -> Vec<u8> {
-        let mut v = vec![0xFE, 0xFE, self.addr, 0xE0];
-        v.extend_from_slice(body);
-        v.push(0xFD);
-        v
-    }
-    fn freq_bcd(hz: u64) -> [u8; 5] {
-        let mut digits = [0u8; 10];
-        let mut f = hz;
-        for d in digits.iter_mut() {
-            *d = (f % 10) as u8;
-            f /= 10;
-        }
-        let mut out = [0u8; 5];
-        for i in 0..5 {
-            out[i] = digits[2 * i] | (digits[2 * i + 1] << 4);
-        }
-        out
-    }
-}
-impl Driver for Icom {
-    fn freq_cmd(&self, hz: u64) -> Vec<u8> {
-        let mut body = vec![0x05];
-        body.extend_from_slice(&Self::freq_bcd(hz));
-        self.frame(&body)
-    }
-    fn data_mode_cmd(&self) -> Vec<u8> {
-        self.frame(&[0x26, 0x00, 0x01, 0x01, 0x01])
-    }
-    fn ptt_cmd(&self, on: bool) -> Vec<u8> {
-        self.frame(&[0x1C, 0x00, if on { 0x01 } else { 0x00 }])
-    }
-}
-
-fn driver_for(model: RigModel, civ_address: u8) -> Option<Box<dyn Driver>> {
-    match model {
-        RigModel::Yaesu => Some(Box::new(Yaesu)),
-        RigModel::Kenwood => Some(Box::new(Kenwood)),
-        RigModel::Icom => Some(Box::new(Icom { addr: civ_address })),
-        RigModel::None => None,
-    }
-}
-
-struct SerialCat {
-    port: Box<dyn serialport::SerialPort>,
-    driver: Box<dyn Driver>,
-    ptt: PttMethod,
-    model: RigModel,
-}
-
-impl SerialCat {
-    fn connect(cfg: &RigConfig) -> anyhow::Result<SerialCat> {
-        let driver = driver_for(cfg.model, cfg.civ_address)
-            .ok_or_else(|| anyhow::anyhow!("select a rig model for serial CAT"))?;
-        let port = serialport::new(&cfg.port, cfg.baud)
-            .timeout(Duration::from_millis(200))
-            .open()?;
-        Ok(SerialCat { port, driver, ptt: cfg.ptt, model: cfg.model })
-    }
-
-    fn send(&mut self, bytes: &[u8]) -> anyhow::Result<()> {
-        self.port.write_all(bytes)?;
-        self.port.flush()?;
-        Ok(())
-    }
-}
-
-impl RigTransport for SerialCat {
-    fn set_frequency(&mut self, hz: u64) -> anyhow::Result<()> {
-        let cmd = self.driver.freq_cmd(hz);
-        self.send(&cmd)
-    }
-    fn set_data_mode(&mut self) -> anyhow::Result<()> {
-        let cmd = self.driver.data_mode_cmd();
-        self.send(&cmd)
-    }
-    fn set_ptt(&mut self, on: bool) -> anyhow::Result<()> {
-        match self.ptt {
-            PttMethod::Cat => {
-                let cmd = self.driver.ptt_cmd(on);
-                self.send(&cmd)
-            }
-            PttMethod::Rts => Ok(self.port.write_request_to_send(on)?),
-            PttMethod::Dtr => Ok(self.port.write_data_terminal_ready(on)?),
-            PttMethod::None => Ok(()),
-        }
-    }
-    fn name(&self) -> String {
-        format!("{:?}", self.model)
-    }
-    fn connected(&self) -> bool {
-        true
     }
 }
 
@@ -680,32 +507,50 @@ impl Drop for Hamlib {
 mod tests {
     use super::*;
 
+    /// A fresh install must default to manual tuning ("None"), not a backend
+    /// that immediately tries to load a shared library that may be absent.
     #[test]
-    fn yaesu_freq_command() {
-        assert_eq!(Yaesu.freq_cmd(14_074_000), b"FA014074000;".to_vec());
+    fn default_backend_is_none() {
+        assert_eq!(default_backend(), RigBackend::None);
+        let cfg: RigConfig = serde_json::from_str("{}").unwrap();
+        assert_eq!(cfg.backend, RigBackend::None);
     }
 
+    /// The removed serial backend is no longer a valid selector value; only
+    /// none / flrig / hamlib deserialize.
     #[test]
-    fn icom_freq_bcd_little_endian() {
-        assert_eq!(Icom::freq_bcd(14_074_000), [0x00, 0x40, 0x07, 0x14, 0x00]);
+    fn backend_serde_roundtrip() {
+        for (json, backend) in [
+            ("\"none\"", RigBackend::None),
+            ("\"flrig\"", RigBackend::Flrig),
+            ("\"hamlib\"", RigBackend::Hamlib),
+        ] {
+            let b: RigBackend = serde_json::from_str(json).unwrap();
+            assert_eq!(b, backend);
+            assert_eq!(serde_json::to_string(&b).unwrap(), json);
+        }
+        assert!(serde_json::from_str::<RigBackend>("\"serial\"").is_err());
     }
 
+    /// A config persisted by an older build (with the now-removed serial fields
+    /// `model`/`ptt`/`civ_address`) must still deserialize — serde ignores the
+    /// extra keys and applies defaults for anything missing.
     #[test]
-    fn icom_freq_frame() {
-        let icom = Icom { addr: 0x94 };
-        assert_eq!(
-            icom.freq_cmd(14_074_000),
-            vec![0xFE, 0xFE, 0x94, 0xE0, 0x05, 0x00, 0x40, 0x07, 0x14, 0x00, 0xFD]
-        );
-    }
-
-    #[test]
-    fn icom_ptt_frame() {
-        let icom = Icom { addr: 0x94 };
-        assert_eq!(
-            icom.ptt_cmd(true),
-            vec![0xFE, 0xFE, 0x94, 0xE0, 0x1C, 0x00, 0x01, 0xFD]
-        );
+    fn legacy_serial_config_still_deserializes() {
+        let legacy = r#"{
+            "backend": "hamlib",
+            "model": "icom",
+            "port": "/dev/ttyUSB0",
+            "baud": 9600,
+            "ptt": "rts",
+            "civ_address": 148,
+            "hamlib_model": 3073
+        }"#;
+        let cfg: RigConfig = serde_json::from_str(legacy).unwrap();
+        assert_eq!(cfg.backend, RigBackend::Hamlib);
+        assert_eq!(cfg.port, "/dev/ttyUSB0");
+        assert_eq!(cfg.baud, 9600);
+        assert_eq!(cfg.hamlib_model, 3073);
     }
 
     #[test]

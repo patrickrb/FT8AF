@@ -6,11 +6,18 @@
 
 pub mod audio;
 pub mod bands;
+// Build-time arch-selection helpers, shared with `build.rs` via `include!`.
+// Unused by the library itself (only build.rs calls them), so silence dead_code;
+// they exist here purely so `cargo test` runs their unit tests.
+#[allow(dead_code)]
+mod build_support;
 pub mod db;
 pub mod dsp;
 pub mod engine;
+pub mod os_location;
 pub mod qso;
 pub mod rig;
 pub mod timesync;
+pub mod udp;
 pub mod util;
 pub mod wf;

@@ -3,6 +3,8 @@ package radio.ks3ckc.ft8af.ui.pota
 import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
+import android.os.Handler
+import android.os.Looper
 import androidx.core.content.FileProvider
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.log.AdifFormat
@@ -140,6 +142,39 @@ object PotaAdifExporter {
         }
     }
 
+    /**
+     * Deliver [result] to [onResult] on the main thread, immediately when the
+     * caller is already there and via the main [Looper] otherwise.
+     *
+     * Every callback out of [shareActivationAdif] goes through here, because the
+     * body that produces them runs on [Dispatchers.IO] and callers legitimately
+     * touch UI in the callback — the existing one shows a Toast, and
+     * `Toast.makeText` throws "Can't toast on a thread that has not called
+     * Looper.prepare()" off the main thread. Issue #700 was exactly that: sharing
+     * an activation with no QSOs takes the empty-documents exit, which reported
+     * failure from an IO worker and crashed the app.
+     *
+     * Making the guarantee the *exporter's* rather than each caller's is the
+     * point. A caller cannot see which thread the callback arrives on, so a fix
+     * at the one Toast would leave the next caller to rediscover this.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal fun deliverOnMain(
+        result: Boolean,
+        onResult: (Boolean) -> Unit,
+    ) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            onResult(result)
+        } else {
+            Handler(Looper.getMainLooper()).post { onResult(result) }
+        }
+    }
+
+    /**
+     * Build this activation's ADIF documents and hand them to the system share
+     * sheet. [onResult] reports whether anything was shared, and is always
+     * invoked on the main thread — see [deliverOnMain].
+     */
     fun shareActivationAdif(
         context: Context,
         mainViewModel: MainViewModel,
@@ -147,7 +182,7 @@ object PotaAdifExporter {
         onResult: (Boolean) -> Unit,
     ) {
         val db = mainViewModel.databaseOpr?.db ?: run {
-            onResult(false)
+            deliverOnMain(false, onResult)
             return
         }
         scope.launch {
@@ -155,11 +190,11 @@ object PotaAdifExporter {
                 val docs = buildActivationAdif(db, activation)
                 if (docs.isEmpty()) {
                     // No QSOs matched this activation — nothing to share.
-                    onResult(false)
+                    deliverOnMain(false, onResult)
                     return@launch
                 }
                 val dir = context.getExternalFilesDir(null) ?: run {
-                    onResult(false)
+                    deliverOnMain(false, onResult)
                     return@launch
                 }
                 val parks = activation.parkRefs
@@ -190,11 +225,13 @@ object PotaAdifExporter {
                 val chooser = Intent.createChooser(send, "Share POTA ADIF").apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
+                // Legal from a background thread because of FLAG_ACTIVITY_NEW_TASK
+                // above; only the callback has a main-thread requirement.
                 context.startActivity(chooser)
-                onResult(true)
+                deliverOnMain(true, onResult)
             } catch (e: Exception) {
                 e.printStackTrace()
-                onResult(false)
+                deliverOnMain(false, onResult)
             }
         }
     }

@@ -13,11 +13,11 @@ struct ToastOverlay: View {
             HStack(spacing: 8) {
                 if let icon {
                     Image(systemName: icon)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.ft8afUI(size: 13, weight: .semibold))
                         .foregroundStyle(accent)
                 }
                 Text(message)
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .font(.ft8afMono(size: 13, weight: .semibold))
                     .foregroundStyle(textPrimary)
             }
             .padding(.horizontal, 16)

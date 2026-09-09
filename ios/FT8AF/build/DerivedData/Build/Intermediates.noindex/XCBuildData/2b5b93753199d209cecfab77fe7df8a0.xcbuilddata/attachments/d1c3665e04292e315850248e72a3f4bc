@@ -1,0 +1,4 @@
+module FT8Audio {
+header "FT8Audio-Swift.h"
+export *
+}

@@ -84,4 +84,28 @@ class PotaSessionManagerTest {
         assertThat(r.sig).isEqualTo("POTA")
         assertThat(r.sigInfo).isEqualTo("")
     }
+
+    // --- onQsoLogged / qsoCountsForActivation ------------------------------
+
+    @Test
+    fun onQsoLogged_whenIdle_isANoOp() {
+        // No activation running (the only state reachable without SQLite):
+        // must neither crash nor conjure an activation.
+        PotaSessionManager.onQsoLogged("K-1234")
+
+        assertThat(PotaSessionManager.currentActivation.value).isNull()
+    }
+
+    @Test
+    fun qsoCountsForActivation_matchesDatabaseBumpPredicate() {
+        // Mirrors DatabaseOpr's `park_ref = ? AND ended_at IS NULL` binding:
+        // only an exact match on the full (possibly comma-joined) ref counts.
+        assertThat(PotaSessionManager.qsoCountsForActivation("K-1234", "K-1234")).isTrue()
+        assertThat(PotaSessionManager.qsoCountsForActivation("K-1234,K-5678", "K-1234,K-5678")).isTrue()
+
+        assertThat(PotaSessionManager.qsoCountsForActivation("K-1234", null)).isFalse()
+        assertThat(PotaSessionManager.qsoCountsForActivation("K-1234", "")).isFalse()
+        assertThat(PotaSessionManager.qsoCountsForActivation("K-1234", "K-5678")).isFalse()
+        assertThat(PotaSessionManager.qsoCountsForActivation("K-1234,K-5678", "K-1234")).isFalse()
+    }
 }

@@ -38,9 +38,15 @@ public class BluetoothSerialService extends Service implements BluetoothSerialLi
     private final IBinder binder;
     private final Queue<QueueItem> queue1, queue2;
 
-    private BluetoothSerialSocket socket;
+    // volatile: assigned on the connect thread, cleared to null on the disconnect
+    // thread, read on the CAT/TX thread (write()). Readers snapshot it into a
+    // local before check-and-use — see write().
+    private volatile BluetoothSerialSocket socket;
     private BluetoothSerialListener listener;
-    private boolean connected;
+    // volatile for the same reason as socket: written by connect()/disconnect() and
+    // the background onSerial* callbacks, read by binder callers (write()) — without
+    // it the writeIfConnected guard can see a stale value under the Java memory model.
+    private volatile boolean connected;
 
     /**
      * Lifecylce
@@ -84,9 +90,14 @@ public class BluetoothSerialService extends Service implements BluetoothSerialLi
     }
 
     public void write(byte[] data) throws IOException {
-        if(!connected)
-            throw new IOException("not connected");
-        socket.write(data);
+        // Snapshot the volatile socket ONCE — disconnect() may null it on another
+        // thread between the connected check and the write (check-then-act race).
+        // writeIfConnected converts a torn-down link into the "not connected"
+        // IOException BluetoothRigConnector.sendCommand already handles, never an
+        // uncaught NPE that would crash the CAT/TX worker. See
+        // BluetoothSerialSocket.writeIfConnected.
+        final BluetoothSerialSocket s = socket;
+        BluetoothSerialSocket.writeIfConnected(connected, s == null ? null : s::write, data);
     }
 
     public void attach(BluetoothSerialListener listener) {

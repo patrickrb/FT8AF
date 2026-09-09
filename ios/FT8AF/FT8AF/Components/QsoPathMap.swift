@@ -1,3 +1,4 @@
+import FT8Engine
 import SwiftUI
 
 /// Mini equirectangular map showing the great circle path between two grids.
@@ -38,8 +39,8 @@ struct QsoPathMap: View {
             ctx.stroke(Path(ellipseIn: theirRect), with: .color(signal.opacity(0.5)), lineWidth: 2)
 
             // Labels
-            let myLabel = Text(myGrid).font(.system(size: 8, weight: .bold, design: .monospaced)).foregroundStyle(accent)
-            let theirLabel = Text(theirGrid).font(.system(size: 8, weight: .bold, design: .monospaced)).foregroundStyle(signal)
+            let myLabel = Text(myGrid).font(.ft8afMono(size: 8, weight: .bold)).foregroundStyle(accent)
+            let theirLabel = Text(theirGrid).font(.ft8afMono(size: 8, weight: .bold)).foregroundStyle(signal)
 
             let myLabelPt = CGPoint(x: max(20, min(w - 20, myPt.x)), y: max(10, myPt.y - 12))
             let theirLabelPt = CGPoint(x: max(20, min(w - 20, theirPt.x)), y: min(h - 10, theirPt.y + 12))

@@ -1,0 +1,128 @@
+{
+  "" : {
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/FT8Audio-master.dia",
+    "emit-module-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/FT8Audio-master-emit-module.d",
+    "emit-module-diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/FT8Audio-master-emit-module.dia",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/FT8Audio-master.swiftdeps"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/AudioInputLevel.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/AudioInputLevel.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/AudioInputLevel.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/AudioInputLevel.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/AudioInputLevel.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/AudioInputLevel.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/AudioInputLevel.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/AudioInputLevel.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/AudioInputLevel~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/AudioPortLabel.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/AudioPortLabel.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/AudioPortLabel.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/AudioPortLabel.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/AudioPortLabel.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/AudioPortLabel.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/AudioPortLabel.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/AudioPortLabel.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/AudioPortLabel~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/ClockHealth.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/ClockHealth.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/ClockHealth.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/ClockHealth.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/ClockHealth.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/ClockHealth.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/ClockHealth.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/ClockHealth.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/ClockHealth~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/ClockOffset.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/ClockOffset.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/ClockOffset.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/ClockOffset.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/ClockOffset.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/ClockOffset.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/ClockOffset.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/ClockOffset.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/ClockOffset~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/DecodeScheduler.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/DecodeScheduler.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/DecodeScheduler.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/DecodeScheduler.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/DecodeScheduler.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/DecodeScheduler.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/DecodeScheduler.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/DecodeScheduler.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/DecodeScheduler~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/DtCalibrator.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/DtCalibrator.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/DtCalibrator.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/DtCalibrator.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/DtCalibrator.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/DtCalibrator.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/DtCalibrator.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/DtCalibrator.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/DtCalibrator~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/SlotAccumulator.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/SlotAccumulator.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/SlotAccumulator.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/SlotAccumulator.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/SlotAccumulator.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/SlotAccumulator.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/SlotAccumulator.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/SlotAccumulator.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/SlotAccumulator~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/SlotClock.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/SlotClock.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/SlotClock.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/SlotClock.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/SlotClock.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/SlotClock.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/SlotClock.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/SlotClock.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/SlotClock~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/Sntp.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/Sntp.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/Sntp.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/Sntp.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/Sntp.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/Sntp.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/Sntp.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/Sntp.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/Sntp~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/WaterfallAxis.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallAxis.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallAxis.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallAxis.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallAxis.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallAxis.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallAxis.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallAxis.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallAxis~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/WaterfallRowBuilder.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallRowBuilder.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallRowBuilder.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallRowBuilder.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallRowBuilder.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallRowBuilder.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallRowBuilder.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallRowBuilder.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallRowBuilder~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/WaterfallTimestampGate.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallTimestampGate.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallTimestampGate.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallTimestampGate.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallTimestampGate.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallTimestampGate.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallTimestampGate.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallTimestampGate.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphoneos/FT8Audio.build/Objects-normal/arm64/WaterfallTimestampGate~partial.swiftmodule"
+  }
+}

@@ -11,7 +11,8 @@ others (except a change to the shared native C core under
 ```
 feature/* ──PR──▶ dev ──PR──▶ staging ──PR──▶ main
                   │            │               │
-                  │            │               └─ PRODUCTION build → Releases + Play production
+                  │            │               └─ PRODUCTION build → Releases only (no AAB to Play)
+                  │            │                  └─ manual run on the android-v* tag → Play production
                   │            └───────────────── DEV (prerelease) build → Releases + Play internal
                   └────────────────────────────── CI only, NO release
 ```
@@ -22,8 +23,27 @@ feature/* ──PR──▶ dev ──PR──▶ staging ──PR──▶ main
   this PR (a push to `staging`) cuts a **dev / prerelease** build of every
   platform: prerelease GitHub Releases + Play **internal** track for Android.
 - **staging → main** — promote the validated staging build. Merging this PR (a
-  push to `main`) cuts the **production** build: full GitHub Releases + Play
-  **production** track for Android.
+  push to `main`) cuts the **production** build: full GitHub Releases with the
+  auto-bumped `android-v<x.y.z>` / `desktop-v<x.y.z>` tags. **A merge to `main`
+  reaches Google Play in no way at all** — no AAB to any track, and no store
+  listing text either. Everything Play-side is a deliberate, separate act. See
+  [Store listings](#store-listings) below.
+- **shipping a `main`-cut release to Play production is manual.** In
+  **Actions → Android CI & Release → Run workflow**, pick the `android-v<x.y.z>`
+  tag the `main` merge created as the ref and run it. That run takes the same
+  release lane an `android-v*` tag push takes and uploads the AAB to the Play
+  **production** track. It reuses the release notes already on that tag's
+  GitHub Release (read back through the hidden markers in its body) as Play's
+  what's-new — and refuses to run if they are missing — and leaves the release
+  body as the promotion wrote it. A merge to `main` on its own never puts a
+  build in front of users. (Pushing a brand-new `android-v*` tag by hand is
+  the other, older path: it also enters the tag lane and publishes to
+  production directly, with the version string as the what's-new.)
+
+  It has to be a manual run rather than a tag push: the `main` run creates the
+  `android-v<x.y.z>` ref itself (the GitHub Releases API creates the tag), so
+  `git push origin android-v<x.y.z>` is `Everything up-to-date` — it emits no
+  push event and starts no workflow.
 
 Source gates (enforced as required status checks):
 
@@ -36,16 +56,72 @@ Per-platform prefixes keep the Releases page unambiguous:
 
 | Platform | Production tag        | Dev (prerelease) tag      | Trigger of dev build |
 |----------|-----------------------|---------------------------|----------------------|
-| Android  | `android-v<x.y>`      | `android-dev.<run#>`      | push to `staging`    |
+| Android  | `android-v<x.y.z>`    | `android-dev.<run#>`      | push to `staging`    |
 | Desktop  | `desktop-v<x.y.z>`    | `desktop-dev.<run#>`      | push to `staging`    |
 | iOS      | _(no release yet)_    | _(no release yet)_        | —                    |
 
-- Production tags are auto-bumped on a push to `main` from the latest matching
-  tag. Android seeds from a legacy bare `v*` tag if no `android-v*` exists yet,
-  so numbering stays continuous with pre-split releases.
+- Desktop production tags are auto-bumped on a push to `main` from the latest
+  matching tag.
+- Android versions are chosen by Claude (see below). Older Android tags are the
+  two-part `android-v0.149` form; they normalise to `0.149.0` so numbering stays
+  continuous. Android seeds from a legacy bare `v*` tag if no `android-v*`
+  exists yet.
 - iOS is CI-only: it builds the FT8AFKit test suite and an unsigned simulator
   build to prove it compiles. A distributable `.ipa` needs an Apple Developer
   cert + provisioning profile / TestFlight, which are not wired up yet.
+
+## Android versioning + release notes (AI-assisted)
+
+Ported from Sorrel's `play-beta.yml`. On a push to `staging` the Android
+`build` job:
+
+1. Takes the latest `android-v*` tag as the baseline and collects everything
+   from there to `HEAD`: merged PRs (number, branch, title), the commit log,
+   and size signals (commit count, `ft8af/` diff stat, changed files by area).
+2. If nothing under `ft8af/` changed (an iOS- or desktop-only promotion) it
+   builds but **cuts no release** — no empty versions.
+3. Otherwise asks Claude (`claude-opus-5`, structured output) for the semver
+   bump — `major` / `minor` / `patch`, judged from both content and size, with
+   changes outside `ft8af/` not counting — and for ≤400-character Play release
+   notes aimed at ham operators.
+4. Builds `versionName = <x.y.z>-dev.<run#>`, tags `android-dev.<run#>`, and
+   publishes the notes to the GitHub prerelease body **and** the Play internal
+   track's "Release notes" (`whatsNewDirectory`). The prerelease body also
+   carries hidden markers (`<!-- ft8af-version: x.y.z -->` and
+   `<!-- ft8af-notes-start/end -->`).
+
+On the later push to `main` the job looks for the newest `android-dev.*` tag
+that is an ancestor of `HEAD` and not already shipped, reads the version and
+notes back out of those markers, and releases `android-v<x.y.z>` with the same
+notes — so when that tag is later shipped to Play, production ships exactly what
+the internal testers ran. If no such candidate exists (or it pre-dates the markers) Claude
+decides on `main` instead. An `android-v<x.y.z>` that already exists is stepped
+by a patch until free.
+
+`versionCode` is unchanged: still `GITHUB_RUN_NUMBER + 1000`.
+
+The helper `.github/scripts/android-next-version.sh` does the bump arithmetic
+and has a self-test (`--self-test`).
+
+**Secret:** `ANTHROPIC_API_KEY` (repository secret). Without it, or if the API
+call fails, the run annotates a warning, takes a **patch** bump, and uses the
+PR titles as the notes — a release is never blocked on the AI step.
+
+## Store listings
+
+Play *store listing* text (title, descriptions, per-locale metadata) lives in
+`fastlane/metadata/android/` and ships through its own workflow,
+`play-listings.yml` — not through the Android release pipeline above, and not
+on any branch push. A PR touching the metadata is **validated** (completeness
+and Play's character limits) and then the text just sits in the repo; it reaches
+the store only when someone runs the publish on purpose:
+
+- **Actions → "Play store listings" → Run workflow**, mode `publish` (the
+  default mode is the read-only `dry-run`), or
+- locally: `python .github/scripts/publish_listings.py`.
+
+Listing copy and app builds ship on different cadences, and neither is tied to a
+`main` merge.
 
 ## One-time setup on GitHub (manual)
 
@@ -62,4 +138,6 @@ These cannot be done from a workflow file — do them in the repo settings:
    now lives on `staging`.
 4. **Play Console** → confirm the `PLAY_SERVICE_ACCOUNT_JSON` service account has
    release permission on the **production** track (it previously only needed
-   internal). `main` merges now publish there.
+   internal). Two paths publish an AAB there: the manual workflow run on an
+   `android-v*` tag (the normal path for a release cut by a `main` merge) and a
+   plain `android-v*` tag push. `main` merges do not.

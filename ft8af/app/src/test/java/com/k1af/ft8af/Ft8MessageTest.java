@@ -88,6 +88,20 @@ public class Ft8MessageTest {
     }
 
     @Test
+    public void checkIsCQ_falseWhenCallsignToNull() {
+        // A free-text / telemetry / unresolved-hash decode can reach the decode
+        // list with callsignTo still at its null default (single-arg ctor). The
+        // Compose decode screen calls checkIsCQ() unconditionally on every
+        // rendered row (DecodeRow / resolveQsoStatus / filterMessages) on the
+        // main thread with no try/catch, so a missing destination must return
+        // "not a CQ" rather than NPE. Mirrors the #254 guard already present in
+        // ActiveQsoPanel for the same deref.
+        Ft8Message msg = new Ft8Message(FT8Common.FT8_MODE);
+        assertThat(msg.callsignTo).isNull();
+        assertThat(msg.checkIsCQ()).isFalse();
+    }
+
+    @Test
     public void getMessageText_freeTextPadsToThirteen() {
         // Default i3/n3 == 0 selects the free-text branch, which upper-cases and
         // left-pads the payload to 13 chars.
@@ -258,6 +272,25 @@ public class Ft8MessageTest {
     public void getCallsignTo_realCallsign_stripsBrackets() {
         Ft8Message msg = new Ft8Message("<K1ABC>", "W9XYZ", "FN42");
         assertThat(msg.getCallsignTo()).isEqualTo("K1ABC");
+    }
+
+    @Test
+    public void getCallsignTo_twoCharToken_doesNotCrash() {
+        // Regression: the calling-token check ran substring(0, 3) (for "QRZ")
+        // after only a length<2 guard, so a callsignTo of exactly length 2 that
+        // is neither "CQ" nor "DE" threw StringIndexOutOfBoundsException. The
+        // native decoder can render such a short junk token into callsignTo on a
+        // CRC-collision false decode, and getCallsignTo() runs on essentially
+        // every decoded message, so this crashed the decode-handling path.
+        Ft8Message msg = new Ft8Message("W1", "K1ABC", "FN42");
+        assertThat(msg.getCallsignTo()).isEqualTo("W1");
+    }
+
+    @Test
+    public void getCallsignTo_singleCharToken_doesNotCrash() {
+        // A length-1 field must also be handled without an index exception.
+        Ft8Message msg = new Ft8Message("A", "K1ABC", "FN42");
+        assertThat(msg.getCallsignTo()).isEqualTo("A");
     }
 
     // ---- isPlausibleCallsign / isJunkDecode ---------------------------------

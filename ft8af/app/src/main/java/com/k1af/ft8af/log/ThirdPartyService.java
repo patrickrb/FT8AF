@@ -69,15 +69,12 @@ public class ThirdPartyService {
      */
     public static List<StationProfile> FetchCloudlogStations(String address, String apiKey) {
         List<StationProfile> stations = new ArrayList<>();
-        if (address == null || address.isEmpty() || apiKey == null || apiKey.isEmpty()) {
+        String base = CloudlogEndpoint.normalizeBase(address);
+        if (base == null || apiKey == null || apiKey.trim().isEmpty()) {
             return stations;
         }
-        if (!address.endsWith("/")) {
-            address += "/";
-        }
         try {
-            String url = address + "api/station_info/" + apiKey;
-            String result = sendGetRequest(url);
+            String result = cloudlogGet(base, "api/station_info/" + apiKey.trim(), null);
             if (result == null || result.isEmpty()) return stations;
             JSONArray arr = new JSONArray(result);
             for (int i = 0; i < arr.length(); i++) {
@@ -117,11 +114,9 @@ public class ThirdPartyService {
                                                String gridsquare, String callsign,
                                                String city, String dxcc,
                                                boolean linkActiveLogbook) {
-        if (address == null || address.isEmpty() || apiKey == null || apiKey.isEmpty()) {
+        String base = CloudlogEndpoint.normalizeBase(address);
+        if (base == null || apiKey == null || apiKey.trim().isEmpty()) {
             return null;
-        }
-        if (!address.endsWith("/")) {
-            address += "/";
         }
         try {
             String body = buildCreateStationRequestJson(
@@ -132,8 +127,7 @@ public class ThirdPartyService {
                 Log.d(TAG, "createCloudlogStation aborted: could not build request body");
                 return null;
             }
-            String url = address + "api/create_station/" + apiKey;
-            String result = sendPostRequest(url, body);
+            String result = cloudlogPost(base, "api/create_station/" + apiKey.trim(), body, null);
             String id = parseCreateStationResponse(result);
             Log.d(TAG, "createCloudlogStation " + (id != null ? "created id" : "failed/no id"));
             return id;
@@ -229,7 +223,7 @@ public class ThirdPartyService {
 
         if (qslRecord.getToMaidenGrid() != null) {
             logStr.append(String.format("<gridsquare:%d>%s "
-                    , qslRecord.getToMaidenGrid().length()
+                    , AdifFormat.utf8Length(qslRecord.getToMaidenGrid())
                     , qslRecord.getToMaidenGrid()));
         }
 
@@ -239,46 +233,46 @@ public class ThirdPartyService {
             String submode = AdifFormat.mfskSubmode(qslRecord.getMode());
             if (submode != null) {
                 logStr.append(String.format("<mode:4>MFSK <submode:%d>%s "
-                        , submode.length(), submode));
+                        , AdifFormat.utf8Length(submode), submode));
             } else {
                 logStr.append(String.format("<mode:%d>%s "
-                        , qslRecord.getMode().length()
+                        , AdifFormat.utf8Length(qslRecord.getMode())
                         , qslRecord.getMode()));
             }
         }
 
-        String rstSent = AdifFormat.formatReport(qslRecord.getSendReport());
-        logStr.append(String.format("<rst_sent:%d>%s ", rstSent.length(), rstSent));
+        String rstSent = AdifFormat.formatReport(qslRecord.getMode(), qslRecord.getSendReport());
+        logStr.append(String.format("<rst_sent:%d>%s ", AdifFormat.utf8Length(rstSent), rstSent));
 
-        String rstRcvd = AdifFormat.formatReport(qslRecord.getReceivedReport());
-        logStr.append(String.format("<rst_rcvd:%d>%s ", rstRcvd.length(), rstRcvd));
+        String rstRcvd = AdifFormat.formatReport(qslRecord.getMode(), qslRecord.getReceivedReport());
+        logStr.append(String.format("<rst_rcvd:%d>%s ", AdifFormat.utf8Length(rstRcvd), rstRcvd));
 
         if (qslRecord.getQso_date() != null) {
             logStr.append(String.format("<qso_date:%d>%s "
-                    , qslRecord.getQso_date().length()
+                    , AdifFormat.utf8Length(qslRecord.getQso_date())
                     , qslRecord.getQso_date()));
         }
 
         if (qslRecord.getTime_on() != null) {
             logStr.append(String.format("<time_on:%d>%s "
-                    , qslRecord.getTime_on().length()
+                    , AdifFormat.utf8Length(qslRecord.getTime_on())
                     , qslRecord.getTime_on()));
         }
         if (qslRecord.getBandLength() != null) {
             logStr.append(String.format("<band:%d>%s "
-                    , qslRecord.getBandLength().length()
+                    , AdifFormat.utf8Length(qslRecord.getBandLength())
                     , qslRecord.getBandLength()));
         }
 
         if (qslRecord.getQso_date_off() != null) {
             logStr.append(String.format("<qso_date_off:%d>%s "
-                    , qslRecord.getQso_date_off().length()
+                    , AdifFormat.utf8Length(qslRecord.getQso_date_off())
                     , qslRecord.getQso_date_off()));
         }
 
         if (qslRecord.getTime_off() != null) {
             logStr.append(String.format("<time_off:%d>%s "
-                    , qslRecord.getTime_off().length()
+                    , AdifFormat.utf8Length(qslRecord.getTime_off())
                     , qslRecord.getTime_off()));
         }
 
@@ -291,28 +285,29 @@ public class ThirdPartyService {
             }
 
             logStr.append(String.format("<freq:%d>%s "
-                    , freq.length()
+                    , AdifFormat.utf8Length(freq)
                     , freq));
         }
 
         if (qslRecord.getMyCallsign() != null) {
             logStr.append(String.format("<station_callsign:%d>%s "
-                    , qslRecord.getMyCallsign().length()
+                    , AdifFormat.utf8Length(qslRecord.getMyCallsign())
                     , qslRecord.getMyCallsign()));
         }
 
         if (qslRecord.getMyMaidenGrid() != null) {
             logStr.append(String.format("<my_gridsquare:%d>%s "
-                    , qslRecord.getMyMaidenGrid().length()
+                    , AdifFormat.utf8Length(qslRecord.getMyMaidenGrid())
                     , qslRecord.getMyMaidenGrid()));
         }
 
         String comment = qslRecord.getComment();
+        if (comment == null) comment = "";
 
         //<comment:15>Distance: 99 km <eor>
         //When writing to the database, be sure to append " km"
         logStr.append(String.format("<comment:%d>%s <eor>\n"
-                , comment.length()
+                , AdifFormat.utf8Length(comment)
                 , comment));
         return logStr.toString();
     }
@@ -327,10 +322,19 @@ public class ThirdPartyService {
      * Returns true on HTTP 2xx, false otherwise.
      */
     public static boolean uploadAdifToCloudlog(String adif) {
-        String address = GeneralVariables.getCloudlogServerAddress();
-        if (address == null || address.isEmpty()) return false;
-        if (!address.endsWith("/")){
-            address+="/";
+        return uploadAdifToCloudlog(adif, null);
+    }
+
+    /**
+     * As {@link #uploadAdifToCloudlog(String)}, but records why the upload failed into
+     * {@code failureOut} when one is supplied, so callers can surface the server's own
+     * explanation instead of a bare "0 uploaded".
+     */
+    public static boolean uploadAdifToCloudlog(String adif, StringBuilder failureOut) {
+        String base = CloudlogEndpoint.normalizeBase(GeneralVariables.getCloudlogServerAddress());
+        if (base == null) {
+            appendFailure(failureOut, "no server address configured");
+            return false;
         }
         JSONStringer js = new JSONStringer();
         try {
@@ -339,40 +343,73 @@ public class ThirdPartyService {
             // Cloudlog's documented endpoint is /api/qso (no trailing slash). Wavelog and
             // Nextlog both 308-redirect when the trailing slash is present, which
             // HttpURLConnection won't follow on a POST.
-            String clRes = sendPostRequest(address+"api/qso",result);
+            String clRes = cloudlogPost(base, "api/qso", result, failureOut);
             Log.d(TAG, "Cloudlog upload " + (clRes != null ? "succeeded" : "failed"));
             return clRes != null;
         }catch (Exception k){
             Log.d(TAG, "Cloudlog upload error: " + k.getClass().getSimpleName());
+            appendFailure(failureOut, k.getClass().getSimpleName()
+                    + (k.getMessage() != null ? ": " + k.getMessage() : ""));
             return false;
         }
     }
+
+    /** Outcome of {@link #checkCloudlogConnection()}: pass/fail plus a one-line reason. */
+    public static final class ConnectionCheck {
+        public final boolean ok;
+        /** Why it failed (HTTP status, transport error, bad key…); null when {@link #ok}. */
+        public final String detail;
+
+        ConnectionCheck(boolean ok, String detail) {
+            this.ok = ok;
+            this.detail = detail;
+        }
+    }
+
     public static boolean CheckCloudlogConnection(){
-        String address = GeneralVariables.getCloudlogServerAddress();
+        return checkCloudlogConnection().ok;
+    }
+
+    /**
+     * Verifies the configured Cloudlog/Wavelog/Nextlog address + API key via
+     * {@code api/auth/[key]} and says <em>why</em> when it fails. Before #756 every failure
+     * — a cleartext block, a 404 from a no-rewrite install, a typo, a dead host — collapsed
+     * to a bare "Fail" in the settings dialog with nothing in debug.log.
+     */
+    public static ConnectionCheck checkCloudlogConnection() {
+        String base = CloudlogEndpoint.normalizeBase(GeneralVariables.getCloudlogServerAddress());
         String apiKey = GeneralVariables.getCloudlogServerApiKey();
-        // Check if the address ends with /
-        if (!address.endsWith("/")){
-            address+="/";
+        if (base == null) {
+            return new ConnectionCheck(false, "no server address configured");
         }
-        try{
-            // The Cloudlog auth endpoint takes the key as a path segment, so the constructed
-            // URL is unavoidably credential-bearing. Do not log it.
-            String url = address + "api/auth/"+ apiKey;
-            String result = sendGetRequest(url);
-            if (result == null) {
-                Log.d(TAG, "Cloudlog connection failed: no response");
-                return false;
-            }
-            // Nextlog and Wavelog both implement /api/auth but return slightly different shapes
-            // (XML declaration, extra whitespace, etc.). Match on the meaningful markers so all
-            // three Cloudlog-compatible backends report Pass.
-            String compact = result.replaceAll("\\s+", "");
-            return compact.contains("<status>Valid</status>")
-                    && compact.contains("<rights>rw</rights>");
-        }catch (Exception e){
-            Log.d(TAG, "Cloudlog auth error: " + e.getClass().getSimpleName());
-            return false;
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            return new ConnectionCheck(false, "no API key configured");
         }
+        // The Cloudlog auth endpoint takes the key as a path segment, so the constructed
+        // URL is unavoidably credential-bearing; cloudlogGet redacts it before logging.
+        StringBuilder why = new StringBuilder();
+        String result = cloudlogGet(base, "api/auth/" + apiKey.trim(), why);
+        if (result == null) {
+            return new ConnectionCheck(false, why.length() > 0 ? why.toString() : "no response");
+        }
+        return interpretAuthResponse(result);
+    }
+
+    /**
+     * Interprets the body of {@code api/auth/[key]}. Nextlog and Wavelog both implement it
+     * but return slightly different shapes (XML declaration, extra whitespace, etc.), so
+     * match on the meaningful markers. Pure — unit-tested.
+     */
+    static ConnectionCheck interpretAuthResponse(String body) {
+        String compact = body == null ? "" : body.replaceAll("\\s+", "");
+        boolean valid = compact.contains("<status>Valid</status>");
+        boolean rw = compact.contains("<rights>rw</rights>");
+        if (valid && rw) return new ConnectionCheck(true, null);
+        if (valid) return new ConnectionCheck(false, "API key is read-only (needs rw rights)");
+        if (compact.contains("<status>")) {
+            return new ConnectionCheck(false, "API key rejected by server");
+        }
+        return new ConnectionCheck(false, "unexpected reply (not a Cloudlog API?)");
     }
 
     public static boolean CheckQRZConnection(){
@@ -408,8 +445,20 @@ public class ThirdPartyService {
      * still a success from a "the record is now on QRZ" standpoint).
      */
     public static boolean uploadAdifToQrz(String adif) {
+        return uploadAdifToQrz(adif, null);
+    }
+
+    /**
+     * As {@link #uploadAdifToQrz(String)}, but records the rejection reason into
+     * {@code failureOut} when one is supplied. QRZ answers with {@code RESULT=FAIL}
+     * plus a {@code REASON=...} pair, which is worth showing verbatim.
+     */
+    public static boolean uploadAdifToQrz(String adif, StringBuilder failureOut) {
         String apikey = GeneralVariables.getQrzApiKey();
-        if (apikey == null || apikey.isEmpty()) return false;
+        if (apikey == null || apikey.isEmpty()) {
+            appendFailure(failureOut, "no API key configured");
+            return false;
+        }
         try {
             // POST keeps both the API key and the ADIF payload out of the URL.
             String body = "KEY=" + URLEncoder.encode(apikey, StandardCharsets.UTF_8.name())
@@ -417,14 +466,52 @@ public class ThirdPartyService {
                     + "&ADIF=" + URLEncoder.encode(adif, StandardCharsets.UTF_8.name());
             String result = sendPostFormRequest("https://logbook.qrz.com/api", body);
             Log.d(TAG, "QRZ upload " + (result != null ? "succeeded" : "failed"));
-            if (result == null) return false;
+            if (result == null) {
+                appendFailure(failureOut, "no response from QRZ");
+                return false;
+            }
             // QRZ encodes status as RESULT=OK|FAIL|REPLACE within an &-separated body
             String qrzResult = parseQrzResult(result);
-            return "OK".equals(qrzResult) || "REPLACE".equals(qrzResult);
+            if ("OK".equals(qrzResult) || "REPLACE".equals(qrzResult)) {
+                return true;
+            }
+            appendFailure(failureOut, describeQrzFailure(result));
+            return false;
         }catch (Exception k){
             Log.d(TAG, "QRZ upload error: " + k.getClass().getSimpleName());
+            appendFailure(failureOut, k.getClass().getSimpleName()
+                    + (k.getMessage() != null ? ": " + k.getMessage() : ""));
             return false;
         }
+    }
+
+    /**
+     * Summarise a rejected QRZ upload as {@code RESULT=<r>} plus QRZ's {@code REASON}
+     * when it supplied one. Pure (no network) so it is unit-testable.
+     *
+     * <p>Deliberately does not echo the whole response: it contains the submitted ADIF,
+     * and this string is written to {@code debug.log}.
+     */
+    static String describeQrzFailure(String response) {
+        String result = parseQrzResult(response);
+        StringBuilder sb = new StringBuilder("RESULT=")
+                .append(result == null ? "(none)" : result);
+        if (response != null) {
+            for (String s : response.split("&")) {
+                String[] kv = s.split("=", 2);
+                if (kv.length > 1 && "REASON".equalsIgnoreCase(kv[0].trim())) {
+                    String reason = kv[1].replaceAll("\\s+", " ").trim();
+                    if (!reason.isEmpty()) {
+                        if (reason.length() > MAX_FAILURE_LEN) {
+                            reason = reason.substring(0, MAX_FAILURE_LEN) + "…";
+                        }
+                        sb.append(": ").append(reason);
+                    }
+                    break;
+                }
+            }
+        }
+        return sb.toString();
     }
 
     /**
@@ -457,14 +544,30 @@ public class ThirdPartyService {
         public final int qrzOk;
         public final boolean cloudlogAttempted;
         public final boolean qrzAttempted;
+        /**
+         * Why the first failed Cloudlog upload of this run failed, or null if none did.
+         * Only the first is kept: when a server is broken every row fails the same way,
+         * and repeating that 113 times helps nobody.
+         */
+        public final String cloudlogError;
+        /** Same, for QRZ. */
+        public final String qrzError;
 
-        SyncResult(int total, int cloudlogOk, int qrzOk,
-                   boolean cloudlogAttempted, boolean qrzAttempted) {
+        public SyncResult(int total, int cloudlogOk, int qrzOk,
+                          boolean cloudlogAttempted, boolean qrzAttempted) {
+            this(total, cloudlogOk, qrzOk, cloudlogAttempted, qrzAttempted, null, null);
+        }
+
+        public SyncResult(int total, int cloudlogOk, int qrzOk,
+                          boolean cloudlogAttempted, boolean qrzAttempted,
+                          String cloudlogError, String qrzError) {
             this.total = total;
             this.cloudlogOk = cloudlogOk;
             this.qrzOk = qrzOk;
             this.cloudlogAttempted = cloudlogAttempted;
             this.qrzAttempted = qrzAttempted;
+            this.cloudlogError = cloudlogError;
+            this.qrzError = qrzError;
         }
     }
 
@@ -522,6 +625,8 @@ public class ThirdPartyService {
         int total = 0;
         int cloudlogOk = 0;
         int qrzOk = 0;
+        String cloudlogError = null;
+        String qrzError = null;
         if (db == null || (!cl && !qrz)) {
             return new SyncResult(0, 0, 0, cl, qrz);
         }
@@ -544,16 +649,22 @@ public class ThirdPartyService {
                 boolean alreadyQrz = syncedQrzCol >= 0 && cursor.getInt(syncedQrzCol) == 1;
                 if (cl && !alreadyCl) {
                     String adif = buildAdifFromCursor(cursor, ServiceType.Cloudlog);
-                    if (uploadAdifToCloudlog(adif)) {
+                    StringBuilder why = cloudlogError == null ? new StringBuilder() : null;
+                    if (uploadAdifToCloudlog(adif, why)) {
                         cloudlogOk++;
                         if (rowId >= 0) markRowSynced(db, rowId, "synced_cloudlog");
+                    } else if (why != null && why.length() > 0) {
+                        cloudlogError = why.toString();
                     }
                 }
                 if (qrz && !alreadyQrz) {
                     String adif = buildAdifFromCursor(cursor, ServiceType.QRZ);
-                    if (uploadAdifToQrz(adif)) {
+                    StringBuilder why = qrzError == null ? new StringBuilder() : null;
+                    if (uploadAdifToQrz(adif, why)) {
                         qrzOk++;
                         if (rowId >= 0) markRowSynced(db, rowId, "synced_qrz");
+                    } else if (why != null && why.length() > 0) {
+                        qrzError = why.toString();
                     }
                 }
                 done++;
@@ -564,7 +675,7 @@ public class ThirdPartyService {
         } finally {
             if (cursor != null) cursor.close();
         }
-        return new SyncResult(total, cloudlogOk, qrzOk, cl, qrz);
+        return new SyncResult(total, cloudlogOk, qrzOk, cl, qrz, cloudlogError, qrzError);
     }
 
     /**
@@ -595,13 +706,13 @@ public class ThirdPartyService {
 
         String comment = colStr(c, "comment");
         if (comment == null) comment = "";
-        s.append(String.format("<comment:%d>%s <eor>\n", comment.length(), comment));
+        s.append(String.format("<comment:%d>%s <eor>\n", AdifFormat.utf8Length(comment), comment));
         return s.toString();
     }
 
     private static void appendAdif(StringBuilder sb, String tag, String value) {
         if (value == null || value.isEmpty()) return;
-        sb.append(String.format("<%s:%d>%s ", tag, value.length(), value));
+        sb.append(String.format("<%s:%d>%s ", tag, AdifFormat.utf8Length(value), value));
     }
 
     private static String colStr(Cursor c, String name) {
@@ -649,30 +760,63 @@ public class ThirdPartyService {
     }
 
     /**
-     * Redacts a Cloudlog/Wavelog API key from a URL before it is logged. The key is a
-     * path segment following {@code create_station/}, {@code station_info/}, or
-     * {@code auth/}; this replaces that segment with {@code ***} so the credential never
-     * reaches logcat. Only the LOGGED string is redacted — the real request URL is
-     * unchanged. Returns null unchanged.
+     * Redacts credentials from a URL before it is logged. Two things are masked:
+     * <ul>
+     *   <li>the Cloudlog/Wavelog API key — a path segment following {@code create_station/},
+     *       {@code station_info/}, or {@code auth/} — replaced with {@code ***};</li>
+     *   <li>any authority user-info ({@code http://user:pw@host/…}) — replaced with
+     *       {@code ***@}. Self-hosted logbooks behind basic auth are entered exactly that
+     *       way, and {@link CloudlogEndpoint#normalizeBase} preserves it, so without this
+     *       every {@code Cloudlog: GET/POST} line in debug.log would carry the password.</li>
+     * </ul>
+     * Only the LOGGED string is redacted — the real request URL is unchanged. Returns null
+     * unchanged.
      */
     static String redactUrlApiKey(String url) {
         if (url == null) {
             return null;
         }
-        return url.replaceAll("(create_station/|station_info/|auth/)[^/?#\\s]+", "$1***");
+        String out = url.replaceFirst("^([A-Za-z][A-Za-z0-9+.\\-]*://)[^/?#@\\s]*@", "$1***@");
+        return out.replaceAll("(create_station/|station_info/|auth/)[^/?#\\s]+", "$1***");
     }
 
     public static String sendPostRequest(String url, String json) throws IOException {
+        return sendPostRequest(url, json, null);
+    }
+
+    /**
+     * As {@link #sendPostRequest(String, String)}, but when the POST fails and
+     * {@code failureOut} is non-null, the reason is appended to it — HTTP status plus
+     * whatever the server said in the error body.
+     *
+     * <p>Why this exists: the failure reason used to go only to {@code Log.d}, so a server
+     * that rejected every upload looked identical in {@code debug.log} to "nothing to do".
+     * A Cloudlog-compatible backend reports real, actionable problems this way (a missing
+     * DB column, a bad station id, an expired key), and none of it was reaching the user.
+     */
+    static String sendPostRequest(String url, String json, StringBuilder failureOut)
+            throws IOException {
+        return sendPostRequest(url, json, failureOut, null);
+    }
+
+    /**
+     * As {@link #sendPostRequest(String, String, StringBuilder)}, additionally reporting the
+     * final HTTP status in {@code statusOut[0]} (0 if none was received).
+     */
+    static String sendPostRequest(String url, String json, StringBuilder failureOut,
+                                  int[] statusOut) throws IOException {
         // HttpURLConnection does not auto-follow 30x on a POST. Walk redirects manually
         // (capped) so deployments that rewrite trailing slashes, http→https, or move
         // the API path still work.
         String currentUrl = url;
+        if (statusOut != null && statusOut.length > 0) statusOut[0] = 0;
         for (int hop = 0; hop < 5; hop++) {
             HttpURLConnection conn = null;
             BufferedReader reader = null;
             try {
                 URL urlObj = new URL(currentUrl);
                 conn = (HttpURLConnection) urlObj.openConnection();
+                applyTimeouts(conn);
                 conn.setDoOutput(true);
                 conn.setInstanceFollowRedirects(false);
                 conn.setRequestMethod("POST");
@@ -684,6 +828,7 @@ public class ThirdPartyService {
                 os.close();
 
                 int responseCode = conn.getResponseCode();
+                if (statusOut != null && statusOut.length > 0) statusOut[0] = responseCode;
                 // Cloudlog uses HTTP_CREATED as the response for successful record creation
                 if (responseCode == HttpURLConnection.HTTP_OK
                         || responseCode == HttpURLConnection.HTTP_CREATED) {
@@ -702,6 +847,8 @@ public class ThirdPartyService {
                     if (loc == null || loc.isEmpty()) {
                         Log.d(TAG, "POST " + redactUrlApiKey(currentUrl) + " -> HTTP "
                                 + responseCode + " (no Location header)");
+                        appendFailure(failureOut,
+                                "HTTP " + responseCode + " redirect with no Location header");
                         return null;
                     }
                     // Resolve relative redirect against the previous URL.
@@ -729,6 +876,7 @@ public class ThirdPartyService {
                 } catch (Exception ignored) {}
                 Log.d(TAG, "POST " + redactUrlApiKey(currentUrl) + " -> HTTP " + responseCode
                         + (err.length() > 0 ? " body=" + err : ""));
+                appendFailure(failureOut, describeHttpFailure(responseCode, err.toString()));
                 return null;
             } finally {
                 if (conn != null) {
@@ -740,7 +888,40 @@ public class ThirdPartyService {
             }
         }
         Log.d(TAG, "POST " + redactUrlApiKey(url) + " exceeded redirect limit");
+        appendFailure(failureOut, "exceeded redirect limit");
         return null;
+    }
+
+    private static void appendFailure(StringBuilder failureOut, String reason) {
+        if (failureOut == null || reason == null || reason.isEmpty()) return;
+        if (failureOut.length() > 0) failureOut.append("; ");
+        failureOut.append(reason);
+    }
+
+    /** Longest failure description we keep. Server error bodies can be whole HTML pages. */
+    private static final int MAX_FAILURE_LEN = 200;
+
+    /**
+     * Render an HTTP failure as one short line: the status, plus the server's error body
+     * when it carried one. Pure (no network, no Android) so it is unit-testable.
+     *
+     * <p>The body is collapsed to a single line and truncated — Cloudlog-compatible
+     * backends answer with a compact JSON envelope whose {@code messages} array holds the
+     * real cause, but a misconfigured proxy can just as easily return an HTML error page,
+     * and neither {@code debug.log} nor a toast wants all of that.
+     */
+    static String describeHttpFailure(int responseCode, String body) {
+        StringBuilder sb = new StringBuilder("HTTP ").append(responseCode);
+        if (body != null) {
+            String flat = body.replaceAll("\\s+", " ").trim();
+            if (!flat.isEmpty()) {
+                if (flat.length() > MAX_FAILURE_LEN) {
+                    flat = flat.substring(0, MAX_FAILURE_LEN) + "…";
+                }
+                sb.append(": ").append(flat);
+            }
+        }
+        return sb.toString();
     }
     public static String sendPostFormRequest(String url, String formBody) throws IOException {
         HttpURLConnection conn = null;
@@ -748,6 +929,7 @@ public class ThirdPartyService {
         try {
             URL urlObj = new URL(url);
             conn = (HttpURLConnection) urlObj.openConnection();
+            applyTimeouts(conn);
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
             conn.setDoOutput(true);
@@ -781,12 +963,23 @@ public class ThirdPartyService {
     }
 
     public static String sendGetRequest(String url) throws IOException {
+        return sendGetRequest(url, null);
+    }
+
+    /**
+     * As {@link #sendGetRequest(String)}, but reports the HTTP status in
+     * {@code statusOut[0]} when supplied (0 if the connection never produced one), so the
+     * caller can tell a 404 (try the other URL shape) from a 401/500 (stop).
+     */
+    static String sendGetRequest(String url, int[] statusOut) throws IOException {
         HttpURLConnection conn = null;
         BufferedReader reader = null;
+        if (statusOut != null && statusOut.length > 0) statusOut[0] = 0;
 
         try {
             URL urlObj = new URL(url);
             conn = (HttpURLConnection) urlObj.openConnection();
+            applyTimeouts(conn);
 
             // Set request method to GET
             conn.setRequestMethod("GET");
@@ -795,8 +988,10 @@ public class ThirdPartyService {
 
             // Get server response
             int responseCode = conn.getResponseCode();
+            if (statusOut != null && statusOut.length > 0) statusOut[0] = responseCode;
             if (responseCode == HttpURLConnection.HTTP_OK) {
-                reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                reader = new BufferedReader(new InputStreamReader(conn.getInputStream(),
+                        StandardCharsets.UTF_8));
                 StringBuilder response = new StringBuilder();
                 String line;
                 while ((line = reader.readLine()) != null) {
@@ -804,6 +999,7 @@ public class ThirdPartyService {
                 }
                 return response.toString();
             }
+            Log.d(TAG, "GET " + redactUrlApiKey(url) + " -> HTTP " + responseCode);
         } finally {
             if (conn != null) {
                 conn.disconnect();
@@ -812,6 +1008,91 @@ public class ThirdPartyService {
                 reader.close();
             }
         }
+        return null;
+    }
+
+    /**
+     * Connect/read timeouts for every logbook request. {@code HttpURLConnection} defaults
+     * to "forever", which on a LAN host that is off or firewalled left the Test Connection
+     * spinner running until the OS gave up on the SYN retries (issue #756).
+     */
+    static final int HTTP_CONNECT_TIMEOUT_MS = 10_000;
+    static final int HTTP_READ_TIMEOUT_MS = 20_000;
+
+    private static void applyTimeouts(HttpURLConnection conn) {
+        conn.setConnectTimeout(HTTP_CONNECT_TIMEOUT_MS);
+        conn.setReadTimeout(HTTP_READ_TIMEOUT_MS);
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Cloudlog / Wavelog / Nextlog request plumbing (issue #756)
+    // ---------------------------------------------------------------------------------
+
+    /**
+     * GET {@code path} under a Cloudlog-compatible base URL, trying each URL shape from
+     * {@link CloudlogEndpoint#candidates} in turn. A 404 moves on to the next shape (an
+     * install without URL rewriting only answers at {@code index.php/api/...}); any other
+     * status, or a transport error, stops. Returns the body on HTTP 200, else null with the
+     * reason appended to {@code failureOut}. Every attempt is written to debug.log with the
+     * API key redacted.
+     */
+    static String cloudlogGet(String base, String path, StringBuilder failureOut) {
+        return cloudlogRequest("GET", base, path, failureOut,
+                (url, status, why) -> sendGetRequest(url, status));
+    }
+
+    /**
+     * POST counterpart of {@link #cloudlogGet}: same candidate walk, same 404-only
+     * fallback, same logging. Returns the body on HTTP 200/201, else null.
+     */
+    static String cloudlogPost(String base, String path, String json, StringBuilder failureOut) {
+        return cloudlogRequest("POST", base, path, failureOut,
+                (url, status, why) -> sendPostRequest(url, json, why, status));
+    }
+
+    /**
+     * One HTTP attempt against a single candidate URL. Returns the body on success or
+     * {@code null} on a non-success status (reporting the status in {@code statusOut[0]}
+     * and, optionally, a server-supplied reason in {@code why}); throws on transport
+     * failure. Package-private so the candidate walk can be unit-tested with a fake.
+     */
+    interface CloudlogTransport {
+        String call(String url, int[] statusOut, StringBuilder why) throws IOException;
+    }
+
+    /**
+     * The candidate walk shared by {@link #cloudlogGet} and {@link #cloudlogPost}: try each
+     * URL shape from {@link CloudlogEndpoint#candidates} in order; a 404 moves on to the
+     * next shape, any other status or a transport exception stops; the first success pins
+     * its shape via {@link CloudlogEndpoint#rememberWorking}. The reason for the last
+     * failed attempt is appended to {@code failureOut}.
+     */
+    static String cloudlogRequest(String verb, String base, String path,
+                                  StringBuilder failureOut, CloudlogTransport transport) {
+        String lastFailure = null;
+        for (String url : CloudlogEndpoint.candidates(base, path)) {
+            String shown = redactUrlApiKey(url);
+            int[] status = new int[1];
+            StringBuilder why = new StringBuilder();
+            try {
+                String body = transport.call(url, status, why);
+                if (body != null) {
+                    CloudlogEndpoint.rememberWorking(base, url);
+                    GeneralVariables.fileLog("Cloudlog: " + verb + " " + shown
+                            + " -> HTTP " + status[0]);
+                    return body;
+                }
+                lastFailure = why.length() > 0 ? why.toString()
+                        : CloudlogEndpoint.describeFailure(shown, status[0], null);
+                GeneralVariables.fileLog("Cloudlog: " + verb + " " + shown + " -> " + lastFailure);
+                if (status[0] != HttpURLConnection.HTTP_NOT_FOUND) break;
+            } catch (Exception e) {
+                lastFailure = CloudlogEndpoint.describeFailure(shown, 0, e);
+                GeneralVariables.fileLog("Cloudlog: " + verb + " " + shown + " -> " + lastFailure);
+                break;
+            }
+        }
+        appendFailure(failureOut, lastFailure);
         return null;
     }
 }

@@ -16,6 +16,8 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 
 import androidx.core.content.ContextCompat;
 
@@ -29,6 +31,11 @@ public class BluetoothStateBroadcastReceive extends BroadcastReceiver {
     private static final String TAG="BluetoothStateBroadcastReceive";
     private Context context;
     private MainViewModel mainViewModel;
+
+    /** How long after a profile change to re-evaluate headset mode for non-Bluetooth rigs. */
+    static final long PROFILE_REFRESH_DELAY_MS = 500;
+    private final Handler refreshHandler = new Handler(Looper.getMainLooper());
+    private final Runnable refreshHeadsetMode = () -> mainViewModel.refreshBluetoothHeadsetMode();
 
     public BluetoothStateBroadcastReceive(Context context, MainViewModel mainViewModel) {
         this.context = context;
@@ -71,17 +78,33 @@ public class BluetoothStateBroadcastReceive extends BroadcastReceiver {
         switch (action) {
             case BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED:
             case BluetoothAdapter.EXTRA_CONNECTION_STATE:
-            case BluetoothAdapter.EXTRA_STATE:
-                if (shouldHandleBluetoothAudioRouting()) {
-                    if(headset == BluetoothProfile.STATE_CONNECTED ||a2dp==BluetoothProfile.STATE_CONNECTED){
-                    //if(headset == BluetoothProfile.STATE_CONNECTED){
-                    //if(a2dp==BluetoothProfile.STATE_CONNECTED){
+            case BluetoothAdapter.EXTRA_STATE: {
+                boolean profileConnected = headset == BluetoothProfile.STATE_CONNECTED
+                        || a2dp == BluetoothProfile.STATE_CONNECTED;
+                switch (ScoPolicy.profileChangeAction(GeneralVariables.connectMode,
+                        profileConnected)) {
+                    case ScoPolicy.PROFILE_ENTER:
                         mainViewModel.setBlueToothOn();
-                    }else {
+                        break;
+                    case ScoPolicy.PROFILE_LEAVE:
                         mainViewModel.setBlueToothOff();
-                    }
+                        break;
+                    case ScoPolicy.PROFILE_REFRESH:
+                        // USB/VOX rig with a BT headset selected as mic/speaker (#723): a
+                        // headset that comes back after the SCO retry budget ran out must
+                        // re-enter headset mode, and one that goes away must leave it. The
+                        // refresh is selection-aware and idempotent, so a car merely paired
+                        // for music still isn't touched. Deferred a beat: the profile
+                        // broadcast can land before AudioManager lists the SCO endpoint the
+                        // refresh looks the selected device id up against.
+                        refreshHandler.removeCallbacks(refreshHeadsetMode);
+                        refreshHandler.postDelayed(refreshHeadsetMode, PROFILE_REFRESH_DELAY_MS);
+                        break;
+                    default:
+                        break;
                 }
                 break;
+            }
 
             case BluetoothDevice.ACTION_ACL_CONNECTED:
                 if (shouldHandleBluetoothAudioRouting() && device!=null) {
@@ -97,6 +120,20 @@ public class BluetoothStateBroadcastReceive extends BroadcastReceiver {
                             GeneralVariables.getStringFromResource(R.string.bluetooth_is_diconnected)
                             ,device.getName()));
                 }
+                break;
+
+            case AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED:
+                // Registered since day one but never handled: the app had no idea
+                // whether its startBluetoothSco() ever produced a link, so a
+                // failed/dropped SCO was never retried and the AudioRecord was
+                // never rebuilt on top of it (issue #759). Not gated on connect
+                // mode: the tracker only acts when the app asked for SCO, and
+                // the transitions are worth having in debug.log regardless.
+                mainViewModel.onScoAudioStateUpdated(
+                        intent.getIntExtra(AudioManager.EXTRA_SCO_AUDIO_STATE,
+                                AudioManager.SCO_AUDIO_STATE_ERROR),
+                        intent.getIntExtra(AudioManager.EXTRA_SCO_AUDIO_PREVIOUS_STATE,
+                                AudioManager.SCO_AUDIO_STATE_ERROR));
                 break;
 
             case AudioManager.ACTION_AUDIO_BECOMING_NOISY:

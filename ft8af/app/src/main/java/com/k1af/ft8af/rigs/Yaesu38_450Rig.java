@@ -131,50 +131,50 @@ public class Yaesu38_450Rig extends BaseRig {
 
     @Override
     public void onReceiveData(byte[] data) {
-        String s = new String(data);
-        //ToastMessage.showDebug("39 YAESU read data:"+new String(Yaesu3RigConstant.setReadOperationFreq()));
+        // Drain every complete ';'-terminated command in this read. The meter
+        // poll sends the ALC and SWR reads back-to-back, so the transport
+        // routinely coalesces both replies ("RM4nnn;RM6nnn;") into one chunk.
+        // The old parser consumed only the first command and re-buffered the
+        // rest with its terminator retained, where the next poll's
+        // clearBufferData() wiped it -- permanently losing the SWR reading (so
+        // the high-SWR safety alert never fires during TX). Only the trailing,
+        // unterminated fragment is carried into the next call. Shared with the
+        // other Yaesu gen-3 rigs via CatLineSplitter.
+        CatLineSplitter.Result result = CatLineSplitter.split(buffer.toString(), new String(data), ';');
+        clearBufferData();
+        buffer.append(result.remainder);
+        // A runaway unterminated buffer must not grow without bound.
+        if (buffer.length() > 1000) clearBufferData();
 
-        if (!s.contains(";")) {
-            buffer.append(s);
-            if (buffer.length() > 1000) clearBufferData();
-            //return;//data reception not yet complete.
-        } else {
-            if (s.indexOf(";") > 0) {//received end-of-data, and delimiter is not the first character
-                buffer.append(s.substring(0, s.indexOf(";")));
-            }
-
-            //begin parsing data
-            Yaesu3Command yaesu3Command = Yaesu3Command.getCommand(buffer.toString());
-            clearBufferData();//clear buffer
-            //put remaining data into buffer
-            buffer.append(s.substring(s.indexOf(";") + 1));
-
-            if (yaesu3Command == null) {
-                return;
-            }
-            //long tempFreq = Yaesu3Command.getFrequency(yaesu3Command);
-            //if (tempFreq != 0) {//if tempFreq==0, frequency is invalid
-            //    setFreq(Yaesu3Command.getFrequency(yaesu3Command));
-            //}
-
-            if (yaesu3Command.getCommandID().equalsIgnoreCase("FA")
-                    || yaesu3Command.getCommandID().equalsIgnoreCase("FB")) {
-                long tempFreq = Yaesu3Command.getFrequency(yaesu3Command);
-                if (tempFreq != 0) {//if tempFreq==0, frequency is invalid
-                    setFreq(Yaesu3Command.getFrequency(yaesu3Command));
-                }
-            } else if (yaesu3Command.getCommandID().equalsIgnoreCase("RM")) {//METER
-                if (Yaesu3Command.isSWRMeter38(yaesu3Command)) {
-                    swr = Yaesu3Command.getALCOrSWR38(yaesu3Command);
-                }
-                if (Yaesu3Command.isALCMeter38(yaesu3Command)) {
-                    alc = Yaesu3Command.getALCOrSWR38(yaesu3Command);
-                }
-                showAlert();
-            }
-
+        for (String command : result.frames) {
+            processCommand(command);
         }
+    }
 
+    /**
+     * Parse and act on one complete ';'-terminated command (terminator already
+     * stripped). Extracted so {@link #onReceiveData} stays a thin drain loop.
+     */
+    private void processCommand(String command) {
+        Yaesu3Command yaesu3Command = Yaesu3Command.getCommand(command);
+        if (yaesu3Command == null) {
+            return;
+        }
+        if (yaesu3Command.getCommandID().equalsIgnoreCase("FA")
+                || yaesu3Command.getCommandID().equalsIgnoreCase("FB")) {
+            long tempFreq = Yaesu3Command.getFrequency(yaesu3Command);
+            if (tempFreq != 0) {//if tempFreq==0, frequency is invalid
+                setFreq(tempFreq);
+            }
+        } else if (yaesu3Command.getCommandID().equalsIgnoreCase("RM")) {//METER
+            if (Yaesu3Command.isSWRMeter38(yaesu3Command)) {
+                swr = Yaesu3Command.getALCOrSWR38(yaesu3Command);
+            }
+            if (Yaesu3Command.isALCMeter38(yaesu3Command)) {
+                alc = Yaesu3Command.getALCOrSWR38(yaesu3Command);
+            }
+            showAlert();
+        }
     }
 
     @Override

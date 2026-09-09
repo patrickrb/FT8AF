@@ -28,7 +28,10 @@ import java.util.TimeZone;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 
 public class UtcTimer {
@@ -45,14 +48,14 @@ public class UtcTimer {
     private final Timer secTimer = new Timer();
     private final Timer heartBeatTimer = new Timer();
     private int time_sec = 0;//time offset
-    private final ExecutorService cachedThreadPool = Executors.newCachedThreadPool();
+    private final ExecutorService cachedThreadPool = newDiscardingCachedThreadPool();
     private final Runnable doSomething = new Runnable() {
         @Override
         public void run() {
             onUtcTimer.doOnSecTimer(utc);
         }
     };
-    private final ExecutorService heartBeatThreadPool = Executors.newCachedThreadPool();
+    private final ExecutorService heartBeatThreadPool = newDiscardingCachedThreadPool();
     private final Runnable doHeartBeat = new Runnable() {
         @Override
         public void run() {
@@ -264,6 +267,62 @@ public class UtcTimer {
     }
 
     /**
+     * A cached thread pool that <em>discards</em> a task submitted after it has been shut down instead
+     * of throwing (the default {@link ThreadPoolExecutor.AbortPolicy}).
+     *
+     * <p>{@link #delete()} shuts these pools down, but {@link Timer#cancel()} does not wait for a
+     * {@link TimerTask} that is already running. A {@link #secTask()} / {@link #heartBeatTask()} tick
+     * can therefore be mid-{@code run()} — about to submit its callback to the pool — at the very
+     * instant {@code delete()} calls {@code shutdownNow()} from another thread. This teardown happens
+     * on every app exit ({@code ComposeMainActivity.onDestroy}) and every operating-mode switch
+     * (FT8/FT4/FT2 {@code rebuildTimer}), while the 1&nbsp;second heartbeat is always live, so the
+     * window is exercised routinely.
+     *
+     * <p>With the default policy that late submit raises an unchecked
+     * {@code java.util.concurrent.RejectedExecutionException} out of {@code TimerTask.run()}; the
+     * {@code secTask} catch only handles {@code InterruptedException} and {@code heartBeatTask} has no
+     * catch at all, so the exception escapes the {@code Timer}'s thread — which terminates the timer
+     * and reaches the process's default uncaught-exception handler, crashing the app. Discarding the
+     * submit is the correct behaviour during teardown (the cycle/heartbeat callback is moot once we
+     * are shutting down) and is a no-op in normal operation: with an unbounded maximum pool size over
+     * a {@link SynchronousQueue}, a submit is only ever rejected once the pool has been shut down.
+     *
+     * <p>The rejection handler discards <em>only</em> while the pool is shutting down. A rejection
+     * for any other reason (e.g. the JVM/OS refusing a new thread under resource exhaustion) still
+     * aborts with the usual {@code RejectedExecutionException} rather than silently swallowing the
+     * callback, so a real failure stays visible instead of turning into a mysteriously dead
+     * heartbeat.
+     */
+    static ThreadPoolExecutor newDiscardingCachedThreadPool() {
+        // Mirrors Executors.newCachedThreadPool() exactly, then swaps in the teardown policy.
+        ThreadPoolExecutor pool = new ThreadPoolExecutor(
+                0, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<Runnable>());
+        pool.setRejectedExecutionHandler(new DiscardOnShutdownPolicy());
+        return pool;
+    }
+
+    /**
+     * Discards a task rejected because the executor is shutting down; delegates every other
+     * rejection to {@link ThreadPoolExecutor.AbortPolicy}.
+     *
+     * <p>{@link ThreadPoolExecutor.DiscardPolicy} would drop <em>all</em> rejections, including one
+     * caused by thread-creation failure during normal operation — a silent loss of the cycle or
+     * heartbeat callback with nothing in the log to explain it. Only the teardown race that
+     * {@link #newDiscardingCachedThreadPool()} exists to fix is safe to ignore.
+     */
+    static final class DiscardOnShutdownPolicy implements RejectedExecutionHandler {
+        private static final ThreadPoolExecutor.AbortPolicy ABORT = new ThreadPoolExecutor.AbortPolicy();
+
+        @Override
+        public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+            if (executor.isShutdown()) {
+                return; // teardown in progress: the cycle/heartbeat callback is moot
+            }
+            ABORT.rejectedExecution(r, executor);
+        }
+    }
+
+    /**
      * Set the time offset; positive values shift forward
      *
      * @param time_sec the offset amount
@@ -318,6 +377,43 @@ public class UtcTimer {
     }
 
     /**
+     * The clock offset (ms) to add to {@link System#currentTimeMillis()} so the app
+     * clock matches an authoritative UTC source — an NTP server's transmit timestamp.
+     * A positive result means the device clock is behind the reference and must be
+     * shifted forward. Written to {@link #delay} by {@link #syncTime}.
+     *
+     * <p><b>The full offset is returned</b>, not just its remainder within one FT8
+     * cycle. Storing only {@code offset % 15000} (as {@code syncTime} did before)
+     * keeps decode/TX cycle alignment intact — every slot length (15000, 7500, 3750)
+     * divides 15000, so the firing instants of {@link #isCycleBoundary} are unchanged
+     * — but it discards the whole-cycle part of the correction. A device clock more
+     * than one cycle out of sync would then leave {@link #getSystemTime()}, and every
+     * UTC value derived from it (the on-screen clock, QSO log start/end times, ADIF
+     * export times, and PSKReporter {@code flowStartSeconds}), wrong by a whole
+     * multiple of 15 s — silently, because RX/TX still work. This mirrors the GPS
+     * clock-discipline path ({@code GpsClockUpdater.gpsClockOffsetMs}) and the manual
+     * correction, both of which write the full offset.
+     *
+     * <p>Clamped to the {@code int} range so an absurdly wrong device clock (more than
+     * ~24.8 days off) can't overflow the {@code int} field into a bogus small value.
+     *
+     * <p>Exposed as {@code public static} for pure-JVM testing, consistent with the sibling
+     * {@link #sequential(long, int)} / {@link #isCycleBoundary(long, int, int)} helpers in this
+     * file (also {@code public static} and tested from the same package).
+     *
+     * @param referenceUtcMs authoritative UTC "now" in ms (e.g. NTP transmit time)
+     * @param deviceNowMs    the device wall clock at the same instant
+     *                       ({@code System.currentTimeMillis()})
+     * @return the full offset in ms, clamped to {@code int} range
+     */
+    public static int ntpClockOffsetMs(long referenceUtcMs, long deviceNowMs) {
+        long offset = referenceUtcMs - deviceNowMs;
+        if (offset > Integer.MAX_VALUE) offset = Integer.MAX_VALUE;
+        if (offset < Integer.MIN_VALUE) offset = Integer.MIN_VALUE;
+        return (int) offset;
+    }
+
+    /**
      * Synchronize time using Microsoft's time server
      */
     public static void syncTime(AfterSyncTime afterSyncTime) {
@@ -330,8 +426,13 @@ public class UtcTimer {
                     InetAddress inetAddress = InetAddress.getByName("time.windows.com");
                     TimeInfo timeInfo = timeClient.getTime(inetAddress);
                     long serverTime = timeInfo.getMessage().getTransmitTimeStamp().getTime();
-                    int trueDelay = (int) ((serverTime - System.currentTimeMillis()));
-                    UtcTimer.delay = trueDelay % 15000;//delay per cycle
+                    // Apply the FULL correction, not just its remainder within one cycle.
+                    // Truncating to (offset % 15000) kept RX/TX cycle alignment but left the
+                    // app clock — and every UTC timestamp derived from it — off by a whole
+                    // multiple of 15s whenever the device clock was more than a cycle out.
+                    // See ntpClockOffsetMs.
+                    int trueDelay = ntpClockOffsetMs(serverTime, System.currentTimeMillis());
+                    UtcTimer.delay = trueDelay;
                     if (afterSyncTime != null) {
                         afterSyncTime.doAfterSyncTimer(trueDelay);
                     }

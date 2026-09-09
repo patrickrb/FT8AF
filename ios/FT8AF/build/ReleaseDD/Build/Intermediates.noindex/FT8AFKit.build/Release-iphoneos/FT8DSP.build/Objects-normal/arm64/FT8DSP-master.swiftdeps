@@ -1,0 +1,10 @@
+version: "Apple Swift version 6.1.2 (swiftlang-6.1.2.1.2 clang-1700.0.13.5)"
+options: "b0687d6c5a06917d8608cde475e7454ed556794ac43bcc2713d9365ae868cafc"
+build_start_time: [1786912747, 533915000]
+build_end_time: [1786912750, 522600000]
+inputs:
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/Constants.swift": [1783174095, 894048320]
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/FT8Decoder.swift": [1783174095, 894133527]
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/FT8Encoder.swift": [1783970610, 11102078]
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/FT8Hash.swift": [1783174095, 894222401]
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8DSP/HashTable.swift": [1783174095, 894269442]

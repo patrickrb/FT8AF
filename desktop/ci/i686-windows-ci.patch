@@ -1,0 +1,80 @@
+diff --git a/.github/workflows/desktop.yml b/.github/workflows/desktop.yml
+index 42623e33..8aef49a1 100644
+--- a/.github/workflows/desktop.yml
++++ b/.github/workflows/desktop.yml
+@@ -144,13 +144,29 @@ jobs:
+           fi
+ 
+   build:
+-    name: Build (${{ matrix.os }})
++    name: Build (${{ matrix.label }})
+     needs: [detect, version]
+     if: ${{ needs.detect.outputs.run == 'true' }}
++    # The Windows matrix carries two legs: the default 64-bit host build and a
++    # cross-compiled 32-bit (i686) build for users still on 32-bit Windows. Only
++    # the x86 leg sets `rust-target`; the other three legs build the host arch
++    # exactly as before (`rust-target` is empty -> no `--target` flag), so this
++    # can't clobber the existing x64/macOS/Linux artifacts. Tauri names the WiX
++    # MSI by arch (`..._x86_...` vs `..._x64_...`), so the two Windows installers
++    # land on the release with non-colliding filenames.
+     strategy:
+       fail-fast: false
+       matrix:
+-        os: [ubuntu-latest, macos-latest, windows-latest]
++        include:
++          - os: ubuntu-latest
++            label: linux
++          - os: macos-latest
++            label: macos
++          - os: windows-latest
++            label: windows-x64
++          - os: windows-latest
++            label: windows-x86
++            rust-target: i686-pc-windows-msvc
+     runs-on: ${{ matrix.os }}
+ 
+     steps:
+@@ -162,13 +178,20 @@ jobs:
+         with:
+           node-version: '20'
+ 
++      # `targets` is empty for the host-arch legs (a no-op) and installs the
++      # i686 std/target only for the 32-bit Windows leg.
+       - name: Set up Rust
+         uses: dtolnay/rust-toolchain@stable
++        with:
++          targets: ${{ matrix.rust-target }}
+ 
+       - name: Cache Rust build
+         uses: Swatinem/rust-cache@v2
+         with:
+           workspaces: desktop/src-tauri
++          # Distinct key per matrix leg so the two windows-latest jobs (x64 vs
++          # x86) don't share/thrash one cache — their target dirs differ.
++          key: ${{ matrix.label }}
+ 
+       # Tauri v2 Linux system dependencies (webkit2gtk-4.1 + GTK + packaging),
+       # plus the native libs our crates link against on Linux:
+@@ -221,7 +244,8 @@ jobs:
+       - name: Compile check (no bundle)
+         if: ${{ needs.version.outputs.should_release != 'true' }}
+         working-directory: desktop
+-        run: npm run tauri build -- --no-bundle
++        # `--target` is added only on the 32-bit Windows leg; empty elsewhere.
++        run: npm run tauri build -- --no-bundle ${{ matrix.rust-target && format('--target {0}', matrix.rust-target) || '' }}
+ 
+       # --- Release: build native bundles and upload to the per-platform release.
+       # tauri.conf.json has bundle.active=false (keeps local dev builds bundle-
+@@ -240,7 +264,11 @@ jobs:
+           releaseName: ${{ needs.version.outputs.release_tag }}
+           releaseBody: 'FT8AF desktop build ${{ needs.version.outputs.version_name }}.'
+           prerelease: ${{ needs.version.outputs.is_prerelease == 'true' }}
+-          args: --config '{"bundle":{"active":true}}'
++          # On the 32-bit Windows leg, cross-compile + bundle for i686 (Tauri's
++          # WiX bundler emits an x86-arch MSI, plus an x86 NSIS). Other legs keep
++          # the host arch. All legs share one tagName, so tauri-action attaches
++          # every OS/arch's installers to the same release.
++          args: --config '{"bundle":{"active":true}}' ${{ matrix.rust-target && format('--target {0}', matrix.rust-target) || '' }}
+ 
+   coverage:
+     name: Rust coverage

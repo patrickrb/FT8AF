@@ -10,7 +10,7 @@ struct FilterChip: View {
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 12, weight: isSelected ? .semibold : .medium, design: .monospaced))
+                .font(.ft8afMono(size: 12, weight: isSelected ? .semibold : .medium))
                 .foregroundStyle(isSelected ? bgApp : textMuted)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)

@@ -35,7 +35,7 @@ struct SplashScreen: View {
 
                     // Center icon
                     Image(systemName: "antenna.radiowaves.left.and.right")
-                        .font(.system(size: 36, weight: .semibold))
+                        .font(.ft8afUI(size: 36, weight: .semibold))
                         .foregroundStyle(accent)
                 }
                 .scaleEffect(logoScale)
@@ -44,11 +44,11 @@ struct SplashScreen: View {
                 // App title
                 VStack(spacing: 6) {
                     Text("FT8AF")
-                        .font(.system(size: 32, weight: .bold, design: .monospaced))
+                        .font(.ft8afMono(size: 32, weight: .bold))
                         .foregroundStyle(textPrimary)
 
                     Text("Amateur Radio FT8")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.ft8afUI(size: 14, weight: .medium))
                         .foregroundStyle(textMuted)
                 }
                 .opacity(titleOpacity)
@@ -62,14 +62,14 @@ struct SplashScreen: View {
                         .frame(width: 200)
 
                     Text("Initializing...")
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .font(.ft8afMono(size: 11, weight: .medium))
                         .foregroundStyle(textFaint)
                 }
                 .opacity(subtitleOpacity)
 
                 // Version
                 Text(appVersion)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .font(.ft8afMono(size: 10, weight: .medium))
                     .foregroundStyle(textDim)
                     .opacity(subtitleOpacity)
                     .padding(.bottom, 40)

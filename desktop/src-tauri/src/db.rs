@@ -8,7 +8,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 /// One logged QSO. Field names follow ADIF.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -40,10 +40,76 @@ pub struct QsoRecord {
     pub my_gridsquare: String,
     #[serde(default)]
     pub comment: String,
+    /// QSL confirmed status (Android `qsl_rcvd`). Drives the Logbook filter and
+    /// the `<QSL_RCVD>` ADIF field on export.
+    #[serde(default)]
+    pub confirmed: bool,
 }
 
 fn default_mode() -> String {
     "FT8".to_string()
+}
+
+/// Logbook confirmation filter, mirroring the Android `FilterDialog`
+/// (All / QSL'd only / Not-QSL'd only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfirmedFilter {
+    All,
+    Confirmed,
+    Unconfirmed,
+}
+
+impl Default for ConfirmedFilter {
+    fn default() -> Self {
+        ConfirmedFilter::All
+    }
+}
+
+/// Pure predicate: does a QSO match the live search box + confirmation filter?
+///
+/// `callsign_query` is matched case-insensitively as a substring of the call
+/// (empty query matches everything), mirroring `queryByCallsign` on Android.
+pub fn qso_matches(rec: &QsoRecord, callsign_query: &str, filter: ConfirmedFilter) -> bool {
+    let call_ok = {
+        let q = callsign_query.trim();
+        q.is_empty() || rec.call.to_uppercase().contains(&q.to_uppercase())
+    };
+    let confirm_ok = match filter {
+        ConfirmedFilter::All => true,
+        ConfirmedFilter::Confirmed => rec.confirmed,
+        ConfirmedFilter::Unconfirmed => !rec.confirmed,
+    };
+    call_ok && confirm_ok
+}
+
+/// Pure predicate: is an ADIF `YYYYMMDD` date within an optional inclusive
+/// `[start, end]` range? Empty/None bounds are open; with no bounds everything
+/// passes. Under a bound, a value that isn't a real 8-digit `YYYYMMDD` date is
+/// excluded — lexicographic comparison is only meaningful for that fixed width,
+/// so e.g. `"BAD"` must not sneak past a start-only bound just because it sorts
+/// after the digits.
+pub fn date_in_range(qso_date: &str, start: Option<&str>, end: Option<&str>) -> bool {
+    let start = start.map(str::trim).filter(|s| !s.is_empty());
+    let end = end.map(str::trim).filter(|s| !s.is_empty());
+    if start.is_none() && end.is_none() {
+        return true;
+    }
+    let d = qso_date.trim();
+    if !(d.len() == 8 && d.bytes().all(|b| b.is_ascii_digit())) {
+        return false;
+    }
+    if let Some(s) = start {
+        if d < s {
+            return false;
+        }
+    }
+    if let Some(e) = end {
+        if d > e {
+            return false;
+        }
+    }
+    true
 }
 
 pub struct Db {
@@ -100,6 +166,25 @@ impl Db {
                 "#,
             )?;
         }
+        if version < 2 {
+            // v2: QSL confirmation + per-service online-sync flags. These are
+            // added via ALTER so an existing v1 log upgrades in place; on a
+            // fresh DB the base table was just created above without them.
+            // `IF NOT EXISTS` isn't supported by ADD COLUMN, so ignore the
+            // "duplicate column" error to keep the migration idempotent.
+            for col in [
+                "ALTER TABLE qso_log ADD COLUMN qsl_rcvd INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE qso_log ADD COLUMN synced_cloudlog INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE qso_log ADD COLUMN synced_qrz INTEGER NOT NULL DEFAULT 0",
+            ] {
+                match conn.execute(col, []) {
+                    Ok(_) => {}
+                    Err(rusqlite::Error::SqliteFailure(_, Some(ref m)))
+                        if m.contains("duplicate column name") => {}
+                    Err(e) => return Err(e.into()),
+                }
+            }
+        }
         conn.execute(&format!("PRAGMA user_version = {SCHEMA_VERSION}"), [])?;
         Ok(())
     }
@@ -146,18 +231,19 @@ impl Db {
             "INSERT INTO qso_log
                 (call, gridsquare, mode, rst_sent, rst_rcvd, qso_date, time_on,
                  qso_date_off, time_off, band, freq, station_callsign,
-                 my_gridsquare, comment, created_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)
+                 my_gridsquare, comment, qsl_rcvd, created_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)
              ON CONFLICT(call, qso_date, time_on, mode) DO UPDATE SET
                 gridsquare=excluded.gridsquare, rst_sent=excluded.rst_sent,
                 rst_rcvd=excluded.rst_rcvd, qso_date_off=excluded.qso_date_off,
                 time_off=excluded.time_off, band=excluded.band, freq=excluded.freq,
                 station_callsign=excluded.station_callsign,
-                my_gridsquare=excluded.my_gridsquare, comment=excluded.comment",
+                my_gridsquare=excluded.my_gridsquare, comment=excluded.comment,
+                qsl_rcvd=excluded.qsl_rcvd",
             params![
                 r.call, r.gridsquare, r.mode, r.rst_sent, r.rst_rcvd, r.qso_date,
                 r.time_on, r.qso_date_off, r.time_off, r.band, r.freq,
-                r.station_callsign, r.my_gridsquare, r.comment,
+                r.station_callsign, r.my_gridsquare, r.comment, r.confirmed as i64,
                 crate::util::now_unix_ms(),
             ],
         )?;
@@ -169,7 +255,7 @@ impl Db {
         let mut stmt = match conn.prepare(
             "SELECT id, call, gridsquare, mode, rst_sent, rst_rcvd, qso_date, time_on,
                     qso_date_off, time_off, band, freq, station_callsign,
-                    my_gridsquare, comment
+                    my_gridsquare, comment, qsl_rcvd
              FROM qso_log ORDER BY id DESC LIMIT ?1 OFFSET ?2",
         ) {
             Ok(s) => s,
@@ -178,6 +264,83 @@ impl Db {
         stmt.query_map(params![limit, offset], row_to_qso)
             .map(|it| it.filter_map(Result::ok).collect())
             .unwrap_or_default()
+    }
+
+    /// Server-side search/filter mirroring the Android Logbook tab: substring
+    /// match on callsign plus the QSL confirmation filter, most-recent-first.
+    ///
+    /// Filters and paginates at the DB layer (real `LIMIT`/`OFFSET`) instead of
+    /// loading the whole log and filtering in memory, so it stays fast as the log
+    /// grows. The callsign match is a case-insensitive (ASCII) `LIKE` substring
+    /// with the query's `LIKE` wildcards escaped so it behaves as a literal
+    /// substring — i.e. the same result set as the pure [`qso_matches`] predicate
+    /// (guarded by `search_qsos_matches_predicate` in the tests).
+    pub fn search_qsos(
+        &self,
+        callsign_query: &str,
+        filter: ConfirmedFilter,
+        limit: i64,
+        offset: i64,
+    ) -> Vec<QsoRecord> {
+        let q = callsign_query.trim();
+        let like = format!(
+            "%{}%",
+            q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+        );
+        let confirm_clause = match filter {
+            ConfirmedFilter::All => "",
+            ConfirmedFilter::Confirmed => " AND qsl_rcvd = 1",
+            ConfirmedFilter::Unconfirmed => " AND qsl_rcvd = 0",
+        };
+        let sql = format!(
+            "SELECT id, call, gridsquare, mode, rst_sent, rst_rcvd, qso_date, time_on,
+                    qso_date_off, time_off, band, freq, station_callsign,
+                    my_gridsquare, comment, qsl_rcvd
+             FROM qso_log
+             WHERE call LIKE ?1 ESCAPE '\\'{confirm_clause}
+             ORDER BY id DESC LIMIT ?2 OFFSET ?3"
+        );
+        let conn = self.conn.lock();
+        let mut stmt = match conn.prepare(&sql) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        stmt.query_map(params![like, limit.max(0), offset.max(0)], row_to_qso)
+            .map(|it| it.filter_map(Result::ok).collect())
+            .unwrap_or_default()
+    }
+
+    /// Flag a QSO as synced to an online service so re-runs are idempotent.
+    /// `service` is `"cloudlog"` or `"qrz"`; unknown services are a no-op.
+    pub fn mark_synced(&self, id: i64, service: &str) -> anyhow::Result<()> {
+        let column = match service {
+            "cloudlog" => "synced_cloudlog",
+            "qrz" => "synced_qrz",
+            _ => return Ok(()),
+        };
+        self.conn.lock().execute(
+            &format!("UPDATE qso_log SET {column} = 1 WHERE id = ?1"),
+            params![id],
+        )?;
+        Ok(())
+    }
+
+    /// Whether a QSO has already been synced to the given service.
+    pub fn is_synced(&self, id: i64, service: &str) -> bool {
+        let column = match service {
+            "cloudlog" => "synced_cloudlog",
+            "qrz" => "synced_qrz",
+            _ => return false,
+        };
+        self.conn
+            .lock()
+            .query_row(
+                &format!("SELECT {column} FROM qso_log WHERE id = ?1"),
+                params![id],
+                |r| r.get::<_, i64>(0),
+            )
+            .map(|v| v != 0)
+            .unwrap_or(false)
     }
 
     pub fn count(&self) -> i64 {
@@ -196,10 +359,23 @@ impl Db {
 
     /// Export the whole log as an ADIF string, matching ShareLogs' field set/order.
     pub fn export_adif(&self) -> String {
+        self.export_adif_range(None, None)
+    }
+
+    /// Export the log as ADIF, optionally restricted to an inclusive
+    /// `[start, end]` `YYYYMMDD` date range (mirrors `ExportLogSheet`'s
+    /// date-range filter). Empty/`None` bounds are open.
+    pub fn export_adif_range(&self, start: Option<&str>, end: Option<&str>) -> String {
         let mut out = String::from("FT8AF ADIF Export<eoh>\n");
-        for r in self.list_qsos(i64::MAX, 0).into_iter().rev() {
+        for r in self
+            .list_qsos(i64::MAX, 0)
+            .into_iter()
+            .rev()
+            .filter(|r| date_in_range(&r.qso_date, start, end))
+        {
             out.push_str(&adif_field("call", &r.call));
-            out.push_str("<QSL_RCVD:1>N <QSL_MANUAL:1>N ");
+            let qsl = if r.confirmed { "Y" } else { "N" };
+            out.push_str(&format!("<QSL_RCVD:1>{qsl} "));
             adif_opt(&mut out, "gridsquare", &r.gridsquare);
             adif_opt(&mut out, "mode", &r.mode);
             adif_opt(&mut out, "rst_sent", &r.rst_sent);
@@ -235,7 +411,32 @@ fn row_to_qso(r: &rusqlite::Row) -> rusqlite::Result<QsoRecord> {
         station_callsign: r.get::<_, Option<String>>(12)?.unwrap_or_default(),
         my_gridsquare: r.get::<_, Option<String>>(13)?.unwrap_or_default(),
         comment: r.get::<_, Option<String>>(14)?.unwrap_or_default(),
+        confirmed: r.get::<_, Option<i64>>(15)?.unwrap_or(0) != 0,
     })
+}
+
+/// One QSO as a single ADIF record line (ending in `<eor>`), matching the field
+/// set/order of [`Db::export_adif_range`]. Used for the WSJT-X "Logged ADIF" UDP
+/// message so companion loggers (JTAlert, N1MM) can capture the QSO verbatim.
+pub fn adif_record(r: &QsoRecord) -> String {
+    let mut out = String::new();
+    out.push_str(&adif_field("call", &r.call));
+    let qsl = if r.confirmed { "Y" } else { "N" };
+    out.push_str(&format!("<QSL_RCVD:1>{qsl} "));
+    adif_opt(&mut out, "gridsquare", &r.gridsquare);
+    adif_opt(&mut out, "mode", &r.mode);
+    adif_opt(&mut out, "rst_sent", &r.rst_sent);
+    adif_opt(&mut out, "rst_rcvd", &r.rst_rcvd);
+    adif_opt(&mut out, "qso_date", &r.qso_date);
+    adif_opt(&mut out, "time_on", &r.time_on);
+    adif_opt(&mut out, "qso_date_off", &r.qso_date_off);
+    adif_opt(&mut out, "time_off", &r.time_off);
+    adif_opt(&mut out, "band", &r.band);
+    adif_opt(&mut out, "freq", &r.freq);
+    adif_opt(&mut out, "station_callsign", &r.station_callsign);
+    adif_opt(&mut out, "my_gridsquare", &r.my_gridsquare);
+    out.push_str(&format!("<comment:{}>{} <eor>", r.comment.len(), r.comment));
+    out
 }
 
 fn adif_field(name: &str, value: &str) -> String {
@@ -282,11 +483,272 @@ mod tests {
     }
 
     #[test]
+    fn export_omits_the_non_adif_qsl_manual_tag() {
+        // QSL_MANUAL is not in the ADIF spec (issue #697), and strict importers
+        // reject or silently drop unknown tags. Both emitters are covered: the
+        // file export and adif_record(), which is what goes out over the WSJT-X
+        // "Logged ADIF" UDP message to JTAlert/N1MM.
+        let db = Db::open_in_memory().unwrap();
+        let confirmed = rec("K1ABC", "20260604", "120000", true);
+        let unconfirmed = rec("W1AW", "20260604", "130000", false);
+        db.insert_qso(&confirmed).unwrap();
+        db.insert_qso(&unconfirmed).unwrap();
+
+        let adif = db.export_adif();
+        assert!(!adif.contains("QSL_MANUAL"));
+        assert!(!adif_record(&confirmed).contains("QSL_MANUAL"));
+
+        // QSL_RCVD is a real ADIF field and still carries the confirmed flag,
+        // which is the only QSL information these records ever held.
+        assert!(adif.contains("<call:5>K1ABC <QSL_RCVD:1>Y "));
+        assert!(adif.contains("<call:4>W1AW <QSL_RCVD:1>N "));
+        assert!(adif_record(&confirmed).contains("<QSL_RCVD:1>Y "));
+    }
+
+    #[test]
     fn config_roundtrip() {
         let db = Db::open_in_memory().unwrap();
         assert_eq!(db.get_config("my_call"), None);
         db.set_config("my_call", "K0XYZ").unwrap();
         db.set_config("my_call", "K0ABC").unwrap();
         assert_eq!(db.get_config("my_call").as_deref(), Some("K0ABC"));
+    }
+
+    fn rec(call: &str, date: &str, time: &str, confirmed: bool) -> QsoRecord {
+        QsoRecord {
+            call: call.into(),
+            mode: "FT8".into(),
+            qso_date: date.into(),
+            time_on: time.into(),
+            confirmed,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn confirmed_status_round_trips_and_reflects_in_adif() {
+        let db = Db::open_in_memory().unwrap();
+        db.insert_qso(&rec("K1ABC", "20260604", "120000", true)).unwrap();
+        db.insert_qso(&rec("W1AW", "20260604", "130000", false)).unwrap();
+
+        let rows = db.list_qsos(10, 0);
+        let k1abc = rows.iter().find(|r| r.call == "K1ABC").unwrap();
+        let w1aw = rows.iter().find(|r| r.call == "W1AW").unwrap();
+        assert!(k1abc.confirmed);
+        assert!(!w1aw.confirmed);
+
+        let adif = db.export_adif();
+        // Confirmed QSO exports QSL_RCVD:Y, unconfirmed exports N.
+        assert!(adif.contains("<call:5>K1ABC <QSL_RCVD:1>Y "));
+        assert!(adif.contains("<call:4>W1AW <QSL_RCVD:1>N "));
+    }
+
+    #[test]
+    fn editing_a_qso_toggles_confirmed_via_insert() {
+        let db = Db::open_in_memory().unwrap();
+        let id = db.insert_qso(&rec("K1ABC", "20260604", "120000", false)).unwrap();
+        assert!(!db.list_qsos(1, 0)[0].confirmed);
+        // save_qso re-inserts the same dedup key with confirmed flipped.
+        let mut edited = rec("K1ABC", "20260604", "120000", true);
+        edited.id = Some(id);
+        db.insert_qso(&edited).unwrap();
+        assert_eq!(db.count(), 1);
+        assert!(db.list_qsos(1, 0)[0].confirmed);
+    }
+
+    #[test]
+    fn search_filters_by_callsign_and_confirmation() {
+        let db = Db::open_in_memory().unwrap();
+        db.insert_qso(&rec("K1ABC", "20260604", "120000", true)).unwrap();
+        db.insert_qso(&rec("K1XYZ", "20260604", "130000", false)).unwrap();
+        db.insert_qso(&rec("W1AW", "20260604", "140000", true)).unwrap();
+
+        // Substring match, case-insensitive.
+        let k1 = db.search_qsos("k1", ConfirmedFilter::All, 100, 0);
+        assert_eq!(k1.len(), 2);
+        assert!(k1.iter().all(|r| r.call.contains("K1")));
+
+        // Confirmation filter.
+        let confirmed = db.search_qsos("", ConfirmedFilter::Confirmed, 100, 0);
+        assert_eq!(confirmed.len(), 2);
+        let unconfirmed = db.search_qsos("", ConfirmedFilter::Unconfirmed, 100, 0);
+        assert_eq!(unconfirmed.len(), 1);
+        assert_eq!(unconfirmed[0].call, "K1XYZ");
+
+        // Combined.
+        let combined = db.search_qsos("k1", ConfirmedFilter::Confirmed, 100, 0);
+        assert_eq!(combined.len(), 1);
+        assert_eq!(combined[0].call, "K1ABC");
+    }
+
+    #[test]
+    fn search_qsos_matches_predicate_and_paginates() {
+        let db = Db::open_in_memory().unwrap();
+        let recs = [
+            rec("K1ABC", "20260604", "120000", true),
+            rec("K1XYZ", "20260604", "130000", false),
+            rec("W1AW", "20260604", "140000", true),
+            rec("K1ABC/P", "20260604", "150000", false),
+        ];
+        for r in &recs {
+            db.insert_qso(r).unwrap();
+        }
+
+        // Parity: the SQL-level search returns exactly the rows the pure
+        // qso_matches predicate accepts, across query/filter combinations.
+        for (q, f) in [
+            ("", ConfirmedFilter::All),
+            ("k1", ConfirmedFilter::All),
+            ("k1", ConfirmedFilter::Confirmed),
+            ("w", ConfirmedFilter::Unconfirmed),
+            ("zzz", ConfirmedFilter::All),
+        ] {
+            let got: std::collections::BTreeSet<String> = db
+                .search_qsos(q, f, i64::MAX, 0)
+                .into_iter()
+                .map(|r| r.call)
+                .collect();
+            let want: std::collections::BTreeSet<String> = db
+                .list_qsos(i64::MAX, 0)
+                .into_iter()
+                .filter(|r| qso_matches(r, q, f))
+                .map(|r| r.call)
+                .collect();
+            assert_eq!(got, want, "query={q:?} filter={f:?}");
+        }
+
+        // LIMIT/OFFSET paginate at the DB layer, newest-first, with no overlap.
+        let page1 = db.search_qsos("", ConfirmedFilter::All, 2, 0);
+        let page2 = db.search_qsos("", ConfirmedFilter::All, 2, 2);
+        assert_eq!(page1.len(), 2);
+        assert_eq!(page2.len(), 2);
+        assert_eq!(page1[0].call, "K1ABC/P"); // last inserted -> highest id
+        assert!(page1.iter().all(|a| page2.iter().all(|b| a.call != b.call)));
+    }
+
+    #[test]
+    fn qso_matches_predicate() {
+        let confirmed = rec("K1ABC", "20260604", "120000", true);
+        let unconfirmed = rec("W1AW", "20260604", "120000", false);
+        assert!(qso_matches(&confirmed, "", ConfirmedFilter::All));
+        assert!(qso_matches(&confirmed, "abc", ConfirmedFilter::All));
+        assert!(!qso_matches(&confirmed, "zzz", ConfirmedFilter::All));
+        assert!(qso_matches(&confirmed, "", ConfirmedFilter::Confirmed));
+        assert!(!qso_matches(&confirmed, "", ConfirmedFilter::Unconfirmed));
+        assert!(qso_matches(&unconfirmed, "", ConfirmedFilter::Unconfirmed));
+        assert!(!qso_matches(&unconfirmed, "", ConfirmedFilter::Confirmed));
+    }
+
+    #[test]
+    fn export_date_range_filters_rows() {
+        let db = Db::open_in_memory().unwrap();
+        db.insert_qso(&rec("A1AA", "20260601", "120000", false)).unwrap();
+        db.insert_qso(&rec("B2BB", "20260615", "120000", false)).unwrap();
+        db.insert_qso(&rec("C3CC", "20260630", "120000", false)).unwrap();
+
+        let mid = db.export_adif_range(Some("20260610"), Some("20260620"));
+        assert!(!mid.contains("A1AA"));
+        assert!(mid.contains("B2BB"));
+        assert!(!mid.contains("C3CC"));
+
+        // Open-ended bounds.
+        let from = db.export_adif_range(Some("20260615"), None);
+        assert!(!from.contains("A1AA"));
+        assert!(from.contains("B2BB"));
+        assert!(from.contains("C3CC"));
+
+        // No bounds == whole log.
+        let all = db.export_adif_range(None, None);
+        assert!(all.contains("A1AA") && all.contains("B2BB") && all.contains("C3CC"));
+    }
+
+    #[test]
+    fn date_in_range_predicate() {
+        assert!(date_in_range("20260615", None, None));
+        assert!(date_in_range("20260615", Some(""), Some("")));
+        assert!(date_in_range("20260615", Some("20260601"), Some("20260630")));
+        assert!(!date_in_range("20260701", Some("20260601"), Some("20260630")));
+        assert!(!date_in_range("20260501", Some("20260601"), None));
+        assert!(date_in_range("20260615", None, Some("20260615")));
+        assert!(!date_in_range("20260616", None, Some("20260615")));
+
+        // Malformed dates must not sneak past a bound via lexicographic ordering.
+        assert!(!date_in_range("BAD", Some("20240101"), None));
+        assert!(!date_in_range("2026061", Some("20260101"), None)); // 7 digits
+        assert!(!date_in_range("2026-06-15", None, Some("20260630"))); // wrong shape
+        assert!(!date_in_range("", Some("20260101"), None));
+        // With no bounds the range is fully open, so even a malformed value passes.
+        assert!(date_in_range("BAD", None, None));
+    }
+
+    #[test]
+    fn sync_flags_are_idempotent_per_service() {
+        let db = Db::open_in_memory().unwrap();
+        let id = db.insert_qso(&rec("K1ABC", "20260604", "120000", false)).unwrap();
+        assert!(!db.is_synced(id, "cloudlog"));
+        assert!(!db.is_synced(id, "qrz"));
+
+        db.mark_synced(id, "cloudlog").unwrap();
+        assert!(db.is_synced(id, "cloudlog"));
+        assert!(!db.is_synced(id, "qrz"));
+
+        // Unknown service is a no-op, not an error.
+        db.mark_synced(id, "bogus").unwrap();
+        assert!(!db.is_synced(id, "bogus"));
+    }
+
+    #[test]
+    fn migrates_v1_log_in_place() {
+        // Simulate an existing v1 database (no qsl_rcvd / sync columns) and
+        // confirm the v2 migration adds them without dropping rows.
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            r#"
+            CREATE TABLE qso_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                call TEXT NOT NULL, gridsquare TEXT, mode TEXT, rst_sent TEXT,
+                rst_rcvd TEXT, qso_date TEXT, time_on TEXT, qso_date_off TEXT,
+                time_off TEXT, band TEXT, freq TEXT, station_callsign TEXT,
+                my_gridsquare TEXT, comment TEXT, created_at INTEGER
+            );
+            CREATE UNIQUE INDEX qso_log_dedup_idx
+                ON qso_log(call, qso_date, time_on, mode);
+            INSERT INTO qso_log(call, mode, qso_date, time_on)
+                VALUES('K1ABC', 'FT8', '20260604', '120000');
+            PRAGMA user_version = 1;
+            "#,
+        )
+        .unwrap();
+        let db = Db::from_conn(conn).unwrap();
+        let rows = db.list_qsos(10, 0);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].call, "K1ABC");
+        assert!(!rows[0].confirmed); // defaults to unconfirmed
+    }
+
+    #[test]
+    fn custom_bands_persist_via_config() {
+        // The custom dial list (issue #470) rides on the config store, so it must
+        // survive a reload the same way any other config value does.
+        use crate::bands;
+        let db = Db::open_in_memory().unwrap();
+
+        let mut custom =
+            bands::parse_custom_bands(&db.get_config(bands::CUSTOM_BANDS_KEY).unwrap_or_default());
+        assert!(custom.is_empty());
+
+        bands::upsert_custom_band(&mut custom, "3B9 DX", 14_090_000);
+        db.set_config(bands::CUSTOM_BANDS_KEY, &bands::serialize_custom_bands(&custom))
+            .unwrap();
+
+        // Reload from the store (as a fresh app launch would).
+        let reloaded =
+            bands::parse_custom_bands(&db.get_config(bands::CUSTOM_BANDS_KEY).unwrap());
+        assert_eq!(reloaded.len(), 1);
+        assert_eq!(reloaded[0].dial_hz, 14_090_000);
+        assert_eq!(reloaded[0].name, "3B9 DX");
+
+        let merged = bands::merged_bands(&reloaded);
+        assert!(merged.iter().any(|b| b.dial_hz == 14_090_000 && b.custom));
     }
 }

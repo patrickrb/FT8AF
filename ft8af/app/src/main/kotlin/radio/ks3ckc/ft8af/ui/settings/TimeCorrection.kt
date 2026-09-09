@@ -1,5 +1,6 @@
 package radio.ks3ckc.ft8af.ui.settings
 
+import com.k1af.ft8af.GeneralVariables
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -17,9 +18,18 @@ import kotlin.math.roundToInt
  * a Samsung A50 needing over 3 s while offline is why this is ±5 s, not ±2 s.
  */
 
-/** Inclusive bounds for the manual correction, in milliseconds. */
-internal const val TIME_CORRECTION_MIN_MS = -5000
-internal const val TIME_CORRECTION_MAX_MS = 5000
+/**
+ * Inclusive bounds for the manual correction, in milliseconds.
+ *
+ * Single source of truth is [GeneralVariables.MANUAL_TIME_CORRECTION_MIN_MS] /
+ * [GeneralVariables.MANUAL_TIME_CORRECTION_MAX_MS], which the config-hydration
+ * reload path clamps against ([GeneralVariables.clampManualTimeCorrectionMs]).
+ * These reference those so a range change can't drift the UI out of sync with
+ * reload. (Java `static final int` constant expressions inline at compile time,
+ * so this doesn't drag GeneralVariables' class init into this pure-logic file.)
+ */
+internal val TIME_CORRECTION_MIN_MS = GeneralVariables.MANUAL_TIME_CORRECTION_MIN_MS
+internal val TIME_CORRECTION_MAX_MS = GeneralVariables.MANUAL_TIME_CORRECTION_MAX_MS
 
 /** Coerce an arbitrary correction into the allowed range. */
 internal fun clampCorrectionMs(ms: Int): Int =
@@ -43,6 +53,23 @@ internal fun stepCorrectionMs(current: Int, deltaMs: Int): Int =
  */
 internal fun suggestedCorrectionMs(currentDelayMs: Int, avgDtSec: Float): Int =
     clampCorrectionMs(currentDelayMs - (avgDtSec * 1000f).roundToInt())
+
+/**
+ * Whether the Suggestion card should offer the manual "Apply suggested
+ * correction" action.
+ *
+ * Only when nothing automatic owns the clock. With auto-sync on, the estimator
+ * is already driving the same DT toward zero — offering the tap on top of it
+ * made operators keep applying the residual by hand (and every manual apply
+ * fights the estimator's next step). With GPS or NTP discipline on, the manual
+ * controls are locked for the same reason, and the suggestion must be too.
+ */
+internal fun showSuggestionApply(
+    autoSyncFromDecodes: Boolean,
+    disciplineFromGps: Boolean,
+    disciplineFromNtp: Boolean = false,
+): Boolean =
+    !autoSyncFromDecodes && !disciplineFromGps && !disciplineFromNtp
 
 /**
  * Human-readable offset, e.g. "+0.6 s", "-0.3 s", "0.0 s". Used for both the

@@ -22,4 +22,5 @@
     <locale android:name="id" />
     <locale android:name="uk" />
     <locale android:name="ar" />
+    <locale android:name="pt-BR" />
 </locale-config>

@@ -1,3 +1,4 @@
+import FT8Engine
 import SwiftUI
 
 /// Canvas-drawn azimuthal equidistant projection centered on the operator's grid.
@@ -52,7 +53,7 @@ struct AzimuthalMapCanvas: View {
                     // Distance label on right side of ring
                     let labelText = dist >= 1000 ? "\(Int(dist / 1000))k" : "\(Int(dist))"
                     let text = context.resolve(Text(labelText)
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .font(.ft8afMono(size: 8, weight: .medium))
                         .foregroundStyle(textFaint))
                     let labelX = center.x + ringRadius + 2
                     let labelY = center.y - 5
@@ -81,7 +82,7 @@ struct AzimuthalMapCanvas: View {
                     let lx = center.x + labelDist * CGFloat(sin(rad))
                     let ly = center.y - labelDist * CGFloat(cos(rad))
                     let compassText = context.resolve(Text(compassLabels[i])
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .font(.ft8afMono(size: 9, weight: .semibold))
                         .foregroundStyle(i == 0 ? textMuted : textFaint))
                     context.draw(compassText, at: CGPoint(x: lx, y: ly), anchor: .center)
                 }

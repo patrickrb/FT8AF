@@ -84,10 +84,10 @@ private struct BigStatCard: View {
     var body: some View {
         VStack(spacing: 4) {
             Text("\(value)")
-                .font(.system(size: 22, weight: .bold, design: .monospaced))
+                .font(.ft8afMono(size: 22, weight: .bold))
                 .foregroundStyle(textPrimary)
             Text(title)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.ft8afUI(size: 10, weight: .semibold))
                 .foregroundStyle(textFaint)
                 .textCase(.uppercase)
         }
@@ -112,7 +112,7 @@ private struct BandDonutChart: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("BAND DISTRIBUTION")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .font(.ft8afMono(size: 10, weight: .bold))
                 .foregroundStyle(textFaint)
 
             HStack(spacing: 16) {
@@ -128,10 +128,10 @@ private struct BandDonutChart: View {
                     // Center label
                     VStack(spacing: 1) {
                         Text("\(total)")
-                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .font(.ft8afMono(size: 16, weight: .bold))
                             .foregroundStyle(textPrimary)
                         Text("QSOs")
-                            .font(.system(size: 8, weight: .medium))
+                            .font(.ft8afUI(size: 8, weight: .medium))
                             .foregroundStyle(textFaint)
                     }
                 }
@@ -145,11 +145,11 @@ private struct BandDonutChart: View {
                                 .fill(bandColor(for: item.band))
                                 .frame(width: 6, height: 6)
                             Text(item.band)
-                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                .font(.ft8afMono(size: 11, weight: .semibold))
                                 .foregroundStyle(textMuted)
                             Spacer()
                             Text("\(item.count)")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .font(.ft8afMono(size: 11, weight: .bold))
                                 .foregroundStyle(textPrimary)
                         }
                     }
@@ -218,11 +218,11 @@ private struct SnrSparkline: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("SIGNAL TREND")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.ft8afMono(size: 10, weight: .bold))
                     .foregroundStyle(textFaint)
                 Spacer()
                 Text("Last \(snrValues.count) QSOs")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .font(.ft8afMono(size: 9, weight: .medium))
                     .foregroundStyle(textDim)
             }
 
@@ -295,11 +295,11 @@ private struct GridHeatmap: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("GRID COVERAGE")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.ft8afMono(size: 10, weight: .bold))
                     .foregroundStyle(textFaint)
                 Spacer()
                 Text("\(workedFields.count)/324 fields")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .font(.ft8afMono(size: 9, weight: .medium))
                     .foregroundStyle(textDim)
             }
 
@@ -357,7 +357,7 @@ private struct AwardProgressSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("AWARDS PROGRESS")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .font(.ft8afMono(size: 10, weight: .bold))
                 .foregroundStyle(textFaint)
 
             AwardBar(name: "DXCC Mixed", current: dxccCount, goal: 100, color: signal)
@@ -386,11 +386,11 @@ private struct AwardBar: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(name)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.ft8afUI(size: 11, weight: .semibold))
                     .foregroundStyle(textMuted)
                 Spacer()
                 Text("\(current)/\(goal)")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.ft8afMono(size: 10, weight: .bold))
                     .foregroundStyle(textFaint)
             }
             GeometryReader { geo in

@@ -61,7 +61,13 @@ public class IcomCivUdp extends IcomUdpBase{
        }
     }
 
-    public void sendOpenClose(boolean open){
+    // sendOpenClose and sendCivData build the packet from civSeq, send it, then
+    // increment civSeq. sendTrackedPacket is synchronized, but the build and the
+    // increment were not, so two senders — the dial poll, the CAT-liveness poll,
+    // a PTT command from the UI — could stamp the same sequence number and have
+    // the rig drop one as a duplicate. Both are synchronized on the same monitor
+    // as sendTrackedPacket (reentrant), so build + send + increment is atomic.
+    public synchronized void sendOpenClose(boolean open){
         if (open) {
             sendTrackedPacket(IComPacketTypes.OpenClosePacket.toBytes((short) 0
                     , localId, remoteId, civSeq,(byte) 0x04));//Open connection
@@ -94,7 +100,7 @@ public class IcomCivUdp extends IcomUdpBase{
         }
     }
 
-    public void sendCivData(byte[] data){
+    public synchronized void sendCivData(byte[] data){
         sendTrackedPacket(IComPacketTypes.CivPacket.setCivData((short) 0,localId,remoteId,civSeq,data));
         civSeq++;
     }

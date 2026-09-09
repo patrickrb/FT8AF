@@ -46,6 +46,28 @@ public final class UsbCaptureRetryPolicy {
     static final long MAX_BACKOFF_MS = 60_000;
 
     /**
+     * Whether a finished capture session warrants the failure-retry path at all,
+     * based on the native stop reason (see
+     * {@code UsbAudioDevice.describeCaptureStopCode}).
+     *
+     * <p>A clean stop ({@code stopCode == 0}) is a {@code nativeStop} <em>we</em>
+     * requested — a reinit, a band change, {@code stopRecord()}, or teardown —
+     * and the initiator restarts capture itself where appropriate. Treating it
+     * as a failure and scheduling a retry tears down the capture the initiator
+     * just brought back; doing that on every clean stop is what pinned the
+     * C-Media adapter in a fail&rarr;backoff&rarr;reinit loop (429 of 434 field
+     * stops were clean stops misclassified as failures), starving the FT8
+     * decoder of ~87% of receive slots so QSO replies were never heard. Only a
+     * non-zero stop reason (transfers retired, NO_DEVICE, event-loop error, or
+     * the {@code UsbRequest}-fallback death sentinel) is a real failure.
+     *
+     * @param stopCode native stop reason; {@code 0} == clean stop
+     */
+    static boolean isRetryableFailure(int stopCode) {
+        return stopCode != 0;
+    }
+
+    /**
      * Whether a finished capture session should count against the
      * consecutive-failure tally.
      *
@@ -70,5 +92,72 @@ public final class UsbCaptureRetryPolicy {
         long delay = BASE_BACKOFF_MS << shift;
         if (delay <= 0 || delay > MAX_BACKOFF_MS) return MAX_BACKOFF_MS;
         return delay;
+    }
+
+    /**
+     * The failure tally after a session ends: incremented when the session was a
+     * failure (see {@link #isFailure}), reset to {@code 0} when it stayed alive
+     * long enough to be useful. Kept separate from the raw {@code ++} at the call
+     * site so the state transition is unit-testable without a live capture.
+     *
+     * @param prevFailures the tally before this session ended (never negative)
+     * @param sawData      whether any audio arrived during the session
+     * @param aliveMs      how long the session ran before it stopped
+     */
+    static int failureTallyAfter(int prevFailures, boolean sawData, long aliveMs) {
+        return isFailure(sawData, aliveMs) ? prevFailures + 1 : 0;
+    }
+
+    /**
+     * The failure tally after a <em>clean</em> stop (a {@code nativeStop} we
+     * requested: reinit, band change, {@code stopRecord()}, teardown). A clean
+     * stop is never itself a failure, so it never increments the tally — but if
+     * the session that just ended had been alive and delivering audio long enough
+     * to be useful (see {@link #isFailure}), the device has proven healthy, so any
+     * stale streak from earlier genuine failures is cleared to {@code 0}. Without
+     * this a healthy session that ends via a band change leaves an old streak in
+     * place, and the next genuine failure inherits an inflated backoff.
+     *
+     * @param prevFailures the tally before this session ended (never negative)
+     * @param sawData      whether any audio arrived during the session
+     * @param aliveMs      how long the session ran before the clean stop
+     */
+    static int tallyAfterCleanStop(int prevFailures, boolean sawData, long aliveMs) {
+        return isFailure(sawData, aliveMs) ? prevFailures : 0;
+    }
+
+    /**
+     * The complete plan for reacting to a finished USB capture session: the
+     * updated failure tally and how long to wait before the next reinit attempt.
+     * Computed up front (on the native capture event thread) so the actual
+     * backoff sleep + {@code reinitialize()} can be handed to a separate worker
+     * thread — running them on the event thread is what raced libusb into the
+     * destroyed-mutex SIGABRT (nativeStop()'s join() blocks on the event thread
+     * while it drives the next nativeStart(), overlapping the two libusb
+     * contexts). See {@code MicRecorder}'s onCaptureStopped handoff.
+     */
+    static final class ReinitPlan {
+        /** Consecutive-failure tally after this session (see {@link #failureTallyAfter}). */
+        final int consecutiveFailures;
+        /** Delay before the reinit, in ms ({@code 0} = reinit immediately). */
+        final long backoffMs;
+
+        ReinitPlan(int consecutiveFailures, long backoffMs) {
+            this.consecutiveFailures = consecutiveFailures;
+            this.backoffMs = backoffMs;
+        }
+    }
+
+    /**
+     * Fold {@link #failureTallyAfter} and {@link #backoffMs} into the single
+     * decision {@code MicRecorder} needs when a capture session stops.
+     *
+     * @param sawData      whether any audio arrived during the session
+     * @param aliveMs      how long the session ran before it stopped
+     * @param prevFailures the tally before this session ended
+     */
+    static ReinitPlan planReinit(boolean sawData, long aliveMs, int prevFailures) {
+        int tally = failureTallyAfter(prevFailures, sawData, aliveMs);
+        return new ReinitPlan(tally, backoffMs(tally));
     }
 }

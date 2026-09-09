@@ -56,7 +56,13 @@ public class CableSerialPort {
     private int portNum = 0;//Port number
     private int baudRate = 19200;//Baud rate
 
-    private UsbSerialPort usbSerialPort;
+    // volatile: written on the connect thread (open) and cleared to null on the
+    // disconnect thread (disconnect()), read on the CAT/TX threads (sendData,
+    // setRTS/DTR). Readers MUST snapshot it into a local before check-and-use —
+    // reading the field twice let a concurrent disconnect null it between the
+    // null-check and usbSerialPort.write(), NPE-ing a delayed CAT freq write on
+    // the FT-891 (Yaesu39Rig.setFreqToRig) as the rig dropped.
+    private volatile UsbSerialPort usbSerialPort;
     private SerialInputOutputManager usbIoManager;
     public SerialInputOutputManager.Listener ioListener = null;
 
@@ -104,6 +110,46 @@ public class CableSerialPort {
                 && GeneralVariables.controlMode == ControlMode.CAT;
     }
 
+    /**
+     * Whether {@code portNum} is a valid 0-based index into a driver port list
+     * of {@code portCount} ports, i.e. in {@code 0 .. portCount-1}.
+     *
+     * <p>{@link #prepare()} calls {@code driver.getPorts().get(portNum)} right
+     * after this check. The previous guard was {@code portCount < portNum},
+     * which is off by one: it let {@code portNum == portCount} (a persisted
+     * multi-port selection replayed against a device that now enumerates fewer
+     * ports, or an empty port list with the default {@code portNum == 0}) pass,
+     * so {@code get(portNum)} threw {@link IndexOutOfBoundsException} out of
+     * {@code prepare()} → {@code connect()}. On the CAT auto-reconnect worker
+     * that exception is uncaught and crashes the app. Requiring
+     * {@code portNum < portCount} (and non-negative) makes the guard actually
+     * cover the index it protects.
+     *
+     * <p>Package-visible for testing.
+     */
+    static boolean isValidPortIndex(int portCount, int portNum) {
+        return portNum >= 0 && portNum < portCount;
+    }
+
+    /**
+     * Whether a USB device with this port's vendor id is currently on the bus (the same
+     * match {@link #prepare()} uses to find the device). The auto-reconnect loop consults
+     * this to stop retrying a device that has been unplugged — see
+     * {@link CatReconnectPolicy#shouldKeepRetrying(boolean, boolean)}.
+     * Package-private on purpose: an internal reconnect helper, not part of the
+     * port's supported surface.
+     */
+    boolean isDevicePresent() {
+        UsbManager manager = (UsbManager) context.getSystemService(Context.USB_SERVICE);
+        if (manager == null) return false;
+        for (UsbDevice v : manager.getDeviceList().values()) {
+            if (v.getVendorId() == vendorId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean prepare() {
         registerRigSerialPort(context);
         UsbDevice device = null;
@@ -131,7 +177,7 @@ public class CableSerialPort {
             //Try adding the unknown device to the CDC driver
             driver = new CdcAcmSerialDriver(device);
         }
-        if (driver.getPorts().size() < portNum) {
+        if (!isValidPortIndex(driver.getPorts().size(), portNum)) {
             Log.e(TAG, "Serial port number does not exist, cannot open.");
             return false;
         }
@@ -157,14 +203,24 @@ public class CableSerialPort {
         }
         if (usbConnection == null && usbPermission == UsbPermission.Unknown
                 && !usbManager.hasPermission(driver.getDevice())) {
-            usbPermission = UsbPermission.Requested;
+            // The Unknown guard above is per-instance and every auto-connect builds a
+            // fresh instance, so on a flapping link it alone raised a system dialog per
+            // bounce. The process-wide throttle is what actually spaces the dialogs out.
+            if (UsbPermissionThrottle.shouldRequestNow(vendorId, System.currentTimeMillis())) {
+                usbPermission = UsbPermission.Requested;
+                UsbPermissionThrottle.markRequested(vendorId, System.currentTimeMillis());
 
-            PendingIntent usbPermissionIntent =
-                    UsbPermissionIntentsKt.createUsbPermissionIntent(context, INTENT_ACTION_GRANT_USB);
+                PendingIntent usbPermissionIntent =
+                        UsbPermissionIntentsKt.createUsbPermissionIntent(context, INTENT_ACTION_GRANT_USB);
 
 
-            usbManager.requestPermission(driver.getDevice(), usbPermissionIntent);
-            prepare();
+                usbManager.requestPermission(driver.getDevice(), usbPermissionIntent);
+                prepare();
+            } else {
+                fileLog(String.format("usbPermission: request for vendor 0x%04x throttled"
+                        + " (asked <%ds ago)", vendorId,
+                        UsbPermissionThrottle.REQUEST_COOLDOWN_MS / 1000));
+            }
         }
         if (usbConnection == null) {
             if (onStateChanged!=null){
@@ -238,31 +294,71 @@ public class CableSerialPort {
         Log.d(TAG, msg);
     }
 
+    /**
+     * A single raw port write, extracted so the disconnect-race guard is
+     * unit-testable without the full {@link UsbSerialPort} surface (or a live
+     * device).
+     */
+    @FunctionalInterface
+    interface RawWrite {
+        void write(byte[] src, int timeout) throws IOException;
+    }
+
+    /**
+     * Write {@code src} to a port reference the caller has already snapshotted.
+     * A {@code null} writer means the port was disconnected (closed and nulled
+     * by {@link #disconnect()}): no write, returns {@code false} — never NPEs.
+     * The caller passes the snapshot's {@code ::write}, so a concurrent
+     * disconnect that nulls the field afterwards cannot affect this call.
+     *
+     * @return true if the write was issued, false if the port was not open
+     */
+    static boolean writeIfOpen(RawWrite writer, byte[] src, int timeout) throws IOException {
+        if (writer == null) return false;
+        writer.write(src, timeout);
+        return true;
+    }
+
     public boolean sendData(final byte[] src) {
-        if (usbSerialPort != null) {
-            try {
-                String preview = new String(src).replace("\r", "\\r").replace("\n", "\\n");
-                // Only log non-periodic commands (skip FA; reads to avoid log spam)
-                if (!preview.equals("FA;") && !preview.startsWith("RM")) {
-                    StringBuilder hex = new StringBuilder();
-                    for (byte b : src) hex.append(String.format("%02X ", b));
-                    fileLog("serial.send[" + src.length + "]: " + preview + " | hex: " + hex.toString().trim());
-                }
-                usbSerialPort.write(src, SEND_TIMEOUT);
-                if (!preview.equals("FA;") && !preview.startsWith("RM")) {
-                    fileLog("serial.send: write completed OK");
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-                fileLog("serial.send ERROR: " + e.getMessage());
-                return false;
-            }
-            return true;
-        } else {
+        // Snapshot the volatile field ONCE; disconnect() may null it on another
+        // thread at any moment. Using the local for both the check and the write
+        // removes the check-then-act NPE (see the field's comment).
+        final UsbSerialPort port = usbSerialPort;
+        if (port == null) {
             fileLog("serial.send: port not open!");
             return false;
         }
-
+        try {
+            String preview = new String(src).replace("\r", "\\r").replace("\n", "\\n");
+            // Only log non-periodic commands (skip FA; reads to avoid log spam)
+            if (!preview.equals("FA;") && !preview.startsWith("RM")) {
+                StringBuilder hex = new StringBuilder();
+                for (byte b : src) hex.append(String.format("%02X ", b));
+                fileLog("serial.send[" + src.length + "]: " + preview + " | hex: " + hex.toString().trim());
+            }
+            writeIfOpen(port::write, src, SEND_TIMEOUT);
+            if (!preview.equals("FA;") && !preview.startsWith("RM")) {
+                fileLog("serial.send: write completed OK");
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            fileLog("serial.send ERROR: " + e.getMessage());
+            return false;
+        } catch (RuntimeException e) {
+            // Backstop. A CAT write must never be fatal: sendData runs on the TX
+            // pool thread via the PTT path, so an uncaught RuntimeException takes
+            // the whole process down — and if it happens between TX1 and TX0 the
+            // rig is left keyed with nothing alive to unkey it (observed in the
+            // field: process died 3ms after TX1, transmitter keyed for 89s).
+            // The known case is an NPE from a yanked USB endpoint, now also
+            // guarded at source in CommonUsbSerialPort; this catch covers the
+            // rest of the driver stack, which is third-party and NPEs freely
+            // once the device disappears mid-transfer.
+            e.printStackTrace();
+            fileLog("serial.send ERROR (runtime, port died mid-write): " + e);
+            return false;
+        }
+        return true;
     }
 
     public void disconnect() {
@@ -308,30 +404,69 @@ public class CableSerialPort {
 
 
     /**
+     * Whether a control-line toggle can actually be driven: the port must report
+     * the requested line as supported. Pure so the "unsupported line reports
+     * failure" decision (used by {@link #setRTS_On}/{@link #setDTR_On}) is
+     * unit-testable without a live USB device.
+     */
+    static boolean controlLineSupported(EnumSet<UsbSerialPort.ControlLine> supported,
+                                        UsbSerialPort.ControlLine line) {
+        return supported != null && supported.contains(line);
+    }
+
+    /**
      * Toggle RTS on and off
      *
      * @param rts_on true: on, false: off
      */
-    public void setRTS_On(boolean rts_on) {
+    public boolean setRTS_On(boolean rts_on) {
+        // Snapshot once — disconnect() may null the field on another thread
+        // between the check and the setRTS() call (same race as sendData).
+        final UsbSerialPort port = usbSerialPort;
+        if (port == null) {
+            fileLog("serial.setRTS: port not open!");
+            return false;
+        }
         try {
-            EnumSet<UsbSerialPort.ControlLine> controlLines = usbSerialPort.getSupportedControlLines();
-            if (controlLines.contains(UsbSerialPort.ControlLine.RTS)) {
-                usbSerialPort.setRTS(rts_on);
+            if (!controlLineSupported(port.getSupportedControlLines(),
+                    UsbSerialPort.ControlLine.RTS)) {
+                // Report failure rather than a silent no-op: callers use the return
+                // value to decide whether a PTT toggle actually happened, so a port
+                // that can't drive RTS must not read as a successful toggle.
+                fileLog("serial.setRTS: RTS not supported by this port");
+                return false;
             }
+            port.setRTS(rts_on);
+            return true;
         } catch (IOException e) {
             e.printStackTrace();
+            fileLog("serial.setRTS ERROR: " + e.getMessage());
+            return false;
         }
     }
 
-    public void setDTR_On(boolean dtr_on) {
+    public boolean setDTR_On(boolean dtr_on) {
+        // Snapshot once (see setRTS_On) — the field can be nulled concurrently.
+        final UsbSerialPort port = usbSerialPort;
+        if (port == null) {
+            fileLog("serial.setDTR: port not open!");
+            return false;
+        }
         try {
-            EnumSet<UsbSerialPort.ControlLine> controlLines = usbSerialPort.getSupportedControlLines();
-            if (controlLines.contains(UsbSerialPort.ControlLine.DTR)) {
-                usbSerialPort.setDTR(dtr_on);
+            if (!controlLineSupported(port.getSupportedControlLines(),
+                    UsbSerialPort.ControlLine.DTR)) {
+                // Report failure rather than a silent no-op (see setRTS_On): a port
+                // that can't drive DTR must not read as a successful PTT toggle.
+                fileLog("serial.setDTR: DTR not supported by this port");
+                return false;
             }
+            port.setDTR(dtr_on);
+            return true;
         } catch (IOException e) {
             e.printStackTrace();
             Log.d(TAG, "setDTR_On: " + e.getMessage());
+            fileLog("serial.setDTR ERROR: " + e.getMessage());
+            return false;
         }
     }
 

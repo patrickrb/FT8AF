@@ -79,8 +79,24 @@ public class X6100Radio {
     private XieguCommand xieguCommand;
     private int handle = 0;
     private String commandStr;
-    private int frames = 768;//frames per cycle
+    private int frames = 768;//frames per cycle (samples per TX audio packet)
     private int period = 64;//duration per cycle in milliseconds
+
+    // Upper bound accepted for a rig-reported audio "frames" (samples per TX
+    // packet). The default is 768 (64 ms at 12 kHz); a single packet as large as
+    // a whole 15 s TX cycle (180 000 samples at 12 kHz) is already the ceiling of
+    // anything sensible, so anything larger is a garbled/hostile reply. Capping
+    // keeps sendWaveData's `new short[frames]` allocation bounded (never an
+    // OutOfMemoryError) — see parseAudioFrames.
+    static final int MAX_AUDIO_FRAMES = 180_000;
+
+    // Upper bound accepted for the rig-reported audio "period" (packet-pacing gap
+    // in ms, after the µs→ms conversion). The X6100 uses 64 ms; sendWaveData
+    // busy-waits `period` ms between packets, so a garbled value like
+    // period=2147483647 (µs) would spin the TX thread at 100% CPU for ~35 minutes
+    // per packet. A gap beyond 1 s is far past any real rig cadence, so treat it
+    // as garbled and fall back — see parseAudioPeriodMs.
+    static final int MAX_AUDIO_PERIOD_MS = 1_000;
 
 
     //************************event handling interfaces*******************************
@@ -630,7 +646,7 @@ public class X6100Radio {
                 this.version = response.head.substring(1);
                 break;
             case HANDLE:
-                this.handle = Integer.parseInt(response.head.substring(1), 16);
+                this.handle = parseXieguHandle(response.head, this.handle);
                 break;
             case RESPONSE:
                 if (XieguCommand.AUDIO == response.xieguCommand) {//response information for audio command
@@ -676,6 +692,76 @@ public class X6100Radio {
     }
 
     /**
+     * Parse a Xiegu client-handle response ("H" + hex handle) into its numeric
+     * value, returning {@code currentHandle} unchanged when the frame is empty,
+     * truncated, or not valid hex.
+     *
+     * <p>This is the crash fix for the HANDLE branch of {@link #doReceiveLineEvent}.
+     * The previous {@code Integer.parseInt(head.substring(1), 16)} was unguarded,
+     * unlike every sibling parse in this class (seq_number, resultCode,
+     * play_volume) and unlike the identical handle parse in
+     * {@link com.k1af.ft8af.flex.FlexRadio}, which wraps it in a try/catch. Two
+     * inputs made it throw {@link NumberFormatException}: a garbled/truncated
+     * frame whose tail is not hex (even a lone {@code "H"}, whose tail is empty),
+     * and a legitimate high-bit 32-bit handle such as {@code "HFFFFFFFF"} — the
+     * Xiegu protocol handle is a full 32-bit value (see the {@code HANDLE} enum
+     * doc) and {@code 0xFFFFFFFF} overflows a signed {@code int}, so
+     * {@code Integer.parseInt} rejected it. This parse runs on the TCP CAT read
+     * thread ({@link com.k1af.ft8af.flex.RadioTcpClient}), whose read loop catches
+     * only {@code SocketException}/{@code IOException}; a {@code NumberFormatException}
+     * escaping here therefore killed that thread and crashed the whole app.
+     *
+     * <p>A valid handle is 1–8 <em>unsigned</em> hex digits. We validate that
+     * shape explicitly and only then parse via {@code Long.parseLong} (so the
+     * full {@code 0x00000000}–{@code 0xFFFFFFFF} range round-trips into the
+     * {@code int} handle field with the same bit pattern). Rejecting anything
+     * else keeps the last good handle rather than misinterpreting the frame:
+     * {@code Long.parseLong} would otherwise accept a leading sign
+     * (e.g. {@code "H-1"} → {@code -1}) and would accept more than 8 digits and
+     * then silently truncate them on the narrowing cast (e.g. {@code "H100000000"}
+     * → {@code 0}).
+     *
+     * <p>Package-private and static so it can be unit-tested without a live
+     * socket or {@code Context}.
+     *
+     * @param head          the response head ({@code "H"} + hex handle); may be
+     *                      {@code null} or too short to carry a handle
+     * @param currentHandle the handle value to keep when {@code head} can't be parsed
+     * @return the parsed handle, or {@code currentHandle} on any parse failure
+     */
+    static int parseXieguHandle(String head, int currentHandle) {
+        if (head == null || head.length() < 2) {
+            return currentHandle;
+        }
+        String hex = head.substring(1);
+        if (hex.length() > 8 || !isUnsignedHex(hex)) {
+            Log.e(TAG, "Xiegu handle parse failed (expected 1-8 hex digits): " + hex);
+            return currentHandle;
+        }
+        // Validated to 1-8 unsigned hex digits, so this never throws; parse as
+        // long so 0x80000000..0xFFFFFFFF narrow into the int field with the same
+        // 32-bit pattern (a plain signed-int parse would reject those).
+        return (int) Long.parseLong(hex, 16);
+    }
+
+    /** @return true iff {@code s} is non-empty and every char is {@code [0-9a-fA-F]}. */
+    private static boolean isUnsignedHex(String s) {
+        if (s.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            boolean hex = (c >= '0' && c <= '9')
+                    || (c >= 'a' && c <= 'f')
+                    || (c >= 'A' && c <= 'F');
+            if (!hex) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Get the radio's audio information
      *
      * @param result the returned information
@@ -685,14 +771,73 @@ public class X6100Radio {
         for (int i = 0; i < keys.length; i++) {
             String[] val = keys[i].split("=");
             if (val.length < 2) continue;
-            try {
-                if (val[0].equalsIgnoreCase("period")) period = Integer.parseInt(val[1]) / 1000;
-                if (val[0].equalsIgnoreCase("frames")) frames = Integer.parseInt(val[1]);
-            } catch (NumberFormatException e) {
-                Log.e(TAG, "Error parsing audio info: " + keys[i], e);
-            }
+            if (val[0].equalsIgnoreCase("period")) period = parseAudioPeriodMs(val[1], period);
+            if (val[0].equalsIgnoreCase("frames")) frames = parseAudioFrames(val[1], frames);
         }
         Log.d(TAG, String.format("set audio para:frames=%d,period=%d", frames, period));
+    }
+
+    /**
+     * Parse the rig's audio {@code frames=} value (samples per TX audio packet)
+     * from its network "audio get all" reply, returning {@code fallback} (the
+     * current value) for anything that isn't a sane positive count.
+     *
+     * <p>The value is consumed by {@link #sendWaveData(float[])} as an array size
+     * ({@code new short[frames]}) and a chunk stride. A non-positive value there
+     * is not just wrong data — it crashes or hangs the TX thread, and that thread
+     * is reached from untrusted network input via the TCP CAT read loop
+     * ({@link com.k1af.ft8af.flex.RadioTcpClient}), which catches only
+     * {@code SocketException}/{@code IOException}, while {@code sendWaveData}
+     * itself catches only {@code UnknownHostException}:
+     * <ul>
+     *   <li>{@code frames < 0} → {@code new short[frames]} throws
+     *       {@code NegativeArraySizeException} → uncaught → whole-app crash.</li>
+     *   <li>{@code frames == 0} → the copy loop never advances its offset and
+     *       spins for the whole over, flooding the rig with empty audio.</li>
+     *   <li>an absurdly large value → multi-GB allocation →
+     *       {@code OutOfMemoryError}.</li>
+     * </ul>
+     * Validating here, at the single ingestion point, keeps the invariant
+     * {@code 0 < frames <= MAX_AUDIO_FRAMES} for the field (its only other writer
+     * is the 768 default), so {@code sendWaveData} can never see a bad value.
+     *
+     * <p>Package-private and static so it can be unit-tested without a live
+     * socket or {@code Context}.
+     */
+    static int parseAudioFrames(String raw, int fallback) {
+        if (raw == null) return fallback;
+        try {
+            int f = Integer.parseInt(raw.trim());
+            if (f > 0 && f <= MAX_AUDIO_FRAMES) {
+                return f;
+            }
+        } catch (NumberFormatException ignored) {
+            // fall through to fallback
+        }
+        return fallback;
+    }
+
+    /**
+     * Parse the rig's audio {@code period=} value (microseconds) into whole
+     * milliseconds, returning {@code fallback} for anything that isn't a sane
+     * positive duration. {@code sendWaveData} busy-waits {@code period} ms between
+     * packets, so the value is bounded on both ends: a value below 1000 µs
+     * truncates to 0 ms on the {@code /1000}, turning that wait into a tight CPU
+     * spin, and a value above {@link #MAX_AUDIO_PERIOD_MS} would spin the TX
+     * thread for many seconds/minutes per packet. Same ingestion-point-validation
+     * rationale (and unit-testability) as {@link #parseAudioFrames}.
+     */
+    static int parseAudioPeriodMs(String raw, int fallback) {
+        if (raw == null) return fallback;
+        try {
+            int ms = Integer.parseInt(raw.trim()) / 1000;
+            if (ms > 0 && ms <= MAX_AUDIO_PERIOD_MS) {
+                return ms;
+            }
+        } catch (NumberFormatException ignored) {
+            // fall through to fallback
+        }
+        return fallback;
     }
 
     public synchronized void sendData(byte[] data) {

@@ -1,0 +1,6 @@
+version: "Apple Swift version 6.1.2 (swiftlang-6.1.2.1.2 clang-1700.0.13.5)"
+options: "1d5b42a9a6880f74b68c9ba38bf78bac541d59fad43f7be973285d30456e9534"
+build_start_time: [1786912747, 533915000]
+build_end_time: [1786912748, 216113000]
+inputs:
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Rig/RigDriver.swift": [1783174095, 894561729]

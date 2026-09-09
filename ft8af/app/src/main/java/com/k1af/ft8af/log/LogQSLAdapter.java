@@ -58,11 +58,27 @@ public class LogQSLAdapter extends RecyclerView.Adapter<LogQSLAdapter.LogQSLItem
     }
 
     /**
+     * True when {@code position} indexes a live row. RecyclerView hands
+     * {@link RecyclerView#NO_POSITION} (-1) for a holder that has been detached or is
+     * mid-swipe/animation, and the backing list can shrink under a LiveData refresh
+     * (a decode/import cycle calling {@code notifyDataSetChanged}) between a swipe
+     * gesture and the confirm-dialog callback — so every position-based mutator must
+     * validate before indexing {@code qslRecords}. Mirrors the {@code position == -1}
+     * guard the sibling {@code CallingListAdapter.menuListener} already has.
+     */
+    boolean isValidPosition(int position) {
+        return position >= 0 && position < qslRecords.size();
+    }
+
+    /**
      * Delete log entry
      *
      * @param position position in the list
      */
     public void deleteRecord(int position) {
+        if (!isValidPosition(position)) {
+            return;
+        }
         mainViewModel.databaseOpr.deleteQSLByID(qslRecords.get(position).id);
         qslRecords.remove(position);
     }
@@ -78,6 +94,9 @@ public class LogQSLAdapter extends RecyclerView.Adapter<LogQSLAdapter.LogQSLItem
      * @param b        status
      */
     public void setRecordIsQSL(int position, boolean b) {
+        if (!isValidPosition(position)) {
+            return;
+        }
         qslRecords.get(position).isQSL = b;
         mainViewModel.databaseOpr.setQSLTableIsQSL(b, qslRecords.get(position).id);
 

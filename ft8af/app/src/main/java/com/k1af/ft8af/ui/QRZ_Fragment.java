@@ -64,7 +64,11 @@ public class QRZ_Fragment extends Fragment {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 super.shouldOverrideUrlLoading(view, url);
-                view.loadUrl(url);
+                // HTTPS only: the app-wide cleartext allowance exists for the user's LAN
+                // logbook server (issue #756), not for pages this WebView follows links to.
+                if (WebNavigationPolicy.isAllowed(url)) {
+                    view.loadUrl(url);
+                }
                 return true;
             }
         };

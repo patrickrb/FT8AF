@@ -134,13 +134,13 @@ private struct AwardStatCard: View {
                     .rotationEffect(.degrees(-90))
 
                 Text("\(value)")
-                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    .font(.ft8afMono(size: 18, weight: .bold))
                     .foregroundStyle(textPrimary)
             }
             .frame(width: 54, height: 54)
 
             Text(title)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.ft8afUI(size: 10, weight: .semibold))
                 .foregroundStyle(textFaint)
                 .textCase(.uppercase)
         }
@@ -179,7 +179,7 @@ private struct AwardCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.ft8afUI(size: 14, weight: .semibold))
                     .foregroundStyle(color)
                     .frame(width: 28, height: 28)
                     .background(
@@ -189,10 +189,10 @@ private struct AwardCard: View {
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(name)
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.ft8afUI(size: 13, weight: .bold))
                         .foregroundStyle(textPrimary)
                     Text(description)
-                        .font(.system(size: 10))
+                        .font(.ft8afUI(size: 10))
                         .foregroundStyle(textFaint)
                         .lineLimit(1)
                 }
@@ -200,7 +200,7 @@ private struct AwardCard: View {
                 Spacer()
 
                 Text("\(current)/\(nextMilestone)")
-                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .font(.ft8afMono(size: 12, weight: .bold))
                     .foregroundStyle(progress >= 1.0 ? statusConfirmed : textMuted)
             }
 
@@ -227,7 +227,7 @@ private struct AwardCard: View {
                 HStack(spacing: 0) {
                     ForEach(milestones, id: \.self) { ms in
                         Text("\(ms)")
-                            .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                            .font(.ft8afMono(size: 8, weight: .semibold))
                             .foregroundStyle(current >= ms ? color : textDim)
                         if ms != milestones.last {
                             Spacer()

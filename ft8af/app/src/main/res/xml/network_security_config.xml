@@ -1,8 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cleartext policy (issue #756).
+
+  The only user-supplied host in the app is the Cloudlog / Wavelog / Nextlog logbook
+  server, and those are very often self-hosted on a LAN over plain HTTP
+  (http://192.168.x.x/wavelog/). A base-config that forbids cleartext made
+  HttpURLConnection throw before a single packet left the phone, so "Test Connection"
+  failed with nothing in the server's access log or in tcpdump.
+
+  A network-security-config can't express "cleartext only for the host the user typed":
+  domain-config entries are literal host names (no wildcards, no IP ranges), and the
+  logbook host is unknown until runtime. So the base-config permits cleartext, and the
+  exposure is contained two ways:
+    - every public API and every page the app itself opens is pinned to TLS below, so a
+      typo, a captive portal, or a downgrade attempt can't silently move those to http://;
+    - the embedded WebViews (QRZ lookup, FAQ) refuse to follow non-https navigations
+      (WebNavigationPolicy), so link-following inside them stays where it was before.
+  Net effect: the only traffic that can be cleartext is a request to the address the
+  user entered in Logging settings.
+-->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false">
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+
+    <!-- Public services the app calls with hard-coded https:// URLs, and the hosts the
+         embedded WebViews open: never cleartext. -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">qrz.com</domain>
+        <domain includeSubdomains="true">pota.app</domain>
+        <domain includeSubdomains="true">pskreporter.info</domain>
+        <domain includeSubdomains="true">amazoncognito.com</domain>
+        <domain includeSubdomains="true">amazonaws.com</domain>
+        <domain includeSubdomains="true">github.com</domain>
+        <domain includeSubdomains="true">ft8af.app</domain>
+        <domain includeSubdomains="true">support.qq.com</domain>
+    </domain-config>
 </network-security-config>

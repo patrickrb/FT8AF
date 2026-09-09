@@ -128,6 +128,51 @@ public class HamRecorder {
     }
 
     /**
+     * Pure decision: is FT8 RX holding an Android audio-capture session (an
+     * AudioRecord) right now? True blocks the voice-command SpeechRecognizer —
+     * two capture clients fight under Android's concurrency rules and the
+     * loser (usually our decode chain) goes silent.
+     *
+     * @param running   the recorder is running at all
+     * @param micSource audio comes from MicRecorder (not a LAN connector)
+     * @param usbDirect MicRecorder captures via direct libusb (no AudioRecord)
+     */
+    static boolean phoneMicCaptureInUse(boolean running, boolean micSource, boolean usbDirect) {
+        return running && micSource && !usbDirect;
+    }
+
+    /**
+     * Runtime "phone mic in use by FT8 RX" signal for the voice-command UI:
+     * true whenever this recorder holds an AudioRecord session (system mic or
+     * Android-routed USB input); false for direct-libusb USB capture and for
+     * LAN audio sources (ICOM WiFi / Flex), where the capture stack is free.
+     */
+    /**
+     * Whether RX audio comes from {@link MicRecorder} (the phone mic, an
+     * Android-routed device, or a USB-direct capture) rather than a network rig
+     * (Icom WLAN, Flex, X6100, tr-uSDX over CAT) that feeds
+     * {@link #doOnWaveDataReceived} directly. The RX channel selector only
+     * applies to the former — network rigs hand us mono already — so the
+     * settings screen greys it out when this is false.
+     */
+    public boolean isMicSource() {
+        return isMicRecord;
+    }
+
+    /**
+     * Whether a settings change from {@code from} to {@code to} on the RX
+     * channel selector needs the capture reopened. See
+     * {@link MicRecorder#reopenRequiredForChannelChange}.
+     */
+    public boolean rxChannelChangeNeedsReopen(int from, int to) {
+        return MicRecorder.reopenRequiredForChannelChange(from, to, micRecorder.isUsingUsbDirect());
+    }
+
+    public boolean isPhoneMicInUse() {
+        return phoneMicCaptureInUse(isRunning, isMicRecord, micRecorder.isUsingUsbDirect());
+    }
+
+    /**
      * Start recording. This method keeps the device in a continuous recording state.
      * Recording data is retrieved through the listener class GetVoiceData.
      * After the recording object reads data (audioRecord.read), it invokes the OnReceiveData callback for all listeners in the list.
@@ -184,6 +229,11 @@ public class HamRecorder {
     public void stopRecord() {
         micRecorder.stopRecord();
         isRunning = false;
+    }
+
+    /** The underlying mic capture, for routing introspection (issue #759). */
+    public MicRecorder getMicRecorder() {
+        return micRecorder;
     }
 
     /**

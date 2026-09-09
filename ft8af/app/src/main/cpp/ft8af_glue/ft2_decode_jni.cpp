@@ -34,6 +34,8 @@ int ft8_snr(const waterfall_t* wf, const candidate_t* candidate);
 }
 
 #include "ft8_call_hash.h"
+#include "ftx_hash_store.h"
+#include "ftx_feed.h"
 
 // ---------------------------------------------------------------------------
 // 22-bit WSJT-X callsign hash (copy of jni_ft8af.cpp's compute_n22, kept local so
@@ -62,15 +64,8 @@ static uint32_t ft2_compute_n22(const char* call)
 static const int kMaxCandidates = 140;
 static const int kMinScore = 10;
 
-// ---------------------------------------------------------------------------
-// Per-decoder callsign hash table (mirrors ft8_decoder.cpp).
-// ---------------------------------------------------------------------------
-#define FT2_HASHTABLE_SIZE 256
-typedef struct
-{
-    char callsign[12];
-    uint32_t hash; // 22-bit
-} ft2_hash_entry_t;
+// The per-decoder callsign hash table (ftx_hash_store_t) is shared with
+// ft8_decode_jni.cpp; see ftx_hash_store.h.
 
 struct ft2_decoder_state
 {
@@ -90,8 +85,7 @@ struct ft2_decoder_state
     ftx_message_t last_message; // populated by the most recent successful Analysis
     bool have_last;
 
-    ft2_hash_entry_t hashtable[FT2_HASHTABLE_SIZE];
-    int hashtable_count;
+    ftx_hash_store_t hashstore;
 };
 
 // --- hash interface callbacks (operate on the current decoder_state) --------
@@ -100,20 +94,9 @@ static __thread ft2_decoder_state* g_active = nullptr;
 static void ft2_hash_save(const char* callsign, uint32_t n22)
 {
     ft2_decoder_state* d = g_active;
-    if (!d || callsign[0] == '\0' || callsign[0] == '<')
+    if (!d)
         return;
-    uint16_t h10 = (n22 >> 12) & 0x3FF;
-    int idx = (h10 * 23) % FT2_HASHTABLE_SIZE;
-    while (d->hashtable[idx].callsign[0] != '\0')
-    {
-        if (d->hashtable[idx].hash == n22)
-            return; // already stored
-        idx = (idx + 1) % FT2_HASHTABLE_SIZE;
-    }
-    strncpy(d->hashtable[idx].callsign, callsign, 11);
-    d->hashtable[idx].callsign[11] = '\0';
-    d->hashtable[idx].hash = n22;
-    d->hashtable_count++;
+    ftx_hash_store_save(&d->hashstore, callsign, n22);
 }
 
 static bool ft2_hash_lookup(ftx_callsign_hash_type_e type, uint32_t hash, char* callsign)
@@ -124,19 +107,7 @@ static bool ft2_hash_lookup(ftx_callsign_hash_type_e type, uint32_t hash, char* 
         callsign[0] = '\0';
         return false;
     }
-    uint8_t shift = (type == FTX_CALLSIGN_HASH_10_BITS) ? 12 : (type == FTX_CALLSIGN_HASH_12_BITS ? 10 : 0);
-    for (int i = 0; i < FT2_HASHTABLE_SIZE; ++i)
-    {
-        if (d->hashtable[i].callsign[0] == '\0')
-            continue;
-        if (((d->hashtable[i].hash & 0x3FFFFFu) >> shift) == hash)
-        {
-            strcpy(callsign, d->hashtable[i].callsign);
-            return true;
-        }
-    }
-    callsign[0] = '\0';
-    return false;
+    return ftx_hash_store_lookup(&d->hashstore, type, hash, callsign);
 }
 
 // ---------------------------------------------------------------------------
@@ -267,11 +238,10 @@ static void ft2_feed(ft2_decoder_state* d, const float* data, int n)
 {
     if (!d || !d->mon_ready)
         return;
-    if (d->samples && n <= d->num_samples)
-        memcpy(d->samples, data, sizeof(float) * n);
-    monitor_reset(&d->mon);
-    for (int pos = 0; pos + d->mon.block_size <= n; pos += d->mon.block_size)
-        monitor_process(&d->mon, data + pos);
+    // Null-safe copy + monitor feed (shared with ft8_feed via ftx_feed.h). A
+    // NULL `data` (a failed JNI array pin under memory pressure) is a no-op,
+    // not a native SIGSEGV.
+    ftx_feed_monitor(&d->mon, d->samples, d->num_samples, data, n);
 }
 
 FT2JNI(void, DecoderFt2MonitorPressFloat)(JNIEnv* env, jobject, jfloatArray buffer, jlong handle)
@@ -281,6 +251,12 @@ FT2JNI(void, DecoderFt2MonitorPressFloat)(JNIEnv* env, jobject, jfloatArray buff
         return;
     jsize n = env->GetArrayLength(buffer);
     jfloat* data = env->GetFloatArrayElements(buffer, nullptr);
+    // GetFloatArrayElements may return NULL if the JVM can't pin the array (OOM/heap
+    // pressure), leaving a pending exception. Bail out before feeding or releasing —
+    // ReleaseFloatArrayElements with a NULL pointer is undefined. Mirrors the int16
+    // DecoderMonitorPress guard in ft8_decode_jni.cpp.
+    if (!data)
+        return;
     ft2_feed(d, data, n);
     env->ReleaseFloatArrayElements(buffer, data, JNI_ABORT);
 }

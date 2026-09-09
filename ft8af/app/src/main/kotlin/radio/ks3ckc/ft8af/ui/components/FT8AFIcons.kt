@@ -474,6 +474,42 @@ object FT8AFIcons {
             drawPath(crown, tint, style = stroke)
         }
     }
+
+    /** Microphone — voice-command push-to-talk button. */
+    @Composable
+    fun Mic(
+        modifier: Modifier = Modifier,
+        color: Color = Color.Unspecified,
+        size: Dp = 22.dp,
+        strokeWidth: Float = 1.6f,
+    ) {
+        val tint = if (color == Color.Unspecified) androidx.compose.material3.MaterialTheme.colorScheme.onSurface else color
+        Canvas(modifier = modifier.then(Modifier.sizeOf(size))) {
+            val s = this.size.width / 24f
+            val stroke = strokeStyle(strokeWidth * s)
+            // Capsule body
+            drawRoundRect(
+                color = tint,
+                topLeft = Offset(9f * s, 3f * s),
+                size = Size(6f * s, 10f * s),
+                cornerRadius = CornerRadius(3f * s, 3f * s),
+                style = stroke,
+            )
+            // Cradle arc (open at the top)
+            drawArc(
+                color = tint,
+                startAngle = 0f,
+                sweepAngle = 180f,
+                useCenter = false,
+                topLeft = Offset(6f * s, 5f * s),
+                size = Size(12f * s, 12f * s),
+                style = stroke,
+            )
+            // Stand + base
+            drawLine(tint, Offset(12f * s, 17f * s), Offset(12f * s, 20f * s), stroke.width, StrokeCap.Round)
+            drawLine(tint, Offset(9f * s, 20f * s), Offset(15f * s, 20f * s), stroke.width, StrokeCap.Round)
+        }
+    }
 }
 
 // Extension to apply a dp size uniformly

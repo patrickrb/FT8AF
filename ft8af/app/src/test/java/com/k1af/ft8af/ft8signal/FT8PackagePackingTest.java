@@ -145,4 +145,42 @@ public class FT8PackagePackingTest {
         assertThat((long) w1aw).isAtLeast(boundary);
         assertThat(k1abc).isNotEqualTo(w1aw);
     }
+
+    // ---- formatCallsign (short-callsign crash guard) -------------------------
+    // pack_c28 calls formatCallsign on the raw callsign BEFORE deciding whether
+    // it is standard, so the formatter has to tolerate any string. A decoder
+    // CRC-collision false decode can render a 1-2 char junk token into a
+    // callsign field, and encoding a reply to such a station (pack_c28(toCall))
+    // reaches formatCallsign. Its else branch ran substring(0, 3) with no length
+    // guard, throwing StringIndexOutOfBoundsException for length &lt; 3. We test
+    // formatCallsign directly because pack_c28 on a non-standard callsign falls
+    // through to the native getHash22 branch, which the bare JVM cannot load.
+
+    @Test
+    public void formatCallsign_twoCharToken_doesNotCrash() {
+        // Regression: "W1" (length 2) fell into the else branch's substring(0, 3)
+        // after only length>3 guards on the earlier branches, so it threw.
+        // Short non-standard input is passed through and right-padded to 6.
+        assertThat(FT8Package.formatCallsign("W1")).isEqualTo("W1    ");
+    }
+
+    @Test
+    public void formatCallsign_singleCharToken_doesNotCrash() {
+        // A length-1 field must also be handled without an index exception.
+        assertThat(FT8Package.formatCallsign("A")).isEqualTo("A     ");
+    }
+
+    @Test
+    public void formatCallsign_threeCharPrefix_stillLeftPads() {
+        // The length-3 [A-Z][0-9][A-Z] case is exactly the boundary the guard
+        // must still admit: "A0X" gets the leading-space pad, unchanged by the fix.
+        assertThat(FT8Package.formatCallsign("A0X")).isEqualTo(" A0X  ");
+    }
+
+    @Test
+    public void formatCallsign_standardCallsign_unchangedByGuard() {
+        // The common standard-callsign path (digit in position 2) is unaffected:
+        // "K1ABC" -> leading-space pad to the 6-char c6 field.
+        assertThat(FT8Package.formatCallsign("K1ABC")).isEqualTo(" K1ABC");
+    }
 }

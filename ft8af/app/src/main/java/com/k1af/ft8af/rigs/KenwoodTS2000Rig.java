@@ -59,17 +59,26 @@ public class KenwoodTS2000Rig extends BaseRig {
     /**
      * Read Meter RM;
      */
-    private void readMeters() {
+    protected void readMeters() {
         if (getConnector() != null) {
             clearBufferData();//clear buffer
-            getConnector().sendData(KenwoodTK90RigConstant.setRead590Meters());
+            sendMeterReadCommand();
         }
+    }
+
+    /**
+     * Send the CAT command(s) that request a meter reading. The TS-2000/TS-590
+     * just polls {@code RM;}; subclasses whose rig needs a meter-select first
+     * (e.g. the TX-500's {@code RM1;} SWR select) override this. Issue #599.
+     */
+    protected void sendMeterReadCommand() {
+        getConnector().sendData(KenwoodTK90RigConstant.setRead590Meters());
     }
 
     /**
      * Clear buffer data
      */
-    private void clearBufferData() {
+    protected void clearBufferData() {
         buffer.setLength(0);
     }
 
@@ -127,42 +136,56 @@ public class KenwoodTS2000Rig extends BaseRig {
     public void onReceiveData(byte[] data) {
         String s = new String(data);
 
-        if (!s.contains("\r")) {
-            buffer.append(s);
-            if (buffer.length() > 1000) clearBufferData();
-            //return;//data reception not yet complete.
-        } else {
-            if (s.indexOf("\r") > 0) {//received end-of-data, and delimiter is not the first character
-                buffer.append(s.substring(0, s.indexOf("\r")));
-            }
-            //begin parsing data
-            Yaesu3Command yaesu3Command = Yaesu3Command.getCommand(buffer.toString());
-            clearBufferData();//clear buffer
-            //put remaining data into buffer
-            buffer.append(s.substring(s.indexOf("\r") + 1));
+        // Kenwood frames every command and reply with ';' (e.g. the freq reply
+        // FA...; and the meter reply RM...;). The old code split on '\r', which
+        // Kenwood never sends, so no reply ever parsed -- frequency read-back and
+        // SWR/ALC protection were dead (issues #599/#589 on the TX-500 subclass).
+        // Drain every complete ';'/CR-terminated command in this read (the RM
+        // poll answers SWR then ALC back-to-back, so both replies routinely
+        // coalesce into one read) and carry only the trailing, unterminated
+        // fragment into the next call.
+        CatLineSplitter.Result result = CatLineSplitter.split(buffer.toString(), s, ";\r");
+        clearBufferData();
+        buffer.append(result.remainder);
+        // A runaway unterminated buffer must not grow without bound.
+        if (buffer.length() > 1000) clearBufferData();
 
-            if (yaesu3Command == null) {
-                return;
-            }
-            String cmd = yaesu3Command.getCommandID();
-            if (cmd.equalsIgnoreCase("FA")) {//frequency
-                long tempFreq = Yaesu3Command.getFrequency(yaesu3Command);
-                if (tempFreq != 0) {//if tempFreq==0, frequency is invalid
-                    setFreq(Yaesu3Command.getFrequency(yaesu3Command));
-                }
-            } else if (cmd.equalsIgnoreCase("RM")) {//meter
-                if (Yaesu3Command.is590MeterSWR(yaesu3Command)) {
-                    swr = Yaesu3Command.get590ALCOrSWR(yaesu3Command);
-                }
-                if (Yaesu3Command.is590MeterALC(yaesu3Command)) {
-                    alc = Yaesu3Command.get590ALCOrSWR(yaesu3Command);
-                }
-                showAlert();
-                notifyMeterData(Math.min(alc * 8, 255), Math.min(swr * 8, 255));
-            }
-
+        for (String frame : result.frames) {
+            processCommand(frame);
         }
+    }
 
+    private void processCommand(String frame) {
+        Yaesu3Command yaesu3Command = Yaesu3Command.getCommand(frame);
+        if (yaesu3Command == null) {
+            return;
+        }
+        String cmd = yaesu3Command.getCommandID();
+        if (cmd.equalsIgnoreCase("FA")) {//frequency
+            long tempFreq = Yaesu3Command.getFrequency(yaesu3Command);
+            if (tempFreq != 0) {//if tempFreq==0, frequency is invalid
+                setFreq(tempFreq);
+            }
+        } else if (cmd.equalsIgnoreCase("RM")) {//meter
+            handleMeterReply(yaesu3Command);
+        }
+    }
+
+    /**
+     * Parse an RM meter reply and forward the result to the protection
+     * controller. The TS-2000/TS-590 layout puts the selector at index 2 and the
+     * value at {@code substring(1,5)}; rigs with a different RM layout (e.g. the
+     * TX-500) override this. Issue #599.
+     */
+    protected void handleMeterReply(Yaesu3Command yaesu3Command) {
+        if (Yaesu3Command.is590MeterSWR(yaesu3Command)) {
+            swr = Yaesu3Command.get590ALCOrSWR(yaesu3Command);
+        }
+        if (Yaesu3Command.is590MeterALC(yaesu3Command)) {
+            alc = Yaesu3Command.get590ALCOrSWR(yaesu3Command);
+        }
+        showAlert();
+        notifyMeterData(Math.min(alc * 8, 255), Math.min(swr * 8, 255));
     }
 
     private void showAlert() {

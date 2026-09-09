@@ -11,8 +11,8 @@ public class Yaesu2Command {
                     +(int) (rawData[1] & 0x0f) * 100000
                     +((int) (rawData[2] >> 4) & 0xf) * 10000
                     +(int) (rawData[2] & 0x0f) * 1000
-                    +((int) (rawData[3] >> 4) & 0xf) * 10000
-                    +(int) (rawData[3] & 0x0f) * 1000;
+                    +((int) (rawData[3] >> 4) & 0xf) * 100
+                    +(int) (rawData[3] & 0x0f) * 10;
         }else {
             return -1;
         }

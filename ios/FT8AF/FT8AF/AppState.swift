@@ -1,3 +1,5 @@
+import FT8Audio
+import FT8DSP
 import FT8Engine
 import Foundation
 import Observation
@@ -14,6 +16,7 @@ final class AppState {
     let tx = TxState()
     let pota = PotaState()
     let toast = ToastState()
+    let clock = ClockState()
 
     /// The live engine is set once by `FT8AFApp` at startup. Views access it
     /// through `appState.engine` instead of a separate `@Environment` entry,
@@ -28,6 +31,10 @@ enum DecodeFilter: String, CaseIterable {
     case cq = "CQ Calls"
     case cqPota = "CQ POTA"
     case newDxcc = "New DXCC"
+    case newZone = "New Zone"
+    case newState = "New State"
+    case newGrid = "New Grid"
+    case newPrefix = "New Prefix"
     case needed = "Needed"
     case forMe = "For Me"
 }
@@ -53,6 +60,17 @@ struct DecodeMessage: Identifiable, Equatable {
     var grid: String
     var extra: String
     var slotIndex: Int
+    /// DT (seconds): how far into the RX window this signal started, straight
+    /// from the decoder (`DecodedMessage.timeSec`). Rendered per-row like
+    /// WSJT-X. Defaulted so the non-decode construction sites (UDP reply,
+    /// auto-open) can omit it.
+    var dtSec: Float = 0
+    /// Wall-clock arrival of the decode. Defaulted to construction time so
+    /// every existing `DecodeMessage(...)` call site (LiveEngine creates
+    /// messages the moment a slot decodes) gets the correct arrival without
+    /// changes; the decode list derives the relative "now / 32s / 5m" age
+    /// from it.
+    var arrival: Date = Date()
 
     static let mock: [DecodeMessage] = [
         DecodeMessage(utcTime: "12:30:00", callFrom: "W1AW", callTo: "CQ", snr: -5, freqHz: 1120, grid: "FN31", extra: "FN31", slotIndex: 0),
@@ -75,7 +93,22 @@ struct DecodeMessage: Identifiable, Equatable {
 @Observable @MainActor
 final class WaterfallState {
     var rows: [[UInt8]] = []
+    /// Optional UTC boundary label per row, kept in lockstep with `rows`:
+    /// non-nil on the first row of each 15 s FT8 period ("HH:mm:ss" of the
+    /// period start), nil elsewhere. `WaterfallCanvas` draws a divider + label
+    /// at these rows.
+    var rowTimestamps: [String?] = []
     var spectrum: [Float] = []
+    /// Top of the audio band the current `rows`/`spectrum` were built to, in
+    /// Hz. Maintained by the LiveEngine waterfall loop from the operator's
+    /// spectrum-width setting; on a live width change the loop clears the
+    /// old-width history and updates this.
+    var displayMaxHz: Float = 3000
+    /// RX input level of the most recent metering window (linear, 0..~1), for
+    /// the level indicator in the waterfall info bar. Classified via
+    /// `AudioInputLevel.fromPeakRms` in the view.
+    var inputPeak: Float = 0
+    var inputRms: Float = 0
     var txFreqHz: Float = 1500
     var isLive: Bool = false
     var noiseReduction: Bool = false
@@ -149,6 +182,7 @@ enum RigModel: String, CaseIterable, Identifiable {
     case ft991a = "FT-991A"
     case ft710 = "FT-710"
     case ft450d = "FT-450D"
+    case ft891 = "FT-891"
     case ts590s = "TS-590S"
     case k3 = "K3/K3S"
     case kx3 = "KX3"
@@ -165,6 +199,20 @@ enum PttMode: String, CaseIterable, Identifiable {
     case dtr = "DTR"
 
     var id: String { rawValue }
+
+    /// The PTT modes actually usable on iOS/iPadOS. Only VOX works: CAT/RTS/DTR
+    /// PTT all need a wired serial/CAT link the platform won't allow over USB.
+    /// The other cases are retained (a future Wi-Fi/rigctld bridge may use them)
+    /// but are not offered in the picker today.
+    static let selectableOnIOS: [PttMode] = [.vox]
+
+    /// The mode to actually run with on iOS: `self` when it's usable here,
+    /// otherwise VOX. A CAT/RTS/DTR value persisted by an older build is
+    /// migrated through this when settings load, so the model, the settings
+    /// summary and the next save all agree — not just the picker's display.
+    var coercedForIOS: PttMode {
+        Self.selectableOnIOS.contains(self) ? self : .vox
+    }
 }
 
 @Observable @MainActor
@@ -172,6 +220,10 @@ final class SettingsState {
     var myCall: String = ""
     var myGrid: String = ""
     var band: String = "20M"
+    // Operating mode. FT8 (15 s) is the default; FT4 (7.5 s) is RX + timing
+    // only for now — FT4 TX is deferred (see LiveEngine.scheduleTx). The active
+    // `ModeProfile` (via `mode.profile`) drives all slot/decode/waterfall timing.
+    var mode: Mode = .ft8
     var rigModel: RigModel = .none
     var pttMode: PttMode = .vox
     var txPowerWatts: Int = 5
@@ -188,12 +240,56 @@ final class SettingsState {
     var autoCallFollow: Bool = false
     var earlyDecode: Bool = false
     var autoCQAfterQSO: Bool = false
+    // Deep decode: raise the LDPC iteration cap for weaker-signal recovery at a
+    // small per-slot CPU cost. Default ON to match Android's
+    // `GeneralVariables.deepDecodeMode = true`.
+    var deepDecode: Bool = true
     // TX safety
     var txWatchdogMin: Int = 0          // 0 = off
     var stopAfterAttempts: Int = 0      // 0 = off
     // Radio
-    var spectrumWidthHz: Int = 3000
+    // Default 3500 matches the pre-configurable fixed span (desktop WF_MAX_HZ)
+    // so updating doesn't silently narrow the displayed band.
+    var spectrumWidthHz: Int = 3500
     var enabledBands: [String] = ["160M","80M","40M","30M","20M","17M","15M","12M","10M","6M"]
+    // WSJT-X UDP interface (GridTracker / JTAlert / N1MM / Log4OM interop).
+    var udpEnabled: Bool = false
+    var udpHost: String = "127.0.0.1"
+    var udpPort: Int = 2237
+    var udpAcceptRequests: Bool = false
+    // Online logging (Cloudlog/Wavelog family + QRZ.com logbook + PSK Reporter)
+    var cloudlogEnabled: Bool = false
+    var cloudlogUrl: String = ""
+    var cloudlogApiKey: String = ""
+    var cloudlogStationId: String = ""
+    var qrzLogbookEnabled: Bool = false
+    var qrzLogbookApiKey: String = ""
+    var pskReporterEnabled: Bool = false
+    // Decode highlights & filters
+    var highlightNewPota: Bool = true
+    var highlightNewDxcc: Bool = true
+    var highlightNewZone: Bool = true
+    var highlightNewState: Bool = true
+    var highlightNewGrid: Bool = true
+    var highlightNewPrefix: Bool = true
+    var highlightNewBand: Bool = true
+    var highlightWorked: Bool = true
+    var continentFilter: String = "All"   // All / NA / SA / EU / AF / AS / OC / AN
+    var distanceInMiles: Bool = false
+    /// Opt-in short-path beam heading in the decode row's meta line (default OFF,
+    /// like Android's `showBeamHeading`): only beam operators want the extra column.
+    var showBeamHeading: Bool = false
+    // Tune
+    var tuneTimeoutSec: Int = 30
+    // Manual whole-clock correction (ms), ±5 s, persisted. Combined with the
+    // runtime NTP offset (`ClockState.ntpOffsetMs`) and the automatic band-median
+    // DT correction (`ClockState.autoOffsetMs`) into the unified clock offset the
+    // engine adds to every wall-clock read (RX slot detection, TX key-up, logged
+    // UTC).
+    var manualClockOffsetMs: Int = 0
+    // Preferred audio input port name ("" = system default); matched by name
+    // so the choice survives replug/relaunch.
+    var preferredInputPort: String = ""
 }
 
 // MARK: - Rig
@@ -237,18 +333,73 @@ final class TxState {
     var conversationLog: [QsoLogEntry] = []
     /// Set by the engine when our CQ is answered, to auto-open QsoSheet.
     var autoOpenMessage: DecodeMessage?
+    /// The QSO engine's raw sequencer stage, mirrored by LiveEngine for the
+    /// TX message-selector chips (`TxStageSelector`).
+    var qsoStage: TxStage = .idle
+    /// Last SNR heard from the current target (for the Active QSO header).
+    var targetSnr: Int?
+    /// Callsigns waiting their turn (mirror of LiveEngine's `CallerQueue`).
+    var queuedCallers: [String] = []
+    /// TUNE carrier state: latched steady tone at the TX audio frequency.
+    var isTuning: Bool = false
+    var tuneRemainingSec: Int = 0
 }
 
 // MARK: - POTA
 
 @Observable @MainActor
 final class PotaState {
+    /// Start-form inputs (park reference + optional notes).
     var parkInput: String = ""
-    var parkRefs: [String] = []
     var notes: String = ""
-    var isActivating: Bool = false
-    var activationQsoCount: Int = 0
-    var activationStartTime: Date?
+    /// All activation sessions (past + at most one active). Loaded from
+    /// `PotaActivationStore` the first time the POTA screen appears and
+    /// persisted on every change; an unfinished activation therefore survives
+    /// app restarts.
+    var activations: [PotaActivationRecord] = []
+    /// Whether `activations` has been loaded from disk yet (the POTA screen
+    /// loads lazily on first appearance).
+    var activationsLoaded: Bool = false
+
+    /// The in-progress activation, if any (endedAtMs == nil).
+    var current: PotaActivationRecord? { activations.first { $0.isActive } }
+    var isActivating: Bool { current != nil }
+}
+
+// MARK: - Clock
+
+/// Runtime clock-sync state (the persisted manual correction lives in
+/// `SettingsState.manualClockOffsetMs`). Combined via `clockOffset` into the
+/// unified whole-clock correction the engine applies to RX + TX + logged UTC.
+@Observable @MainActor
+final class ClockState {
+    /// NTP-derived correction (ms) from the most recent "Sync now"; 0 until a
+    /// successful sync this install (not persisted — re-fetched on demand).
+    var ntpOffsetMs: Int64 = 0
+    /// When the last successful NTP sync landed (for the settings readout).
+    var lastSyncDate: Date?
+    /// Human-readable failure from the last sync attempt, or nil.
+    var lastSyncError: String?
+    /// True while a sync request is in flight (drives the button spinner).
+    var isSyncing: Bool = false
+    /// Mean decode DT (seconds) of the most recent slot that decoded anything;
+    /// nil until the first decode this session. A consistent bias across the
+    /// stations we hear proxies our own clock offset — the clock-health source.
+    var dtOffsetSec: Float?
+    /// Automatic band-median DT correction (ms) from `DtCalibrator`, written by
+    /// the decode loop as it self-syncs the clock off the band. Whole-clock (it
+    /// moves RX + TX + logged UTC), runtime-only (reset to 0 each session, like
+    /// `ntpOffsetMs`). Mirrors Android's `ClockSelfSync` → `UtcTimer.delay`.
+    var autoOffsetMs: Int64 = 0
+
+    /// The unified whole-clock offset combining NTP + the persisted manual
+    /// correction + the automatic band-median DT correction. The engine adds
+    /// `combinedMs` to every wall-clock read.
+    func clockOffset(manualMs: Int) -> ClockOffset {
+        ClockOffset(ntpOffsetMs: ntpOffsetMs,
+                    manualOffsetMs: Int64(manualMs),
+                    autoOffsetMs: autoOffsetMs)
+    }
 }
 
 // MARK: - Settings Persistence
@@ -261,6 +412,7 @@ enum SettingsPersistence {
         d.set(s.myCall, forKey: key("myCall"))
         d.set(s.myGrid, forKey: key("myGrid"))
         d.set(s.band, forKey: key("band"))
+        d.set(s.mode.rawValue, forKey: key("mode"))
         d.set(s.rigModel.rawValue, forKey: key("rigModel"))
         d.set(s.pttMode.rawValue, forKey: key("pttMode"))
         d.set(s.txPowerWatts, forKey: key("txPowerWatts"))
@@ -275,11 +427,37 @@ enum SettingsPersistence {
         d.set(s.huntCallsCQ, forKey: key("huntCallsCQ"))
         d.set(s.autoCallFollow, forKey: key("autoCallFollow"))
         d.set(s.earlyDecode, forKey: key("earlyDecode"))
+        d.set(s.deepDecode, forKey: key("deepDecode"))
         d.set(s.autoCQAfterQSO, forKey: key("autoCQAfterQSO"))
         d.set(s.txWatchdogMin, forKey: key("txWatchdogMin"))
         d.set(s.stopAfterAttempts, forKey: key("stopAfterAttempts"))
         d.set(s.spectrumWidthHz, forKey: key("spectrumWidthHz"))
         d.set(s.enabledBands, forKey: key("enabledBands"))
+        d.set(s.udpEnabled, forKey: key("udpEnabled"))
+        d.set(s.udpHost, forKey: key("udpHost"))
+        d.set(s.udpPort, forKey: key("udpPort"))
+        d.set(s.udpAcceptRequests, forKey: key("udpAcceptRequests"))
+        d.set(s.cloudlogEnabled, forKey: key("cloudlogEnabled"))
+        d.set(s.cloudlogUrl, forKey: key("cloudlogUrl"))
+        d.set(s.cloudlogApiKey, forKey: key("cloudlogApiKey"))
+        d.set(s.cloudlogStationId, forKey: key("cloudlogStationId"))
+        d.set(s.qrzLogbookEnabled, forKey: key("qrzLogbookEnabled"))
+        d.set(s.qrzLogbookApiKey, forKey: key("qrzLogbookApiKey"))
+        d.set(s.pskReporterEnabled, forKey: key("pskReporterEnabled"))
+        d.set(s.highlightNewPota, forKey: key("highlightNewPota"))
+        d.set(s.highlightNewDxcc, forKey: key("highlightNewDxcc"))
+        d.set(s.highlightNewZone, forKey: key("highlightNewZone"))
+        d.set(s.highlightNewState, forKey: key("highlightNewState"))
+        d.set(s.highlightNewGrid, forKey: key("highlightNewGrid"))
+        d.set(s.highlightNewPrefix, forKey: key("highlightNewPrefix"))
+        d.set(s.highlightNewBand, forKey: key("highlightNewBand"))
+        d.set(s.highlightWorked, forKey: key("highlightWorked"))
+        d.set(s.continentFilter, forKey: key("continentFilter"))
+        d.set(s.distanceInMiles, forKey: key("distanceInMiles"))
+        d.set(s.showBeamHeading, forKey: key("showBeamHeading"))
+        d.set(s.tuneTimeoutSec, forKey: key("tuneTimeoutSec"))
+        d.set(s.preferredInputPort, forKey: key("preferredInputPort"))
+        d.set(s.manualClockOffsetMs, forKey: key("manualClockOffsetMs"))
     }
 
     @MainActor static func load(into s: SettingsState) {
@@ -287,10 +465,13 @@ enum SettingsPersistence {
         if let v = d.string(forKey: key("myCall")) { s.myCall = v }
         if let v = d.string(forKey: key("myGrid")) { s.myGrid = v }
         if let v = d.string(forKey: key("band")) { s.band = v }
+        if let v = d.string(forKey: key("mode")), let m = Mode(rawValue: v) { s.mode = m }
         if let v = d.string(forKey: key("rigModel")),
            let m = RigModel(rawValue: v) { s.rigModel = m }
+        // Migrate a CAT/RTS/DTR value from an older build to VOX — the only
+        // mode that works on iOS (see `PttMode.coercedForIOS`).
         if let v = d.string(forKey: key("pttMode")),
-           let m = PttMode(rawValue: v) { s.pttMode = m }
+           let m = PttMode(rawValue: v) { s.pttMode = m.coercedForIOS }
         if d.object(forKey: key("txPowerWatts")) != nil {
             s.txPowerWatts = d.integer(forKey: key("txPowerWatts"))
         }
@@ -327,6 +508,9 @@ enum SettingsPersistence {
         if d.object(forKey: key("earlyDecode")) != nil {
             s.earlyDecode = d.bool(forKey: key("earlyDecode"))
         }
+        if d.object(forKey: key("deepDecode")) != nil {
+            s.deepDecode = d.bool(forKey: key("deepDecode"))
+        }
         if d.object(forKey: key("autoCQAfterQSO")) != nil {
             s.autoCQAfterQSO = d.bool(forKey: key("autoCQAfterQSO"))
         }
@@ -341,6 +525,75 @@ enum SettingsPersistence {
         }
         if let bands = d.stringArray(forKey: key("enabledBands")) {
             s.enabledBands = bands
+        }
+        if d.object(forKey: key("udpEnabled")) != nil {
+            s.udpEnabled = d.bool(forKey: key("udpEnabled"))
+        }
+        if let v = d.string(forKey: key("udpHost")), !v.isEmpty { s.udpHost = v }
+        if d.object(forKey: key("udpPort")) != nil {
+            let p = d.integer(forKey: key("udpPort"))
+            if p > 0 && p <= 65535 { s.udpPort = p }
+        }
+        if d.object(forKey: key("udpAcceptRequests")) != nil {
+            s.udpAcceptRequests = d.bool(forKey: key("udpAcceptRequests"))
+        }
+        if d.object(forKey: key("cloudlogEnabled")) != nil {
+            s.cloudlogEnabled = d.bool(forKey: key("cloudlogEnabled"))
+        }
+        if let v = d.string(forKey: key("cloudlogUrl")) { s.cloudlogUrl = v }
+        if let v = d.string(forKey: key("cloudlogApiKey")) { s.cloudlogApiKey = v }
+        if let v = d.string(forKey: key("cloudlogStationId")) { s.cloudlogStationId = v }
+        if d.object(forKey: key("qrzLogbookEnabled")) != nil {
+            s.qrzLogbookEnabled = d.bool(forKey: key("qrzLogbookEnabled"))
+        }
+        if let v = d.string(forKey: key("qrzLogbookApiKey")) { s.qrzLogbookApiKey = v }
+        if d.object(forKey: key("pskReporterEnabled")) != nil {
+            s.pskReporterEnabled = d.bool(forKey: key("pskReporterEnabled"))
+        }
+        if d.object(forKey: key("highlightNewPota")) != nil {
+            s.highlightNewPota = d.bool(forKey: key("highlightNewPota"))
+        }
+        if d.object(forKey: key("highlightNewDxcc")) != nil {
+            s.highlightNewDxcc = d.bool(forKey: key("highlightNewDxcc"))
+        }
+        if d.object(forKey: key("highlightNewZone")) != nil {
+            s.highlightNewZone = d.bool(forKey: key("highlightNewZone"))
+        }
+        if d.object(forKey: key("highlightNewState")) != nil {
+            s.highlightNewState = d.bool(forKey: key("highlightNewState"))
+        }
+        if d.object(forKey: key("highlightNewGrid")) != nil {
+            s.highlightNewGrid = d.bool(forKey: key("highlightNewGrid"))
+        }
+        if d.object(forKey: key("highlightNewPrefix")) != nil {
+            s.highlightNewPrefix = d.bool(forKey: key("highlightNewPrefix"))
+        }
+        if d.object(forKey: key("highlightNewBand")) != nil {
+            s.highlightNewBand = d.bool(forKey: key("highlightNewBand"))
+        }
+        if d.object(forKey: key("highlightWorked")) != nil {
+            s.highlightWorked = d.bool(forKey: key("highlightWorked"))
+        }
+        if let v = d.string(forKey: key("continentFilter")), !v.isEmpty {
+            s.continentFilter = v
+        }
+        if d.object(forKey: key("distanceInMiles")) != nil {
+            s.distanceInMiles = d.bool(forKey: key("distanceInMiles"))
+        }
+        if d.object(forKey: key("showBeamHeading")) != nil {
+            s.showBeamHeading = d.bool(forKey: key("showBeamHeading"))
+        }
+        if d.object(forKey: key("tuneTimeoutSec")) != nil {
+            s.tuneTimeoutSec = d.integer(forKey: key("tuneTimeoutSec"))
+        }
+        if let v = d.string(forKey: key("preferredInputPort")) {
+            s.preferredInputPort = v
+        }
+        if d.object(forKey: key("manualClockOffsetMs")) != nil {
+            // Coerce a persisted value into the allowed ±5 s range in case an
+            // older/edited build wrote something out of bounds.
+            s.manualClockOffsetMs = Int(ClockOffset.clampManualMs(
+                Int64(d.integer(forKey: key("manualClockOffsetMs")))))
         }
     }
 

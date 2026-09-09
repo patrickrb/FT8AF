@@ -63,16 +63,16 @@ struct ExportLogSheet: View {
                         } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: format.icon)
-                                    .font(.system(size: 14, weight: .semibold))
+                                    .font(.ft8afUI(size: 14, weight: .semibold))
                                     .foregroundStyle(selectedFormat == format ? accent : textFaint)
                                     .frame(width: 24)
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(format.rawValue)
-                                        .font(.system(size: 14, weight: .semibold))
+                                        .font(.ft8afUI(size: 14, weight: .semibold))
                                         .foregroundStyle(textPrimary)
                                     Text(format.description)
-                                        .font(.system(size: 11))
+                                        .font(.ft8afUI(size: 11))
                                         .foregroundStyle(textFaint)
                                 }
 
@@ -117,9 +117,9 @@ struct ExportLogSheet: View {
                         HStack {
                             Spacer()
                             Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.ft8afUI(size: 14, weight: .semibold))
                             Text("Export \(selectedFormat.rawValue)")
-                                .font(.system(size: 15, weight: .bold))
+                                .font(.ft8afUI(size: 15, weight: .bold))
                             Spacer()
                         }
                         .foregroundStyle(bgApp)

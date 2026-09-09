@@ -102,6 +102,31 @@ float *synth_gfsk_dphi_alloc(const uint8_t *symbols, int n_sym, float f0,
     return dphi;
 }
 
+// Number of output samples synth_gfsk_offset writes for a tone sequence at the
+// given rate: n_sym * n_spsym, where n_spsym is rounded EXACTLY as
+// synth_gfsk_dphi_alloc above computes it ((int)(0.5f + signal_rate *
+// symbol_period)). Callers size / bounds-check the output buffer with this so a
+// buffer sized with a different rounding — e.g. a Java float[] sized as
+// round(n_sym * symbol_period * signal_rate) instead of n_sym * round(...),
+// which diverges whenever signal_rate*symbol_period is not integral — can never
+// drive an out-of-bounds write in synth_gfsk_offset. Returns 0 for degenerate
+// input (matching synth_gfsk_dphi_alloc, which then produces no samples).
+int synth_gfsk_output_len(int n_sym, float symbol_period, int signal_rate)
+{
+    if (n_sym <= 0 || signal_rate <= 0 || symbol_period <= 0)
+        return 0;
+    int n_spsym = (int)(0.5f + signal_rate * symbol_period);
+    if (n_spsym <= 0)
+        return 0;
+    // Compute in int64 so a corrupted, out-of-range signal_rate can't overflow the
+    // signed int multiply (UB, and it would hand a bogus length back to the JNI bounds
+    // check that trusts this). Return 0 on overflow rather than a wrapped value.
+    int64_t n_wave = (int64_t)n_sym * n_spsym;
+    if (n_wave > INT32_MAX)
+        return 0;
+    return (int)n_wave;
+}
+
 // Synthesise a GFSK waveform from a tone sequence, writing into
 // signal[offset .. offset + n_sym*n_spsym).
 //

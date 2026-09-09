@@ -216,60 +216,36 @@ class CarQsoStatusTest {
         assertThat(shouldInvalidateForTick(lastSecond = -1, newSecond = 15)).isTrue()
     }
 
-    // -- buildCarPotaLine --
+    // --- Pane row selection ------------------------------------------------
+    // The status/band/POTA/session row content, badges, and color spans are
+    // built by the design dashboard helpers, covered in CarDashboardTest.
 
     @Test
-    fun buildCarPotaLine_nullWhenNoActivation() {
-        assertThat(buildCarPotaLine(null, null)).isNull()
-        assertThat(buildCarPotaLine("", null)).isNull()
-        assertThat(buildCarPotaLine("  ", null)).isNull()
+    fun selectCarPaneRows_underLimit_keepsAllInOrder() {
+        val p = listOf(CAR_ROW_HEADLINE, CAR_ROW_SEQ_SLOT, CAR_ROW_BAND)
+        assertThat(selectCarPaneRows(p, 3)).containsExactly(0, 1, 2).inOrder()
+        assertThat(selectCarPaneRows(p, 10)).containsExactly(0, 1, 2).inOrder()
     }
 
     @Test
-    fun buildCarPotaLine_formatsSingleParkWithCount() {
-        val spec = buildCarPotaLine("K-1234", 3)
-        assertThat(spec?.resId).isEqualTo(R.string.car_pota_line)
-        assertThat(spec?.args).containsExactly("K-1234", 3).inOrder()
-    }
-
-    @Test
-    fun buildCarPotaLine_formatsMultiParkDisplay() {
-        val spec = buildCarPotaLine("K-1234 + K-5678", 12)
-        assertThat(spec?.resId).isEqualTo(R.string.car_pota_line)
-        assertThat(spec?.args).containsExactly("K-1234 + K-5678", 12).inOrder()
-    }
-
-    @Test
-    fun buildCarPotaLine_zeroCount() {
-        val spec = buildCarPotaLine("K-0001", 0)
-        assertThat(spec?.resId).isEqualTo(R.string.car_pota_line)
-        assertThat(spec?.args).containsExactly("K-0001", 0).inOrder()
-    }
-
-    @Test
-    fun buildCarPotaLine_nullCountTreatedAsZero() {
-        val spec = buildCarPotaLine("K-9999", null)
-        assertThat(spec?.resId).isEqualTo(R.string.car_pota_line)
-        assertThat(spec?.args).containsExactly("K-9999", 0).inOrder()
-    }
-
-    // -- pskSpotsToMarkers ("who heard me" rings) --
-
-    @Test
-    fun pskSpotsToMarkers_mapsCoordsAndColor_skipsZeroZero() {
-        val spots = listOf(
-            radio.ks3ckc.ft8af.pskreporter.PskReporterSpot(
-                "VE3XYZ", "FN03", 43.0, -79.0, 14_074_000L, -10, "FT8", 0L,
-            ),
-            // Gridless report at 0,0 \u2014 should be dropped, not plotted off Africa.
-            radio.ks3ckc.ft8af.pskreporter.PskReporterSpot(
-                "BADXYZ", "", 0.0, 0.0, 14_074_000L, -10, "FT8", 0L,
-            ),
+    fun selectCarPaneRows_tightLimit_dropsBandBeforeActivationRows() {
+        // Build order: headline, seq/slot, band, then activation rows.
+        val p = listOf(
+            CAR_ROW_HEADLINE, CAR_ROW_SEQ_SLOT, CAR_ROW_BAND,
+            CAR_ROW_ACTIVATION, CAR_ROW_ACTIVATION,
         )
-        val markers = pskSpotsToMarkers(spots)
-        assertThat(markers).hasSize(1)
-        assertThat(markers[0].lat).isEqualTo(43.0)
-        assertThat(markers[0].lon).isEqualTo(-79.0)
-        assertThat(markers[0].colorInt).isEqualTo(PSK_MARKER_COLOR)
+        // 3-row host: band is sacrificed, the earlier activation row survives
+        // (wins the tie against the later one).
+        assertThat(selectCarPaneRows(p, 3)).containsExactly(0, 1, 3).inOrder()
+        // 4-row host: both activation rows fit; band is still the one dropped.
+        assertThat(selectCarPaneRows(p, 4)).containsExactly(0, 1, 3, 4).inOrder()
+        // 5-row host: everything fits, build order preserved.
+        assertThat(selectCarPaneRows(p, 5)).containsExactly(0, 1, 2, 3, 4).inOrder()
+    }
+
+    @Test
+    fun selectCarPaneRows_zeroOrNegativeLimit_isEmpty() {
+        assertThat(selectCarPaneRows(listOf(0, 1), 0)).isEmpty()
+        assertThat(selectCarPaneRows(listOf(0, 1), -2)).isEmpty()
     }
 }

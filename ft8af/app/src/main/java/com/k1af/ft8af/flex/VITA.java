@@ -81,7 +81,10 @@ public class VITA {
     public int classId;//For FLEX this should be 0x534CFFF, combining informationClassCode and packetClassCode
     public long classId64;
 
-    public byte[] payload = null;
+    //Shared empty payload so header-only/malformed packets (and the field default)
+    //don't each allocate a throwaway 0-length array on the high-rate UDP path.
+    private static final byte[] EMPTY_PAYLOAD = new byte[0];
+    public byte[] payload = EMPTY_PAYLOAD;//never null: UDP stream handlers deref this without a null check
     public long trailer;
     public boolean isAvailable = false;//Whether the radio object is valid
 
@@ -332,7 +335,18 @@ public class VITA {
         if (data.length < VITAmin) return;
 
         isAvailable = true;//Data length reaches 28 bytes, indicating it is valid
-        packetType = VitaPacketType.values()[(data[0] >> 4) & 0x0f];
+        //The VITA49 packet-type field is 4 bits (0..15), but only 6 types are
+        //defined. Reserved values (6..15) must not index the enum or they throw
+        //ArrayIndexOutOfBoundsException. That exception would escape the UDP/TCP
+        //read loops (which catch only IOException) and crash the whole app, so
+        //treat an unrecognized packet type as an invalid packet and bail out.
+        int packetTypeIndex = (data[0] >> 4) & 0x0f;
+        VitaPacketType[] packetTypes = VitaPacketType.values();
+        if (packetTypeIndex >= packetTypes.length) {
+            isAvailable = false;
+            return;
+        }
+        packetType = packetTypes[packetTypeIndex];
         classIdPresent = (data[0] & 0x8) == 0x8;//Indicates whether the packet contains a class identifier (class ID) field
         trailerPresent = (data[0] & 0x4) == 0x4;//Indicates whether the packet contains a trailer
         tsi = VitaTSI.values()[(data[1] >> 6) & 0x3];//If timestamp exists, indicates the type of the integer part
@@ -395,9 +409,19 @@ public class VITA {
 
 
         //Log.e(TAG, String.format("VITA: data length:%d,offset:%d",data.length,offset) );
-        if (offset < data.length) {
-            payload = new byte[data.length - offset - (trailerPresent ? 2 : 0)];//If there is a trailer, subtract one word position
-            System.arraycopy(data, offset, payload, 0, payload.length);
+        // A truncated or malformed packet can leave the parse cursor (offset) at or
+        // past the end of the buffer, or declare a trailer with no room for it, which
+        // made `data.length - offset - 2` negative -> NegativeArraySizeException. A
+        // valid header-only packet (offset == data.length) previously left `payload`
+        // null. Both escaped the IOException-only UDP/TCP read loops and crashed the
+        // whole app, since the Flex/Xiegu stream handlers dereference `payload` with
+        // no null check. Clamp the length to >= 0 and always leave `payload` non-null.
+        int payloadLength = data.length - offset - (trailerPresent ? 2 : 0);//trailer takes one 16-bit word
+        if (payloadLength <= 0) {
+            payload = EMPTY_PAYLOAD;//reuse the shared empty array; still non-null
+        } else {
+            payload = new byte[payloadLength];
+            System.arraycopy(data, offset, payload, 0, payloadLength);
         }
         if (trailerPresent) {
             trailer = ((((int) data[data.length - 2]) & 0x00ff) << 8) | ((int) data[data.length - 1]) & 0x00ff;

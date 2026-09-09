@@ -1,0 +1,228 @@
+{
+  "" : {
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/FT8Engine-master.dia",
+    "emit-module-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/FT8Engine-master-emit-module.d",
+    "emit-module-diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/FT8Engine-master-emit-module.dia",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/FT8Engine-master.swiftdeps"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/Adif.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/Adif.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/Adif.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/Adif.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/Adif.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/Adif.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/Adif.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/Adif.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/Adif~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/CallerQueue.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/CallerQueue.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/CallerQueue.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/CallerQueue.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/CallerQueue.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/CallerQueue.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/CallerQueue.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/CallerQueue.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/CallerQueue~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/CloudlogClient.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/CloudlogClient.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/CloudlogClient.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/CloudlogClient.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/CloudlogClient.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/CloudlogClient.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/CloudlogClient.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/CloudlogClient.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/CloudlogClient~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/DecodeAnnotator.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DecodeAnnotator~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/DisplayFormatters.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DisplayFormatters.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DisplayFormatters.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DisplayFormatters.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DisplayFormatters.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DisplayFormatters.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DisplayFormatters.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DisplayFormatters.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DisplayFormatters~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/DxccPrefix.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DxccPrefix.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DxccPrefix.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DxccPrefix.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DxccPrefix.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DxccPrefix.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DxccPrefix.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DxccPrefix.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/DxccPrefix~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/OnlineLogAdif.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/OnlineLogAdif.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/OnlineLogAdif.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/OnlineLogAdif.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/OnlineLogAdif.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/OnlineLogAdif.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/OnlineLogAdif.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/OnlineLogAdif.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/OnlineLogAdif~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/OnlineLogSync.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/OnlineLogSync.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/OnlineLogSync.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/OnlineLogSync.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/OnlineLogSync.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/OnlineLogSync.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/OnlineLogSync.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/OnlineLogSync.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/OnlineLogSync~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/PotaActivations.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaActivations.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaActivations.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaActivations.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaActivations.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaActivations.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaActivations.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaActivations.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaActivations~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/PotaAdif.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaAdif.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaAdif.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaAdif.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaAdif.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaAdif.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaAdif.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaAdif.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaAdif~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/PotaSpots.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaSpots.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaSpots.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaSpots.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaSpots.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaSpots.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaSpots.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaSpots.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PotaSpots~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/PskReporter.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PskReporter.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PskReporter.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PskReporter.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PskReporter.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PskReporter.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PskReporter.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PskReporter.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/PskReporter~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/QrzLogbookClient.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QrzLogbookClient.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QrzLogbookClient.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QrzLogbookClient.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QrzLogbookClient.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QrzLogbookClient.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QrzLogbookClient.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QrzLogbookClient.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QrzLogbookClient~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/QsoEngine.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QsoEngine.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QsoEngine.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QsoEngine.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QsoEngine.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QsoEngine.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QsoEngine.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QsoEngine.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QsoEngine~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/QsoRecord.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QsoRecord.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QsoRecord.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QsoRecord.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QsoRecord.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QsoRecord.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QsoRecord.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QsoRecord.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/QsoRecord~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/TuneTone.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TuneTone.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TuneTone.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TuneTone.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TuneTone.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TuneTone.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TuneTone.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TuneTone.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TuneTone~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/TxStageSelector.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxStageSelector.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxStageSelector.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxStageSelector.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxStageSelector.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxStageSelector.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxStageSelector.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxStageSelector.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxStageSelector~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/TxSupervisor.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxSupervisor.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxSupervisor.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxSupervisor.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxSupervisor.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxSupervisor.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxSupervisor.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxSupervisor.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxSupervisor~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/TxTiming.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxTiming.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxTiming.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxTiming.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxTiming.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxTiming.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxTiming.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxTiming.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/TxTiming~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/Util.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/Util.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/Util.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/Util.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/Util.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/Util.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/Util.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/Util.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/Util~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/WsjtxCodec.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/WsjtxCodec.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/WsjtxCodec.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/WsjtxCodec.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/WsjtxCodec.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/WsjtxCodec.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/WsjtxCodec.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/WsjtxCodec.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/WsjtxCodec~partial.swiftmodule"
+  },
+  "/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Engine/WsjtxUdpService.swift" : {
+    "const-values" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/WsjtxUdpService.swiftconstvalues",
+    "dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/WsjtxUdpService.d",
+    "diagnostics" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/WsjtxUdpService.dia",
+    "index-unit-output-path" : "/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/WsjtxUdpService.o",
+    "llvm-bc" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/WsjtxUdpService.bc",
+    "object" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/WsjtxUdpService.o",
+    "swift-dependencies" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/WsjtxUdpService.swiftdeps",
+    "swiftmodule" : "/Users/patrickburns/Projects/FT8AF/ios/FT8AF/build/DerivedData/Build/Intermediates.noindex/FT8AFKit.build/Debug-iphonesimulator/FT8Engine.build/Objects-normal/arm64/WsjtxUdpService~partial.swiftmodule"
+  }
+}

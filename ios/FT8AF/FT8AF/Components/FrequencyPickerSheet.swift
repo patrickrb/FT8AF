@@ -36,14 +36,14 @@ struct FrequencyPickerSheet: View {
                                 .frame(width: 8, height: 8)
 
                             Text(item.band)
-                                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                                .font(.ft8afMono(size: 16, weight: .bold))
                                 .foregroundStyle(textPrimary)
 
                             Text("—")
                                 .foregroundStyle(textDim)
 
                             Text(item.freq)
-                                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                .font(.ft8afMono(size: 14, weight: .medium))
                                 .foregroundStyle(textMuted)
 
                             Spacer()

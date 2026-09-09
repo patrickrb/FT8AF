@@ -122,21 +122,6 @@ public class XieGu6100Rig extends BaseRig {
     }
 
     /**
-     * Find the position of the command end marker. Returns -1 if not found.
-     *
-     * @param data data
-     * @return position
-     */
-    private int getCommandEnd(byte[] data) {
-        for (int i = 0; i < data.length; i++) {
-            if (data[i] == (byte) 0xFD) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    /**
      * Find command header. Returns -1 if not found, otherwise returns position of first FE FE.
      *
      * @param data data
@@ -244,31 +229,15 @@ public class XieGu6100Rig extends BaseRig {
 
     @Override
     public void onReceiveData(byte[] data) {
-        int commandEnd = getCommandEnd(data);
-        if (commandEnd <= -1) {//no command end marker
-            byte[] temp = new byte[dataBuffer.length + data.length];
-            System.arraycopy(dataBuffer, 0, temp, 0, dataBuffer.length);
-            System.arraycopy(data, 0, temp, dataBuffer.length, data.length);
-            dataBuffer = temp;
-        } else {
-            byte[] temp = new byte[dataBuffer.length + commandEnd + 1];
-            System.arraycopy(dataBuffer, 0, temp, 0, dataBuffer.length);
-            dataBuffer = temp;
-            System.arraycopy(data, 0, dataBuffer, dataBuffer.length - commandEnd - 1, commandEnd + 1);
+        // Append to any partial command buffered from a previous callback, then
+        // process every complete command (each ending in 0xFD) and keep only the
+        // trailing incomplete bytes for next time. See CivFrameSplitter for why the
+        // previous hand-rolled reassembly dropped fragments and injected stray bytes.
+        CivFrameSplitter.Result result = CivFrameSplitter.split(dataBuffer, data);
+        for (byte[] command : result.commands) {
+            analysisCommand(command);
         }
-        if (commandEnd != -1) {
-            analysisCommand(dataBuffer);
-        }
-        dataBuffer = new byte[0];//clear buffer
-        if (commandEnd <= -1 || commandEnd < data.length) {
-            byte[] temp = new byte[data.length - commandEnd + 1];
-            for (int i = 0; i < data.length - commandEnd - 1; i++) {
-                temp[i] = data[commandEnd + i + 1];
-            }
-            dataBuffer = temp;
-        }
-
-
+        dataBuffer = result.remainder;
     }
 
     @Override
@@ -277,8 +246,12 @@ public class XieGu6100Rig extends BaseRig {
             //if ft8cns mode, transmit a91 data packet
             if (GeneralVariables.instructionSet == InstructionSet.XIEGU_6100_FT8CNS) {
                 //Log.e(TAG,"generate A91");
-                getConnector().sendFt8A91(GenerateFT8.generateA91(message, true)
-                        , GeneralVariables.getBaseFrequency());
+                byte[] a91 = GenerateFT8.generateA91(message, true);
+                if (a91 == null) {//invalid callsign: generateA91 aborted (toast already shown)
+                    setPTT(false);
+                    return;
+                }
+                getConnector().sendFt8A91(a91, GeneralVariables.getBaseFrequency());
             } else {//otherwise transmit audio data normally
                 float[] data = GenerateFT8.generateFt8(message, GeneralVariables.getBaseFrequency()
                         , 12000);//ICOM rig audio sample rate is 12000

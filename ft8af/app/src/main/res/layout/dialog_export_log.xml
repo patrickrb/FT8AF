@@ -70,15 +70,19 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="From (YYYYMMDD, optional)"
+                android:text="From (optional)"
                 android:textColor="@color/help_dialog_text_color"
                 android:textSize="11sp" />
             <EditText
                 android:id="@+id/exportDateStart"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="any"
+                android:contentDescription="From date, tap the calendar icon or type YYYYMMDD"
+                android:drawableEnd="@drawable/ic_calendar_today"
+                android:drawablePadding="4dp"
+                android:hint="YYYYMMDD"
                 android:inputType="number"
+                android:maxLength="8"
                 android:textColor="@color/help_dialog_text_color"
                 android:textColorHint="@color/help_dialog_text_color" />
         </LinearLayout>
@@ -91,15 +95,19 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="To (YYYYMMDD, optional)"
+                android:text="To (optional)"
                 android:textColor="@color/help_dialog_text_color"
                 android:textSize="11sp" />
             <EditText
                 android:id="@+id/exportDateEnd"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="any"
+                android:contentDescription="To date, tap the calendar icon or type YYYYMMDD"
+                android:drawableEnd="@drawable/ic_calendar_today"
+                android:drawablePadding="4dp"
+                android:hint="YYYYMMDD"
                 android:inputType="number"
+                android:maxLength="8"
                 android:textColor="@color/help_dialog_text_color"
                 android:textColorHint="@color/help_dialog_text_color" />
         </LinearLayout>

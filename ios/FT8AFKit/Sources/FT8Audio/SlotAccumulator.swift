@@ -69,10 +69,19 @@ public final class SlotAccumulator: @unchecked Sendable {
     /// Copy the most recent full slot (`FT8.slotSamples`), front-padding with
     /// silence if fewer samples have been captured so far (mirror take_slot).
     public func takeSlot() -> [Float] {
+        takeTrailing(FT8.slotSamples)
+    }
+
+    /// Copy the most recent `count` samples, front-padding with silence if fewer
+    /// have been captured so far. The generalization of `takeSlot()` used by the
+    /// early-decode path, which takes a shorter (~13.5 s) trailing window ending
+    /// partway through the in-progress slot rather than a full 15 s slot.
+    public func takeTrailing(_ count: Int) -> [Float] {
         lock.lock(); defer { lock.unlock() }
-        var out = [Float](repeating: 0, count: FT8.slotSamples)
-        let n = min(filled, FT8.slotSamples)
-        let startDst = FT8.slotSamples - n // most recent n land at the end
+        let want = max(0, count)
+        var out = [Float](repeating: 0, count: want)
+        let n = min(filled, want)
+        let startDst = want - n // most recent n land at the end
         copyRecent(n, into: &out, dstOffset: startDst)
         return out
     }

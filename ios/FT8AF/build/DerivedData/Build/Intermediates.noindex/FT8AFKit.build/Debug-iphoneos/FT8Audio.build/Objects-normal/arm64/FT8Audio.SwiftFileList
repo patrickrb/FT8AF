@@ -1,0 +1,12 @@
+/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/AudioInputLevel.swift
+/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/AudioPortLabel.swift
+/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/ClockHealth.swift
+/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/ClockOffset.swift
+/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/DecodeScheduler.swift
+/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/DtCalibrator.swift
+/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/SlotAccumulator.swift
+/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/SlotClock.swift
+/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/Sntp.swift
+/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/WaterfallAxis.swift
+/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/WaterfallRowBuilder.swift
+/Users/patrickburns/Projects/FT8AF/ios/FT8AFKit/Sources/FT8Audio/WaterfallTimestampGate.swift

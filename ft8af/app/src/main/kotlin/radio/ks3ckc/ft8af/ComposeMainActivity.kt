@@ -16,7 +16,6 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
-import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -37,12 +36,12 @@ import androidx.lifecycle.Observer
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
+import radio.ks3ckc.ft8af.crash.CrashReporting
 import radio.ks3ckc.ft8af.sync.QsoAutoSync
 import radio.ks3ckc.ft8af.util.bluetoothAdapter
 import com.k1af.ft8af.service.RxForegroundService
 import com.k1af.ft8af.service.RxServiceController
 import com.k1af.ft8af.bluetooth.BluetoothStateBroadcastReceive
-import com.k1af.ft8af.bluetooth.ScoPolicy
 import com.k1af.ft8af.connector.CableSerialPort
 import com.k1af.ft8af.connector.ConnectMode
 import com.k1af.ft8af.callsign.CallsignDatabase
@@ -50,6 +49,7 @@ import com.k1af.ft8af.database.DatabaseOpr
 import com.k1af.ft8af.database.OnAfterQueryConfig
 import com.k1af.ft8af.database.OperationBand
 import com.k1af.ft8af.location.GpsClockUpdater
+import com.k1af.ft8af.timer.NtpClockUpdater
 import com.k1af.ft8af.location.GridLocationUpdater
 import com.k1af.ft8af.log.ImportSharedLogs
 import com.k1af.ft8af.wave.UsbAudioNative
@@ -91,13 +91,18 @@ class ComposeMainActivity : AppCompatActivity() {
         val permissions = buildPermissionsList()
         checkPermission(permissions)
 
-        // Edge-to-edge is mandatory on Android 15 (targetSdk 35) and the old
+        // Edge-to-edge has been mandatory since Android 15 (API 35) — and stays
+        // enforced on our current target — while the old
         // FLAG_FULLSCREEN / window.statusBarColor APIs are deprecated. Opt into
         // edge-to-edge, then preserve the app's original full-screen look by
         // hiding the system bars immersively (transient reveal on swipe) instead
         // of the deprecated fullscreen flag. Keep the screen on as before.
         enableEdgeToEdge()
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Screen-awake is now a setting (default on, matching the previous
+        // hard-coded behaviour). Config has not hydrated yet at this point, so
+        // this applies the default; onResume re-applies once the stored value is
+        // loaded, and the settings toggle applies it live.
+        ScreenWake.apply(window, GeneralVariables.keepScreenOn)
 
         super.onCreate(savedInstanceState)
 
@@ -132,6 +137,17 @@ class ComposeMainActivity : AppCompatActivity() {
         UsbAudioNative.setTxVolume(GeneralVariables.volumePercent)
         GeneralVariables.mutableVolumePercent.observe(this) { v ->
             if (v != null) UsbAudioNative.setTxVolume(v)
+        }
+
+        // Re-apply the screen-awake preference once config hydration finishes.
+        // onCreate/onResume both run before initData()'s async config load
+        // completes, so they apply the default (on); if the stored value is
+        // actually false the screen would stay awake until the next resume or a
+        // manual toggle. Observing mutableConfigLoaded catches the moment the real
+        // value lands. Lifecycle-bound and delivered on the main thread, so the
+        // window flag is set safely.
+        mainViewModel.mutableConfigLoaded.observe(this) { loaded ->
+            if (loaded == true) ScreenWake.apply(window, GeneralVariables.keepScreenOn)
         }
 
         // Register back press handler. Priority: dismiss the QSO sheet if
@@ -252,7 +268,13 @@ class ComposeMainActivity : AppCompatActivity() {
             com.k1af.ft8af.alert.DxAlertNotifier.EXTRA_CALLSIGN,
         ) ?: return
         if (callsign.isBlank()) return
-        fileLog("handleAlertIntent: preselect $callsign")
+        // The full callsign goes to the local debug.log, but a callsign is PII in
+        // this app, so the Sentry breadcrumb is redacted (see fileLog / the
+        // "callsign is never sent" promise).
+        fileLog(
+            "handleAlertIntent: preselect $callsign",
+            breadcrumbMsg = "handleAlertIntent: preselect <redacted>",
+        )
         mainViewModel.mutablePreselectCallsign.postValue(callsign)
     }
 
@@ -390,8 +412,18 @@ class ComposeMainActivity : AppCompatActivity() {
                     }
                     GridLocationUpdater.refresh(applicationContext, mainViewModel)
                 }
+                // Defensive: a hand-edited or pre-feature-restore config could have both
+                // flags persisted true. Enforce the mutual-exclusion invariant here too —
+                // GPS wins as the original feature — before either updater starts.
+                if (GeneralVariables.disciplineClockFromGPS && GeneralVariables.disciplineClockFromNtp) {
+                    GeneralVariables.disciplineClockFromNtp = false
+                    mainViewModel.databaseOpr.writeConfig("disciplineClockFromNtp", "0", null)
+                }
                 if (GeneralVariables.disciplineClockFromGPS) {
                     GpsClockUpdater.refresh(applicationContext)
+                }
+                if (GeneralVariables.disciplineClockFromNtp) {
+                    NtpClockUpdater.refresh(applicationContext)
                 }
                 mainViewModel.ft8TransmitSignal.setTimer_sec(GeneralVariables.transmitDelay)
 
@@ -415,11 +447,10 @@ class ComposeMainActivity : AppCompatActivity() {
                 // review); gating on connect mode at all keeps a car/headphones paired
                 // for music from being yanked out of A2DP (the original bug).
                 Handler(Looper.getMainLooper()).post {
-                    if (ScoPolicy.shouldEnterHeadsetMode(
-                            GeneralVariables.connectMode, mainViewModel.isBTConnected())
-                    ) {
-                        mainViewModel.setBlueToothOn()
-                    }
+                    // Enter Bluetooth headset (SCO) mode if a Bluetooth rig is in use OR the
+                    // persisted audio device is a Bluetooth-SCO headset (issue #723). The
+                    // decision + AudioRecord rebuild live in the view model.
+                    mainViewModel.refreshBluetoothHeadsetMode()
                 }
 
                 // USB auto-connect is driven by the mutableSerialPorts observer; Bluetooth has
@@ -609,6 +640,14 @@ class ComposeMainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Re-apply the screen-awake preference. onCreate runs before config
+        // hydration, so the stored value may differ from the default it applied;
+        // this also covers returning from the settings screen.
+        ScreenWake.apply(window, GeneralVariables.keepScreenOn)
+    }
+
     override fun onStop() {
         // A tune carrier must never outlive the operator's attention (issue
         // #408): backgrounding or swiping the app away mid-tune force-stops the
@@ -698,8 +737,20 @@ class ComposeMainActivity : AppCompatActivity() {
         }
     }
 
-    /** Write a line to /sdcard/Android/data/com.k1af.ft8af/files/debug.log */
-    private fun fileLog(msg: String) {
+    /**
+     * Write a line to /sdcard/Android/data/com.k1af.ft8af/files/debug.log.
+     *
+     * The full [msg] always goes to the on-device debug.log and logcat, but only
+     * [breadcrumbMsg] is mirrored into Sentry — pass a redacted string (or null) for
+     * lines carrying PII (callsign, grid, location) so it never rides along with a
+     * crash report, keeping the "callsign/location are never sent" promise.
+     */
+    private fun fileLog(msg: String, breadcrumbMsg: String? = msg) {
+        // Mirror the (possibly redacted) line into Sentry as a breadcrumb so a crash
+        // report carries the same event trail (CAT sends, band changes, USB
+        // attach…). No-op unless crash reporting is enabled. First, so it fires
+        // even when the external dir is unavailable and the file write is skipped.
+        breadcrumbMsg?.let { CrashReporting.breadcrumb(it) }
         try {
             val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
             val dir = getExternalFilesDir(null) ?: return

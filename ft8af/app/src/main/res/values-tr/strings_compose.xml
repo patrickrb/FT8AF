@@ -237,6 +237,25 @@
     <string name="pota_tab_activate">Aktive Et</string>
     <string name="pota_tab_hunt">Av</string>
     <string name="pota_tab_history">Geçmiş</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">az önce</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="one">%d sn önce</item>
+        <item quantity="other">%d sn önce</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="one">%d dk önce</item>
+        <item quantity="other">%d dk önce</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="one">%d sa önce</item>
+        <item quantity="other">%d sa önce</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="one">%d g önce</item>
+        <item quantity="other">%d g önce</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">UTC saatini göster</string>
     <string name="pota_start_activation">Aktivasyonu başlat</string>
     <string name="pota_park_reference_label">Park referansı (ör. K-1234)</string>
     <string name="pota_notes_optional_label">Notlar (isteğe bağlı)</string>
@@ -395,6 +414,9 @@
     <string name="settings_tx_watchdog_desc">Zaman aşımından sonra yayını otomatik durdur</string>
     <string name="settings_stop_after">Şundan Sonra Durdur</string>
     <string name="settings_stop_after_desc">N yanıtsız denemeden sonra çağrıyı durdur</string>
+    <string name="settings_max_73">Maks. 73 gönderimi</string>
+    <string name="settings_max_73_desc">Devam etmeden önce görüşme başına en fazla RR73/73 gönderim sayısı</string>
+    <string name="settings_max_73_auto">Otomatik</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Av (CQ\'lara otomatik yanıt)</string>

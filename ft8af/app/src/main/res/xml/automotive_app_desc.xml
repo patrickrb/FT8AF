@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-    Declares to the Android Auto host that this app renders car-app-library
-    templates (see FT8AFCarAppService). Referenced from the manifest via the
-    com.google.android.gms.car.application meta-data entry.
--->
-<automotiveApp>
-    <uses name="template" />
-</automotiveApp>

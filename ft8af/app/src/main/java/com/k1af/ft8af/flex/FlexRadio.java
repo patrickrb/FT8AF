@@ -108,7 +108,9 @@ public class FlexRadio {
     private OnMessageListener onMessageListener;//Message event trigger
     private OnStatusListener onStatusListener;//Status event trigger
     //*****************************************************************
-    private AudioTrack audioTrack = null;
+    // volatile: written by openAudio/closeAudio on the connect/disconnect thread,
+    // read by the UDP stream thread in writeAudioToTrack.
+    private volatile AudioTrack audioTrack = null;
 
     public FlexRadio() {
         updateLastSeen();
@@ -274,10 +276,46 @@ public class FlexRadio {
         if (onReceiveStreamData != null) {
             onReceiveStreamData.onReceiveAudio(data);
         }
-        if (audioTrack != null) {//If audio playback is already open, write audio stream data
-            float[] sound = getFloatFromBytes(data);//Length is 256 floats
-            audioTrack.write(sound, 0, sound.length, AudioTrack.WRITE_NON_BLOCKING);
+        writeAudio(data);
+    }
+
+    /**
+     * Write one DAX audio frame to the playback track, tolerating the
+     * disconnect-while-streaming race. Audio frames arrive on the UDP stream
+     * read thread (the {@link RadioUdpClient} receive worker, whose loop
+     * catches only {@code IOException}), while {@link #closeAudio()} releases
+     * and nulls {@link #audioTrack} from the disconnect thread — and
+     * {@code FlexConnector.disconnect()} calls {@code closeAudio()} <em>before</em>
+     * it stops the stream port, so the receive thread is still live when the
+     * track is torn down. Between the null-check and the write the track can be
+     * released, making {@link AudioTrack#write} throw an
+     * {@link IllegalStateException}; swallow it here rather than let it escape
+     * and crash the whole app. Package-private so a unit test can drive it
+     * without constructing a real {@link AudioTrack}.
+     */
+    void writeAudio(byte[] data) {
+        try {
+            writeAudioToTrack(data);
+        } catch (IllegalStateException e) {
+            // audioTrack was released concurrently (disconnect during streaming);
+            // drop this frame rather than crash the receive thread. This is an
+            // expected, handled race and multiple frames can arrive between
+            // release() and audioTrack=null, so log at DEBUG to avoid ERROR-level
+            // per-frame spam on every disconnect.
+            Log.d(TAG, "writeAudio: track released mid-stream: " + e.getMessage());
         }
+    }
+
+    /**
+     * Seam performing the actual conversion + write on a single volatile
+     * snapshot of {@link #audioTrack}. A no-op when audio is closed (snapshot is
+     * null). Overridden in tests to simulate a track released mid-write.
+     */
+    void writeAudioToTrack(byte[] data) {
+        AudioTrack track = audioTrack;// snapshot the volatile field once
+        if (track == null) return;// audio not open (or already closed)
+        float[] sound = getFloatFromBytes(data);//Length is 256 floats
+        track.write(sound, 0, sound.length, AudioTrack.WRITE_NON_BLOCKING);
     }
 
     /**
@@ -448,6 +486,40 @@ public class FlexRadio {
     }
 
     /**
+     * Fill one stereo TX packet from {@code stereo} starting at sample index
+     * {@code from}, and return the index one past the last sample copied.
+     *
+     * <p>Copies at most {@code packet.length} samples; when fewer remain in
+     * {@code stereo} the tail of {@code packet} is zero-filled (silence padding
+     * for the final, partial packet). It never reads past the end of
+     * {@code stereo}.
+     *
+     * <p>The historic inline loop read {@code stereo[from]} and only tested the
+     * bound <em>after</em> the read, so a {@code stereo} length that was not a
+     * whole multiple of {@code packet.length} ran one element past the array and
+     * threw {@link ArrayIndexOutOfBoundsException} on the TX send thread
+     * (uncaught → whole-app crash). That happens for any waveform whose sample
+     * count is not a multiple of {@code packet.length / 2}; e.g. FT2 at 24 kHz
+     * generates 60480 samples → 120960 interleaved stereo values, which is not a
+     * multiple of 256, so the last packet overran.
+     *
+     * @param stereo interleaved L/R sample buffer
+     * @param from   index of the first sample to copy ({@code 0 <= from <= stereo.length})
+     * @param packet destination packet buffer, fully (over)written
+     * @return {@code min(from + packet.length, stereo.length)}
+     */
+    static int fillVoicePacket(float[] stereo, int from, float[] packet) {
+        int i = 0;
+        for (; i < packet.length && from < stereo.length; i++, from++) {
+            packet[i] = stereo[from];
+        }
+        for (; i < packet.length; i++) {
+            packet[i] = 0f;
+        }
+        return from;
+    }
+
+    /**
      * FlexRadio transmits at 24000 sample rate; also converts mono to stereo
      * @param data audio
      */
@@ -479,15 +551,11 @@ public class FlexRadio {
 
 
 
-                    float[] voice=new float[256];//Because it's stereo, 240*2
+                    float[] voice=new float[256];//256 interleaved stereo floats (128 L/R frames) per packet
 
 
                     //for (int j = 0; j <3 ; j++) {
-                        for (int i = 0; i < voice.length; i++) {
-                            voice[i] = temp[count];
-                            count++;
-                            if (count > temp.length) break;
-                        }
+                        count = fillVoicePacket(temp, count, voice);
 
                         //byte[] send = vita.audioDataToVita(packetCount, streamTxId,0x534c2d, voice);
                         //daxTxAudioStreamId=0x0084000001&0x00000000ffffffff;
@@ -504,7 +572,7 @@ public class FlexRadio {
                         } catch (UnknownHostException e) {
                             throw new RuntimeException(e);
                         }
-                        if (count>temp.length) break;
+                        if (count>=temp.length) break;
                     //}
                     while (isPttOn) {
                         if (System.currentTimeMillis() - now >= 5) {//5ms per cycle, 256 floats per cycle
@@ -1123,7 +1191,14 @@ public class FlexRadio {
                     getHeadAndContent(line, "\\|");
                     try {
                         //Log.e(TAG, "FlexResponse: "+line );
-                        this.message_num = Integer.parseInt(head.substring(2), 16);//Message number, 32-bit, hex
+                        // Guard: substring(2) needs len > 2 to yield a non-empty
+                        // token. A truncated/garbled frame ("M"/"M|...") would throw
+                        // StringIndexOutOfBoundsException (uncaught -> read-thread
+                        // crash); "M1"/"M1|..." would yield "" and a needless
+                        // NumberFormatException. Mirrors the 'C' branch's length guard.
+                        if (head.length() > 2) {
+                            this.message_num = Integer.parseInt(head.substring(2), 16);//Message number, 32-bit, hex
+                        }
                     } catch (NumberFormatException e) {
                         e.printStackTrace();
                         Log.e(TAG, "FlexResponse parseInt message_num exception: " + e.getMessage());

@@ -37,6 +37,51 @@ import radio.ks3ckc.ft8af.ui.components.IntSlider
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 import radio.ks3ckc.ft8af.ui.components.SettingsRow
 
+// ALC target window bounds (0-255 normalized ALC scale). The low/high sliders
+// keep a [ALC_GAP]-unit gap between the two values; clampAlcLow/clampAlcHigh use
+// these both to bound each slider and to keep the coerceIn range non-empty when a
+// restored/corrupted config persists an out-of-order pair.
+// Upper bound of the "Max 73 Sends" picker (1..MAX; 0 = Auto, cap disabled).
+private const val MAX_73_SENDS_MAX = 10
+
+private const val ALC_LOW_MIN = 10
+private const val ALC_LOW_MAX = 200
+private const val ALC_HIGH_MAX = 250
+private const val ALC_GAP = 10
+
+/**
+ * Clamp a desired ALC-target *low* value into [ALC_LOW_MIN]..[ALC_LOW_MAX]. The
+ * [ALC_GAP]-unit gap below the current [high] is enforced only when [high] leaves
+ * room for it (i.e. `high >= ALC_LOW_MIN + ALC_GAP`); otherwise the value is simply
+ * clamped to [ALC_LOW_MIN]. This is because the upper bound is floored at
+ * [ALC_LOW_MIN] so the range never inverts: a corrupted/restored config with `high`
+ * below `ALC_LOW_MIN + ALC_GAP` would otherwise make `high - ALC_GAP` fall under
+ * [ALC_LOW_MIN] and crash `coerceIn` with an empty range (in that degenerate case
+ * the only non-crashing result is [ALC_LOW_MIN] itself). Byte-identical to the
+ * previous inline `coerceIn(ALC_LOW_MIN, minOf(ALC_LOW_MAX, high - ALC_GAP))`
+ * whenever that range is already valid (i.e. `high >= ALC_LOW_MIN + ALC_GAP`).
+ */
+internal fun clampAlcLow(desired: Int, high: Int): Int {
+    val upper = minOf(ALC_LOW_MAX, high - ALC_GAP).coerceAtLeast(ALC_LOW_MIN)
+    return desired.coerceIn(ALC_LOW_MIN, upper)
+}
+
+/**
+ * Clamp a desired ALC-target *high* value into (`low + ALC_GAP`)..[ALC_HIGH_MAX].
+ * The [ALC_GAP]-unit gap above the current [low] is enforced only when [low] leaves
+ * room for it (i.e. `low <= ALC_HIGH_MAX - ALC_GAP`); otherwise the lower bound is
+ * capped at [ALC_HIGH_MAX] and the value clamps to [ALC_HIGH_MAX]. This keeps the
+ * range from inverting when a corrupted/restored config persists a `low` above
+ * `ALC_HIGH_MAX - ALC_GAP` (in that degenerate case the only non-crashing result is
+ * [ALC_HIGH_MAX] itself). Byte-identical to the previous inline
+ * `coerceIn(low + ALC_GAP, ALC_HIGH_MAX)` whenever that range is already valid
+ * (i.e. `low <= ALC_HIGH_MAX - ALC_GAP`).
+ */
+internal fun clampAlcHigh(desired: Int, low: Int): Int {
+    val lower = (low + ALC_GAP).coerceAtMost(ALC_HIGH_MAX)
+    return desired.coerceIn(lower, ALC_HIGH_MAX)
+}
+
 /**
  * Transmission settings: TX/RX split, watchdog, stop-after, TX protection
  * (auto-volume ALC + SWR halt), and auto-sequencing.
@@ -51,6 +96,7 @@ fun TransmissionSettings(
     var clearOnBandModeChange by remember { mutableStateOf(GeneralVariables.clearOnBandModeChange) }
     var watchdogMs by remember { mutableIntStateOf(GeneralVariables.launchSupervision) }
     var noReplyLimit by remember { mutableIntStateOf(GeneralVariables.noReplyLimit) }
+    var max73Sends by remember { mutableIntStateOf(GeneralVariables.max73Sends) }
 
     // TX Protection state
     var autoVolumeEnabled by remember { mutableStateOf(GeneralVariables.autoVolumeEnabled) }
@@ -72,9 +118,11 @@ fun TransmissionSettings(
     var autoCallFollow by remember { mutableStateOf(GeneralVariables.autoCallFollow) }
     var earlyDecode by remember { mutableStateOf(GeneralVariables.earlyDecode) }
     var autoCQAfterQSO by remember { mutableStateOf(GeneralVariables.autoCQAfterQSO) }
+    var pileupStrongestFirst by remember { mutableStateOf(GeneralVariables.pileupStrongestFirst) }
 
     var showWatchdog by remember { mutableStateOf(false) }
     var showStopAfter by remember { mutableStateOf(false) }
+    var showMax73 by remember { mutableStateOf(false) }
     var showTuneMethod by remember { mutableStateOf(false) }
 
     // Index == TuneMethod.AUTOMATIC/INTERNAL/TONE
@@ -161,6 +209,28 @@ fun TransmissionSettings(
         )
     }
 
+    // -- Max 73 Sends Picker --
+    if (showMax73) {
+        val max73Options = mutableListOf(stringResource(R.string.settings_max_73_auto))
+        for (i in 1..MAX_73_SENDS_MAX) {
+            max73Options.add(i.toString())
+        }
+        ListPickerDialog(
+            title = stringResource(R.string.settings_max_73),
+            items = max73Options,
+            selectedIndex = max73Sends.coerceIn(0, MAX_73_SENDS_MAX),
+            onDismiss = { showMax73 = false },
+            onSelect = { index ->
+                showMax73 = false
+                GeneralVariables.max73Sends = index
+                max73Sends = index
+                mainViewModel.databaseOpr.writeConfig(
+                    "max73Sends", index.toString(), null,
+                )
+            },
+        )
+    }
+
     SettingsDetailScaffold(
         title = stringResource(R.string.settings_cat_transmission),
         onBack = onBack,
@@ -226,6 +296,15 @@ fun TransmissionSettings(
                         showChevron = true,
                         onClick = { showStopAfter = true },
                     )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_max_73),
+                        description = stringResource(R.string.settings_max_73_desc),
+                        value = if (max73Sends == 0) stringResource(R.string.settings_max_73_auto)
+                        else max73Sends.toString(),
+                        showChevron = true,
+                        onClick = { showMax73 = true },
+                    )
                 }
             }
         }
@@ -270,7 +349,7 @@ fun TransmissionSettings(
                             )
                             FT8AFIconButton(
                                 onClick = {
-                                    val clamped = (alcTargetLow - 5).coerceIn(10, minOf(200, alcTargetHigh - 10))
+                                    val clamped = clampAlcLow(alcTargetLow - 5, alcTargetHigh)
                                     alcTargetLow = clamped
                                     GeneralVariables.alcTargetLow = clamped
                                     mainViewModel.databaseOpr.writeConfig(
@@ -284,7 +363,7 @@ fun TransmissionSettings(
                             IntSlider(
                                 value = alcTargetLow,
                                 onValueChange = { v ->
-                                    val clamped = v.coerceIn(10, minOf(200, alcTargetHigh - 10))
+                                    val clamped = clampAlcLow(v, alcTargetHigh)
                                     alcTargetLow = clamped
                                     GeneralVariables.alcTargetLow = clamped
                                 },
@@ -300,7 +379,7 @@ fun TransmissionSettings(
                             )
                             FT8AFIconButton(
                                 onClick = {
-                                    val clamped = (alcTargetLow + 5).coerceIn(10, minOf(200, alcTargetHigh - 10))
+                                    val clamped = clampAlcLow(alcTargetLow + 5, alcTargetHigh)
                                     alcTargetLow = clamped
                                     GeneralVariables.alcTargetLow = clamped
                                     mainViewModel.databaseOpr.writeConfig(
@@ -327,7 +406,7 @@ fun TransmissionSettings(
                             )
                             FT8AFIconButton(
                                 onClick = {
-                                    val clamped = (alcTargetHigh - 5).coerceIn(alcTargetLow + 10, 250)
+                                    val clamped = clampAlcHigh(alcTargetHigh - 5, alcTargetLow)
                                     alcTargetHigh = clamped
                                     GeneralVariables.alcTargetHigh = clamped
                                     mainViewModel.databaseOpr.writeConfig(
@@ -341,7 +420,7 @@ fun TransmissionSettings(
                             IntSlider(
                                 value = alcTargetHigh,
                                 onValueChange = { v ->
-                                    val clamped = v.coerceIn(alcTargetLow + 10, 250)
+                                    val clamped = clampAlcHigh(v, alcTargetLow)
                                     alcTargetHigh = clamped
                                     GeneralVariables.alcTargetHigh = clamped
                                 },
@@ -357,7 +436,7 @@ fun TransmissionSettings(
                             )
                             FT8AFIconButton(
                                 onClick = {
-                                    val clamped = (alcTargetHigh + 5).coerceIn(alcTargetLow + 10, 250)
+                                    val clamped = clampAlcHigh(alcTargetHigh + 5, alcTargetLow)
                                     alcTargetHigh = clamped
                                     GeneralVariables.alcTargetHigh = clamped
                                     mainViewModel.databaseOpr.writeConfig(
@@ -635,6 +714,19 @@ fun TransmissionSettings(
                             GeneralVariables.autoCQAfterQSO = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "autoCQAfterQSO", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_pileup_strongest),
+                        description = stringResource(R.string.settings_pileup_strongest_desc),
+                        toggle = pileupStrongestFirst,
+                        onToggleChange = { checked ->
+                            pileupStrongestFirst = checked
+                            GeneralVariables.pileupStrongestFirst = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "pileupStrongestFirst", if (checked) "1" else "0", null,
                             )
                         },
                     )
