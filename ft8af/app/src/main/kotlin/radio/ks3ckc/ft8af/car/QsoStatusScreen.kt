@@ -1,5 +1,6 @@
 package radio.ks3ckc.ft8af.car
 
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -20,6 +21,7 @@ import androidx.car.app.model.ForegroundCarColorSpan
 import androidx.car.app.model.MessageTemplate
 import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
+import androidx.car.app.model.ParkedOnlyOnClickListener
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.car.app.versioning.CarAppApiLevels
@@ -46,8 +48,7 @@ import radio.ks3ckc.ft8af.ui.components.slotTimerState
  *
  * The engine is never started from here: until ComposeMainActivity has created
  * the [MainViewModel] singleton, [MainViewModel.peekInstance] is null and the
- * screen shows an "open the app on your phone" message, re-checking on its
- * 1 Hz tick.
+ * screen shows [engineIdleTemplate], re-checking on its 1 Hz tick.
  */
 class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifecycleObserver {
 
@@ -103,7 +104,7 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
     }
 
     override fun onGetTemplate(): Template {
-        val vm = MainViewModel.peekInstance() ?: return openPhoneTemplate(carContext)
+        val vm = MainViewModel.peekInstance() ?: return engineIdleTemplate(carContext)
         val ts = vm.ft8TransmitSignal
         val mode = ModeProfile.fromId(vm.mutableOperatingMode.value ?: GeneralVariables.operatingMode)
         val slot = slotTimerState(UtcTimer.getSystemTime(), mode.slotMillis.toLong())
@@ -273,11 +274,61 @@ internal fun currentBandName(): String {
 }
 
 /** Shown while the engine singleton doesn't exist yet (phone app not opened). */
-internal fun openPhoneTemplate(carContext: CarContext): MessageTemplate =
-    MessageTemplate.Builder(carContext.getString(R.string.car_open_phone))
-        .setTitle(carContext.getString(R.string.car_screen_title))
+internal fun engineIdleTemplate(carContext: CarContext): MessageTemplate =
+    engineIdleTemplate(
+        title = carContext.getString(R.string.car_screen_title),
+        message = carContext.getString(R.string.car_engine_idle),
+        startActionTitle = carContext.getString(R.string.car_engine_idle_action),
+        onParkedStart = { startAppOnPhone(carContext) },
+    )
+
+/**
+ * The idle template's content, split out from resource lookup so it can be unit
+ * tested.
+ *
+ * Play's Android Auto review rejected versionCode 2100 under "Visual info on
+ * phone — your app does not disable features requiring phone interaction while
+ * in driving mode": this screen used to read "Open FT8AF on your phone to start
+ * the FT8 engine", i.e. the car told the driver to pick up their phone, with
+ * nothing gating that on the car being stopped. Two rules follow, and both are
+ * pinned by CarIdleTemplateTest:
+ *
+ *  1. [message] is status only — never an instruction to touch the phone.
+ *  2. Starting the phone app is the one action here that needs phone
+ *     interaction, so it is wrapped in [ParkedOnlyOnClickListener]. The host
+ *     runs it only when the car is parked and shows its own "not available
+ *     while driving" notice otherwise, which is exactly the "disable while
+ *     driving" behaviour the guideline asks for.
+ *
+ * Anything added to the car screens later has to keep both properties.
+ */
+internal fun engineIdleTemplate(
+    title: String,
+    message: String,
+    startActionTitle: String,
+    onParkedStart: () -> Unit,
+): MessageTemplate =
+    MessageTemplate.Builder(message)
+        .setTitle(title)
         .setHeaderAction(Action.APP_ICON)
+        .addAction(
+            Action.Builder()
+                .setTitle(startActionTitle)
+                .setOnClickListener(ParkedOnlyOnClickListener.create { onParkedStart() })
+                .build(),
+        )
         .build()
+
+/**
+ * Bring the phone app up so it can create the engine. Only ever called from a
+ * [ParkedOnlyOnClickListener], so it cannot run while the car is moving.
+ * Resolved through the launcher intent rather than a hard-coded Activity class
+ * so it keeps working if the launcher Activity is renamed.
+ */
+private fun startAppOnPhone(carContext: CarContext) {
+    val launch = carContext.packageManager.getLaunchIntentForPackage(carContext.packageName) ?: return
+    carContext.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+}
 
 private const val DEFAULT_PANE_ROWS = 3
 
