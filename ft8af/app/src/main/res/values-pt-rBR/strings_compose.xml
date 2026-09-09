@@ -674,7 +674,8 @@
     <string name="tune_method_tone">Tom de baixa potência</string>
 
     <!-- Android Auto status screens (read-only). Headlines reuse the qsopanel_* strings. -->
-    <string name="car_open_phone">Abra o FT8AF no seu celular para iniciar o motor FT8</string>
+    <string name="car_engine_idle">O FT8AF ainda não está no ar. O status do QSO aparece aqui quando ele estiver em execução.</string>
+    <string name="car_engine_idle_action">Iniciar o FT8AF</string>
     <string name="car_monitoring">Monitorando — TX desligado</string>
     <string name="car_seq_step">Etapa %1$s (%2$d/%3$d)</string>
     <string name="car_slot_tx">Slot de TX · %1$d s</string>
