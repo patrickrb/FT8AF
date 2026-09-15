@@ -167,11 +167,12 @@ private fun sendBugReportEmail(context: Context, description: String) {
 /**
  * Send the rating prompt's low-star feedback to the maintainer through the same
  * email path as a bug report. The body carries the callsign and app/device block
- * (as the feedback form discloses) but not debug.log.
+ * (as the feedback form discloses) but not debug.log. Returns whether an email
+ * app opened.
  */
-internal fun sendAppFeedbackEmail(context: Context, feedback: String) {
+internal fun sendAppFeedbackEmail(context: Context, feedback: String): Boolean {
     val info = gatherInfo()
-    startReportEmail(
+    return startReportEmail(
         context,
         buildReportEmailIntent(
             context,
@@ -194,16 +195,21 @@ internal fun buildReportEmailIntent(context: Context, subject: String, body: Str
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 
-private fun startReportEmail(context: Context, intent: Intent) {
-    // A device with no mail handler (or all disabled) throws here; surface a
-    // message instead of crashing out of the caller's screen.
+/**
+ * Launch [intent]; returns whether an email app actually opened. A device with no
+ * mail handler (or all disabled) throws here — surface a message instead of
+ * crashing out of the caller's screen, and report false so the caller can keep
+ * the operator's typed text rather than treating it as sent.
+ */
+internal fun startReportEmail(context: Context, intent: Intent): Boolean =
     try {
         context.startActivity(intent)
+        true
     } catch (e: ActivityNotFoundException) {
         Toast.makeText(
             context,
             context.getString(R.string.bug_report_no_email_app),
             Toast.LENGTH_LONG,
         ).show()
+        false
     }
-}

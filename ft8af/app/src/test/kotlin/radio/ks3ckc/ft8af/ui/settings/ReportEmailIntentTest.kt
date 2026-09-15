@@ -8,6 +8,8 @@ import com.k1af.ft8af.R
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowToast
 
 /** The shared maintainer email intent used by the bug reporter and rate-prompt feedback. */
 @RunWith(RobolectricTestRunner::class)
@@ -28,6 +30,23 @@ class ReportEmailIntentTest {
         assertThat(intent.getStringExtra(Intent.EXTRA_SUBJECT)).isEqualTo("App feedback (v1.1.0)")
         assertThat(intent.getStringExtra(Intent.EXTRA_TEXT)).isEqualTo("It works")
         assertThat(intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK).isNotEqualTo(0)
+    }
+
+    @Test
+    fun `startReportEmail reports success when an email app resolves`() {
+        val intent = buildReportEmailIntent(app, subject = "s", body = "b")
+        assertThat(startReportEmail(app, intent)).isTrue()
+        assertThat(shadowOf(app).nextStartedActivity.action).isEqualTo(Intent.ACTION_SEND)
+    }
+
+    @Test
+    fun `startReportEmail reports failure and toasts when no email app exists`() {
+        shadowOf(app).checkActivities(true)
+        val intent = buildReportEmailIntent(app, subject = "s", body = "b")
+
+        assertThat(startReportEmail(app, intent)).isFalse()
+        assertThat(ShadowToast.getTextOfLatestToast())
+            .isEqualTo(app.getString(R.string.bug_report_no_email_app))
     }
 
     @Test

@@ -93,8 +93,12 @@ fun RatePromptHost(
         },
         onNotNow = { close { it.afterDismiss(RatePromptStep.PLAY, stats.qsoCount) } },
         onSendFeedback = { feedback ->
-            sendAppFeedbackEmail(context, feedback)
-            close { it.afterCompleted() }
+            // No email app → the "no email app" toast shows and the sheet stays
+            // open with the typed text, so the feedback isn't silently dropped
+            // and the prompt isn't resolved; Skip still closes it.
+            if (sendAppFeedbackEmail(context, feedback)) {
+                close { it.afterCompleted() }
+            }
         },
         onSkipFeedback = { close { it.afterCompleted() } },
     )

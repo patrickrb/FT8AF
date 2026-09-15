@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -135,10 +136,15 @@ internal fun RatePromptSheetContent(
         targetState = step,
         transitionSpec = { fadeIn() togetherWith fadeOut() },
         label = "rate-prompt-step",
+        // imePadding: the feedback field raises the keyboard, and the app is
+        // edge-to-edge with no adjustResize, so without it the Send/Skip buttons
+        // sit hidden behind the IME. Padding grows the bottom-anchored sheet up
+        // above the keyboard instead.
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
-            .padding(bottom = 24.dp),
+            .padding(bottom = 24.dp)
+            .imePadding(),
     ) { current ->
         when (current) {
             RatePromptStep.ASK -> Column(Modifier.fillMaxWidth()) {
