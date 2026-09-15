@@ -2,7 +2,13 @@ package radio.ks3ckc.ft8af.pota
 
 import com.k1af.ft8af.log.QSLRecord
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Test
+import radio.ks3ckc.ft8af.pota.model.PotaActivation
 
 /**
  * Unit coverage for the Android-free surface of [PotaSessionManager].
@@ -83,6 +89,37 @@ class PotaSessionManagerTest {
 
         assertThat(r.sig).isEqualTo("POTA")
         assertThat(r.sigInfo).isEqualTo("")
+    }
+
+    // --- endedActivations ---------------------------------------------------
+
+    private val endedFixture = PotaActivation(
+        id = 7L,
+        parkRef = "K-1234",
+        operator = "W1AW",
+        startedAtMs = 0L,
+        endedAtMs = 1_000L,
+        qsoCount = 12,
+        notes = null,
+    )
+
+    @Test
+    fun notifyActivationEnded_publishesTheEndedActivationToListeners() = runBlocking {
+        // UNDISPATCHED subscribes before the emit below: the flow has no replay,
+        // so only a listener already collecting receives the event.
+        val received = async(start = CoroutineStart.UNDISPATCHED) {
+            PotaSessionManager.endedActivations.first()
+        }
+
+        PotaSessionManager.notifyActivationEnded(endedFixture)
+
+        assertThat(withTimeout(1_000) { received.await() }).isEqualTo(endedFixture)
+    }
+
+    @Test
+    fun notifyActivationEnded_withNoListener_neitherThrowsNorBlocks() {
+        PotaSessionManager.notifyActivationEnded(endedFixture)
+        PotaSessionManager.notifyActivationEnded(endedFixture.copy(id = 8L))
     }
 
     // --- onQsoLogged / qsoCountsForActivation ------------------------------

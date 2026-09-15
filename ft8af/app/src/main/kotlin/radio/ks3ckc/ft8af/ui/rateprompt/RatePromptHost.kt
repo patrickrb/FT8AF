@@ -15,13 +15,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import radio.ks3ckc.ft8af.pota.PotaSessionManager
 import radio.ks3ckc.ft8af.ui.settings.sendAppFeedbackEmail
 
 /**
  * Hosts [RatePromptSheet] at the root of FT8AFApp. Each time a QSO is logged
- * ([qsoCompletedAt] turns non-null), it waits for the confirmation toast to clear
- * and for any TX to finish, snapshots the log, and shows the sheet if
- * [evaluateRatePrompt] says so. Every exit path rewrites the persisted state.
+ * ([qsoCompletedAt] turns non-null) or a POTA activation of at least
+ * [RATE_PROMPT_MIN_ACTIVATION_QSOS] QSOs ends, it waits for the confirmation
+ * toast to clear and for any TX to finish, snapshots the log, and shows the sheet
+ * if [evaluateRatePrompt] says so. Every exit path rewrites the persisted state.
  */
 @Composable
 fun RatePromptHost(
@@ -46,6 +48,15 @@ fun RatePromptHost(
     var triggerToken by remember { mutableIntStateOf(0) }
     LaunchedEffect(qsoCompletedAt) {
         if (qsoCompletedAt != null) triggerToken++
+    }
+
+    // Ending a POTA activation is a natural pause after a good run — the operator
+    // has stopped working stations — so it runs the same check (same gates, same
+    // suppression) when the activation earned park credit.
+    LaunchedEffect(Unit) {
+        PotaSessionManager.endedActivations.collect { ended ->
+            if (activationEndTriggersRatePrompt(ended.qsoCount)) triggerToken++
+        }
     }
 
     LaunchedEffect(triggerToken) {

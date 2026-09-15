@@ -72,6 +72,16 @@ class RatePromptLogicTest {
         assertThat(evaluateRatePrompt(stats.copy(qsoCount = 4), RatePromptState())).isNull()
     }
 
+    // ---- POTA activation-end trigger ----
+
+    @Test
+    fun `activation end triggers only at the park-credit minimum`() {
+        assertThat(activationEndTriggersRatePrompt(0)).isFalse()
+        assertThat(activationEndTriggersRatePrompt(9)).isFalse()
+        assertThat(activationEndTriggersRatePrompt(10)).isTrue()
+        assertThat(activationEndTriggersRatePrompt(42)).isTrue()
+    }
+
     // ---- star routing ----
 
     @Test

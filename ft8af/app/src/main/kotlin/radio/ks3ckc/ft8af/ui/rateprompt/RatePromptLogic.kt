@@ -17,6 +17,12 @@ internal const val RATE_PROMPT_REMIND_INTERVAL_QSOS = 15
 /** Declining this many times resolves the prompt for good — never ask again. */
 internal const val RATE_PROMPT_MAX_DECLINES = 2
 
+/**
+ * Ending a POTA activation also checks the prompt, but only when the activation
+ * reached the park-credit minimum — a clean finish, not a bust or a quick test.
+ */
+internal const val RATE_PROMPT_MIN_ACTIVATION_QSOS = 10
+
 /** Wait for the post-log "QSO : …" confirmation toast to clear before showing. */
 internal const val RATE_PROMPT_SHOW_DELAY_MS = 1_500L
 
@@ -73,6 +79,13 @@ internal fun evaluateRatePrompt(stats: RatePromptLogStats, state: RatePromptStat
     } else {
         null
     }
+
+/**
+ * Whether ending an activation with [activationQsoCount] QSOs should run the
+ * prompt check. Only a trigger — [shouldShowRatePrompt] still gates the result.
+ */
+internal fun activationEndTriggersRatePrompt(activationQsoCount: Int): Boolean =
+    activationQsoCount >= RATE_PROMPT_MIN_ACTIVATION_QSOS
 
 /** 4–5 stars hand off to Play; 1–3 open the feedback form. The value is never sent. */
 internal fun ratePromptStepForStars(stars: Int): RatePromptStep {
