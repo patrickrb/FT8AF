@@ -39,7 +39,7 @@ fun RatePromptHost(
     var variant by remember { mutableStateOf(RatePromptVariant.MINIMAL) }
     var stats by remember { mutableStateOf(RatePromptLogStats(0, 0, 0)) }
     var step by remember { mutableStateOf(RatePromptStep.ASK) }
-    var selectedStars by remember { mutableIntStateOf(0) }
+    val closeLatch = remember { RatePromptCloseLatch() }
 
     // qsoCompletedAt is a one-shot LiveData that FT8AFApp resets to null right
     // away; keying the check on it directly would cancel the delayed check on
@@ -73,11 +73,14 @@ fun RatePromptHost(
         variant = shown
         stats = snapshot
         step = RatePromptStep.ASK
-        selectedStars = 0
+        closeLatch.open()
         visible = true
     }
 
-    val close: ((RatePromptState) -> RatePromptState) -> Unit = { transform ->
+    val close: ((RatePromptState) -> RatePromptState) -> Unit = close@{ transform ->
+        // One persisted close per presentation: the sheet's Back handler stays
+        // active during its exit animation, so a repeat dismissal must be a no-op.
+        if (!closeLatch.tryClose()) return@close
         visible = false
         store.persist(transform)
     }
@@ -87,22 +90,22 @@ fun RatePromptHost(
         variant = variant,
         stats = stats,
         step = step,
-        selectedStars = selectedStars,
         onDismiss = {
             val dismissedOn = step
             close { it.afterDismiss(dismissedOn, stats.qsoCount) }
         },
-        onStarSelected = { stars ->
-            selectedStars = stars
-            step = ratePromptStepForStars(stars)
+        onRateOnPlay = {
+            // Straight to the Play Store listing, not the In-App Review API: Google's
+            // guidelines say not to trigger the review card from a button, since it
+            // silently shows nothing once the user's review quota is spent. If no store
+            // app or browser can open it, keep the sheet up rather than resolving.
+            if (openPlayStoreListing(context)) {
+                close { it.afterCompleted() }
+            }
         },
+        onOpenFeedback = { step = RatePromptStep.FEEDBACK },
         onRemindLater = { close { it.afterDecline(stats.qsoCount) } },
         onDontAskAgain = { close { it.afterDontAskAgain() } },
-        onRateOnPlay = {
-            launchPlayReview(context)
-            close { it.afterCompleted() }
-        },
-        onNotNow = { close { it.afterDismiss(RatePromptStep.PLAY, stats.qsoCount) } },
         onSendFeedback = { feedback ->
             // No email app → the "no email app" toast shows and the sheet stays
             // open with the typed text, so the feedback isn't silently dropped

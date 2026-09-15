@@ -869,19 +869,17 @@
     <string name="rate_prompt_stat_qsos">QSOs</string>
     <string name="rate_prompt_stat_dxcc">DXCC</string>
     <string name="rate_prompt_stat_bands">Bands</string>
-    <string name="rate_prompt_milestone_question">How would you rate FT8AF so far?</string>
     <string name="rate_prompt_minimal_title">Rate FT8AF</string>
-    <string name="rate_prompt_minimal_body">You\'ve logged %1$d contacts. How is the app working for you?</string>
-    <string name="rate_prompt_star_description">%1$d of 5 stars</string>
+    <string name="rate_prompt_minimal_body">You\'ve logged %1$d contacts with FT8AF.</string>
+    <!-- Deliberately not a question: Play's in-app review guidelines forbid asking opinion questions before a rating action. -->
+    <string name="rate_prompt_play_pitch">A quick review on Google Play helps other operators find FT8AF.</string>
     <string name="rate_prompt_remind_later">Remind me later</string>
     <string name="rate_prompt_dont_ask_again">Don\'t ask again</string>
-    <string name="rate_prompt_play_title">Thanks — post it on Play?</string>
-    <string name="rate_prompt_play_body">Opens the Play review sheet. Takes about ten seconds.</string>
     <string name="rate_prompt_play_action">Rate on Google Play</string>
-    <string name="rate_prompt_not_now">Not now</string>
-    <string name="rate_prompt_feedback_title">What\'s not working?</string>
+    <string name="rate_prompt_feedback_action">Send feedback</string>
+    <string name="rate_prompt_feedback_title">Feedback for the developer</string>
     <string name="rate_prompt_feedback_body">Goes straight to the developer. Your callsign and app version are attached.</string>
-    <string name="rate_prompt_feedback_hint">Tell us what went wrong…</string>
+    <string name="rate_prompt_feedback_hint">Tell us what would make FT8AF better…</string>
     <string name="rate_prompt_feedback_send">Send feedback</string>
     <string name="rate_prompt_feedback_skip">Skip</string>
     <!-- Spelled-out counts for the milestone headline; index == value, digits past the end. -->

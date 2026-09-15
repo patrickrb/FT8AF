@@ -7,7 +7,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,13 +18,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -42,10 +37,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -62,21 +53,25 @@ import radio.ks3ckc.ft8af.theme.FT8AFTypography
 import radio.ks3ckc.ft8af.theme.GeistMonoFamily
 import radio.ks3ckc.ft8af.theme.Signal
 import radio.ks3ckc.ft8af.theme.StatusConfirmed
-import radio.ks3ckc.ft8af.theme.TextDim
 import radio.ks3ckc.ft8af.theme.TextFaint
 import radio.ks3ckc.ft8af.theme.TextMuted
 import radio.ks3ckc.ft8af.theme.TextPrimary
 import radio.ks3ckc.ft8af.ui.components.FT8AFBottomSheet
 
-private val StarTileSize = 52.dp
 private val ButtonMinHeight = 48.dp
 private val TileShape = RoundedCornerShape(12.dp)
 
 /**
- * The in-app rating prompt. The ask step shows a [variant]-specific header over
- * the shared star row + dismiss row; a star tap advances straight to the shared
- * Play or feedback step. All decisions (eligibility, routing, persistence) live in
- * [RatePromptLogic] and [RatePromptHost] — this only renders and reports taps.
+ * The in-app rating prompt. The ask step shows a [variant]-specific header, then two
+ * equal actions — open the Play Store listing, or write private feedback — over the
+ * shared dismiss row.
+ *
+ * There is deliberately no rating question in front of the Play action: Google Play's
+ * in-app review guidelines say an app "shouldn't ask the user any questions before or
+ * while presenting the rating button", including opinion or predictive ones ("Would
+ * you rate this app 5 stars"). So feedback sits beside Play instead of gating it.
+ * Decisions (eligibility, persistence) live in [RatePromptLogic] and [RatePromptHost];
+ * this only renders and reports taps.
  *
  * [onDismiss] is swipe-down, Back, scrim tap, or the sheet's close button.
  */
@@ -86,13 +81,11 @@ internal fun RatePromptSheet(
     variant: RatePromptVariant,
     stats: RatePromptLogStats,
     step: RatePromptStep,
-    selectedStars: Int,
     onDismiss: () -> Unit,
-    onStarSelected: (Int) -> Unit,
+    onRateOnPlay: () -> Unit,
+    onOpenFeedback: () -> Unit,
     onRemindLater: () -> Unit,
     onDontAskAgain: () -> Unit,
-    onRateOnPlay: () -> Unit,
-    onNotNow: () -> Unit,
     onSendFeedback: (String) -> Unit,
     onSkipFeedback: () -> Unit,
 ) {
@@ -101,12 +94,10 @@ internal fun RatePromptSheet(
             variant = variant,
             stats = stats,
             step = step,
-            selectedStars = selectedStars,
-            onStarSelected = onStarSelected,
+            onRateOnPlay = onRateOnPlay,
+            onOpenFeedback = onOpenFeedback,
             onRemindLater = onRemindLater,
             onDontAskAgain = onDontAskAgain,
-            onRateOnPlay = onRateOnPlay,
-            onNotNow = onNotNow,
             onSendFeedback = onSendFeedback,
             onSkipFeedback = onSkipFeedback,
         )
@@ -119,19 +110,14 @@ internal fun RatePromptSheetContent(
     variant: RatePromptVariant,
     stats: RatePromptLogStats,
     step: RatePromptStep,
-    selectedStars: Int,
-    onStarSelected: (Int) -> Unit,
+    onRateOnPlay: () -> Unit,
+    onOpenFeedback: () -> Unit,
     onRemindLater: () -> Unit,
     onDontAskAgain: () -> Unit,
-    onRateOnPlay: () -> Unit,
-    onNotNow: () -> Unit,
     onSendFeedback: (String) -> Unit,
     onSkipFeedback: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Crossfade between steps: the outgoing ask page keeps its selected stars on
-    // screen while it fades, so the tap still reads as registered even though it
-    // advances immediately.
     AnimatedContent(
         targetState = step,
         transitionSpec = { fadeIn() togetherWith fadeOut() },
@@ -152,12 +138,19 @@ internal fun RatePromptSheetContent(
                     RatePromptVariant.MILESTONE -> MilestoneHeader(stats)
                     RatePromptVariant.MINIMAL -> MinimalHeader(stats.qsoCount)
                 }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.rate_prompt_play_pitch),
+                    style = FT8AFTypography.bodyMedium,
+                    color = TextMuted,
+                )
                 Spacer(Modifier.height(20.dp))
-                StarRow(selectedStars = selectedStars, onStarSelected = onStarSelected)
-                Spacer(Modifier.height(20.dp))
+                PrimaryButton(stringResource(R.string.rate_prompt_play_action), onClick = onRateOnPlay)
+                Spacer(Modifier.height(8.dp))
+                TonalButton(stringResource(R.string.rate_prompt_feedback_action), onClick = onOpenFeedback)
+                Spacer(Modifier.height(16.dp))
                 DismissRow(onRemindLater = onRemindLater, onDontAskAgain = onDontAskAgain)
             }
-            RatePromptStep.PLAY -> PlayStep(onRateOnPlay = onRateOnPlay, onNotNow = onNotNow)
             RatePromptStep.FEEDBACK -> FeedbackStep(onSend = onSendFeedback, onSkip = onSkipFeedback)
         }
     }
@@ -185,12 +178,6 @@ private fun MilestoneHeader(stats: RatePromptLogStats) {
         StatCard(stats.dxccEntities, stringResource(R.string.rate_prompt_stat_dxcc), Signal)
         StatCard(stats.bandsWorked, stringResource(R.string.rate_prompt_stat_bands), StatusConfirmed)
     }
-    Spacer(Modifier.height(16.dp))
-    Text(
-        text = stringResource(R.string.rate_prompt_milestone_question),
-        style = FT8AFTypography.bodyMedium,
-        color = TextMuted,
-    )
 }
 
 @Composable
@@ -256,38 +243,6 @@ private fun MinimalHeader(qsoCount: Int) {
 }
 
 @Composable
-private fun StarRow(selectedStars: Int, onStarSelected: (Int) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-    ) {
-        for (star in 1..RATE_PROMPT_STAR_COUNT) {
-            val selected = star <= selectedStars
-            val description = stringResource(R.string.rate_prompt_star_description, star)
-            Box(
-                modifier = Modifier
-                    .size(StarTileSize)
-                    .clip(TileShape)
-                    .background(if (selected) AccentSoft else Color.Transparent)
-                    .clickable { onStarSelected(star) }
-                    .semantics {
-                        role = Role.Button
-                        contentDescription = description
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Star,
-                    contentDescription = null,
-                    tint = if (selected) Accent else TextDim,
-                    modifier = Modifier.size(32.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun DismissRow(onRemindLater: () -> Unit, onDontAskAgain: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -324,26 +279,19 @@ private fun DismissRow(onRemindLater: () -> Unit, onDontAskAgain: () -> Unit) {
 }
 
 @Composable
-private fun PlayStep(onRateOnPlay: () -> Unit, onNotNow: () -> Unit) {
-    Column(Modifier.fillMaxWidth()) {
-        StepHeading(
-            title = stringResource(R.string.rate_prompt_play_title),
-            body = stringResource(R.string.rate_prompt_play_body),
-        )
-        Spacer(Modifier.height(20.dp))
-        PrimaryButton(stringResource(R.string.rate_prompt_play_action), onClick = onRateOnPlay)
-        Spacer(Modifier.height(4.dp))
-        SecondaryButton(stringResource(R.string.rate_prompt_not_now), onClick = onNotNow)
-    }
-}
-
-@Composable
 private fun FeedbackStep(onSend: (String) -> Unit, onSkip: () -> Unit) {
     var feedback by rememberSaveable { mutableStateOf("") }
     Column(Modifier.fillMaxWidth()) {
-        StepHeading(
-            title = stringResource(R.string.rate_prompt_feedback_title),
-            body = stringResource(R.string.rate_prompt_feedback_body),
+        Text(
+            text = stringResource(R.string.rate_prompt_feedback_title),
+            style = FT8AFTypography.headlineMedium,
+            color = TextPrimary,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = stringResource(R.string.rate_prompt_feedback_body),
+            style = FT8AFTypography.bodyMedium,
+            color = TextMuted,
         )
         Spacer(Modifier.height(16.dp))
         OutlinedTextField(
@@ -371,15 +319,19 @@ private fun FeedbackStep(onSend: (String) -> Unit, onSkip: () -> Unit) {
             onClick = { onSend(feedback) },
         )
         Spacer(Modifier.height(4.dp))
-        SecondaryButton(stringResource(R.string.rate_prompt_feedback_skip), onClick = onSkip)
+        TextButton(
+            onClick = onSkip,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = ButtonMinHeight),
+        ) {
+            Text(
+                text = stringResource(R.string.rate_prompt_feedback_skip),
+                style = FT8AFTypography.labelLarge,
+                color = TextMuted,
+            )
+        }
     }
-}
-
-@Composable
-private fun StepHeading(title: String, body: String) {
-    Text(text = title, style = FT8AFTypography.headlineMedium, color = TextPrimary)
-    Spacer(Modifier.height(6.dp))
-    Text(text = body, style = FT8AFTypography.bodyMedium, color = TextMuted)
 }
 
 @Composable
@@ -402,20 +354,24 @@ private fun PrimaryButton(text: String, onClick: () -> Unit, enabled: Boolean = 
     }
 }
 
+/** Second action beside the primary one: same size, quieter surface. */
 @Composable
-private fun SecondaryButton(text: String, onClick: () -> Unit) {
-    TextButton(
+private fun TonalButton(text: String, onClick: () -> Unit) {
+    OutlinedButton(
         onClick = onClick,
+        shape = TileShape,
+        border = BorderStroke(1.dp, Border),
+        colors = ButtonDefaults.outlinedButtonColors(containerColor = BgSurface, contentColor = TextPrimary),
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = ButtonMinHeight),
     ) {
-        Text(text = text, style = FT8AFTypography.labelLarge, color = TextMuted)
+        Text(text = text, style = FT8AFTypography.labelLarge, fontWeight = FontWeight.SemiBold)
     }
 }
 
 // ---------------------------------------------------------------------------
-// Previews — one per state: milestone ask, minimal ask, Play step, feedback step.
+// Previews — one per state: milestone ask, minimal ask, feedback step.
 // ---------------------------------------------------------------------------
 
 private val PreviewMilestoneStats = RatePromptLogStats(qsoCount = 12, bandsWorked = 2, dxccEntities = 3)
@@ -426,19 +382,16 @@ private fun RatePromptPreviewFrame(
     variant: RatePromptVariant,
     stats: RatePromptLogStats,
     step: RatePromptStep,
-    selectedStars: Int = 0,
 ) {
     Box(Modifier.background(BgSurface2).padding(top = 16.dp)) {
         RatePromptSheetContent(
             variant = variant,
             stats = stats,
             step = step,
-            selectedStars = selectedStars,
-            onStarSelected = {},
+            onRateOnPlay = {},
+            onOpenFeedback = {},
             onRemindLater = {},
             onDontAskAgain = {},
-            onRateOnPlay = {},
-            onNotNow = {},
             onSendFeedback = {},
             onSkipFeedback = {},
         )
@@ -457,14 +410,8 @@ private fun RatePromptMinimalAskPreview() {
     RatePromptPreviewFrame(RatePromptVariant.MINIMAL, PreviewMinimalStats, RatePromptStep.ASK)
 }
 
-@Preview(name = "Play step", widthDp = 380)
-@Composable
-private fun RatePromptPlayStepPreview() {
-    RatePromptPreviewFrame(RatePromptVariant.MILESTONE, PreviewMilestoneStats, RatePromptStep.PLAY, selectedStars = 5)
-}
-
 @Preview(name = "Feedback step", widthDp = 380)
 @Composable
 private fun RatePromptFeedbackStepPreview() {
-    RatePromptPreviewFrame(RatePromptVariant.MINIMAL, PreviewMinimalStats, RatePromptStep.FEEDBACK, selectedStars = 2)
+    RatePromptPreviewFrame(RatePromptVariant.MINIMAL, PreviewMinimalStats, RatePromptStep.FEEDBACK)
 }

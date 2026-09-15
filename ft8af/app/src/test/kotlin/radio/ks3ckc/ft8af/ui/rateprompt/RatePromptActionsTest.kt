@@ -1,14 +1,11 @@
 package radio.ks3ckc.ft8af.ui.rateprompt
 
-import android.app.Activity
 import android.app.Application
-import android.content.ContextWrapper
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 
@@ -34,18 +31,6 @@ class RatePromptActionsTest {
     }
 
     @Test
-    fun `findActivity unwraps nested context wrappers`() {
-        val activity = Robolectric.buildActivity(Activity::class.java).get()
-        assertThat(activity.findActivity()).isSameInstanceAs(activity)
-        assertThat(ContextWrapper(ContextWrapper(activity)).findActivity()).isSameInstanceAs(activity)
-    }
-
-    @Test
-    fun `findActivity is null for the application context`() {
-        assertThat(app.findActivity()).isNull()
-    }
-
-    @Test
     fun `store listing opens the market URI first`() {
         assertThat(openPlayStoreListing(app)).isTrue()
         val started = shadowOf(app).nextStartedActivity
@@ -53,9 +38,11 @@ class RatePromptActionsTest {
     }
 
     @Test
-    fun `launchPlayReview without an activity falls back to the store listing`() {
-        launchPlayReview(app)
-        val started = shadowOf(app).nextStartedActivity
-        assertThat(started.data).isEqualTo(playStoreMarketUri(app.packageName))
+    fun `store listing reports failure when nothing can open it`() {
+        // With activity checking on and no handler registered, both the market:// and
+        // https:// intents throw ActivityNotFoundException.
+        shadowOf(app).checkActivities(true)
+        assertThat(openPlayStoreListing(app)).isFalse()
+        assertThat(shadowOf(app).nextStartedActivity).isNull()
     }
 }

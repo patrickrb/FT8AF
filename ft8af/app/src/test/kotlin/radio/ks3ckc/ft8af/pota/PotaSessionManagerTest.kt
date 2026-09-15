@@ -122,6 +122,20 @@ class PotaSessionManagerTest {
         PotaSessionManager.notifyActivationEnded(endedFixture.copy(id = 8L))
     }
 
+    @Test
+    fun endedActivation_stampsTheEndTimeSoItNoLongerReadsAsActive() {
+        // end() publishes this copy (built with the same timestamp it writes to
+        // ended_at) instead of the in-memory object, whose endedAtMs is still null.
+        val running = endedFixture.copy(endedAtMs = null)
+        assertThat(running.isActive).isTrue()
+
+        val ended = PotaSessionManager.endedActivation(running, 5_000L)
+
+        assertThat(ended.endedAtMs).isEqualTo(5_000L)
+        assertThat(ended.isActive).isFalse()
+        assertThat(ended.copy(endedAtMs = null)).isEqualTo(running)
+    }
+
     // --- onQsoLogged / qsoCountsForActivation ------------------------------
 
     @Test

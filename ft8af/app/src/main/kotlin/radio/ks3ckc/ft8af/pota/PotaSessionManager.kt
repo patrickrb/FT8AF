@@ -99,14 +99,22 @@ object PotaSessionManager {
             log("end ignored — no activation running")
             return
         }
-        PotaActivationDao.endActivation(active.id)
+        // One timestamp for the DB row and the published copy, so listeners get
+        // exactly what was persisted: an ended activation, not the still-active
+        // in-memory object.
+        val endedAtMs = System.currentTimeMillis()
+        PotaActivationDao.endActivation(active.id, endedAtMs)
         GeneralVariables.toModifier = savedModifier
         savedModifier = ""
         log("end ref=${active.parkRef} id=${active.id} qsoCount=${active.qsoCount} restoredModifier='${GeneralVariables.toModifier}'")
         _currentActivation.value = null
         _activationQsos.value = emptyList()
-        notifyActivationEnded(active)
+        notifyActivationEnded(endedActivation(active, endedAtMs))
     }
+
+    /** [active] as [end] persisted it: the same row stamped with [endedAtMs], so it reads as ended. */
+    internal fun endedActivation(active: PotaActivation, endedAtMs: Long): PotaActivation =
+        active.copy(endedAtMs = endedAtMs)
 
     /** Publish [ended] on [endedActivations]. Split out of [end] so it's testable without the DB. */
     internal fun notifyActivationEnded(ended: PotaActivation) {
