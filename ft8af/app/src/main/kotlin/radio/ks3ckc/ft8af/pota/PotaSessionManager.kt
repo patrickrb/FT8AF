@@ -2,8 +2,12 @@ package radio.ks3ckc.ft8af.pota
 
 import android.util.Log
 import com.k1af.ft8af.GeneralVariables
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import radio.ks3ckc.ft8af.pota.model.PotaActivation
 import radio.ks3ckc.ft8af.pota.model.PotaQso
@@ -36,6 +40,15 @@ object PotaSessionManager {
 
     private val _activationQsos = MutableStateFlow<List<PotaQso>>(emptyList())
     val activationQsos: StateFlow<List<PotaQso>> = _activationQsos.asStateFlow()
+
+    // One-shot "an activation just ended" events carrying the final activation
+    // (with its qso_count). No replay: only a listener that's running when the
+    // operator ends the activation (the in-app rating prompt) should react.
+    private val _endedActivations = MutableSharedFlow<PotaActivation>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val endedActivations: SharedFlow<PotaActivation> = _endedActivations.asSharedFlow()
 
     @Volatile
     private var savedModifier: String = ""
@@ -86,12 +99,26 @@ object PotaSessionManager {
             log("end ignored — no activation running")
             return
         }
-        PotaActivationDao.endActivation(active.id)
+        // One timestamp for the DB row and the published copy, so listeners get
+        // exactly what was persisted: an ended activation, not the still-active
+        // in-memory object.
+        val endedAtMs = System.currentTimeMillis()
+        PotaActivationDao.endActivation(active.id, endedAtMs)
         GeneralVariables.toModifier = savedModifier
         savedModifier = ""
         log("end ref=${active.parkRef} id=${active.id} qsoCount=${active.qsoCount} restoredModifier='${GeneralVariables.toModifier}'")
         _currentActivation.value = null
         _activationQsos.value = emptyList()
+        notifyActivationEnded(endedActivation(active, endedAtMs))
+    }
+
+    /** [active] as [end] persisted it: the same row stamped with [endedAtMs], so it reads as ended. */
+    internal fun endedActivation(active: PotaActivation, endedAtMs: Long): PotaActivation =
+        active.copy(endedAtMs = endedAtMs)
+
+    /** Publish [ended] on [endedActivations]. Split out of [end] so it's testable without the DB. */
+    internal fun notifyActivationEnded(ended: PotaActivation) {
+        _endedActivations.tryEmit(ended)
     }
 
     /**

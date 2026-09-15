@@ -871,6 +871,59 @@
     <string name="bug_report_no_email_app">No email app found to send the report</string>
     <string name="bug_report_open_github">Open GitHub issue</string>
     <string name="bug_report_email" translatable="false">k1af@FT8AF.app</string>
+
+    <!-- ===== In-app rating prompt (RatePromptSheet) ===== -->
+    <string name="rate_prompt_eyebrow">GOOD SESSION</string>
+    <string name="rate_prompt_headline_entities_bands">%1$s entities across %2$s bands</string>
+    <string name="rate_prompt_headline_entities">%1$s entities in your log</string>
+    <string name="rate_prompt_headline_contacts_bands">%1$s contacts across %2$s bands</string>
+    <string name="rate_prompt_stat_qsos">QSOs</string>
+    <string name="rate_prompt_stat_dxcc">DXCC</string>
+    <string name="rate_prompt_stat_bands">Bands</string>
+    <string name="rate_prompt_minimal_title">Rate FT8AF</string>
+    <string name="rate_prompt_minimal_body">You\'ve logged %1$d contacts with FT8AF.</string>
+    <!-- Deliberately not a question: Play's in-app review guidelines forbid asking opinion questions before a rating action. -->
+    <string name="rate_prompt_play_pitch">A quick review on Google Play helps other operators find FT8AF.</string>
+    <string name="rate_prompt_remind_later">Remind me later</string>
+    <string name="rate_prompt_dont_ask_again">Don\'t ask again</string>
+    <string name="rate_prompt_play_action">Rate on Google Play</string>
+    <string name="rate_prompt_feedback_action">Send feedback</string>
+    <string name="rate_prompt_feedback_title">Feedback for the developer</string>
+    <string name="rate_prompt_feedback_body">Goes straight to the developer. Your callsign and app version are attached.</string>
+    <string name="rate_prompt_feedback_hint">Tell us what would make FT8AF better…</string>
+    <string name="rate_prompt_feedback_send">Send feedback</string>
+    <string name="rate_prompt_feedback_skip">Skip</string>
+    <!-- Spelled-out counts for the milestone headline; index == value, digits past the end. -->
+    <string-array name="rate_prompt_count_words_capitalized">
+        <item>Zero</item>
+        <item>One</item>
+        <item>Two</item>
+        <item>Three</item>
+        <item>Four</item>
+        <item>Five</item>
+        <item>Six</item>
+        <item>Seven</item>
+        <item>Eight</item>
+        <item>Nine</item>
+        <item>Ten</item>
+        <item>Eleven</item>
+        <item>Twelve</item>
+    </string-array>
+    <string-array name="rate_prompt_count_words">
+        <item>zero</item>
+        <item>one</item>
+        <item>two</item>
+        <item>three</item>
+        <item>four</item>
+        <item>five</item>
+        <item>six</item>
+        <item>seven</item>
+        <item>eight</item>
+        <item>nine</item>
+        <item>ten</item>
+        <item>eleven</item>
+        <item>twelve</item>
+    </string-array>
     <string name="settings_debug">Debug</string>
     <string name="settings_debug_desc">View / share debug.log</string>
     <string name="settings_about_body">Version %1$s (build %2$s)\nBuild date %3$s\n\nFT8, made easy.\n\nA standalone FT8 transceiver app for Android. USB, Bluetooth, and network rig control with automatic sequencing and logging.</string>
