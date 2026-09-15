@@ -226,7 +226,7 @@
     <string name="log_sync_title_no_services">ETKİN SERVİS YOK</string>
     <string name="log_sync_title_syncing">EŞİTLENİYOR…</string>
     <string name="log_sync_title_complete">EŞİTLEME TAMAMLANDI</string>
-    <string name="log_sync_enable_services">Ayarlar\'da Cloudlog/Wavelog/Nextlog veya QRZ\'yi etkinleştirip yeniden deneyin.</string>
+    <string name="log_sync_enable_services">Ayarlar\'da Cloudlog/Wavelog/Nextlog, QRZ veya World Radio League\'i etkinleştirip yeniden deneyin.</string>
     <string name="log_sync_progress_count">%2$d QSO\'dan %1$d</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d kabul edildi</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d kabul edildi</string>
@@ -602,4 +602,15 @@
     <string name="settings_bin_agg_max">Maksimum</string>
     <string name="settings_bin_agg_avg">Ortalama</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d kabul edildi</string>
+    <string name="settings_wrl_desc">QSO\'ları World Radio League kayıt defterinize otomatik yükle (Developer API anahtarı gerekir)</string>
+    <string name="settings_wrl_dialog_desc">World Radio League\'de Integrations → Developer API altında bir anahtar oluşturun. Tek anahtar tüm hesabınızı kapsar.</string>
+    <string name="settings_wrl_logbook">Kayıt defteri</string>
+    <string name="settings_wrl_logbook_default">Varsayılan kayıt defteri</string>
+    <string name="settings_wrl_loading_logbooks">Kayıt defterleri yükleniyor…</string>
+    <string name="settings_wrl_no_logbooks">World Radio League hesabınızda henüz kayıt defteri yok.</string>
+    <string name="settings_wrl_create_logbook">“%1$s” kayıt defterini oluştur</string>
+    <string name="settings_wrl_creating_logbook">Kayıt defteri oluşturuluyor…</string>
 </resources>

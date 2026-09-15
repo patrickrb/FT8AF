@@ -320,15 +320,18 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
                             if (syncDialogState?.inProgress == true) return@IconButton
                             val cl = GeneralVariables.enableCloudlog
                             val qrz = GeneralVariables.enableQRZ
-                            if (!cl && !qrz) {
+                            val wrl = GeneralVariables.enableWRL
+                            if (!ThirdPartyService.anyUploadServiceEnabled()) {
                                 syncDialogState = SyncDialogState(
                                     inProgress = false,
                                     done = 0,
                                     total = 0,
                                     cloudlogOk = 0,
                                     qrzOk = 0,
+                                    wrlOk = 0,
                                     cloudlogAttempted = false,
                                     qrzAttempted = false,
+                                    wrlAttempted = false,
                                     finished = true,
                                     noServicesEnabled = true,
                                 )
@@ -340,8 +343,10 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
                                 total = 0,
                                 cloudlogOk = 0,
                                 qrzOk = 0,
+                                wrlOk = 0,
                                 cloudlogAttempted = cl,
                                 qrzAttempted = qrz,
+                                wrlAttempted = wrl,
                                 finished = false,
                                 noServicesEnabled = false,
                             )
@@ -349,13 +354,14 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
                                 val result = withContext(Dispatchers.IO) {
                                     val db = mainViewModel.databaseOpr?.db
                                         ?: return@withContext null
-                                    ThirdPartyService.syncAllQSOs(db) { done, total, ok1, ok2 ->
+                                    ThirdPartyService.syncAllQSOs(db) { done, total, ok1, ok2, ok3 ->
                                         // Marshal back to main thread for state update
                                         syncDialogState = syncDialogState?.copy(
                                             done = done,
                                             total = total,
                                             cloudlogOk = ok1,
                                             qrzOk = ok2,
+                                            wrlOk = ok3,
                                         )
                                     }
                                 }
@@ -365,9 +371,10 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
                                     total = result?.total ?: 0,
                                     cloudlogOk = result?.cloudlogOk ?: 0,
                                     qrzOk = result?.qrzOk ?: 0,
+                                    wrlOk = result?.wrlOk ?: 0,
                                 )
                                 // Re-query QSLTable so the row chips pick up the
-                                // newly-set synced_cloudlog / synced_qrz flags.
+                                // newly-set synced_cloudlog / synced_qrz / synced_wrl flags.
                                 refreshKey++
                             }
                         },
@@ -482,8 +489,10 @@ private data class SyncDialogState(
     val total: Int,
     val cloudlogOk: Int,
     val qrzOk: Int,
+    val wrlOk: Int,
     val cloudlogAttempted: Boolean,
     val qrzAttempted: Boolean,
+    val wrlAttempted: Boolean,
     val finished: Boolean,
     val noServicesEnabled: Boolean,
 )
@@ -1680,6 +1689,7 @@ private fun QsoRow(
             SyncChips(
                 cloudlog = record.syncedCloudlog,
                 qrz = record.syncedQrz,
+                wrl = record.syncedWrl,
                 cloudlogLabel = cloudlogFamilyLabel(GeneralVariables.cloudlogServerAddress),
             )
 
@@ -1735,20 +1745,35 @@ private fun QsoRow(
 }
 
 // ---------------------------------------------------------------------------
-// Sync-to-service chips ("CL" for Cloudlog/Wavelog/Nextlog, "QRZ" for QRZ)
+// Sync-to-service chips ("CL" for Cloudlog/Wavelog/Nextlog, "QRZ" for QRZ,
+// "WRL" for World Radio League)
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun SyncChips(cloudlog: Boolean, qrz: Boolean, cloudlogLabel: String) {
-    if (!cloudlog && !qrz) return
+private fun SyncChips(cloudlog: Boolean, qrz: Boolean, wrl: Boolean, cloudlogLabel: String) {
+    val labels = syncChipLabels(cloudlog, qrz, wrl, cloudlogLabel)
+    if (labels.isEmpty()) return
     Row(
         modifier = Modifier.padding(start = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (cloudlog) SyncChip(label = cloudlogLabel)
-        if (qrz) SyncChip(label = "QRZ")
+        labels.forEach { SyncChip(label = it) }
     }
+}
+
+/** Chip labels for the services a logbook row has reached, in a fixed order. */
+internal fun syncChipLabels(
+    cloudlog: Boolean,
+    qrz: Boolean,
+    wrl: Boolean,
+    cloudlogLabel: String,
+): List<String> {
+    val labels = mutableListOf<String>()
+    if (cloudlog) labels.add(cloudlogLabel)
+    if (qrz) labels.add("QRZ")
+    if (wrl) labels.add("WRL")
+    return labels
 }
 
 // Cloudlog, Wavelog, and Nextlog share an upload API but identify differently in
@@ -2336,6 +2361,14 @@ private fun CatchUpSyncDialog(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.log_sync_qrz_accepted, state.qrzOk),
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                    )
+                }
+                if (state.wrlAttempted) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.log_sync_wrl_accepted, state.wrlOk),
                         color = TextMuted,
                         fontSize = 12.sp,
                     )

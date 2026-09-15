@@ -65,4 +65,25 @@ class BugReportLogicTest {
         assertThat(decoded).contains("two words")
         assertThat(decoded).contains("next line")
     }
+
+    @Test
+    fun `feedback body uses the feedback heading over the same device block`() {
+        val body = buildFeedbackBody("Waterfall is too dim", info())
+        assertThat(body).startsWith("What's not working:\nWaterfall is too dim")
+        assertThat(body).doesNotContain("Describe the problem:")
+        assertThat(body).contains("App version: 1.0.2 (build 104)")
+        assertThat(body).contains("Android: 15 (API 35)")
+        assertThat(body).contains("Device: Google Pixel 8")
+        assertThat(body).contains("Callsign: K1AF")
+    }
+
+    @Test
+    fun `feedback body shows a placeholder when blank`() {
+        assertThat(buildFeedbackBody(" ", info())).contains("(no feedback provided)")
+    }
+
+    @Test
+    fun `feedback title carries the app version`() {
+        assertThat(buildFeedbackTitle(info())).isEqualTo("App feedback (v1.0.2)")
+    }
 }

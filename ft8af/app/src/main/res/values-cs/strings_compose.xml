@@ -237,7 +237,7 @@
     <string name="log_sync_title_no_services">ŽÁDNÉ POVOLENÉ SLUŽBY</string>
     <string name="log_sync_title_syncing">SYNCHRONIZACE…</string>
     <string name="log_sync_title_complete">SYNCHRONIZACE DOKONČENA</string>
-    <string name="log_sync_enable_services">Povolte Cloudlog/Wavelog/Nextlog nebo QRZ v Nastavení a zkuste to znovu.</string>
+    <string name="log_sync_enable_services">Povolte Cloudlog/Wavelog/Nextlog, QRZ nebo World Radio League v Nastavení a zkuste to znovu.</string>
     <string name="log_sync_progress_count">%1$d z %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d přijato</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d přijato</string>
@@ -621,4 +621,15 @@
     <string name="settings_bin_agg_max">Maximum</string>
     <string name="settings_bin_agg_avg">Průměr</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d přijato</string>
+    <string name="settings_wrl_desc">Automaticky nahrávat QSOs do deníku World Radio League (vyžaduje klíč Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Klíč vygenerujete ve World Radio League v části Integrations → Developer API. Jeden klíč platí pro celý účet.</string>
+    <string name="settings_wrl_logbook">Deník</string>
+    <string name="settings_wrl_logbook_default">Výchozí deník</string>
+    <string name="settings_wrl_loading_logbooks">Načítání deníků…</string>
+    <string name="settings_wrl_no_logbooks">Váš účet World Radio League zatím nemá žádný deník.</string>
+    <string name="settings_wrl_create_logbook">Vytvořit deník „%1$s“</string>
+    <string name="settings_wrl_creating_logbook">Vytváření deníku…</string>
 </resources>

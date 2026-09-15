@@ -75,4 +75,19 @@ class QsoAutoSyncSummaryTest {
 
         assertThat(summary).doesNotContain("\n")
     }
+
+    @Test
+    fun `wrl count and reason appear only when wrl took part`() {
+        val withWrl =
+            ThirdPartyService.SyncResult(
+                5, 5, 0, 3,
+                true, false, true,
+                null, null, "HTTP 422 VALIDATION_ERROR: bad band [band]",
+            )
+
+        assertThat(summarize(withWrl))
+            .isEqualTo("cloudlog=5 qrz=0 wrl=3 of 5 wrlError=HTTP 422 VALIDATION_ERROR: bad band [band]")
+        // The legacy constructor leaves wrl out, so the Cloudlog/QRZ-only line is unchanged.
+        assertThat(summarize(result(5, 5, 5))).doesNotContain("wrl")
+    }
 }

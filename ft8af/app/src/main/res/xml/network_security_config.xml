@@ -36,6 +36,7 @@
         <domain includeSubdomains="true">amazonaws.com</domain>
         <domain includeSubdomains="true">github.com</domain>
         <domain includeSubdomains="true">ft8af.app</domain>
+        <domain includeSubdomains="true">worldradioleague.com</domain>
         <domain includeSubdomains="true">support.qq.com</domain>
     </domain-config>
 </network-security-config>

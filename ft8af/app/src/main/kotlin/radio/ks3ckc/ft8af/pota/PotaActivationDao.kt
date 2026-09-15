@@ -37,10 +37,10 @@ internal object PotaActivationDao {
         )
     }
 
-    fun endActivation(id: Long) {
+    fun endActivation(id: Long, endedAtMs: Long) {
         db().execSQL(
             "UPDATE pota_activation SET ended_at = ? WHERE id = ?",
-            arrayOf<Any?>(System.currentTimeMillis(), id),
+            arrayOf<Any?>(endedAtMs, id),
         )
     }
 

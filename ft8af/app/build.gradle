@@ -260,6 +260,10 @@ dependencies {
     // off (see the sentry { } block) so this is the single source of the SDK.
     implementation 'io.sentry:sentry-android:8.16.0'
 
+    // In-app rating prompt: DataStore persists its eligibility state (survives
+    // process death + app updates).
+    implementation 'androidx.datastore:datastore-preferences:1.1.7'
+
     // --- JVM unit + Robolectric tests ---
     testImplementation 'junit:junit:4.13.2'
     // 4.14.1 ships android-all for SDK 35; older versions fail with

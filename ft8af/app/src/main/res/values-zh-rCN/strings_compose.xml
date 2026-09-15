@@ -194,7 +194,7 @@
     <string name="log_sync_title_no_services">未启用任何服务</string>
     <string name="log_sync_title_syncing">正在同步…</string>
     <string name="log_sync_title_complete">同步完成</string>
-    <string name="log_sync_enable_services">请在设置中启用 Cloudlog/Wavelog/Nextlog 或 QRZ，然后重试。</string>
+    <string name="log_sync_enable_services">请在设置中启用 Cloudlog/Wavelog/Nextlog、QRZ 或 World Radio League，然后重试。</string>
     <string name="log_sync_progress_count">%2$d 个 QSO 中的第 %1$d 个</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog：已接受 %1$d 个</string>
     <string name="log_sync_qrz_accepted">QRZ：已接受 %1$d 个</string>
@@ -566,4 +566,15 @@
     <string name="settings_bin_agg_max">最大值</string>
     <string name="settings_bin_agg_avg">平均值</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League：已接受 %1$d 个</string>
+    <string name="settings_wrl_desc">自动上传 QSO 到您的 World Radio League 日志（需要 Developer API 密钥）</string>
+    <string name="settings_wrl_dialog_desc">在 World Radio League 的 Integrations → Developer API 中生成密钥。一个密钥适用于整个账户。</string>
+    <string name="settings_wrl_logbook">日志</string>
+    <string name="settings_wrl_logbook_default">默认日志</string>
+    <string name="settings_wrl_loading_logbooks">正在加载日志…</string>
+    <string name="settings_wrl_no_logbooks">您的 World Radio League 账户还没有日志。</string>
+    <string name="settings_wrl_create_logbook">创建“%1$s”日志</string>
+    <string name="settings_wrl_creating_logbook">正在创建日志…</string>
 </resources>

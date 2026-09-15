@@ -194,7 +194,7 @@
     <string name="log_sync_title_no_services">СЛУЖБЫ НЕ ВКЛЮЧЕНЫ</string>
     <string name="log_sync_title_syncing">СИНХРОНИЗАЦИЯ…</string>
     <string name="log_sync_title_complete">СИНХРОНИЗАЦИЯ ЗАВЕРШЕНА</string>
-    <string name="log_sync_enable_services">Включите Cloudlog/Wavelog/Nextlog или QRZ в настройках и повторите.</string>
+    <string name="log_sync_enable_services">Включите Cloudlog/Wavelog/Nextlog, QRZ или World Radio League в настройках и повторите.</string>
     <string name="log_sync_progress_count">%1$d из %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: принято %1$d</string>
     <string name="log_sync_qrz_accepted">QRZ: принято %1$d</string>
@@ -578,4 +578,15 @@
     <string name="settings_bin_agg_max">Максимум</string>
     <string name="settings_bin_agg_avg">Среднее</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: принято %1$d</string>
+    <string name="settings_wrl_desc">Автозагрузка QSO в журнал World Radio League (нужен ключ Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Создайте ключ в World Radio League в разделе Integrations → Developer API. Один ключ действует для всей учётной записи.</string>
+    <string name="settings_wrl_logbook">Журнал</string>
+    <string name="settings_wrl_logbook_default">Журнал по умолчанию</string>
+    <string name="settings_wrl_loading_logbooks">Загрузка журналов…</string>
+    <string name="settings_wrl_no_logbooks">В вашей учётной записи World Radio League пока нет журналов.</string>
+    <string name="settings_wrl_create_logbook">Создать журнал «%1$s»</string>
+    <string name="settings_wrl_creating_logbook">Создание журнала…</string>
 </resources>
