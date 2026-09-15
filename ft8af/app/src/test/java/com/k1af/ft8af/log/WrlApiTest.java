@@ -311,8 +311,30 @@ public class WrlApiTest {
     public void isBatchFatal_contactSpecificProblemsDoNot() {
         assertThat(WrlApi.isBatchFatal(400, error(400, "VALIDATION_ERROR", "x", "band").body)).isFalse();
         assertThat(WrlApi.isBatchFatal(422, error(422, "VALIDATION_ERROR", "x", "gridsquare").body)).isFalse();
-        assertThat(WrlApi.isBatchFatal(500, error(500, "INTERNAL_ERROR", "x", null).body)).isFalse();
-        assertThat(WrlApi.isBatchFatal(502, "<html>")).isFalse();
+    }
+
+    /** Verbatim live reply (2026-09-15) to a contact with no logbookId on a single-logbook account. */
+    private static final String LIVE_UNROUTABLE_500 =
+            "{\"data\":null,\"meta\":null,\"error\":{\"code\":\"INTERNAL_ERROR\","
+                    + "\"message\":\"Could not determine the destination logbook.\","
+                    + "\"requestId\":\"ab3f85ca-994a-4778-830e-8816da212aae\"}}";
+
+    @Test
+    public void isBatchFatal_serverErrorsStopTheBatch() {
+        // An outage fails every row alike, and WRL reports an unroutable contact as a 500.
+        assertThat(WrlApi.isBatchFatal(500, LIVE_UNROUTABLE_500)).isTrue();
+        assertThat(WrlApi.isBatchFatal(502, "<html>")).isTrue();
+        assertThat(WrlApi.isBatchFatal(503, null)).isTrue();
+    }
+
+    @Test
+    public void upload_unroutableContactStopsTheBatchWithWrlReason() {
+        respond(new WrlApi.Response(500, LIVE_UNROUTABLE_500, null));
+        StringBuilder why = new StringBuilder();
+        assertThat(WrlApi.uploadContact("k", "{}", why)).isEqualTo(WrlApi.UploadResult.FAILED_STOP_BATCH);
+        assertThat(why.toString())
+                .isEqualTo("HTTP 500 INTERNAL_ERROR: Could not determine the destination logbook.");
+        assertThat(sleeps).isEmpty();
     }
 
     @Test
@@ -406,6 +428,20 @@ public class WrlApiTest {
         assertThat(none.ok).isFalse();
         assertThat(none.detail).contains("choose a logbook");
         assertThat(WrlApi.interpretMe(body, "6f1c0b7e").ok).isTrue();
+    }
+
+    @Test
+    public void interpretMe_nullDefaultDestinationFailsUnlessALogbookIsChosen() {
+        // Verbatim live /me (2026-09-15) for a free account with one web-created logbook:
+        // WRL resolves nothing, and a contact without logbookId then fails with a 500.
+        String body = "{\"data\":{\"uid\":\"u\",\"environment\":\"live\",\"membershipTier\":\"free\","
+                + "\"defaultLogbook\":{\"logbookId\":null,\"resolution\":null}},\"meta\":null,\"error\":null}";
+        ThirdPartyService.ConnectionCheck none = WrlApi.interpretMe(body, "");
+        assertThat(none.ok).isFalse();
+        assertThat(none.detail).contains("choose a logbook");
+        assertThat(WrlApi.interpretMe(body, "ee6b3656-1469-4d21-8a08-ce2763fbb565").ok).isTrue();
+        // No defaultLogbook object at all is no destination either.
+        assertThat(WrlApi.interpretMe("{\"data\":{\"uid\":\"u\"}}", null).ok).isFalse();
     }
 
     @Test

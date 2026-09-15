@@ -364,10 +364,13 @@ public final class WrlApi {
      * Whether a refused upload means every later one in the batch would be refused too, so
      * the sync should stop calling WRL: an auth/tier problem, a destination logbook that
      * cannot take contacts, the API being switched off, or a rate limit we will not wait out.
-     * A validation error is specific to that contact and a 5xx may clear, so neither stops.
+     * A 5xx stops too: an outage fails every row alike, and live WRL answers an unroutable
+     * contact (no logbookId, no resolvable default) with 500 INTERNAL_ERROR rather than 422
+     * LOGBOOK_REQUIRED. Stopping loses nothing — the rows stay unsynced for the next pass.
+     * A validation error is specific to that contact, so it does not stop.
      */
     static boolean isBatchFatal(int status, String body) {
-        if (status == 401 || status == 403 || status == 429) {
+        if (status == 401 || status == 403 || status == 429 || status >= 500) {
             return true;
         }
         JSONObject err = errorObject(body);
@@ -494,13 +497,18 @@ public final class WrlApi {
         if (trimToNull(logbookId) == null) {
             JSONObject def = data.optJSONObject("defaultLogbook");
             String resolution = def == null ? null : optText(def, "resolution");
-            if ("ambiguous".equals(resolution)) {
-                return new ThirdPartyService.ConnectionCheck(false,
-                        "several logbooks and no default: choose a logbook");
-            }
             if ("none".equals(resolution)) {
                 return new ThirdPartyService.ConnectionCheck(false,
                         "no unlocked logbook: create one in World Radio League");
+            }
+            // With no logbookId a contact goes wherever defaultLogbook.logbookId points. Live
+            // WRL (2026-09-15) reports {logbookId:null, resolution:null} for an account whose
+            // only logbook was made in the web UI, then answers every contact with 500
+            // "Could not determine the destination logbook" — so a null destination fails
+            // the check whatever the resolution says ("ambiguous" included).
+            if (def == null || optText(def, "logbookId") == null) {
+                return new ThirdPartyService.ConnectionCheck(false,
+                        "no default logbook: choose a logbook");
             }
         }
         return new ThirdPartyService.ConnectionCheck(true, null);

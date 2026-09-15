@@ -739,6 +739,16 @@ internal fun wrlLogbookIdAt(logbooks: List<ThirdPartyService.StationProfile>, in
     if (index <= 0) "" else logbooks.getOrNull(index - 1)?.stationId.orEmpty()
 
 /**
+ * With no logbook chosen and exactly one on the account, choose it. WRL does not route a
+ * contact to a lone logbook by itself: live, a contact without logbookId fails with 500
+ * "Could not determine the destination logbook" unless a default was set on the website.
+ */
+internal fun wrlAutoSelectLogbook(
+    logbooks: List<ThirdPartyService.StationProfile>,
+    selectedId: String,
+): String = if (selectedId.isBlank() && logbooks.size == 1) logbooks[0].stationId else selectedId
+
+/**
  * Dialog for the World Radio League Developer API key and destination logbook (issue #800).
  * WRL is a fixed cloud service, so unlike Cloudlog there is no server address. Test
  * Connection calls [WrlApi.checkConnection] with the typed values — nothing global changes
@@ -767,6 +777,7 @@ private fun WrlSettingsDialog(
         if (key.isNotBlank()) {
             isFetchingLogbooks = true
             logbooks = withContext(Dispatchers.IO) { WrlApi.fetchLogbooks(key) }
+            logbookId = wrlAutoSelectLogbook(logbooks, logbookId)
             isFetchingLogbooks = false
         }
     }
@@ -865,24 +876,28 @@ private fun WrlSettingsDialog(
                 TextButton(
                     onClick = {
                         val key = apiKeyInput.text.trim()
-                        val selected = logbookId
                         isTesting = true
                         testResult = null
                         testDetail = null
                         scope.launch {
+                            // Logbooks first: a lone logbook is chosen automatically (WRL
+                            // won't route to it on its own), so the check below tests the
+                            // destination uploads will really use. They load even when the
+                            // check then fails with "choose a logbook" — the picker is how
+                            // the user fixes exactly that.
+                            if (key.isNotBlank()) {
+                                isFetchingLogbooks = true
+                                logbooks = withContext(Dispatchers.IO) { WrlApi.fetchLogbooks(key) }
+                                logbookId = wrlAutoSelectLogbook(logbooks, logbookId)
+                                isFetchingLogbooks = false
+                            }
+                            val selected = logbookId
                             val check = withContext(Dispatchers.IO) {
                                 WrlApi.checkConnection(key, selected)
                             }
                             testResult = check.ok
                             testDetail = check.detail
                             isTesting = false
-                            // Load logbooks even when the check failed with "choose a
-                            // logbook" — the picker is how the user fixes exactly that.
-                            if (key.isNotBlank()) {
-                                isFetchingLogbooks = true
-                                logbooks = withContext(Dispatchers.IO) { WrlApi.fetchLogbooks(key) }
-                                isFetchingLogbooks = false
-                            }
                         }
                     },
                     enabled = !isTesting,

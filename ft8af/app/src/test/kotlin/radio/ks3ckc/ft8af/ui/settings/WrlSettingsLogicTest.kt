@@ -35,6 +35,17 @@ class WrlSettingsLogicTest {
     }
 
     @Test
+    fun `a lone logbook is chosen automatically only when nothing is selected`() {
+        val lone = listOf(ThirdPartyService.StationProfile("uuid-only", "Test", "", ""))
+        assertThat(wrlAutoSelectLogbook(lone, "")).isEqualTo("uuid-only")
+        // An explicit choice (even one no longer listed) is never overridden.
+        assertThat(wrlAutoSelectLogbook(lone, "uuid-other")).isEqualTo("uuid-other")
+        // With several logbooks the user has to pick; with none there is nothing to pick.
+        assertThat(wrlAutoSelectLogbook(logbooks, "")).isEmpty()
+        assertThat(wrlAutoSelectLogbook(emptyList(), "")).isEmpty()
+    }
+
+    @Test
     fun `a saved logbook that is no longer listed shows its raw id`() {
         assertThat(wrlLogbookSelectionLabel(emptyList(), "uuid-gone", "Default logbook")).isEqualTo("uuid-gone")
         assertThat(wrlLogbookPickerIndex(logbooks, "uuid-gone")).isEqualTo(0)
