@@ -582,4 +582,7 @@
     <string name="settings_wrl_logbook">Libro de guardia</string>
     <string name="settings_wrl_logbook_default">Libro predeterminado</string>
     <string name="settings_wrl_loading_logbooks">Cargando libros…</string>
+    <string name="settings_wrl_no_logbooks">Tu cuenta de World Radio League aún no tiene libros de guardia.</string>
+    <string name="settings_wrl_create_logbook">Crear libro “%1$s”</string>
+    <string name="settings_wrl_creating_logbook">Creando libro…</string>
 </resources>

@@ -629,4 +629,7 @@
     <string name="settings_wrl_logbook">Deník</string>
     <string name="settings_wrl_logbook_default">Výchozí deník</string>
     <string name="settings_wrl_loading_logbooks">Načítání deníků…</string>
+    <string name="settings_wrl_no_logbooks">Váš účet World Radio League zatím nemá žádný deník.</string>
+    <string name="settings_wrl_create_logbook">Vytvořit deník „%1$s“</string>
+    <string name="settings_wrl_creating_logbook">Vytváření deníku…</string>
 </resources>

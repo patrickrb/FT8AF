@@ -618,4 +618,7 @@
     <string name="settings_wrl_logbook">Журнал</string>
     <string name="settings_wrl_logbook_default">Журнал за замовчуванням</string>
     <string name="settings_wrl_loading_logbooks">Завантаження журналів…</string>
+    <string name="settings_wrl_no_logbooks">У вашому обліковому записі World Radio League ще немає журналів.</string>
+    <string name="settings_wrl_create_logbook">Створити журнал «%1$s»</string>
+    <string name="settings_wrl_creating_logbook">Створення журналу…</string>
 </resources>

@@ -46,6 +46,27 @@ class WrlSettingsLogicTest {
     }
 
     @Test
+    fun `create logbook is offered only when the account is known to have none`() {
+        assertThat(wrlShouldOfferCreateLogbook("wrl_live_k", emptyList())).isTrue()
+        assertThat(wrlShouldOfferCreateLogbook("wrl_live_k", logbooks)).isFalse()
+        // null = not loaded yet, or the request failed (bad key, offline): nothing to offer.
+        assertThat(wrlShouldOfferCreateLogbook("wrl_live_k", null)).isFalse()
+        assertThat(wrlShouldOfferCreateLogbook("  ", emptyList())).isFalse()
+    }
+
+    @Test
+    fun `an empty account replaces the choose-a-logbook failure detail`() {
+        val noLogbooks = "No logbooks yet"
+        assertThat(wrlTestFailureDetail("no default logbook: choose a logbook", emptyList(), noLogbooks))
+            .isEqualTo(noLogbooks)
+        // A real key/network failure keeps WRL's own reason.
+        assertThat(wrlTestFailureDetail("HTTP 401 INVALID_KEY: The API key is not valid.", null, noLogbooks))
+            .isEqualTo("HTTP 401 INVALID_KEY: The API key is not valid.")
+        assertThat(wrlTestFailureDetail("no default logbook: choose a logbook", logbooks, noLogbooks))
+            .isEqualTo("no default logbook: choose a logbook")
+    }
+
+    @Test
     fun `a saved logbook that is no longer listed shows its raw id`() {
         assertThat(wrlLogbookSelectionLabel(emptyList(), "uuid-gone", "Default logbook")).isEqualTo("uuid-gone")
         assertThat(wrlLogbookPickerIndex(logbooks, "uuid-gone")).isEqualTo(0)

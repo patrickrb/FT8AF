@@ -637,4 +637,7 @@
     <string name="settings_wrl_logbook">السجل</string>
     <string name="settings_wrl_logbook_default">السجل الافتراضي</string>
     <string name="settings_wrl_loading_logbooks">جارٍ تحميل السجلات…</string>
+    <string name="settings_wrl_no_logbooks">لا يحتوي حسابك في World Radio League على أي سجلات بعد.</string>
+    <string name="settings_wrl_create_logbook">إنشاء سجل “%1$s”</string>
+    <string name="settings_wrl_creating_logbook">جارٍ إنشاء السجل…</string>
 </resources>

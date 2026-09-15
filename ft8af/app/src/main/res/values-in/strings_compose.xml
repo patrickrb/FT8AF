@@ -617,4 +617,7 @@
     <string name="settings_wrl_logbook">Logbook</string>
     <string name="settings_wrl_logbook_default">Logbook default</string>
     <string name="settings_wrl_loading_logbooks">Memuat logbook…</string>
+    <string name="settings_wrl_no_logbooks">Akun World Radio League Anda belum memiliki logbook.</string>
+    <string name="settings_wrl_create_logbook">Buat logbook “%1$s”</string>
+    <string name="settings_wrl_creating_logbook">Membuat logbook…</string>
 </resources>

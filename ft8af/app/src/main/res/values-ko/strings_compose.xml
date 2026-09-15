@@ -617,4 +617,7 @@
     <string name="settings_wrl_logbook">로그북</string>
     <string name="settings_wrl_logbook_default">기본 로그북</string>
     <string name="settings_wrl_loading_logbooks">로그북 불러오는 중…</string>
+    <string name="settings_wrl_no_logbooks">World Radio League 계정에 아직 로그북이 없습니다.</string>
+    <string name="settings_wrl_create_logbook">“%1$s” 로그북 만들기</string>
+    <string name="settings_wrl_creating_logbook">로그북 만드는 중…</string>
 </resources>

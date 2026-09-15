@@ -92,6 +92,7 @@ import com.k1af.ft8af.log.QSLCallsignRecord;
 import com.k1af.ft8af.log.QSLRecord;
 import com.k1af.ft8af.log.SWLQsoList;
 import com.k1af.ft8af.log.ThirdPartyService;
+import com.k1af.ft8af.log.WrlApi;
 import com.k1af.ft8af.rigs.BaseRig;
 import com.k1af.ft8af.rigs.BaseRigOperation;
 import com.k1af.ft8af.rigs.CatConnectionState;
@@ -587,6 +588,15 @@ public class MainViewModel extends ViewModel {
         //get configuration info.
         databaseOpr = DatabaseOpr.getInstance(GeneralVariables.getMainContext()
                 , "data.db");
+        // World Radio League: when an upload finds no saved logbook and the account has
+        // exactly one, keep that choice. Uploads run on background threads, so write
+        // synchronously rather than through the AsyncTask-based writeConfig.
+        WrlApi.setLogbookIdSaver(logbookId -> {
+            if (databaseOpr != null) {
+                databaseOpr.writeConfigSync(
+                        java.util.Collections.singletonMap("wrlLogbookId", logbookId));
+            }
+        });
         mutableIsDecoding.postValue(false);//decode state
         //create recording object
         hamRecorder = new HamRecorder(null);

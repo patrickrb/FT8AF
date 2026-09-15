@@ -610,4 +610,7 @@
     <string name="settings_wrl_logbook">Kayıt defteri</string>
     <string name="settings_wrl_logbook_default">Varsayılan kayıt defteri</string>
     <string name="settings_wrl_loading_logbooks">Kayıt defterleri yükleniyor…</string>
+    <string name="settings_wrl_no_logbooks">World Radio League hesabınızda henüz kayıt defteri yok.</string>
+    <string name="settings_wrl_create_logbook">“%1$s” kayıt defterini oluştur</string>
+    <string name="settings_wrl_creating_logbook">Kayıt defteri oluşturuluyor…</string>
 </resources>

@@ -843,6 +843,9 @@
     <string name="settings_wrl_logbook">Logbook</string>
     <string name="settings_wrl_logbook_default">Default logbook</string>
     <string name="settings_wrl_loading_logbooks">Loading logbooks…</string>
+    <string name="settings_wrl_no_logbooks">Your World Radio League account has no logbooks yet.</string>
+    <string name="settings_wrl_create_logbook">Create “%1$s” logbook</string>
+    <string name="settings_wrl_creating_logbook">Creating logbook…</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">PTT Delay</string>

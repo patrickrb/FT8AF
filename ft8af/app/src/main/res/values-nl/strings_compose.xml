@@ -621,4 +621,7 @@
     <string name="settings_wrl_logbook">Logboek</string>
     <string name="settings_wrl_logbook_default">Standaardlogboek</string>
     <string name="settings_wrl_loading_logbooks">Logboeken laden…</string>
+    <string name="settings_wrl_no_logbooks">Je World Radio League-account heeft nog geen logboeken.</string>
+    <string name="settings_wrl_create_logbook">Logboek “%1$s” aanmaken</string>
+    <string name="settings_wrl_creating_logbook">Logboek aanmaken…</string>
 </resources>

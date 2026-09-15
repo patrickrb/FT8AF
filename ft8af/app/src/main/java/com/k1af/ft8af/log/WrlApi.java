@@ -107,6 +107,20 @@ public final class WrlApi {
     static Transport transport = WrlApi::httpCall;
     static Sleeper sleeper = Thread::sleep;
 
+    /** Name of the logbook the settings dialog offers to create for an account that has none. */
+    public static final String DEFAULT_LOGBOOK_NAME = "FT8AF";
+
+    /** Persists a logbook id chosen at upload time (MainViewModel wires it to the config table). */
+    public interface LogbookIdSaver {
+        void save(String logbookId);
+    }
+
+    static LogbookIdSaver logbookIdSaver = id -> { };
+
+    public static void setLogbookIdSaver(LogbookIdSaver saver) {
+        logbookIdSaver = saver != null ? saver : id -> { };
+    }
+
     /** The QSO fields WRL accepts, as plain strings, whichever source they came from. */
     static final class ContactFields {
         String call;
@@ -446,8 +460,25 @@ public final class WrlApi {
             appendFailure(failureOut, "no API key configured");
             return UploadResult.FAILED_STOP_BATCH;
         }
+        String logbook = trimToNull(GeneralVariables.wrlLogbookId);
+        if (logbook == null) {
+            // No logbook saved. WRL will not route a contact to a lone logbook on its own
+            // (live: 500 "Could not determine the destination logbook"), and a new account
+            // has none at all — so look before posting.
+            List<ThirdPartyService.StationProfile> books = fetchLogbooksOrNull(key);
+            if (books != null && books.isEmpty()) {
+                log("not uploaded: account has no logbook");
+                appendFailure(failureOut,
+                        "no logbook in the World Radio League account: create one in Logging settings");
+                return UploadResult.FAILED_STOP_BATCH;
+            }
+            logbook = chooseUploadLogbook(books);
+            if (logbook != null) {
+                rememberLogbook(logbook);
+            }
+        }
         StringBuilder why = new StringBuilder();
-        String json = buildContactJson(f, GeneralVariables.wrlLogbookId, why);
+        String json = buildContactJson(f, logbook, why);
         if (json == null) {
             log("not uploaded: " + why);
             appendFailure(failureOut, why.toString());
@@ -516,9 +547,19 @@ public final class WrlApi {
 
     /** The account's logbooks that can accept contacts. Empty (never null) on any failure. */
     public static List<ThirdPartyService.StationProfile> fetchLogbooks(String apiKey) {
+        List<ThirdPartyService.StationProfile> books = fetchLogbooksOrNull(apiKey);
+        return books != null ? books : new ArrayList<>();
+    }
+
+    /**
+     * As {@link #fetchLogbooks}, but null when the list could not be read (no key, bad key,
+     * offline) — so an account that genuinely has no logbooks is distinguishable from a
+     * failed request.
+     */
+    public static List<ThirdPartyService.StationProfile> fetchLogbooksOrNull(String apiKey) {
         String key = trimToNull(apiKey);
         if (key == null) {
-            return new ArrayList<>();
+            return null;
         }
         try {
             Response r = transport.call("GET", BASE_URL + "logbooks?limit=100", key, null);
@@ -529,7 +570,105 @@ public final class WrlApi {
         } catch (IOException e) {
             log("GET logbooks -> " + describeTransportError(e));
         }
-        return new ArrayList<>();
+        return null;
+    }
+
+    /**
+     * Creates a logbook ({@code POST /v1/logbooks}). WRL gives a new account no logbook, so
+     * without one there is nowhere to put contacts. Returns the new logbook, or null with the
+     * reason appended to {@code failureOut}.
+     */
+    public static ThirdPartyService.StationProfile createLogbook(String apiKey, String name,
+                                                                String defaultCallSign,
+                                                                StringBuilder failureOut) {
+        String key = trimToNull(apiKey);
+        if (key == null) {
+            appendFailure(failureOut, "no API key configured");
+            return null;
+        }
+        String json = buildLogbookCreateJson(name, defaultCallSign);
+        if (json == null) {
+            appendFailure(failureOut, "missing logbook name");
+            return null;
+        }
+        try {
+            Response r = transport.call("POST", BASE_URL + "logbooks", key, json);
+            if (r.status == HttpURLConnection.HTTP_OK || r.status == HttpURLConnection.HTTP_CREATED) {
+                log("POST logbooks -> HTTP " + r.status);
+                ThirdPartyService.StationProfile created = parseCreatedLogbook(r.body);
+                if (created == null) {
+                    appendFailure(failureOut, "unexpected reply (no logbook id)");
+                }
+                return created;
+            }
+            String why = describeFailure(r.status, r.body);
+            log("POST logbooks -> " + why);
+            appendFailure(failureOut, why);
+        } catch (IOException e) {
+            String why = describeTransportError(e);
+            log("POST logbooks -> " + why);
+            appendFailure(failureOut, why);
+        }
+        return null;
+    }
+
+    /**
+     * The LogbookCreate body: {@code name} (clipped to WRL's 100) plus the operator's callsign
+     * as {@code defaultCallSign} when it fits WRL's 20-character limit. Null without a name.
+     * Pure — unit-tested.
+     */
+    static String buildLogbookCreateJson(String name, String defaultCallSign) {
+        String n = trimToNull(name);
+        if (n == null) {
+            return null;
+        }
+        try {
+            JSONObject o = new JSONObject();
+            o.put("name", n.length() > 100 ? n.substring(0, 100) : n);
+            String call = trimToNull(defaultCallSign);
+            if (call != null && call.length() <= 20) {
+                o.put("defaultCallSign", call.toUpperCase(Locale.ROOT));
+            }
+            return o.toString();
+        } catch (JSONException e) {
+            return null;
+        }
+    }
+
+    /** The logbook in a {@code POST /v1/logbooks} reply, or null. Pure. */
+    static ThirdPartyService.StationProfile parseCreatedLogbook(String body) {
+        JSONObject data = dataObject(body);
+        return data == null ? null : toProfile(data);
+    }
+
+    /**
+     * Upload-time fallback when no logbook is saved: the account's only logbook, else null —
+     * with several, the choice is the operator's (or a default they set on the website).
+     * Pure — unit-tested.
+     */
+    static String chooseUploadLogbook(List<ThirdPartyService.StationProfile> books) {
+        return books != null && books.size() == 1 ? books.get(0).stationId : null;
+    }
+
+    private static void rememberLogbook(String logbookId) {
+        GeneralVariables.wrlLogbookId = logbookId;
+        log("using the account's only logbook");
+        try {
+            logbookIdSaver.save(logbookId);
+        } catch (Exception e) {
+            Log.d(TAG, "saving logbook id failed: " + e.getClass().getSimpleName());
+        }
+    }
+
+    private static ThirdPartyService.StationProfile toProfile(JSONObject lb) {
+        String id = optText(lb, "id");
+        if (id == null) {
+            return null;
+        }
+        String name = optText(lb, "name");
+        String call = optText(lb, "defaultCallSign");
+        return new ThirdPartyService.StationProfile(id,
+                name == null ? "" : name, call == null ? "" : call, "");
     }
 
     /**
@@ -551,14 +690,10 @@ public final class WrlApi {
                 if (lb == null) {
                     continue;
                 }
-                String id = optText(lb, "id");
-                if (id == null || lb.optBoolean("isLocked", false)) {
-                    continue;
+                ThirdPartyService.StationProfile profile = toProfile(lb);
+                if (profile != null && !lb.optBoolean("isLocked", false)) {
+                    out.add(profile);
                 }
-                String name = optText(lb, "name");
-                String call = optText(lb, "defaultCallSign");
-                out.add(new ThirdPartyService.StationProfile(id,
-                        name == null ? "" : name, call == null ? "" : call, ""));
             }
         } catch (JSONException e) {
             Log.d(TAG, "parseLogbooks error: " + e.getClass().getSimpleName());

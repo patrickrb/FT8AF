@@ -691,4 +691,7 @@
     <string name="settings_wrl_logbook">Logbook</string>
     <string name="settings_wrl_logbook_default">Logbook padrão</string>
     <string name="settings_wrl_loading_logbooks">Carregando logbooks…</string>
+    <string name="settings_wrl_no_logbooks">Sua conta do World Radio League ainda não tem logbooks.</string>
+    <string name="settings_wrl_create_logbook">Criar logbook “%1$s”</string>
+    <string name="settings_wrl_creating_logbook">Criando logbook…</string>
 </resources>

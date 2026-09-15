@@ -582,4 +582,7 @@
     <string name="settings_wrl_logbook">Carnet de trafic</string>
     <string name="settings_wrl_logbook_default">Carnet par défaut</string>
     <string name="settings_wrl_loading_logbooks">Chargement des carnets…</string>
+    <string name="settings_wrl_no_logbooks">Votre compte World Radio League n\'a encore aucun carnet.</string>
+    <string name="settings_wrl_create_logbook">Créer le carnet « %1$s »</string>
+    <string name="settings_wrl_creating_logbook">Création du carnet…</string>
 </resources>

@@ -574,4 +574,7 @@
     <string name="settings_wrl_logbook">日誌</string>
     <string name="settings_wrl_logbook_default">預設日誌</string>
     <string name="settings_wrl_loading_logbooks">正在載入日誌…</string>
+    <string name="settings_wrl_no_logbooks">您的 World Radio League 帳戶還沒有日誌。</string>
+    <string name="settings_wrl_create_logbook">建立「%1$s」日誌</string>
+    <string name="settings_wrl_creating_logbook">正在建立日誌…</string>
 </resources>

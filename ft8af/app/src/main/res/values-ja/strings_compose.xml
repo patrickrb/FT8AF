@@ -574,4 +574,7 @@
     <string name="settings_wrl_logbook">ログブック</string>
     <string name="settings_wrl_logbook_default">既定のログブック</string>
     <string name="settings_wrl_loading_logbooks">ログブックを読み込み中…</string>
+    <string name="settings_wrl_no_logbooks">World Radio League アカウントにはまだログブックがありません。</string>
+    <string name="settings_wrl_create_logbook">「%1$s」ログブックを作成</string>
+    <string name="settings_wrl_creating_logbook">ログブックを作成中…</string>
 </resources>

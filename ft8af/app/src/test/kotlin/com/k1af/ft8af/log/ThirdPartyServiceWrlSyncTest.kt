@@ -28,8 +28,11 @@ class ThirdPartyServiceWrlSyncTest {
     private var savedLogbook: String? = null
     private lateinit var savedTransport: WrlApi.Transport
     private lateinit var savedSleeper: WrlApi.Sleeper
+    private lateinit var savedSaver: WrlApi.LogbookIdSaver
     private val bodies = mutableListOf<String?>()
     private val keys = mutableListOf<String>()
+    private val requests = mutableListOf<String>()
+    private val savedLogbookIds = mutableListOf<String>()
 
     @Before
     fun setUp() {
@@ -40,12 +43,15 @@ class ThirdPartyServiceWrlSyncTest {
         savedLogbook = GeneralVariables.wrlLogbookId
         savedTransport = WrlApi.transport
         savedSleeper = WrlApi.sleeper
+        savedSaver = WrlApi.logbookIdSaver
         GeneralVariables.enableCloudlog = false
         GeneralVariables.enableQRZ = false
         GeneralVariables.enableWRL = true
         GeneralVariables.wrlApiKey = "wrl_live_test"
-        GeneralVariables.wrlLogbookId = ""
+        // A saved logbook, so most tests see only contact POSTs; the lookup tests clear it.
+        GeneralVariables.wrlLogbookId = "lb-saved"
         WrlApi.sleeper = WrlApi.Sleeper { }
+        WrlApi.logbookIdSaver = WrlApi.LogbookIdSaver { savedLogbookIds.add(it) }
         db = SQLiteDatabase.create(null)
         db.execSQL(
             """
@@ -73,6 +79,80 @@ class ThirdPartyServiceWrlSyncTest {
         GeneralVariables.wrlLogbookId = savedLogbook
         WrlApi.transport = savedTransport
         WrlApi.sleeper = savedSleeper
+        WrlApi.logbookIdSaver = savedSaver
+    }
+
+    /** Fake WRL for flows that read the logbook list before posting contacts. */
+    private fun route(logbooksJson: String) {
+        WrlApi.transport = WrlApi.Transport { method, url, key, body ->
+            keys.add(key)
+            requests.add("$method ${url.removePrefix(WrlApi.BASE_URL)}")
+            if (method == "GET") {
+                WrlApi.Response(200, """{"data":$logbooksJson,"meta":null,"error":null}""", null)
+            } else {
+                bodies.add(body)
+                WrlApi.Response(201, okBody, null)
+            }
+        }
+    }
+
+    private fun logbook(id: String) = """{"id":"$id","name":"$id","isLocked":false}"""
+
+    @Test
+    fun `with no logbook saved the account's only logbook is used and remembered`() {
+        GeneralVariables.wrlLogbookId = ""
+        insertQso("W1AW")
+        insertQso("K2XX")
+        route("[${logbook("lb-only")}]")
+
+        val result = ThirdPartyService.syncAllQSOs(db, null)
+
+        assertThat(result.wrlOk).isEqualTo(2)
+        assertThat(bodies.map { JSONObject(it!!).getString("logbookId") }).containsExactly("lb-only", "lb-only")
+        // Looked up once, then remembered for the rest of the batch and for next time.
+        assertThat(requests.count { it.startsWith("GET") }).isEqualTo(1)
+        assertThat(savedLogbookIds).containsExactly("lb-only")
+        assertThat(GeneralVariables.wrlLogbookId).isEqualTo("lb-only")
+    }
+
+    @Test
+    fun `an account with no logbook is not posted to and says so`() {
+        GeneralVariables.wrlLogbookId = ""
+        insertQso("W1AW")
+        insertQso("K2XX")
+        route("[]")
+
+        val result = ThirdPartyService.syncAllQSOs(db, null)
+
+        assertThat(bodies).isEmpty()
+        assertThat(requests).containsExactly("GET logbooks?limit=100")
+        assertThat(result.wrlError).contains("no logbook")
+        assertThat(savedLogbookIds).isEmpty()
+        assertThat(ThirdPartyService.countUnsyncedQSOs(db)).isEqualTo(2)
+    }
+
+    @Test
+    fun `with several logbooks and none saved the choice is left to wrl`() {
+        GeneralVariables.wrlLogbookId = ""
+        insertQso("W1AW")
+        route("[${logbook("lb-a")},${logbook("lb-b")}]")
+
+        ThirdPartyService.syncAllQSOs(db, null)
+
+        assertThat(JSONObject(bodies.single()!!).has("logbookId")).isFalse()
+        assertThat(savedLogbookIds).isEmpty()
+        assertThat(GeneralVariables.wrlLogbookId).isEmpty()
+    }
+
+    @Test
+    fun `a saved logbook skips the lookup`() {
+        insertQso("W1AW")
+        route("[${logbook("lb-other")}]")
+
+        ThirdPartyService.syncAllQSOs(db, null)
+
+        assertThat(requests).containsExactly("POST contacts")
+        assertThat(JSONObject(bodies.single()!!).getString("logbookId")).isEqualTo("lb-saved")
     }
 
     private fun insertQso(

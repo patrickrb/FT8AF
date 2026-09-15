@@ -618,4 +618,7 @@
     <string name="settings_wrl_logbook">Dziennik</string>
     <string name="settings_wrl_logbook_default">Domyślny dziennik</string>
     <string name="settings_wrl_loading_logbooks">Wczytywanie dzienników…</string>
+    <string name="settings_wrl_no_logbooks">Twoje konto World Radio League nie ma jeszcze żadnego dziennika.</string>
+    <string name="settings_wrl_create_logbook">Utwórz dziennik „%1$s”</string>
+    <string name="settings_wrl_creating_logbook">Tworzenie dziennika…</string>
 </resources>

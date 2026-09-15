@@ -508,6 +508,78 @@ public class WrlApiTest {
                 .isEqualTo("id-1");
     }
 
+    // -- logbook creation --
+
+    /** Every field WRL's LogbookCreate schema accepts; anything else is a 400. */
+    private static final Set<String> LOGBOOK_CREATE_FIELDS = new HashSet<>(Arrays.asList(
+            "name", "description", "defaultCallSign", "defaultFrequency", "defaultMode",
+            "defaultBand", "defaultPower"));
+
+    @Test
+    public void logbookCreateJson_usesOnlyFieldsWrlAccepts() throws Exception {
+        JSONObject o = new JSONObject(WrlApi.buildLogbookCreateJson(" FT8AF ", "k1af"));
+        assertThat(o.getString("name")).isEqualTo("FT8AF");
+        assertThat(o.getString("defaultCallSign")).isEqualTo("K1AF");
+        for (Iterator<String> it = o.keys(); it.hasNext(); ) {
+            assertThat(LOGBOOK_CREATE_FIELDS).contains(it.next());
+        }
+    }
+
+    @Test
+    public void logbookCreateJson_dropsCallsignWrlWouldRejectAndNeedsAName() throws Exception {
+        assertThat(new JSONObject(WrlApi.buildLogbookCreateJson("FT8AF", "")).has("defaultCallSign")).isFalse();
+        assertThat(new JSONObject(WrlApi.buildLogbookCreateJson("FT8AF", "VP2E/W1AW/QRP/PORTABLE"))
+                .has("defaultCallSign")).isFalse();
+        assertThat(WrlApi.buildLogbookCreateJson("  ", "K1AF")).isNull();
+        assertThat(WrlApi.buildLogbookCreateJson(null, "K1AF")).isNull();
+    }
+
+    @Test
+    public void createLogbook_returnsTheNewLogbook() {
+        respond(new WrlApi.Response(201, "{\"data\":{\"id\":\"new-id\",\"name\":\"FT8AF\","
+                + "\"defaultCallSign\":\"K1AF\",\"isLocked\":false},\"meta\":null,\"error\":null}", null));
+        ThirdPartyService.StationProfile p = WrlApi.createLogbook("k", "FT8AF", "K1AF", null);
+        assertThat(p.stationId).isEqualTo("new-id");
+        assertThat(WrlApi.logbookLabel(p)).isEqualTo("FT8AF (K1AF)");
+        assertThat(urls).containsExactly("POST https://api.worldradioleague.com/v1/logbooks");
+    }
+
+    @Test
+    public void createLogbook_failureSaysWhy() {
+        respond(error(422, "VALIDATION_ERROR", "Name is too long.", "name"));
+        StringBuilder why = new StringBuilder();
+        assertThat(WrlApi.createLogbook("k", "FT8AF", "K1AF", why)).isNull();
+        assertThat(why.toString()).isEqualTo("HTTP 422 VALIDATION_ERROR: Name is too long. [name]");
+
+        StringBuilder noKey = new StringBuilder();
+        assertThat(WrlApi.createLogbook(" ", "FT8AF", "K1AF", noKey)).isNull();
+        assertThat(noKey.toString()).isEqualTo("no API key configured");
+
+        respond(new WrlApi.Response(201, "{\"data\":{},\"meta\":null,\"error\":null}", null));
+        StringBuilder noId = new StringBuilder();
+        assertThat(WrlApi.createLogbook("k", "FT8AF", "K1AF", noId)).isNull();
+        assertThat(noId.toString()).contains("no logbook id");
+    }
+
+    @Test
+    public void fetchLogbooksOrNull_distinguishesNoLogbooksFromAFailedRequest() {
+        respond(new WrlApi.Response(200, "{\"data\":[],\"meta\":{\"count\":0},\"error\":null}", null));
+        assertThat(WrlApi.fetchLogbooksOrNull("k")).isEmpty();
+        respond(error(401, "INVALID_KEY", "x", null));
+        assertThat(WrlApi.fetchLogbooksOrNull("k")).isNull();
+        assertThat(WrlApi.fetchLogbooksOrNull("  ")).isNull();
+    }
+
+    @Test
+    public void chooseUploadLogbook_onlyALoneLogbook() {
+        ThirdPartyService.StationProfile a = new ThirdPartyService.StationProfile("a", "A", "", "");
+        ThirdPartyService.StationProfile b = new ThirdPartyService.StationProfile("b", "B", "", "");
+        assertThat(WrlApi.chooseUploadLogbook(Arrays.asList(a))).isEqualTo("a");
+        assertThat(WrlApi.chooseUploadLogbook(Arrays.asList(a, b))).isNull();
+        assertThat(WrlApi.chooseUploadLogbook(new ArrayList<>())).isNull();
+        assertThat(WrlApi.chooseUploadLogbook(null)).isNull();
+    }
+
     @Test
     public void fetchLogbooks_failureIsAnEmptyList() {
         respond(error(403, "INSUFFICIENT_SCOPE", "x", null));
