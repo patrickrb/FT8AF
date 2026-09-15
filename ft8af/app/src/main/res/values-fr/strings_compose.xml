@@ -194,7 +194,7 @@
     <string name="log_sync_title_no_services">AUCUN SERVICE ACTIVÉ</string>
     <string name="log_sync_title_syncing">SYNCHRONISATION…</string>
     <string name="log_sync_title_complete">SYNCHRONISATION TERMINÉE</string>
-    <string name="log_sync_enable_services">Activez Cloudlog/Wavelog/Nextlog ou QRZ dans les Réglages, puis réessayez.</string>
+    <string name="log_sync_enable_services">Activez Cloudlog/Wavelog/Nextlog, QRZ ou World Radio League dans les Réglages, puis réessayez.</string>
     <string name="log_sync_progress_count">%1$d sur %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog : %1$d acceptés</string>
     <string name="log_sync_qrz_accepted">QRZ : %1$d acceptés</string>
@@ -574,4 +574,15 @@
     <string name="settings_bin_agg_max">Maximum</string>
     <string name="settings_bin_agg_avg">Moyenne</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League : %1$d acceptés</string>
+    <string name="settings_wrl_desc">Envoyer automatiquement les QSOs vers votre carnet World Radio League (clé Developer API requise)</string>
+    <string name="settings_wrl_dialog_desc">Générez une clé dans World Radio League sous Integrations → Developer API. Une seule clé couvre tout votre compte.</string>
+    <string name="settings_wrl_logbook">Carnet de trafic</string>
+    <string name="settings_wrl_logbook_default">Carnet par défaut</string>
+    <string name="settings_wrl_loading_logbooks">Chargement des carnets…</string>
+    <string name="settings_wrl_no_logbooks">Votre compte World Radio League n\'a encore aucun carnet.</string>
+    <string name="settings_wrl_create_logbook">Créer le carnet « %1$s »</string>
+    <string name="settings_wrl_creating_logbook">Création du carnet…</string>
 </resources>

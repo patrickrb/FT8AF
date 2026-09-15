@@ -79,6 +79,10 @@ public class DatabaseOprQslTableUpgradeTest {
      * database it believes it created fresh.
      */
     private static void writeLegacyDatabase(File dbFile) {
+        writeLegacyDatabase(dbFile, 19);
+    }
+
+    private static void writeLegacyDatabase(File dbFile, int version) {
         //noinspection ResultOfMethodCallIgnored
         dbFile.getParentFile().mkdirs();
         //noinspection ResultOfMethodCallIgnored
@@ -87,7 +91,7 @@ public class DatabaseOprQslTableUpgradeTest {
         SQLiteDatabase legacy = SQLiteDatabase.openOrCreateDatabase(dbFile, null);
         try {
             legacy.execSQL(LEGACY_QSL_TABLE);
-            legacy.setVersion(19);
+            legacy.setVersion(version);
             assertThat(columnsOf(legacy, "QSLTable")).doesNotContain("my_lat");
         } finally {
             legacy.close();
@@ -120,6 +124,26 @@ public class DatabaseOprQslTableUpgradeTest {
                     "my_sig", "my_sig_info", "sig", "sig_info"}) {
                 assertThat(columns).contains(required);
             }
+        } finally {
+            opr.close();
+            //noinspection ResultOfMethodCallIgnored
+            dbFile.delete();
+        }
+    }
+
+    @Test
+    public void version20DatabaseGainsTheWrlSyncColumnOnUpgrade() {
+        // synced_wrl (issue #800) arrived after v20. Without the bump to 21 an install
+        // already at v20 never runs the ALTER, and the first sync pass that filters on
+        // synced_wrl fails with "no such column".
+        assertThat(DatabaseOpr.SCHEMA_VERSION).isGreaterThan(20);
+        Context context = ApplicationProvider.getApplicationContext();
+        File dbFile = context.getDatabasePath("upgrade_wrl_probe.db");
+        writeLegacyDatabase(dbFile, 20);
+
+        DatabaseOpr opr = new DatabaseOpr(context, dbFile.getName(), null, DatabaseOpr.SCHEMA_VERSION);
+        try {
+            assertThat(columnsOf(opr.getWritableDatabase(), "QSLTable")).contains("synced_wrl");
         } finally {
             opr.close();
             //noinspection ResultOfMethodCallIgnored

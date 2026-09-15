@@ -237,7 +237,7 @@
     <string name="log_sync_title_no_services">활성화된 서비스 없음</string>
     <string name="log_sync_title_syncing">동기화 중…</string>
     <string name="log_sync_title_complete">동기화 완료</string>
-    <string name="log_sync_enable_services">설정에서 Cloudlog/Wavelog/Nextlog 또는 QRZ를 활성화한 후 다시 시도하세요.</string>
+    <string name="log_sync_enable_services">설정에서 Cloudlog/Wavelog/Nextlog, QRZ 또는 World Radio League를 활성화한 후 다시 시도하세요.</string>
     <string name="log_sync_progress_count">%2$d개 중 %1$d개 QSO</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d개 수락됨</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d개 수락됨</string>
@@ -609,4 +609,15 @@
     <string name="settings_bin_agg_max">최대</string>
     <string name="settings_bin_agg_avg">평균</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d개 수락됨</string>
+    <string name="settings_wrl_desc">QSO를 World Radio League 로그북에 자동 업로드 (Developer API 키 필요)</string>
+    <string name="settings_wrl_dialog_desc">World Radio League의 Integrations → Developer API에서 키를 생성하세요. 키 하나로 계정 전체에 사용됩니다.</string>
+    <string name="settings_wrl_logbook">로그북</string>
+    <string name="settings_wrl_logbook_default">기본 로그북</string>
+    <string name="settings_wrl_loading_logbooks">로그북 불러오는 중…</string>
+    <string name="settings_wrl_no_logbooks">World Radio League 계정에 아직 로그북이 없습니다.</string>
+    <string name="settings_wrl_create_logbook">“%1$s” 로그북 만들기</string>
+    <string name="settings_wrl_creating_logbook">로그북 만드는 중…</string>
 </resources>

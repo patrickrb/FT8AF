@@ -237,7 +237,7 @@
     <string name="log_sync_title_no_services">GEEN DIENSTEN INGESCHAKELD</string>
     <string name="log_sync_title_syncing">SYNCHRONISEREN…</string>
     <string name="log_sync_title_complete">SYNCHRONISATIE VOLTOOID</string>
-    <string name="log_sync_enable_services">Schakel Cloudlog/Wavelog/Nextlog of QRZ in bij Instellingen en probeer het opnieuw.</string>
+    <string name="log_sync_enable_services">Schakel Cloudlog/Wavelog/Nextlog, QRZ of World Radio League in bij Instellingen en probeer het opnieuw.</string>
     <string name="log_sync_progress_count">%1$d van %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d geaccepteerd</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d geaccepteerd</string>
@@ -613,4 +613,15 @@
     <string name="settings_bin_agg_max">Maximum</string>
     <string name="settings_bin_agg_avg">Gemiddelde</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d geaccepteerd</string>
+    <string name="settings_wrl_desc">QSO\'s automatisch uploaden naar je World Radio League-logboek (vereist een Developer API-sleutel)</string>
+    <string name="settings_wrl_dialog_desc">Maak een sleutel aan in World Radio League onder Integrations → Developer API. Eén sleutel geldt voor je hele account.</string>
+    <string name="settings_wrl_logbook">Logboek</string>
+    <string name="settings_wrl_logbook_default">Standaardlogboek</string>
+    <string name="settings_wrl_loading_logbooks">Logboeken laden…</string>
+    <string name="settings_wrl_no_logbooks">Je World Radio League-account heeft nog geen logboeken.</string>
+    <string name="settings_wrl_create_logbook">Logboek “%1$s” aanmaken</string>
+    <string name="settings_wrl_creating_logbook">Logboek aanmaken…</string>
 </resources>

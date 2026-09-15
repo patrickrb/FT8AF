@@ -226,7 +226,7 @@
     <string name="log_sync_title_no_services">NESSUN SERVIZIO ABILITATO</string>
     <string name="log_sync_title_syncing">SINCRONIZZAZIONE…</string>
     <string name="log_sync_title_complete">SINCRONIZZAZIONE COMPLETATA</string>
-    <string name="log_sync_enable_services">Abilita Cloudlog/Wavelog/Nextlog o QRZ nelle Impostazioni, poi riprova.</string>
+    <string name="log_sync_enable_services">Abilita Cloudlog/Wavelog/Nextlog, QRZ o World Radio League nelle Impostazioni, poi riprova.</string>
     <string name="log_sync_progress_count">%1$d di %2$d QSO</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d accettati</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d accettati</string>
@@ -606,4 +606,15 @@
     <string name="settings_bin_agg_max">Massimo</string>
     <string name="settings_bin_agg_avg">Media</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d accettati</string>
+    <string name="settings_wrl_desc">Carica automaticamente i QSO nel tuo logbook di World Radio League (richiede una chiave Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Genera una chiave in World Radio League da Integrations → Developer API. Una sola chiave vale per tutto l\'account.</string>
+    <string name="settings_wrl_logbook">Logbook</string>
+    <string name="settings_wrl_logbook_default">Logbook predefinito</string>
+    <string name="settings_wrl_loading_logbooks">Caricamento logbook…</string>
+    <string name="settings_wrl_no_logbooks">Il tuo account World Radio League non ha ancora logbook.</string>
+    <string name="settings_wrl_create_logbook">Crea il logbook “%1$s”</string>
+    <string name="settings_wrl_creating_logbook">Creazione del logbook…</string>
 </resources>

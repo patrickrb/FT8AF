@@ -237,7 +237,7 @@
     <string name="log_sync_title_no_services">لا خدمات مفعَّلة</string>
     <string name="log_sync_title_syncing">جارٍ المزامنة…</string>
     <string name="log_sync_title_complete">اكتملت المزامنة</string>
-    <string name="log_sync_enable_services">فعِّل Cloudlog/Wavelog/Nextlog أو QRZ في الإعدادات، ثم أعد المحاولة.</string>
+    <string name="log_sync_enable_services">فعِّل Cloudlog/Wavelog/Nextlog أو QRZ أو World Radio League في الإعدادات، ثم أعد المحاولة.</string>
     <string name="log_sync_progress_count">%1$d من %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d مقبول</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d مقبول</string>
@@ -629,4 +629,15 @@
     <string name="settings_bin_agg_max">الحد الأقصى</string>
     <string name="settings_bin_agg_avg">المتوسط</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d مقبول</string>
+    <string name="settings_wrl_desc">رفع QSOs تلقائياً إلى سجل World Radio League الخاص بك (يتطلب مفتاح Developer API)</string>
+    <string name="settings_wrl_dialog_desc">أنشئ مفتاحاً في World Radio League من Integrations → Developer API. مفتاح واحد يغطي حسابك بالكامل.</string>
+    <string name="settings_wrl_logbook">السجل</string>
+    <string name="settings_wrl_logbook_default">السجل الافتراضي</string>
+    <string name="settings_wrl_loading_logbooks">جارٍ تحميل السجلات…</string>
+    <string name="settings_wrl_no_logbooks">لا يحتوي حسابك في World Radio League على أي سجلات بعد.</string>
+    <string name="settings_wrl_create_logbook">إنشاء سجل “%1$s”</string>
+    <string name="settings_wrl_creating_logbook">جارٍ إنشاء السجل…</string>
 </resources>
