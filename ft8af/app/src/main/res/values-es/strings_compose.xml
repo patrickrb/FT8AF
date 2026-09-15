@@ -574,4 +574,12 @@
     <string name="settings_bin_agg_max">Máximo</string>
     <string name="settings_bin_agg_avg">Promedio</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d aceptados</string>
+    <string name="settings_wrl_desc">Subir QSOs automáticamente a tu libro de guardia de World Radio League (requiere una clave de Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Genera una clave en World Radio League en Integrations → Developer API. Una sola clave sirve para toda tu cuenta.</string>
+    <string name="settings_wrl_logbook">Libro de guardia</string>
+    <string name="settings_wrl_logbook_default">Libro predeterminado</string>
+    <string name="settings_wrl_loading_logbooks">Cargando libros…</string>
 </resources>

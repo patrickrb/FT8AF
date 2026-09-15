@@ -532,10 +532,24 @@ public class ThirdPartyService {
     }
 
     /**
+     * Uploads one QSO to World Radio League (issue #800) — see {@link WrlApi}. Blocks; call
+     * from a background thread. True when WRL accepted the contact.
+     */
+    public static boolean UploadToWrl(QSLRecord qslRecord) {
+        return WrlApi.uploadRecord(qslRecord);
+    }
+
+    /** Whether any service with per-QSO sync flags (Cloudlog, QRZ, World Radio League) is on. */
+    public static boolean anyUploadServiceEnabled() {
+        return GeneralVariables.enableCloudlog || GeneralVariables.enableQRZ
+                || GeneralVariables.enableWRL;
+    }
+
+    /**
      * Progress callback used during a batch re-upload.
      */
     public interface SyncProgress {
-        void onProgress(int done, int total, int cloudlogOk, int qrzOk);
+        void onProgress(int done, int total, int cloudlogOk, int qrzOk, int wrlOk);
     }
 
     public static class SyncResult {
@@ -552,6 +566,10 @@ public class ThirdPartyService {
         public final String cloudlogError;
         /** Same, for QRZ. */
         public final String qrzError;
+        public final int wrlOk;
+        public final boolean wrlAttempted;
+        /** Same, for World Radio League. */
+        public final String wrlError;
 
         public SyncResult(int total, int cloudlogOk, int qrzOk,
                           boolean cloudlogAttempted, boolean qrzAttempted) {
@@ -561,31 +579,38 @@ public class ThirdPartyService {
         public SyncResult(int total, int cloudlogOk, int qrzOk,
                           boolean cloudlogAttempted, boolean qrzAttempted,
                           String cloudlogError, String qrzError) {
+            this(total, cloudlogOk, qrzOk, 0, cloudlogAttempted, qrzAttempted, false,
+                    cloudlogError, qrzError, null);
+        }
+
+        public SyncResult(int total, int cloudlogOk, int qrzOk, int wrlOk,
+                          boolean cloudlogAttempted, boolean qrzAttempted, boolean wrlAttempted,
+                          String cloudlogError, String qrzError, String wrlError) {
             this.total = total;
             this.cloudlogOk = cloudlogOk;
             this.qrzOk = qrzOk;
+            this.wrlOk = wrlOk;
             this.cloudlogAttempted = cloudlogAttempted;
             this.qrzAttempted = qrzAttempted;
+            this.wrlAttempted = wrlAttempted;
             this.cloudlogError = cloudlogError;
             this.qrzError = qrzError;
+            this.wrlError = wrlError;
         }
     }
 
     /**
      * The {@code WHERE} clause (with a leading space) selecting QSLTable rows that
      * still need an upload to at least one enabled service. Returns an empty string
-     * when neither service is enabled (caller should not query in that case). Single
+     * when no service is enabled (caller should not query in that case). Single
      * source of truth shared by {@link #syncAllQSOs} and {@link #countUnsyncedQSOs}.
      */
-    private static String unsyncedFilter(boolean cloudlog, boolean qrz) {
-        if (cloudlog && qrz) {
-            return " where synced_cloudlog = 0 or synced_qrz = 0";
-        } else if (cloudlog) {
-            return " where synced_cloudlog = 0";
-        } else if (qrz) {
-            return " where synced_qrz = 0";
-        }
-        return "";
+    private static String unsyncedFilter(boolean cloudlog, boolean qrz, boolean wrl) {
+        StringBuilder where = new StringBuilder();
+        if (cloudlog) where.append("synced_cloudlog = 0");
+        if (qrz) where.append(where.length() > 0 ? " or " : "").append("synced_qrz = 0");
+        if (wrl) where.append(where.length() > 0 ? " or " : "").append("synced_wrl = 0");
+        return where.length() > 0 ? " where " + where : "";
     }
 
     /**
@@ -597,11 +622,12 @@ public class ThirdPartyService {
     public static int countUnsyncedQSOs(SQLiteDatabase db) {
         boolean cl = GeneralVariables.enableCloudlog;
         boolean qrz = GeneralVariables.enableQRZ;
-        if (db == null || (!cl && !qrz)) return 0;
+        boolean wrl = GeneralVariables.enableWRL;
+        if (db == null || (!cl && !qrz && !wrl)) return 0;
         Cursor cursor = null;
         try {
             cursor = db.rawQuery(
-                    "select count(*) from QSLTable" + unsyncedFilter(cl, qrz), null);
+                    "select count(*) from QSLTable" + unsyncedFilter(cl, qrz, wrl), null);
             if (cursor.moveToFirst()) {
                 return cursor.getInt(0);
             }
@@ -622,13 +648,16 @@ public class ThirdPartyService {
     public static SyncResult syncAllQSOs(SQLiteDatabase db, SyncProgress progress) {
         boolean cl = GeneralVariables.enableCloudlog;
         boolean qrz = GeneralVariables.enableQRZ;
+        boolean wrl = GeneralVariables.enableWRL;
         int total = 0;
         int cloudlogOk = 0;
         int qrzOk = 0;
+        int wrlOk = 0;
         String cloudlogError = null;
         String qrzError = null;
-        if (db == null || (!cl && !qrz)) {
-            return new SyncResult(0, 0, 0, cl, qrz);
+        String wrlError = null;
+        if (db == null || (!cl && !qrz && !wrl)) {
+            return new SyncResult(0, 0, 0, 0, cl, qrz, wrl, null, null, null);
         }
         Cursor cursor = null;
         try {
@@ -636,17 +665,23 @@ public class ThirdPartyService {
             // tell something happened via the dialog's row counts, and a re-press isn't
             // wasted on already-confirmed records.
             cursor = db.rawQuery(
-                    "select * from QSLTable" + unsyncedFilter(cl, qrz) + " order by id asc", null);
+                    "select * from QSLTable" + unsyncedFilter(cl, qrz, wrl) + " order by id asc", null);
             total = cursor.getCount();
-            if (progress != null) progress.onProgress(0, total, 0, 0);
+            if (progress != null) progress.onProgress(0, total, 0, 0, 0);
             int idCol = cursor.getColumnIndex("id");
             int syncedClCol = cursor.getColumnIndex("synced_cloudlog");
             int syncedQrzCol = cursor.getColumnIndex("synced_qrz");
+            int syncedWrlCol = cursor.getColumnIndex("synced_wrl");
+            // Cleared when WRL says every further upload would be refused the same way (bad
+            // key, no logbook, daily quota, offline): a 113-row backlog must not turn into 113
+            // identical rejections against a rate-limited API.
+            boolean wrlLive = wrl;
             int done = 0;
             while (cursor.moveToNext()) {
                 long rowId = idCol >= 0 ? cursor.getLong(idCol) : -1;
                 boolean alreadyCl = syncedClCol >= 0 && cursor.getInt(syncedClCol) == 1;
                 boolean alreadyQrz = syncedQrzCol >= 0 && cursor.getInt(syncedQrzCol) == 1;
+                boolean alreadyWrl = syncedWrlCol >= 0 && cursor.getInt(syncedWrlCol) == 1;
                 if (cl && !alreadyCl) {
                     String adif = buildAdifFromCursor(cursor, ServiceType.Cloudlog);
                     StringBuilder why = cloudlogError == null ? new StringBuilder() : null;
@@ -667,15 +702,27 @@ public class ThirdPartyService {
                         qrzError = why.toString();
                     }
                 }
+                if (wrlLive && !alreadyWrl) {
+                    StringBuilder why = new StringBuilder();
+                    WrlApi.UploadResult r = WrlApi.uploadFields(WrlApi.fromCursor(cursor), why);
+                    if (r == WrlApi.UploadResult.OK) {
+                        wrlOk++;
+                        if (rowId >= 0) markRowSynced(db, rowId, "synced_wrl");
+                    } else {
+                        if (wrlError == null && why.length() > 0) wrlError = why.toString();
+                        if (r == WrlApi.UploadResult.FAILED_STOP_BATCH) wrlLive = false;
+                    }
+                }
                 done++;
-                if (progress != null) progress.onProgress(done, total, cloudlogOk, qrzOk);
+                if (progress != null) progress.onProgress(done, total, cloudlogOk, qrzOk, wrlOk);
             }
         } catch (Exception e) {
             Log.e(TAG, "syncAllQSOs error: " + e.getClass().getSimpleName() + " " + e.getMessage());
         } finally {
             if (cursor != null) cursor.close();
         }
-        return new SyncResult(total, cloudlogOk, qrzOk, cl, qrz, cloudlogError, qrzError);
+        return new SyncResult(total, cloudlogOk, qrzOk, wrlOk, cl, qrz, wrl,
+                cloudlogError, qrzError, wrlError);
     }
 
     /**
@@ -737,14 +784,24 @@ public class ThirdPartyService {
      */
     public static void markQsoSynced(SQLiteDatabase db, QSLRecord r,
                                      boolean cloudlogOk, boolean qrzOk) {
+        markQsoSynced(db, r, cloudlogOk, qrzOk, false);
+    }
+
+    /** As {@link #markQsoSynced(SQLiteDatabase, QSLRecord, boolean, boolean)}, plus World Radio League. */
+    public static void markQsoSynced(SQLiteDatabase db, QSLRecord r,
+                                     boolean cloudlogOk, boolean qrzOk, boolean wrlOk) {
         if (db == null || r == null) return;
-        if (!cloudlogOk && !qrzOk) return;
+        if (!cloudlogOk && !qrzOk && !wrlOk) return;
         try {
             StringBuilder set = new StringBuilder();
             if (cloudlogOk) set.append("synced_cloudlog = 1");
             if (qrzOk) {
                 if (set.length() > 0) set.append(", ");
                 set.append("synced_qrz = 1");
+            }
+            if (wrlOk) {
+                if (set.length() > 0) set.append(", ");
+                set.append("synced_wrl = 1");
             }
             db.execSQL("update QSLTable set " + set
                             + " where [call] = ? and qso_date = ? and time_on = ? and mode = ?",

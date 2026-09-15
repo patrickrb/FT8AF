@@ -609,4 +609,12 @@
     <string name="settings_bin_agg_max">최대</string>
     <string name="settings_bin_agg_avg">평균</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d개 수락됨</string>
+    <string name="settings_wrl_desc">QSO를 World Radio League 로그북에 자동 업로드 (Developer API 키 필요)</string>
+    <string name="settings_wrl_dialog_desc">World Radio League의 Integrations → Developer API에서 키를 생성하세요. 키 하나로 계정 전체에 사용됩니다.</string>
+    <string name="settings_wrl_logbook">로그북</string>
+    <string name="settings_wrl_logbook_default">기본 로그북</string>
+    <string name="settings_wrl_loading_logbooks">로그북 불러오는 중…</string>
 </resources>

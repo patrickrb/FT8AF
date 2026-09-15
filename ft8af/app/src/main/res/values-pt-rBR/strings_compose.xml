@@ -683,4 +683,12 @@
     <string name="car_decodes_action">Decodificações</string>
     <string name="car_decodes_title">Decodificações recentes</string>
     <string name="car_no_decodes">Nenhuma decodificação ainda</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d aceitos</string>
+    <string name="settings_wrl_desc">Envia QSOs automaticamente para o seu logbook do World Radio League (requer uma chave da Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Gere uma chave no World Radio League em Integrations → Developer API. Uma chave vale para toda a sua conta.</string>
+    <string name="settings_wrl_logbook">Logbook</string>
+    <string name="settings_wrl_logbook_default">Logbook padrão</string>
+    <string name="settings_wrl_loading_logbooks">Carregando logbooks…</string>
 </resources>

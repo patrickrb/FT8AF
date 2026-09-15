@@ -613,4 +613,12 @@
     <string name="settings_bin_agg_max">Maximum</string>
     <string name="settings_bin_agg_avg">Gemiddelde</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d geaccepteerd</string>
+    <string name="settings_wrl_desc">QSO\'s automatisch uploaden naar je World Radio League-logboek (vereist een Developer API-sleutel)</string>
+    <string name="settings_wrl_dialog_desc">Maak een sleutel aan in World Radio League onder Integrations → Developer API. Eén sleutel geldt voor je hele account.</string>
+    <string name="settings_wrl_logbook">Logboek</string>
+    <string name="settings_wrl_logbook_default">Standaardlogboek</string>
+    <string name="settings_wrl_loading_logbooks">Logboeken laden…</string>
 </resources>

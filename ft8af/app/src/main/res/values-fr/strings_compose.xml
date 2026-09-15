@@ -574,4 +574,12 @@
     <string name="settings_bin_agg_max">Maximum</string>
     <string name="settings_bin_agg_avg">Moyenne</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League : %1$d acceptés</string>
+    <string name="settings_wrl_desc">Envoyer automatiquement les QSOs vers votre carnet World Radio League (clé Developer API requise)</string>
+    <string name="settings_wrl_dialog_desc">Générez une clé dans World Radio League sous Integrations → Developer API. Une seule clé couvre tout votre compte.</string>
+    <string name="settings_wrl_logbook">Carnet de trafic</string>
+    <string name="settings_wrl_logbook_default">Carnet par défaut</string>
+    <string name="settings_wrl_loading_logbooks">Chargement des carnets…</string>
 </resources>

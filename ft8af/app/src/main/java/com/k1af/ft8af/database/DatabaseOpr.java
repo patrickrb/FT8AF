@@ -76,8 +76,9 @@ public class DatabaseOpr extends SQLiteOpenHelper {
      * v20 fixes — {@code my_lat}/{@code my_lon} shipped without a bump, so
      * {@code doInsertQSLData} threw "table QSLTable has no column named my_lat" on every
      * logged QSO for anyone upgrading rather than installing clean.
+     * v21 adds {@code QSLTable.synced_wrl} (World Radio League upload state, issue #800).
      */
-    static final int SCHEMA_VERSION = 20;
+    static final int SCHEMA_VERSION = 21;
 
     public static synchronized DatabaseOpr getInstance(@Nullable Context context, @Nullable String databaseName) {
         if (instance == null) {
@@ -280,6 +281,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     , "synced_cloudlog INTEGER DEFAULT 0");
             alterTable(sqLiteDatabase, "QSLTable", "synced_qrz"
                     , "synced_qrz INTEGER DEFAULT 0");
+            alterTable(sqLiteDatabase, "QSLTable", "synced_wrl"
+                    , "synced_wrl INTEGER DEFAULT 0");
             // POTA ADIF fields. MY_SIG/MY_SIG_INFO are the activator's program/park ref;
             // SIG/SIG_INFO are the worked station's. Empty for non-POTA contacts.
             alterTable(sqLiteDatabase, "QSLTable", "my_sig"
@@ -299,6 +302,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     "isLotW_QSL INTEGER DEFAULT 0,\n" +
                     "synced_cloudlog INTEGER DEFAULT 0,\n" +//Uploaded to Cloudlog/Wavelog/Nextlog
                     "synced_qrz INTEGER DEFAULT 0,\n" +//Uploaded to QRZ
+                    "synced_wrl INTEGER DEFAULT 0,\n" +//Uploaded to World Radio League
 
 
                     "call TEXT,\n" +
@@ -2274,6 +2278,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     ",max(" + normTimeOn + ") as last_time_on\n" +
                     ",max(q.synced_cloudlog) as synced_cloudlog\n" +
                     ",max(q.synced_qrz) as synced_qrz\n" +
+                    ",max(q.synced_wrl) as synced_wrl\n" +
                     "from QSLTable q inner join QSLTable q2 ON q.id =q2.id \n" +
                     "where (q.[call] like ?)\n" +
                     filterStr +
@@ -2298,6 +2303,8 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     int idxQrz = cursor.getColumnIndex("synced_qrz");
                     record.syncedCloudlog = idxCl >= 0 && cursor.getInt(idxCl) == 1;
                     record.syncedQrz = idxQrz >= 0 && cursor.getInt(idxQrz) == 1;
+                    int idxWrl = cursor.getColumnIndex("synced_wrl");
+                    record.syncedWrl = idxWrl >= 0 && cursor.getInt(idxWrl) == 1;
                     record.setLastTime(cursor.getString(cursor.getColumnIndex("last_time")));
                     int idxTimeOn = cursor.getColumnIndex("last_time_on");
                     if (idxTimeOn >= 0) {
@@ -3085,6 +3092,17 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 }
                 if (name.equalsIgnoreCase("cloudlogStationID")) {
                     GeneralVariables.cloudlogStationID = result;
+                }
+
+                //World Radio League
+                if (name.equalsIgnoreCase("enableWRL")) {
+                    GeneralVariables.enableWRL = result.equals("1");
+                }
+                if (name.equalsIgnoreCase("wrlApiKey")) {
+                    GeneralVariables.wrlApiKey = result;
+                }
+                if (name.equalsIgnoreCase("wrlLogbookId")) {
+                    GeneralVariables.wrlLogbookId = result;
                 }
 
                 //QRZ

@@ -609,4 +609,12 @@
     <string name="settings_bin_agg_max">Maksimum</string>
     <string name="settings_bin_agg_avg">Rata-rata</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d diterima</string>
+    <string name="settings_wrl_desc">Unggah QSO otomatis ke logbook World Radio League Anda (memerlukan kunci Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Buat kunci di World Radio League pada Integrations → Developer API. Satu kunci berlaku untuk seluruh akun Anda.</string>
+    <string name="settings_wrl_logbook">Logbook</string>
+    <string name="settings_wrl_logbook_default">Logbook default</string>
+    <string name="settings_wrl_loading_logbooks">Memuat logbook…</string>
 </resources>

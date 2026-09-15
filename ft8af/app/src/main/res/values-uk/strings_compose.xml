@@ -610,4 +610,12 @@
     <string name="settings_bin_agg_max">Максимум</string>
     <string name="settings_bin_agg_avg">Середнє</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d прийнято</string>
+    <string name="settings_wrl_desc">Автозавантаження QSO до журналу World Radio League (потрібен ключ Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Створіть ключ у World Radio League в розділі Integrations → Developer API. Один ключ діє для всього облікового запису.</string>
+    <string name="settings_wrl_logbook">Журнал</string>
+    <string name="settings_wrl_logbook_default">Журнал за замовчуванням</string>
+    <string name="settings_wrl_loading_logbooks">Завантаження журналів…</string>
 </resources>

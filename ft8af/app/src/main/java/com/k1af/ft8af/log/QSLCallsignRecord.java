@@ -25,6 +25,7 @@ public class QSLCallsignRecord {
     public boolean isLotW_QSL = false;//Whether confirmed via LoTW
     public boolean syncedCloudlog = false;//Whether at least one underlying row was accepted by Cloudlog/Wavelog/Nextlog
     public boolean syncedQrz = false;//Whether at least one underlying row was accepted by QRZ
+    public boolean syncedWrl = false;//Whether at least one underlying row was accepted by World Radio League
 
     public String getCallsign() {
         return callsign;

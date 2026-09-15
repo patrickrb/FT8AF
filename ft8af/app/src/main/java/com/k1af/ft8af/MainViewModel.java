@@ -1073,15 +1073,19 @@ public class MainViewModel extends ViewModel {
                     public void run() {
                         boolean cloudlogOk = false;
                         boolean qrzOk = false;
+                        boolean wrlOk = false;
                         if (GeneralVariables.enableCloudlog){
                             cloudlogOk = ThirdPartyService.UploadToCloudLog(qslRecord);
                         }
                         if (GeneralVariables.enableQRZ){
                             qrzOk = ThirdPartyService.UploadToQRZ(qslRecord);
                         }
-                        if (databaseOpr != null && (cloudlogOk || qrzOk)) {
+                        if (GeneralVariables.enableWRL){
+                            wrlOk = ThirdPartyService.UploadToWrl(qslRecord);
+                        }
+                        if (databaseOpr != null && (cloudlogOk || qrzOk || wrlOk)) {
                             ThirdPartyService.markQsoSynced(
-                                    databaseOpr.getDb(), qslRecord, cloudlogOk, qrzOk);
+                                    databaseOpr.getDb(), qslRecord, cloudlogOk, qrzOk, wrlOk);
                         }
                     }
                 }).start();

@@ -566,4 +566,12 @@
     <string name="settings_bin_agg_max">最大值</string>
     <string name="settings_bin_agg_avg">平均值</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League：已接受 %1$d 个</string>
+    <string name="settings_wrl_desc">自动上传 QSO 到您的 World Radio League 日志（需要 Developer API 密钥）</string>
+    <string name="settings_wrl_dialog_desc">在 World Radio League 的 Integrations → Developer API 中生成密钥。一个密钥适用于整个账户。</string>
+    <string name="settings_wrl_logbook">日志</string>
+    <string name="settings_wrl_logbook_default">默认日志</string>
+    <string name="settings_wrl_loading_logbooks">正在加载日志…</string>
 </resources>

@@ -629,4 +629,12 @@
     <string name="settings_bin_agg_max">الحد الأقصى</string>
     <string name="settings_bin_agg_avg">المتوسط</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d مقبول</string>
+    <string name="settings_wrl_desc">رفع QSOs تلقائياً إلى سجل World Radio League الخاص بك (يتطلب مفتاح Developer API)</string>
+    <string name="settings_wrl_dialog_desc">أنشئ مفتاحاً في World Radio League من Integrations → Developer API. مفتاح واحد يغطي حسابك بالكامل.</string>
+    <string name="settings_wrl_logbook">السجل</string>
+    <string name="settings_wrl_logbook_default">السجل الافتراضي</string>
+    <string name="settings_wrl_loading_logbooks">جارٍ تحميل السجلات…</string>
 </resources>

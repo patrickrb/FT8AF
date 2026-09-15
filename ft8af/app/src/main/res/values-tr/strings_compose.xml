@@ -602,4 +602,12 @@
     <string name="settings_bin_agg_max">Maksimum</string>
     <string name="settings_bin_agg_avg">Ortalama</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d kabul edildi</string>
+    <string name="settings_wrl_desc">QSO\'ları World Radio League kayıt defterinize otomatik yükle (Developer API anahtarı gerekir)</string>
+    <string name="settings_wrl_dialog_desc">World Radio League\'de Integrations → Developer API altında bir anahtar oluşturun. Tek anahtar tüm hesabınızı kapsar.</string>
+    <string name="settings_wrl_logbook">Kayıt defteri</string>
+    <string name="settings_wrl_logbook_default">Varsayılan kayıt defteri</string>
+    <string name="settings_wrl_loading_logbooks">Kayıt defterleri yükleniyor…</string>
 </resources>

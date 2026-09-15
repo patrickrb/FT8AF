@@ -566,4 +566,12 @@
     <string name="settings_bin_agg_max">最大値</string>
     <string name="settings_bin_agg_avg">平均</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d 件受理</string>
+    <string name="settings_wrl_desc">QSO を World Radio League のログブックに自動アップロードします（Developer API キーが必要）</string>
+    <string name="settings_wrl_dialog_desc">World Radio League の Integrations → Developer API でキーを生成してください。1 つのキーでアカウント全体に使えます。</string>
+    <string name="settings_wrl_logbook">ログブック</string>
+    <string name="settings_wrl_logbook_default">既定のログブック</string>
+    <string name="settings_wrl_loading_logbooks">ログブックを読み込み中…</string>
 </resources>

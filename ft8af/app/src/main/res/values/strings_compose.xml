@@ -370,10 +370,11 @@
     <string name="log_sync_title_no_services">NO SERVICES ENABLED</string>
     <string name="log_sync_title_syncing">SYNCING…</string>
     <string name="log_sync_title_complete">SYNC COMPLETE</string>
-    <string name="log_sync_enable_services">Enable Cloudlog/Wavelog/Nextlog or QRZ in Settings, then try again.</string>
+    <string name="log_sync_enable_services">Enable Cloudlog/Wavelog/Nextlog, QRZ, or World Radio League in Settings, then try again.</string>
     <string name="log_sync_progress_count">%1$d of %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d accepted</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d accepted</string>
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d accepted</string>
     <string name="log_sync_nothing_to_upload">No QSOs in the logbook to upload yet.</string>
     <string name="log_sync_working">Working…</string>
 
@@ -835,6 +836,13 @@
     <string name="settings_qrz_profile_lookup_desc">Username + password for QRZ XML API (avatars)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">Auto-upload QSOs to a Cloudlog, Wavelog, or Nextlog instance</string>
+    <string name="settings_wrl" translatable="false">World Radio League</string>
+    <string name="settings_wrl_desc">Auto-upload QSOs to your World Radio League logbook (requires a Developer API key)</string>
+    <string name="settings_wrl_dialog_desc">Generate a key in World Radio League under Integrations → Developer API. One key covers your whole account.</string>
+    <string name="settings_wrl_api_key_hint" translatable="false">wrl_live_…</string>
+    <string name="settings_wrl_logbook">Logbook</string>
+    <string name="settings_wrl_logbook_default">Default logbook</string>
+    <string name="settings_wrl_loading_logbooks">Loading logbooks…</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">PTT Delay</string>

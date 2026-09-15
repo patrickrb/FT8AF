@@ -610,4 +610,12 @@
     <string name="settings_bin_agg_max">Maksimum</string>
     <string name="settings_bin_agg_avg">Średnia</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d zaakceptowano</string>
+    <string name="settings_wrl_desc">Auto-wysyłka QSO do dziennika World Radio League (wymaga klucza Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Wygeneruj klucz w World Radio League w sekcji Integrations → Developer API. Jeden klucz obejmuje całe konto.</string>
+    <string name="settings_wrl_logbook">Dziennik</string>
+    <string name="settings_wrl_logbook_default">Domyślny dziennik</string>
+    <string name="settings_wrl_loading_logbooks">Wczytywanie dzienników…</string>
 </resources>
