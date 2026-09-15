@@ -1,0 +1,101 @@
+package radio.ks3ckc.ft8af.ui.rateprompt
+
+import android.database.sqlite.SQLiteDatabase
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import radio.ks3ckc.ft8af.ui.settings.sendAppFeedbackEmail
+
+/**
+ * Hosts [RatePromptSheet] at the root of FT8AFApp. Each time a QSO is logged
+ * ([qsoCompletedAt] turns non-null), it waits for the confirmation toast to clear
+ * and for any TX to finish, snapshots the log, and shows the sheet if
+ * [evaluateRatePrompt] says so. Every exit path rewrites the persisted state.
+ */
+@Composable
+fun RatePromptHost(
+    qsoCompletedAt: Long?,
+    isTransmitting: Boolean,
+    database: () -> SQLiteDatabase?,
+) {
+    val context = LocalContext.current
+    val store = remember { RatePromptStore.from(context) }
+    val transmitting by rememberUpdatedState(isTransmitting)
+
+    var visible by remember { mutableStateOf(false) }
+    var variant by remember { mutableStateOf(RatePromptVariant.MINIMAL) }
+    var stats by remember { mutableStateOf(RatePromptLogStats(0, 0, 0)) }
+    var step by remember { mutableStateOf(RatePromptStep.ASK) }
+    var selectedStars by remember { mutableIntStateOf(0) }
+
+    // qsoCompletedAt is a one-shot LiveData that FT8AFApp resets to null right
+    // away; keying the check on it directly would cancel the delayed check on
+    // that reset. Turn each non-null value into a monotonic token instead (same
+    // pattern as QsoCelebration).
+    var triggerToken by remember { mutableIntStateOf(0) }
+    LaunchedEffect(qsoCompletedAt) {
+        if (qsoCompletedAt != null) triggerToken++
+    }
+
+    LaunchedEffect(triggerToken) {
+        if (triggerToken == 0 || visible) return@LaunchedEffect
+        // Let the post-log toast clear (this also gives the async QSO insert time
+        // to land), then hold off while the radio is mid-TX.
+        delay(RATE_PROMPT_SHOW_DELAY_MS)
+        snapshotFlow { transmitting }.first { !it }
+        val db = database() ?: return@LaunchedEffect
+        val snapshot = withContext(Dispatchers.IO) {
+            runCatching { queryRatePromptLogStats(db) }.getOrNull()
+        } ?: return@LaunchedEffect
+        val shown = evaluateRatePrompt(snapshot, store.read()) ?: return@LaunchedEffect
+        variant = shown
+        stats = snapshot
+        step = RatePromptStep.ASK
+        selectedStars = 0
+        visible = true
+    }
+
+    val close: ((RatePromptState) -> RatePromptState) -> Unit = { transform ->
+        visible = false
+        store.persist(transform)
+    }
+
+    RatePromptSheet(
+        visible = visible,
+        variant = variant,
+        stats = stats,
+        step = step,
+        selectedStars = selectedStars,
+        onDismiss = {
+            val dismissedOn = step
+            close { it.afterDismiss(dismissedOn, stats.qsoCount) }
+        },
+        onStarSelected = { stars ->
+            selectedStars = stars
+            step = ratePromptStepForStars(stars)
+        },
+        onRemindLater = { close { it.afterDecline(stats.qsoCount) } },
+        onDontAskAgain = { close { it.afterDontAskAgain() } },
+        onRateOnPlay = {
+            launchPlayReview(context)
+            close { it.afterCompleted() }
+        },
+        onNotNow = { close { it.afterDismiss(RatePromptStep.PLAY, stats.qsoCount) } },
+        onSendFeedback = { feedback ->
+            sendAppFeedbackEmail(context, feedback)
+            close { it.afterCompleted() }
+        },
+        onSkipFeedback = { close { it.afterCompleted() } },
+    )
+}

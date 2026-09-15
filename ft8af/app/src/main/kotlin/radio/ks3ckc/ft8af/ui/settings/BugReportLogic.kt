@@ -28,11 +28,30 @@ internal data class BugReportInfo(
  * Developer-facing report body: the user's description followed by an app/device
  * block. Intentionally English (diagnostic text for the maintainer, not localized).
  */
-internal fun buildBugReportBody(description: String, info: BugReportInfo): String {
+internal fun buildBugReportBody(description: String, info: BugReportInfo): String =
+    buildReportBody("Describe the problem:", description, "(no description provided)", info)
+
+/**
+ * Body for the rating prompt's low-star feedback form: the same app/device block
+ * as a bug report, under a feedback heading. Also English, for the maintainer.
+ */
+internal fun buildFeedbackBody(feedback: String, info: BugReportInfo): String =
+    buildReportBody("What's not working:", feedback, "(no feedback provided)", info)
+
+/** Short feedback email title, e.g. `App feedback (v1.0.2)`. */
+internal fun buildFeedbackTitle(info: BugReportInfo): String =
+    "App feedback (v${info.appVersion})"
+
+private fun buildReportBody(
+    heading: String,
+    text: String,
+    blankPlaceholder: String,
+    info: BugReportInfo,
+): String {
     val callsign = info.callsign.ifBlank { "(not set)" }
     return buildString {
-        append("Describe the problem:\n")
-        append(description.ifBlank { "(no description provided)" })
+        append(heading).append('\n')
+        append(text.ifBlank { blankPlaceholder })
         append("\n\n")
         append("--- App / device info ---\n")
         append("App version: ${info.appVersion} (build ${info.versionCode})\n")

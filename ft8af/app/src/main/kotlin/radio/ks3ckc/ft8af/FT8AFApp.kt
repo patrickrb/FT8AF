@@ -69,6 +69,7 @@ import radio.ks3ckc.ft8af.ui.decode.DecodeScreen
 import radio.ks3ckc.ft8af.ui.logbook.LogbookScreen
 import radio.ks3ckc.ft8af.ui.map.MapScreen
 import radio.ks3ckc.ft8af.ui.pota.PotaScreen
+import radio.ks3ckc.ft8af.ui.rateprompt.RatePromptHost
 import radio.ks3ckc.ft8af.ui.settings.SettingsScreen
 import radio.ks3ckc.ft8af.ui.waterfall.WaterfallBottomStripHeight
 import radio.ks3ckc.ft8af.ui.waterfall.WaterfallScreen
@@ -827,6 +828,14 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 mainViewModel.databaseOpr.writeConfig("huntMinSnr", stored.toString(), null)
             },
             onStartHunt = { setHuntEnabled(true) },
+        )
+
+        // In-app rating prompt — checked after each logged QSO; last so its sheet
+        // sits above every other overlay.
+        RatePromptHost(
+            qsoCompletedAt = qsoCompletedAt,
+            isTransmitting = isTransmitting,
+            database = { mainViewModel.databaseOpr?.db },
         )
     }
 }

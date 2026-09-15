@@ -49,6 +49,16 @@ class DebugInjectTest {
         assertThat(spec.waterfall).isEqualTo(0)
     }
 
+    /** `complete` accepts 1/true (any case); anything else, or absent, is off. */
+    @Test
+    fun qsoComplete_parsesOneOrTrue() {
+        assertThat(parseDebugInject { null }.qsoComplete).isFalse()
+        assertThat(parseDebugInject { if (it == "complete") "1" else null }.qsoComplete).isTrue()
+        assertThat(parseDebugInject { if (it == "complete") "TRUE" else null }.qsoComplete).isTrue()
+        assertThat(parseDebugInject { if (it == "complete") "0" else null }.qsoComplete).isFalse()
+        assertThat(parseDebugInject { if (it == "complete") "yes" else null }.qsoComplete).isFalse()
+    }
+
     /** Supplied values win over defaults and are upper-cased. */
     @Test
     fun overrides_areUpperCased() {
