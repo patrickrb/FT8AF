@@ -194,7 +194,7 @@
     <string name="log_sync_title_no_services">СЛУЖБЫ НЕ ВКЛЮЧЕНЫ</string>
     <string name="log_sync_title_syncing">СИНХРОНИЗАЦИЯ…</string>
     <string name="log_sync_title_complete">СИНХРОНИЗАЦИЯ ЗАВЕРШЕНА</string>
-    <string name="log_sync_enable_services">Включите Cloudlog/Wavelog/Nextlog или QRZ в настройках и повторите.</string>
+    <string name="log_sync_enable_services">Включите Cloudlog/Wavelog/Nextlog, QRZ или World Radio League в настройках и повторите.</string>
     <string name="log_sync_progress_count">%1$d из %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: принято %1$d</string>
     <string name="log_sync_qrz_accepted">QRZ: принято %1$d</string>

@@ -194,7 +194,7 @@
     <string name="log_sync_title_no_services">AUCUN SERVICE ACTIVÉ</string>
     <string name="log_sync_title_syncing">SYNCHRONISATION…</string>
     <string name="log_sync_title_complete">SYNCHRONISATION TERMINÉE</string>
-    <string name="log_sync_enable_services">Activez Cloudlog/Wavelog/Nextlog ou QRZ dans les Réglages, puis réessayez.</string>
+    <string name="log_sync_enable_services">Activez Cloudlog/Wavelog/Nextlog, QRZ ou World Radio League dans les Réglages, puis réessayez.</string>
     <string name="log_sync_progress_count">%1$d sur %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog : %1$d acceptés</string>
     <string name="log_sync_qrz_accepted">QRZ : %1$d acceptés</string>

@@ -237,7 +237,7 @@
     <string name="log_sync_title_no_services">GEEN DIENSTEN INGESCHAKELD</string>
     <string name="log_sync_title_syncing">SYNCHRONISEREN…</string>
     <string name="log_sync_title_complete">SYNCHRONISATIE VOLTOOID</string>
-    <string name="log_sync_enable_services">Schakel Cloudlog/Wavelog/Nextlog of QRZ in bij Instellingen en probeer het opnieuw.</string>
+    <string name="log_sync_enable_services">Schakel Cloudlog/Wavelog/Nextlog, QRZ of World Radio League in bij Instellingen en probeer het opnieuw.</string>
     <string name="log_sync_progress_count">%1$d van %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d geaccepteerd</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d geaccepteerd</string>

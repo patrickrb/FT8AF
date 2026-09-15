@@ -226,7 +226,7 @@
     <string name="log_sync_title_no_services">BRAK WŁĄCZONYCH USŁUG</string>
     <string name="log_sync_title_syncing">SYNCHRONIZACJA…</string>
     <string name="log_sync_title_complete">SYNCHRONIZACJA ZAKOŃCZONA</string>
-    <string name="log_sync_enable_services">Włącz Cloudlog/Wavelog/Nextlog lub QRZ w Ustawieniach, a następnie spróbuj ponownie.</string>
+    <string name="log_sync_enable_services">Włącz Cloudlog/Wavelog/Nextlog, QRZ lub World Radio League w Ustawieniach, a następnie spróbuj ponownie.</string>
     <string name="log_sync_progress_count">%1$d z %2$d QSO</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d zaakceptowano</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d zaakceptowano</string>

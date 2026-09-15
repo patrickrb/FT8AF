@@ -25,6 +25,7 @@ import com.k1af.ft8af.FT8Common;
 import com.k1af.ft8af.Ft8Message;
 import com.k1af.ft8af.FullDuplexMonitor;
 import com.k1af.ft8af.GeneralVariables;
+import radio.ks3ckc.ft8af.ui.settings.SettingsBackup;
 import com.k1af.ft8af.R;
 import com.k1af.ft8af.callsign.CallsignDatabase;
 import com.k1af.ft8af.callsign.CallsignInfo;
@@ -794,8 +795,24 @@ public class DatabaseOpr extends SQLiteOpenHelper {
      * Write configuration info, async operation
      */
     public void writeConfig(String KeyName, String Value, OnAfterWriteConfig onAfterWriteConfig) {
-        Log.d(TAG, "writeConfig: Value:" + Value);
+        Log.d(TAG, "writeConfig: " + KeyName + " Value:" + configValueForLog(KeyName, Value));
         new WriteConfig(db, KeyName, Value, onAfterWriteConfig).execute();
+    }
+
+    /**
+     * The config value as it may appear in logcat. Keys that hold credentials
+     * ({@link SettingsBackup#getSENSITIVE_KEYS()} -- the API keys and passwords a
+     * settings export also withholds) are masked, so saving e.g. a World Radio
+     * League or QRZ key never writes the secret to the log. Pure -- unit-tested.
+     */
+    static String configValueForLog(String keyName, String value) {
+        if (value == null) {
+            return "null";
+        }
+        if (keyName != null && SettingsBackup.INSTANCE.getSENSITIVE_KEYS().contains(keyName)) {
+            return "*** (" + value.length() + " chars)";
+        }
+        return value;
     }
 
     public void writeMessage(ArrayList<Ft8Message> messages) {
@@ -878,7 +895,16 @@ public class DatabaseOpr extends SQLiteOpenHelper {
      * @param qslRecord QSO record
      */
     public void addQSL_Callsign(QSLRecord qslRecord) {
-        new AddQSL_Info(this, qslRecord).execute();
+        addQSL_Callsign(qslRecord, null);
+    }
+
+    /**
+     * As {@link #addQSL_Callsign(QSLRecord)}, then runs {@code afterInsert} on the main thread
+     * once the row is in QSLTable. Anything that UPDATEs that row -- e.g. marking a third-party
+     * upload synced -- must wait for this, or its UPDATE can run first and match nothing.
+     */
+    public void addQSL_Callsign(QSLRecord qslRecord, Runnable afterInsert) {
+        new AddQSL_Info(this, qslRecord, afterInsert).execute();
     }
 
     /**
@@ -1890,10 +1916,12 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         //private final SQLiteDatabase db;
         private final DatabaseOpr databaseOpr;
         private QSLRecord qslRecord;
+        private final Runnable afterInsert;
 
-        public AddQSL_Info(DatabaseOpr opr, QSLRecord qslRecord) {
+        public AddQSL_Info(DatabaseOpr opr, QSLRecord qslRecord, Runnable afterInsert) {
             this.databaseOpr = opr;
             this.qslRecord = qslRecord;
+            this.afterInsert = afterInsert;
         }
 
 
@@ -1902,6 +1930,13 @@ public class DatabaseOpr extends SQLiteOpenHelper {
         protected Void doInBackground(Void... voids) {
             databaseOpr.doInsertQSLData(qslRecord,null);//Insert log and successfully contacted callsign
             return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void unused) {
+            if (afterInsert != null) {
+                afterInsert.run();
+            }
         }
     }
 

@@ -226,7 +226,7 @@
     <string name="log_sync_title_no_services">ЖОДНУ СЛУЖБУ НЕ УВІМКНЕНО</string>
     <string name="log_sync_title_syncing">СИНХРОНІЗАЦІЯ…</string>
     <string name="log_sync_title_complete">СИНХРОНІЗАЦІЮ ЗАВЕРШЕНО</string>
-    <string name="log_sync_enable_services">Увімкніть Cloudlog/Wavelog/Nextlog або QRZ у Налаштуваннях, потім повторіть.</string>
+    <string name="log_sync_enable_services">Увімкніть Cloudlog/Wavelog/Nextlog, QRZ або World Radio League у Налаштуваннях, потім повторіть.</string>
     <string name="log_sync_progress_count">%1$d з %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d прийнято</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d прийнято</string>

@@ -226,7 +226,7 @@
     <string name="log_sync_title_no_services">ETKİN SERVİS YOK</string>
     <string name="log_sync_title_syncing">EŞİTLENİYOR…</string>
     <string name="log_sync_title_complete">EŞİTLEME TAMAMLANDI</string>
-    <string name="log_sync_enable_services">Ayarlar\'da Cloudlog/Wavelog/Nextlog veya QRZ\'yi etkinleştirip yeniden deneyin.</string>
+    <string name="log_sync_enable_services">Ayarlar\'da Cloudlog/Wavelog/Nextlog, QRZ veya World Radio League\'i etkinleştirip yeniden deneyin.</string>
     <string name="log_sync_progress_count">%2$d QSO\'dan %1$d</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d kabul edildi</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d kabul edildi</string>

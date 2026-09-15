@@ -478,6 +478,59 @@ public class WrlApiTest {
         assertThat(keys).containsExactly("wrl_live_k");
     }
 
+    private static WrlApi.Response meWithoutDefault() {
+        return new WrlApi.Response(200, "{\"data\":{\"uid\":\"u\",\"defaultLogbook\":"
+                + "{\"logbookId\":null,\"resolution\":null}},\"meta\":null,\"error\":null}", null);
+    }
+
+    private static final String TWO_LOGBOOKS = "{\"data\":["
+            + "{\"id\":\"a\",\"name\":\"Home\",\"isLocked\":false},"
+            + "{\"id\":\"b\",\"name\":\"Old\",\"isLocked\":true}],\"meta\":null,\"error\":null}";
+
+    @Test
+    public void checkConnection_chosenLogbookPassesOnlyWhenItStillExistsUnlocked() {
+        respond(meWithoutDefault(), new WrlApi.Response(200, TWO_LOGBOOKS, null));
+        assertThat(WrlApi.checkConnection("k", "a").ok).isTrue();
+        assertThat(urls).containsExactly("GET https://api.worldradioleague.com/v1/me",
+                "GET https://api.worldradioleague.com/v1/logbooks?limit=100").inOrder();
+
+        urls.clear();
+        respond(meWithoutDefault(), new WrlApi.Response(200, TWO_LOGBOOKS, null));
+        ThirdPartyService.ConnectionCheck locked = WrlApi.checkConnection("k", "b");
+        assertThat(locked.ok).isFalse();
+        assertThat(locked.detail).contains("choose a logbook");
+
+        urls.clear();
+        respond(meWithoutDefault(), new WrlApi.Response(200, TWO_LOGBOOKS, null));
+        assertThat(WrlApi.checkConnection("k", "deleted-uuid").ok).isFalse();
+    }
+
+    @Test
+    public void checkConnection_chosenLogbookFailsWhenTheListCannotBeRead() {
+        respond(meWithoutDefault(), error(503, "UNAVAILABLE", "down", null));
+        ThirdPartyService.ConnectionCheck c = WrlApi.checkConnection("k", "a");
+        assertThat(c.ok).isFalse();
+        assertThat(c.detail).contains("could not read");
+    }
+
+    @Test
+    public void checkConnection_withoutAChosenLogbookOnlyAsksMe() {
+        respond(new WrlApi.Response(200,
+                "{\"data\":{\"defaultLogbook\":{\"logbookId\":\"L\",\"resolution\":\"sole\"}}}", null));
+        assertThat(WrlApi.checkConnection("k", " ").ok).isTrue();
+        assertThat(urls).containsExactly("GET https://api.worldradioleague.com/v1/me");
+    }
+
+    @Test
+    public void interpretLogbookChoice_matchesOnlyAListedLogbook() {
+        List<ThirdPartyService.StationProfile> books = Arrays.asList(
+                new ThirdPartyService.StationProfile("a", "Home", "", ""));
+        assertThat(WrlApi.interpretLogbookChoice(books, " a ").ok).isTrue();
+        assertThat(WrlApi.interpretLogbookChoice(books, "z").ok).isFalse();
+        assertThat(WrlApi.interpretLogbookChoice(new ArrayList<>(), "a").ok).isFalse();
+        assertThat(WrlApi.interpretLogbookChoice(null, "a").detail).contains("could not read");
+    }
+
     // -- logbooks --
 
     @Test
@@ -494,8 +547,11 @@ public class WrlApiTest {
         assertThat(books.get(0).callsign).isEqualTo("K1AF");
         assertThat(books.get(1).stationId).isEqualTo("c");
         assertThat(books.get(1).callsign).isEmpty();
-        assertThat(WrlApi.parseLogbooks("not json")).isEmpty();
-        assertThat(WrlApi.parseLogbooks(null)).isEmpty();
+        // An unreadable reply is a failed read (null), never "the account has no logbooks".
+        assertThat(WrlApi.parseLogbooks("not json")).isNull();
+        assertThat(WrlApi.parseLogbooks(null)).isNull();
+        assertThat(WrlApi.parseLogbooks("{\"data\":{}}")).isNull();
+        assertThat(WrlApi.parseLogbooks("{\"data\":[],\"meta\":{\"count\":0},\"error\":null}")).isEmpty();
     }
 
     @Test
@@ -568,6 +624,16 @@ public class WrlApiTest {
         respond(error(401, "INVALID_KEY", "x", null));
         assertThat(WrlApi.fetchLogbooksOrNull("k")).isNull();
         assertThat(WrlApi.fetchLogbooksOrNull("  ")).isNull();
+    }
+
+    @Test
+    public void fetchLogbooksOrNull_malformedOkReplyIsAFailureNotAnEmptyAccount() {
+        respond(new WrlApi.Response(200, "<html>captive portal</html>", null));
+        assertThat(WrlApi.fetchLogbooksOrNull("k")).isNull();
+        respond(new WrlApi.Response(200, "{\"data\":null,\"meta\":null,\"error\":null}", null));
+        assertThat(WrlApi.fetchLogbooksOrNull("k")).isNull();
+        // The never-null variant still degrades to an empty list.
+        assertThat(WrlApi.fetchLogbooks("k")).isEmpty();
     }
 
     @Test

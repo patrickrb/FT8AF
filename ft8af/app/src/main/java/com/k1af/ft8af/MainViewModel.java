@@ -1069,7 +1069,34 @@ public class MainViewModel extends ViewModel {
         }, new OnTransmitSuccess() {//when QSO is successful
             @Override
             public void doAfterTransmit(QSLRecord qslRecord) {
-                databaseOpr.addQSL_Callsign(qslRecord);//two operations: record callsign and QSL
+                // Upload to third-party services only once the QSLTable row exists:
+                // markQsoSynced UPDATEs that row, so an upload finishing before the async
+                // insert lands would mark nothing, and the next catch-up sync would send the
+                // contact again.
+                databaseOpr.addQSL_Callsign(qslRecord, () -> {
+                    // record to third-party service; may take some time
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            boolean cloudlogOk = false;
+                            boolean qrzOk = false;
+                            boolean wrlOk = false;
+                            if (GeneralVariables.enableCloudlog){
+                                cloudlogOk = ThirdPartyService.UploadToCloudLog(qslRecord);
+                            }
+                            if (GeneralVariables.enableQRZ){
+                                qrzOk = ThirdPartyService.UploadToQRZ(qslRecord);
+                            }
+                            if (GeneralVariables.enableWRL){
+                                wrlOk = ThirdPartyService.UploadToWrl(qslRecord);
+                            }
+                            if (databaseOpr != null && (cloudlogOk || qrzOk || wrlOk)) {
+                                ThirdPartyService.markQsoSynced(
+                                        databaseOpr.getDb(), qslRecord, cloudlogOk, qrzOk, wrlOk);
+                            }
+                        }
+                    }).start();
+                });
 
                 // QSO-complete alert (opt-in). Fires once per logged contact.
                 dxAlertNotifier.notifyQsoComplete(qslRecord);
@@ -1077,28 +1104,6 @@ public class MainViewModel extends ViewModel {
                 // broadcast the logged QSO over the WSJT-X UDP interface
                 broadcastWsjtxQso(qslRecord);
 
-                // record to third-party service; may take some time
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        boolean cloudlogOk = false;
-                        boolean qrzOk = false;
-                        boolean wrlOk = false;
-                        if (GeneralVariables.enableCloudlog){
-                            cloudlogOk = ThirdPartyService.UploadToCloudLog(qslRecord);
-                        }
-                        if (GeneralVariables.enableQRZ){
-                            qrzOk = ThirdPartyService.UploadToQRZ(qslRecord);
-                        }
-                        if (GeneralVariables.enableWRL){
-                            wrlOk = ThirdPartyService.UploadToWrl(qslRecord);
-                        }
-                        if (databaseOpr != null && (cloudlogOk || qrzOk || wrlOk)) {
-                            ThirdPartyService.markQsoSynced(
-                                    databaseOpr.getDb(), qslRecord, cloudlogOk, qrzOk, wrlOk);
-                        }
-                    }
-                }).start();
 
                 if (qslRecord.getToCallsign() != null) {//add successfully contacted zone to zone list
                     GeneralVariables.callsignDatabase.getCallsignInformation(qslRecord.getToCallsign()

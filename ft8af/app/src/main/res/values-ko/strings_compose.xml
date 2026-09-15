@@ -237,7 +237,7 @@
     <string name="log_sync_title_no_services">활성화된 서비스 없음</string>
     <string name="log_sync_title_syncing">동기화 중…</string>
     <string name="log_sync_title_complete">동기화 완료</string>
-    <string name="log_sync_enable_services">설정에서 Cloudlog/Wavelog/Nextlog 또는 QRZ를 활성화한 후 다시 시도하세요.</string>
+    <string name="log_sync_enable_services">설정에서 Cloudlog/Wavelog/Nextlog, QRZ 또는 World Radio League를 활성화한 후 다시 시도하세요.</string>
     <string name="log_sync_progress_count">%2$d개 중 %1$d개 QSO</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d개 수락됨</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d개 수락됨</string>

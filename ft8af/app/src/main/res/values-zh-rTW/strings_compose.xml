@@ -194,7 +194,7 @@
     <string name="log_sync_title_no_services">未啟用任何服務</string>
     <string name="log_sync_title_syncing">同步中…</string>
     <string name="log_sync_title_complete">同步完成</string>
-    <string name="log_sync_enable_services">請在設定中啟用 Cloudlog/Wavelog/Nextlog 或 QRZ，然後再試一次。</string>
+    <string name="log_sync_enable_services">請在設定中啟用 Cloudlog/Wavelog/Nextlog、QRZ 或 World Radio League，然後再試一次。</string>
     <string name="log_sync_progress_count">%2$d 筆 QSOs 中的第 %1$d 筆</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog：已接受 %1$d 筆</string>
     <string name="log_sync_qrz_accepted">QRZ：已接受 %1$d 筆</string>

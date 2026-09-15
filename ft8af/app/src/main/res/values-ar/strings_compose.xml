@@ -237,7 +237,7 @@
     <string name="log_sync_title_no_services">لا خدمات مفعَّلة</string>
     <string name="log_sync_title_syncing">جارٍ المزامنة…</string>
     <string name="log_sync_title_complete">اكتملت المزامنة</string>
-    <string name="log_sync_enable_services">فعِّل Cloudlog/Wavelog/Nextlog أو QRZ في الإعدادات، ثم أعد المحاولة.</string>
+    <string name="log_sync_enable_services">فعِّل Cloudlog/Wavelog/Nextlog أو QRZ أو World Radio League في الإعدادات، ثم أعد المحاولة.</string>
     <string name="log_sync_progress_count">%1$d من %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d مقبول</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d مقبول</string>

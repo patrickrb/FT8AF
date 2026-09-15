@@ -237,7 +237,7 @@
     <string name="log_sync_title_no_services">TIDAK ADA LAYANAN AKTIF</string>
     <string name="log_sync_title_syncing">MENYINKRONKAN…</string>
     <string name="log_sync_title_complete">SINKRONISASI SELESAI</string>
-    <string name="log_sync_enable_services">Aktifkan Cloudlog/Wavelog/Nextlog atau QRZ di Setelan, lalu coba lagi.</string>
+    <string name="log_sync_enable_services">Aktifkan Cloudlog/Wavelog/Nextlog, QRZ, atau World Radio League di Setelan, lalu coba lagi.</string>
     <string name="log_sync_progress_count">%1$d dari %2$d QSO</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d diterima</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d diterima</string>

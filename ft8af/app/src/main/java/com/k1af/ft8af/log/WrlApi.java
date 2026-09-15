@@ -510,7 +510,14 @@ public final class WrlApi {
                 return new ThirdPartyService.ConnectionCheck(false, why);
             }
             log("GET me -> HTTP 200");
-            return interpretMe(r.body, logbookId);
+            ThirdPartyService.ConnectionCheck me = interpretMe(r.body, logbookId);
+            String chosen = trimToNull(logbookId);
+            if (!me.ok || chosen == null) {
+                return me;
+            }
+            // A chosen logbook must still exist and accept contacts: a deleted, foreign or
+            // locked UUID passes /me, but every contact POST to it would then fail.
+            return interpretLogbookChoice(fetchLogbooksOrNull(key), chosen);
         } catch (IOException e) {
             String why = describeTransportError(e);
             log("GET me -> " + why);
@@ -543,6 +550,27 @@ public final class WrlApi {
             }
         }
         return new ThirdPartyService.ConnectionCheck(true, null);
+    }
+
+    /**
+     * Test Connection's verdict on a chosen {@code logbookId}: it passes only when that id is
+     * among the account's unlocked logbooks. {@code books} is {@link #fetchLogbooksOrNull}'s
+     * result, so null (list unreadable) fails too. Pure — unit-tested.
+     */
+    static ThirdPartyService.ConnectionCheck interpretLogbookChoice(
+            List<ThirdPartyService.StationProfile> books, String logbookId) {
+        if (books == null) {
+            return new ThirdPartyService.ConnectionCheck(false,
+                    "could not read the account's logbooks");
+        }
+        String chosen = trimToNull(logbookId);
+        for (ThirdPartyService.StationProfile book : books) {
+            if (book.stationId.equals(chosen)) {
+                return new ThirdPartyService.ConnectionCheck(true, null);
+            }
+        }
+        return new ThirdPartyService.ConnectionCheck(false,
+                "chosen logbook not found or locked: choose a logbook");
     }
 
     /** The account's logbooks that can accept contacts. Empty (never null) on any failure. */
@@ -676,14 +704,16 @@ public final class WrlApi {
      * callsign). Locked logbooks are skipped: WRL refuses new contacts into them. Pure.
      */
     static List<ThirdPartyService.StationProfile> parseLogbooks(String body) {
-        List<ThirdPartyService.StationProfile> out = new ArrayList<>();
+        // Only a well-formed {"data": [...]} is an answer. Anything else (empty body, not
+        // JSON, no data array) is a failed read, so no caller mistakes it for "no logbooks".
         if (body == null || body.isEmpty()) {
-            return out;
+            return null;
         }
+        List<ThirdPartyService.StationProfile> out = new ArrayList<>();
         try {
             JSONArray arr = new JSONObject(body).optJSONArray("data");
             if (arr == null) {
-                return out;
+                return null;
             }
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject lb = arr.optJSONObject(i);
@@ -697,6 +727,7 @@ public final class WrlApi {
             }
         } catch (JSONException e) {
             Log.d(TAG, "parseLogbooks error: " + e.getClass().getSimpleName());
+            return null;
         }
         return out;
     }
