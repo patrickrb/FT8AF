@@ -508,8 +508,11 @@
     <string name="bug_report_send_email">Wyślij e-mail</string>
     <string name="bug_report_no_email_app">Nie znaleziono aplikacji e-mail do wysłania zgłoszenia</string>
     <string name="bug_report_open_github">Otwórz zgłoszenie na GitHub</string>
-    <string name="settings_debug">Debug</string>
     <string name="settings_debug_desc">Wyświetl / udostępnij debug.log</string>
+    <string name="settings_share_logs">Udostępnij logi</string>
+    <string name="settings_share_logs_desc">Wyślij debug.log e-mailem, na Discord, Drive…</string>
+    <string name="settings_view_logs">Wyświetl logi</string>
+    <string name="settings_share_logs_empty">Brak zapisanych logów</string>
     <string name="settings_about_body">Wersja %1$s (kompilacja %2$s)\nData kompilacji %3$s\n\nFT8, prosto i łatwo.\n\nSamodzielna aplikacja transceivera FT8 na Androida. Sterowanie radiem przez USB, Bluetooth i sieć z automatyczną sekwencją i logowaniem.</string>
     <string name="settings_website">Strona internetowa</string>
     <string name="settings_community">Społeczność</string>
@@ -529,8 +532,6 @@
     <string name="settings_conn_network">Sieć</string>
     <string name="settings_no_usb_serial">Nie wykryto urządzeń szeregowych USB. Podłącz kabel USB do radia i spróbuj ponownie.</string>
     <string name="settings_no_bluetooth_devices">Nie znaleziono sparowanych urządzeń Bluetooth. Najpierw sparuj urządzenie w ustawieniach Bluetooth Androida.</string>
-    <string name="settings_debug_mode_enabled">Tryb debugowania włączony</string>
-    <string name="settings_debug_mode_disabled">Tryb debugowania wyłączony</string>
     <string name="settings_edit_operator_identity">Edytuj tożsamość operatora</string>
     <string name="settings_callsign">Znak</string>
     <string name="settings_callsign_hint">np. W1AW</string>

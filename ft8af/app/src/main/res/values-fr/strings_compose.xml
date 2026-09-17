@@ -438,8 +438,11 @@
     <string name="bug_report_send_email">Envoyer un e-mail</string>
     <string name="bug_report_no_email_app">Aucune application e-mail trouvée pour envoyer le rapport</string>
     <string name="bug_report_open_github">Ouvrir un ticket GitHub</string>
-    <string name="settings_debug">Débogage</string>
     <string name="settings_debug_desc">Afficher / partager debug.log</string>
+    <string name="settings_share_logs">Partager les journaux</string>
+    <string name="settings_share_logs_desc">Envoyer debug.log par e-mail, Discord, Drive…</string>
+    <string name="settings_view_logs">Afficher les journaux</string>
+    <string name="settings_share_logs_empty">Aucun journal enregistré pour le moment</string>
     <string name="settings_about_body">Version %1$s (build %2$s)\nDate de build %3$s\n\nFT8, en toute simplicité.\n\nUne application de transceiver FT8 autonome pour Android. Contrôle de rig par USB, Bluetooth et réseau avec séquençage et journalisation automatiques.</string>
     <string name="settings_website">Site web</string>
     <string name="settings_community">Communauté</string>
@@ -458,8 +461,6 @@
     <string name="settings_conn_bluetooth">Bluetooth</string>
     <string name="settings_conn_network">Réseau</string>
     <string name="settings_no_usb_serial">Aucun périphérique série USB détecté. Connectez un câble USB à votre radio et réessayez.</string>
-    <string name="settings_debug_mode_enabled">Mode débogage activé</string>
-    <string name="settings_debug_mode_disabled">Mode débogage désactivé</string>
     <string name="settings_edit_operator_identity">Modifier l\'identité de l\'opérateur</string>
     <string name="settings_callsign">Indicatif</string>
     <string name="settings_callsign_hint">ex. W1AW</string>

@@ -138,7 +138,7 @@ private fun gatherInfo(): BugReportInfo = BugReportInfo(
 /**
  * Fire an email intent prefilled with the report body, addressed to the maintainer,
  * attaching debug.log when it exists. Mirrors the FileProvider/flags handling in
- * [DebugLogScreen.shareDebugLog].
+ * [buildDebugLogShareIntent].
  *
  * Uses an ACTION_SEND intent (so the debug.log attachment rides along via
  * EXTRA_STREAM) narrowed with a `mailto:` selector. The selector restricts the

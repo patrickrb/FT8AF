@@ -511,8 +511,11 @@
     <string name="bug_report_send_email">E-mail verzenden</string>
     <string name="bug_report_no_email_app">Geen e-mailapp gevonden om de melding te verzenden</string>
     <string name="bug_report_open_github">GitHub-issue openen</string>
-    <string name="settings_debug">Debug</string>
     <string name="settings_debug_desc">debug.log bekijken / delen</string>
+    <string name="settings_share_logs">Logs delen</string>
+    <string name="settings_share_logs_desc">debug.log versturen via e-mail, Discord, Drive…</string>
+    <string name="settings_view_logs">Logs bekijken</string>
+    <string name="settings_share_logs_empty">Nog geen log vastgelegd</string>
     <string name="settings_about_body">Versie %1$s (build %2$s)\nBuilddatum %3$s\n\nFT8, eenvoudig gemaakt.\n\nEen zelfstandige FT8-transceiver-app voor Android. USB-, Bluetooth- en netwerk-rigbesturing met automatische sequentie en logboek.</string>
     <string name="settings_website">Website</string>
     <string name="settings_community">Community</string>
@@ -532,8 +535,6 @@
     <string name="settings_conn_network">Netwerk</string>
     <string name="settings_no_usb_serial">Geen USB-seriële apparaten gedetecteerd. Sluit een USB-kabel aan op je radio en probeer het opnieuw.</string>
     <string name="settings_no_bluetooth_devices">Geen gekoppelde Bluetooth-apparaten gevonden. Koppel eerst een apparaat in de Bluetooth-instellingen van Android.</string>
-    <string name="settings_debug_mode_enabled">Debugmodus ingeschakeld</string>
-    <string name="settings_debug_mode_disabled">Debugmodus uitgeschakeld</string>
     <string name="settings_edit_operator_identity">Operatoridentiteit bewerken</string>
     <string name="settings_callsign">Roepnaam</string>
     <string name="settings_callsign_hint">bijv. W1AW</string>
