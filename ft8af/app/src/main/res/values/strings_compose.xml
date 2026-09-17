@@ -614,7 +614,7 @@
     <string name="usb_diag_cat_response">CAT Response</string>
     <string name="usb_diag_cat_port">CAT Port</string>
     <string name="usb_diag_baud_value">%1$s · %2$d bd</string>
-    <string name="usb_diag_hint_ft710">FT-710 cable mode is write-only: the app never reads from the CAT port, so CAT Response stays red here by design.</string>
+    <string name="usb_diag_hint_ft710">FT-710 cable mode is write-only: the app never reads from the CAT port, so CAT Response is shown as information here, not a failure.</string>
     <string name="usb_diag_hint_dual_port">This chip has two ports. Yaesu rigs (FT-891, FT-991A, FTDX10, FT-710) answer CAT on the Enhanced port; Kenwood TS-890S/TS-990S on the Standard port. The other port only carries RTS/DTR keying. Pick the other port under Connection Mode › USB Cable, and check the baud rate against the rig menu.</string>
     <string name="usb_diag_hint_no_response">The port is open but the radio has not answered. Check the baud rate and the radio model in Settings, and that CAT is enabled in the rig menu.</string>
     <string name="usb_diag_value_none">—</string>

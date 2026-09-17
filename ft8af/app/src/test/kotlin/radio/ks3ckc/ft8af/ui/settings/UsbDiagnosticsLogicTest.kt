@@ -20,12 +20,14 @@ class UsbDiagnosticsLogicTest {
         hasSerialDriver: Boolean = false,
         hasAudioInterface: Boolean = false,
         hasPermission: Boolean = false,
+        deviceId: Int = 0,
     ) = UsbDeviceSummary(
         vendorId = vendorId,
         productId = productId,
         hasSerialDriver = hasSerialDriver,
         hasAudioInterface = hasAudioInterface,
         hasPermission = hasPermission,
+        deviceId = deviceId,
     )
 
     // --- formatUsbId ---
@@ -83,7 +85,86 @@ class UsbDiagnosticsLogicTest {
         assertThat(selectDiagnosticDevice(listOf(first, second))).isEqualTo(first)
     }
 
+    @Test
+    fun selectDevice_connectedPortWinsOverFirstSerialDevice() {
+        // CP2102 cable enumerated first, the rig's CP2105 second; CAT is on the CP2105.
+        // The first-serial ranking would describe the CP2102 next to the CP2105's port.
+        val cp2102 = summary(0x10C4, 0xEA60, hasSerialDriver = true, deviceId = 1003)
+        val cp2105 = summary(0x10C4, 0xEA70, hasSerialDriver = true, deviceId = 1004)
+        val connected = ConnectedUsbPort(deviceId = 1004, vendorId = 0x10C4, productId = 0xEA70)
+        assertThat(selectDiagnosticDevice(listOf(cp2102, cp2105), connected)).isEqualTo(cp2105)
+    }
+
+    @Test
+    fun selectDevice_connectedPortMatchesByVidPidAfterReplug() {
+        // The port was picked before a re-plug, which assigned a new deviceId.
+        val cp2102 = summary(0x10C4, 0xEA60, hasSerialDriver = true, deviceId = 1003)
+        val cp2105 = summary(0x10C4, 0xEA70, hasSerialDriver = true, deviceId = 1010)
+        val stale = ConnectedUsbPort(deviceId = 1004, vendorId = 0x10C4, productId = 0xEA70)
+        assertThat(selectDiagnosticDevice(listOf(cp2102, cp2105), stale)).isEqualTo(cp2105)
+    }
+
+    @Test
+    fun selectDevice_recycledDeviceIdDoesNotMatchADifferentChip() {
+        // The kernel handed the old deviceId to the CP2102: VID+PID must still agree.
+        val cp2102 = summary(0x10C4, 0xEA60, hasSerialDriver = true, deviceId = 1004)
+        val cp2105 = summary(0x10C4, 0xEA70, hasSerialDriver = true, deviceId = 1010)
+        val connected = ConnectedUsbPort(deviceId = 1004, vendorId = 0x10C4, productId = 0xEA70)
+        assertThat(selectDiagnosticDevice(listOf(cp2102, cp2105), connected)).isEqualTo(cp2105)
+    }
+
+    @Test
+    fun selectDevice_unknownProductIdMatchesVendorOnly() {
+        val other = summary(0x1111, 0x0001, hasSerialDriver = true, deviceId = 1)
+        val rig = summary(0x0C26, 0x0020, deviceId = 2)
+        val legacy = ConnectedUsbPort(deviceId = 99, vendorId = 0x0C26, productId = 0)
+        assertThat(selectDiagnosticDevice(listOf(other, rig), legacy)).isEqualTo(rig)
+    }
+
+    @Test
+    fun selectDevice_connectedPortGoneFallsBackToRanking() {
+        val serial = summary(0x0C26, 0x0020, hasSerialDriver = true, deviceId = 5)
+        val gone = ConnectedUsbPort(deviceId = 9, vendorId = 0x10C4, productId = 0xEA70)
+        assertThat(selectDiagnosticDevice(listOf(serial), gone)).isEqualTo(serial)
+    }
+
+    // --- hasSerialDriver (CDC fallback, same rule as the port picker) ---
+
+    @Test
+    fun hasSerialDriver_proberKnownChip() {
+        assertThat(hasSerialDriver(probed = true, interfaceClasses = intArrayOf())).isTrue()
+    }
+
+    @Test
+    fun hasSerialDriver_cdcFallbackWithCommunicationsInterface() {
+        // USB_CLASS_COMM (2) + USB_CLASS_CDC_DATA (10): no prober match, but the
+        // picker lists and connects it through the CDC-ACM fallback.
+        assertThat(hasSerialDriver(probed = false, interfaceClasses = intArrayOf(2, 10))).isTrue()
+    }
+
+    @Test
+    fun hasSerialDriver_unknownNonCdcDeviceIsNot() {
+        // e.g. the rig's USB audio codec (class 1) — not a serial port.
+        assertThat(hasSerialDriver(probed = false, interfaceClasses = intArrayOf(1, 1))).isFalse()
+        assertThat(hasSerialDriver(probed = false, interfaceClasses = null)).isFalse()
+    }
+
     // --- assembleUsbDiagnosticsData ---
+
+    @Test
+    fun assemble_vidPidAndPermissionComeFromTheConnectedPortsDevice() {
+        val cp2102 = summary(0x10C4, 0xEA60, hasSerialDriver = true, hasPermission = true, deviceId = 1003)
+        val cp2105 = summary(0x10C4, 0xEA70, hasSerialDriver = true, hasPermission = false, deviceId = 1004)
+        val data = assembleUsbDiagnosticsData(
+            listOf(cp2102, cp2105),
+            portOpen = true,
+            catResponded = false,
+            connectedPort = ConnectedUsbPort(1004, 0x10C4, 0xEA70),
+        )
+        assertThat(data.vendorId).isEqualTo(0x10C4)
+        assertThat(data.productId).isEqualTo(0xEA70)
+        assertThat(data.hasPermission).isFalse()
+    }
 
     @Test
     fun assemble_noDevices_allNegative() {
@@ -136,6 +217,8 @@ class UsbDiagnosticsLogicTest {
     }
 
     // --- buildUsbDiagnostics ---
+
+    private val USB_PORT = "Port 1 of 2 · Enhanced"
 
     private fun fullData(
         deviceFound: Boolean = true,
@@ -242,29 +325,52 @@ class UsbDiagnosticsLogicTest {
 
     @Test
     fun hint_noneWhilePortClosedOrCatAnswering() {
-        assertThat(catResponseHintRes(fullData(portOpen = false, catResponded = false))).isNull()
-        assertThat(catResponseHintRes(fullData(catResponded = true))).isNull()
-        assertThat(catResponseHintRes(fullData(catResponded = true, catPortHasRole = true))).isNull()
+        assertThat(catResponseHintRes(fullData(portOpen = false, catResponded = false, catPortName = USB_PORT)))
+            .isNull()
+        assertThat(catResponseHintRes(fullData(catResponded = true, catPortName = USB_PORT))).isNull()
+        assertThat(catResponseHintRes(fullData(catResponded = true, catPortHasRole = true, catPortName = USB_PORT)))
+            .isNull()
     }
 
     @Test
-    fun hint_ft710WriteOnlyExplainsTheDesignedRed() {
-        assertThat(catResponseHintRes(fullData(catResponded = false, catReadExpected = false)))
+    fun hint_noneWithoutAUsbPort() {
+        // Bluetooth/network links report portOpen too, but carry no USB port name: the
+        // cable/port/baud hints don't apply there.
+        assertThat(catResponseHintRes(fullData(catResponded = false, catPortName = null))).isNull()
+        assertThat(catResponseHintRes(fullData(catResponded = false, catReadExpected = false, catPortName = null)))
+            .isNull()
+    }
+
+    @Test
+    fun hint_noFt710NoteBesideAPassRow() {
+        // CAT answered: whatever the read-expected flag says, the row is PASS — no hint.
+        val data = fullData(catResponded = true, catReadExpected = false, catPortName = USB_PORT)
+        assertThat(buildUsbDiagnostics(data).single { it.labelRes == R.string.usb_diag_cat_response }.status)
+            .isEqualTo(DiagnosticStatus.PASS)
+        assertThat(catResponseHintRes(data)).isNull()
+    }
+
+    @Test
+    fun hint_ft710WriteOnlyExplainsTheInformationalRow() {
+        assertThat(catResponseHintRes(fullData(catResponded = false, catReadExpected = false, catPortName = USB_PORT)))
             .isEqualTo(R.string.usb_diag_hint_ft710)
         // Even on a CP2105 the FT-710 note wins: the port is not the question there.
-        assertThat(catResponseHintRes(fullData(catResponded = false, catReadExpected = false, catPortHasRole = true)))
-            .isEqualTo(R.string.usb_diag_hint_ft710)
+        assertThat(
+            catResponseHintRes(
+                fullData(catResponded = false, catReadExpected = false, catPortHasRole = true, catPortName = USB_PORT),
+            ),
+        ).isEqualTo(R.string.usb_diag_hint_ft710)
     }
 
     @Test
     fun hint_dualPortChipGetsTheEnhancedStandardNote() {
-        assertThat(catResponseHintRes(fullData(catResponded = false, catPortHasRole = true)))
+        assertThat(catResponseHintRes(fullData(catResponded = false, catPortHasRole = true, catPortName = USB_PORT)))
             .isEqualTo(R.string.usb_diag_hint_dual_port)
     }
 
     @Test
     fun hint_singlePortSilenceGetsTheGenericNote() {
-        assertThat(catResponseHintRes(fullData(catResponded = false, catPortHasRole = false)))
+        assertThat(catResponseHintRes(fullData(catResponded = false, catPortHasRole = false, catPortName = USB_PORT)))
             .isEqualTo(R.string.usb_diag_hint_no_response)
     }
 

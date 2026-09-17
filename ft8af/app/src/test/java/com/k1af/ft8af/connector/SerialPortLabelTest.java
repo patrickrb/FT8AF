@@ -2,6 +2,11 @@ package com.k1af.ft8af.connector;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.k1af.ft8af.serialport.CdcAcmSerialDriver;
+import com.k1af.ft8af.serialport.Ch34xSerialDriver;
+import com.k1af.ft8af.serialport.Cp21xxSerialDriver;
+import com.k1af.ft8af.serialport.FtdiSerialDriver;
+import com.k1af.ft8af.serialport.ProlificSerialDriver;
 import com.k1af.ft8af.serialport.UsbId;
 
 import org.junit.Test;
@@ -19,6 +24,32 @@ import java.util.Collections;
 public class SerialPortLabelTest {
 
     private static final String PORT_OF = "Port %1$d of %2$d";
+
+    // --- driverFamily ---
+
+    @Test
+    public void driverFamily_mapsDriverClassesToStableKeys() {
+        // Class literals, not getSimpleName(): R8 renames these classes in release builds.
+        assertThat(SerialPortLabel.driverFamily(Cp21xxSerialDriver.class)).isEqualTo(SerialPortLabel.DRIVER_CP21XX);
+        assertThat(SerialPortLabel.driverFamily(FtdiSerialDriver.class)).isEqualTo(SerialPortLabel.DRIVER_FTDI);
+        assertThat(SerialPortLabel.driverFamily(ProlificSerialDriver.class)).isEqualTo(SerialPortLabel.DRIVER_PROLIFIC);
+        assertThat(SerialPortLabel.driverFamily(Ch34xSerialDriver.class)).isEqualTo(SerialPortLabel.DRIVER_CH34X);
+        assertThat(SerialPortLabel.driverFamily(CdcAcmSerialDriver.class)).isEqualTo(SerialPortLabel.DRIVER_CDC_ACM);
+    }
+
+    @Test
+    public void driverFamily_unknownOrNullIsNull() {
+        assertThat(SerialPortLabel.driverFamily(null)).isNull();
+        assertThat(SerialPortLabel.driverFamily(String.class)).isNull();
+        assertThat(SerialPortLabel.chipName(0x1234, 0x5678, SerialPortLabel.driverFamily(String.class)))
+                .isEqualTo("USB serial");
+    }
+
+    @Test
+    public void driverFamily_feedsChipNameEndToEnd() {
+        assertThat(SerialPortLabel.chipName(UsbId.VENDOR_SILABS, UsbId.SILABS_CP2105,
+                SerialPortLabel.driverFamily(Cp21xxSerialDriver.class))).isEqualTo("Silicon Labs CP2105");
+    }
 
     // --- chipName ---
 

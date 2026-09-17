@@ -1,5 +1,10 @@
 package com.k1af.ft8af.connector;
 
+import com.k1af.ft8af.serialport.CdcAcmSerialDriver;
+import com.k1af.ft8af.serialport.Ch34xSerialDriver;
+import com.k1af.ft8af.serialport.Cp21xxSerialDriver;
+import com.k1af.ft8af.serialport.FtdiSerialDriver;
+import com.k1af.ft8af.serialport.ProlificSerialDriver;
 import com.k1af.ft8af.serialport.UsbId;
 
 import java.util.Locale;
@@ -32,12 +37,32 @@ public final class SerialPortLabel {
 
     private SerialPortLabel() {}
 
-    /** Driver family keys — the simple class name of the {@code UsbSerialDriver} that claimed the device. */
+    /**
+     * Driver family keys for the {@code UsbSerialDriver} that claimed the device. These
+     * are stable ids, NOT live class names: release builds run R8, which renames the
+     * driver classes, so {@code getClass().getSimpleName()} would never match them there.
+     * Resolve a driver with {@link #driverFamily(Class)}.
+     */
     public static final String DRIVER_CP21XX = "Cp21xxSerialDriver";
     public static final String DRIVER_FTDI = "FtdiSerialDriver";
     public static final String DRIVER_PROLIFIC = "ProlificSerialDriver";
     public static final String DRIVER_CH34X = "Ch34xSerialDriver";
     public static final String DRIVER_CDC_ACM = "CdcAcmSerialDriver";
+
+    /**
+     * The stable family key for a driver class, or null for a driver this class does
+     * not name. Compares class literals, which R8 rewrites together with the classes
+     * they refer to, so the mapping survives obfuscation.
+     */
+    public static String driverFamily(Class<?> driverClass) {
+        if (driverClass == null) return null;
+        if (Cp21xxSerialDriver.class.isAssignableFrom(driverClass)) return DRIVER_CP21XX;
+        if (FtdiSerialDriver.class.isAssignableFrom(driverClass)) return DRIVER_FTDI;
+        if (ProlificSerialDriver.class.isAssignableFrom(driverClass)) return DRIVER_PROLIFIC;
+        if (Ch34xSerialDriver.class.isAssignableFrom(driverClass)) return DRIVER_CH34X;
+        if (CdcAcmSerialDriver.class.isAssignableFrom(driverClass)) return DRIVER_CDC_ACM;
+        return null;
+    }
 
     /** CP2105 interface names, as Silicon Labs (and Windows Device Manager) call them. */
     public static final String ROLE_ENHANCED = "Enhanced";
@@ -49,8 +74,9 @@ public final class SerialPortLabel {
      * Chip / bridge name for a device, e.g. {@code "Silicon Labs CP2105"},
      * {@code "FTDI FT2232H"}, {@code "USB CDC serial"}. Never returns hex.
      *
-     * @param driverFamily simple class name of the driver that claimed the device
-     *                     (one of the {@code DRIVER_*} constants), or null/unknown
+     * @param driverFamily family key of the driver that claimed the device (one of the
+     *                     {@code DRIVER_*} constants, see {@link #driverFamily(Class)}),
+     *                     or null/unknown
      */
     public static String chipName(int vendorId, int productId, String driverFamily) {
         if (driverFamily == null) return "USB serial";

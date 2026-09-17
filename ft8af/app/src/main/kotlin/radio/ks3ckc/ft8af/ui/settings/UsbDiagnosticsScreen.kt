@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
+import com.k1af.ft8af.connector.CableSerialPort
 import com.k1af.ft8af.connector.SerialPortLabel
 import com.k1af.ft8af.serialport.UsbId
 import com.k1af.ft8af.serialport.UsbSerialProber
@@ -70,6 +71,15 @@ internal data class UsbDeviceSummary(
     val hasSerialDriver: Boolean,
     val hasAudioInterface: Boolean,
     val hasPermission: Boolean,
+    /** Kernel-assigned id; lets the diagnostics describe the device the CAT port is on. */
+    val deviceId: Int = 0,
+)
+
+/** Identity of the USB device behind the connected CAT port (see [selectDiagnosticDevice]). */
+internal data class ConnectedUsbPort(
+    val deviceId: Int,
+    val vendorId: Int,
+    val productId: Int,
 )
 
 /** The full set of USB/CAT facts a single diagnostics refresh gathers. */
@@ -106,13 +116,23 @@ internal fun formatUsbId(id: Int?): String? =
     id?.let { String.format("0x%04X", it and 0xFFFF) }
 
 /**
- * Picks which attached device the diagnostics describe. Prefers one a serial driver
- * can drive (that's the rig's CAT port), then one matching the default CAT vendor id,
- * then one exposing a USB-audio interface, then simply the first device. Returns null
- * when nothing is attached.
+ * Picks which attached device the diagnostics describe. When a CAT port is connected,
+ * that port's device wins, so its VID/PID and permission rows sit next to the right
+ * "CAT Port" row — with two serial chips attached (a CP2105 rig plus a CP2102 cable)
+ * the first serial device could otherwise be the other one. It is matched the way
+ * [com.k1af.ft8af.connector.CableSerialPort] matches the picked device: same deviceId
+ * and VID+PID, else same VID+PID (a re-plug hands out a new deviceId), else vendor
+ * only when the product id is unknown. Without a match it prefers one a serial driver
+ * can drive, then one matching the default CAT vendor id, then one exposing a
+ * USB-audio interface, then simply the first device. Returns null when nothing is
+ * attached.
  */
-internal fun selectDiagnosticDevice(devices: List<UsbDeviceSummary>): UsbDeviceSummary? =
-    devices.firstOrNull { it.hasSerialDriver }
+internal fun selectDiagnosticDevice(
+    devices: List<UsbDeviceSummary>,
+    connected: ConnectedUsbPort? = null,
+): UsbDeviceSummary? =
+    connected?.let { c -> matchConnectedDevice(devices, c) }
+        ?: devices.firstOrNull { it.hasSerialDriver }
         ?: devices.firstOrNull { it.vendorId == DEFAULT_CAT_VENDOR_ID }
         ?: devices.firstOrNull { it.hasAudioInterface }
         ?: devices.firstOrNull()
@@ -130,8 +150,9 @@ internal fun assembleUsbDiagnosticsData(
     catPortHasRole: Boolean = false,
     baudRate: Int? = null,
     catReadExpected: Boolean = true,
+    connectedPort: ConnectedUsbPort? = null,
 ): UsbDiagnosticsData {
-    val target = selectDiagnosticDevice(devices)
+    val target = selectDiagnosticDevice(devices, connectedPort)
     return UsbDiagnosticsData(
         deviceFound = target != null,
         vendorId = target?.vendorId,
@@ -160,6 +181,27 @@ internal fun catPortValue(data: UsbDiagnosticsData, baudValueTemplate: String): 
     val baud = data.baudRate ?: return name
     return String.format(baudValueTemplate, name, baud)
 }
+
+private fun matchConnectedDevice(
+    devices: List<UsbDeviceSummary>,
+    c: ConnectedUsbPort,
+): UsbDeviceSummary? =
+    if (c.productId != 0) {
+        devices.firstOrNull {
+            it.deviceId == c.deviceId && it.vendorId == c.vendorId && it.productId == c.productId
+        } ?: devices.firstOrNull { it.vendorId == c.vendorId && it.productId == c.productId }
+    } else {
+        devices.firstOrNull { it.vendorId == c.vendorId }
+    }
+
+/**
+ * Whether a device counts as a serial-driver device: a prober-known chip, or one the
+ * CDC-ACM fallback will drive because it carries a Communications control interface.
+ * Same rule the port picker uses ([com.k1af.ft8af.connector.CableSerialPort.listSerialPorts]),
+ * so a CDC rig that is selectable and connected doesn't show "CDC Serial Found" as failed.
+ */
+internal fun hasSerialDriver(probed: Boolean, interfaceClasses: IntArray?): Boolean =
+    probed || CableSerialPort.hasCdcControlInterface(interfaceClasses)
 
 /**
  * Maps gathered facts to the ordered list of display rows, matching the layout in the
@@ -204,15 +246,17 @@ internal fun buildUsbDiagnostics(
 }
 
 /**
- * The one-paragraph next step shown under the card when the port is open but CAT
- * is silent, or null when there is nothing to say. Never suggests the app switch
+ * The one-paragraph next step shown under the card when a USB CAT port is open but
+ * CAT is silent, or null when there is nothing to say. Suppressed first when there
+ * is no USB port (a Bluetooth/network link also reports the rig connected, but these
+ * hints are about cables, ports and baud) or CAT has answered; only then is the
+ * write-only / dual-port / generic explanation chosen. Never suggests the app switch
  * ports or baud rates itself: on the same VID:PID the CAT port is Enhanced for
  * Yaesu and Standard for Kenwood, so only the operator can know.
  */
 internal fun catResponseHintRes(data: UsbDiagnosticsData): Int? = when {
-    !data.portOpen -> null
+    !data.portOpen || data.catPortName == null || data.catResponded -> null
     !data.catReadExpected -> R.string.usb_diag_hint_ft710
-    data.catResponded -> null
     data.catPortHasRole -> R.string.usb_diag_hint_dual_port
     else -> R.string.usb_diag_hint_no_response
 }
@@ -290,11 +334,16 @@ internal fun collectUsbDiagnostics(
             UsbDeviceSummary(
                 vendorId = device.vendorId,
                 productId = device.productId,
-                hasSerialDriver = runCatching { prober.probeDevice(device) != null }
-                    .getOrDefault(false),
+                hasSerialDriver = runCatching {
+                    hasSerialDriver(
+                        probed = prober.probeDevice(device) != null,
+                        interfaceClasses = CableSerialPort.interfaceClassesOf(device),
+                    )
+                }.getOrDefault(false),
                 hasAudioInterface = audioDeviceIds.contains(device.deviceId),
                 hasPermission = runCatching { usbManager.hasPermission(device) }
                     .getOrDefault(false),
+                deviceId = device.deviceId,
             )
         }
     }
@@ -315,6 +364,7 @@ internal fun collectUsbDiagnostics(
         } ?: false,
         baudRate = GeneralVariables.baudRate,
         catReadExpected = runCatching { mainViewModel.isCatReadExpected() }.getOrDefault(true),
+        connectedPort = port?.let { ConnectedUsbPort(it.deviceId, it.vendorId, it.productId) },
     )
 }
 

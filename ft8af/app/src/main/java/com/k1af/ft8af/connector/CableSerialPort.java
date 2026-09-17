@@ -205,13 +205,14 @@ public class CableSerialPort {
     /**
      * Whether a USB device's interface list makes it a CDC-ACM serial candidate:
      * it carries at least one Communications-class control interface. This is
-     * the gate {@link #listSerialPorts} uses before offering an unrecognised
+     * the gate {@link #listSerialPorts} (and the USB Diagnostics "CDC Serial Found"
+     * check) uses before offering an unrecognised
      * device through the CDC fallback driver. Without the gate every unknown
      * device on the bus — the rig's own USB audio codec, a hub — would be listed
      * as a serial port, because {@code CdcAcmSerialDriver} synthesises a port
      * even when it finds no CDC interfaces at all.
      */
-    static boolean hasCdcControlInterface(int[] interfaceClasses) {
+    public static boolean hasCdcControlInterface(int[] interfaceClasses) {
         if (interfaceClasses == null) return false;
         for (int cls : interfaceClasses) {
             if (cls == UsbConstants.USB_CLASS_COMM) return true;
@@ -219,7 +220,7 @@ public class CableSerialPort {
         return false;
     }
 
-    private static int[] interfaceClassesOf(UsbDevice device) {
+    public static int[] interfaceClassesOf(UsbDevice device) {
         int[] classes = new int[device.getInterfaceCount()];
         for (int i = 0; i < classes.length; i++) {
             classes[i] = device.getInterface(i).getInterfaceClass();
@@ -637,7 +638,8 @@ public class CableSerialPort {
                 driver = new CdcAcmSerialDriver(device);
             }
             int portCount = driver.getPorts().size();
-            String family = driver.getClass().getSimpleName();
+            // Class-literal mapping, not getSimpleName(): R8 renames the drivers in release.
+            String family = SerialPortLabel.driverFamily(driver.getClass());
             for (int i = 0; i < portCount; i++) {
                 serialPorts.add(new SerialPort(device.getDeviceId(), device.getVendorId()
                         , device.getProductId(), i, portCount, family));
@@ -658,7 +660,7 @@ public class CableSerialPort {
         public int portNum = 0;//Port number
         /** How many ports the driver enumerated on this device (1 for a single-UART chip). */
         public int portCount = 1;
-        /** Simple class name of the driver that claimed the device; see {@link SerialPortLabel}. */
+        /** Family key of the driver that claimed the device; see {@link SerialPortLabel#driverFamily}. */
         public String driverFamily = null;
 
         public SerialPort(int deviceId, int vendorId, int productId, int portNum) {
