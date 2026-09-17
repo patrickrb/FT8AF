@@ -295,8 +295,10 @@ public class MainViewModel extends ViewModel {
             //disconnected from rig. A failed connect fires onRunError() then
             //onDisconnected(); afterDisconnect() preserves ERROR so the chip can
             //stay red until the next connect attempt (onConnecting) or a success.
-            stopCatLivenessWatchdog();
-            setCatConnectionState(CatConnectionState.afterDisconnect(catConnectionState));
+            // State write is applied atomically with the tracker stop, so a reply racing
+            // the disconnect can't heal the chip back to CONNECTED afterwards.
+            stopCatLivenessWatchdog(() -> setCatConnectionState(
+                    CatConnectionState.afterDisconnect(catConnectionState)));
             ToastMessage.show(getStringFromResource(R.string.disconnect_rig));
         }
 
@@ -415,9 +417,9 @@ public class MainViewModel extends ViewModel {
 
         @Override
         public void onRunError(String message) {
-            //rig communication error
-            stopCatLivenessWatchdog();
-            setCatConnectionState(CatConnectionState.ERROR);
+            //rig communication error. ERROR is written atomically with the tracker stop:
+            //a reply parsed while the connector still reports connected can't overwrite it.
+            stopCatLivenessWatchdog(() -> setCatConnectionState(CatConnectionState.ERROR));
             ToastMessage.show(String.format(getStringFromResource(R.string.radio_communication_error)
                     , message));
         }
@@ -441,13 +443,15 @@ public class MainViewModel extends ViewModel {
 
     /** Record that the rig just demonstrably responded (called from onRigResponded). */
     private void markRigResponded() {
-        if (catLiveness.onResponse(System.currentTimeMillis()) && isRigConnected()) {
-            // The rig answered after the watchdog had declared it dead: heal the chip.
-            // Only the watchdog's own ERROR is undone here — a connector I/O error stops
-            // the watchdog first (onRunError), so this can't mask a real link loss.
+        // The rig answered after the watchdog had declared it dead: heal the chip. The
+        // CONNECTED write happens under the tracker's monitor, atomic with clearing the
+        // trip. Only the watchdog's own ERROR is undone here: a connector I/O error stops
+        // the tracker (under the same monitor) before writing ERROR, so this can't mask a
+        // real link loss.
+        catLiveness.onResponse(System.currentTimeMillis(), this::isRigConnected, () -> {
             fileLog("CAT liveness: rig answered again — chip back to CONNECTED");
             setCatConnectionState(CatConnectionState.CONNECTED);
-        }
+        });
     }
 
     private synchronized void startCatLivenessWatchdog() {
@@ -463,6 +467,14 @@ public class MainViewModel extends ViewModel {
     }
 
     private synchronized void stopCatLivenessWatchdog() {
+        stopCatLivenessWatchdog(null);
+    }
+
+    /**
+     * Stop the watchdog, applying {@code then} (a chip-state write) atomically with the
+     * tracker stop — see {@link CatLivenessTracker#stop(CatLivenessTracker.Transition)}.
+     */
+    private synchronized void stopCatLivenessWatchdog(CatLivenessTracker.Transition then) {
         if (catLivenessTimer != null) {
             catLivenessTimer.cancel();
             catLivenessTimer.purge();
@@ -472,7 +484,7 @@ public class MainViewModel extends ViewModel {
         // or teardown) so hasRigRespondedToCat() can't report a stale true after the rig
         // is unplugged — the USB Diagnostics page would otherwise show "CAT Response: pass"
         // alongside "Device Found: fail". A fresh connect re-arms it in start...().
-        catLiveness.stop();
+        catLiveness.stop(then);
     }
 
     /** One watchdog tick: probe the rig, then declare it dead if it's gone quiet too long. */
@@ -483,7 +495,12 @@ public class MainViewModel extends ViewModel {
             long nowMs = System.currentTimeMillis();
             boolean connected = isRigConnected();
             boolean transmitting = ft8TransmitSignal != null && ft8TransmitSignal.isTransmitting();
-            CatLivenessTracker.Tick tick = catLiveness.tick(connected, transmitting, nowMs);
+            // A trip writes ERROR under the tracker's monitor, and BEFORE this tick's probe
+            // goes out: a fast reply to that probe then always finds the trip applied and
+            // heals it, instead of healing first and being overwritten by a late ERROR
+            // (which left the chip red with the tracker untripped, unrecoverable).
+            CatLivenessTracker.Tick tick = catLiveness.tick(connected, transmitting, nowMs,
+                    () -> setCatConnectionState(CatConnectionState.ERROR));
             // Actively probe (a frequency read); the reply lands in onRigResponded ->
             // markRigResponded() (onFreqChanged only fires on a change, so a stable dial
             // can't be used). On a dead-but-powered BT module the write succeeds but no
@@ -496,7 +513,6 @@ public class MainViewModel extends ViewModel {
                 // Watchdog stays running (see markRigResponded for the recovery path).
                 fileLog("CAT liveness: no reply to freq reads for " + tick.quietMs
                         + "ms (transport still open) — chip ERROR until the rig answers");
-                setCatConnectionState(CatConnectionState.ERROR);
                 ToastMessage.show(String.format(
                         getStringFromResource(R.string.radio_communication_error),
                         getStringFromResource(R.string.disconnect_rig)));

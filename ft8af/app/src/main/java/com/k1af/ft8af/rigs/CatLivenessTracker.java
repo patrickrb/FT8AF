@@ -25,8 +25,26 @@ package com.k1af.ft8af.rigs;
  * flip the status chip back to connected. A rig that goes quiet for one window (busy in
  * an ATU tune, a menu, a Bluetooth hiccup, a mangled reply) used to stay red until the
  * operator tapped the chip; now the chip heals itself as soon as the rig answers again.
+ *
+ * <p>Atomicity: the reply thread, the watchdog timer and the connector's error/disconnect
+ * callbacks all race. The {@link Transition} overloads run the caller's UI-state change
+ * while holding this tracker's monitor, so "decide" and "apply" are one step — a reply
+ * can't heal the chip between a trip and its ERROR write (which would leave the chip red
+ * with the tracker untripped, so no later reply could recover it), and a recovery can't
+ * overwrite an ERROR written by a connector error that stopped the tracker. Transitions
+ * must be quick and must not block on another lock (a LiveData post, a log line).
  */
 public final class CatLivenessTracker {
+
+    /** A UI-state change applied atomically with the tracker transition that caused it. */
+    public interface Transition {
+        void apply();
+    }
+
+    /** A check evaluated under the tracker's monitor, just before a recovery is applied. */
+    public interface Condition {
+        boolean holds();
+    }
 
     /** What a tick decided beyond "send a probe". */
     public enum Event {
@@ -77,9 +95,18 @@ public final class CatLivenessTracker {
      * true after the rig is unplugged, and ignores any reply that straggles in.
      */
     public synchronized void stop() {
+        stop(null);
+    }
+
+    /**
+     * {@link #stop()}, then apply {@code then} (e.g. the connector's ERROR) before any
+     * concurrent {@link #onResponse} can run, so a straggling reply can't heal over it.
+     */
+    public synchronized void stop(Transition then) {
         running = false;
         sawResponse = false;
         tripped = false;
+        if (then != null) then.apply();
     }
 
     public synchronized boolean isRunning() {
@@ -103,11 +130,24 @@ public final class CatLivenessTracker {
      *         restore the connected state it flipped to error on {@link Event#TRIPPED}
      */
     public synchronized boolean onResponse(long nowMs) {
+        return onResponse(nowMs, null, null);
+    }
+
+    /**
+     * {@link #onResponse(long)}, applying {@code onRecovered} under the tracker's monitor
+     * when this reply ends a tripped period and {@code canRecover} (e.g. "transport still
+     * connected") holds at that instant.
+     */
+    public synchronized boolean onResponse(long nowMs, Condition canRecover,
+                                           Transition onRecovered) {
         if (!running) return false;
         lastResponseMs = nowMs;
         sawResponse = true;
         if (tripped) {
             tripped = false;
+            if (onRecovered != null && (canRecover == null || canRecover.holds())) {
+                onRecovered.apply();
+            }
             return true;
         }
         return false;
@@ -121,6 +161,16 @@ public final class CatLivenessTracker {
      * @param nowMs        current time
      */
     public synchronized Tick tick(boolean connected, boolean transmitting, long nowMs) {
+        return tick(connected, transmitting, nowMs, null);
+    }
+
+    /**
+     * {@link #tick(boolean, boolean, long)}, applying {@code onTripped} under the tracker's
+     * monitor when this tick trips. The caller must send the tick's probe only AFTER this
+     * returns, so the probe's reply always sees the trip already applied.
+     */
+    public synchronized Tick tick(boolean connected, boolean transmitting, long nowMs,
+                                  Transition onTripped) {
         if (!running) return new Tick(false, Event.NONE, 0);
         boolean probe = CatLiveness.shouldProbe(connected, transmitting);
         // Transmit freezes lastResponseMs (we don't probe while keyed). On the TX->RX
@@ -136,6 +186,7 @@ public final class CatLivenessTracker {
                 nowMs, lastResponseMs, timeoutMs)) {
             tripped = true;
             event = Event.TRIPPED;
+            if (onTripped != null) onTripped.apply();
         }
         return new Tick(probe, event, nowMs - lastResponseMs);
     }

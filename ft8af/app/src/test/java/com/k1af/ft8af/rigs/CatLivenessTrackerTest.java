@@ -4,6 +4,10 @@ import static com.google.common.truth.Truth.assertThat;
 
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+
 /**
  * Lifecycle tests for the CAT liveness watchdog state (arm / trip / recover). Pure JUnit.
  */
@@ -155,5 +159,90 @@ public class CatLivenessTrackerTest {
         assertThat(t.hasSeenResponse()).isFalse();
         // Disarmed again: silence on the new connection is not judged until the rig answers.
         assertThat(t.tick(true, false, 40_000).event).isEqualTo(CatLivenessTracker.Event.NONE);
+    }
+
+    // ---- atomic state transitions (Copilot review on PR #818) ---------------
+
+    @Test
+    public void transitions_runOnlyOnTheirEvent() {
+        List<String> chip = new ArrayList<>();
+        CatLivenessTracker t = started(0);
+        t.onResponse(1000, () -> true, () -> chip.add("CONNECTED")); // not tripped: no-op
+        t.tick(true, false, 4000, () -> chip.add("ERROR"));           // in window: no-op
+        assertThat(chip).isEmpty();
+
+        t.tick(true, false, 10_000, () -> chip.add("ERROR"));
+        t.tick(true, false, 13_000, () -> chip.add("ERROR"));         // already tripped
+        assertThat(chip).containsExactly("ERROR");
+
+        // Tripped, but the transport is gone: the trip clears, the chip is left alone.
+        assertThat(t.onResponse(14_000, () -> false, () -> chip.add("CONNECTED"))).isTrue();
+        assertThat(t.isTripped()).isFalse();
+        assertThat(chip).containsExactly("ERROR");
+
+        t.stop(() -> chip.add("STOPPED"));
+        assertThat(chip).containsExactly("ERROR", "STOPPED").inOrder();
+    }
+
+    @Test
+    public void replyRacingATrip_cannotHealBeforeTheErrorIsWritten() throws Exception {
+        // The interleaving Copilot flagged: the tick trips, and a reply lands before the
+        // tick has written ERROR. Healing first and then being overwritten by ERROR left
+        // the chip red with the tracker untripped, so no later reply could recover it.
+        // With the ERROR write inside the tracker's monitor, the reply must wait for it.
+        CatLivenessTracker t = started(0);
+        t.onResponse(1000);
+        AtomicReference<String> chip = new AtomicReference<>("CONNECTED");
+        Thread[] reply = new Thread[1];
+
+        CatLivenessTracker.Tick tick = t.tick(true, false, 10_000, () -> {
+            reply[0] = new Thread(() ->
+                    t.onResponse(10_050, () -> true, () -> chip.set("CONNECTED")));
+            reply[0].start();
+            awaitBlocked(reply[0]); // the reply is parked on the tracker's monitor
+            chip.set("ERROR");
+        });
+        reply[0].join(5000);
+
+        assertThat(tick.event).isEqualTo(CatLivenessTracker.Event.TRIPPED);
+        assertThat(chip.get()).isEqualTo("CONNECTED");
+        assertThat(t.isTripped()).isFalse();
+    }
+
+    @Test
+    public void connectorErrorRacingARecovery_errorWins() throws Exception {
+        // A connector onRunError while a recovering reply is still applying CONNECTED
+        // (its transport flag not yet cleared): the error's stop+ERROR must land after
+        // the recovery, never be overwritten by it.
+        CatLivenessTracker t = started(0);
+        t.onResponse(1000);
+        t.tick(true, false, 10_000);
+        AtomicReference<String> chip = new AtomicReference<>("ERROR");
+        Thread[] error = new Thread[1];
+
+        t.onResponse(11_000, () -> true, () -> {
+            error[0] = new Thread(() -> t.stop(() -> chip.set("ERROR")));
+            error[0].start();
+            awaitBlocked(error[0]);
+            chip.set("CONNECTED");
+        });
+        error[0].join(5000);
+
+        assertThat(chip.get()).isEqualTo("ERROR");
+        assertThat(t.isRunning()).isFalse();
+        // And a reply straggling in after the error can't heal it.
+        assertThat(t.onResponse(12_000, () -> true, () -> chip.set("CONNECTED"))).isFalse();
+        assertThat(chip.get()).isEqualTo("ERROR");
+    }
+
+    /** Wait until {@code thread} is parked on a monitor (i.e. contending for the tracker). */
+    private static void awaitBlocked(Thread thread) {
+        long deadline = System.currentTimeMillis() + 5000;
+        while (thread.getState() != Thread.State.BLOCKED) {
+            if (System.currentTimeMillis() > deadline) {
+                throw new AssertionError("thread never blocked on the tracker: " + thread.getState());
+            }
+            Thread.yield();
+        }
     }
 }
