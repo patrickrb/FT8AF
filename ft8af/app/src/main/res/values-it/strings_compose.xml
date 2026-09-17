@@ -504,8 +504,11 @@
     <string name="bug_report_send_email">Invia email</string>
     <string name="bug_report_no_email_app">Nessuna app email trovata per inviare la segnalazione</string>
     <string name="bug_report_open_github">Apri issue su GitHub</string>
-    <string name="settings_debug">Debug</string>
     <string name="settings_debug_desc">Visualizza / condividi debug.log</string>
+    <string name="settings_share_logs">Condividi log</string>
+    <string name="settings_share_logs_desc">Invia debug.log via email, Discord, Drive…</string>
+    <string name="settings_view_logs">Visualizza log</string>
+    <string name="settings_share_logs_empty">Nessun log registrato finora</string>
     <string name="settings_about_body">Versione %1$s (build %2$s)\nData build %3$s\n\nFT8, reso facile.\n\nUn\'app transceiver FT8 autonoma per Android. Controllo radio via USB, Bluetooth e rete con sequenziamento e logging automatici.</string>
     <string name="settings_website">Sito web</string>
     <string name="settings_community">Community</string>
@@ -525,8 +528,6 @@
     <string name="settings_conn_network">Rete</string>
     <string name="settings_no_usb_serial">Nessun dispositivo seriale USB rilevato. Collega un cavo USB alla tua radio e riprova.</string>
     <string name="settings_no_bluetooth_devices">Nessun dispositivo Bluetooth associato trovato. Associa prima un dispositivo nelle impostazioni Bluetooth di Android.</string>
-    <string name="settings_debug_mode_enabled">Modalità debug abilitata</string>
-    <string name="settings_debug_mode_disabled">Modalità debug disabilitata</string>
     <string name="settings_edit_operator_identity">Modifica identità operatore</string>
     <string name="settings_callsign">Nominativo</string>
     <string name="settings_callsign_hint">es. W1AW</string>

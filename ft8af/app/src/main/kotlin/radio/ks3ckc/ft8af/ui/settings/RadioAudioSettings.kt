@@ -41,6 +41,7 @@ import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import com.k1af.ft8af.connector.CableSerialPort
 import com.k1af.ft8af.connector.ConnectMode
+import com.k1af.ft8af.connector.SerialPortLabel
 import com.k1af.ft8af.database.ControlMode
 import com.k1af.ft8af.database.OperationBand
 import com.k1af.ft8af.database.RigNameList
@@ -938,6 +939,14 @@ private fun BandToggleDialog(
 }
 
 /**
+ * Whether the serial-port picker should show the dual-port (Enhanced/Standard)
+ * explanation: only when at least one listed port belongs to a chip whose
+ * interfaces have names. Pure so it is unit-tested; the Composable just calls it.
+ */
+internal fun shouldShowDualPortHint(ports: List<CableSerialPort.SerialPort>?): Boolean =
+    SerialPortLabel.anyPortHasRole(ports)
+
+/**
  * Dialog for selecting a USB serial port to connect to a rig.
  */
 @Composable
@@ -964,6 +973,9 @@ private fun SerialPortPickerDialog(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Rows read "Silicon Labs CP2105 · Port 1 of 2 · Enhanced", never raw
+            // hex (issue #817). The label is built by SerialPortLabel (unit-tested).
+            val portOfTemplate = stringResource(R.string.serial_port_label_port_of)
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -971,7 +983,7 @@ private fun SerialPortPickerDialog(
             ) {
                 itemsIndexed(ports) { _, port ->
                     Text(
-                        text = port.information(),
+                        text = port.label(portOfTemplate),
                         color = TextPrimary,
                         fontSize = 14.sp,
                         modifier = Modifier
@@ -980,6 +992,19 @@ private fun SerialPortPickerDialog(
                             .padding(horizontal = 24.dp, vertical = 12.dp),
                     )
                 }
+            }
+
+            // Which of a dual-UART chip's ports carries CAT depends on the rig
+            // (Yaesu: Enhanced, Kenwood: Standard), so the app states the fact and
+            // leaves the choice to the operator rather than guessing a "CAT" tag.
+            if (shouldShowDualPortHint(ports)) {
+                Text(
+                    text = stringResource(R.string.serial_port_picker_dual_port_hint),
+                    color = TextMuted,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))

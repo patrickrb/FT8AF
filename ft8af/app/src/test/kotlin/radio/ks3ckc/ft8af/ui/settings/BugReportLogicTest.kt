@@ -55,6 +55,14 @@ class BugReportLogicTest {
     }
 
     @Test
+    fun `github url points operators at the Share logs row for debug log`() {
+        val url = buildGithubIssueUrl("hello", info())
+        val body = URLDecoder.decode(url.substringAfter("body="), "UTF-8")
+        assertThat(body).contains("Settings -> About -> Share logs")
+        assertThat(body).doesNotContain("About -> Debug")
+    }
+
+    @Test
     fun `github url percent-encodes the body so it carries no raw spaces`() {
         val url = buildGithubIssueUrl("two words\nnext line", info())
         val query = url.substringAfter("?")

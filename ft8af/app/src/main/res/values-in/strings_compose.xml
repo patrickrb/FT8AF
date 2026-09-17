@@ -507,8 +507,11 @@
     <string name="bug_report_send_email">Kirim email</string>
     <string name="bug_report_no_email_app">Tidak ditemukan aplikasi email untuk mengirim laporan</string>
     <string name="bug_report_open_github">Buka isu GitHub</string>
-    <string name="settings_debug">Debug</string>
     <string name="settings_debug_desc">Lihat / bagikan debug.log</string>
+    <string name="settings_share_logs">Bagikan log</string>
+    <string name="settings_share_logs_desc">Kirim debug.log ke email, Discord, Drive…</string>
+    <string name="settings_view_logs">Lihat log</string>
+    <string name="settings_share_logs_empty">Belum ada log yang tercatat</string>
     <string name="settings_about_body">Versi %1$s (build %2$s)\nTanggal build %3$s\n\nFT8, dipermudah.\n\nAplikasi transceiver FT8 mandiri untuk Android. Kontrol rig via USB, Bluetooth, dan jaringan dengan sequencing dan logging otomatis.</string>
     <string name="settings_website">Situs Web</string>
     <string name="settings_community">Komunitas</string>
@@ -528,8 +531,6 @@
     <string name="settings_conn_network">Jaringan</string>
     <string name="settings_no_usb_serial">Tidak ada perangkat serial USB terdeteksi. Hubungkan kabel USB ke radio Anda dan coba lagi.</string>
     <string name="settings_no_bluetooth_devices">Tidak ditemukan perangkat Bluetooth terpasang. Pasangkan perangkat di setelan Bluetooth Android terlebih dahulu.</string>
-    <string name="settings_debug_mode_enabled">Mode debug diaktifkan</string>
-    <string name="settings_debug_mode_disabled">Mode debug dinonaktifkan</string>
     <string name="settings_edit_operator_identity">Ubah Identitas Operator</string>
     <string name="settings_callsign">Tanda Panggil</string>
     <string name="settings_callsign_hint">mis. W1AW</string>
