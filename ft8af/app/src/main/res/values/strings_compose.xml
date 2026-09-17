@@ -612,6 +612,11 @@
     <string name="usb_diag_audio_device">Audio Device Found</string>
     <string name="usb_diag_port_open">Port Open</string>
     <string name="usb_diag_cat_response">CAT Response</string>
+    <string name="usb_diag_cat_port">CAT Port</string>
+    <string name="usb_diag_baud_value">%1$s · %2$d bd</string>
+    <string name="usb_diag_hint_ft710">FT-710 cable mode is write-only: the app never reads from the CAT port, so CAT Response is shown as information here, not a failure.</string>
+    <string name="usb_diag_hint_dual_port">This chip has two ports. Yaesu rigs (FT-891, FT-991A, FTDX10, FT-710) answer CAT on the Enhanced port; Kenwood TS-890S/TS-990S on the Standard port. The other port only carries RTS/DTR keying. Pick the other port under Connection Mode › USB Cable, and check the baud rate against the rig menu.</string>
+    <string name="usb_diag_hint_no_response">The port is open but the radio has not answered. Check the baud rate and the radio model in Settings, and that CAT is enabled in the rig menu.</string>
     <string name="usb_diag_value_none">—</string>
     <!-- Spoken status suffixes for TalkBack (e.g. "Device Found, pass") -->
     <string name="usb_diag_status_pass">pass</string>
@@ -974,6 +979,8 @@
     <string name="settings_password">Password</string>
     <string name="settings_enabled_bands_dialog_desc">Hidden bands won\'t appear in the frequency pickers.</string>
     <string name="settings_select_serial_port">Select Serial Port</string>
+    <string name="serial_port_label_port_of">Port %1$d of %2$d</string>
+    <string name="serial_port_picker_dual_port_hint">Dual-port chip: Yaesu rigs use the Enhanced port for CAT, Kenwood TS-890S/TS-990S use the Standard port. The other port is for RTS/DTR keying.</string>
     <string name="settings_tx_volume_advice">Adjust live — your next TX uses this level. Watch your radio\'s ALC and dial down until it\'s just kissing the line.</string>
     <string name="settings_input_volume">Input Volume</string>
     <string name="settings_input_volume_desc" formatted="false">RX audio gain applied before decoding (100% = unchanged)</string>
