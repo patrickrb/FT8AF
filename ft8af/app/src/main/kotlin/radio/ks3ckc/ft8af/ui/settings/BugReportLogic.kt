@@ -69,12 +69,12 @@ internal fun buildBugReportTitle(info: BugReportInfo): String =
 /**
  * Prefilled GitHub "new issue" URL. GitHub issues can't carry a file attachment, so
  * the body includes the inline device block plus a note to attach `debug.log` from
- * Settings -> About -> Debug if the maintainer asks.
+ * Settings -> About -> Share logs if the maintainer asks.
  */
 internal fun buildGithubIssueUrl(description: String, info: BugReportInfo): String {
     val title = buildBugReportTitle(info)
     val body = buildBugReportBody(description, info) +
-        "\n(If asked, attach debug.log from Settings -> About -> Debug.)"
+        "\n(If asked, attach debug.log from Settings -> About -> Share logs.)"
     return "https://github.com/$BUG_REPORT_REPO/issues/new" +
         "?title=${enc(title)}&body=${enc(body)}"
 }

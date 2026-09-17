@@ -236,7 +236,7 @@ internal fun debugLogFile(context: Context): File? =
 internal fun buildDebugLogShareIntent(
     context: Context,
     logFile: File?,
-    toUri: (File) -> Uri = { FileProvider.getUriForFile(context, FILE_PROVIDER_AUTHORITY, it) },
+    toUri: (File) -> Uri = { debugLogContentUri(context, it) },
 ): Intent? {
     if (logFile == null || !logFile.exists() || logFile.length() == 0L) return null
     val uri = toUri(logFile)
@@ -252,11 +252,17 @@ internal fun buildDebugLogShareIntent(
 }
 
 /** Open the share sheet for debug.log; returns false when there is no log to share. */
-internal fun shareDebugLog(context: Context): Boolean {
-    val intent = buildDebugLogShareIntent(context, debugLogFile(context)) ?: return false
+internal fun shareDebugLog(
+    context: Context,
+    toUri: (File) -> Uri = { debugLogContentUri(context, it) },
+): Boolean {
+    val intent = buildDebugLogShareIntent(context, debugLogFile(context), toUri) ?: return false
     context.startActivity(intent)
     return true
 }
+
+private fun debugLogContentUri(context: Context, file: File): Uri =
+    FileProvider.getUriForFile(context, FILE_PROVIDER_AUTHORITY, file)
 
 private const val DEBUG_LOG_NAME = "debug.log"
 private const val FILE_PROVIDER_AUTHORITY = "radio.ks3ckc.ft8af.fileprovider"

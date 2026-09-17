@@ -76,4 +76,20 @@ class DebugLogShareTest {
         assertThat(shareDebugLog(context)).isFalse()
         assertThat(Shadows.shadowOf(context).nextStartedActivity).isNull()
     }
+
+    @Test
+    fun shareDebugLog_withLog_startsChooserAndReturnsTrue() {
+        freshLog().writeText("12:00:00.000 hello\n")
+        val fakeUri = Uri.parse("content://radio.ks3ckc.ft8af.fileprovider/external_files/debug.log")
+
+        assertThat(shareDebugLog(context) { fakeUri }).isTrue()
+
+        val started = Shadows.shadowOf(context).nextStartedActivity
+        assertThat(started).isNotNull()
+        assertThat(started.action).isEqualTo(Intent.ACTION_CHOOSER)
+        @Suppress("DEPRECATION")
+        val send = started.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+        @Suppress("DEPRECATION")
+        assertThat(send.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)).isEqualTo(fakeUri)
+    }
 }
