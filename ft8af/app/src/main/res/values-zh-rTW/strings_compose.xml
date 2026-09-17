@@ -430,8 +430,11 @@
     <string name="bug_report_send_email">傳送郵件</string>
     <string name="bug_report_no_email_app">找不到可傳送報告的郵件應用程式</string>
     <string name="bug_report_open_github">開啟 GitHub issue</string>
-    <string name="settings_debug">除錯</string>
     <string name="settings_debug_desc">檢視／分享 debug.log</string>
+    <string name="settings_share_logs">分享日誌</string>
+    <string name="settings_share_logs_desc">透過郵件、Discord、雲端硬碟等傳送 debug.log</string>
+    <string name="settings_view_logs">檢視日誌</string>
+    <string name="settings_share_logs_empty">尚無日誌記錄</string>
     <string name="settings_about_body">版本 %1$s（build %2$s）\n建置日期 %3$s\n\nFT8，輕鬆上手。\n\n一款適用於 Android 的獨立 FT8 收發器應用程式。支援 USB、Bluetooth 與網路電台控制，並具備自動序列與日誌功能。</string>
     <string name="settings_website">網站</string>
     <string name="settings_community">社群</string>
@@ -450,8 +453,6 @@
     <string name="settings_conn_bluetooth">Bluetooth</string>
     <string name="settings_conn_network">網路</string>
     <string name="settings_no_usb_serial">未偵測到 USB 序列裝置。請將 USB 連接線接上您的無線電並再試一次。</string>
-    <string name="settings_debug_mode_enabled">已啟用除錯模式</string>
-    <string name="settings_debug_mode_disabled">已停用除錯模式</string>
     <string name="settings_edit_operator_identity">編輯操作員身分</string>
     <string name="settings_callsign">呼號</string>
     <string name="settings_callsign_hint">例如 W1AW</string>

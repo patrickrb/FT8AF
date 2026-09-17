@@ -596,8 +596,11 @@
     <string name="bug_report_send_email">Enviar e-mail</string>
     <string name="bug_report_no_email_app">Nenhum app de e-mail encontrado para enviar o relatório</string>
     <string name="bug_report_open_github">Abrir issue no GitHub</string>
-    <string name="settings_debug">Depuração</string>
     <string name="settings_debug_desc">Ver / compartilhar debug.log</string>
+    <string name="settings_share_logs">Compartilhar logs</string>
+    <string name="settings_share_logs_desc">Enviar debug.log por e-mail, Discord, Drive…</string>
+    <string name="settings_view_logs">Ver logs</string>
+    <string name="settings_share_logs_empty">Nenhum log registrado ainda</string>
     <string name="settings_about_body">Versão %1$s (build %2$s)\nData do build %3$s\n\nFT8, feito fácil.\n\nUm aplicativo de transceptor FT8 independente para Android. Controle de rig via USB, Bluetooth e rede, com sequenciamento e registro automáticos.</string>
     <string name="settings_website">Site</string>
     <string name="settings_community">Comunidade</string>
@@ -618,8 +621,6 @@
     <string name="settings_conn_network">Rede</string>
     <string name="settings_no_usb_serial">Nenhum dispositivo serial USB detectado. Conecte um cabo USB ao seu rádio e tente novamente.</string>
     <string name="settings_no_bluetooth_devices">Nenhum dispositivo Bluetooth pareado encontrado. Pareie um dispositivo nas configurações de Bluetooth do Android primeiro.</string>
-    <string name="settings_debug_mode_enabled">Modo de depuração ativado</string>
-    <string name="settings_debug_mode_disabled">Modo de depuração desativado</string>
     <string name="settings_edit_operator_identity">Editar Identidade do Operador</string>
     <string name="settings_callsign">Indicativo</string>
     <string name="settings_callsign_hint">ex.: W1AW</string>

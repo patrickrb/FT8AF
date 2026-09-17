@@ -430,8 +430,11 @@
     <string name="bug_report_send_email">发送邮件</string>
     <string name="bug_report_no_email_app">未找到可发送报告的邮件应用</string>
     <string name="bug_report_open_github">打开 GitHub issue</string>
-    <string name="settings_debug">调试</string>
     <string name="settings_debug_desc">查看 / 分享 debug.log</string>
+    <string name="settings_share_logs">分享日志</string>
+    <string name="settings_share_logs_desc">通过邮件、Discord、云盘等发送 debug.log</string>
+    <string name="settings_view_logs">查看日志</string>
+    <string name="settings_share_logs_empty">尚无日志记录</string>
     <string name="settings_about_body">版本 %1$s（构建 %2$s）\n构建日期 %3$s\n\nFT8，轻松上手。\n\n一款用于 Android 的独立 FT8 收发应用。支持 USB、Bluetooth 及网络电台控制，具备自动流程与日志记录功能。</string>
     <string name="settings_website">网站</string>
     <string name="settings_community">社区</string>
@@ -450,8 +453,6 @@
     <string name="settings_conn_bluetooth">Bluetooth</string>
     <string name="settings_conn_network">网络</string>
     <string name="settings_no_usb_serial">未检测到 USB 串口设备。请将 USB 线缆连接至您的电台后重试。</string>
-    <string name="settings_debug_mode_enabled">调试模式已启用</string>
-    <string name="settings_debug_mode_disabled">调试模式已禁用</string>
     <string name="settings_edit_operator_identity">编辑操作员身份</string>
     <string name="settings_callsign">呼号</string>
     <string name="settings_callsign_hint">例如 W1AW</string>
