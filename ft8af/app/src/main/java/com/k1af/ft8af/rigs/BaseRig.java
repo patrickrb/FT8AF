@@ -64,14 +64,35 @@ public abstract class BaseRig {
         return freq;
     }
 
+    /**
+     * A frequency the RIG reported (parsed from its CAT reply). This is the only entry
+     * point that counts as a liveness signal; rig subclasses call it from their
+     * {@link #onReceiveData(byte[])} parsers.
+     */
     public void setFreq(long freq) {
+        applyFreq(freq, true);
+    }
+
+    /**
+     * A frequency the APP is about to command (the dial we are pushing to the rig via
+     * {@link #setFreqToRig()}). Same bookkeeping as {@link #setFreq(long)} — stores the
+     * value, publishes it, fires {@code onFreqChanged} on a change — but it is NOT a
+     * liveness signal: nothing has been heard from the rig. Routing our own write through
+     * {@link #setFreq(long)} armed the CAT watchdog on a rig that never answered a
+     * frequency read, which then went "dead" 8 s later while CAT kept working (#781).
+     */
+    public void setCommandedFreq(long freq) {
+        applyFreq(freq, false);
+    }
+
+    private void applyFreq(long freq, boolean reportedByRig) {
         if (freq == 0) return;
         if (freq == -1) return;
         // The rig answered with a valid frequency — proof the link is alive even if the dial
         // didn't move. Fire this BEFORE the unchanged-frequency early return below so the CAT
         // liveness watchdog (which keys off onRigResponded, not onFreqChanged) sees every
         // reply and doesn't falsely trip on a stable dial.
-        if (onRigStateChanged != null) {
+        if (reportedByRig && onRigStateChanged != null) {
             onRigStateChanged.onRigResponded();
         }
         if (freq == this.freq) return;
