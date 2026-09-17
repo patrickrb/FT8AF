@@ -3097,9 +3097,6 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     // (missing/blank column from an imported backup) must not NPE here.
                     GeneralVariables.keepScreenOn = "1".equals(result);
                 }
-                if (name.equalsIgnoreCase("debugModeEnabled")) {//Hidden debug screen unlock
-                    GeneralVariables.debugModeEnabled = result.equals("1");
-                }
                 // Serial line params: same defensive parse as audioRate above. These
                 // three keys were the only remaining hydration parses with no guard,
                 // so an empty or non-numeric value from an imported backup (#382) threw

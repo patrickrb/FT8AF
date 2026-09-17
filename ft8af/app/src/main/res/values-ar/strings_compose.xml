@@ -527,8 +527,11 @@
     <string name="bug_report_send_email">إرسال بريد إلكتروني</string>
     <string name="bug_report_no_email_app">لم يُعثر على تطبيق بريد لإرسال التقرير</string>
     <string name="bug_report_open_github">فتح مشكلة GitHub</string>
-    <string name="settings_debug">تصحيح</string>
     <string name="settings_debug_desc">عرض / مشاركة debug.log</string>
+    <string name="settings_share_logs">مشاركة السجلات</string>
+    <string name="settings_share_logs_desc">إرسال debug.log عبر البريد أو Discord أو Drive…</string>
+    <string name="settings_view_logs">عرض السجلات</string>
+    <string name="settings_share_logs_empty">لم يتم تسجيل أي سجل بعد</string>
     <string name="settings_about_body">الإصدار %1$s (بناء %2$s)\nتاريخ البناء %3$s\n\nFT8، بكل سهولة.\n\nتطبيق جهاز إرسال واستقبال FT8 مستقل لنظام Android. تحكم في الجهاز عبر USB وBluetooth والشبكة مع التسلسل والتسجيل التلقائيين.</string>
     <string name="settings_website">الموقع الإلكتروني</string>
     <string name="settings_community">المجتمع</string>
@@ -548,8 +551,6 @@
     <string name="settings_conn_network">الشبكة</string>
     <string name="settings_no_usb_serial">لم تُرصد أجهزة USB تسلسلية. يرجى توصيل كابل USB براديوك وإعادة المحاولة.</string>
     <string name="settings_no_bluetooth_devices">لم يُعثر على أجهزة Bluetooth مقترنة. اقترن بجهاز في إعدادات Bluetooth بنظام Android أولاً.</string>
-    <string name="settings_debug_mode_enabled">وضع التصحيح مفعَّل</string>
-    <string name="settings_debug_mode_disabled">وضع التصحيح متوقف</string>
     <string name="settings_edit_operator_identity">تحرير هوية المشغِّل</string>
     <string name="settings_callsign">النداء</string>
     <string name="settings_callsign_hint">مثل W1AW</string>

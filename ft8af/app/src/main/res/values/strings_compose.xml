@@ -924,8 +924,11 @@
         <item>eleven</item>
         <item>twelve</item>
     </string-array>
-    <string name="settings_debug">Debug</string>
     <string name="settings_debug_desc">View / share debug.log</string>
+    <string name="settings_share_logs">Share logs</string>
+    <string name="settings_share_logs_desc">Send debug.log to email, Discord, Drive…</string>
+    <string name="settings_view_logs">View logs</string>
+    <string name="settings_share_logs_empty">No log recorded yet</string>
     <string name="settings_about_body">Version %1$s (build %2$s)\nBuild date %3$s\n\nFT8, made easy.\n\nA standalone FT8 transceiver app for Android. USB, Bluetooth, and network rig control with automatic sequencing and logging.</string>
     <string name="settings_website">Website</string>
     <string name="settings_community">Community</string>
@@ -948,8 +951,6 @@
     <string name="settings_conn_network">Network</string>
     <string name="settings_no_usb_serial">No USB serial devices detected. Please connect a USB cable to your radio and try again.</string>
     <string name="settings_no_bluetooth_devices">No bonded Bluetooth devices found. Pair a device in Android Bluetooth settings first.</string>
-    <string name="settings_debug_mode_enabled">Debug mode enabled</string>
-    <string name="settings_debug_mode_disabled">Debug mode disabled</string>
     <string name="settings_edit_operator_identity">Edit Operator Identity</string>
     <string name="settings_callsign">Callsign</string>
     <string name="settings_callsign_hint">e.g. W1AW</string>

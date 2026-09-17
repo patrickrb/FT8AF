@@ -13,7 +13,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -34,8 +33,8 @@ import radio.ks3ckc.ft8af.ui.components.GlassCard
 import radio.ks3ckc.ft8af.ui.components.SettingsRow
 
 /**
- * About / support settings: version info, FAQ/support link, and the hidden
- * debug-mode unlock (7 taps on the version block in [AboutDialog]).
+ * About / support settings: version info, FAQ/support link, bug reporting, and
+ * the local debug.log — shared in one tap or viewed in [DebugLogScreen].
  */
 @Composable
 fun AboutSettings(
@@ -44,30 +43,13 @@ fun AboutSettings(
 ) {
     val context = LocalContext.current
 
-    var debugEnabled by remember { mutableStateOf(GeneralVariables.debugModeEnabled) }
     var showAbout by remember { mutableStateOf(false) }
     var showDebugScreen by remember { mutableStateOf(false) }
     var showBugReport by remember { mutableStateOf(false) }
 
     // -- About / FAQ Dialog --
     if (showAbout) {
-        AboutDialog(
-            onDismiss = { showAbout = false },
-            onToggleDebug = {
-                val next = !debugEnabled
-                GeneralVariables.debugModeEnabled = next
-                debugEnabled = next
-                mainViewModel.databaseOpr.writeConfig(
-                    "debugModeEnabled", if (next) "1" else "0", null,
-                )
-                Toast.makeText(
-                    context,
-                    if (next) context.getString(R.string.settings_debug_mode_enabled)
-                    else context.getString(R.string.settings_debug_mode_disabled),
-                    Toast.LENGTH_SHORT,
-                ).show()
-            },
-        )
+        AboutDialog(onDismiss = { showAbout = false })
     }
 
     // -- Debug log viewer --
@@ -110,15 +92,28 @@ fun AboutSettings(
                         showChevron = true,
                         onClick = { showBugReport = true },
                     )
-                    if (debugEnabled) {
-                        SectionDivider()
-                        SettingsRow(
-                            label = stringResource(R.string.settings_debug),
-                            description = stringResource(R.string.settings_debug_desc),
-                            showChevron = true,
-                            onClick = { showDebugScreen = true },
-                        )
-                    }
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_share_logs),
+                        description = stringResource(R.string.settings_share_logs_desc),
+                        showChevron = true,
+                        onClick = {
+                            if (!shareDebugLog(context)) {
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.settings_share_logs_empty),
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_view_logs),
+                        description = stringResource(R.string.settings_debug_desc),
+                        showChevron = true,
+                        onClick = { showDebugScreen = true },
+                    )
                 }
             }
         }
@@ -129,15 +124,8 @@ fun AboutSettings(
  * About dialog with version info, credits, and tappable QRZ links for the authors.
  */
 @Composable
-private fun AboutDialog(
-    onDismiss: () -> Unit,
-    onToggleDebug: () -> Unit = {},
-) {
+private fun AboutDialog(onDismiss: () -> Unit) {
     val uriHandler = LocalUriHandler.current
-    // Hidden debug-mode unlock: 7 consecutive taps on the version block flips
-    // GeneralVariables.debugModeEnabled (and persists it). Counter resets when
-    // the dialog re-opens, matching Android's developer-options UX.
-    var versionTaps by remember { mutableIntStateOf(0) }
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -164,13 +152,6 @@ private fun AboutDialog(
                 color = TextMuted,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
-                modifier = Modifier.clickable {
-                    versionTaps += 1
-                    if (versionTaps >= 7) {
-                        versionTaps = 0
-                        onToggleDebug()
-                    }
-                },
             )
 
             Text(

@@ -507,8 +507,11 @@
     <string name="bug_report_send_email">이메일 보내기</string>
     <string name="bug_report_no_email_app">신고를 보낼 이메일 앱을 찾을 수 없습니다</string>
     <string name="bug_report_open_github">GitHub 이슈 열기</string>
-    <string name="settings_debug">디버그</string>
     <string name="settings_debug_desc">debug.log 보기 / 공유</string>
+    <string name="settings_share_logs">로그 공유</string>
+    <string name="settings_share_logs_desc">debug.log를 이메일, Discord, Drive 등으로 보내기</string>
+    <string name="settings_view_logs">로그 보기</string>
+    <string name="settings_share_logs_empty">아직 기록된 로그가 없습니다</string>
     <string name="settings_about_body">버전 %1$s (빌드 %2$s)\n빌드 날짜 %3$s\n\nFT8, 쉽게.\n\nAndroid용 독립형 FT8 트랜시버 앱. USB, Bluetooth, 네트워크 무전기 제어와 자동 시퀀싱 및 로깅 지원.</string>
     <string name="settings_website">웹사이트</string>
     <string name="settings_community">커뮤니티</string>
@@ -528,8 +531,6 @@
     <string name="settings_conn_network">네트워크</string>
     <string name="settings_no_usb_serial">USB 시리얼 장치가 감지되지 않았습니다. 무전기에 USB 케이블을 연결하고 다시 시도하세요.</string>
     <string name="settings_no_bluetooth_devices">연결된 Bluetooth 장치를 찾을 수 없습니다. 먼저 Android Bluetooth 설정에서 장치를 페어링하세요.</string>
-    <string name="settings_debug_mode_enabled">디버그 모드 활성화됨</string>
-    <string name="settings_debug_mode_disabled">디버그 모드 비활성화됨</string>
     <string name="settings_edit_operator_identity">운용자 정보 편집</string>
     <string name="settings_callsign">콜사인</string>
     <string name="settings_callsign_hint">예: W1AW</string>

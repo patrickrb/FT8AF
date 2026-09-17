@@ -192,10 +192,6 @@ public class GeneralVariables {
     public static int flexMaxRfPower = 10;//Flex radio max transmit power
     public static int flexMaxTunePower = 10;//Flex radio max tune power
 
-    // Hidden debug mode (unlocked by tapping the version 7 times in About).
-    // When true, Settings exposes the Debug screen for log viewing/sharing.
-    public static boolean debugModeEnabled = false;
-
     private Context mainContext;
 
     /**
