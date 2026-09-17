@@ -24,8 +24,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
+import com.k1af.ft8af.connector.SerialPortLabel
 import com.k1af.ft8af.serialport.UsbId
 import com.k1af.ft8af.serialport.UsbSerialProber
 import com.k1af.ft8af.wave.UsbAudioDevice
@@ -80,7 +82,24 @@ internal data class UsbDiagnosticsData(
     val audioDeviceFound: Boolean,
     val portOpen: Boolean,
     val catResponded: Boolean,
+    /**
+     * The port half of the connected USB port's label ("Port 2 of 2 · Standard"),
+     * null when the rig is not on a USB cable. See [SerialPortLabel.portName].
+     */
+    val catPortName: String? = null,
+    /** True when that port belongs to a chip with named interfaces (a CP2105). */
+    val catPortHasRole: Boolean = false,
+    /** Configured CAT baud rate, shown next to the port so a mismatch is visible. */
+    val baudRate: Int? = null,
+    /**
+     * False when the current link never listens for CAT (FT-710 cable mode), in
+     * which case a missing CAT response is by design, not a fault.
+     */
+    val catReadExpected: Boolean = true,
 )
+
+/** Default for the "CAT Port" value when the caller has no resources ("Port 1 of 2 · Enhanced · 4800 bd"). */
+internal const val DEFAULT_BAUD_VALUE_TEMPLATE = "%1\$s · %2\$d bd"
 
 /** Formats a USB id as the conventional 16-bit hex (e.g. 0x0C26); null passes through. */
 internal fun formatUsbId(id: Int?): String? =
@@ -107,6 +126,10 @@ internal fun assembleUsbDiagnosticsData(
     devices: List<UsbDeviceSummary>,
     portOpen: Boolean,
     catResponded: Boolean,
+    catPortName: String? = null,
+    catPortHasRole: Boolean = false,
+    baudRate: Int? = null,
+    catReadExpected: Boolean = true,
 ): UsbDiagnosticsData {
     val target = selectDiagnosticDevice(devices)
     return UsbDiagnosticsData(
@@ -118,17 +141,43 @@ internal fun assembleUsbDiagnosticsData(
         audioDeviceFound = devices.any { it.hasAudioInterface },
         portOpen = portOpen,
         catResponded = catResponded,
+        catPortName = catPortName,
+        catPortHasRole = catPortHasRole,
+        baudRate = baudRate,
+        catReadExpected = catReadExpected,
     )
 }
 
 /**
- * Maps gathered facts to the ordered list of display rows, matching the layout in the
- * task: device found, VID, PID, permission, CDC serial, audio, port open, CAT response.
- * The VID/PID rows are informational (no tick/cross) and only carry a value once a
- * device is actually found.
+ * The "CAT Port" row value: the port name plus the configured baud, or null when
+ * no USB port is open. Exposing both on one line is what lets an operator see
+ * "Port 2 of 2 · Standard · 4800 bd" and realise the rig wants port 1 / another
+ * rate — the two things the app cannot decide for them (issue #817).
  */
-internal fun buildUsbDiagnostics(data: UsbDiagnosticsData): List<UsbDiagnosticItem> {
+internal fun catPortValue(data: UsbDiagnosticsData, baudValueTemplate: String): String? {
+    val name = data.catPortName ?: return null
+    if (!data.portOpen) return null
+    val baud = data.baudRate ?: return name
+    return String.format(baudValueTemplate, name, baud)
+}
+
+/**
+ * Maps gathered facts to the ordered list of display rows, matching the layout in the
+ * task: device found, VID, PID, permission, CDC serial, audio, port open, CAT port,
+ * CAT response. The VID/PID/CAT-port rows are informational (no tick/cross) and only
+ * carry a value once there is one. CAT Response is also informational (not a fail)
+ * on a link that never listens for CAT, see [UsbDiagnosticsData.catReadExpected].
+ */
+internal fun buildUsbDiagnostics(
+    data: UsbDiagnosticsData,
+    baudValueTemplate: String = DEFAULT_BAUD_VALUE_TEMPLATE,
+): List<UsbDiagnosticItem> {
     fun passFail(ok: Boolean) = if (ok) DiagnosticStatus.PASS else DiagnosticStatus.FAIL
+    val catResponse = when {
+        data.catResponded -> DiagnosticStatus.PASS
+        !data.catReadExpected && data.portOpen -> DiagnosticStatus.INFO
+        else -> DiagnosticStatus.FAIL
+    }
     return listOf(
         UsbDiagnosticItem(R.string.usb_diag_device_found, passFail(data.deviceFound)),
         UsbDiagnosticItem(
@@ -145,8 +194,27 @@ internal fun buildUsbDiagnostics(data: UsbDiagnosticsData): List<UsbDiagnosticIt
         UsbDiagnosticItem(R.string.usb_diag_cdc_serial, passFail(data.cdcSerialFound)),
         UsbDiagnosticItem(R.string.usb_diag_audio_device, passFail(data.audioDeviceFound)),
         UsbDiagnosticItem(R.string.usb_diag_port_open, passFail(data.portOpen)),
-        UsbDiagnosticItem(R.string.usb_diag_cat_response, passFail(data.catResponded)),
+        UsbDiagnosticItem(
+            R.string.usb_diag_cat_port,
+            DiagnosticStatus.INFO,
+            catPortValue(data, baudValueTemplate),
+        ),
+        UsbDiagnosticItem(R.string.usb_diag_cat_response, catResponse),
     )
+}
+
+/**
+ * The one-paragraph next step shown under the card when the port is open but CAT
+ * is silent, or null when there is nothing to say. Never suggests the app switch
+ * ports or baud rates itself: on the same VID:PID the CAT port is Enhanced for
+ * Yaesu and Standard for Kenwood, so only the operator can know.
+ */
+internal fun catResponseHintRes(data: UsbDiagnosticsData): Int? = when {
+    !data.portOpen -> null
+    !data.catReadExpected -> R.string.usb_diag_hint_ft710
+    data.catResponded -> null
+    data.catPortHasRole -> R.string.usb_diag_hint_dual_port
+    else -> R.string.usb_diag_hint_no_response
 }
 
 /** Glyph shown for a status; INFO rows carry no glyph (value only). */
@@ -230,6 +298,8 @@ internal fun collectUsbDiagnostics(
             )
         }
     }
+    val port = runCatching { mainViewModel.connectedCableSerialPort() }.getOrNull()
+    val portOfTemplate = context.getString(R.string.serial_port_label_port_of)
     return assembleUsbDiagnosticsData(
         devices = summaries,
         // Guarded like the USB calls above: baseRig is reassigned (nulled then rebuilt)
@@ -237,6 +307,14 @@ internal fun collectUsbDiagnostics(
         // the polling coroutine, freezing the screen on stale data.
         portOpen = runCatching { mainViewModel.isRigConnected() }.getOrDefault(false),
         catResponded = runCatching { mainViewModel.hasRigRespondedToCat() }.getOrDefault(false),
+        catPortName = port?.let {
+            SerialPortLabel.portName(it.vendorId, it.productId, it.portNum, it.portCount, portOfTemplate)
+        },
+        catPortHasRole = port?.let {
+            SerialPortLabel.portRole(it.vendorId, it.productId, it.portNum, it.portCount) != null
+        } ?: false,
+        baudRate = GeneralVariables.baudRate,
+        catReadExpected = runCatching { mainViewModel.isCatReadExpected() }.getOrDefault(true),
     )
 }
 
@@ -267,12 +345,15 @@ fun UsbDiagnosticsScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    var items by remember { mutableStateOf(buildUsbDiagnostics(EMPTY_DIAGNOSTICS)) }
+    val baudValueTemplate = stringResource(R.string.usb_diag_baud_value)
+    var items by remember { mutableStateOf(buildUsbDiagnostics(EMPTY_DIAGNOSTICS, baudValueTemplate)) }
+    var hintRes by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(Unit) {
         while (true) {
             val data = withContext(Dispatchers.IO) { collectUsbDiagnostics(context, mainViewModel) }
-            items = buildUsbDiagnostics(data)
+            items = buildUsbDiagnostics(data, baudValueTemplate)
+            hintRes = catResponseHintRes(data)
             delay(1_500)
         }
     }
@@ -297,6 +378,15 @@ fun UsbDiagnosticsScreen(
                     UsbDiagnosticRow(item)
                 }
             }
+        }
+        hintRes?.let { res ->
+            Text(
+                text = stringResource(res),
+                color = TextMuted,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+            )
         }
     }
 }

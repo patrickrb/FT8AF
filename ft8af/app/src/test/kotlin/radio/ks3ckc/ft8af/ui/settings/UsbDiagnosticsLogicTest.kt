@@ -146,6 +146,10 @@ class UsbDiagnosticsLogicTest {
         audioDeviceFound: Boolean = true,
         portOpen: Boolean = true,
         catResponded: Boolean = true,
+        catPortName: String? = null,
+        catPortHasRole: Boolean = false,
+        baudRate: Int? = null,
+        catReadExpected: Boolean = true,
     ) = UsbDiagnosticsData(
         deviceFound = deviceFound,
         vendorId = vendorId,
@@ -155,10 +159,14 @@ class UsbDiagnosticsLogicTest {
         audioDeviceFound = audioDeviceFound,
         portOpen = portOpen,
         catResponded = catResponded,
+        catPortName = catPortName,
+        catPortHasRole = catPortHasRole,
+        baudRate = baudRate,
+        catReadExpected = catReadExpected,
     )
 
     @Test
-    fun build_producesEightRowsInTaskOrder() {
+    fun build_producesNineRowsInTaskOrder() {
         val rows = buildUsbDiagnostics(fullData())
         assertThat(rows.map { it.labelRes }).containsExactly(
             R.string.usb_diag_device_found,
@@ -168,8 +176,122 @@ class UsbDiagnosticsLogicTest {
             R.string.usb_diag_cdc_serial,
             R.string.usb_diag_audio_device,
             R.string.usb_diag_port_open,
+            R.string.usb_diag_cat_port,
             R.string.usb_diag_cat_response,
         ).inOrder()
+    }
+
+    // --- CAT Port row + hint (issue #817) ---
+
+    @Test
+    fun build_catPortRowIsInformationalAndShowsPortWithBaud() {
+        val rows = buildUsbDiagnostics(
+            fullData(catPortName = "Port 2 of 2 · Standard", catPortHasRole = true, baudRate = 4800),
+        ).associateBy { it.labelRes }
+        val row = rows.getValue(R.string.usb_diag_cat_port)
+        assertThat(row.status).isEqualTo(DiagnosticStatus.INFO)
+        assertThat(row.value).isEqualTo("Port 2 of 2 · Standard · 4800 bd")
+    }
+
+    @Test
+    fun build_catPortRowUsesCallersTemplate() {
+        val rows = buildUsbDiagnostics(
+            fullData(catPortName = "Port 1 of 1", baudRate = 38400),
+            baudValueTemplate = "%1\$s @ %2\$d",
+        ).associateBy { it.labelRes }
+        assertThat(rows.getValue(R.string.usb_diag_cat_port).value).isEqualTo("Port 1 of 1 @ 38400")
+    }
+
+    @Test
+    fun catPortValue_nullWithoutAnOpenUsbPort() {
+        // Bluetooth/network rigs have no USB port; a closed port shows nothing either.
+        assertThat(catPortValue(fullData(catPortName = null), DEFAULT_BAUD_VALUE_TEMPLATE)).isNull()
+        assertThat(
+            catPortValue(fullData(catPortName = "Port 1 of 1", portOpen = false), DEFAULT_BAUD_VALUE_TEMPLATE),
+        ).isNull()
+    }
+
+    @Test
+    fun catPortValue_portNameAloneWhenBaudUnknown() {
+        assertThat(catPortValue(fullData(catPortName = "Port 1 of 1", baudRate = null), DEFAULT_BAUD_VALUE_TEMPLATE))
+            .isEqualTo("Port 1 of 1")
+    }
+
+    @Test
+    fun build_catResponseIsInfoNotFailWhenNoReadIsExpected() {
+        // FT-710 cable mode never starts the read loop: red would be a false alarm.
+        val rows = buildUsbDiagnostics(fullData(catResponded = false, catReadExpected = false))
+            .associateBy { it.labelRes }
+        assertThat(rows.getValue(R.string.usb_diag_cat_response).status).isEqualTo(DiagnosticStatus.INFO)
+    }
+
+    @Test
+    fun build_catResponseStillFailsWhenNoReadExpectedButPortClosed() {
+        // With the port down the problem is upstream of CAT; keep the honest red.
+        val rows = buildUsbDiagnostics(fullData(portOpen = false, catResponded = false, catReadExpected = false))
+            .associateBy { it.labelRes }
+        assertThat(rows.getValue(R.string.usb_diag_cat_response).status).isEqualTo(DiagnosticStatus.FAIL)
+    }
+
+    @Test
+    fun build_catResponsePassWinsOverReadExpectedFlag() {
+        val rows = buildUsbDiagnostics(fullData(catResponded = true, catReadExpected = false))
+            .associateBy { it.labelRes }
+        assertThat(rows.getValue(R.string.usb_diag_cat_response).status).isEqualTo(DiagnosticStatus.PASS)
+    }
+
+    @Test
+    fun hint_noneWhilePortClosedOrCatAnswering() {
+        assertThat(catResponseHintRes(fullData(portOpen = false, catResponded = false))).isNull()
+        assertThat(catResponseHintRes(fullData(catResponded = true))).isNull()
+        assertThat(catResponseHintRes(fullData(catResponded = true, catPortHasRole = true))).isNull()
+    }
+
+    @Test
+    fun hint_ft710WriteOnlyExplainsTheDesignedRed() {
+        assertThat(catResponseHintRes(fullData(catResponded = false, catReadExpected = false)))
+            .isEqualTo(R.string.usb_diag_hint_ft710)
+        // Even on a CP2105 the FT-710 note wins: the port is not the question there.
+        assertThat(catResponseHintRes(fullData(catResponded = false, catReadExpected = false, catPortHasRole = true)))
+            .isEqualTo(R.string.usb_diag_hint_ft710)
+    }
+
+    @Test
+    fun hint_dualPortChipGetsTheEnhancedStandardNote() {
+        assertThat(catResponseHintRes(fullData(catResponded = false, catPortHasRole = true)))
+            .isEqualTo(R.string.usb_diag_hint_dual_port)
+    }
+
+    @Test
+    fun hint_singlePortSilenceGetsTheGenericNote() {
+        assertThat(catResponseHintRes(fullData(catResponded = false, catPortHasRole = false)))
+            .isEqualTo(R.string.usb_diag_hint_no_response)
+    }
+
+    @Test
+    fun assemble_passesPortFactsThrough() {
+        val data = assembleUsbDiagnosticsData(
+            emptyList(),
+            portOpen = true,
+            catResponded = false,
+            catPortName = "Port 1 of 2 · Enhanced",
+            catPortHasRole = true,
+            baudRate = 4800,
+            catReadExpected = false,
+        )
+        assertThat(data.catPortName).isEqualTo("Port 1 of 2 · Enhanced")
+        assertThat(data.catPortHasRole).isTrue()
+        assertThat(data.baudRate).isEqualTo(4800)
+        assertThat(data.catReadExpected).isFalse()
+    }
+
+    @Test
+    fun assemble_portFactsDefaultToNoUsbPort() {
+        val data = assembleUsbDiagnosticsData(emptyList(), portOpen = false, catResponded = false)
+        assertThat(data.catPortName).isNull()
+        assertThat(data.catPortHasRole).isFalse()
+        assertThat(data.baudRate).isNull()
+        assertThat(data.catReadExpected).isTrue()
     }
 
     @Test

@@ -2639,6 +2639,33 @@ public class MainViewModel extends ViewModel {
     }
 
     /**
+     * The USB serial port the current rig connector drives, or null when the rig
+     * is not on a USB cable (Bluetooth, network, nothing). Backs the USB
+     * Diagnostics "CAT Port" row — on a dual-UART chip that row is what tells
+     * the operator they are on the Standard port when their rig wants Enhanced
+     * (issue #817).
+     */
+    public CableSerialPort.SerialPort connectedCableSerialPort() {
+        if (baseRig == null) return null;
+        BaseRigConnector connector = baseRig.getConnector();
+        if (connector instanceof CableConnector) {
+            return ((CableConnector) connector).getSerialPort();
+        }
+        return null;
+    }
+
+    /**
+     * Whether a CAT reply can be expected on the current link at all. False in the
+     * FT-710 cable mode, where the read loop is deliberately never started (see
+     * {@link CableSerialPort#isFt710WriteOnlyCatMode}) — so "CAT Response: fail"
+     * is the designed state there, not a fault.
+     */
+    public boolean isCatReadExpected() {
+        return !CableSerialPort.isFt710WriteOnlyCatMode(GeneralVariables.instructionSet,
+                GeneralVariables.connectMode, GeneralVariables.controlMode);
+    }
+
+    /**
      * Re-trigger the current rig's CAT connection. Backs the tap-to-reconnect
      * status chip: Bluetooth often only connects on the second attempt, so this
      * reuses the connector's existing connect() path (which, for Bluetooth, runs
