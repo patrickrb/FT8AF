@@ -237,7 +237,7 @@
     <string name="log_sync_title_no_services">TIDAK ADA LAYANAN AKTIF</string>
     <string name="log_sync_title_syncing">MENYINKRONKAN…</string>
     <string name="log_sync_title_complete">SINKRONISASI SELESAI</string>
-    <string name="log_sync_enable_services">Aktifkan Cloudlog/Wavelog/Nextlog atau QRZ di Setelan, lalu coba lagi.</string>
+    <string name="log_sync_enable_services">Aktifkan Cloudlog/Wavelog/Nextlog, QRZ, atau World Radio League di Setelan, lalu coba lagi.</string>
     <string name="log_sync_progress_count">%1$d dari %2$d QSO</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d diterima</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d diterima</string>
@@ -274,6 +274,7 @@
     <string name="pota_self_spot_failed">Self-spot gagal — periksa log</string>
     <string name="pota_active_park">AKTIF — %1$s</string>
     <string name="pota_qsos">QSO</string>
+    <string name="pota_dupe">duplikat</string>
     <string name="pota_contacts_map">Peta kontak</string>
     <string name="pota_back">Kembali</string>
     <string name="pota_valid_activation">aktivasi valid</string>
@@ -507,8 +508,11 @@
     <string name="bug_report_send_email">Kirim email</string>
     <string name="bug_report_no_email_app">Tidak ditemukan aplikasi email untuk mengirim laporan</string>
     <string name="bug_report_open_github">Buka isu GitHub</string>
-    <string name="settings_debug">Debug</string>
     <string name="settings_debug_desc">Lihat / bagikan debug.log</string>
+    <string name="settings_share_logs">Bagikan log</string>
+    <string name="settings_share_logs_desc">Kirim debug.log ke email, Discord, Drive…</string>
+    <string name="settings_view_logs">Lihat log</string>
+    <string name="settings_share_logs_empty">Belum ada log yang tercatat</string>
     <string name="settings_about_body">Versi %1$s (build %2$s)\nTanggal build %3$s\n\nFT8, dipermudah.\n\nAplikasi transceiver FT8 mandiri untuk Android. Kontrol rig via USB, Bluetooth, dan jaringan dengan sequencing dan logging otomatis.</string>
     <string name="settings_website">Situs Web</string>
     <string name="settings_community">Komunitas</string>
@@ -528,8 +532,6 @@
     <string name="settings_conn_network">Jaringan</string>
     <string name="settings_no_usb_serial">Tidak ada perangkat serial USB terdeteksi. Hubungkan kabel USB ke radio Anda dan coba lagi.</string>
     <string name="settings_no_bluetooth_devices">Tidak ditemukan perangkat Bluetooth terpasang. Pasangkan perangkat di setelan Bluetooth Android terlebih dahulu.</string>
-    <string name="settings_debug_mode_enabled">Mode debug diaktifkan</string>
-    <string name="settings_debug_mode_disabled">Mode debug dinonaktifkan</string>
     <string name="settings_edit_operator_identity">Ubah Identitas Operator</string>
     <string name="settings_callsign">Tanda Panggil</string>
     <string name="settings_callsign_hint">mis. W1AW</string>
@@ -609,4 +611,15 @@
     <string name="settings_bin_agg_max">Maksimum</string>
     <string name="settings_bin_agg_avg">Rata-rata</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d diterima</string>
+    <string name="settings_wrl_desc">Unggah QSO otomatis ke logbook World Radio League Anda (memerlukan kunci Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Buat kunci di World Radio League pada Integrations → Developer API. Satu kunci berlaku untuk seluruh akun Anda.</string>
+    <string name="settings_wrl_logbook">Logbook</string>
+    <string name="settings_wrl_logbook_default">Logbook default</string>
+    <string name="settings_wrl_loading_logbooks">Memuat logbook…</string>
+    <string name="settings_wrl_no_logbooks">Akun World Radio League Anda belum memiliki logbook.</string>
+    <string name="settings_wrl_create_logbook">Buat logbook “%1$s”</string>
+    <string name="settings_wrl_creating_logbook">Membuat logbook…</string>
 </resources>

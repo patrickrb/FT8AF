@@ -43,6 +43,7 @@ public class GeneralVariables {
     public static boolean saveSWL_QSO = false;//Save QSOs from decoded messages switch
     public static boolean enableCloudlog = false;//Whether Cloudlog auto-sync is enabled
     public static boolean enableQRZ = false;//Whether QRZ auto-sync is enabled
+    public static boolean enableWRL = false;//Whether World Radio League auto-sync is enabled (issue #800)
     public static boolean enablePskReporter = true;//Whether PSKReporter spot upload is enabled
     public static boolean enableAdifExport = true;//Append each logged QSO to a running ft8af_log.adi (real-time ADIF mirror for backup + desktop-logger import)
     // WSJT-X UDP interface (issue: interop with GridTracker/JTAlert/N1MM/Log4OM).
@@ -190,10 +191,6 @@ public class GeneralVariables {
 
     public static int flexMaxRfPower = 10;//Flex radio max transmit power
     public static int flexMaxTunePower = 10;//Flex radio max tune power
-
-    // Hidden debug mode (unlocked by tapping the version 7 times in About).
-    // When true, Settings exposes the Debug screen for log viewing/sharing.
-    public static boolean debugModeEnabled = false;
 
     private Context mainContext;
 
@@ -527,6 +524,8 @@ public class GeneralVariables {
     public static String qrzApiKey = ""; //QRZ API key
     public static String qrzXmlUsername = ""; //QRZ XML API username (for callsign lookups)
     public static String qrzXmlPassword = ""; //QRZ XML API password
+    public static String wrlApiKey = ""; //World Radio League Developer API key (wrl_live_...)
+    public static String wrlLogbookId = ""; //WRL logbook UUID; empty = the account's default logbook
     public static boolean pskOverlayEnabled = false; //PSK Reporter map overlay (issue #33)
     public static boolean grayLineEnabled = true; //Day/night terminator (gray line) map overlay — on by default
     public static boolean synFrequency = false;//Same-frequency transmit

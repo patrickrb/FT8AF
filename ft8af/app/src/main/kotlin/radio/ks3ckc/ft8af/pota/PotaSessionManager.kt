@@ -2,8 +2,12 @@ package radio.ks3ckc.ft8af.pota
 
 import android.util.Log
 import com.k1af.ft8af.GeneralVariables
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import radio.ks3ckc.ft8af.pota.model.PotaActivation
 import radio.ks3ckc.ft8af.pota.model.PotaQso
@@ -36,6 +40,15 @@ object PotaSessionManager {
 
     private val _activationQsos = MutableStateFlow<List<PotaQso>>(emptyList())
     val activationQsos: StateFlow<List<PotaQso>> = _activationQsos.asStateFlow()
+
+    // One-shot "an activation just ended" events carrying the final activation
+    // (with its qso_count). No replay: only a listener that's running when the
+    // operator ends the activation (the in-app rating prompt) should react.
+    private val _endedActivations = MutableSharedFlow<PotaActivation>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val endedActivations: SharedFlow<PotaActivation> = _endedActivations.asSharedFlow()
 
     @Volatile
     private var savedModifier: String = ""
@@ -86,26 +99,58 @@ object PotaSessionManager {
             log("end ignored — no activation running")
             return
         }
-        PotaActivationDao.endActivation(active.id)
+        // One timestamp for the DB row and the published copy, so listeners get
+        // exactly what was persisted: an ended activation, not the still-active
+        // in-memory object.
+        val endedAtMs = System.currentTimeMillis()
+        PotaActivationDao.endActivation(active.id, endedAtMs)
         GeneralVariables.toModifier = savedModifier
         savedModifier = ""
         log("end ref=${active.parkRef} id=${active.id} qsoCount=${active.qsoCount} restoredModifier='${GeneralVariables.toModifier}'")
         _currentActivation.value = null
         _activationQsos.value = emptyList()
+        notifyActivationEnded(endedActivation(active, endedAtMs))
+    }
+
+    /** [active] as [end] persisted it: the same row stamped with [endedAtMs], so it reads as ended. */
+    internal fun endedActivation(active: PotaActivation, endedAtMs: Long): PotaActivation =
+        active.copy(endedAtMs = endedAtMs)
+
+    /** Publish [ended] on [endedActivations]. Split out of [end] so it's testable without the DB. */
+    internal fun notifyActivationEnded(ended: PotaActivation) {
+        _endedActivations.tryEmit(ended)
     }
 
     /**
-     * Called from the QSO save path (DatabaseOpr) right after it bumps
-     * pota_activation.qso_count in SQLite, so the in-memory activation that the
-     * phone and Android Auto UIs observe stays in step with the DB without a
-     * blocking reload on the save path.
+     * Called from the QSO save path (DatabaseOpr) right after it recounts
+     * pota_activation.qso_count in SQLite, carrying the refreshed dupe-free count,
+     * so the in-memory activation that the phone and Android Auto UIs observe
+     * stays in step with the DB without a blocking reload on the save path.
      */
     @JvmStatic
     @Synchronized
-    fun onQsoLogged(mySigInfo: String?) {
-        val active = _currentActivation.value ?: return
-        if (!qsoCountsForActivation(active.parkRef, mySigInfo)) return
-        _currentActivation.value = active.copy(qsoCount = active.qsoCount + 1)
+    fun onQsoLogged(mySigInfo: String?, uniqueQsoCount: Int) {
+        activationWithLoggedQso(_currentActivation.value, mySigInfo, uniqueQsoCount)?.let {
+            _currentActivation.value = it
+        }
+    }
+
+    /**
+     * Pure decision behind [onQsoLogged]: the replacement activation carrying the
+     * DB's recounted unique-contact total, or null when nothing should change (no
+     * activation running, the QSO belongs to a different park ref, or the count is
+     * invalid). The in-memory count must move exactly to the DB's value — it is a
+     * dupe-free COUNT(DISTINCT), so it can stay flat after a logged QSO or even
+     * shrink relative to the raw QSO tally.
+     */
+    internal fun activationWithLoggedQso(
+        active: PotaActivation?,
+        mySigInfo: String?,
+        uniqueQsoCount: Int,
+    ): PotaActivation? {
+        if (active == null || uniqueQsoCount < 0) return null
+        if (!qsoCountsForActivation(active.parkRef, mySigInfo)) return null
+        return active.copy(qsoCount = uniqueQsoCount)
     }
 
     /** Pull the latest qso_count and contacts from the DB so the UI stays accurate. */

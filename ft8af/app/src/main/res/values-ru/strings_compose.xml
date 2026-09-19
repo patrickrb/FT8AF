@@ -194,7 +194,7 @@
     <string name="log_sync_title_no_services">СЛУЖБЫ НЕ ВКЛЮЧЕНЫ</string>
     <string name="log_sync_title_syncing">СИНХРОНИЗАЦИЯ…</string>
     <string name="log_sync_title_complete">СИНХРОНИЗАЦИЯ ЗАВЕРШЕНА</string>
-    <string name="log_sync_enable_services">Включите Cloudlog/Wavelog/Nextlog или QRZ в настройках и повторите.</string>
+    <string name="log_sync_enable_services">Включите Cloudlog/Wavelog/Nextlog, QRZ или World Radio League в настройках и повторите.</string>
     <string name="log_sync_progress_count">%1$d из %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: принято %1$d</string>
     <string name="log_sync_qrz_accepted">QRZ: принято %1$d</string>
@@ -243,6 +243,7 @@
     <string name="pota_self_spot_failed">Самоспот не удался — проверьте журнал</string>
     <string name="pota_active_park">АКТИВНА — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">дубль</string>
     <string name="pota_contacts_map">Карта контактов</string>
     <string name="pota_back">Назад</string>
     <string name="pota_valid_activation">зачётная активация</string>
@@ -442,8 +443,11 @@
     <string name="bug_report_send_email">Отправить письмо</string>
     <string name="bug_report_no_email_app">Не найдено приложение для отправки отчёта по почте</string>
     <string name="bug_report_open_github">Открыть issue на GitHub</string>
-    <string name="settings_debug">Отладка</string>
     <string name="settings_debug_desc">Просмотр / отправка debug.log</string>
+    <string name="settings_share_logs">Поделиться логами</string>
+    <string name="settings_share_logs_desc">Отправить debug.log по почте, в Discord, Drive…</string>
+    <string name="settings_view_logs">Просмотр логов</string>
+    <string name="settings_share_logs_empty">Лог пока пуст</string>
     <string name="settings_about_body">Версия %1$s (сборка %2$s)\nДата сборки %3$s\n\nFT8 — это просто.\n\nАвтономное приложение FT8-трансивера для Android. Управление трансивером по USB, Bluetooth и сети с автопоследовательностью и журналированием.</string>
     <string name="settings_website">Веб-сайт</string>
     <string name="settings_community">Сообщество</string>
@@ -462,8 +466,6 @@
     <string name="settings_conn_bluetooth">Bluetooth</string>
     <string name="settings_conn_network">Сеть</string>
     <string name="settings_no_usb_serial">USB-устройства последовательного порта не обнаружены. Подключите USB-кабель к трансиверу и повторите.</string>
-    <string name="settings_debug_mode_enabled">Режим отладки включён</string>
-    <string name="settings_debug_mode_disabled">Режим отладки выключен</string>
     <string name="settings_edit_operator_identity">Изменить данные оператора</string>
     <string name="settings_callsign">Позывной</string>
     <string name="settings_callsign_hint">напр. W1AW</string>
@@ -578,4 +580,15 @@
     <string name="settings_bin_agg_max">Максимум</string>
     <string name="settings_bin_agg_avg">Среднее</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: принято %1$d</string>
+    <string name="settings_wrl_desc">Автозагрузка QSO в журнал World Radio League (нужен ключ Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Создайте ключ в World Radio League в разделе Integrations → Developer API. Один ключ действует для всей учётной записи.</string>
+    <string name="settings_wrl_logbook">Журнал</string>
+    <string name="settings_wrl_logbook_default">Журнал по умолчанию</string>
+    <string name="settings_wrl_loading_logbooks">Загрузка журналов…</string>
+    <string name="settings_wrl_no_logbooks">В вашей учётной записи World Radio League пока нет журналов.</string>
+    <string name="settings_wrl_create_logbook">Создать журнал «%1$s»</string>
+    <string name="settings_wrl_creating_logbook">Создание журнала…</string>
 </resources>

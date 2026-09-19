@@ -6,7 +6,6 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.SystemClock
-import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.database.DatabaseOpr
 import com.k1af.ft8af.log.ThirdPartyService
 import java.io.File
@@ -66,11 +65,13 @@ internal class QsoSyncGate(private val minIntervalMs: Long = 15_000L) {
  * (no Android types) so it is unit-testable.
  */
 internal fun summarize(result: ThirdPartyService.SyncResult): String {
-    val sb = StringBuilder(
-        "cloudlog=${result.cloudlogOk} qrz=${result.qrzOk} of ${result.total}"
-    )
+    val sb = StringBuilder("cloudlog=${result.cloudlogOk} qrz=${result.qrzOk}")
+    // Only when WRL took part, so the line is unchanged for Cloudlog/QRZ-only users.
+    if (result.wrlAttempted) sb.append(" wrl=").append(result.wrlOk)
+    sb.append(" of ").append(result.total)
     result.cloudlogError?.takeIf { it.isNotEmpty() }?.let { sb.append(" cloudlogError=").append(it) }
     result.qrzError?.takeIf { it.isNotEmpty() }?.let { sb.append(" qrzError=").append(it) }
+    result.wrlError?.takeIf { it.isNotEmpty() }?.let { sb.append(" wrlError=").append(it) }
     return sb.toString()
 }
 
@@ -82,7 +83,8 @@ internal fun summarize(result: ThirdPartyService.SyncResult): String {
  * the manual Sync button.
  *
  * Thin Android wrapper: all the start/skip decisions live in the testable [QsoSyncGate].
- * Scoped to QRZ + Cloudlog (the services with per-QSO sync flags). POTA is excluded.
+ * Scoped to Cloudlog, QRZ and World Radio League (the services with per-QSO sync flags).
+ * POTA is excluded.
  */
 class QsoAutoSync(private val appContext: Context) {
 
@@ -144,7 +146,7 @@ class QsoAutoSync(private val appContext: Context) {
         // which would otherwise wedge the gate open or shut. (Only used for the
         // interval; the gate compares deltas, never wall-clock dates.)
         val now = SystemClock.elapsedRealtime()
-        val anyEnabled = GeneralVariables.enableCloudlog || GeneralVariables.enableQRZ
+        val anyEnabled = ThirdPartyService.anyUploadServiceEnabled()
         if (!gate.tryStart(now, anyEnabled)) {
             log("skip ($reason): enabled=$anyEnabled")
             return

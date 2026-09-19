@@ -2,7 +2,13 @@ package radio.ks3ckc.ft8af.pota
 
 import com.k1af.ft8af.log.QSLRecord
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Test
+import radio.ks3ckc.ft8af.pota.model.PotaActivation
 
 /**
  * Unit coverage for the Android-free surface of [PotaSessionManager].
@@ -85,16 +91,100 @@ class PotaSessionManagerTest {
         assertThat(r.sigInfo).isEqualTo("")
     }
 
+    // --- endedActivations ---------------------------------------------------
+
+    private val endedFixture = PotaActivation(
+        id = 7L,
+        parkRef = "K-1234",
+        operator = "W1AW",
+        startedAtMs = 0L,
+        endedAtMs = 1_000L,
+        qsoCount = 12,
+        notes = null,
+    )
+
+    @Test
+    fun notifyActivationEnded_publishesTheEndedActivationToListeners() = runBlocking {
+        // UNDISPATCHED subscribes before the emit below: the flow has no replay,
+        // so only a listener already collecting receives the event.
+        val received = async(start = CoroutineStart.UNDISPATCHED) {
+            PotaSessionManager.endedActivations.first()
+        }
+
+        PotaSessionManager.notifyActivationEnded(endedFixture)
+
+        assertThat(withTimeout(1_000) { received.await() }).isEqualTo(endedFixture)
+    }
+
+    @Test
+    fun notifyActivationEnded_withNoListener_neitherThrowsNorBlocks() {
+        PotaSessionManager.notifyActivationEnded(endedFixture)
+        PotaSessionManager.notifyActivationEnded(endedFixture.copy(id = 8L))
+    }
+
+    @Test
+    fun endedActivation_stampsTheEndTimeSoItNoLongerReadsAsActive() {
+        // end() publishes this copy (built with the same timestamp it writes to
+        // ended_at) instead of the in-memory object, whose endedAtMs is still null.
+        val running = endedFixture.copy(endedAtMs = null)
+        assertThat(running.isActive).isTrue()
+
+        val ended = PotaSessionManager.endedActivation(running, 5_000L)
+
+        assertThat(ended.endedAtMs).isEqualTo(5_000L)
+        assertThat(ended.isActive).isFalse()
+        assertThat(ended.copy(endedAtMs = null)).isEqualTo(running)
+    }
+
     // --- onQsoLogged / qsoCountsForActivation ------------------------------
 
     @Test
     fun onQsoLogged_whenIdle_isANoOp() {
         // No activation running (the only state reachable without SQLite):
         // must neither crash nor conjure an activation.
-        PotaSessionManager.onQsoLogged("K-1234")
+        PotaSessionManager.onQsoLogged("K-1234", 1)
 
         assertThat(PotaSessionManager.currentActivation.value).isNull()
     }
+
+    @Test
+    fun activationWithLoggedQso_adoptsTheDbUniqueCount() {
+        val active = activation(parkRef = "K-1234", qsoCount = 4)
+
+        // The DB recount is dupe-free, so it can stay flat (a dupe was logged)…
+        assertThat(PotaSessionManager.activationWithLoggedQso(active, "K-1234", 4)?.qsoCount)
+            .isEqualTo(4)
+        // …move forward (a new unique contact)…
+        assertThat(PotaSessionManager.activationWithLoggedQso(active, "K-1234", 5)?.qsoCount)
+            .isEqualTo(5)
+        // …or even shrink below the in-memory value (recount healed old drift).
+        assertThat(PotaSessionManager.activationWithLoggedQso(active, "K-1234", 2)?.qsoCount)
+            .isEqualTo(2)
+    }
+
+    @Test
+    fun activationWithLoggedQso_ignoresNonMatchingOrInvalidUpdates() {
+        val active = activation(parkRef = "K-1234", qsoCount = 4)
+
+        // No activation running.
+        assertThat(PotaSessionManager.activationWithLoggedQso(null, "K-1234", 5)).isNull()
+        // QSO stamped for a different (or partial multi-park) ref.
+        assertThat(PotaSessionManager.activationWithLoggedQso(active, "K-5678", 5)).isNull()
+        assertThat(PotaSessionManager.activationWithLoggedQso(active, null, 5)).isNull()
+        // Negative means DatabaseOpr found no active row — nothing to mirror.
+        assertThat(PotaSessionManager.activationWithLoggedQso(active, "K-1234", -1)).isNull()
+    }
+
+    private fun activation(parkRef: String, qsoCount: Int) =
+        radio.ks3ckc.ft8af.pota.model.PotaActivation(
+            id = 7L,
+            parkRef = parkRef,
+            operator = "W1AW",
+            startedAtMs = 1_000L,
+            endedAtMs = null,
+            qsoCount = qsoCount,
+            notes = null,
+        )
 
     @Test
     fun qsoCountsForActivation_matchesDatabaseBumpPredicate() {

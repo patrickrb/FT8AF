@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -24,9 +23,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -152,40 +148,27 @@ fun BandModeSheet(
                 .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
         ) {
             // ---- Header ----
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
+            // No close button here: FT8AFBottomSheet already draws the shared
+            // close affordance in its drag-handle row (issue #782), and this
+            // sheet briefly showed two stacked X buttons because of a leftover
+            // header copy.
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = stringResource(R.string.band_sheet_title),
+                    color = TextPrimary,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = InterFamily,
+                )
+                if (catConnected) {
                     Text(
-                        text = stringResource(R.string.band_sheet_title),
-                        color = TextPrimary,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        text = stringResource(R.string.band_sheet_subtitle),
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal,
                         fontFamily = InterFamily,
+                        modifier = Modifier.padding(top = 1.dp),
                     )
-                    if (catConnected) {
-                        Text(
-                            text = stringResource(R.string.band_sheet_subtitle),
-                            color = TextMuted,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Normal,
-                            fontFamily = InterFamily,
-                            modifier = Modifier.padding(top = 1.dp),
-                        )
-                    }
-                }
-                val closeLabel = stringResource(R.string.band_sheet_close)
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(BgSurface3)
-                        .clickable(onClickLabel = closeLabel) { onDismiss() }
-                        .semantics { role = Role.Button; contentDescription = closeLabel },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    FT8AFIcons.Close(size = 16.dp, color = TextMuted, strokeWidth = 2f)
                 }
             }
 

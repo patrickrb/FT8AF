@@ -194,7 +194,7 @@
     <string name="log_sync_title_no_services">未启用任何服务</string>
     <string name="log_sync_title_syncing">正在同步…</string>
     <string name="log_sync_title_complete">同步完成</string>
-    <string name="log_sync_enable_services">请在设置中启用 Cloudlog/Wavelog/Nextlog 或 QRZ，然后重试。</string>
+    <string name="log_sync_enable_services">请在设置中启用 Cloudlog/Wavelog/Nextlog、QRZ 或 World Radio League，然后重试。</string>
     <string name="log_sync_progress_count">%2$d 个 QSO 中的第 %1$d 个</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog：已接受 %1$d 个</string>
     <string name="log_sync_qrz_accepted">QRZ：已接受 %1$d 个</string>
@@ -231,6 +231,7 @@
     <string name="pota_self_spot_failed">自助点位发布失败 — 请检查日志</string>
     <string name="pota_active_park">激活中 — %1$s</string>
     <string name="pota_qsos">QSO</string>
+    <string name="pota_dupe">重复</string>
     <string name="pota_contacts_map">通联地图</string>
     <string name="pota_back">返回</string>
     <string name="pota_valid_activation">有效激活</string>
@@ -430,8 +431,11 @@
     <string name="bug_report_send_email">发送邮件</string>
     <string name="bug_report_no_email_app">未找到可发送报告的邮件应用</string>
     <string name="bug_report_open_github">打开 GitHub issue</string>
-    <string name="settings_debug">调试</string>
     <string name="settings_debug_desc">查看 / 分享 debug.log</string>
+    <string name="settings_share_logs">分享日志</string>
+    <string name="settings_share_logs_desc">通过邮件、Discord、云盘等发送 debug.log</string>
+    <string name="settings_view_logs">查看日志</string>
+    <string name="settings_share_logs_empty">尚无日志记录</string>
     <string name="settings_about_body">版本 %1$s（构建 %2$s）\n构建日期 %3$s\n\nFT8，轻松上手。\n\n一款用于 Android 的独立 FT8 收发应用。支持 USB、Bluetooth 及网络电台控制，具备自动流程与日志记录功能。</string>
     <string name="settings_website">网站</string>
     <string name="settings_community">社区</string>
@@ -450,8 +454,6 @@
     <string name="settings_conn_bluetooth">Bluetooth</string>
     <string name="settings_conn_network">网络</string>
     <string name="settings_no_usb_serial">未检测到 USB 串口设备。请将 USB 线缆连接至您的电台后重试。</string>
-    <string name="settings_debug_mode_enabled">调试模式已启用</string>
-    <string name="settings_debug_mode_disabled">调试模式已禁用</string>
     <string name="settings_edit_operator_identity">编辑操作员身份</string>
     <string name="settings_callsign">呼号</string>
     <string name="settings_callsign_hint">例如 W1AW</string>
@@ -566,4 +568,15 @@
     <string name="settings_bin_agg_max">最大值</string>
     <string name="settings_bin_agg_avg">平均值</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League：已接受 %1$d 个</string>
+    <string name="settings_wrl_desc">自动上传 QSO 到您的 World Radio League 日志（需要 Developer API 密钥）</string>
+    <string name="settings_wrl_dialog_desc">在 World Radio League 的 Integrations → Developer API 中生成密钥。一个密钥适用于整个账户。</string>
+    <string name="settings_wrl_logbook">日志</string>
+    <string name="settings_wrl_logbook_default">默认日志</string>
+    <string name="settings_wrl_loading_logbooks">正在加载日志…</string>
+    <string name="settings_wrl_no_logbooks">您的 World Radio League 账户还没有日志。</string>
+    <string name="settings_wrl_create_logbook">创建“%1$s”日志</string>
+    <string name="settings_wrl_creating_logbook">正在创建日志…</string>
 </resources>

@@ -92,6 +92,7 @@ import com.k1af.ft8af.log.QSLCallsignRecord;
 import com.k1af.ft8af.log.QSLRecord;
 import com.k1af.ft8af.log.SWLQsoList;
 import com.k1af.ft8af.log.ThirdPartyService;
+import com.k1af.ft8af.log.WrlApi;
 import com.k1af.ft8af.rigs.BaseRig;
 import com.k1af.ft8af.rigs.BaseRigOperation;
 import com.k1af.ft8af.rigs.CatConnectionState;
@@ -99,6 +100,7 @@ import com.k1af.ft8af.rigs.CivAddressConfig;
 import com.k1af.ft8af.rigs.RetunePolicy;
 import com.k1af.ft8af.rigs.RigDialTarget;
 import com.k1af.ft8af.rigs.CatLiveness;
+import com.k1af.ft8af.rigs.CatLivenessTracker;
 import com.k1af.ft8af.rigs.DiscoveryTX500Rig;
 import com.k1af.ft8af.rigs.ElecraftRig;
 import com.k1af.ft8af.rigs.Flex6000Rig;
@@ -293,8 +295,10 @@ public class MainViewModel extends ViewModel {
             //disconnected from rig. A failed connect fires onRunError() then
             //onDisconnected(); afterDisconnect() preserves ERROR so the chip can
             //stay red until the next connect attempt (onConnecting) or a success.
-            stopCatLivenessWatchdog();
-            setCatConnectionState(CatConnectionState.afterDisconnect(catConnectionState));
+            // State write is applied atomically with the tracker stop, so a reply racing
+            // the disconnect can't heal the chip back to CONNECTED afterwards.
+            stopCatLivenessWatchdog(() -> setCatConnectionState(
+                    CatConnectionState.afterDisconnect(catConnectionState)));
             ToastMessage.show(getStringFromResource(R.string.disconnect_rig));
         }
 
@@ -413,9 +417,9 @@ public class MainViewModel extends ViewModel {
 
         @Override
         public void onRunError(String message) {
-            //rig communication error
-            stopCatLivenessWatchdog();
-            setCatConnectionState(CatConnectionState.ERROR);
+            //rig communication error. ERROR is written atomically with the tracker stop:
+            //a reply parsed while the connector still reports connected can't overwrite it.
+            stopCatLivenessWatchdog(() -> setCatConnectionState(CatConnectionState.ERROR));
             ToastMessage.show(String.format(getStringFromResource(R.string.radio_communication_error)
                     , message));
         }
@@ -430,23 +434,29 @@ public class MainViewModel extends ViewModel {
     // that doesn't echo frequency reads is never falsely marked dead).
     private static final long CAT_LIVENESS_TICK_MS = 3000;
     private Timer catLivenessTimer;
-    private volatile long lastRigResponseMs = 0;
-    private volatile boolean sawRigResponseSinceConnect = false;
-    // Transmit state observed on the previous tick, used to detect the TX->RX edge so we can
-    // re-arm lastRigResponseMs (which freezes during TX) before judging staleness.
-    private volatile boolean wasTransmittingLastTick = false;
+    // Arm/trip/recover state lives in the tracker (pure, unit-tested). It is armed ONLY
+    // by replies parsed from the rig (BaseRig.setFreq -> onRigResponded); the app's own
+    // dial pushes go through BaseRig.setCommandedFreq and never count. A trip is not
+    // terminal: probing continues and the next reply flips the chip back to CONNECTED.
+    private final CatLivenessTracker catLiveness =
+            new CatLivenessTracker(CatLiveness.DEFAULT_TIMEOUT_MS);
 
     /** Record that the rig just demonstrably responded (called from onRigResponded). */
     private void markRigResponded() {
-        lastRigResponseMs = System.currentTimeMillis();
-        sawRigResponseSinceConnect = true;
+        // The rig answered after the watchdog had declared it dead: heal the chip. The
+        // CONNECTED write happens under the tracker's monitor, atomic with clearing the
+        // trip. Only the watchdog's own ERROR is undone here: a connector I/O error stops
+        // the tracker (under the same monitor) before writing ERROR, so this can't mask a
+        // real link loss.
+        catLiveness.onResponse(System.currentTimeMillis(), this::isRigConnected, () -> {
+            fileLog("CAT liveness: rig answered again — chip back to CONNECTED");
+            setCatConnectionState(CatConnectionState.CONNECTED);
+        });
     }
 
     private synchronized void startCatLivenessWatchdog() {
         stopCatLivenessWatchdog();
-        lastRigResponseMs = System.currentTimeMillis();
-        sawRigResponseSinceConnect = false;
-        wasTransmittingLastTick = false;
+        catLiveness.start(System.currentTimeMillis());
         catLivenessTimer = new Timer("cat-liveness");
         catLivenessTimer.schedule(new TimerTask() {
             @Override
@@ -457,6 +467,14 @@ public class MainViewModel extends ViewModel {
     }
 
     private synchronized void stopCatLivenessWatchdog() {
+        stopCatLivenessWatchdog(null);
+    }
+
+    /**
+     * Stop the watchdog, applying {@code then} (a chip-state write) atomically with the
+     * tracker stop — see {@link CatLivenessTracker#stop(CatLivenessTracker.Transition)}.
+     */
+    private synchronized void stopCatLivenessWatchdog(CatLivenessTracker.Transition then) {
         if (catLivenessTimer != null) {
             catLivenessTimer.cancel();
             catLivenessTimer.purge();
@@ -466,7 +484,7 @@ public class MainViewModel extends ViewModel {
         // or teardown) so hasRigRespondedToCat() can't report a stale true after the rig
         // is unplugged — the USB Diagnostics page would otherwise show "CAT Response: pass"
         // alongside "Device Found: fail". A fresh connect re-arms it in start...().
-        sawRigResponseSinceConnect = false;
+        catLiveness.stop(then);
     }
 
     /** One watchdog tick: probe the rig, then declare it dead if it's gone quiet too long. */
@@ -477,24 +495,24 @@ public class MainViewModel extends ViewModel {
             long nowMs = System.currentTimeMillis();
             boolean connected = isRigConnected();
             boolean transmitting = ft8TransmitSignal != null && ft8TransmitSignal.isTransmitting();
+            // A trip writes ERROR under the tracker's monitor, and BEFORE this tick's probe
+            // goes out: a fast reply to that probe then always finds the trip applied and
+            // heals it, instead of healing first and being overwritten by a late ERROR
+            // (which left the chip red with the tracker untripped, unrecoverable).
+            CatLivenessTracker.Tick tick = catLiveness.tick(connected, transmitting, nowMs,
+                    () -> setCatConnectionState(CatConnectionState.ERROR));
             // Actively probe (a frequency read); the reply lands in onRigResponded ->
             // markRigResponded() (onFreqChanged only fires on a change, so a stable dial
             // can't be used). On a dead-but-powered BT module the write succeeds but no
-            // reply comes, so the quiet timer below eventually trips.
-            if (CatLiveness.shouldProbe(connected, transmitting) && baseRig != null) {
+            // reply comes, so the quiet timer eventually trips. Probing continues while
+            // tripped so the next reply can heal the chip.
+            if (tick.probe && baseRig != null) {
                 baseRig.readFreqFromRig();
             }
-            // Transmit freezes lastRigResponseMs (we don't probe while keyed). On the TX->RX
-            // edge, restart the quiet window from now so the just-sent probe has time to reply
-            // before we judge staleness — otherwise a >8s FT8 over falsely trips ERROR.
-            if (CatLiveness.shouldRearmAfterTx(wasTransmittingLastTick, transmitting)) {
-                lastRigResponseMs = nowMs;
-            }
-            wasTransmittingLastTick = transmitting;
-            if (CatLiveness.isRigStale(connected, transmitting, sawRigResponseSinceConnect,
-                    nowMs, lastRigResponseMs, CatLiveness.DEFAULT_TIMEOUT_MS)) {
-                stopCatLivenessWatchdog();
-                setCatConnectionState(CatConnectionState.ERROR);
+            if (tick.event == CatLivenessTracker.Event.TRIPPED) {
+                // Watchdog stays running (see markRigResponded for the recovery path).
+                fileLog("CAT liveness: no reply to freq reads for " + tick.quietMs
+                        + "ms (transport still open) — chip ERROR until the rig answers");
                 ToastMessage.show(String.format(
                         getStringFromResource(R.string.radio_communication_error),
                         getStringFromResource(R.string.disconnect_rig)));
@@ -587,6 +605,15 @@ public class MainViewModel extends ViewModel {
         //get configuration info.
         databaseOpr = DatabaseOpr.getInstance(GeneralVariables.getMainContext()
                 , "data.db");
+        // World Radio League: when an upload finds no saved logbook and the account has
+        // exactly one, keep that choice. Uploads run on background threads, so write
+        // synchronously rather than through the AsyncTask-based writeConfig.
+        WrlApi.setLogbookIdSaver(logbookId -> {
+            if (databaseOpr != null) {
+                databaseOpr.writeConfigSync(
+                        java.util.Collections.singletonMap("wrlLogbookId", logbookId));
+            }
+        });
         mutableIsDecoding.postValue(false);//decode state
         //create recording object
         hamRecorder = new HamRecorder(null);
@@ -1059,7 +1086,34 @@ public class MainViewModel extends ViewModel {
         }, new OnTransmitSuccess() {//when QSO is successful
             @Override
             public void doAfterTransmit(QSLRecord qslRecord) {
-                databaseOpr.addQSL_Callsign(qslRecord);//two operations: record callsign and QSL
+                // Upload to third-party services only once the QSLTable row exists:
+                // markQsoSynced UPDATEs that row, so an upload finishing before the async
+                // insert lands would mark nothing, and the next catch-up sync would send the
+                // contact again.
+                databaseOpr.addQSL_Callsign(qslRecord, () -> {
+                    // record to third-party service; may take some time
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            boolean cloudlogOk = false;
+                            boolean qrzOk = false;
+                            boolean wrlOk = false;
+                            if (GeneralVariables.enableCloudlog){
+                                cloudlogOk = ThirdPartyService.UploadToCloudLog(qslRecord);
+                            }
+                            if (GeneralVariables.enableQRZ){
+                                qrzOk = ThirdPartyService.UploadToQRZ(qslRecord);
+                            }
+                            if (GeneralVariables.enableWRL){
+                                wrlOk = ThirdPartyService.UploadToWrl(qslRecord);
+                            }
+                            if (databaseOpr != null && (cloudlogOk || qrzOk || wrlOk)) {
+                                ThirdPartyService.markQsoSynced(
+                                        databaseOpr.getDb(), qslRecord, cloudlogOk, qrzOk, wrlOk);
+                            }
+                        }
+                    }).start();
+                });
 
                 // QSO-complete alert (opt-in). Fires once per logged contact.
                 dxAlertNotifier.notifyQsoComplete(qslRecord);
@@ -1067,24 +1121,6 @@ public class MainViewModel extends ViewModel {
                 // broadcast the logged QSO over the WSJT-X UDP interface
                 broadcastWsjtxQso(qslRecord);
 
-                // record to third-party service; may take some time
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        boolean cloudlogOk = false;
-                        boolean qrzOk = false;
-                        if (GeneralVariables.enableCloudlog){
-                            cloudlogOk = ThirdPartyService.UploadToCloudLog(qslRecord);
-                        }
-                        if (GeneralVariables.enableQRZ){
-                            qrzOk = ThirdPartyService.UploadToQRZ(qslRecord);
-                        }
-                        if (databaseOpr != null && (cloudlogOk || qrzOk)) {
-                            ThirdPartyService.markQsoSynced(
-                                    databaseOpr.getDb(), qslRecord, cloudlogOk, qrzOk);
-                        }
-                    }
-                }).start();
 
                 if (qslRecord.getToCallsign() != null) {//add successfully contacted zone to zone list
                     GeneralVariables.callsignDatabase.getCallsignInformation(qslRecord.getToCallsign()
@@ -1851,7 +1887,8 @@ public class MainViewModel extends ViewModel {
                         GeneralVariables.commandedBandHz, GeneralVariables.band);
                 fileLog("setOperationBand: setting freq=" + sendHz
                         + " (rig.getFreq=" + baseRig.getFreq() + ")");
-                baseRig.setFreq(sendHz);//set frequency
+                // Commanded, not reported: must NOT arm the CAT liveness watchdog (#781).
+                baseRig.setCommandedFreq(sendHz);//set frequency
                 baseRig.setFreqToRig();
                 // A pending operator selection has now actually been dispatched (the
                 // connected-gate above passed): start the confirm grace, after which a
@@ -2616,7 +2653,34 @@ public class MainViewModel extends ViewModel {
      * @return true once a valid CAT reply has been seen on the live connection
      */
     public boolean hasRigRespondedToCat() {
-        return sawRigResponseSinceConnect;
+        return catLiveness.hasSeenResponse();
+    }
+
+    /**
+     * The USB serial port the current rig connector drives, or null when the rig
+     * is not on a USB cable (Bluetooth, network, nothing). Backs the USB
+     * Diagnostics "CAT Port" row — on a dual-UART chip that row is what tells
+     * the operator they are on the Standard port when their rig wants Enhanced
+     * (issue #817).
+     */
+    public CableSerialPort.SerialPort connectedCableSerialPort() {
+        if (baseRig == null) return null;
+        BaseRigConnector connector = baseRig.getConnector();
+        if (connector instanceof CableConnector) {
+            return ((CableConnector) connector).getSerialPort();
+        }
+        return null;
+    }
+
+    /**
+     * Whether a CAT reply can be expected on the current link at all. False in the
+     * FT-710 cable mode, where the read loop is deliberately never started (see
+     * {@link CableSerialPort#isFt710WriteOnlyCatMode}) — so "CAT Response: fail"
+     * is the designed state there, not a fault.
+     */
+    public boolean isCatReadExpected() {
+        return !CableSerialPort.isFt710WriteOnlyCatMode(GeneralVariables.instructionSet,
+                GeneralVariables.connectMode, GeneralVariables.controlMode);
     }
 
     /**

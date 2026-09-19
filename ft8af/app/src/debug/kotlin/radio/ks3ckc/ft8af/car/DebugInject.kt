@@ -49,7 +49,8 @@ import kotlin.math.sin
  * `mycall` sets the operator callsign for the session so the partner's reply
  * renders as TO YOU; `psk` adds N "who heard me" rings; `qsos`
  * adds N demo logbook entries; `wf` streams a waterfall with N tone traces (be on
- * the Waterfall tab to see it fill). All extras are optional;
+ * the Waterfall tab to see it fill); `complete 1` posts the QSO-logged signal
+ * (celebration + rating-prompt check). All extras are optional;
  * [parseDebugInject] fills sensible defaults.
  */
 class DebugInjectReceiver : BroadcastReceiver() {
@@ -259,6 +260,13 @@ internal fun applyDebugInject(spec: DebugInjectSpec, vm: MainViewModel) {
             PotaSessionManager.stampQso(record, null)
             vm.databaseOpr.addQSL_Callsign(record)
         }
+    }
+
+    // Fire the same one-shot "QSO logged" signal the sequencer posts after a real
+    // RR73/73, so the celebration and the in-app rating prompt can be exercised
+    // without a radio (`complete` extra).
+    if (spec.qsoComplete) {
+        vm.ft8TransmitSignal.mutableQsoCompletedAt.postValue(System.currentTimeMillis())
     }
 
     // Setting the target triggers the car screen's observer → re-render.
@@ -475,6 +483,7 @@ internal data class DebugInjectSpec(
     val qsos: Int,
     val waterfall: Int,
     val myCall: String? = null,
+    val qsoComplete: Boolean = false,
 )
 
 /**
@@ -497,6 +506,7 @@ internal fun parseDebugInject(get: (String) -> String?): DebugInjectSpec {
         qsos = str("qsos")?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
         waterfall = str("wf")?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
         myCall = str("mycall")?.uppercase(),
+        qsoComplete = str("complete")?.lowercase() in setOf("1", "true"),
     )
 }
 

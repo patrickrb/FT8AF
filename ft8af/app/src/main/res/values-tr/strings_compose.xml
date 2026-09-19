@@ -226,7 +226,7 @@
     <string name="log_sync_title_no_services">ETKİN SERVİS YOK</string>
     <string name="log_sync_title_syncing">EŞİTLENİYOR…</string>
     <string name="log_sync_title_complete">EŞİTLEME TAMAMLANDI</string>
-    <string name="log_sync_enable_services">Ayarlar\'da Cloudlog/Wavelog/Nextlog veya QRZ\'yi etkinleştirip yeniden deneyin.</string>
+    <string name="log_sync_enable_services">Ayarlar\'da Cloudlog/Wavelog/Nextlog, QRZ veya World Radio League\'i etkinleştirip yeniden deneyin.</string>
     <string name="log_sync_progress_count">%2$d QSO\'dan %1$d</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d kabul edildi</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d kabul edildi</string>
@@ -267,6 +267,7 @@
     <string name="pota_self_spot_failed">Kendi spotu başarısız — günlüğe bakın</string>
     <string name="pota_active_park">AKTİF — %1$s</string>
     <string name="pota_qsos">QSO</string>
+    <string name="pota_dupe">mükerrer</string>
     <string name="pota_contacts_map">Bağlantı haritası</string>
     <string name="pota_back">Geri</string>
     <string name="pota_valid_activation">geçerli aktivasyon</string>
@@ -500,8 +501,11 @@
     <string name="bug_report_send_email">E-posta gönder</string>
     <string name="bug_report_no_email_app">Raporu göndermek için e-posta uygulaması bulunamadı</string>
     <string name="bug_report_open_github">GitHub sorunu aç</string>
-    <string name="settings_debug">Hata Ayıklama</string>
     <string name="settings_debug_desc">debug.log\'u görüntüle / paylaş</string>
+    <string name="settings_share_logs">Günlükleri paylaş</string>
+    <string name="settings_share_logs_desc">debug.log\'u e-posta, Discord, Drive… ile gönder</string>
+    <string name="settings_view_logs">Günlükleri görüntüle</string>
+    <string name="settings_share_logs_empty">Henüz kayıtlı günlük yok</string>
     <string name="settings_about_body">Sürüm %1$s (derleme %2$s)\nDerleme tarihi %3$s\n\nFT8, kolaylaştırıldı.\n\nAndroid için bağımsız bir FT8 alıcı-verici uygulaması. Otomatik sıralama ve günlükleme ile USB, Bluetooth ve ağ üzerinden cihaz kontrolü.</string>
     <string name="settings_website">Web Sitesi</string>
     <string name="settings_community">Topluluk</string>
@@ -521,8 +525,6 @@
     <string name="settings_conn_network">Ağ</string>
     <string name="settings_no_usb_serial">USB seri cihaz algılanmadı. Lütfen radyonuza bir USB kablo bağlayıp yeniden deneyin.</string>
     <string name="settings_no_bluetooth_devices">Eşleştirilmiş Bluetooth cihazı bulunamadı. Önce Android Bluetooth ayarlarında bir cihaz eşleştirin.</string>
-    <string name="settings_debug_mode_enabled">Hata ayıklama modu etkin</string>
-    <string name="settings_debug_mode_disabled">Hata ayıklama modu devre dışı</string>
     <string name="settings_edit_operator_identity">Operatör Kimliğini Düzenle</string>
     <string name="settings_callsign">Çağrı İşareti</string>
     <string name="settings_callsign_hint">ör. W1AW</string>
@@ -602,4 +604,15 @@
     <string name="settings_bin_agg_max">Maksimum</string>
     <string name="settings_bin_agg_avg">Ortalama</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d kabul edildi</string>
+    <string name="settings_wrl_desc">QSO\'ları World Radio League kayıt defterinize otomatik yükle (Developer API anahtarı gerekir)</string>
+    <string name="settings_wrl_dialog_desc">World Radio League\'de Integrations → Developer API altında bir anahtar oluşturun. Tek anahtar tüm hesabınızı kapsar.</string>
+    <string name="settings_wrl_logbook">Kayıt defteri</string>
+    <string name="settings_wrl_logbook_default">Varsayılan kayıt defteri</string>
+    <string name="settings_wrl_loading_logbooks">Kayıt defterleri yükleniyor…</string>
+    <string name="settings_wrl_no_logbooks">World Radio League hesabınızda henüz kayıt defteri yok.</string>
+    <string name="settings_wrl_create_logbook">“%1$s” kayıt defterini oluştur</string>
+    <string name="settings_wrl_creating_logbook">Kayıt defteri oluşturuluyor…</string>
 </resources>

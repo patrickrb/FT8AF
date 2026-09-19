@@ -194,7 +194,7 @@
     <string name="log_sync_title_no_services">AUCUN SERVICE ACTIVÉ</string>
     <string name="log_sync_title_syncing">SYNCHRONISATION…</string>
     <string name="log_sync_title_complete">SYNCHRONISATION TERMINÉE</string>
-    <string name="log_sync_enable_services">Activez Cloudlog/Wavelog/Nextlog ou QRZ dans les Réglages, puis réessayez.</string>
+    <string name="log_sync_enable_services">Activez Cloudlog/Wavelog/Nextlog, QRZ ou World Radio League dans les Réglages, puis réessayez.</string>
     <string name="log_sync_progress_count">%1$d sur %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog : %1$d acceptés</string>
     <string name="log_sync_qrz_accepted">QRZ : %1$d acceptés</string>
@@ -239,6 +239,7 @@
     <string name="pota_self_spot_failed">Échec de l\'auto-spot — consultez le journal</string>
     <string name="pota_active_park">ACTIF — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">doublon</string>
     <string name="pota_contacts_map">Carte des contacts</string>
     <string name="pota_back">Retour</string>
     <string name="pota_valid_activation">activation valide</string>
@@ -438,8 +439,11 @@
     <string name="bug_report_send_email">Envoyer un e-mail</string>
     <string name="bug_report_no_email_app">Aucune application e-mail trouvée pour envoyer le rapport</string>
     <string name="bug_report_open_github">Ouvrir un ticket GitHub</string>
-    <string name="settings_debug">Débogage</string>
     <string name="settings_debug_desc">Afficher / partager debug.log</string>
+    <string name="settings_share_logs">Partager les journaux</string>
+    <string name="settings_share_logs_desc">Envoyer debug.log par e-mail, Discord, Drive…</string>
+    <string name="settings_view_logs">Afficher les journaux</string>
+    <string name="settings_share_logs_empty">Aucun journal enregistré pour le moment</string>
     <string name="settings_about_body">Version %1$s (build %2$s)\nDate de build %3$s\n\nFT8, en toute simplicité.\n\nUne application de transceiver FT8 autonome pour Android. Contrôle de rig par USB, Bluetooth et réseau avec séquençage et journalisation automatiques.</string>
     <string name="settings_website">Site web</string>
     <string name="settings_community">Communauté</string>
@@ -458,8 +462,6 @@
     <string name="settings_conn_bluetooth">Bluetooth</string>
     <string name="settings_conn_network">Réseau</string>
     <string name="settings_no_usb_serial">Aucun périphérique série USB détecté. Connectez un câble USB à votre radio et réessayez.</string>
-    <string name="settings_debug_mode_enabled">Mode débogage activé</string>
-    <string name="settings_debug_mode_disabled">Mode débogage désactivé</string>
     <string name="settings_edit_operator_identity">Modifier l\'identité de l\'opérateur</string>
     <string name="settings_callsign">Indicatif</string>
     <string name="settings_callsign_hint">ex. W1AW</string>
@@ -574,4 +576,15 @@
     <string name="settings_bin_agg_max">Maximum</string>
     <string name="settings_bin_agg_avg">Moyenne</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League : %1$d acceptés</string>
+    <string name="settings_wrl_desc">Envoyer automatiquement les QSOs vers votre carnet World Radio League (clé Developer API requise)</string>
+    <string name="settings_wrl_dialog_desc">Générez une clé dans World Radio League sous Integrations → Developer API. Une seule clé couvre tout votre compte.</string>
+    <string name="settings_wrl_logbook">Carnet de trafic</string>
+    <string name="settings_wrl_logbook_default">Carnet par défaut</string>
+    <string name="settings_wrl_loading_logbooks">Chargement des carnets…</string>
+    <string name="settings_wrl_no_logbooks">Votre compte World Radio League n\'a encore aucun carnet.</string>
+    <string name="settings_wrl_create_logbook">Créer le carnet « %1$s »</string>
+    <string name="settings_wrl_creating_logbook">Création du carnet…</string>
 </resources>

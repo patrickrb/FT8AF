@@ -55,6 +55,14 @@ class BugReportLogicTest {
     }
 
     @Test
+    fun `github url points operators at the Share logs row for debug log`() {
+        val url = buildGithubIssueUrl("hello", info())
+        val body = URLDecoder.decode(url.substringAfter("body="), "UTF-8")
+        assertThat(body).contains("Settings -> About -> Share logs")
+        assertThat(body).doesNotContain("About -> Debug")
+    }
+
+    @Test
     fun `github url percent-encodes the body so it carries no raw spaces`() {
         val url = buildGithubIssueUrl("two words\nnext line", info())
         val query = url.substringAfter("?")
@@ -64,5 +72,26 @@ class BugReportLogicTest {
         val decoded = URLDecoder.decode(bodyParam, "UTF-8")
         assertThat(decoded).contains("two words")
         assertThat(decoded).contains("next line")
+    }
+
+    @Test
+    fun `feedback body uses the feedback heading over the same device block`() {
+        val body = buildFeedbackBody("Waterfall is too dim", info())
+        assertThat(body).startsWith("What's not working:\nWaterfall is too dim")
+        assertThat(body).doesNotContain("Describe the problem:")
+        assertThat(body).contains("App version: 1.0.2 (build 104)")
+        assertThat(body).contains("Android: 15 (API 35)")
+        assertThat(body).contains("Device: Google Pixel 8")
+        assertThat(body).contains("Callsign: K1AF")
+    }
+
+    @Test
+    fun `feedback body shows a placeholder when blank`() {
+        assertThat(buildFeedbackBody(" ", info())).contains("(no feedback provided)")
+    }
+
+    @Test
+    fun `feedback title carries the app version`() {
+        assertThat(buildFeedbackTitle(info())).isEqualTo("App feedback (v1.0.2)")
     }
 }

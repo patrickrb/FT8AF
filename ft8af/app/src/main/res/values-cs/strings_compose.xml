@@ -237,7 +237,7 @@
     <string name="log_sync_title_no_services">ŽÁDNÉ POVOLENÉ SLUŽBY</string>
     <string name="log_sync_title_syncing">SYNCHRONIZACE…</string>
     <string name="log_sync_title_complete">SYNCHRONIZACE DOKONČENA</string>
-    <string name="log_sync_enable_services">Povolte Cloudlog/Wavelog/Nextlog nebo QRZ v Nastavení a zkuste to znovu.</string>
+    <string name="log_sync_enable_services">Povolte Cloudlog/Wavelog/Nextlog, QRZ nebo World Radio League v Nastavení a zkuste to znovu.</string>
     <string name="log_sync_progress_count">%1$d z %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d přijato</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d přijato</string>
@@ -286,6 +286,7 @@
     <string name="pota_self_spot_failed">Vlastní spot selhal — zkontrolujte log</string>
     <string name="pota_active_park">AKTIVNÍ — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">duplikát</string>
     <string name="pota_contacts_map">Mapa spojení</string>
     <string name="pota_back">Zpět</string>
     <string name="pota_valid_activation">platná aktivace</string>
@@ -519,8 +520,11 @@
     <string name="bug_report_send_email">Odeslat e-mail</string>
     <string name="bug_report_no_email_app">Nebyla nalezena žádná e-mailová aplikace pro odeslání hlášení</string>
     <string name="bug_report_open_github">Otevřít issue na GitHubu</string>
-    <string name="settings_debug">Ladění</string>
     <string name="settings_debug_desc">Zobrazit / sdílet debug.log</string>
+    <string name="settings_share_logs">Sdílet logy</string>
+    <string name="settings_share_logs_desc">Odeslat debug.log e-mailem, na Discord, Drive…</string>
+    <string name="settings_view_logs">Zobrazit logy</string>
+    <string name="settings_share_logs_empty">Zatím není zaznamenán žádný log</string>
     <string name="settings_about_body">Verze %1$s (build %2$s)\nDatum buildu %3$s\n\nFT8, jednoduše.\n\nSamostatná aplikace FT8 transceiveru pro Android. Řízení TRX přes USB, Bluetooth a síť s automatickým sekvencováním a logováním.</string>
     <string name="settings_website">Web</string>
     <string name="settings_community">Komunita</string>
@@ -540,8 +544,6 @@
     <string name="settings_conn_network">Síť</string>
     <string name="settings_no_usb_serial">Nebyla zjištěna žádná sériová zařízení USB. Připojte USB kabel k rádiu a zkuste to znovu.</string>
     <string name="settings_no_bluetooth_devices">Nebyla nalezena žádná spárovaná zařízení Bluetooth. Nejprve spárujte zařízení v nastavení Bluetooth systému Android.</string>
-    <string name="settings_debug_mode_enabled">Režim ladění povolen</string>
-    <string name="settings_debug_mode_disabled">Režim ladění zakázán</string>
     <string name="settings_edit_operator_identity">Upravit identitu operátora</string>
     <string name="settings_callsign">Volací značka</string>
     <string name="settings_callsign_hint">např. W1AW</string>
@@ -621,4 +623,15 @@
     <string name="settings_bin_agg_max">Maximum</string>
     <string name="settings_bin_agg_avg">Průměr</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d přijato</string>
+    <string name="settings_wrl_desc">Automaticky nahrávat QSOs do deníku World Radio League (vyžaduje klíč Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Klíč vygenerujete ve World Radio League v části Integrations → Developer API. Jeden klíč platí pro celý účet.</string>
+    <string name="settings_wrl_logbook">Deník</string>
+    <string name="settings_wrl_logbook_default">Výchozí deník</string>
+    <string name="settings_wrl_loading_logbooks">Načítání deníků…</string>
+    <string name="settings_wrl_no_logbooks">Váš účet World Radio League zatím nemá žádný deník.</string>
+    <string name="settings_wrl_create_logbook">Vytvořit deník „%1$s“</string>
+    <string name="settings_wrl_creating_logbook">Vytváření deníku…</string>
 </resources>

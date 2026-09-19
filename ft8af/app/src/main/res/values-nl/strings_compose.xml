@@ -237,7 +237,7 @@
     <string name="log_sync_title_no_services">GEEN DIENSTEN INGESCHAKELD</string>
     <string name="log_sync_title_syncing">SYNCHRONISEREN…</string>
     <string name="log_sync_title_complete">SYNCHRONISATIE VOLTOOID</string>
-    <string name="log_sync_enable_services">Schakel Cloudlog/Wavelog/Nextlog of QRZ in bij Instellingen en probeer het opnieuw.</string>
+    <string name="log_sync_enable_services">Schakel Cloudlog/Wavelog/Nextlog, QRZ of World Radio League in bij Instellingen en probeer het opnieuw.</string>
     <string name="log_sync_progress_count">%1$d van %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d geaccepteerd</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d geaccepteerd</string>
@@ -278,6 +278,7 @@
     <string name="pota_self_spot_failed">Self-spot mislukt — controleer log</string>
     <string name="pota_active_park">ACTIEF — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">duplicaat</string>
     <string name="pota_contacts_map">Contactenkaart</string>
     <string name="pota_back">Terug</string>
     <string name="pota_valid_activation">geldige activatie</string>
@@ -511,8 +512,11 @@
     <string name="bug_report_send_email">E-mail verzenden</string>
     <string name="bug_report_no_email_app">Geen e-mailapp gevonden om de melding te verzenden</string>
     <string name="bug_report_open_github">GitHub-issue openen</string>
-    <string name="settings_debug">Debug</string>
     <string name="settings_debug_desc">debug.log bekijken / delen</string>
+    <string name="settings_share_logs">Logs delen</string>
+    <string name="settings_share_logs_desc">debug.log versturen via e-mail, Discord, Drive…</string>
+    <string name="settings_view_logs">Logs bekijken</string>
+    <string name="settings_share_logs_empty">Nog geen log vastgelegd</string>
     <string name="settings_about_body">Versie %1$s (build %2$s)\nBuilddatum %3$s\n\nFT8, eenvoudig gemaakt.\n\nEen zelfstandige FT8-transceiver-app voor Android. USB-, Bluetooth- en netwerk-rigbesturing met automatische sequentie en logboek.</string>
     <string name="settings_website">Website</string>
     <string name="settings_community">Community</string>
@@ -532,8 +536,6 @@
     <string name="settings_conn_network">Netwerk</string>
     <string name="settings_no_usb_serial">Geen USB-seriële apparaten gedetecteerd. Sluit een USB-kabel aan op je radio en probeer het opnieuw.</string>
     <string name="settings_no_bluetooth_devices">Geen gekoppelde Bluetooth-apparaten gevonden. Koppel eerst een apparaat in de Bluetooth-instellingen van Android.</string>
-    <string name="settings_debug_mode_enabled">Debugmodus ingeschakeld</string>
-    <string name="settings_debug_mode_disabled">Debugmodus uitgeschakeld</string>
     <string name="settings_edit_operator_identity">Operatoridentiteit bewerken</string>
     <string name="settings_callsign">Roepnaam</string>
     <string name="settings_callsign_hint">bijv. W1AW</string>
@@ -613,4 +615,15 @@
     <string name="settings_bin_agg_max">Maximum</string>
     <string name="settings_bin_agg_avg">Gemiddelde</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d geaccepteerd</string>
+    <string name="settings_wrl_desc">QSO\'s automatisch uploaden naar je World Radio League-logboek (vereist een Developer API-sleutel)</string>
+    <string name="settings_wrl_dialog_desc">Maak een sleutel aan in World Radio League onder Integrations → Developer API. Eén sleutel geldt voor je hele account.</string>
+    <string name="settings_wrl_logbook">Logboek</string>
+    <string name="settings_wrl_logbook_default">Standaardlogboek</string>
+    <string name="settings_wrl_loading_logbooks">Logboeken laden…</string>
+    <string name="settings_wrl_no_logbooks">Je World Radio League-account heeft nog geen logboeken.</string>
+    <string name="settings_wrl_create_logbook">Logboek “%1$s” aanmaken</string>
+    <string name="settings_wrl_creating_logbook">Logboek aanmaken…</string>
 </resources>

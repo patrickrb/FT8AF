@@ -237,7 +237,7 @@
     <string name="log_sync_title_no_services">لا خدمات مفعَّلة</string>
     <string name="log_sync_title_syncing">جارٍ المزامنة…</string>
     <string name="log_sync_title_complete">اكتملت المزامنة</string>
-    <string name="log_sync_enable_services">فعِّل Cloudlog/Wavelog/Nextlog أو QRZ في الإعدادات، ثم أعد المحاولة.</string>
+    <string name="log_sync_enable_services">فعِّل Cloudlog/Wavelog/Nextlog أو QRZ أو World Radio League في الإعدادات، ثم أعد المحاولة.</string>
     <string name="log_sync_progress_count">%1$d من %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d مقبول</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d مقبول</string>
@@ -294,6 +294,7 @@
     <string name="pota_self_spot_failed">فشل الرصد الذاتي — راجع السجل</string>
     <string name="pota_active_park">نشط — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">مكرر</string>
     <string name="pota_contacts_map">خريطة الاتصالات</string>
     <string name="pota_back">رجوع</string>
     <string name="pota_valid_activation">تفعيل صالح</string>
@@ -527,8 +528,11 @@
     <string name="bug_report_send_email">إرسال بريد إلكتروني</string>
     <string name="bug_report_no_email_app">لم يُعثر على تطبيق بريد لإرسال التقرير</string>
     <string name="bug_report_open_github">فتح مشكلة GitHub</string>
-    <string name="settings_debug">تصحيح</string>
     <string name="settings_debug_desc">عرض / مشاركة debug.log</string>
+    <string name="settings_share_logs">مشاركة السجلات</string>
+    <string name="settings_share_logs_desc">إرسال debug.log عبر البريد أو Discord أو Drive…</string>
+    <string name="settings_view_logs">عرض السجلات</string>
+    <string name="settings_share_logs_empty">لم يتم تسجيل أي سجل بعد</string>
     <string name="settings_about_body">الإصدار %1$s (بناء %2$s)\nتاريخ البناء %3$s\n\nFT8، بكل سهولة.\n\nتطبيق جهاز إرسال واستقبال FT8 مستقل لنظام Android. تحكم في الجهاز عبر USB وBluetooth والشبكة مع التسلسل والتسجيل التلقائيين.</string>
     <string name="settings_website">الموقع الإلكتروني</string>
     <string name="settings_community">المجتمع</string>
@@ -548,8 +552,6 @@
     <string name="settings_conn_network">الشبكة</string>
     <string name="settings_no_usb_serial">لم تُرصد أجهزة USB تسلسلية. يرجى توصيل كابل USB براديوك وإعادة المحاولة.</string>
     <string name="settings_no_bluetooth_devices">لم يُعثر على أجهزة Bluetooth مقترنة. اقترن بجهاز في إعدادات Bluetooth بنظام Android أولاً.</string>
-    <string name="settings_debug_mode_enabled">وضع التصحيح مفعَّل</string>
-    <string name="settings_debug_mode_disabled">وضع التصحيح متوقف</string>
     <string name="settings_edit_operator_identity">تحرير هوية المشغِّل</string>
     <string name="settings_callsign">النداء</string>
     <string name="settings_callsign_hint">مثل W1AW</string>
@@ -629,4 +631,15 @@
     <string name="settings_bin_agg_max">الحد الأقصى</string>
     <string name="settings_bin_agg_avg">المتوسط</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d مقبول</string>
+    <string name="settings_wrl_desc">رفع QSOs تلقائياً إلى سجل World Radio League الخاص بك (يتطلب مفتاح Developer API)</string>
+    <string name="settings_wrl_dialog_desc">أنشئ مفتاحاً في World Radio League من Integrations → Developer API. مفتاح واحد يغطي حسابك بالكامل.</string>
+    <string name="settings_wrl_logbook">السجل</string>
+    <string name="settings_wrl_logbook_default">السجل الافتراضي</string>
+    <string name="settings_wrl_loading_logbooks">جارٍ تحميل السجلات…</string>
+    <string name="settings_wrl_no_logbooks">لا يحتوي حسابك في World Radio League على أي سجلات بعد.</string>
+    <string name="settings_wrl_create_logbook">إنشاء سجل “%1$s”</string>
+    <string name="settings_wrl_creating_logbook">جارٍ إنشاء السجل…</string>
 </resources>

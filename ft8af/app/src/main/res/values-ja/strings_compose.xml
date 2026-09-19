@@ -194,7 +194,7 @@
     <string name="log_sync_title_no_services">有効なサービスなし</string>
     <string name="log_sync_title_syncing">同期中…</string>
     <string name="log_sync_title_complete">同期完了</string>
-    <string name="log_sync_enable_services">設定で Cloudlog/Wavelog/Nextlog または QRZ を有効にして、もう一度お試しください。</string>
+    <string name="log_sync_enable_services">設定で Cloudlog/Wavelog/Nextlog、QRZ、または World Radio League を有効にして、もう一度お試しください。</string>
     <string name="log_sync_progress_count">%2$d 件中 %1$d 件の QSO</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d 件受理</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d 件受理</string>
@@ -231,6 +231,7 @@
     <string name="pota_self_spot_failed">セルフスポット失敗 — ログを確認してください</string>
     <string name="pota_active_park">アクティブ — %1$s</string>
     <string name="pota_qsos">QSO</string>
+    <string name="pota_dupe">重複</string>
     <string name="pota_contacts_map">交信マップ</string>
     <string name="pota_back">戻る</string>
     <string name="pota_valid_activation">有効なアクティベーション</string>
@@ -430,8 +431,11 @@
     <string name="bug_report_send_email">メールを送信</string>
     <string name="bug_report_no_email_app">レポートを送信できるメールアプリが見つかりません</string>
     <string name="bug_report_open_github">GitHub Issue を開く</string>
-    <string name="settings_debug">デバッグ</string>
     <string name="settings_debug_desc">debug.log を表示 / 共有</string>
+    <string name="settings_share_logs">ログを共有</string>
+    <string name="settings_share_logs_desc">debug.log をメール、Discord、Drive などに送信</string>
+    <string name="settings_view_logs">ログを表示</string>
+    <string name="settings_share_logs_empty">まだログがありません</string>
     <string name="settings_about_body">バージョン %1$s (ビルド %2$s)\nビルド日 %3$s\n\nFT8 を、もっと手軽に。\n\nAndroid 向けのスタンドアロン FT8 トランシーバーアプリ。USB、Bluetooth、ネットワークでの無線機制御に対応し、自動シーケンスとログ記録を備えています。</string>
     <string name="settings_website">ウェブサイト</string>
     <string name="settings_community">コミュニティ</string>
@@ -450,8 +454,6 @@
     <string name="settings_conn_bluetooth">Bluetooth</string>
     <string name="settings_conn_network">ネットワーク</string>
     <string name="settings_no_usb_serial">USB シリアルデバイスが検出されませんでした。無線機に USB ケーブルを接続して、もう一度お試しください。</string>
-    <string name="settings_debug_mode_enabled">デバッグモードを有効にしました</string>
-    <string name="settings_debug_mode_disabled">デバッグモードを無効にしました</string>
     <string name="settings_edit_operator_identity">オペレーター情報を編集</string>
     <string name="settings_callsign">コールサイン</string>
     <string name="settings_callsign_hint">例: W1AW</string>
@@ -566,4 +568,15 @@
     <string name="settings_bin_agg_max">最大値</string>
     <string name="settings_bin_agg_avg">平均</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d 件受理</string>
+    <string name="settings_wrl_desc">QSO を World Radio League のログブックに自動アップロードします（Developer API キーが必要）</string>
+    <string name="settings_wrl_dialog_desc">World Radio League の Integrations → Developer API でキーを生成してください。1 つのキーでアカウント全体に使えます。</string>
+    <string name="settings_wrl_logbook">ログブック</string>
+    <string name="settings_wrl_logbook_default">既定のログブック</string>
+    <string name="settings_wrl_loading_logbooks">ログブックを読み込み中…</string>
+    <string name="settings_wrl_no_logbooks">World Radio League アカウントにはまだログブックがありません。</string>
+    <string name="settings_wrl_create_logbook">「%1$s」ログブックを作成</string>
+    <string name="settings_wrl_creating_logbook">ログブックを作成中…</string>
 </resources>

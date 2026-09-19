@@ -137,7 +137,6 @@
     <!-- ===== Band &amp; Mode sheet (option 3b) ===== -->
     <string name="band_sheet_title">Band &amp; mode</string>
     <string name="band_sheet_subtitle">Your radio retunes when you pick a band</string>
-    <string name="band_sheet_close">Close</string>
     <string name="band_sheet_all_bands">All bands &amp; custom frequency</string>
     <string name="band_hint_20m_best">Best now · daytime, worldwide</string>
     <string name="band_hint_20m">Daytime, worldwide</string>
@@ -370,10 +369,11 @@
     <string name="log_sync_title_no_services">NO SERVICES ENABLED</string>
     <string name="log_sync_title_syncing">SYNCING…</string>
     <string name="log_sync_title_complete">SYNC COMPLETE</string>
-    <string name="log_sync_enable_services">Enable Cloudlog/Wavelog/Nextlog or QRZ in Settings, then try again.</string>
+    <string name="log_sync_enable_services">Enable Cloudlog/Wavelog/Nextlog, QRZ, or World Radio League in Settings, then try again.</string>
     <string name="log_sync_progress_count">%1$d of %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d accepted</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d accepted</string>
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d accepted</string>
     <string name="log_sync_nothing_to_upload">No QSOs in the logbook to upload yet.</string>
     <string name="log_sync_working">Working…</string>
 
@@ -412,6 +412,7 @@
     <string name="pota_self_spot_failed">Self-spot failed — check log</string>
     <string name="pota_active_park">ACTIVE — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">dupe</string>
     <string name="pota_contacts_map">Contacts map</string>
     <string name="pota_back">Back</string>
     <string name="pota_valid_activation">valid activation</string>
@@ -611,6 +612,11 @@
     <string name="usb_diag_audio_device">Audio Device Found</string>
     <string name="usb_diag_port_open">Port Open</string>
     <string name="usb_diag_cat_response">CAT Response</string>
+    <string name="usb_diag_cat_port">CAT Port</string>
+    <string name="usb_diag_baud_value">%1$s · %2$d bd</string>
+    <string name="usb_diag_hint_ft710">FT-710 cable mode is write-only: the app never reads from the CAT port, so CAT Response is shown as information here, not a failure.</string>
+    <string name="usb_diag_hint_dual_port">This chip has two ports. Yaesu rigs (FT-891, FT-991A, FTDX10, FT-710) answer CAT on the Enhanced port; Kenwood TS-890S/TS-990S on the Standard port. The other port only carries RTS/DTR keying. Pick the other port under Connection Mode › USB Cable, and check the baud rate against the rig menu.</string>
+    <string name="usb_diag_hint_no_response">The port is open but the radio has not answered. Check the baud rate and the radio model in Settings, and that CAT is enabled in the rig menu.</string>
     <string name="usb_diag_value_none">—</string>
     <!-- Spoken status suffixes for TalkBack (e.g. "Device Found, pass") -->
     <string name="usb_diag_status_pass">pass</string>
@@ -835,6 +841,16 @@
     <string name="settings_qrz_profile_lookup_desc">Username + password for QRZ XML API (avatars)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">Auto-upload QSOs to a Cloudlog, Wavelog, or Nextlog instance</string>
+    <string name="settings_wrl" translatable="false">World Radio League</string>
+    <string name="settings_wrl_desc">Auto-upload QSOs to your World Radio League logbook (requires a Developer API key)</string>
+    <string name="settings_wrl_dialog_desc">Generate a key in World Radio League under Integrations → Developer API. One key covers your whole account.</string>
+    <string name="settings_wrl_api_key_hint" translatable="false">wrl_live_…</string>
+    <string name="settings_wrl_logbook">Logbook</string>
+    <string name="settings_wrl_logbook_default">Default logbook</string>
+    <string name="settings_wrl_loading_logbooks">Loading logbooks…</string>
+    <string name="settings_wrl_no_logbooks">Your World Radio League account has no logbooks yet.</string>
+    <string name="settings_wrl_create_logbook">Create “%1$s” logbook</string>
+    <string name="settings_wrl_creating_logbook">Creating logbook…</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">PTT Delay</string>
@@ -860,8 +876,64 @@
     <string name="bug_report_no_email_app">No email app found to send the report</string>
     <string name="bug_report_open_github">Open GitHub issue</string>
     <string name="bug_report_email" translatable="false">k1af@FT8AF.app</string>
-    <string name="settings_debug">Debug</string>
+
+    <!-- ===== In-app rating prompt (RatePromptSheet) ===== -->
+    <string name="rate_prompt_eyebrow">GOOD SESSION</string>
+    <string name="rate_prompt_headline_entities_bands">%1$s entities across %2$s bands</string>
+    <string name="rate_prompt_headline_entities">%1$s entities in your log</string>
+    <string name="rate_prompt_headline_contacts_bands">%1$s contacts across %2$s bands</string>
+    <string name="rate_prompt_stat_qsos">QSOs</string>
+    <string name="rate_prompt_stat_dxcc">DXCC</string>
+    <string name="rate_prompt_stat_bands">Bands</string>
+    <string name="rate_prompt_minimal_title">Rate FT8AF</string>
+    <string name="rate_prompt_minimal_body">You\'ve logged %1$d contacts with FT8AF.</string>
+    <!-- Deliberately not a question: Play's in-app review guidelines forbid asking opinion questions before a rating action. -->
+    <string name="rate_prompt_play_pitch">A quick review on Google Play helps other operators find FT8AF.</string>
+    <string name="rate_prompt_remind_later">Remind me later</string>
+    <string name="rate_prompt_dont_ask_again">Don\'t ask again</string>
+    <string name="rate_prompt_play_action">Rate on Google Play</string>
+    <string name="rate_prompt_feedback_action">Send feedback</string>
+    <string name="rate_prompt_feedback_title">Feedback for the developer</string>
+    <string name="rate_prompt_feedback_body">Goes straight to the developer. Your callsign and app version are attached.</string>
+    <string name="rate_prompt_feedback_hint">Tell us what would make FT8AF better…</string>
+    <string name="rate_prompt_feedback_send">Send feedback</string>
+    <string name="rate_prompt_feedback_skip">Skip</string>
+    <!-- Spelled-out counts for the milestone headline; index == value, digits past the end. -->
+    <string-array name="rate_prompt_count_words_capitalized">
+        <item>Zero</item>
+        <item>One</item>
+        <item>Two</item>
+        <item>Three</item>
+        <item>Four</item>
+        <item>Five</item>
+        <item>Six</item>
+        <item>Seven</item>
+        <item>Eight</item>
+        <item>Nine</item>
+        <item>Ten</item>
+        <item>Eleven</item>
+        <item>Twelve</item>
+    </string-array>
+    <string-array name="rate_prompt_count_words">
+        <item>zero</item>
+        <item>one</item>
+        <item>two</item>
+        <item>three</item>
+        <item>four</item>
+        <item>five</item>
+        <item>six</item>
+        <item>seven</item>
+        <item>eight</item>
+        <item>nine</item>
+        <item>ten</item>
+        <item>eleven</item>
+        <item>twelve</item>
+    </string-array>
     <string name="settings_debug_desc">View / share debug.log</string>
+    <string name="settings_share_logs">Share logs</string>
+    <string name="settings_share_logs_desc">Send debug.log to email, Discord, Drive…</string>
+    <string name="settings_view_logs">View logs</string>
+    <string name="settings_share_logs_empty">No log recorded yet</string>
     <string name="settings_about_body">Version %1$s (build %2$s)\nBuild date %3$s\n\nFT8, made easy.\n\nA standalone FT8 transceiver app for Android. USB, Bluetooth, and network rig control with automatic sequencing and logging.</string>
     <string name="settings_website">Website</string>
     <string name="settings_community">Community</string>
@@ -884,8 +956,6 @@
     <string name="settings_conn_network">Network</string>
     <string name="settings_no_usb_serial">No USB serial devices detected. Please connect a USB cable to your radio and try again.</string>
     <string name="settings_no_bluetooth_devices">No bonded Bluetooth devices found. Pair a device in Android Bluetooth settings first.</string>
-    <string name="settings_debug_mode_enabled">Debug mode enabled</string>
-    <string name="settings_debug_mode_disabled">Debug mode disabled</string>
     <string name="settings_edit_operator_identity">Edit Operator Identity</string>
     <string name="settings_callsign">Callsign</string>
     <string name="settings_callsign_hint">e.g. W1AW</string>
@@ -909,6 +979,8 @@
     <string name="settings_password">Password</string>
     <string name="settings_enabled_bands_dialog_desc">Hidden bands won\'t appear in the frequency pickers.</string>
     <string name="settings_select_serial_port">Select Serial Port</string>
+    <string name="serial_port_label_port_of">Port %1$d of %2$d</string>
+    <string name="serial_port_picker_dual_port_hint">Dual-port chip: Yaesu rigs use the Enhanced port for CAT, Kenwood TS-890S/TS-990S use the Standard port. The other port is for RTS/DTR keying.</string>
     <string name="settings_tx_volume_advice">Adjust live — your next TX uses this level. Watch your radio\'s ALC and dial down until it\'s just kissing the line.</string>
     <string name="settings_input_volume">Input Volume</string>
     <string name="settings_input_volume_desc" formatted="false">RX audio gain applied before decoding (100% = unchanged)</string>

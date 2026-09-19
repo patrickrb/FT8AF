@@ -30,6 +30,7 @@ object SettingsBackup {
         "qrzApiKey",
         "qrzXmlUsername",
         "qrzXmlPassword",
+        "wrlApiKey",
         "icomUserName",
         "icomPassword",
     )

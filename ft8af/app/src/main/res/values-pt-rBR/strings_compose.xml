@@ -235,7 +235,7 @@
     <string name="log_sync_title_no_services">NENHUM SERVIÇO ATIVADO</string>
     <string name="log_sync_title_syncing">SINCRONIZANDO…</string>
     <string name="log_sync_title_complete">SINCRONIZAÇÃO CONCLUÍDA</string>
-    <string name="log_sync_enable_services">Ative o Cloudlog/Wavelog/Nextlog ou o QRZ em Configurações e tente novamente.</string>
+    <string name="log_sync_enable_services">Ative o Cloudlog/Wavelog/Nextlog, o QRZ ou o World Radio League em Configurações e tente novamente.</string>
     <string name="log_sync_progress_count">%1$d de %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d aceitos</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d aceitos</string>
@@ -257,6 +257,7 @@
     <string name="pota_self_spot_failed">Falha no auto-spot — verifique o log</string>
     <string name="pota_active_park">ATIVO — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">duplicado</string>
     <string name="pota_contacts_map">Mapa de contatos</string>
     <string name="pota_back">Voltar</string>
     <string name="pota_valid_activation">ativação válida</string>
@@ -596,8 +597,11 @@
     <string name="bug_report_send_email">Enviar e-mail</string>
     <string name="bug_report_no_email_app">Nenhum app de e-mail encontrado para enviar o relatório</string>
     <string name="bug_report_open_github">Abrir issue no GitHub</string>
-    <string name="settings_debug">Depuração</string>
     <string name="settings_debug_desc">Ver / compartilhar debug.log</string>
+    <string name="settings_share_logs">Compartilhar logs</string>
+    <string name="settings_share_logs_desc">Enviar debug.log por e-mail, Discord, Drive…</string>
+    <string name="settings_view_logs">Ver logs</string>
+    <string name="settings_share_logs_empty">Nenhum log registrado ainda</string>
     <string name="settings_about_body">Versão %1$s (build %2$s)\nData do build %3$s\n\nFT8, feito fácil.\n\nUm aplicativo de transceptor FT8 independente para Android. Controle de rig via USB, Bluetooth e rede, com sequenciamento e registro automáticos.</string>
     <string name="settings_website">Site</string>
     <string name="settings_community">Comunidade</string>
@@ -618,8 +622,6 @@
     <string name="settings_conn_network">Rede</string>
     <string name="settings_no_usb_serial">Nenhum dispositivo serial USB detectado. Conecte um cabo USB ao seu rádio e tente novamente.</string>
     <string name="settings_no_bluetooth_devices">Nenhum dispositivo Bluetooth pareado encontrado. Pareie um dispositivo nas configurações de Bluetooth do Android primeiro.</string>
-    <string name="settings_debug_mode_enabled">Modo de depuração ativado</string>
-    <string name="settings_debug_mode_disabled">Modo de depuração desativado</string>
     <string name="settings_edit_operator_identity">Editar Identidade do Operador</string>
     <string name="settings_callsign">Indicativo</string>
     <string name="settings_callsign_hint">ex.: W1AW</string>
@@ -683,4 +685,15 @@
     <string name="car_decodes_action">Decodificações</string>
     <string name="car_decodes_title">Decodificações recentes</string>
     <string name="car_no_decodes">Nenhuma decodificação ainda</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d aceitos</string>
+    <string name="settings_wrl_desc">Envia QSOs automaticamente para o seu logbook do World Radio League (requer uma chave da Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Gere uma chave no World Radio League em Integrations → Developer API. Uma chave vale para toda a sua conta.</string>
+    <string name="settings_wrl_logbook">Logbook</string>
+    <string name="settings_wrl_logbook_default">Logbook padrão</string>
+    <string name="settings_wrl_loading_logbooks">Carregando logbooks…</string>
+    <string name="settings_wrl_no_logbooks">Sua conta do World Radio League ainda não tem logbooks.</string>
+    <string name="settings_wrl_create_logbook">Criar logbook “%1$s”</string>
+    <string name="settings_wrl_creating_logbook">Criando logbook…</string>
 </resources>

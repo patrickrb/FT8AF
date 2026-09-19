@@ -194,7 +194,7 @@
     <string name="log_sync_title_no_services">SIN SERVICIOS ACTIVADOS</string>
     <string name="log_sync_title_syncing">SINCRONIZANDO…</string>
     <string name="log_sync_title_complete">SINCRONIZACIÓN COMPLETA</string>
-    <string name="log_sync_enable_services">Activa Cloudlog/Wavelog/Nextlog o QRZ en Ajustes e inténtalo de nuevo.</string>
+    <string name="log_sync_enable_services">Activa Cloudlog/Wavelog/Nextlog, QRZ o World Radio League en Ajustes e inténtalo de nuevo.</string>
     <string name="log_sync_progress_count">%1$d de %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d aceptados</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d aceptados</string>
@@ -239,6 +239,7 @@
     <string name="pota_self_spot_failed">Error en el auto-spot — revisa el registro</string>
     <string name="pota_active_park">ACTIVO — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">duplicado</string>
     <string name="pota_contacts_map">Mapa de contactos</string>
     <string name="pota_back">Atrás</string>
     <string name="pota_valid_activation">activación válida</string>
@@ -438,8 +439,11 @@
     <string name="bug_report_send_email">Enviar correo</string>
     <string name="bug_report_no_email_app">No se encontró ninguna app de correo para enviar el informe</string>
     <string name="bug_report_open_github">Abrir incidencia en GitHub</string>
-    <string name="settings_debug">Depuración</string>
     <string name="settings_debug_desc">Ver / compartir debug.log</string>
+    <string name="settings_share_logs">Compartir registros</string>
+    <string name="settings_share_logs_desc">Enviar debug.log por correo, Discord, Drive…</string>
+    <string name="settings_view_logs">Ver registros</string>
+    <string name="settings_share_logs_empty">Aún no hay registros</string>
     <string name="settings_about_body">Versión %1$s (compilación %2$s)\nFecha de compilación %3$s\n\nFT8, fácil.\n\nUna app de transceptor FT8 independiente para Android. Control de RIG por USB, Bluetooth y red con secuenciado y registro automáticos.</string>
     <string name="settings_website">Sitio web</string>
     <string name="settings_community">Comunidad</string>
@@ -458,8 +462,6 @@
     <string name="settings_conn_bluetooth">Bluetooth</string>
     <string name="settings_conn_network">Red</string>
     <string name="settings_no_usb_serial">No se detectaron dispositivos serie USB. Conecta un cable USB a tu radio e inténtalo de nuevo.</string>
-    <string name="settings_debug_mode_enabled">Modo de depuración activado</string>
-    <string name="settings_debug_mode_disabled">Modo de depuración desactivado</string>
     <string name="settings_edit_operator_identity">Editar identidad del operador</string>
     <string name="settings_callsign">Indicativo</string>
     <string name="settings_callsign_hint">p. ej. W1AW</string>
@@ -574,4 +576,15 @@
     <string name="settings_bin_agg_max">Máximo</string>
     <string name="settings_bin_agg_avg">Promedio</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d aceptados</string>
+    <string name="settings_wrl_desc">Subir QSOs automáticamente a tu libro de guardia de World Radio League (requiere una clave de Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Genera una clave en World Radio League en Integrations → Developer API. Una sola clave sirve para toda tu cuenta.</string>
+    <string name="settings_wrl_logbook">Libro de guardia</string>
+    <string name="settings_wrl_logbook_default">Libro predeterminado</string>
+    <string name="settings_wrl_loading_logbooks">Cargando libros…</string>
+    <string name="settings_wrl_no_logbooks">Tu cuenta de World Radio League aún no tiene libros de guardia.</string>
+    <string name="settings_wrl_create_logbook">Crear libro “%1$s”</string>
+    <string name="settings_wrl_creating_logbook">Creando libro…</string>
 </resources>

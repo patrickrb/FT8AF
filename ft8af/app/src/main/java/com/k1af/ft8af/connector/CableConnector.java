@@ -22,6 +22,8 @@ public class CableConnector extends BaseRigConnector {
     }
 
     private final CableSerialPort cableSerialPort;
+    /** The port this connector was built for, so diagnostics can say which one is in use. */
+    private final CableSerialPort.SerialPort serialPort;
 
     private final BaseRig cableConnectedRig;
     private OnCableDataReceived onCableDataReceived;
@@ -52,6 +54,7 @@ public class CableConnector extends BaseRigConnector {
             , int controlMode, BaseRig cableConnectedRig) {
         super(controlMode);
         this.cableConnectedRig = cableConnectedRig;
+        this.serialPort = serialPort;
         cableSerialPort = new CableSerialPort(context, serialPort, baudRate, getOnConnectorStateChanged());
         cableSerialPort.ioListener = new SerialInputOutputManager.Listener() {
             @Override
@@ -201,6 +204,11 @@ public class CableConnector extends BaseRigConnector {
                     .append(ts + " " + msg + "\n").close();
         } catch (Exception ignored) {}
         Log.d(TAG, msg);
+    }
+
+    /** The USB port (device + interface index) this connector drives; never null. */
+    public CableSerialPort.SerialPort getSerialPort() {
+        return serialPort;
     }
 
     @Override

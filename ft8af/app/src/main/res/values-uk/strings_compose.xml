@@ -226,7 +226,7 @@
     <string name="log_sync_title_no_services">ЖОДНУ СЛУЖБУ НЕ УВІМКНЕНО</string>
     <string name="log_sync_title_syncing">СИНХРОНІЗАЦІЯ…</string>
     <string name="log_sync_title_complete">СИНХРОНІЗАЦІЮ ЗАВЕРШЕНО</string>
-    <string name="log_sync_enable_services">Увімкніть Cloudlog/Wavelog/Nextlog або QRZ у Налаштуваннях, потім повторіть.</string>
+    <string name="log_sync_enable_services">Увімкніть Cloudlog/Wavelog/Nextlog, QRZ або World Radio League у Налаштуваннях, потім повторіть.</string>
     <string name="log_sync_progress_count">%1$d з %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d прийнято</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d прийнято</string>
@@ -275,6 +275,7 @@
     <string name="pota_self_spot_failed">Не вдалося опублікувати самоспот — перевірте журнал</string>
     <string name="pota_active_park">АКТИВНО — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">дубль</string>
     <string name="pota_contacts_map">Карта зв’язків</string>
     <string name="pota_back">Назад</string>
     <string name="pota_valid_activation">дійсна активація</string>
@@ -508,8 +509,11 @@
     <string name="bug_report_send_email">Надіслати email</string>
     <string name="bug_report_no_email_app">Не знайдено застосунку email для надсилання звіту</string>
     <string name="bug_report_open_github">Відкрити issue на GitHub</string>
-    <string name="settings_debug">Налагодження</string>
     <string name="settings_debug_desc">Переглянути / поділитися debug.log</string>
+    <string name="settings_share_logs">Поділитися логами</string>
+    <string name="settings_share_logs_desc">Надіслати debug.log поштою, у Discord, Drive…</string>
+    <string name="settings_view_logs">Переглянути логи</string>
+    <string name="settings_share_logs_empty">Лог поки порожній</string>
     <string name="settings_about_body">Версія %1$s (збірка %2$s)\nДата збірки %3$s\n\nFT8, просто.\n\nОкремий застосунок-трансивер FT8 для Android. Керування трансивером через USB, Bluetooth і мережу з автоматичним секвенуванням і журналюванням.</string>
     <string name="settings_website">Вебсайт</string>
     <string name="settings_community">Спільнота</string>
@@ -529,8 +533,6 @@
     <string name="settings_conn_network">Мережа</string>
     <string name="settings_no_usb_serial">USB-послідовних пристроїв не виявлено. Під’єднайте USB-кабель до радіо й повторіть.</string>
     <string name="settings_no_bluetooth_devices">Сполучених пристроїв Bluetooth не знайдено. Спочатку сполучіть пристрій у налаштуваннях Bluetooth Android.</string>
-    <string name="settings_debug_mode_enabled">Режим налагодження увімкнено</string>
-    <string name="settings_debug_mode_disabled">Режим налагодження вимкнено</string>
     <string name="settings_edit_operator_identity">Редагувати дані оператора</string>
     <string name="settings_callsign">Позивний</string>
     <string name="settings_callsign_hint">напр. W1AW</string>
@@ -610,4 +612,15 @@
     <string name="settings_bin_agg_max">Максимум</string>
     <string name="settings_bin_agg_avg">Середнє</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d прийнято</string>
+    <string name="settings_wrl_desc">Автозавантаження QSO до журналу World Radio League (потрібен ключ Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Створіть ключ у World Radio League в розділі Integrations → Developer API. Один ключ діє для всього облікового запису.</string>
+    <string name="settings_wrl_logbook">Журнал</string>
+    <string name="settings_wrl_logbook_default">Журнал за замовчуванням</string>
+    <string name="settings_wrl_loading_logbooks">Завантаження журналів…</string>
+    <string name="settings_wrl_no_logbooks">У вашому обліковому записі World Radio League ще немає журналів.</string>
+    <string name="settings_wrl_create_logbook">Створити журнал «%1$s»</string>
+    <string name="settings_wrl_creating_logbook">Створення журналу…</string>
 </resources>
