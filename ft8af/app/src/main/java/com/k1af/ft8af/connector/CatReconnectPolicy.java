@@ -223,4 +223,29 @@ public final class CatReconnectPolicy {
         if (turningOn) return false;
         return attemptsSoFar < MAX_PTT_OFF_RETRIES;
     }
+
+    /**
+     * One-line debug.log record of a serial read-loop error and how it was handled.
+     * The exception's class and message are the only clue to WHY the port dropped
+     * (RFI hit, autosuspend, driver failure, device gone), and until now they went
+     * only to logcat — a field session's debug.log showed every reconnect but never
+     * the reason (the 2026-09-19 POTA outing: 95 reopen cycles, zero causes). Pure
+     * string building so it is unit-testable; null-safe for both exception and
+     * message because drivers throw bare RuntimeExceptions with null messages.
+     */
+    public static String describeError(Exception e, Kind kind, Action action, int attemptsSoFar) {
+        String cause = e == null
+                ? "null"
+                : e.getClass().getSimpleName() + (e.getMessage() == null ? "" : ": " + e.getMessage());
+        return "CAT drop: " + cause
+                + " [kind=" + kind + " action=" + action + " attempt=" + attemptsSoFar + "]";
+    }
+
+    /**
+     * One-line debug.log record of an auto-reconnect attempt about to run after
+     * its backoff. Pure so it is unit-testable.
+     */
+    public static String describeAttempt(int attempt, long backoffMs) {
+        return "CAT auto-reconnect: attempt " + attempt + " after " + backoffMs + "ms backoff";
+    }
 }

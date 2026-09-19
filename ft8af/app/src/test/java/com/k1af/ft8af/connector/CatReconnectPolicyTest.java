@@ -241,4 +241,38 @@ public class CatReconnectPolicyTest {
         assertThat(CatReconnectPolicy.shouldKeepRetrying(true, true)).isFalse();
         assertThat(CatReconnectPolicy.shouldKeepRetrying(true, false)).isFalse();
     }
+
+    // --- describeError / describeAttempt (debug.log drop diagnostics) -------
+
+    @Test
+    public void describeError_namesExceptionClassificationAndDecision() {
+        String line = CatReconnectPolicy.describeError(
+                new java.io.IOException("USB get_status request failed"),
+                CatReconnectPolicy.Kind.TRANSIENT,
+                CatReconnectPolicy.Action.RECONNECT,
+                3);
+
+        assertThat(line).isEqualTo(
+                "CAT drop: IOException: USB get_status request failed"
+                        + " [kind=TRANSIENT action=RECONNECT attempt=3]");
+    }
+
+    @Test
+    public void describeError_survivesNullExceptionAndNullMessage() {
+        // Drivers throw bare RuntimeExceptions with null messages; the log line
+        // must never itself throw on the error path.
+        assertThat(CatReconnectPolicy.describeError(
+                null, CatReconnectPolicy.Kind.TRANSIENT, CatReconnectPolicy.Action.RECONNECT, 0))
+                .isEqualTo("CAT drop: null [kind=TRANSIENT action=RECONNECT attempt=0]");
+        assertThat(CatReconnectPolicy.describeError(
+                new RuntimeException(), CatReconnectPolicy.Kind.FATAL,
+                CatReconnectPolicy.Action.SURFACE, 1))
+                .isEqualTo("CAT drop: RuntimeException [kind=FATAL action=SURFACE attempt=1]");
+    }
+
+    @Test
+    public void describeAttempt_reportsAttemptAndBackoff() {
+        assertThat(CatReconnectPolicy.describeAttempt(4, 4000))
+                .isEqualTo("CAT auto-reconnect: attempt 4 after 4000ms backoff");
+    }
 }
