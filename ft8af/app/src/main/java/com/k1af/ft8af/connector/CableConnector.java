@@ -91,7 +91,13 @@ public class CableConnector extends BaseRigConnector {
         } else {
             attemptsSoFar = reconnectAttempt.get();
         }
-        switch (CatReconnectPolicy.decide(userDisconnected, kind, attemptsSoFar)) {
+        CatReconnectPolicy.Action action =
+                CatReconnectPolicy.decide(userDisconnected, kind, attemptsSoFar);
+        // The exception is the only clue to WHY the port dropped; it used to go
+        // only to logcat, leaving field debug.logs with reconnect churn but no
+        // cause. One line per drop — the reconnect loop below logs its own cadence.
+        fileLog(CatReconnectPolicy.describeError(e, kind, action, attemptsSoFar));
+        switch (action) {
             case IGNORE:
                 // User asked to disconnect; closing the port interrupts the blocking
                 // read with an IOException we expect — don't surface "Lost connection".
@@ -106,6 +112,8 @@ public class CableConnector extends BaseRigConnector {
     }
 
     private void surfaceLostConnection(Exception e) {
+        fileLog("CAT: surfacing lost connection (manual retry): "
+                + (e == null ? "" : e.getMessage()));
         getOnConnectorStateChanged().onRunError(
                 "Lost connection to serial port: " + (e == null ? "" : e.getMessage()));
     }
@@ -132,8 +140,7 @@ public class CableConnector extends BaseRigConnector {
                     // dropping keeps escalating instead of resetting to the first step.
                     int attempt = reconnectAttempt.incrementAndGet();
                     long backoff = CatReconnectPolicy.backoffMs(attempt);
-                    Log.d(TAG, "CAT auto-reconnect attempt " + attempt
-                            + " in " + backoff + "ms");
+                    fileLog(CatReconnectPolicy.describeAttempt(attempt, backoff));
                     try {
                         Thread.sleep(backoff);
                     } catch (InterruptedException ie) {
@@ -160,7 +167,7 @@ public class CableConnector extends BaseRigConnector {
                         // link works. handleSerialError() resets the counter only once
                         // this connection has held for STABLE_CONNECTION_MS.
                         portOpenedAtMs = System.currentTimeMillis();
-                        Log.d(TAG, "CAT port re-opened on attempt " + attempt);
+                        fileLog("CAT auto-reconnect: port re-opened on attempt " + attempt);
                         return; // connect() already fired onConnected()
                     }
                 }
@@ -172,7 +179,7 @@ public class CableConnector extends BaseRigConnector {
                 // disconnect() fires onDisconnected itself, which also moves the UI
                 // out of the "connecting" state set at burst start.
                 if (!userDisconnected) {
-                    Log.d(TAG, "CAT auto-reconnect: device left the bus, stopping"
+                    fileLog("CAT auto-reconnect: device left the bus, stopping"
                             + " (attach broadcast will restart)");
                     cableSerialPort.disconnect();
                 }
@@ -180,6 +187,20 @@ public class CableConnector extends BaseRigConnector {
                 reconnecting = false;
             }
         }, "CAT-Auto-Reconnect").start();
+    }
+
+    private void fileLog(String msg) {
+        try {
+            android.content.Context ctx = com.k1af.ft8af.GeneralVariables.getMainContext();
+            if (ctx == null) return;
+            java.io.File dir = ctx.getExternalFilesDir(null);
+            if (dir == null) return;
+            String ts = new java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US)
+                    .format(new java.util.Date());
+            new java.io.FileWriter(new java.io.File(dir, "debug.log"), true)
+                    .append(ts + " " + msg + "\n").close();
+        } catch (Exception ignored) {}
+        Log.d(TAG, msg);
     }
 
     @Override
