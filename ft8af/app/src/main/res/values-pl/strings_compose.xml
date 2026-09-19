@@ -275,6 +275,7 @@
     <string name="pota_self_spot_failed">Spot własny nieudany — sprawdź log</string>
     <string name="pota_active_park">AKTYWNY — %1$s</string>
     <string name="pota_qsos">QSO</string>
+    <string name="pota_dupe">duplikat</string>
     <string name="pota_contacts_map">Mapa łączności</string>
     <string name="pota_back">Wstecz</string>
     <string name="pota_valid_activation">ważna aktywacja</string>

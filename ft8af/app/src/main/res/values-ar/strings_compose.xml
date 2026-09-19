@@ -294,6 +294,7 @@
     <string name="pota_self_spot_failed">فشل الرصد الذاتي — راجع السجل</string>
     <string name="pota_active_park">نشط — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">مكرر</string>
     <string name="pota_contacts_map">خريطة الاتصالات</string>
     <string name="pota_back">رجوع</string>
     <string name="pota_valid_activation">تفعيل صالح</string>

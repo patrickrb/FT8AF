@@ -278,6 +278,7 @@
     <string name="pota_self_spot_failed">Self-spot mislukt — controleer log</string>
     <string name="pota_active_park">ACTIEF — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">duplicaat</string>
     <string name="pota_contacts_map">Contactenkaart</string>
     <string name="pota_back">Terug</string>
     <string name="pota_valid_activation">geldige activatie</string>

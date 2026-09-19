@@ -142,10 +142,49 @@ class PotaSessionManagerTest {
     fun onQsoLogged_whenIdle_isANoOp() {
         // No activation running (the only state reachable without SQLite):
         // must neither crash nor conjure an activation.
-        PotaSessionManager.onQsoLogged("K-1234")
+        PotaSessionManager.onQsoLogged("K-1234", 1)
 
         assertThat(PotaSessionManager.currentActivation.value).isNull()
     }
+
+    @Test
+    fun activationWithLoggedQso_adoptsTheDbUniqueCount() {
+        val active = activation(parkRef = "K-1234", qsoCount = 4)
+
+        // The DB recount is dupe-free, so it can stay flat (a dupe was logged)…
+        assertThat(PotaSessionManager.activationWithLoggedQso(active, "K-1234", 4)?.qsoCount)
+            .isEqualTo(4)
+        // …move forward (a new unique contact)…
+        assertThat(PotaSessionManager.activationWithLoggedQso(active, "K-1234", 5)?.qsoCount)
+            .isEqualTo(5)
+        // …or even shrink below the in-memory value (recount healed old drift).
+        assertThat(PotaSessionManager.activationWithLoggedQso(active, "K-1234", 2)?.qsoCount)
+            .isEqualTo(2)
+    }
+
+    @Test
+    fun activationWithLoggedQso_ignoresNonMatchingOrInvalidUpdates() {
+        val active = activation(parkRef = "K-1234", qsoCount = 4)
+
+        // No activation running.
+        assertThat(PotaSessionManager.activationWithLoggedQso(null, "K-1234", 5)).isNull()
+        // QSO stamped for a different (or partial multi-park) ref.
+        assertThat(PotaSessionManager.activationWithLoggedQso(active, "K-5678", 5)).isNull()
+        assertThat(PotaSessionManager.activationWithLoggedQso(active, null, 5)).isNull()
+        // Negative means DatabaseOpr found no active row — nothing to mirror.
+        assertThat(PotaSessionManager.activationWithLoggedQso(active, "K-1234", -1)).isNull()
+    }
+
+    private fun activation(parkRef: String, qsoCount: Int) =
+        radio.ks3ckc.ft8af.pota.model.PotaActivation(
+            id = 7L,
+            parkRef = parkRef,
+            operator = "W1AW",
+            startedAtMs = 1_000L,
+            endedAtMs = null,
+            qsoCount = qsoCount,
+            notes = null,
+        )
 
     @Test
     fun qsoCountsForActivation_matchesDatabaseBumpPredicate() {
