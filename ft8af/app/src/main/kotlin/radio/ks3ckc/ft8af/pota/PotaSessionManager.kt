@@ -122,17 +122,35 @@ object PotaSessionManager {
     }
 
     /**
-     * Called from the QSO save path (DatabaseOpr) right after it bumps
-     * pota_activation.qso_count in SQLite, so the in-memory activation that the
-     * phone and Android Auto UIs observe stays in step with the DB without a
-     * blocking reload on the save path.
+     * Called from the QSO save path (DatabaseOpr) right after it recounts
+     * pota_activation.qso_count in SQLite, carrying the refreshed dupe-free count,
+     * so the in-memory activation that the phone and Android Auto UIs observe
+     * stays in step with the DB without a blocking reload on the save path.
      */
     @JvmStatic
     @Synchronized
-    fun onQsoLogged(mySigInfo: String?) {
-        val active = _currentActivation.value ?: return
-        if (!qsoCountsForActivation(active.parkRef, mySigInfo)) return
-        _currentActivation.value = active.copy(qsoCount = active.qsoCount + 1)
+    fun onQsoLogged(mySigInfo: String?, uniqueQsoCount: Int) {
+        activationWithLoggedQso(_currentActivation.value, mySigInfo, uniqueQsoCount)?.let {
+            _currentActivation.value = it
+        }
+    }
+
+    /**
+     * Pure decision behind [onQsoLogged]: the replacement activation carrying the
+     * DB's recounted unique-contact total, or null when nothing should change (no
+     * activation running, the QSO belongs to a different park ref, or the count is
+     * invalid). The in-memory count must move exactly to the DB's value — it is a
+     * dupe-free COUNT(DISTINCT), so it can stay flat after a logged QSO or even
+     * shrink relative to the raw QSO tally.
+     */
+    internal fun activationWithLoggedQso(
+        active: PotaActivation?,
+        mySigInfo: String?,
+        uniqueQsoCount: Int,
+    ): PotaActivation? {
+        if (active == null || uniqueQsoCount < 0) return null
+        if (!qsoCountsForActivation(active.parkRef, mySigInfo)) return null
+        return active.copy(qsoCount = uniqueQsoCount)
     }
 
     /** Pull the latest qso_count and contacts from the DB so the UI stays accurate. */

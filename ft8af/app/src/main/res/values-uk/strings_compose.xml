@@ -275,6 +275,7 @@
     <string name="pota_self_spot_failed">Не вдалося опублікувати самоспот — перевірте журнал</string>
     <string name="pota_active_park">АКТИВНО — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">дубль</string>
     <string name="pota_contacts_map">Карта зв’язків</string>
     <string name="pota_back">Назад</string>
     <string name="pota_valid_activation">дійсна активація</string>

@@ -372,7 +372,7 @@ public class CableSerialPort {
             } else {
                 Log.d(TAG, "FT-710 CAT write-only mode: skipping usbIoManager.start()");
             }
-            Log.d(TAG, "Serial port opened successfully!");
+            fileLog(String.format("serial.open: OK port=%d baud=%d", portNum, baudRate));
             connected = true;
 
             if (onStateChanged!=null){
@@ -381,7 +381,7 @@ public class CableSerialPort {
 
 
         } catch (Exception e) {
-            Log.e(TAG, "Failed to open serial port: " + e.getMessage());
+            fileLog("serial.open FAILED: " + e);
             if (onStateChanged!=null){
                 onStateChanged.onRunError(GeneralVariables.getStringFromResource(R.string.serial_connect_failed)
                         + e.getMessage());
@@ -474,6 +474,10 @@ public class CableSerialPort {
     }
 
     public void disconnect() {
+        // Pairs with "serial.open: OK" so debug.log carries the port's full
+        // lifecycle — a "port not open!" streak can be traced to the drop that
+        // closed it instead of appearing out of nowhere.
+        fileLog("serial.disconnect (was " + (connected ? "connected" : "not connected") + ")");
         connected = false;
         if (onStateChanged!=null){
             onStateChanged.onDisconnected();

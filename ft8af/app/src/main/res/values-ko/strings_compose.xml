@@ -274,6 +274,7 @@
     <string name="pota_self_spot_failed">셀프 스폿 실패 — 로그 확인</string>
     <string name="pota_active_park">운용 중 — %1$s</string>
     <string name="pota_qsos">QSO</string>
+    <string name="pota_dupe">중복</string>
     <string name="pota_contacts_map">교신 지도</string>
     <string name="pota_back">뒤로</string>
     <string name="pota_valid_activation">유효한 운용</string>
