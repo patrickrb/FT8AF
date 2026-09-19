@@ -1560,15 +1560,17 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     , record.getMySigInfo()
                     , record.getSig()
                     , record.getSigInfo()});
-            // If this QSO was logged during an active POTA activation, bump its qso_count.
+            // If this QSO was logged during an active POTA activation, refresh its
+            // qso_count. This is a dupe-aware recount, not a blind increment: POTA
+            // doesn't credit a repeat contact with the same station on the same band.
             if (record.getMySigInfo() != null && !record.getMySigInfo().isEmpty()) {
-                db.execSQL("UPDATE pota_activation SET qso_count = qso_count + 1 "
-                        + "WHERE park_ref = ? AND ended_at IS NULL"
-                        , new Object[]{record.getMySigInfo()});
+                int uniqueQsos = recountActivationQsos(db, record.getMySigInfo());
                 // Keep the in-memory activation (phone + Android Auto UIs) in step
-                // with the row just bumped; refreshCounter() only runs while the
+                // with the row just recounted; refreshCounter() only runs while the
                 // phone's POTA screen is open, which it isn't while driving.
-                radio.ks3ckc.ft8af.pota.PotaSessionManager.onQsoLogged(record.getMySigInfo());
+                if (uniqueQsos >= 0) {
+                    radio.ks3ckc.ft8af.pota.PotaSessionManager.onQsoLogged(record.getMySigInfo(), uniqueQsos);
+                }
             }
             // Mirror this genuinely-new QSO to the running ADIF file. Wrapped so a full disk
             // or missing SD can never break QSO logging (AdifLogFile.logQso itself never throws).
@@ -1642,6 +1644,38 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             }
         }
         return true;
+    }
+
+    /**
+     * Recount the active activation's creditable QSOs after an insert. POTA does not
+     * credit duplicates — the same station worked again on the same band within the
+     * activation is a dupe no matter the mode (issue #823) — so qso_count is a
+     * COUNT(DISTINCT call+band) over the activation's QSO window rather than a blind
+     * increment. Recounting from QSLTable also self-heals any historic drift between
+     * the counter and the log. The my_sig filter and time window mirror
+     * PotaActivationDao.getActivationQsos / PotaQsoWindow so the badge, the contacts
+     * list, and the export agree on what belongs to the activation; the dedupe key
+     * mirrors the Kotlin dupe marking in PotaDupes.kt — keep the two in step.
+     *
+     * @return the refreshed count, or -1 when no active activation matches mySigInfo.
+     */
+    static int recountActivationQsos(SQLiteDatabase db, String mySigInfo) {
+        db.execSQL("UPDATE pota_activation SET qso_count = ("
+                        + " SELECT COUNT(DISTINCT UPPER(TRIM(IFNULL(call,''))) || '|' || UPPER(TRIM(IFNULL(band,''))))"
+                        + " FROM QSLTable"
+                        + " WHERE my_sig = 'POTA' AND my_sig_info = pota_activation.park_ref"
+                        + " AND " + radio.ks3ckc.ft8af.pota.PotaQsoWindow.ROW_STAMP
+                        + " >= strftime('%Y%m%d%H%M%S', pota_activation.started_at / 1000, 'unixepoch'))"
+                        + " WHERE park_ref = ? AND ended_at IS NULL"
+                , new Object[]{mySigInfo});
+        Cursor cursor = db.rawQuery("SELECT qso_count FROM pota_activation"
+                        + " WHERE park_ref = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1"
+                , new String[]{mySigInfo});
+        try {
+            return cursor.moveToFirst() ? cursor.getInt(0) : -1;
+        } finally {
+            cursor.close();
+        }
     }
 
 

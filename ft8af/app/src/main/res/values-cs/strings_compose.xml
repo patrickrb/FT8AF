@@ -286,6 +286,7 @@
     <string name="pota_self_spot_failed">Vlastní spot selhal — zkontrolujte log</string>
     <string name="pota_active_park">AKTIVNÍ — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">duplikát</string>
     <string name="pota_contacts_map">Mapa spojení</string>
     <string name="pota_back">Zpět</string>
     <string name="pota_valid_activation">platná aktivace</string>

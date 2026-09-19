@@ -267,6 +267,7 @@
     <string name="pota_self_spot_failed">Kendi spotu başarısız — günlüğe bakın</string>
     <string name="pota_active_park">AKTİF — %1$s</string>
     <string name="pota_qsos">QSO</string>
+    <string name="pota_dupe">mükerrer</string>
     <string name="pota_contacts_map">Bağlantı haritası</string>
     <string name="pota_back">Geri</string>
     <string name="pota_valid_activation">geçerli aktivasyon</string>

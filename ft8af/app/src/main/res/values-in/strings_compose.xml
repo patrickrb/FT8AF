@@ -274,6 +274,7 @@
     <string name="pota_self_spot_failed">Self-spot gagal — periksa log</string>
     <string name="pota_active_park">AKTIF — %1$s</string>
     <string name="pota_qsos">QSO</string>
+    <string name="pota_dupe">duplikat</string>
     <string name="pota_contacts_map">Peta kontak</string>
     <string name="pota_back">Kembali</string>
     <string name="pota_valid_activation">aktivasi valid</string>

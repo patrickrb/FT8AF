@@ -82,6 +82,7 @@ import radio.ks3ckc.ft8af.pota.PotaClient
 import radio.ks3ckc.ft8af.pota.PotaUploadException
 import radio.ks3ckc.ft8af.pota.PotaSessionManager
 import radio.ks3ckc.ft8af.pota.PotaSpotsRepository
+import radio.ks3ckc.ft8af.pota.potaDupeQsoIds
 import radio.ks3ckc.ft8af.pota.potaSpotFrequencyKhz
 import radio.ks3ckc.ft8af.pota.model.PotaActivation
 import radio.ks3ckc.ft8af.pota.model.PotaQso
@@ -192,6 +193,10 @@ private fun PotaTabHeader(subTab: PotaSubTab, onTabSelected: (PotaSubTab) -> Uni
 private fun ActivateTab(onOpenActivation: (PotaActivation) -> Unit) {
     val activation by PotaSessionManager.currentActivation.collectAsStateWithLifecycle()
     val contacts by PotaSessionManager.activationQsos.collectAsStateWithLifecycle()
+    // Repeats of a station on the same band don't count toward the activation (the
+    // qso_count badge already excludes them); tag those rows so the operator can
+    // see why the list is longer than the counter.
+    val dupeIds = remember(contacts) { potaDupeQsoIds(contacts) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -430,7 +435,7 @@ private fun ActivateTab(onOpenActivation: (PotaActivation) -> Unit) {
                         )
                     }
                     items(contacts, key = { it.id }) { qso ->
-                        PotaContactRow(qso, nowMs)
+                        PotaContactRow(qso, nowMs, isDupe = qso.id in dupeIds)
                     }
                 }
             }
@@ -547,7 +552,7 @@ private fun ActiveActivationCard(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PotaContactRow(qso: PotaQso, nowMs: Long) {
+private fun PotaContactRow(qso: PotaQso, nowMs: Long, isDupe: Boolean = false) {
     val context = LocalContext.current
     // Prefer the relative "ago" readout; the raw stored HHMMz string is a
     // fallback for imported/ADIF rows with no parsable qso_date so the column
@@ -578,6 +583,19 @@ private fun PotaContactRow(qso: PotaQso, nowMs: Long) {
                 if (qso.sigInfo != null) {
                     Spacer(Modifier.width(6.dp))
                     ParkPill(qso.sigInfo)
+                }
+                if (isDupe) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        stringResource(R.string.pota_dupe).uppercase(),
+                        color = TextMuted,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .background(BgSurface2, RoundedCornerShape(6.dp))
+                            .border(1.dp, Border, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
                 }
             }
             Row {
@@ -971,6 +989,9 @@ private fun ActivationDetailScreen(
     }
 
     val loaded = contacts
+    // Same dupe tagging as the live ActivateTab list: repeats of a station on the
+    // same band didn't count toward the activation.
+    val dupeIds = remember(loaded) { potaDupeQsoIds(loaded ?: emptyList()) }
     // Fall back to the live grid only while the activation is active — before the
     // first QSO carries my_gridsquare the map would otherwise be hidden. For a
     // finished activation we keep null so a stale current grid can't misplace the
@@ -1142,7 +1163,7 @@ private fun ActivationDetailScreen(
                     )
                 }
                 items(list, key = { it.id }) { qso ->
-                    PotaContactRow(qso, nowMs)
+                    PotaContactRow(qso, nowMs, isDupe = qso.id in dupeIds)
                 }
             }
         }
