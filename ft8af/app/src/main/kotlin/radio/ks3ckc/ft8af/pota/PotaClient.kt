@@ -62,6 +62,57 @@ internal fun isRetryableUploadFailure(error: Throwable?): Boolean = when (error)
 internal fun uploadBackoffMs(attempt: Int): Long = 1000L shl (attempt - 1)
 
 /**
+ * Count non-overlapping occurrences of [needle] in [haystack]. Used to report the
+ * QSO count of an ADIF document (one `<EOR>` per record) in the upload diagnostics.
+ * Pure so it can be unit-tested; returns 0 for an empty needle rather than looping.
+ */
+internal fun countOccurrences(haystack: String, needle: String): Int {
+    if (needle.isEmpty()) return 0
+    var count = 0
+    var i = haystack.indexOf(needle)
+    while (i >= 0) {
+        count++
+        i = haystack.indexOf(needle, i + needle.length)
+    }
+    return count
+}
+
+/**
+ * Response headers worth capturing when POTA's `/adif` endpoint fails. A 502 with
+ * body `{"message":"Internal server error"}` comes from AWS API Gateway / CloudFront
+ * in front of POTA's Lambda, and these headers carry the request/trace ids that let
+ * POTA support (and us) pinpoint the failing invocation — far more actionable than
+ * the opaque body. Matched case-insensitively; only those present are logged.
+ */
+internal val UPLOAD_TRACE_HEADERS = listOf(
+    "x-amzn-RequestId",
+    "x-amzn-ErrorType",
+    "apigw-requestid",
+    "x-amzn-trace-id",
+    "x-cache",
+    "via",
+    "Content-Type",
+)
+
+/**
+ * Build the one-line trace summary logged on an upload failure from a connection's
+ * response [headers]. Pure (no Android/network types) so the header selection can be
+ * unit-tested directly. Keys are matched case-insensitively — [HttpURLConnection]
+ * preserves the server's casing and includes a null-keyed entry for the status line,
+ * both of which this tolerates. Only [UPLOAD_TRACE_HEADERS] found in [headers] appear,
+ * in declared order, as space-separated `name=value` pairs (multi-valued headers
+ * comma-joined); returns "" when none are present.
+ */
+internal fun uploadTraceSummary(headers: Map<String?, List<String>>): String {
+    val lower = headers.entries
+        .mapNotNull { e -> e.key?.let { it.lowercase() to e.value.joinToString(",") } }
+        .toMap()
+    return UPLOAD_TRACE_HEADERS
+        .mapNotNull { h -> lower[h.lowercase()]?.let { "$h=$it" } }
+        .joinToString(" ")
+}
+
+/**
  * Talks to pota.app's read+write endpoints. Mirrors [radio.ks3ckc.ft8af.pskreporter.PskReporterClient]:
  *   - HttpURLConnection only (no extra deps).
  *   - Coroutine-friendly suspend functions on Dispatchers.IO.
@@ -248,6 +299,7 @@ object PotaClient {
         }.toByteArray(StandardCharsets.UTF_8)
         val epilogue = "\r\n--$boundary--\r\n".toByteArray(StandardCharsets.UTF_8)
         val payload = adif.toByteArray(StandardCharsets.UTF_8)
+        val bodyLen = preamble.size + payload.size + epilogue.size
 
         var conn: HttpURLConnection? = null
         return try {
@@ -261,6 +313,11 @@ object PotaClient {
                 setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
                 setRequestProperty("Accept", "application/json")
             }
+            // Log exactly what we send so a failure can be compared byte-for-byte
+            // against a working website upload: overall body size, the ADIF payload
+            // size, and QSO count (each record ends with <EOR>).
+            val qsoCount = countOccurrences(adif, "<EOR>")
+            log("uploadAdif $filename sending: body=${bodyLen}B adif=${payload.size}B qsos=$qsoCount")
             conn.outputStream.use { out ->
                 out.write(preamble)
                 out.write(payload)
@@ -269,7 +326,11 @@ object PotaClient {
             val code = conn.responseCode
             if (code !in 200..299) {
                 val err = conn.errorStream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() } ?: ""
-                log("uploadAdif $filename -> http $code ${err.take(200)}")
+                val trace = uploadTraceSummary(conn.headerFields ?: emptyMap())
+                log("uploadAdif $filename -> http $code ${err.take(200)}${if (trace.isNotEmpty()) " [$trace]" else ""}")
+                // Persist the exact bytes POTA rejected so the failed log can be pulled
+                // and diffed against a website-successful upload of the same activation.
+                dumpFailedUpload(filename, adif, code, err)
                 return Result.failure(PotaUploadException(code, err))
             }
             val resp = conn.inputStream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() } ?: ""
@@ -367,6 +428,26 @@ object PotaClient {
 
     private fun urlEncode(s: String): String =
         URLEncoder.encode(s, StandardCharsets.UTF_8.name())
+
+    /**
+     * On an upload failure, write the exact ADIF bytes we POSTed (plus the HTTP
+     * status and error body) to `pota-upload-failed.adi` in the app's external files
+     * dir — the same directory as debug.log, so `adb pull` grabs both. This lets a
+     * field failure be reproduced and diffed against a website-successful upload of
+     * the same activation without needing to re-run the QSO. Best-effort: any IO
+     * problem here must never mask the original upload error, so it's swallowed.
+     */
+    private fun dumpFailedUpload(filename: String, adif: String, code: Int, body: String) {
+        try {
+            val ctx = GeneralVariables.getMainContext() ?: return
+            val dir = ctx.getExternalFilesDir(null) ?: return
+            val ts = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+            val header = "; POTA upload FAILED $ts http=$code file=$filename\n" +
+                "; response=${body.take(500)}\n"
+            File(dir, "pota-upload-failed.adi").writeText(header + adif)
+        } catch (_: Exception) {
+        }
+    }
 
     private fun log(msg: String) {
         Log.d(TAG, msg)
