@@ -137,7 +137,6 @@
     <!-- ===== Band &amp; Mode sheet (option 3b) ===== -->
     <string name="band_sheet_title">Band &amp; mode</string>
     <string name="band_sheet_subtitle">Your radio retunes when you pick a band</string>
-    <string name="band_sheet_close">Close</string>
     <string name="band_sheet_all_bands">All bands &amp; custom frequency</string>
     <string name="band_hint_20m_best">Best now · daytime, worldwide</string>
     <string name="band_hint_20m">Daytime, worldwide</string>
